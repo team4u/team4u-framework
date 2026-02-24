@@ -14,6 +14,7 @@ import java.util.function.Function;
  */
 public class ValueConverterRegistryTest {
 
+    @SuppressWarnings("unchecked")
     @Test
     public void testBuiltInConverters() {
         ValueConverterRegistry registry = Criteria.builder().getConverterRegistry();
@@ -49,18 +50,13 @@ public class ValueConverterRegistryTest {
         // 测试手动注册转换器对象
         registry.register(new ValueConverter() {
             @Override
-            public String id() {
+            public String key() {
                 return "custom";
             }
 
             @Override
             public Comparable<?> apply(Object obj) {
                 return obj + "_suffix";
-            }
-
-            @Override
-            public String key() {
-                return id();
             }
         });
         Function<Object, Comparable<?>> customConverter = registry.policyOf("custom");

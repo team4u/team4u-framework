@@ -12,7 +12,7 @@ import cn.hutool.core.collection.CollUtil;
 public class SizeValueConverter implements ValueConverter {
 
     @Override
-    public String id() {
+    public String key() {
         return "size";
     }
 

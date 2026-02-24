@@ -10,7 +10,7 @@ package com.team4u.criterion.model.convert;
 public class StringValueConverter implements ValueConverter {
 
     @Override
-    public String id() {
+    public String key() {
         return "string";
     }
 

@@ -12,16 +12,4 @@ import java.util.function.Function;
  * @author jay.wu
  */
 public interface ValueConverter extends Function<Object, Comparable<?>>, KeyedPolicy<String> {
-    /**
-     * 获取转换器标识 (如: "date", "version")
-     */
-    @Override
-    default String key() {
-        return id();
-    }
-
-    /**
-     * 获取转换器标识
-     */
-    String id();
 }

@@ -12,7 +12,7 @@ import com.team4u.criterion.util.FastNumberUtil;
 public class NumberValueConverter implements ValueConverter {
 
     @Override
-    public String id() {
+    public String key() {
         return "number";
     }
 

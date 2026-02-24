@@ -12,7 +12,7 @@ import cn.hutool.core.util.StrUtil;
 public class VersionValueConverter implements ValueConverter {
 
     @Override
-    public String id() {
+    public String key() {
         return "version";
     }
 

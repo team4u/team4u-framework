@@ -14,7 +14,7 @@ import java.util.Date;
 public class DateValueConverter implements ValueConverter {
 
     @Override
-    public String id() {
+    public String key() {
         return "date";
     }
 

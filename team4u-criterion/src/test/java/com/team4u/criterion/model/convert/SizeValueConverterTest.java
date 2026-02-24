@@ -16,8 +16,8 @@ public class SizeValueConverterTest {
     private final SizeValueConverter converter = new SizeValueConverter();
 
     @Test
-    public void testId() {
-        Assert.assertEquals("size", converter.id());
+    public void testKey() {
+        Assert.assertEquals("size", converter.key());
     }
 
     @Test
