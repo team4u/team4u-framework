@@ -37,9 +37,9 @@
 
 ```xml
 <dependency>
-    <groupId>org.team4u</groupId>
-    <artifactId>team4u-base</artifactId>
-    <version>2.30.0-SNAPSHOT</version>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-criterion</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
 </dependency>
 ```
 
@@ -66,8 +66,8 @@ public class CriteriaConfig {
 ### 基础用法Demo
 
 ```java
-import org.team4u.base.criterion.Criteria;
-import org.team4u.base.criterion.spi.MatchContext;
+import com.team4u.criterion.Criteria;
+import com.team4u.criterion.MatchContext;
 
 public class Demo {
     static void main(String[] args) {
@@ -484,25 +484,25 @@ Criteria customCriteria = Criteria.builder()
 
 | 组件 | 说明 | 包路径 |
 |------|------|--------|
-| `Criteria` | 门面类（不可变），提供表达式解析、编译、匹配及缓存功能 | `org.team4u.base.criterion` |
-| `CriteriaBuilder` | 建造者类，用于组装自定义配置的 Criteria 实例 | `org.team4u.base.criterion` |
-| `MatchContext` | 匹配上下文，持有实际值和属性 Map | `org.team4u.base.criterion.spi` |
-| `AttributeResolver` | 属性解析器接口（函数式），入参含上下文和 key，用于延迟加载外部属性 | `org.team4u.base.criterion.spi` |
-| `LazyAttributeResolver` | 内置解析器注册表，支持以声明式链式 API 注册多个 key 的延迟加载逻辑 | `org.team4u.base.criterion.spi` |
-| `MatchPredicate` | 匹配断言函数接口（函数式接口） | `org.team4u.base.criterion.spi` |
-| `Criterion` | 规则表达式 AST 节点根类 (抽象类)，持有原始表达式字符串 | `org.team4u.base.criterion.core` |
-| `CriterionParser` | 解析器接口，将字符串解析为 AST | `org.team4u.base.criterion.parser` |
-| `StandardCriterionParser` | 标准解析器实现，基于责任链模式 | `org.team4u.base.criterion.parser.impl` |
-| `SyntaxHandler` | 语法处理器接口，支持优先级排序 | `org.team4u.base.criterion.parser` |
-| `CriterionCompiler` | 编译器接口，将 AST 编译为 `MatchPredicate` | `org.team4u.base.criterion.spi` |
-| `CompilingVisitor` | 编译访问者，协调编译器完成 AST 到函数的转换 | `org.team4u.base.criterion.visitor` |
-| `CompilerRegistry` | 编译器注册表，自动扫描并管理 `CriterionCompiler` 实现 | `org.team4u.base.criterion.spi` |
-| `ValueConverter` | 值转换器接口，将任意对象转换为 `Comparable` | `org.team4u.base.criterion.core.convert` |
-| `ValueConverterRegistry` | 值转换器注册表，自动扫描并管理 `ValueConverter` 实现 | `org.team4u.base.criterion.core.convert` |
-| `Value<T>` | 值提供者接口，屏蔽字面量和变量的区别 | `org.team4u.base.criterion.core.value` |
-| `VariableExtractor` | 变量提取器，静态分析表达式中的变量名 | `org.team4u.base.criterion.visitor` |
-| `CompareOperators` | 比较操作符工具类，提供统一的比较逻辑映射 | `org.team4u.base.criterion.core` |
-| `FastNumberUtil` | 极速数字处理工具，使用原生类型避免 BigDecimal 开销 | `org.team4u.base.criterion.util` |
+| `Criteria` | 门面类（不可变），提供表达式解析、编译、匹配及缓存功能 | `com.team4u.criterion` |
+| `CriteriaBuilder` | 建造者类，用于组装自定义配置的 Criteria 实例 | `com.team4u.criterion` |
+| `MatchContext` | 匹配上下文，持有实际值 and 属性 Map | `com.team4u.criterion` |
+| `AttributeResolver` | 属性解析器接口（函数式），入参含上下文 and key，用于延迟加载外部属性 | `com.team4u.criterion` |
+| `LazyAttributeResolver` | 内置解析器注册表，支持以声明式链式 API 注册多个 key 的延迟加载逻辑 | `com.team4u.criterion` |
+| `MatchPredicate` | 匹配断言函数接口（函数式接口） | `com.team4u.criterion` |
+| `Criterion` | 规则表达式 AST 节点根类 (抽象类)，持有原始表达式字符串 | `com.team4u.criterion.model` |
+| `CriterionParser` | 解析器接口，将字符串解析为 AST | `com.team4u.criterion.parser` |
+| `StandardCriterionParser` | 标准解析器实现，基于责任链模式 | `com.team4u.criterion.parser.impl` |
+| `SyntaxHandler` | 语法处理器接口，支持优先级排序 | `com.team4u.criterion.parser` |
+| `CriterionCompiler` | 编译器接口，将 AST 编译为 `MatchPredicate` | `com.team4u.criterion.compiler` |
+| `CompilingVisitor` | 编译访问者，协调编译器完成 AST 到函数的转换 | `com.team4u.criterion.compiler` |
+| `CompilerRegistry` | 编译器注册表，自动扫描并管理 `CriterionCompiler` 实现 | `com.team4u.criterion.compiler` |
+| `ValueConverter` | 值转换器接口，将任意对象转换为 `Comparable` | `com.team4u.criterion.model.convert` |
+| `ValueConverterRegistry` | 值转换器注册表，自动扫描并管理 `ValueConverter` 实现 | `com.team4u.criterion.model.convert` |
+| `Value<T>` | 值提供者接口，屏蔽字面量和变量的区别 | `com.team4u.criterion.model.value` |
+| `VariableExtractor` | 变量提取器，静态分析表达式中的变量名 | `com.team4u.criterion.model` |
+| `CompareOperators` | 比较操作符工具类，提供统一的比较逻辑映射 | `com.team4u.criterion` |
+| `FastNumberUtil` | 极速数字处理工具，使用原生类型避免 BigDecimal 开销 | `com.team4u.criterion.util` |
 </details>
 
 ### Value 系统详解

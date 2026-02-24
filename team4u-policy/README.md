@@ -35,7 +35,7 @@
 继承 `KeyedPolicy<K>` 接口，其中 `K` 是路由键的类型（通常是 String 或 Integer）。
 
 ```java
-import org.team4u.base.policy.KeyedPolicy;
+import com.team4u.policy.KeyedPolicy;
 
 // 定义支付策略接口
 public interface PaymentPolicy extends KeyedPolicy<String> {
@@ -68,7 +68,7 @@ public class AlipayPolicy implements PaymentPolicy {
 使用 `KeyedPolicyRegistry` 进行管理。该注册表针对读操作进行了极致优化（Copy-On-Write 机制），确保高并发下的读取性能。
 
 ```java
-import org.team4u.base.policy.KeyedPolicyRegistry;
+import com.team4u.policy.KeyedPolicyRegistry;
 
 // 创建注册表
 KeyedPolicyRegistry<String, PaymentPolicy> registry = new KeyedPolicyRegistry<>(PaymentPolicy.class);
@@ -92,7 +92,7 @@ registry.get("ALIPAY").ifPresent(policy -> policy.pay(100.0));
 继承 `ContextPolicy<C>` 接口，其中 `C` 是上下文对象的类型。
 
 ```java
-import org.team4u.base.policy.ContextPolicy;
+import com.team4u.policy.ContextPolicy;
 
 // 定义优惠券策略
 public interface DiscountPolicy extends ContextPolicy<OrderContext> {
@@ -130,7 +130,7 @@ public class VipDiscountPolicy implements DiscountPolicy {
 使用 `OrderedPolicyChain` 管理。它会自动根据 `priority` 对策略进行排序。
 
 ```java
-import org.team4u.base.policy.OrderedPolicyChain;
+import com.team4u.policy.OrderedPolicyChain;
 
 // 创建链
 OrderedPolicyChain<OrderContext, DiscountPolicy> chain = new OrderedPolicyChain<>(DiscountPolicy.class);

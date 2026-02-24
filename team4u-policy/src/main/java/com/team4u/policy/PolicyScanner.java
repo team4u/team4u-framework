@@ -20,7 +20,6 @@ public class PolicyScanner {
     /**
      * 通过 ServiceLoader 注册策略
      */
-    @SuppressWarnings("unchecked")
     public static <P> void registerFromServiceLoader(PolicyRegistry<P> registry) {
         ServiceLoaderUtil.loadAvailableList((Class<? extends P>) registry.getPolicyClass()).forEach(registry::register);
     }
