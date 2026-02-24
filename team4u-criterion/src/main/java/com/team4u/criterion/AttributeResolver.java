@@ -5,7 +5,7 @@ package com.team4u.criterion;
  * <p>
  * 用于在 MatchContext 中动态解析属性值。
  *
- * @author fjay
+ * @author jay.wu
  */
 @FunctionalInterface
 public interface AttributeResolver {

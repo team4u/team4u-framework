@@ -10,7 +10,7 @@ import java.util.function.Supplier;
  * 用于在 MatchContext 中注册多个 Key 对应的延迟加载逻辑。
  * 开发者可以通过链式调用 register 方法来注册不同的属性提供者。
  *
- * @author fjay
+ * @author jay.wu
  */
 public class LazyAttributeResolver implements AttributeResolver {
     /**

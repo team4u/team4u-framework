@@ -6,7 +6,7 @@ import org.junit.Test;
 /**
  * 延迟属性解析器单元测试
  *
- * @author fjay
+ * @author jay.wu
  */
 public class LazyAttributeResolverTest {
 
