@@ -1,4 +1,4 @@
-# Criterion 表达式模块
+# 表达式模块
 
 [![JDK 8+](https://img.shields.io/badge/JDK-8+-green.svg)](https://openjdk.java.net/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -31,7 +31,7 @@
 
 ## 快速入门
 
-> ⚠️ 强烈警告：`Criteria` 是线程安全且建议单例复用的；但 `MatchContext` 是非线程安全的，每个并发请求必须创建独立的 `MatchContext` 实例！
+> `Criteria` 是线程安全且建议单例复用的；但 `MatchContext` 是非线程安全的，每个并发请求必须创建独立的 `MatchContext` 实例。
 
 ### 引入依赖
 
