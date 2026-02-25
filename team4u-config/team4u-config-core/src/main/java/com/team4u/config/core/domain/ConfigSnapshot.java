@@ -112,11 +112,14 @@ public class ConfigSnapshot {
             return unflattenedMap();
         }
 
+        // 统一预处理前缀，去除结尾的 "." 方便统一查找逻辑
+        String searchPrefix = prefix.endsWith(".") ? prefix.substring(0, prefix.length() - 1) : prefix;
+
         Map<String, Object> current = unflattenedMap();
         int start = 0;
         int dotIndex;
-        while ((dotIndex = prefix.indexOf('.', start)) != -1) {
-            String part = prefix.substring(start, dotIndex);
+        while ((dotIndex = searchPrefix.indexOf('.', start)) != -1) {
+            String part = searchPrefix.substring(start, dotIndex);
             Object node = current.get(part);
             if (!(node instanceof Map)) {
                 return null;
@@ -126,7 +129,7 @@ public class ConfigSnapshot {
             start = dotIndex + 1;
         }
 
-        return current.get(prefix.substring(start));
+        return current.get(searchPrefix.substring(start));
     }
 
     /**

@@ -39,4 +39,26 @@ public class ConfigSnapshotTest {
         Assert.assertEquals(2, dbPropsWithDot.size());
         Assert.assertEquals("root", dbPropsWithDot.get("user"));
     }
+
+    @Test
+    public void testGetUnflattenedValue() {
+        Map<String, ConfigEntry> entries = new HashMap<>();
+        long now = System.currentTimeMillis();
+        entries.put("server.db.url", new ConfigEntry("server.db.url", "jdbc", "src", now));
+
+        ConfigSnapshot snapshot = new ConfigSnapshot(1L, entries);
+
+        // 普通前缀
+        Object val1 = snapshot.getUnflattenedValue("server.db");
+        Assert.assertTrue(val1 instanceof Map);
+        Assert.assertEquals("jdbc", ((Map<?, ?>) val1).get("url"));
+
+        // 带点的后缀
+        Object val2 = snapshot.getUnflattenedValue("server.db.");
+        Assert.assertTrue(val2 instanceof Map);
+        Assert.assertEquals("jdbc", ((Map<?, ?>) val2).get("url"));
+
+        // 验证一致性
+        Assert.assertEquals(val1, val2);
+    }
 }

@@ -43,7 +43,7 @@ public class ConfigProxyFactory {
     }
 
     /**
-     * 统一创建动态代理实例的私有辅助方法
+     * 统一创建动态代理实例的辅助方法
      *
      * @param snapshotProvider 快照提供者
      * @param prefix           前缀
@@ -53,7 +53,7 @@ public class ConfigProxyFactory {
      * @return 代理对象
      */
     @SuppressWarnings("unchecked")
-    private <T> T createProxy(java.util.function.Supplier<ConfigSnapshot> snapshotProvider,
+    <T> T createProxy(java.util.function.Supplier<ConfigSnapshot> snapshotProvider,
                               String prefix, Class<T> type,
                               boolean isPinned) {
         SnapshotAwareInvocationHandler handler = new SnapshotAwareInvocationHandler(

@@ -48,9 +48,9 @@ team4u-config-core 是一个轻量级、高性能、类型安全的 Java 配置�
 在 src/main/resources 下创建 config.properties：
 ```properties
 # 基础配置
-app.name=team4u-demo
-app.port=8080
-app.tags=web,api,v1
+server.name=team4u-demo
+server.port=8080
+server.tags=web,api,v1
 
 # 复杂对象绑定示例
 server.connect-timeout=5000
@@ -60,7 +60,7 @@ server.db.url=jdbc:mysql://localhost:3306/test
 server.db.username=root
 
 # 占位符引用
-app.description=${app.name} is running on port ${app.port}
+server.description=${server.name} is running on port ${server.port}
 ```
 
 ### 获取 ConfigManager 实例
@@ -83,7 +83,7 @@ ConfigManager customManager = ConfigManager.builder()
 
 ```java
 // 获取精准配置，返回 Optional 避免空指针
-String dbUrl = manager.getString("db.url").orElse("jdbc:mysql://localhost:3306/default");
+String dbUrl = manager.getString("server.db.url").orElse("jdbc:mysql://localhost:3306/default");
 ```
 
 ### 进阶用法：强类型接口代理
@@ -134,28 +134,28 @@ System.out.println(config.getDb().getUrl()); // 访问嵌套对象
 
 #### 接口代理匹配规则
 当你调用接口方法 maxDbConnections() 时，系统会按照以下顺序尝试在配置源中查找匹配项：
-- app.maxDbConnections (原始驼峰)
-- app.max-db-connections (中划线，推荐)
-- app.max_db_connections (下划线)
-- app.max.db.connections (点分隔)
+- server.maxDbConnections (原始驼峰)
+- server.max-db-connections (中划线，推荐)
+- server.max_db_connections (下划线)
+- server.max.db.connections (点分隔)
 
 > [!NOTE]
-> 对于 boolean 类型的 Getter 方法（如 isDevMode()），系统会自动去除 is 前缀后再进行上述匹配逻辑（即查找 app.dev-mode 等）。
+> 对于 boolean 类型的 Getter 方法（如 isDevMode()），系统会自动去除 is 前缀后再进行上述匹配逻辑（即查找 server.dev-mode 等）。
 
 #### 绑定对比示例
 | 配置键 (Config Key) | 映射关系示例      | 适用风格   |
 | :------------------ | :---------------- | :--------- |
-| app.max-threads   | getMaxThreads() | Kebab Case |
-| app.max_threads   | getMaxThreads() | Snake Case |
-| app.max.threads   | getMaxThreads() | Dot Case   |
-| app.maxThreads    | getMaxThreads() | Camel Case |
+| server.max-threads   | getMaxThreads() | Kebab Case |
+| server.max_threads   | getMaxThreads() | Snake Case |
+| server.max.threads   | getMaxThreads() | Dot Case   |
+| server.maxThreads    | getMaxThreads() | Camel Case |
 
 ### 占位符解析 (Placeholder)
 支持 `${key:defaultValue}` 语法，具备以下特性：
 - **深度嵌套支持**：
     - **键嵌套**：`${db.${env}.host}`，根据 `env` 的值动态决定查找的键。
     - **值嵌套**：解析出的值若包含占位符，将自动递归解析。
-    - **默认值嵌套**：`${app.port:${global.port:8080}}`，支持在默认值中嵌套其他占位符。
+    - **默认值嵌套**：`${server.port:${global.port:8080}}`，支持在默认值中嵌套其他占位符。
 - **高性能实现**：
     - **零临时对象**：优化了匹配算法，在解析过程中避免了大量 `substring` 导致的临时字符串对象分配。
     - **集合复用**：在批量解析配置快照时复用依赖追踪集合，显著降低高频调用下的内存压力。
@@ -172,7 +172,7 @@ System.out.println(config.getDb().getUrl()); // 访问嵌套对象
     - 删除：oldValue != null, newValue == null（代表配置被移除或被高优先级源标记为删除）
 
 ```java
-manager.addChangeListener("app.*", (key, oldVal, newVal) -> {
+manager.addChangeListener("server.*", (key, oldVal, newVal) -> {
     if (newVal == null) {
         System.out.println("Config deleted: " + key);
     } else {
@@ -204,10 +204,10 @@ ConfigManager manager = ConfigManager.builder()
     .build();
 
 // 注入配置并自动刷新
-memorySource.putAndRefresh("app.name", "unit-test-app");
+memorySource.putAndRefresh("server.name", "unit-test-app");
 
 // 验证行为
-AppConfig config = manager.createProxy("app", AppConfig.class);
+AppConfig config = manager.createProxy("server", AppConfig.class);
 assertEquals("unit-test-app", config.getName());
 ```
 
@@ -224,7 +224,7 @@ assertEquals("unit-test-app", config.getName());
 ### 配置溯源 (Traceability)
 当多个配置源存在同名键时，可以通过快照获取配置的原始来源，解决“配置究竟从哪来”的疑问：
 ```java
-manager.currentSnapshot().getEntry("app.name").ifPresent(entry -> {
+manager.currentSnapshot().getEntry("server.name").ifPresent(entry -> {
     System.out.println("Value: " + entry.getValue());
     System.out.println("From source: " + entry.getSourceName()); // 例如 "File:config.properties"
 });

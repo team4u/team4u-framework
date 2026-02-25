@@ -129,6 +129,12 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
             metadata.effectiveKey = resolvedKey;
         }
 
+        // --- 增加对嵌套接口的支持 ---
+        if (rawValue == null && metadata.returnType.isInterface()) {
+            String subPrefix = prefix + metadata.baseName;
+            return proxyFactory.createProxy(snapshotProvider, subPrefix, metadata.returnType, isPinned);
+        }
+
         // 若未找到对应配置，返回类型默认值
         if (rawValue == null) {
             return ClassUtil.getDefaultValue(metadata.returnType);

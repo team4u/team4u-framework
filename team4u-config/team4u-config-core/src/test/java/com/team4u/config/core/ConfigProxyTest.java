@@ -133,6 +133,47 @@ public class ConfigProxyTest {
         Assert.assertTrue(config.isDevMode());
     }
 
+    @Test
+    public void testNestedInterfaceProxy() {
+        Map<String, ConfigEntry> entries = new HashMap<>();
+        long now = System.currentTimeMillis();
+        entries.put("server.name", new ConfigEntry("server.name", "nested-app", "mock", now));
+        entries.put("server.db.url", new ConfigEntry("server.db.url", "jdbc:mysql://localhost:3306/nested", "mock", now));
+
+        ConfigSnapshot snapshot = new ConfigSnapshot(100L, entries);
+        ConfigManager manager = new ConfigManager() {
+            @Override
+            public ConfigSnapshot currentSnapshot() {
+                return snapshot;
+            }
+
+            @Override
+            public <T> T createProxy(String prefix, Class<T> interfaceType) {
+                return new ConfigProxyFactory().createLiveProxy(this, prefix, interfaceType);
+            }
+
+            @Override
+            public void addChangeListener(String keyPattern, ConfigChangeListener listener) {
+            }
+        };
+
+        NestedAppConfig config = manager.createProxy("server", NestedAppConfig.class);
+
+        Assert.assertEquals("nested-app", config.name());
+        Assert.assertNotNull(config.db());
+        Assert.assertEquals("jdbc:mysql://localhost:3306/nested", config.db().url());
+    }
+
+    public interface NestedAppConfig {
+        String name();
+
+        NestedDbConfig db();
+    }
+
+    public interface NestedDbConfig {
+        String url();
+    }
+
     public interface AppConfig {
         String name();
 

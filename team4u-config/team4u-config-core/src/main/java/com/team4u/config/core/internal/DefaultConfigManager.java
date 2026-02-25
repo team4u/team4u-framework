@@ -8,6 +8,7 @@ import com.team4u.config.core.ConfigChangeListener;
 import com.team4u.config.core.ConfigManager;
 import com.team4u.config.core.domain.ConfigEntry;
 import com.team4u.config.core.domain.ConfigSnapshot;
+import com.team4u.config.core.proxy.ConfigProxyFactory;
 import com.team4u.config.core.spi.*;
 
 import java.util.*;
@@ -75,6 +76,11 @@ public class DefaultConfigManager implements ConfigManager {
 
     @Override
     public <T> T createProxy(String prefix, Class<T> interfaceType) {
+        // 如果是接口，返回 Live Mode 动态代理，支持实时热更新
+        if (interfaceType.isInterface()) {
+            return new ConfigProxyFactory().createLiveProxy(this, prefix, interfaceType);
+        }
+
         if (configBinder == null) {
             throw new IllegalStateException("ConfigBinder is missing. Cannot create proxy.");
         }
