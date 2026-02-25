@@ -11,6 +11,6 @@ public class PropertyConverterRegistry
         extends KeyedPolicyRegistry<Class<? extends PropertyConverter<?>>, PropertyConverter<?>> {
 
     public PropertyConverterRegistry() {
-        super((Class<PropertyConverter<?>>) (Class<?>) PropertyConverter.class);
+        super(PropertyConverter.class);
     }
 }

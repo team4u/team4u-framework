@@ -21,13 +21,13 @@ import java.util.function.Supplier;
 /**
  * 快照感知动态代理调用处理器
  * <p>
- * 通过元数据预解析（全局静态缓存）和二级值缓存（版本号对齐），
+ * 通过元数据预解析（全局静态缓存）和值缓存（版本号对齐），
  * 在高并发下实现低延迟的配置属性读取。
  *
  * <h3>核心设计</h3>
  * <ul>
  * <li>{@link #METADATA_CACHE}：全局静态缓存，所有实例共享方法元数据，仅解析一次注解</li>
- * <li>{@link #valueCache}：实例级二级缓存，按版本号失效，避免重复类型转换</li>
+ * <li>{@link #valueCache}：实例级缓存，按版本号失效，避免重复类型转换</li>
  * </ul>
  */
 public class SnapshotAwareInvocationHandler implements InvocationHandler {
@@ -45,7 +45,7 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
     private static final Map<Method, MethodMetadata> METADATA_CACHE = new ConcurrentHashMap<>();
 
     /**
-     * 实例级二级值缓存：版本对齐，缓存类型转换后的结果
+     * 实例级值缓存：版本对齐，缓存类型转换后的结果
      */
     private final Map<Method, CacheNode> valueCache = new ConcurrentHashMap<>();
 
@@ -96,7 +96,7 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
 
         Object value = resolveValue(metadata, snapshot);
 
-        // 回写二级缓存（允许并发写入，最终一致即可）
+        // 回写缓存（允许并发写入，最终一致即可）
         valueCache.put(method, new CacheNode(currentVersion, value));
 
         return value;
@@ -135,7 +135,7 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
             return convertWithCustomConverter(rawValue, metadata);
         }
 
-        // 6. 回退到 Hutool 通用类型转换
+        // 6. 回退到通用类型转换
         return convert(rawValue, metadata);
     }
 
@@ -383,7 +383,7 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
     }
 
     /**
-     * 二级缓存节点，绑定版本号与转换后的值，实现版本驱动失效
+     * 缓存节点，绑定版本号与转换后的值，实现版本驱动失效
      */
     private static final class CacheNode {
         final long version;

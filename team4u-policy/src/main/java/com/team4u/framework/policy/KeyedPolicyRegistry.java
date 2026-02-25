@@ -36,8 +36,9 @@ public class KeyedPolicyRegistry<K, P extends KeyedPolicy<K>> implements PolicyR
      */
     private volatile List<P> unmodifiablePolicies = Collections.emptyList();
 
-    public KeyedPolicyRegistry(Class<P> policyClass) {
-        this.policyClass = policyClass;
+    @SuppressWarnings("unchecked")
+    public KeyedPolicyRegistry(Class<?> policyClass) {
+        this.policyClass = (Class<P>) policyClass;
     }
 
     @Override

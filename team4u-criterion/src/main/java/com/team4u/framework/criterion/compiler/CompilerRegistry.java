@@ -10,6 +10,6 @@ public class CompilerRegistry extends KeyedPolicyRegistry<Class<? extends Criter
 
     @SuppressWarnings("unchecked")
     public CompilerRegistry() {
-        super((Class<CriterionCompiler<?>>) (Class<?>) CriterionCompiler.class);
+        super(CriterionCompiler.class);
     }
 }
