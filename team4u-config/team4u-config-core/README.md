@@ -150,7 +150,7 @@ AppConfig config = manager.createProxy(AppConfig.class);
 ```
 
 > [!TIP]
-> **前缀合并规则**：如果你在代码中显式指定了前缀，它将与注解中的前缀进行**叠加合并**。例如，如果接口标记了 `@ConfigPrefix("db")`，而调用时使用了 `manager.createProxy("prod", DbConfig.class)`，最终生效的完整前缀将是 `prod.db`。
+> 前缀合并规则：如果你在代码中显式指定了前缀，它将与注解中的前缀进行叠加合并。例如，如果接口标记了 `@ConfigPrefix("db")`，而调用时使用了 `manager.createProxy("prod", DbConfig.class)`，最终生效的完整前缀将是 `prod.db`。
 
 #### @ConfigKey
 用于明确指定该方法对应的配置 Key，跳过自动推断逻辑。支持绝对路径（以点号开头）和相对路径。
@@ -198,7 +198,7 @@ public interface AppConfig {
 如果需要特殊的转换逻辑（如解密），可以实现 `PropertyConverter` 接口：
 
 ```java
-/**
+/
  * 解密转换器示例
  */
 public class MyDecryptConverter implements PropertyConverter<String> {
@@ -214,20 +214,20 @@ public class MyDecryptConverter implements PropertyConverter<String> {
 
 你通过以下方式提供的自定义转换器将在所有 `ConfigManager` 实例中生效：
 
-**方式 A：通过 Builder 手动注册（推荐用于特定实例）**
+方式 A：通过 Builder 手动注册（推荐用于特定实例）
 ```java
 ConfigManager manager = ConfigManager.builder()
     .addConverter(new MyDecryptConverter()) // 手动添加实例
     .build();
 ```
 
-**方式 B：自动发现（推荐用于全局通用转换器）**
+方式 B：自动发现（推荐用于全局通用转换器）
 框架在初始化 `Builder` 时，会自动通过以下两种机制加载转换器：
-1. **SPI 机制**：在 `META-INF/services/com.team4u.framework.config.core.convert.PropertyConverter` 文件中添加实现类的全路径。
-2. **包扫描**：自动扫描 `com.team4u.framework.config.core.convert` 包及其子包下的所有非抽象 `PropertyConverter` 实现类。
+1. SPI 机制：在 `META-INF/services/com.team4u.framework.config.core.convert.PropertyConverter` 文件中添加实现类的全路径。
+2. 包扫描：自动扫描 `com.team4u.framework.config.core.convert` 包及其子包下的所有非抽象 `PropertyConverter` 实现类。
 
 > [!TIP]
-> **优先级说明**：手动通过 `addConverter` 注册的转换器优先级高于自动加载的转换器。如果同一个目标类型存在多个转换器，系统将采用最后注册的一个。
+> 优先级说明：手动通过 `addConverter` 注册的转换器优先级高于自动加载的转换器。如果同一个目标类型存在多个转换器，系统将采用最后注册的一个。
 
 ### 智能松散绑定 (Relaxed Binding)
 
@@ -253,15 +253,15 @@ ConfigManager manager = ConfigManager.builder()
 
 ### 占位符解析 (Placeholder)
 支持 `${key:defaultValue}` 语法，具备以下特性：
-- **深度嵌套支持**：
-    - **键嵌套**：`${db.${env}.host}`，根据 `env` 的值动态决定查找的键。
-    - **值嵌套**：解析出的值若包含占位符，将自动递归解析。
-    - **默认值嵌套**：`${server.port:${global.port:8080}}`，支持在默认值中嵌套其他占位符。
-- **高性能实现**：
-    - **零临时对象**：优化了匹配算法，在解析过程中避免了大量 `substring` 导致的临时字符串对象分配。
-    - **集合复用**：在批量解析配置快照时复用依赖追踪集合，显著降低高频调用下的内存压力。
-- **循环依赖检测**：系统会自动检测并防止 `${a} -> ${b} -> ${a}` 的死循环，并抛出清晰的异常信息。
-- **优雅降级**：对于无法解析且未提供默认值的占位符，系统将保持原样输出，确保不会因部分配置缺失导致整体解析失败。
+- 深度嵌套支持：
+    - 键嵌套：`${db.${env}.host}`，根据 `env` 的值动态决定查找的键。
+    - 值嵌套：解析出的值若包含占位符，将自动递归解析。
+    - 默认值嵌套：`${server.port:${global.port:8080}}`，支持在默认值中嵌套其他占位符。
+- 高性能实现：
+    - 零临时对象：优化了匹配算法，在解析过程中避免了大量 `substring` 导致的临时字符串对象分配。
+    - 集合复用：在批量解析配置快照时复用依赖追踪集合，显著降低高频调用下的内存压力。
+- 循环依赖检测：系统会自动检测并防止 `${a} -> ${b} -> ${a}` 的死循环，并抛出清晰的异常信息。
+- 优雅降级：对于无法解析且未提供默认值的占位符，系统将保持原样输出，确保不会因部分配置缺失导致整体解析失败。
 
 ### 热加载与变更监听
 当 ConfigWatcher 探测到源数据变更时，ConfigManager 会触发重载。
@@ -337,20 +337,43 @@ manager.currentSnapshot().getEntry("server.name").ifPresent(entry -> {
 
 ### 场景：高性能一致性快照 (Pinned Mode)
 
-在某些对一致性要求极高的场景（如长耗时的批处理任务或涉及多步逻辑 of 订单处理），你可能不希望处理过程中配置发生跳变。
+在某些对一致性要求极高的场景（如长耗时的批处理任务或涉及多步逻辑的订单处理），你可能不希望处理过程中配置发生跳变。
 
-为什么要用锚定 (Pinning)？
-* 防止“撕裂读取” (Torn Reads)：如果一段逻辑中多次读取不同的配置项（如 discount 和 threshold），而此时后台正好发生了配置重载，可能会导致一半逻辑使用了旧配置，另一半使用了新配置，从而产生业务逻辑错误。
-* 性能优化：Pinned 代理绑定了固定的快照，避免了每次方法调用时都去查询全局最新引用的开销。
+#### 为什么要用锚定 (Pinning)？
+*   防止“撕裂读取”：如果一段逻辑中多次读取不同的配置项（如 discount 和 threshold），而此时后台正好发生了配置重载，可能会导致一半逻辑使用了旧配置，另一半使用了新配置，从而产生业务逻辑错误。
+*   性能优化：Pinned 代理绑定了固定的快照，且内部共享解析后的元数据静态缓存。这使得 Pinned 代理的创建非常轻量，且由于不需要每次调用都去竞争全局 Snapshot 引用，能更好地承载极高并发的读取请求。
 
+#### 最佳实践：一次锚定，多次复用
+为了既保证逻辑一致性，又发挥代理的高性能，应遵循 “一次 Pin，多次使用” 的原则。通常建议在业务请求的入口（如 Request Filter 或 Service 入口处）进行锚定，并将其绑定到请求上下文或方法作用域中。
+
+##### ❌ 错误用法（反模式）
+不要在每个微小的操作中重复锚定，这虽然正确性没问题，但会产生不必要的对象分配。
 ```java
-// 方式 A：直接从管理器获取当前时刻的静态快照
-ConfigSnapshot snapshot = manager.currentSnapshot();
-String value = snapshot.get("key").orElse(null);
+public void process() {
+    // 【严重不推荐】
+    // 每次调用都 pin，虽然对象创建很轻量，但会导致逻辑颗粒度过碎
+    if (SnapshotAware.pin(config).isEnabled()) {
+         // ...
+         int val = SnapshotAware.pin(config).getVal();
+    }
+}
+```
 
-// 方式 B：将已有的 Live 代理“锚定”为 Pinned 代理（推荐）
-// 锚定后产生的新对象将永远固定在调用 pin 时刻的状态，不再随全局更新。
-AppConfig pinnedConfig = SnapshotAware.pin(config);
+##### ✅ 正确用法（推荐）
+在业务逻辑的开始处锚定一次，后续所有子逻辑复用该实例。
+```java
+public void process() {
+    // 1. 在当前作用域开始时，生成一个固定视角的配置对象
+    AppConfig safeConfig = SnapshotAware.pin(config); 
+
+    // 2. 后续所有逻辑都使用这个 safeConfig
+    //    由于元数据已全局静态缓存，此处的开销极低
+    if (safeConfig.isEnabled()) {
+         // ... 
+         // 这里拿到的 val 和上面的 isEnabled 保证是同一个版本快照，且读取性能极高
+         int val = safeConfig.getVal(); 
+    }
+}
 ```
 
 ### 场景：基于接口的配置驱动编程
@@ -371,10 +394,10 @@ AppConfig pinnedConfig = SnapshotAware.pin(config);
 
 ### 实现自定义配置源
 
-- **Tombstone 机制**：
+- Tombstone 机制：
   `ConfigSource` 定义了 `TOMBSTONE_VALUE` (null)。当一个源返回此值时，表示它显式“删除”或“屏蔽”了低优先级源中的同名配置，防止旧值污染。
 
-- **实现接口**：
+- 实现接口：
 ```java
 public class MyConfigSource implements ConfigSource {
     @Override

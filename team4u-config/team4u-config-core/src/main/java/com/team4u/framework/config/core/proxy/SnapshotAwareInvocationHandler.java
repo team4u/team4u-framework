@@ -34,9 +34,9 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
     private final PropertyConverterRegistry converterRegistry;
 
     /**
-     * 元数据缓存：存储方法的静态信息，避免重复解析方法名
+     * 元数据全局静态缓存：共享解析后的方法元数据，提取静态特征
      */
-    private final Map<Method, MethodMetadata> metadataMap = new ConcurrentHashMap<>();
+    private static final Map<Method, MethodMetadata> METADATA_CACHE = new ConcurrentHashMap<>();
 
     /**
      * 二级值缓存：存储当前版本已解析的值，降低类型转换开销
@@ -44,11 +44,11 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
     private final Map<Method, CacheNode> valueCache = new ConcurrentHashMap<>();
 
     public SnapshotAwareInvocationHandler(Class<?> interfaceType,
-                                          String prefix,
-                                          Supplier<ConfigSnapshot> snapshotProvider,
-                                          boolean isPinned,
-                                          ConfigProxyFactory proxyFactory,
-                                          PropertyConverterRegistry converterRegistry) {
+            String prefix,
+            Supplier<ConfigSnapshot> snapshotProvider,
+            boolean isPinned,
+            ConfigProxyFactory proxyFactory,
+            PropertyConverterRegistry converterRegistry) {
         this.interfaceType = interfaceType;
         // 预处理前缀，保证以 "." 结尾，减少 invoke 时的判断
         this.prefix = (prefix == null || prefix.isEmpty()) ? "" : (prefix.endsWith(".") ? prefix : prefix + ".");
@@ -62,13 +62,13 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
     }
 
     /**
-     * 预热元数据：遍历接口所有方法，提前解析并放入 metadataMap
+     * 预热元数据：遍历接口所有方法，提前解析并放入 METADATA_CACHE
      */
     private void warmUp() {
         for (Method method : interfaceType.getMethods()) {
             // 排除 Object 基础方法和默认方法，仅处理业务方法
             if (method.getDeclaringClass() != Object.class && !method.isDefault()) {
-                metadataMap.put(method, createMetadata(method));
+                METADATA_CACHE.computeIfAbsent(method, m -> createMetadata(m, converterRegistry));
             }
         }
     }
@@ -96,7 +96,7 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
         }
 
         // 缓存失效或未命中，获取或预热方法元数据
-        MethodMetadata metadata = metadataMap.computeIfAbsent(method, this::createMetadata);
+        MethodMetadata metadata = METADATA_CACHE.computeIfAbsent(method, m -> createMetadata(m, converterRegistry));
 
         // 解析配置值（慢路径，包含路径记忆逻辑）
         Object value = resolveValue(metadata, snapshot);
@@ -110,6 +110,7 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
     /**
      * 解析配置值：利用路径记忆加速查找
      */
+    @SuppressWarnings({"rawtypes", "unchecked"})
     private Object resolveValue(MethodMetadata metadata, ConfigSnapshot snapshot) {
         // 根据是否是绝对路径选择拼接方式
         String targetKey = metadata.absolute ? metadata.baseName : prefix + metadata.baseName;
@@ -135,7 +136,7 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
         // 5. 优先使用自定义转换器
         if (metadata.converter != null) {
             try {
-                return ((PropertyConverter<Object>) metadata.converter).convert(rawValue, (Class<Object>) metadata.returnType);
+                return ((PropertyConverter) metadata.converter).convert(rawValue, metadata.returnType);
             } catch (Exception e) {
                 // 转换失败时回退到默认值
                 return metadata.defaultValue;
@@ -154,7 +155,7 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
     /**
      * 创建并缓存方法元数据，提取静态特征
      */
-    private MethodMetadata createMetadata(Method method) {
+    private static MethodMetadata createMetadata(Method method, PropertyConverterRegistry converterRegistry) {
         String baseName;
         boolean absolute = false;
 
@@ -259,11 +260,11 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
         final PropertyConverter<?> converter;
 
         MethodMetadata(String baseName,
-                       Class<?> returnType,
-                       Object defaultValue,
-                       boolean required,
-                       boolean absolute,
-                       PropertyConverter<?> converter) {
+                Class<?> returnType,
+                Object defaultValue,
+                boolean required,
+                boolean absolute,
+                PropertyConverter<?> converter) {
             this.baseName = baseName;
             this.returnType = returnType;
             this.defaultValue = defaultValue;

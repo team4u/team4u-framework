@@ -22,6 +22,9 @@ public interface SnapshotAware<T> {
      * @param proxy 实现过 SnapshotAware 的配置代理对象
      * @param <T>   目标配置接口类型
      * @return 锚定后的固定快照代理对象
+     * @see #pin()
+     * @apiNote 最佳实践：遵循“一次锚定，多次复用”原则。建议在 Service 或请求入口处执行一次 pin()，
+     *          然后在后续业务逻辑中复用返回的结果，以确保高性能和逻辑一致性。
      */
     @SuppressWarnings("unchecked")
     static <T> T pin(T proxy) {
