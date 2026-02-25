@@ -16,7 +16,7 @@ public class PolicyExceptionTest {
         PolicyException exception = PolicyException.typeMismatch(expectedClass, actualClass);
 
         Assert.assertEquals("消息应包含类型信息",
-                "Policy type mismatch, expected: com.team4u.policy.PolicyExceptionTest$StringPolicy, got: com.team4u.policy.PolicyExceptionTest$IntegerPolicy",
+                "Policy type mismatch, expected: com.team4u.framework.policy.PolicyExceptionTest$StringPolicy, got: com.team4u.framework.policy.PolicyExceptionTest$IntegerPolicy",
                 exception.getMessage());
         Assert.assertEquals(expectedClass, exception.getExpectedPolicyClass());
         Assert.assertEquals(actualClass, exception.getActualPolicyClass());
@@ -33,7 +33,7 @@ public class PolicyExceptionTest {
         PolicyException exception = PolicyException.unsupportedRegistry(expectedClass, actualClass);
 
         Assert.assertEquals("消息应包含类型信息",
-                "Only KeyedPolicyRegistry is supported, got: com.team4u.policy.OrderedPolicyChain",
+                "Only KeyedPolicyRegistry is supported, got: com.team4u.framework.policy.OrderedPolicyChain",
                 exception.getMessage());
         Assert.assertNull(exception.getExpectedPolicyClass());
         Assert.assertNull(exception.getActualPolicyClass());
@@ -58,7 +58,7 @@ public class PolicyExceptionTest {
         PolicyException exception = PolicyException.policyKeyNull(policyClass);
 
         Assert.assertEquals("消息应包含策略类型",
-                "Policy key cannot be null for policy type: com.team4u.policy.PolicyExceptionTest$StringPolicy",
+                "Policy key cannot be null for policy type: com.team4u.framework.policy.PolicyExceptionTest$StringPolicy",
                 exception.getMessage());
         Assert.assertEquals(policyClass, exception.getExpectedPolicyClass());
     }

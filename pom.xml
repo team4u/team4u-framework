@@ -13,6 +13,7 @@
         <module>team4u-base</module>
         <module>team4u-policy</module>
         <module>team4u-criterion</module>
+        <module>team4u-config</module>
     </modules>
 
     <properties>

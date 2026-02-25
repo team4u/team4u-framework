@@ -1,7 +1,6 @@
 package com.team4u.framework.criterion.parser.impl;
 
 import cn.hutool.core.util.StrUtil;
-import com.team4u.criterion.model.*;
 import com.team4u.framework.criterion.model.*;
 import com.team4u.framework.criterion.model.convert.ValueConverterRegistry;
 import com.team4u.framework.criterion.model.value.Value;
@@ -10,7 +9,6 @@ import com.team4u.framework.criterion.parser.CriterionKeywords;
 import com.team4u.framework.criterion.parser.CriterionParseException;
 import com.team4u.framework.criterion.parser.CriterionParser;
 import com.team4u.framework.criterion.parser.SyntaxHandler;
-import com.team4u.criterion.parser.handler.*;
 import com.team4u.framework.criterion.parser.handler.*;
 import com.team4u.framework.criterion.parser.token.Token;
 import com.team4u.framework.criterion.parser.token.TokenType;
