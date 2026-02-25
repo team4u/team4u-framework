@@ -226,6 +226,13 @@ ConfigManager manager = ConfigManager.builder()
 1. SPI 机制：在 `META-INF/services/com.team4u.framework.config.core.convert.PropertyConverter` 文件中添加实现类的全路径。
 2. 包扫描：自动扫描 `com.team4u.framework.config.core.convert` 包及其子包下的所有非抽象 `PropertyConverter` 实现类。
 
+方式 C：手动指定包扫描
+```java
+ConfigManager manager = ConfigManager.builder()
+    .scanConverters("com.mycompany.config.converters") // 手动扫描指定包
+    .build();
+```
+
 > [!TIP]
 > 优先级说明：手动通过 `addConverter` 注册的转换器优先级高于自动加载的转换器。如果同一个目标类型存在多个转换器，系统将采用最后注册的一个。
 

@@ -183,6 +183,17 @@ public interface ConfigManager {
         }
 
         /**
+         * 扫描并加载包下所有的 PropertyConverter
+         *
+         * @param packageName 包名
+         * @return 当前 Builder 实例
+         */
+        public Builder scanConverters(String packageName) {
+            PolicyScanner.scanAndRegister(converterRegistry, packageName, PropertyConverter.class);
+            return this;
+        }
+
+        /**
          * 添加自定义配置源
          *
          * @param source 配置源
