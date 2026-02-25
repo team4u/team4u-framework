@@ -3,6 +3,7 @@ package com.team4u.config.core.proxy;
 import cn.hutool.core.convert.Convert;
 import cn.hutool.core.util.ClassUtil;
 import cn.hutool.core.util.StrUtil;
+import com.team4u.config.core.annotation.ConfigDefault;
 import com.team4u.config.core.domain.ConfigSnapshot;
 
 import java.lang.reflect.InvocationHandler;
@@ -64,7 +65,7 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
     }
 
     @Override
-    public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+    public Object invoke(Object proxy, Method method, Object[] args) {
         // 拦截 Object 基础方法
         if (Object.class.equals(method.getDeclaringClass())) {
             return handleObjectMethods(proxy, method, args);
@@ -115,16 +116,17 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
             return proxyFactory.createProxy(snapshotProvider, subPrefix, metadata.returnType, isPinned);
         }
 
-        // 3. 如果依然未找到对应配置，返回类型默认值
+        // 3. 如果依然未找到对应配置，返回预计算的默认值（包含注解值或类型零值）
         if (rawValue == null) {
-            return ClassUtil.getDefaultValue(metadata.returnType);
+            return metadata.defaultValue;
         }
 
         // 4. 进行类型转换并处理潜在异常
         try {
             return Convert.convert(metadata.returnType, rawValue);
         } catch (Exception e) {
-            return ClassUtil.getDefaultValue(metadata.returnType);
+            // 转换异常时也回退到默认值
+            return metadata.defaultValue;
         }
     }
 
@@ -140,7 +142,27 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
         } else if (name.startsWith("is") && name.length() > 2) {
             baseName = StrUtil.lowerFirst(name.substring(2));
         }
-        return new MethodMetadata(baseName, method.getReturnType());
+
+        Class<?> returnType = method.getReturnType();
+        Object defaultValue = null;
+
+        // 1. 优先查找注解
+        if (method.isAnnotationPresent(ConfigDefault.class)) {
+            String annotationValue = method.getAnnotation(ConfigDefault.class).value();
+            try {
+                // 提前转换类型，避免运行时转换开销
+                defaultValue = Convert.convert(returnType, annotationValue);
+            } catch (Exception ignore) {
+                // 转换失败则回退
+            }
+        }
+
+        // 2. 如果没有注解或转换失败，使用 Java 类型的默认值 (int=0, boolean=false, Object=null)
+        if (defaultValue == null) {
+            defaultValue = ClassUtil.getDefaultValue(returnType);
+        }
+
+        return new MethodMetadata(baseName, returnType, defaultValue);
     }
 
     /**
@@ -176,10 +198,12 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
     private static class MethodMetadata {
         final String baseName;
         final Class<?> returnType;
+        final Object defaultValue;
 
-        MethodMetadata(String baseName, Class<?> returnType) {
+        MethodMetadata(String baseName, Class<?> returnType, Object defaultValue) {
             this.baseName = baseName;
             this.returnType = returnType;
+            this.defaultValue = defaultValue;
         }
     }
 

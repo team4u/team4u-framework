@@ -131,6 +131,7 @@ public class DefaultConfigManager implements ConfigManager {
 
             // 如果值确实发生变化（新增、删除、或者是值变动）
             if (!Objects.equals(oldVal, newVal)) {
+                log.info("Config patch detected: key=[{}]", key);
                 notifyListeners(key, oldVal, newVal);
             }
         }
