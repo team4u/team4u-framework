@@ -188,8 +188,11 @@ public interface ConfigManager {
          * @param packageName 包名
          * @return 当前 Builder 实例
          */
+        @SuppressWarnings({ "unchecked", "rawtypes" })
         public Builder scanConverters(String packageName) {
-            PolicyScanner.scanAndRegister(converterRegistry, packageName, PropertyConverter.class);
+            // 由于泛型擦除，强制转换在运行时是安全的
+            PolicyScanner.scanAndRegister(converterRegistry, packageName,
+                    (Class) PropertyConverter.class);
             return this;
         }
 

@@ -293,10 +293,14 @@ manager.addChangeListener("server.*", (key, oldVal, newVal) -> {
 你可以同时组合多个配置源，优先级高的源将覆盖优先级低的源：
 ```java
 ConfigManager manager = ConfigManager.builder()
-    .addSource(new GitConfigSource())   // 外部配置，优先级高
-    .addSource(new LocalConfigSource()) // 本地兜底，优先级低
+    .addSource(new SystemEnvConfigSource(10)) // 系统属性/环境变量，作为最高层覆盖（如 -Dapp.debug=true）
+    .addSource(new GitConfigSource(20))       // 远程配置，中层
+    .addSource(new LocalConfigSource(30))     // 本地兜底，优先级最低
     .build();
 ```
+
+> [!TIP]
+> 数值越小优先级越高。`SystemEnvConfigSource` 通常应分配最高优先级，以确保运维人员可以通过系统属性（`-Dkey=value`）随时热覆盖任意配置项。
 
 ---
 
@@ -399,6 +403,38 @@ public void process() {
 | ConfigBinder       | 绑定器：决定如何将 String 数据映射到 Complex Object。                | spi/ConfigBinder.java          |
 | PropertyConverter  | 转换器：SPI 方式注册全局转换逻辑（可选）。                           | convert/PropertyConverter.java |
 
+### 内置配置源
+
+框架开箱即用地提供了以下几种配置源实现：
+
+| 类名 | 说明 | 典型场景 |
+| --- | --- | --- |
+| `InMemoryConfigSource` | 基于内存的配置源，支持动态写入并自动触发热更新 | 单元测试、运行时动态覆盖 |
+| `PropertiesConfigSource` | 基于 `java.util.Properties` 的静态配置源 | 加载本地 .properties 文件 |
+| `SystemEnvConfigSource` | 合并 JVM 系统属性与操作系统环境变量 | 运维覆盖、容器化环境注入 |
+
+#### SystemEnvConfigSource 使用说明
+
+`SystemEnvConfigSource` 会同时读取两类系统级数据，并按以下优先级合并：
+1. **JVM 系统属性**（通过 `-Dkey=value` 传入）——优先级更高，会覆盖同名环境变量
+2. **操作系统环境变量**（`System.getenv()`）
+
+**键名规范化**：对于 `MY_APP_PORT` 这类全大写下划线风格的环境变量，系统会同时以 `MY_APP_PORT` 和规范化的 `my.app.port` 两种键名写入，以确保接口代理的松散绑定能正常匹配。
+
+**实时感知**：每次调用 `load()` 都会重新读取当前系统状态，可感知运行期通过 `System.setProperty` 进行的动态修改。
+
+```java
+// 直接将系统属性与环境变量注册为最高优先级配置源
+ConfigManager manager = ConfigManager.builder()
+    .addSource(new SystemEnvConfigSource(10))  // 使用默认名称 "SystemEnv"
+    .addSource(appFileSource)                  // 应用配置文件，优先级次之
+    .build();
+
+// 此后可通过 -Dserver.port=9090 在启动时覆盖文件中的配置
+```
+
+---
+
 ### 实现自定义配置源
 
 - Tombstone 机制：
@@ -447,7 +483,7 @@ team4u-config-core 的运行机制可以简化为以下闭环：
 graph LR
     S1[File Source] --> A[Aggregator]
     S2[Apollo Source] --> A
-    S3[System Prop] --> A
+    S3[SystemEnvConfigSource] --> A
     A --> |Merge| Snapshot[Immutable Snapshot]
     Snapshot --> |Atomic SWAP| Manager[ConfigManager]
     Manager --> |Live Proxy| Business[Business Code]
