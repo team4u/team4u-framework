@@ -66,7 +66,7 @@ public class DefaultConfigBinderTest {
     @Test
     public void testBindJavaBean() {
         ServerConfig config = binder.bind(snapshot, "server", ServerConfig.class);
-        
+
         Assert.assertNotNull(config);
         Assert.assertEquals("localhost", config.getHost());
         // 松散绑定生效
@@ -95,17 +95,37 @@ public class DefaultConfigBinderTest {
         private int maxThreads;
         private DbConfig db;
 
-        public String getHost() { return host; }
-        public void setHost(String host) { this.host = host; }
+        public String getHost() {
+            return host;
+        }
 
-        public int getConnectTimeout() { return connectTimeout; }
-        public void setConnectTimeout(int connectTimeout) { this.connectTimeout = connectTimeout; }
+        public void setHost(String host) {
+            this.host = host;
+        }
 
-        public int getMaxThreads() { return maxThreads; }
-        public void setMaxThreads(int maxThreads) { this.maxThreads = maxThreads; }
+        public int getConnectTimeout() {
+            return connectTimeout;
+        }
 
-        public DbConfig getDb() { return db; }
-        public void setDb(DbConfig db) { this.db = db; }
+        public void setConnectTimeout(int connectTimeout) {
+            this.connectTimeout = connectTimeout;
+        }
+
+        public int getMaxThreads() {
+            return maxThreads;
+        }
+
+        public void setMaxThreads(int maxThreads) {
+            this.maxThreads = maxThreads;
+        }
+
+        public DbConfig getDb() {
+            return db;
+        }
+
+        public void setDb(DbConfig db) {
+            this.db = db;
+        }
     }
 
     public static class DbConfig {
@@ -113,13 +133,28 @@ public class DefaultConfigBinderTest {
         private String username;
         private String password;
 
-        public String getUrl() { return url; }
-        public void setUrl(String url) { this.url = url; }
+        public String getUrl() {
+            return url;
+        }
 
-        public String getUsername() { return username; }
-        public void setUsername(String username) { this.username = username; }
+        public void setUrl(String url) {
+            this.url = url;
+        }
 
-        public String getPassword() { return password; }
-        public void setPassword(String password) { this.password = password; }
+        public String getUsername() {
+            return username;
+        }
+
+        public void setUsername(String username) {
+            this.username = username;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
+        }
     }
 }

@@ -1,15 +1,14 @@
 package com.team4u.config.core.proxy;
 
+import cn.hutool.cache.CacheUtil;
+import cn.hutool.cache.impl.LRUCache;
 import cn.hutool.core.convert.Convert;
 import cn.hutool.core.util.StrUtil;
 import com.team4u.config.core.domain.ConfigSnapshot;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;
-import java.util.Map;
 import java.util.function.Supplier;
-import cn.hutool.cache.CacheUtil;
-import cn.hutool.cache.impl.LRUCache;
 
 /**
  * 快照感知与 L2 缓存动态代理调用处理器

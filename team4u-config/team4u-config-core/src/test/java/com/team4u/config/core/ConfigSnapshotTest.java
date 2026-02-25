@@ -33,7 +33,7 @@ public class ConfigSnapshotTest {
         Assert.assertEquals("jdbc:mysql://localhost", dbProps.get("url"));
         Assert.assertEquals("root", dbProps.get("user"));
         Assert.assertNull("已删除的项不应出现在前缀搜索结果中", dbProps.get("pwd"));
-        
+
         // 测试带有尾部点号的前缀逻辑处理
         Map<String, String> dbPropsWithDot = snapshot.getByPrefix("db.mysql.");
         Assert.assertEquals(2, dbPropsWithDot.size());

@@ -5,11 +5,7 @@ import com.team4u.config.core.domain.ConfigEntry;
 import com.team4u.config.core.domain.ConfigSnapshot;
 import com.team4u.config.core.internal.DefaultConfigManager;
 import com.team4u.config.core.proxy.ConfigProxyFactory;
-import com.team4u.config.core.spi.ConfigBinder;
-import com.team4u.config.core.spi.ConfigSource;
-import com.team4u.config.core.spi.ConfigSourceRegistry;
-import com.team4u.config.core.spi.ConfigWatcher;
-import com.team4u.config.core.spi.ConfigWatcherRegistry;
+import com.team4u.config.core.spi.*;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -27,10 +23,11 @@ public class DefaultConfigManagerTest {
 
         MockSource source = new MockSource("MockSource", 1, loadCount, initialData);
         MockWatcher watcher = new MockWatcher();
-        
+
         // 模拟绑定器以使用代理工厂执行绑定
         ConfigBinder binder = new ConfigBinder() {
             private final ConfigProxyFactory factory = new ConfigProxyFactory();
+
             @Override
             public <T> T bind(ConfigSnapshot snapshot, String prefix, Class<T> type) {
                 // 这里的简单测试可以跳过或返回 null
@@ -61,7 +58,7 @@ public class DefaultConfigManagerTest {
             Assert.assertEquals("val1", oldVal);
             Assert.assertEquals("val2", newVal);
         });
-        
+
         manager.addChangeListener("app.*", (key, oldVal, newVal) -> {
             changeEvtCount.incrementAndGet();
             Assert.assertEquals("app.name", key);
@@ -72,7 +69,7 @@ public class DefaultConfigManagerTest {
         // 模拟触发频繁变更信号 (验证防抖拦截功)
         source.data.put("key1", new ConfigEntry("key1", "val2", "mock", 1));
         source.data.put("app.name", new ConfigEntry("app.name", "newApp", "mock", 1));
-        
+
         watcher.trigger();
         watcher.trigger();
         watcher.trigger();
@@ -87,7 +84,7 @@ public class DefaultConfigManagerTest {
         // 防抖合并结束后，应仅额外触发一次加载行为
         Assert.assertEquals(2, loadCount.get());
         Assert.assertEquals("val2", manager.getString("key1").orElse(null));
-        
+
         // 验证监听器被准确触发了 2 次 (key1 + app.name)
         Assert.assertEquals(2, changeEvtCount.get());
 
@@ -95,10 +92,10 @@ public class DefaultConfigManagerTest {
     }
 
     private static class MockSource implements ConfigSource {
+        public final Map<String, ConfigEntry> data;
         private final String name;
         private final int priority;
         private final AtomicInteger loadCount;
-        public final Map<String, ConfigEntry> data;
 
         MockSource(String name, int priority, AtomicInteger loadCount, Map<String, ConfigEntry> data) {
             this.name = name;
@@ -108,7 +105,9 @@ public class DefaultConfigManagerTest {
         }
 
         @Override
-        public String name() { return name; }
+        public String name() {
+            return name;
+        }
 
         @Override
         public Map<String, ConfigEntry> load() {
@@ -117,7 +116,9 @@ public class DefaultConfigManagerTest {
         }
 
         @Override
-        public int priority() { return priority; }
+        public int priority() {
+            return priority;
+        }
     }
 
     private static class MockWatcher implements ConfigWatcher {

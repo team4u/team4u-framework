@@ -54,7 +54,7 @@ public class ConfigProxyFactory {
      */
     @SuppressWarnings("unchecked")
     private <T> T createProxy(java.util.function.Supplier<ConfigSnapshot> snapshotProvider,
-                              String prefix,Class<T> type,
+                              String prefix, Class<T> type,
                               boolean isPinned) {
         SnapshotAwareInvocationHandler handler = new SnapshotAwareInvocationHandler(
                 type,

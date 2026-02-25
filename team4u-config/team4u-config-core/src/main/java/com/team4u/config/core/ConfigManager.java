@@ -3,12 +3,7 @@ package com.team4u.config.core;
 import com.team4u.config.core.domain.ConfigSnapshot;
 import com.team4u.config.core.internal.DefaultConfigBinder;
 import com.team4u.config.core.internal.DefaultConfigManager;
-import com.team4u.config.core.spi.ConfigBinder;
-import com.team4u.config.core.spi.ConfigSource;
-import com.team4u.config.core.spi.ConfigWatcher;
-
-import com.team4u.config.core.spi.ConfigSourceRegistry;
-import com.team4u.config.core.spi.ConfigWatcherRegistry;
+import com.team4u.config.core.spi.*;
 import com.team4u.framework.policy.PolicyScanner;
 
 import java.util.Optional;
@@ -78,6 +73,43 @@ public interface ConfigManager {
     static Builder builder() {
         return new Builder();
     }
+
+    /**
+     * 获取当前最高版本最新的不可变配置快照
+     *
+     * @return 最新的配置快照
+     */
+    ConfigSnapshot currentSnapshot();
+
+    /**
+     * 生成配置接口类型的动态代理实例 (默认返回实时绑定的 Live Mode 代理)
+     *
+     * @param prefix        绑定的配置前缀
+     * @param interfaceType 期望代理出来的业务层 Java 接口类型
+     * @param <T>           强类型
+     * @return 动态生成的代理实例对象
+     */
+    <T> T createProxy(String prefix, Class<T> interfaceType);
+
+    /**
+     * 基础键值获取快捷入口，内部委托给 {@link #currentSnapshot()} 执行
+     *
+     * @param key 精确配置键
+     * @return 配置值
+     */
+    default Optional<String> getString(String key) {
+        return currentSnapshot().get(key);
+    }
+
+    /**
+     * 监听配置点变更
+     * <p>
+     * (支持精准匹配或是 startWith 等模式，取决于实现内部对于 pattern 的处理机制)
+     *
+     * @param keyPattern 要监听的键名或前缀模式
+     * @param listener   变更回调处理程序
+     */
+    void addChangeListener(String keyPattern, ConfigChangeListener listener);
 
     /**
      * 持有单例的内部类
@@ -197,41 +229,4 @@ public interface ConfigManager {
             return new DefaultConfigManager(sourceRegistry, watcherRegistry, configBinder);
         }
     }
-
-    /**
-     * 获取当前最高版本最新的不可变配置快照
-     *
-     * @return 最新的配置快照
-     */
-    ConfigSnapshot currentSnapshot();
-
-    /**
-     * 生成配置接口类型的动态代理实例 (默认返回实时绑定的 Live Mode 代理)
-     *
-     * @param prefix        绑定的配置前缀
-     * @param interfaceType 期望代理出来的业务层 Java 接口类型
-     * @param <T>           强类型
-     * @return 动态生成的代理实例对象
-     */
-    <T> T createProxy(String prefix, Class<T> interfaceType);
-
-    /**
-     * 基础键值获取快捷入口，内部委托给 {@link #currentSnapshot()} 执行
-     *
-     * @param key 精确配置键
-     * @return 配置值
-     */
-    default Optional<String> getString(String key) {
-        return currentSnapshot().get(key);
-    }
-
-    /**
-     * 监听配置点变更
-     * <p>
-     * (支持精准匹配或是 startWith 等模式，取决于实现内部对于 pattern 的处理机制)
-     *
-     * @param keyPattern 要监听的键名或前缀模式
-     * @param listener   变更回调处理程序
-     */
-    void addChangeListener(String keyPattern, ConfigChangeListener listener);
 }

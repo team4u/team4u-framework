@@ -4,7 +4,6 @@ import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.convert.Convert;
 import cn.hutool.core.map.MapUtil;
-import cn.hutool.core.util.TypeUtil;
 import com.team4u.config.core.domain.ConfigSnapshot;
 import com.team4u.config.core.spi.ConfigBinder;
 
@@ -61,7 +60,7 @@ public class DefaultConfigBinder implements ConfigBinder {
         CopyOptions copyOptions = CopyOptions.create()
                 .ignoreCase()
                 .ignoreError(); // 忽略个别无法转换的字段错误
-        
+
         // 由于旧版 hutool 的 ignoreCase 可能对中划线等特殊符号支持不完美，提前将 Map 中的分隔符去除
         Map<String, Object> processedMap = new HashMap<>();
         for (Map.Entry<String, Object> entry : unflattenedMap.entrySet()) {
@@ -85,7 +84,7 @@ public class DefaultConfigBinder implements ConfigBinder {
             // ConfigSnapshot.getByPrefix("app") 会拉取 "app.xxx" -> "xxx" 格式的数据。
             String relKey = entry.getKey();
             String rawValue = entry.getValue();
-            
+
             if (relKey.isEmpty()) {
                 continue; // 保护逻辑
             }

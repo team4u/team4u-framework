@@ -4,7 +4,10 @@ import com.team4u.config.core.domain.ConfigEntry;
 
 import java.io.IOException;
 import java.io.InputStream;
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
+import java.util.Properties;
 
 /**
  * 基于 Properties 的配置源实现

@@ -2,33 +2,16 @@ package com.team4u.config.core;
 
 import com.team4u.config.core.domain.ConfigEntry;
 import com.team4u.config.core.domain.ConfigSnapshot;
-import com.team4u.config.core.internal.SnapshotAggregator;
 import com.team4u.config.core.proxy.ConfigProxyFactory;
 import com.team4u.config.core.proxy.SnapshotAware;
-import com.team4u.config.core.spi.ConfigSource;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.Arrays;
 import java.util.HashMap;
-import java.util.List;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
 
 public class ConfigProxyTest {
-
-    public interface AppConfig {
-        String name();
-        int maxDbConnections();
-        boolean isDevMode();
-    }
-
-    public interface ComplexAppConfig {
-        String name();               // 匹配 app.name
-        int maxDbConnections();      // 匹配 app.max-db-connections (kebab)
-        int serverPort();           // 匹配 app.server_port (snake)
-        boolean isDevMode();         // 匹配 app.is.dev.mode (dot)
-    }
 
     @Test
     public void testProxyBinding() {
@@ -39,19 +22,22 @@ public class ConfigProxyTest {
         entries.put("app.dev-mode", new ConfigEntry("app.dev-mode", "true", "mock", now));
 
         ConfigSnapshot snapshot = new ConfigSnapshot(100L, entries);
-        
+
         // 模拟管理器行为映射
         ConfigManager manager = new ConfigManager() {
             @Override
             public ConfigSnapshot currentSnapshot() {
                 return snapshot;
             }
+
             @Override
             public <T> T createProxy(String prefix, Class<T> interfaceType) {
                 return new ConfigProxyFactory().createLiveProxy(this, prefix, interfaceType);
             }
+
             @Override
-            public void addChangeListener(String keyPattern, ConfigChangeListener listener) {}
+            public void addChangeListener(String keyPattern, ConfigChangeListener listener) {
+            }
         };
 
         AppConfig config = manager.createProxy("app.", AppConfig.class);
@@ -64,7 +50,7 @@ public class ConfigProxyTest {
         AppConfig pinnedConfig = SnapshotAware.pin(config);
         Assert.assertNotNull(pinnedConfig);
         Assert.assertEquals(50, pinnedConfig.maxDbConnections());
-        
+
         // 再次锚定应当返回自身对象实例
         Assert.assertSame(pinnedConfig, SnapshotAware.pin(pinnedConfig));
     }
@@ -89,12 +75,15 @@ public class ConfigProxyTest {
             public ConfigSnapshot currentSnapshot() {
                 return currentRef.get();
             }
+
             @Override
             public <T> T createProxy(String prefix, Class<T> interfaceType) {
                 return new ConfigProxyFactory().createLiveProxy(this, prefix, interfaceType);
             }
+
             @Override
-            public void addChangeListener(String keyPattern, ConfigChangeListener listener) {}
+            public void addChangeListener(String keyPattern, ConfigChangeListener listener) {
+            }
         };
 
         AppConfig config = manager.createProxy("app.", AppConfig.class);
@@ -122,13 +111,18 @@ public class ConfigProxyTest {
         ConfigSnapshot snapshot = new ConfigSnapshot(1L, entries);
         ConfigManager manager = new ConfigManager() {
             @Override
-            public ConfigSnapshot currentSnapshot() { return snapshot; }
+            public ConfigSnapshot currentSnapshot() {
+                return snapshot;
+            }
+
             @Override
             public <T> T createProxy(String prefix, Class<T> type) {
                 return new ConfigProxyFactory().createLiveProxy(this, prefix, type);
             }
+
             @Override
-            public void addChangeListener(String key, ConfigChangeListener l) {}
+            public void addChangeListener(String key, ConfigChangeListener l) {
+            }
         };
 
         ComplexAppConfig config = manager.createProxy("app.", ComplexAppConfig.class);
@@ -137,5 +131,23 @@ public class ConfigProxyTest {
         Assert.assertEquals(10, config.maxDbConnections());
         Assert.assertEquals(8080, config.serverPort());
         Assert.assertTrue(config.isDevMode());
+    }
+
+    public interface AppConfig {
+        String name();
+
+        int maxDbConnections();
+
+        boolean isDevMode();
+    }
+
+    public interface ComplexAppConfig {
+        String name();               // 匹配 app.name
+
+        int maxDbConnections();      // 匹配 app.max-db-connections (kebab)
+
+        int serverPort();           // 匹配 app.server_port (snake)
+
+        boolean isDevMode();         // 匹配 app.is.dev.mode (dot)
     }
 }

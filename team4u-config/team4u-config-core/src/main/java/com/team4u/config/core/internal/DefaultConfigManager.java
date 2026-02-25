@@ -8,11 +8,7 @@ import com.team4u.config.core.ConfigChangeListener;
 import com.team4u.config.core.ConfigManager;
 import com.team4u.config.core.domain.ConfigEntry;
 import com.team4u.config.core.domain.ConfigSnapshot;
-import com.team4u.config.core.spi.ConfigBinder;
-import com.team4u.config.core.spi.ConfigSource;
-import com.team4u.config.core.spi.ConfigSourceRegistry;
-import com.team4u.config.core.spi.ConfigWatcher;
-import com.team4u.config.core.spi.ConfigWatcherRegistry;
+import com.team4u.config.core.spi.*;
 
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -45,10 +41,10 @@ public class DefaultConfigManager implements ConfigManager {
 
         // 绑定重载防抖器 (500ms 窗口)
         this.hotReloadManager = new HotReloadManager(
-                snapshotRef, 
-                this.sources, 
-                this.aggregator, 
-                500, 
+                snapshotRef,
+                this.sources,
+                this.aggregator,
+                500,
                 this::fireChangeEvents
         );
 

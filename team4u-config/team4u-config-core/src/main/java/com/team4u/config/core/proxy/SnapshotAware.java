@@ -11,16 +11,6 @@ package com.team4u.config.core.proxy;
 public interface SnapshotAware<T> {
 
     /**
-     * “钉住” 当前配置状态
-     * <p>
-     * 获取一个新的固定快照代理。该代理内含绑定的老版本 ConfigSnapshot，
-     * 不会随全局更新而变，以防破坏一致性或产生“撕裂读取”。
-     *
-     * @return 固定快照代理对象
-     */
-    T pin();
-
-    /**
      * 静态工具方法：将任意配置代理对象锚定到当前快照
      * <p>
      * 该方法封装了强制转换逻辑，提供更友好的 API。
@@ -38,4 +28,14 @@ public interface SnapshotAware<T> {
         }
         throw new IllegalArgumentException("对象未实现 SnapshotAware 接口，无法进行快照锚定");
     }
+
+    /**
+     * “钉住” 当前配置状态
+     * <p>
+     * 获取一个新的固定快照代理。该代理内含绑定的老版本 ConfigSnapshot，
+     * 不会随全局更新而变，以防破坏一致性或产生“撕裂读取”。
+     *
+     * @return 固定快照代理对象
+     */
+    T pin();
 }

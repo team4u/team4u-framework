@@ -6,14 +6,10 @@ import com.team4u.config.core.domain.ConfigSnapshot;
 import com.team4u.config.core.spi.ConfigSource;
 
 import java.util.List;
-import java.util.function.Consumer;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.ScheduledFuture;
-import java.util.concurrent.ScheduledThreadPoolExecutor;
-import java.util.concurrent.ThreadFactory;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Consumer;
 
 /**
  * 负责收集变更信号，执行防抖，并原子更新 Snapshot
@@ -28,10 +24,9 @@ public class HotReloadManager {
     private final Consumer<ReloadEvent> onReloadSuccess;
 
     private final ScheduledExecutorService debounceExecutor;
-    private ScheduledFuture<?> pendingTask;
     private final long debounceWindowMs;
-
     private final AtomicLong versionGenerator = new AtomicLong(System.currentTimeMillis());
+    private ScheduledFuture<?> pendingTask;
 
     public HotReloadManager(AtomicReference<ConfigSnapshot> currentSnapshot,
                             List<ConfigSource> configSources,

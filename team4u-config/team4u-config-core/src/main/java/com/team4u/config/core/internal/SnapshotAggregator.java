@@ -2,15 +2,11 @@ package com.team4u.config.core.internal;
 
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.map.MapUtil;
-import cn.hutool.core.util.StrUtil;
-import com.team4u.config.core.ConfigChangeListener;
 import com.team4u.config.core.domain.ConfigEntry;
 import com.team4u.config.core.domain.ConfigSnapshot;
 import com.team4u.config.core.spi.ConfigSource;
 
 import java.util.*;
-import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.Consumer;
 
 /**
  * 负责收集排序所有数据源，生成并处理合并后的 ConfigSnapshot
