@@ -46,6 +46,21 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
         this.snapshotProvider = snapshotProvider;
         this.isPinned = isPinned;
         this.proxyFactory = proxyFactory;
+
+        // 预热元数据缓存
+        warmUp();
+    }
+
+    /**
+     * 预热元数据：遍历接口所有方法，提前解析并放入 metadataMap
+     */
+    private void warmUp() {
+        for (Method method : interfaceType.getMethods()) {
+            // 排除 Object 基础方法和默认方法，仅处理业务方法
+            if (method.getDeclaringClass() != Object.class && !method.isDefault()) {
+                metadataMap.put(method, createMetadata(method));
+            }
+        }
     }
 
     @Override

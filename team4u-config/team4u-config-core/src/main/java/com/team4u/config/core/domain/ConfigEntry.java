@@ -1,5 +1,6 @@
 package com.team4u.config.core.domain;
 
+import com.team4u.config.core.spi.ConfigSource;
 import lombok.Value;
 
 /**
@@ -14,7 +15,7 @@ public class ConfigEntry {
      */
     String key;
     /**
-     * 配置值 (若为 null，则代表该配置在此源中被删除或未定义)
+     * 配置值 (若为 {@link ConfigSource#TOMBSTONE_VALUE}，则代表该配置在此源中被删除或未定义)
      */
     String value;
     /**
@@ -29,9 +30,9 @@ public class ConfigEntry {
     /**
      * 判断当前配置项是否为空或已删除
      *
-     * @return 如果值为空，则视为已删除或失效
+     * @return 如果值为 {@link ConfigSource#TOMBSTONE_VALUE}，则视为已删除或失效
      */
     public boolean isEmptyOrDeleted() {
-        return value == null;
+        return value == ConfigSource.TOMBSTONE_VALUE;
     }
 }

@@ -10,6 +10,8 @@ import com.team4u.config.core.domain.ConfigEntry;
 import com.team4u.config.core.domain.ConfigSnapshot;
 import com.team4u.config.core.proxy.ConfigProxyFactory;
 import com.team4u.config.core.spi.*;
+import com.team4u.framework.base.instance.DynamicInstanceProvider;
+import lombok.EqualsAndHashCode;
 
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -32,7 +34,10 @@ public class DefaultConfigManager implements ConfigManager {
 
     private final List<ListenerRegistration> listeners = new CopyOnWriteArrayList<>();
 
-    public DefaultConfigManager(ConfigSourceRegistry sourceRegistry, ConfigWatcherRegistry watcherRegistry, ConfigBinder configBinder) {
+    private final DynamicInstanceProvider<ProxyKey, ProxyKey, Object> proxyInstanceProvider;
+
+    public DefaultConfigManager(ConfigSourceRegistry sourceRegistry, ConfigWatcherRegistry watcherRegistry,
+                                ConfigBinder configBinder) {
         this.sources = sourceRegistry.getPolicies();
         this.watchers = watcherRegistry.getPolicies();
         this.configBinder = configBinder;
@@ -46,18 +51,24 @@ public class DefaultConfigManager implements ConfigManager {
                 this.sources,
                 this.aggregator,
                 500,
-                this::fireChangeEvents
-        );
+                this::fireChangeEvents);
 
         // 启动 Watchers
         initWatchers();
+
+        // 初始化代理对象缓存提供者
+        this.proxyInstanceProvider = DynamicInstanceProvider.createLru(
+                1024,
+                key -> key,
+                key -> doCreateProxy(key.prefix, key.interfaceType));
     }
 
     private void initialLoad() {
         // 同步全量加载配置。如果资源不可用，这里采用快速失败策略阻断应用启动
         ConfigSnapshot snapshot = aggregator.aggregate(sources, System.nanoTime());
         snapshotRef.set(snapshot);
-        log.info("Initial ConfigSnapshot built, version = {}, entries = {}", snapshot.getVersion(), snapshot.getEntries().size());
+        log.info("Initial ConfigSnapshot built, version = {}, entries = {}", snapshot.getVersion(),
+                snapshot.getEntries().size());
     }
 
     private void initWatchers() {
@@ -75,7 +86,12 @@ public class DefaultConfigManager implements ConfigManager {
     }
 
     @Override
+    @SuppressWarnings("unchecked")
     public <T> T createProxy(String prefix, Class<T> interfaceType) {
+        return (T) proxyInstanceProvider.get(new ProxyKey(prefix, interfaceType));
+    }
+
+    private Object doCreateProxy(String prefix, Class<?> interfaceType) {
         // 如果是接口，返回 Live Mode 动态代理，支持实时热更新
         if (interfaceType.isInterface()) {
             return new ConfigProxyFactory().createLiveProxy(this, prefix, interfaceType);
@@ -168,6 +184,17 @@ public class DefaultConfigManager implements ConfigManager {
         ListenerRegistration(String pattern, ConfigChangeListener listener) {
             this.pattern = pattern;
             this.listener = listener;
+        }
+    }
+
+    @EqualsAndHashCode
+    private static class ProxyKey {
+        private final String prefix;
+        private final Class<?> interfaceType;
+
+        private ProxyKey(String prefix, Class<?> interfaceType) {
+            this.prefix = prefix;
+            this.interfaceType = interfaceType;
         }
     }
 }

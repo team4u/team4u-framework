@@ -96,4 +96,25 @@ public class ConfigSnapshotTest {
         // 5. 不存在的情况
         Assert.assertFalse(snapshot.getSmart("notExist").isPresent());
     }
+
+    @Test
+    public void testToString() {
+        Map<String, ConfigEntry> entries = new HashMap<>();
+        long now = System.currentTimeMillis();
+        for (int i = 0; i < 15; i++) {
+            String key = "key" + i;
+            entries.put(key, new ConfigEntry(key, "value" + i, "src", now));
+        }
+
+        ConfigSnapshot snapshot = new ConfigSnapshot(12345L, entries);
+        String str = snapshot.toString();
+
+        // 验证包含必要信息
+        Assert.assertTrue("输出应包含版本号", str.contains("version=12345"));
+        Assert.assertTrue("输出应包含条目总数", str.contains("entriesCount=15"));
+        Assert.assertTrue("输出应包含摘要标记", str.contains("entriesSummary=["));
+        Assert.assertTrue("超过 10 个条目应包含省略号", str.contains("..."));
+        Assert.assertTrue("输出应包含松散索引大小", str.contains("looseIndexSize="));
+        Assert.assertTrue("输出应包含结构化图根节点", str.contains("unflattenedMapRoots="));
+    }
 }

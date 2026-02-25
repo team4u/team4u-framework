@@ -13,6 +13,13 @@ import java.util.Map;
 public interface ConfigSource extends OrderedPolicy {
 
     /**
+     * 表示配置项已被删除或未定义的哨兵值（Tombstone）。
+     * <p>
+     * 当一个配置源返回此值时，表示它显式屏蔽了低优先级数据源中的同名配置项。
+     */
+    String TOMBSTONE_VALUE = null;
+
+    /**
      * 数据源名称，用于标识配置的来源环境或渠道。
      * 例如："JDBC-Primary", "File:/opt/conf/app.prop" 等
      *
@@ -23,7 +30,8 @@ public interface ConfigSource extends OrderedPolicy {
     /**
      * 核心全量加载逻辑
      *
-     * @return 当前源的所有配置，包含被标记为删除的 Tombstone 数据(即 value 为 null 的 ConfigEntry)
+     * @return 当前源的所有配置，包含被标记为删除的 Tombstone 数据(即 value 为 {@link #TOMBSTONE_VALUE} 的
+     * ConfigEntry)
      */
     Map<String, ConfigEntry> load();
 

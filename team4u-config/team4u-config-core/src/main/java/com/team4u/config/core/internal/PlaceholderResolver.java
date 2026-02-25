@@ -16,6 +16,7 @@ public class PlaceholderResolver {
     private static final String PREFIX = "${";
     private static final String SUFFIX = "}";
     private static final String SEPARATOR = ":";
+    private static final int MAX_DEPTH = 20;
 
     /**
      * 解析字符串中的占位符
@@ -25,7 +26,7 @@ public class PlaceholderResolver {
      * @return 解析并替换后的字符串
      */
     public static String resolve(String value, ConfigSnapshot snapshot) {
-        return resolve(value, snapshot, new HashSet<>());
+        return resolve(value, snapshot, new HashSet<>(), 0);
     }
 
     /**
@@ -37,6 +38,24 @@ public class PlaceholderResolver {
      * @return 解析并替换后的字符串
      */
     public static String resolve(String value, ConfigSnapshot snapshot, Set<String> visitedKeys) {
+        return resolve(value, snapshot, visitedKeys, 0);
+    }
+
+    /**
+     * 解析字符串中的占位符（支持复用已访问键集合及递归深度控制）
+     *
+     * @param value        包含占位符的原始字符串
+     * @param snapshot     当前配置快照
+     * @param visitedKeys  已访问的键集合，用于循环依赖检测
+     * @param currentDepth 当前递归深度
+     * @return 解析并替换后的字符串
+     */
+    private static String resolve(String value, ConfigSnapshot snapshot, Set<String> visitedKeys, int currentDepth) {
+        if (currentDepth > MAX_DEPTH) {
+            throw new IllegalArgumentException(
+                    "Maximum recursion depth reached for placeholder resolution: " + MAX_DEPTH);
+        }
+
         if (StrUtil.isBlank(value) || !value.contains(PREFIX)) {
             return value;
         }
@@ -60,10 +79,11 @@ public class PlaceholderResolver {
             // 提取占位符内容，例如 "key:default"
             String placeholder = result.substring(startIndex + PREFIX.length(), endIndex);
             // 递归解析占位符内容中可能存在的嵌套占位符（例如：${db.${env}.host}）
-            String resolvedPlaceholder = resolve(placeholder, snapshot, visitedKeys);
+            String resolvedPlaceholder = resolve(placeholder, snapshot, visitedKeys, currentDepth + 1);
 
             // 解析占位符并获取最终替换值
-            String resolvedValue = resolveSinglePlaceholder(resolvedPlaceholder, snapshot, visitedKeys);
+            String resolvedValue = resolveSinglePlaceholder(resolvedPlaceholder, snapshot, visitedKeys,
+                    currentDepth + 1);
 
             if (resolvedValue != null) {
                 // 替换占位符并从新位置继续扫描
@@ -81,9 +101,13 @@ public class PlaceholderResolver {
     /**
      * 处理单个占位符内容的解析
      *
-     * @param placeholder 占位符内容（不含 ${ 和 }）
+     * @param placeholder  占位符内容（不含 ${ 和 }）
+     * @param snapshot     配置快照
+     * @param visitedKeys  访问过的键集合
+     * @param currentDepth 当前递归深度
      */
-    private static String resolveSinglePlaceholder(String placeholder, ConfigSnapshot snapshot, Set<String> visitedKeys) {
+    private static String resolveSinglePlaceholder(String placeholder, ConfigSnapshot snapshot, Set<String> visitedKeys,
+                                                   int currentDepth) {
         PlaceholderProperty property = parseProperty(placeholder);
 
         // 循环依赖检查
@@ -97,7 +121,7 @@ public class PlaceholderResolver {
 
             if (value != null && value.contains(PREFIX)) {
                 // 如果解析出的值仍包含占位符，递归解析（例如：${key} 指向的值为 ${anotherKey}）
-                return resolve(value, snapshot, visitedKeys);
+                return resolve(value, snapshot, visitedKeys, currentDepth + 1);
             }
 
             return value;

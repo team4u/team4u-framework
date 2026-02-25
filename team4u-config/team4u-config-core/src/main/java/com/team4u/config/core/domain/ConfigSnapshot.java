@@ -33,12 +33,14 @@ public class ConfigSnapshot {
     /**
      * 结构化视图缓存
      */
-    private volatile Map<String, Object> unflattenedMap;
+    private final Map<String, Object> unflattenedMap;
 
     public ConfigSnapshot(long version, Map<String, ConfigEntry> entries) {
         this.version = version;
         this.entries = MapUtil.isEmpty(entries) ? Collections.emptyMap() : Collections.unmodifiableMap(entries);
         this.looseIndex = buildLooseIndex(this.entries.keySet());
+        // 构造阶段积极构建结构化视图（预热占位符逻辑）
+        this.unflattenedMap = buildUnflattenedMap();
     }
 
     /**
@@ -99,13 +101,6 @@ public class ConfigSnapshot {
      * @return 嵌套的 Map 结构
      */
     public Map<String, Object> unflattenedMap() {
-        if (unflattenedMap == null) {
-            synchronized (this) {
-                if (unflattenedMap == null) {
-                    unflattenedMap = buildUnflattenedMap();
-                }
-            }
-        }
         return unflattenedMap;
     }
 
@@ -126,8 +121,15 @@ public class ConfigSnapshot {
                 continue;
             }
 
-            // 解析占位符，预先解析可以显著提升后续 bind 的性能
-            String resolvedValue = PlaceholderResolver.resolve(configEntry.getValue(), this, visitedKeys);
+            // 解析占位符，积极解析可以消除运行时绑定的递归开销
+            String resolvedValue;
+            try {
+                resolvedValue = PlaceholderResolver.resolve(configEntry.getValue(), this, visitedKeys);
+            } catch (IllegalArgumentException e) {
+                // 如果存在循环依赖或递归过深，在预加载阶段仅保持原始值，不抛出异常
+                // 这样可以保证 ConfigSnapshot 构造成功，异常将在业务实际调用时触发
+                resolvedValue = configEntry.getValue();
+            }
 
             // 填充树形结构
             int start = 0;
@@ -243,5 +245,31 @@ public class ConfigSnapshot {
             }
         }
         return Collections.unmodifiableMap(result);
+    }
+
+    @Override
+    public String toString() {
+        StringBuilder sb = new StringBuilder("ConfigSnapshot{");
+        sb.append("version=").append(version);
+        sb.append(", entriesCount=").append(entries.size());
+        sb.append(", entriesSummary=[");
+
+        int count = 0;
+        for (Map.Entry<String, ConfigEntry> entry : entries.entrySet()) {
+            if (count > 0) {
+                sb.append(", ");
+            }
+            if (count >= 10) {
+                sb.append("...");
+                break;
+            }
+            sb.append(entry.getKey()).append("=").append(entry.getValue().getValue());
+            count++;
+        }
+        sb.append("]");
+        sb.append(", looseIndexSize=").append(looseIndex.size());
+        sb.append(", unflattenedMapRoots=").append(unflattenedMap.keySet());
+        sb.append('}');
+        return sb.toString();
     }
 }

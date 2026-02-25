@@ -61,7 +61,7 @@ public class InMemoryConfigSourceTest {
     }
 
     /**
-     * 验证 delete() 将配置项标记为 Tombstone（value 为 null），
+     * 验证 delete() 将配置项标记为 Tombstone（值为 {@link ConfigSource#TOMBSTONE_VALUE}），
      * 而非从存储中抹除，使聚合层能感知到删除信号
      */
     @Test
@@ -70,9 +70,9 @@ public class InMemoryConfigSourceTest {
         source.delete("app.debug");
 
         Map<String, ConfigEntry> result = source.load();
-        // 条目仍然存在，但 value 为 null，表明这是 Tombstone
+        // 条目仍然存在，但值为 {@link ConfigSource#TOMBSTONE_VALUE}，表明这是 Tombstone
         Assert.assertTrue(result.containsKey("app.debug"));
-        Assert.assertNull(result.get("app.debug").getValue());
+        Assert.assertEquals(ConfigSource.TOMBSTONE_VALUE, result.get("app.debug").getValue());
         Assert.assertTrue(result.get("app.debug").isEmptyOrDeleted());
     }
 

@@ -12,9 +12,9 @@ import java.util.concurrent.ConcurrentHashMap;
  * <p>
  * 将配置数据完全保存在 JVM 堆内存中，适合以下场景：
  * <ul>
- *   <li>单元测试：无需依赖外部数据库或文件，快速构造测试数据</li>
- *   <li>动态覆盖：在运行时临时写入或覆盖来自其他数据源的配置项</li>
- *   <li>默认值：作为兜底配置源，为系统提供静态默认值</li>
+ * <li>单元测试：无需依赖外部数据库或文件，快速构造测试数据</li>
+ * <li>动态覆盖：在运行时临时写入或覆盖来自其他数据源的配置项</li>
+ * <li>默认值：作为兜底配置源，为系统提供静态默认值</li>
  * </ul>
  * 本实现同时具备 {@link ConfigWatcher} 能力：
  * 通过 {@link #putAndRefresh(String, String)} 等方法写入配置后，
@@ -63,7 +63,8 @@ public class InMemoryConfigSource implements ConfigSource, ConfigWatcher {
      * 时间戳取写入时刻的系统毫秒数，用于支持增量加载。
      *
      * @param key   配置键
-     * @param value 配置值，传入 null 等同于调用 {@link #delete(String)}，表示将该配置标记为删除（Tombstone）
+     * @param value 配置值，传入 {@link ConfigSource#TOMBSTONE_VALUE} 等同于调用
+     *              {@link #delete(String)}，表示将该配置标记为删除（Tombstone）
      */
     public void put(String key, String value) {
         store.put(key, new ConfigEntry(key, value, name, System.currentTimeMillis()));
@@ -74,7 +75,8 @@ public class InMemoryConfigSource implements ConfigSource, ConfigWatcher {
      * <p>
      * 逐条调用 {@link #put(String, String)}，每条记录独立记录写入时间戳。
      *
-     * @param entries 键值对映射，值为 null 时视为删除标记（Tombstone）
+     * @param entries 键值对映射，值为 {@link ConfigSource#TOMBSTONE_VALUE}
+     *                时视为删除标记（Tombstone）
      */
     public void putAll(Map<String, String> entries) {
         entries.forEach(this::put);
@@ -87,7 +89,7 @@ public class InMemoryConfigSource implements ConfigSource, ConfigWatcher {
      * 适用于写入后需要立即生效的场景。
      *
      * @param key   配置键
-     * @param value 配置值，传入 null 表示标记为删除（Tombstone）
+     * @param value 配置值，传入 {@link ConfigSource#TOMBSTONE_VALUE} 表示标记为删除（Tombstone）
      */
     public void putAndRefresh(String key, String value) {
         put(key, value);
@@ -100,7 +102,8 @@ public class InMemoryConfigSource implements ConfigSource, ConfigWatcher {
      * 等价于先调用 {@link #putAll(Map)}，再统一发出一次变更信号。
      * 适用于需要一次性写入多条配置后立刻生效的场景。
      *
-     * @param entries 键值对映射，值为 null 时视为删除标记（Tombstone）
+     * @param entries 键值对映射，值为 {@link ConfigSource#TOMBSTONE_VALUE}
+     *                时视为删除标记（Tombstone）
      */
     public void putAllAndRefresh(Map<String, String> entries) {
         putAll(entries);
@@ -127,7 +130,7 @@ public class InMemoryConfigSource implements ConfigSource, ConfigWatcher {
      * @param key 待删除的配置键
      */
     public void delete(String key) {
-        put(key, null);
+        put(key, ConfigSource.TOMBSTONE_VALUE);
     }
 
     /**

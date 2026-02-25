@@ -107,12 +107,30 @@ public class PlaceholderResolverTest {
         String result1 = PlaceholderResolver.resolve("Host: ${missing.key:${db.host}}", snapshot);
         Assert.assertEquals("Host: 127.0.0.1", result1);
 
-        // 2. 复杂的默认值嵌套：${missing.key:http://${db.host}:${db.port}/} -> http://127.0.0.1:3306/
+        // 2. 复杂的默认值嵌套：${missing.key:http://${db.host}:${db.port}/} ->
+        // http://127.0.0.1:3306/
         String result2 = PlaceholderResolver.resolve("URL: ${missing.key:http://${db.host}:${db.port}/}", snapshot);
         Assert.assertEquals("URL: http://127.0.0.1:3306/", result2);
 
         // 3. 带有嵌套默认值的嵌套：${missing.key:${another.missing:8080}} -> 8080
         String result3 = PlaceholderResolver.resolve("Port: ${missing.key:${another.missing:8080}}", snapshot);
         Assert.assertEquals("Port: 8080", result3);
+    }
+
+    @Test
+    public void testMaxRecursionDepth() {
+        Map<String, ConfigEntry> entries = new HashMap<>();
+        // 构造 21 层嵌套
+        for (int i = 0; i < 21; i++) {
+            entries.put("k" + i, new ConfigEntry("k" + i, "${k" + (i + 1) + "}", "source", 1L));
+        }
+        entries.put("k21", new ConfigEntry("k21", "done", "source", 1L));
+
+        ConfigSnapshot deepSnapshot = new ConfigSnapshot(1L, entries);
+
+        IllegalArgumentException exception = Assert.assertThrows(IllegalArgumentException.class, () -> {
+            PlaceholderResolver.resolve("${k0}", deepSnapshot);
+        });
+        Assert.assertTrue(exception.getMessage().contains("Maximum recursion depth reached"));
     }
 }
