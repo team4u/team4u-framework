@@ -209,8 +209,28 @@ public class MyDecryptConverter implements PropertyConverter<String> {
 }
 ```
 
+#### 注册自定义转换器
+
+你可以通过以下两种方式注册自定义转换器，使其在全局或特定配置管理器中生效：
+
+**方式 A：通过 Builder 手动注册（推荐用于特定实例）**
+```java
+ConfigManager manager = ConfigManager.builder()
+    .addConverter(new MyDecryptConverter()) // 手动添加实例
+    .build();
+```
+
+**方式 B：通过 SPI 自动加载（推荐用于全局通用转换器）**
+1. 在 `src/main/resources/META-INF/services/com.team4u.config.core.convert.PropertyConverter` 文件中添加实现类的全路径。
+2. 在构建时调用 `loadConvertersFromSpi()`：
+```java
+ConfigManager manager = ConfigManager.builder()
+    .loadConvertersFromSpi()
+    .build();
+```
+
 > [!TIP]
-> **接口变更说明**：从 v1.0.0 起，`convert` 方法增加了 `targetType` 参数，这使得一个转换器实例可以根据目标类型执行不同的逻辑（如通用的 JSON 序列化）。
+> **优先级说明**：手动通过 `addConverter` 注册的转换器优先级高于通过 SPI 加载的转换器。如果同一个目标类型存在多个转换器，系统将采用最后注册的一个。
 
 ### 智能松散绑定 (Relaxed Binding)
 
