@@ -145,7 +145,7 @@ public class Criteria {
     }
 
     private MatchPredicate getCompiledPredicate(String expression) {
-        return compiledProvider.get(expression, expression);
+        return compiledProvider.get(expression);
     }
 
     /**
