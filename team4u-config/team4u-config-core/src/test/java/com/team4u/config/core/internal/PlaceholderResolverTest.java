@@ -7,7 +7,9 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.HashMap;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 
 public class PlaceholderResolverTest {
 
@@ -89,7 +91,7 @@ public class PlaceholderResolverTest {
 
     @Test
     public void testSharedSet() {
-        java.util.Set<String> visitedKeys = new java.util.HashSet<>();
+        Set<String> visitedKeys = new HashSet<>();
         String result1 = PlaceholderResolver.resolve("Hello ${app.name}", snapshot, visitedKeys);
         Assert.assertEquals("Hello Team4UApp", result1);
         Assert.assertTrue(visitedKeys.isEmpty());
@@ -97,5 +99,20 @@ public class PlaceholderResolverTest {
         String result2 = PlaceholderResolver.resolve("DB: ${db.host}", snapshot, visitedKeys);
         Assert.assertEquals("DB: 127.0.0.1", result2);
         Assert.assertTrue(visitedKeys.isEmpty());
+    }
+
+    @Test
+    public void testNestedPlaceholderInDefaultValue() {
+        // 1. 简单的默认值嵌套：${missing.key:${db.host}} -> 127.0.0.1
+        String result1 = PlaceholderResolver.resolve("Host: ${missing.key:${db.host}}", snapshot);
+        Assert.assertEquals("Host: 127.0.0.1", result1);
+
+        // 2. 复杂的默认值嵌套：${missing.key:http://${db.host}:${db.port}/} -> http://127.0.0.1:3306/
+        String result2 = PlaceholderResolver.resolve("URL: ${missing.key:http://${db.host}:${db.port}/}", snapshot);
+        Assert.assertEquals("URL: http://127.0.0.1:3306/", result2);
+
+        // 3. 带有嵌套默认值的嵌套：${missing.key:${another.missing:8080}} -> 8080
+        String result3 = PlaceholderResolver.resolve("Port: ${missing.key:${another.missing:8080}}", snapshot);
+        Assert.assertEquals("Port: 8080", result3);
     }
 }
