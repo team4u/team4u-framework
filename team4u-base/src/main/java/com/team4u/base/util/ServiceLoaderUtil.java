@@ -1,4 +1,4 @@
-package com.team4u.policy.util;
+package com.team4u.base.util;
 
 import cn.hutool.log.Log;
 
@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
 /**
  * SPI机制中的服务加载工具类
  *
- * @author jay.wu
+ * @author team4u
  * @see cn.hutool.core.util.ServiceLoaderUtil
  */
 public class ServiceLoaderUtil extends cn.hutool.core.util.ServiceLoaderUtil {

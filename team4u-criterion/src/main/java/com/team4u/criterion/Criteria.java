@@ -1,8 +1,7 @@
 package com.team4u.criterion;
 
 import lombok.Getter;
-import cn.hutool.cache.Cache;
-import cn.hutool.cache.CacheUtil;
+import com.team4u.base.instance.DynamicInstanceProvider;
 import com.team4u.criterion.compiler.CompilerRegistry;
 import com.team4u.criterion.compiler.CompilingVisitor;
 import com.team4u.criterion.compiler.CriterionCompiler;
@@ -62,9 +61,9 @@ public class Criteria {
     private final CompilerRegistry compilerRegistry;
 
     /**
-     * 核心缓存：表达式字符串 -> 编译后的函数
+     * 核心编译缓存提供者：表达式字符串 -> 编译后的函数
      */
-    private final Cache<String, MatchPredicate> compiledCache;
+    private final DynamicInstanceProvider<String, String, MatchPredicate> compiledProvider;
 
     /**
      * 建议通过 Builder 或 standard() 获取实例
@@ -75,7 +74,10 @@ public class Criteria {
     public Criteria(CriterionParser parser, CompilerRegistry compilerRegistry) {
         this.parser = parser != null ? parser : new StandardCriterionParser();
         this.compilerRegistry = compilerRegistry != null ? compilerRegistry : new CompilerRegistry();
-        this.compiledCache = CacheUtil.newLRUCache(1000);
+        this.compiledProvider = DynamicInstanceProvider.createStringLru(
+                1000,
+                input -> input,
+                (configId, config) -> compileExpression(config));
     }
 
     /**
@@ -143,21 +145,7 @@ public class Criteria {
     }
 
     private MatchPredicate getCompiledPredicate(String expression) {
-        MatchPredicate function = compiledCache.get(expression);
-        if (function != null) {
-            return function;
-        }
-
-        synchronized (expression.intern()) {
-            function = compiledCache.get(expression);
-            if (function != null) {
-                return function;
-            }
-
-            function = compileExpression(expression);
-            compiledCache.put(expression, function);
-            return function;
-        }
+        return compiledProvider.get(expression, expression);
     }
 
     /**

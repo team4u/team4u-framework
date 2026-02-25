@@ -1,32 +1,32 @@
-package com.team4u.policy;
+package com.team4u.base.instance;
 
 import java.util.function.BiFunction;
 
 /**
- * 策略工厂
+ * 实例工厂
  * <p>
- * 负责根据配置创建策略实例
+ * 负责根据配置创建实例
  *
  * @param <C> 配置类型
- * @param <P> 策略类型
+ * @param <T> 实例类型
  * @author team4u
  */
 @FunctionalInterface
-public interface PolicyFactory<C, P> {
+public interface InstanceFactory<C, T> {
 
     /**
      * 便捷适配器
      */
-    static <C, P> PolicyFactory<C, P> of(BiFunction<String, C, P> function) {
+    static <C, T> InstanceFactory<C, T> of(BiFunction<String, C, T> function) {
         return function::apply;
     }
 
     /**
-     * 创建策略
+     * 创建实例
      *
      * @param configId 配置唯一标识
      * @param config   配置对象 (可能为 null，取决于 Parser 的实现)
-     * @return 策略实例
+     * @return 实例
      */
-    P create(String configId, C config);
+    T create(String configId, C config);
 }

@@ -1,4 +1,4 @@
-package com.team4u.policy.util;
+package com.team4u.base.util;
 
 import org.junit.Assert;
 import org.junit.Test;

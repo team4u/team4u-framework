@@ -3,7 +3,7 @@ package com.team4u.policy;
 import cn.hutool.core.util.ClassUtil;
 import cn.hutool.core.util.ReflectUtil;
 import cn.hutool.log.Log;
-import com.team4u.policy.util.ServiceLoaderUtil;
+import com.team4u.base.util.ServiceLoaderUtil;
 
 import java.lang.reflect.Modifier;
 import java.util.Objects;

@@ -22,7 +22,7 @@
 
 - 键值路由模式 (`KeyedPolicy`)：基于唯一 Key 进行 O(1) 复杂度的精准匹配，适用于支付渠道路由、指令分发等场景。
 - 有序责任链模式 (`ContextPolicy`)：基于上下文匹配 (`supports`) 和优先级 (`priority`) 进行过滤和排序，适用于风控规则、优惠计算等场景。
-- 动态策略模式 (`DynamicPolicyProvider`)：支持将 JSON/XML 等配置文本动态解析为策略对象，并提供高性能的缓存和变更检测机制。
+- 动态实例模式 (`DynamicInstanceProvider`)：支持将 JSON/XML 等配置文本动态解析为对象，并提供高性能的缓存和变更检测机制（由 `team4u-base` 模块提供）。
 
 ---
 
@@ -165,40 +165,44 @@ pipeline.executeChain(context, (policy, ctx) -> {
 
 ---
 
-## 场景三：动态配置热加载 (Dynamic Provider)
+## 场景三：动态配置热加载 (Dynamic Instance)
 
-当策略逻辑需要根据配置文本（如数据库中的 JSON 字符串）动态生成，且需要高性能缓存和变更检测时使用。
+当对象逻辑需要根据配置文本（如数据库中的 JSON 字符串）动态生成，且需要高性能缓存和变更检测时使用。此功能由基础模块的 `DynamicInstanceProvider` 提供，适用于策略创建、组件初始化等多种场景。
 
 ### 核心组件
 
 - ConfigParser: 将字符串解析为配置对象。
-- PolicyFactory: 根据配置对象创建策略实例。
-- DynamicPolicyProvider: 管理缓存、哈希比对和线程安全更新。
+- InstanceFactory: 根据配置对象创建实例。
+- DynamicInstanceProvider: 管理缓存、哈希比对和线程安全更新。
 
 ### 使用示例
 
 假设我们需要根据一段 JSON 规则生成一个规则引擎策略：
 
 ```java
+import com.team4u.base.config.StringConfigParser;
+import com.team4u.base.instance.DynamicInstanceProvider;
+import com.team4u.base.instance.InstanceFactory;
+
 // 定义解析器 (String -> Config)
 StringConfigParser<RuleConfig> parser = jsonStr -> JSON.parseObject(jsonStr, RuleConfig.class);
 
-// 定义工厂 (Config -> Policy)
-PolicyFactory<RuleConfig, RulePolicy> factory = (id, config) -> new ConcreteRulePolicy(config);
+// 定义工厂 (Config -> Instance)
+InstanceFactory<RuleConfig, RulePolicy> factory = (id, config) -> new ConcreteRulePolicy(config);
 
 // 创建提供者 (LRU缓存容量 100)
-DynamicPolicyProvider<String, RuleConfig, RulePolicy> provider = 
-    DynamicPolicyProvider.createStringLru(100, parser, factory);
+DynamicInstanceProvider<String, RuleConfig, RulePolicy> provider = 
+    DynamicInstanceProvider.createStringLru(100, parser, factory);
 
-// 获取策略 (高性能)
+// 获取实例 (高性能)
 // 逻辑：
-// - 如果 jsonString 哈希未变，直接返回缓存策略 (无解析开销)
-// - 如果哈希变化，解析 Config -> 创建 Policy -> 更新缓存
+// - 如果 jsonString 哈希未变，直接返回缓存实例 (无解析开销)
+// - 如果哈希变化，解析 Config -> 创建 Instance -> 更新缓存
 RulePolicy policy = provider.get("rule_id_1001", jsonStringFromDb);
 
 ```
 
-性能优势： `DynamicPolicyProvider` 内部维护了 `inputHashCache`，在输入源（如配置字符串）未变更的情况下，完全跳过 JSON 解析和对象创建过程，性能比直接解析快几个数量级。
+性能优势： `DynamicInstanceProvider` 内部维护了 `inputHashCache`，在输入源（如配置字符串）未变更的情况下，完全跳过 JSON 解析和对象创建过程，性能比直接解析快几个数量级。
 
 ---
 
@@ -259,11 +263,11 @@ com.myapp.impl.WechatPolicy
 | KeyedPolicyRegistry | 明确 Key 的路由 (Map模式) | 读写分离，读取无锁，高性能 |  |
 | OrderedPolicyChain | 需排序、条件过滤的链式处理 | 自动排序，volatile 读优化 |  |
 | PolicyPipeline | 需中断控制的流程执行 | 封装了循环与回调逻辑 |  |
-| DynamicPolicyProvider | 文本配置转策略对象 | 输入哈希比对，避免重复解析 |  |
+| DynamicInstanceProvider | 文本配置转对象 | 输入哈希比对，避免重复解析 |  |
 | PolicyScanner | 策略自动发现 | 支持反射扫描与 SPI |  |
 
 ## 最佳实践
 
-- 单例模式：`PolicyRegistry` 和 `DynamicPolicyProvider` 应当作为单例（Singleton）或 Spring Bean 管理，因为它们包含缓存。
+- 单例模式：`PolicyRegistry` 和 `DynamicInstanceProvider` 应当作为单例（Singleton）或 Spring Bean 管理，因为它们包含缓存。
 - 异常处理：注册不同类型的策略到同一个 Registry 会抛出 `PolicyException`，请确保泛型类型匹配。
 - 并发安全：所有的 Registry 实现都是线程安全的（Synchronized 写，Volatile/CopyOnWrite 读），可以放心地在多线程环境中使用。

@@ -1,4 +1,4 @@
-package com.team4u.policy;
+package com.team4u.base.config;
 
 import java.util.function.Function;
 

@@ -1,4 +1,4 @@
-package com.team4u.policy;
+package com.team4u.base.instance;
 
 import cn.hutool.cache.CacheUtil;
 import lombok.Data;
@@ -13,9 +13,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 动态策略工厂相关的单元测试
+ * 动态实例工厂相关的单元测试
  */
-public class DynamicPolicyProviderTest {
+public class DynamicInstanceProviderTest {
 
     @Test
     public void testGet() {
@@ -23,7 +23,7 @@ public class DynamicPolicyProviderTest {
         AtomicInteger createCount = new AtomicInteger();
 
         // 明确指定输入源为 String
-        DynamicPolicyProvider<String, ConfigMock, PolicyMock> provider = DynamicPolicyProvider.createStringLru(
+        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
                 100,
                 rawConfig -> {
                     parseCount.incrementAndGet();
@@ -31,27 +31,27 @@ public class DynamicPolicyProviderTest {
                 },
                 (id, config) -> {
                     createCount.incrementAndGet();
-                    return new PolicyMock(config.getValue());
+                    return new InstanceMock(config.getValue());
                 });
 
         String configContent = "{\"key\": \"val\"}";
 
         // 1. 第一次获取：解析并创建
-        PolicyMock p1 = provider.get("t1", configContent);
+        InstanceMock p1 = provider.get("t1", configContent);
         Assert.assertNotNull(p1);
         Assert.assertEquals("{\"key\": \"val\"}", p1.getValue());
         Assert.assertEquals(1, parseCount.get());
         Assert.assertEquals(1, createCount.get());
 
         // 2. 第二次获取相同标识：通过 hash 快速命中缓存，跳过解析
-        PolicyMock p2 = provider.get("t1", configContent);
+        InstanceMock p2 = provider.get("t1", configContent);
         Assert.assertSame(p1, p2);
         Assert.assertEquals(1, parseCount.get()); // hash 命中，跳过解析
-        Assert.assertEquals(1, createCount.get()); // 策略不应重复创建
+        Assert.assertEquals(1, createCount.get()); // 实例不应重复创建
 
         // 3. 配置变更获取：检测到变更，重新创建
         String newConfigContent = "{\"key\": \"new_val\"}";
-        PolicyMock p3 = provider.get("t1", newConfigContent);
+        InstanceMock p3 = provider.get("t1", newConfigContent);
         Assert.assertNotSame(p1, p3);
         Assert.assertEquals("{\"key\": \"new_val\"}", p3.getValue());
         Assert.assertEquals(2, parseCount.get());
@@ -59,7 +59,7 @@ public class DynamicPolicyProviderTest {
 
         // 4. 手动失效后再获取
         provider.invalidate("t1");
-        PolicyMock p4 = provider.get("t1", newConfigContent);
+        InstanceMock p4 = provider.get("t1", newConfigContent);
         Assert.assertNotSame(p3, p4);
         Assert.assertEquals(3, parseCount.get());
         Assert.assertEquals(3, createCount.get());
@@ -77,7 +77,7 @@ public class DynamicPolicyProviderTest {
         AtomicInteger parseCount = new AtomicInteger();
         AtomicInteger createCount = new AtomicInteger();
 
-        DynamicPolicyProvider<String, ConfigMock, PolicyMock> provider = DynamicPolicyProvider.createStringLru(
+        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
                 100,
                 rawConfig -> {
                     parseCount.incrementAndGet();
@@ -85,7 +85,7 @@ public class DynamicPolicyProviderTest {
                 },
                 (id, config) -> {
                     createCount.incrementAndGet();
-                    return new PolicyMock(config.getValue());
+                    return new InstanceMock(config.getValue());
                 });
 
         String configContent = "test-config";
@@ -100,7 +100,7 @@ public class DynamicPolicyProviderTest {
             provider.get("id1", configContent);
         }
         Assert.assertEquals(1, parseCount.get()); // 仍然只解析了 1 次
-        Assert.assertEquals(1, createCount.get()); // 策略只创建 1 次
+        Assert.assertEquals(1, createCount.get()); // 实例只创建 1 次
     }
 
     /**
@@ -110,13 +110,13 @@ public class DynamicPolicyProviderTest {
     public void testHashChangeTriggersParsing() {
         AtomicInteger parseCount = new AtomicInteger();
 
-        DynamicPolicyProvider<String, ConfigMock, PolicyMock> provider = DynamicPolicyProvider.createStringLru(
+        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
                 100,
                 rawConfig -> {
                     parseCount.incrementAndGet();
                     return new ConfigMock(rawConfig);
                 },
-                (id, config) -> new PolicyMock(config.getValue()));
+                (id, config) -> new InstanceMock(config.getValue()));
 
         provider.get("id1", "config-v1");
         Assert.assertEquals(1, parseCount.get());
@@ -131,31 +131,31 @@ public class DynamicPolicyProviderTest {
     @Test
     public void testMapInput() {
         // 输入源为 Map
-        DynamicPolicyProvider<Map<String, Object>, ConfigMock, PolicyMock> provider = new DynamicPolicyProvider<>(
+        DynamicInstanceProvider<Map<String, Object>, ConfigMock, InstanceMock> provider = new DynamicInstanceProvider<>(
                 CacheUtil.newLRUCache(100),
                 map -> new ConfigMock((String) map.get("value")),
-                (id, config) -> new PolicyMock(config.getValue()));
+                (id, config) -> new InstanceMock(config.getValue()));
 
         Map<String, Object> input = new HashMap<>();
         input.put("value", "v1");
 
-        PolicyMock p1 = provider.get("id1", input);
+        InstanceMock p1 = provider.get("id1", input);
         Assert.assertEquals("v1", p1.getValue());
 
         // 配置变更
         Map<String, Object> input2 = new HashMap<>();
         input2.put("value", "v2");
-        PolicyMock p2 = provider.get("id1", input2);
+        InstanceMock p2 = provider.get("id1", input2);
         Assert.assertEquals("v2", p2.getValue());
         Assert.assertNotSame(p1, p2);
     }
 
     @Test
     public void testLruEviction() {
-        DynamicPolicyProvider<String, ConfigMock, PolicyMock> provider = DynamicPolicyProvider.createStringLru(
+        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
                 2,
                 ConfigMock::new,
-                (id, config) -> new PolicyMock(config.getValue()));
+                (id, config) -> new InstanceMock(config.getValue()));
 
         provider.get("p1", "v1");
         provider.get("p2", "v2");
@@ -176,13 +176,13 @@ public class DynamicPolicyProviderTest {
     public void testHashCacheEviction() {
         AtomicInteger parseCount = new AtomicInteger();
 
-        DynamicPolicyProvider<String, ConfigMock, PolicyMock> provider = DynamicPolicyProvider.createStringLru(
+        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
                 2,
                 rawConfig -> {
                     parseCount.incrementAndGet();
                     return new ConfigMock(rawConfig);
                 },
-                (id, config) -> new PolicyMock(config.getValue()));
+                (id, config) -> new InstanceMock(config.getValue()));
 
         // 填满缓存
         provider.get("p1", "v1");
@@ -210,13 +210,13 @@ public class DynamicPolicyProviderTest {
     public void testInvalidateClearsHashCache() {
         AtomicInteger parseCount = new AtomicInteger();
 
-        DynamicPolicyProvider<String, ConfigMock, PolicyMock> provider = DynamicPolicyProvider.createStringLru(
+        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
                 100,
                 rawConfig -> {
                     parseCount.incrementAndGet();
                     return new ConfigMock(rawConfig);
                 },
-                (id, config) -> new PolicyMock(config.getValue()));
+                (id, config) -> new InstanceMock(config.getValue()));
 
         provider.get("id1", "config1");
         Assert.assertEquals(1, parseCount.get());
@@ -240,13 +240,13 @@ public class DynamicPolicyProviderTest {
     public void testClearClearsHashCache() {
         AtomicInteger parseCount = new AtomicInteger();
 
-        DynamicPolicyProvider<String, ConfigMock, PolicyMock> provider = DynamicPolicyProvider.createStringLru(
+        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
                 100,
                 rawConfig -> {
                     parseCount.incrementAndGet();
                     return new ConfigMock(rawConfig);
                 },
-                (id, config) -> new PolicyMock(config.getValue()));
+                (id, config) -> new InstanceMock(config.getValue()));
 
         provider.get("id1", "config1");
         Assert.assertEquals(1, parseCount.get());
@@ -267,7 +267,7 @@ public class DynamicPolicyProviderTest {
         AtomicInteger parseCount = new AtomicInteger();
         AtomicInteger createCount = new AtomicInteger();
 
-        DynamicPolicyProvider<String, ConfigMock, PolicyMock> provider = DynamicPolicyProvider.createStringLru(
+        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
                 100,
                 rawConfig -> {
                     parseCount.incrementAndGet();
@@ -275,7 +275,7 @@ public class DynamicPolicyProviderTest {
                 },
                 (id, config) -> {
                     createCount.incrementAndGet();
-                    return new PolicyMock(config.getValue());
+                    return new InstanceMock(config.getValue());
                 });
 
         int threadCount = 10;
@@ -288,7 +288,7 @@ public class DynamicPolicyProviderTest {
             executor.submit(() -> {
                 try {
                     for (int j = 0; j < iterationsPerThread; j++) {
-                        PolicyMock policy = provider.get("shared-id", "shared-config");
+                        InstanceMock policy = provider.get("shared-id", "shared-config");
                         Assert.assertNotNull(policy);
                         Assert.assertEquals("shared-config", policy.getValue());
                     }
@@ -313,12 +313,12 @@ public class DynamicPolicyProviderTest {
     public void testConcurrentDifferentConfigIds() throws InterruptedException {
         AtomicInteger createCount = new AtomicInteger();
 
-        DynamicPolicyProvider<String, ConfigMock, PolicyMock> provider = DynamicPolicyProvider.createStringLru(
+        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
                 100,
                 ConfigMock::new,
                 (id, config) -> {
                     createCount.incrementAndGet();
-                    return new PolicyMock(config.getValue());
+                    return new InstanceMock(config.getValue());
                 });
 
         int threadCount = 10;
@@ -331,7 +331,7 @@ public class DynamicPolicyProviderTest {
                 try {
                     String configId = "config-" + threadId;
                     String config = "value-" + threadId;
-                    PolicyMock policy = provider.get(configId, config);
+                    InstanceMock policy = provider.get(configId, config);
                     Assert.assertNotNull(policy);
                     Assert.assertEquals(config, policy.getValue());
                 } finally {
@@ -343,19 +343,75 @@ public class DynamicPolicyProviderTest {
         latch.await();
         executor.shutdown();
 
-        // 每个 configId 应该只创建一次策略
+        // 每个 configId 应该只创建一次实例
         Assert.assertEquals(threadCount, createCount.get());
     }
 
     @Test
     public void testProvideBlankConfig() {
-        DynamicPolicyProvider<String, ConfigMock, PolicyMock> provider = DynamicPolicyProvider.createStringLru(
+        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
                 100,
                 ConfigMock::new,
-                (id, config) -> new PolicyMock(config.getValue()));
+                (id, config) -> new InstanceMock(config.getValue()));
 
         Assert.assertNull(provider.get("test", null));
         Assert.assertNull(provider.get("test", "   "));
+    }
+
+    /**
+     * 测试简化版 get(input) 方法
+     */
+    @Test
+    public void testSimplifiedGet() {
+        AtomicInteger createCount = new AtomicInteger();
+        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
+                100,
+                ConfigMock::new,
+                (id, config) -> {
+                    createCount.incrementAndGet();
+                    return new InstanceMock(config.getValue());
+                });
+
+        String config = "v1";
+        // 1. 第一次获取
+        InstanceMock p1 = provider.get(config);
+        Assert.assertNotNull(p1);
+        Assert.assertEquals(1, createCount.get());
+
+        // 2. 相同内容重复获取，应命中缓存
+        InstanceMock p2 = provider.get(config);
+        Assert.assertSame(p1, p2);
+        Assert.assertEquals(1, createCount.get());
+
+        // 3. 不同内容获取
+        provider.get("v2");
+        Assert.assertEquals(2, createCount.get());
+    }
+
+    /**
+     * 测试简化版 getByConfig(config) 方法
+     */
+    @Test
+    public void testSimplifiedGetByConfig() {
+        AtomicInteger createCount = new AtomicInteger();
+        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
+                100,
+                ConfigMock::new,
+                (id, config) -> {
+                    createCount.incrementAndGet();
+                    return new InstanceMock(config.getValue());
+                });
+
+        ConfigMock config = new ConfigMock("c1");
+        // 1. 第一次获取
+        InstanceMock p1 = provider.getByConfig(config);
+        Assert.assertNotNull(p1);
+        Assert.assertEquals(1, createCount.get());
+
+        // 2. 相同内容重复获取，应命中缓存
+        InstanceMock p2 = provider.getByConfig(config);
+        Assert.assertSame(p1, p2);
+        Assert.assertEquals(1, createCount.get());
     }
 
     @Data
@@ -368,10 +424,10 @@ public class DynamicPolicyProviderTest {
     }
 
     @Data
-    static class PolicyMock {
+    static class InstanceMock {
         private final String value;
 
-        public PolicyMock(String value) {
+        public InstanceMock(String value) {
             this.value = value;
         }
     }
