@@ -29,7 +29,7 @@ public class DynamicInstanceProviderTest {
                     parseCount.incrementAndGet();
                     return new ConfigMock(rawConfig);
                 },
-                (id, config) -> {
+                config -> {
                     createCount.incrementAndGet();
                     return new InstanceMock(config.getValue());
                 });
@@ -37,29 +37,29 @@ public class DynamicInstanceProviderTest {
         String configContent = "{\"key\": \"val\"}";
 
         // 1. 第一次获取：解析并创建
-        InstanceMock p1 = provider.get("t1", configContent);
+        InstanceMock p1 = provider.get(configContent);
         Assert.assertNotNull(p1);
         Assert.assertEquals("{\"key\": \"val\"}", p1.getValue());
         Assert.assertEquals(1, parseCount.get());
         Assert.assertEquals(1, createCount.get());
 
-        // 2. 第二次获取相同标识：通过 hash 快速命中缓存，跳过解析
-        InstanceMock p2 = provider.get("t1", configContent);
+        // 2. 第二次获取相同输入：快速命中缓存，跳过解析和创建
+        InstanceMock p2 = provider.get(configContent);
         Assert.assertSame(p1, p2);
-        Assert.assertEquals(1, parseCount.get()); // hash 命中，跳过解析
-        Assert.assertEquals(1, createCount.get()); // 实例不应重复创建
+        Assert.assertEquals(1, parseCount.get());
+        Assert.assertEquals(1, createCount.get());
 
-        // 3. 配置变更获取：检测到变更，重新创建
+        // 3. 配置变更获取：新的输入，重新解析和创建
         String newConfigContent = "{\"key\": \"new_val\"}";
-        InstanceMock p3 = provider.get("t1", newConfigContent);
+        InstanceMock p3 = provider.get(newConfigContent);
         Assert.assertNotSame(p1, p3);
         Assert.assertEquals("{\"key\": \"new_val\"}", p3.getValue());
         Assert.assertEquals(2, parseCount.get());
         Assert.assertEquals(2, createCount.get());
 
         // 4. 手动失效后再获取
-        provider.invalidate("t1");
-        InstanceMock p4 = provider.get("t1", newConfigContent);
+        provider.invalidate(newConfigContent);
+        InstanceMock p4 = provider.get(newConfigContent);
         Assert.assertNotSame(p3, p4);
         Assert.assertEquals(3, parseCount.get());
         Assert.assertEquals(3, createCount.get());
@@ -69,83 +69,30 @@ public class DynamicInstanceProviderTest {
         Assert.assertEquals(0, provider.size());
     }
 
-    /**
-     * 测试 hash 快速路径优化：相同 input 重复调用时跳过解析
-     */
-    @Test
-    public void testHashFastPathSkipParsing() {
-        AtomicInteger parseCount = new AtomicInteger();
-        AtomicInteger createCount = new AtomicInteger();
-
-        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
-                100,
-                rawConfig -> {
-                    parseCount.incrementAndGet();
-                    return new ConfigMock(rawConfig);
-                },
-                (id, config) -> {
-                    createCount.incrementAndGet();
-                    return new InstanceMock(config.getValue());
-                });
-
-        String configContent = "test-config";
-
-        // 首次调用：需要解析
-        provider.get("id1", configContent);
-        Assert.assertEquals(1, parseCount.get());
-        Assert.assertEquals(1, createCount.get());
-
-        // 后续 10 次相同调用：全部跳过解析
-        for (int i = 0; i < 10; i++) {
-            provider.get("id1", configContent);
-        }
-        Assert.assertEquals(1, parseCount.get()); // 仍然只解析了 1 次
-        Assert.assertEquals(1, createCount.get()); // 实例只创建 1 次
-    }
-
-    /**
-     * 测试 hash 变化时触发解析
-     */
-    @Test
-    public void testHashChangeTriggersParsing() {
-        AtomicInteger parseCount = new AtomicInteger();
-
-        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
-                100,
-                rawConfig -> {
-                    parseCount.incrementAndGet();
-                    return new ConfigMock(rawConfig);
-                },
-                (id, config) -> new InstanceMock(config.getValue()));
-
-        provider.get("id1", "config-v1");
-        Assert.assertEquals(1, parseCount.get());
-
-        provider.get("id1", "config-v2"); // hash 变化，触发解析
-        Assert.assertEquals(2, parseCount.get());
-
-        provider.get("id1", "config-v2"); // hash 未变，跳过解析
-        Assert.assertEquals(2, parseCount.get());
-    }
-
     @Test
     public void testMapInput() {
         // 输入源为 Map
         DynamicInstanceProvider<Map<String, Object>, ConfigMock, InstanceMock> provider = new DynamicInstanceProvider<>(
                 CacheUtil.newLRUCache(100),
                 map -> new ConfigMock((String) map.get("value")),
-                (id, config) -> new InstanceMock(config.getValue()));
+                config -> new InstanceMock(config.getValue()));
 
         Map<String, Object> input = new HashMap<>();
         input.put("value", "v1");
 
-        InstanceMock p1 = provider.get("id1", input);
+        InstanceMock p1 = provider.get(input);
         Assert.assertEquals("v1", p1.getValue());
+
+        // 使用相同内容的 Map 进行第二次获取，由于 Map 的 equals 是按内容比较的，所以应该命中缓存
+        Map<String, Object> inputSame = new HashMap<>();
+        inputSame.put("value", "v1");
+        InstanceMock p1b = provider.get(inputSame);
+        Assert.assertSame(p1, p1b);
 
         // 配置变更
         Map<String, Object> input2 = new HashMap<>();
         input2.put("value", "v2");
-        InstanceMock p2 = provider.get("id1", input2);
+        InstanceMock p2 = provider.get(input2);
         Assert.assertEquals("v2", p2.getValue());
         Assert.assertNotSame(p1, p2);
     }
@@ -155,108 +102,18 @@ public class DynamicInstanceProviderTest {
         DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
                 2,
                 ConfigMock::new,
-                (id, config) -> new InstanceMock(config.getValue()));
+                config -> new InstanceMock(config.getValue()));
 
-        provider.get("p1", "v1");
-        provider.get("p2", "v2");
+        provider.get("v1");
+        provider.get("v2");
         Assert.assertEquals(2, provider.size());
 
-        // p1 变成最近最少使用
-        provider.get("p2", "v2");
+        // v1 变成最近最少使用
+        provider.get("v2");
 
-        // 增加 p3，导致 p1 被淘汰
-        provider.get("p3", "v3");
+        // 增加 v3，导致 v1 被淘汰
+        provider.get("v3");
         Assert.assertEquals(2, provider.size());
-    }
-
-    /**
-     * 测试 LRU 淘汰时 hash 缓存同步淘汰
-     */
-    @Test
-    public void testHashCacheEviction() {
-        AtomicInteger parseCount = new AtomicInteger();
-
-        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
-                2,
-                rawConfig -> {
-                    parseCount.incrementAndGet();
-                    return new ConfigMock(rawConfig);
-                },
-                (id, config) -> new InstanceMock(config.getValue()));
-
-        // 填满缓存
-        provider.get("p1", "v1");
-        provider.get("p2", "v2");
-        Assert.assertEquals(2, provider.size());
-        Assert.assertEquals(2, parseCount.get());
-
-        // 访问 p2，使 p1 成为 LRU
-        provider.get("p2", "v2");
-        Assert.assertEquals(2, parseCount.get()); // hash 命中，跳过解析
-
-        // 添加 p3，p1 被淘汰（包括其 hash 缓存）
-        provider.get("p3", "v3");
-        Assert.assertEquals(3, parseCount.get());
-
-        // 再次访问 p1，由于已被淘汰，需要重新解析
-        provider.get("p1", "v1");
-        Assert.assertEquals(4, parseCount.get()); // 重新解析
-    }
-
-    /**
-     * 测试手动失效时 hash 缓存同步清理
-     */
-    @Test
-    public void testInvalidateClearsHashCache() {
-        AtomicInteger parseCount = new AtomicInteger();
-
-        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
-                100,
-                rawConfig -> {
-                    parseCount.incrementAndGet();
-                    return new ConfigMock(rawConfig);
-                },
-                (id, config) -> new InstanceMock(config.getValue()));
-
-        provider.get("id1", "config1");
-        Assert.assertEquals(1, parseCount.get());
-
-        // 相同配置再次调用，跳过解析
-        provider.get("id1", "config1");
-        Assert.assertEquals(1, parseCount.get());
-
-        // 手动失效
-        provider.invalidate("id1");
-
-        // 再次调用，需要重新解析（hash 缓存已清理）
-        provider.get("id1", "config1");
-        Assert.assertEquals(2, parseCount.get());
-    }
-
-    /**
-     * 测试 clear() 同时清理 hash 缓存
-     */
-    @Test
-    public void testClearClearsHashCache() {
-        AtomicInteger parseCount = new AtomicInteger();
-
-        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
-                100,
-                rawConfig -> {
-                    parseCount.incrementAndGet();
-                    return new ConfigMock(rawConfig);
-                },
-                (id, config) -> new InstanceMock(config.getValue()));
-
-        provider.get("id1", "config1");
-        Assert.assertEquals(1, parseCount.get());
-
-        // 清空缓存
-        provider.clear();
-
-        // 再次调用，需要重新解析
-        provider.get("id1", "config1");
-        Assert.assertEquals(2, parseCount.get());
     }
 
     /**
@@ -273,7 +130,7 @@ public class DynamicInstanceProviderTest {
                     parseCount.incrementAndGet();
                     return new ConfigMock(rawConfig);
                 },
-                (id, config) -> {
+                config -> {
                     createCount.incrementAndGet();
                     return new InstanceMock(config.getValue());
                 });
@@ -283,14 +140,16 @@ public class DynamicInstanceProviderTest {
         ExecutorService executor = Executors.newFixedThreadPool(threadCount);
         CountDownLatch latch = new CountDownLatch(threadCount);
 
-        // 多线程并发访问同一个 configId
+        String sharedConfig = "shared-config";
+
+        // 多线程并发访问同一个 config
         for (int i = 0; i < threadCount; i++) {
             executor.submit(() -> {
                 try {
                     for (int j = 0; j < iterationsPerThread; j++) {
-                        InstanceMock policy = provider.get("shared-id", "shared-config");
+                        InstanceMock policy = provider.get(sharedConfig);
                         Assert.assertNotNull(policy);
-                        Assert.assertEquals("shared-config", policy.getValue());
+                        Assert.assertEquals(sharedConfig, policy.getValue());
                     }
                 } finally {
                     latch.countDown();
@@ -301,22 +160,22 @@ public class DynamicInstanceProviderTest {
         latch.await();
         executor.shutdown();
 
-        // 验证只解析和创建了一次（hash 快速路径 + 双重检查锁）
+        // 验证只解析和创建了一次（双重检查锁）
         Assert.assertEquals(1, parseCount.get());
         Assert.assertEquals(1, createCount.get());
     }
 
     /**
-     * 测试不同 configId 的并发访问
+     * 测试不同 config 的并发访问
      */
     @Test
-    public void testConcurrentDifferentConfigIds() throws InterruptedException {
+    public void testConcurrentDifferentConfigs() throws InterruptedException {
         AtomicInteger createCount = new AtomicInteger();
 
         DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
                 100,
                 ConfigMock::new,
-                (id, config) -> {
+                config -> {
                     createCount.incrementAndGet();
                     return new InstanceMock(config.getValue());
                 });
@@ -329,9 +188,8 @@ public class DynamicInstanceProviderTest {
             final int threadId = i;
             executor.submit(() -> {
                 try {
-                    String configId = "config-" + threadId;
                     String config = "value-" + threadId;
-                    InstanceMock policy = provider.get(configId, config);
+                    InstanceMock policy = provider.get(config);
                     Assert.assertNotNull(policy);
                     Assert.assertEquals(config, policy.getValue());
                 } finally {
@@ -343,7 +201,7 @@ public class DynamicInstanceProviderTest {
         latch.await();
         executor.shutdown();
 
-        // 每个 configId 应该只创建一次实例
+        // 每个 config 应该只创建一次实例
         Assert.assertEquals(threadCount, createCount.get());
     }
 
@@ -352,40 +210,10 @@ public class DynamicInstanceProviderTest {
         DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
                 100,
                 ConfigMock::new,
-                (id, config) -> new InstanceMock(config.getValue()));
+                config -> new InstanceMock(config.getValue()));
 
-        Assert.assertNull(provider.get("test", null));
-        Assert.assertNull(provider.get("test", "   "));
-    }
-
-    /**
-     * 测试简化版 get(input) 方法
-     */
-    @Test
-    public void testSimplifiedGet() {
-        AtomicInteger createCount = new AtomicInteger();
-        DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
-                100,
-                ConfigMock::new,
-                (id, config) -> {
-                    createCount.incrementAndGet();
-                    return new InstanceMock(config.getValue());
-                });
-
-        String config = "v1";
-        // 1. 第一次获取
-        InstanceMock p1 = provider.get(config);
-        Assert.assertNotNull(p1);
-        Assert.assertEquals(1, createCount.get());
-
-        // 2. 相同内容重复获取，应命中缓存
-        InstanceMock p2 = provider.get(config);
-        Assert.assertSame(p1, p2);
-        Assert.assertEquals(1, createCount.get());
-
-        // 3. 不同内容获取
-        provider.get("v2");
-        Assert.assertEquals(2, createCount.get());
+        Assert.assertNull(provider.get(null));
+        Assert.assertNull(provider.get("   "));
     }
 
     /**
@@ -397,7 +225,7 @@ public class DynamicInstanceProviderTest {
         DynamicInstanceProvider<String, ConfigMock, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
                 100,
                 ConfigMock::new,
-                (id, config) -> {
+                config -> {
                     createCount.incrementAndGet();
                     return new InstanceMock(config.getValue());
                 });

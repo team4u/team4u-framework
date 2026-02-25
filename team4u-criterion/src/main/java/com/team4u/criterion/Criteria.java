@@ -77,7 +77,7 @@ public class Criteria {
         this.compiledProvider = DynamicInstanceProvider.createStringLru(
                 1000,
                 input -> input,
-                (configId, config) -> compileExpression(config));
+                config -> compileExpression(config));
     }
 
     /**

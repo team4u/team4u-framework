@@ -1,6 +1,6 @@
 package com.team4u.base.instance;
 
-import java.util.function.BiFunction;
+import java.util.function.Function;
 
 /**
  * 实例工厂
@@ -17,16 +17,15 @@ public interface InstanceFactory<C, T> {
     /**
      * 便捷适配器
      */
-    static <C, T> InstanceFactory<C, T> of(BiFunction<String, C, T> function) {
+    static <C, T> InstanceFactory<C, T> of(Function<C, T> function) {
         return function::apply;
     }
 
     /**
      * 创建实例
      *
-     * @param configId 配置唯一标识
-     * @param config   配置对象 (可能为 null，取决于 Parser 的实现)
+     * @param config 配置对象 (可能为 null，取决于 Parser 的实现)
      * @return 实例
      */
-    T create(String configId, C config);
+    T create(C config);
 }
