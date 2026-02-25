@@ -35,7 +35,7 @@
 继承 `KeyedPolicy<K>` 接口，其中 `K` 是路由键的类型（通常是 String 或 Integer）。
 
 ```java
-import com.team4u.policy.KeyedPolicy;
+import com.team4u.framework.policy.KeyedPolicy;
 
 // 定义支付策略接口
 public interface PaymentPolicy extends KeyedPolicy<String> {
@@ -68,16 +68,24 @@ public class AlipayPolicy implements PaymentPolicy {
 使用 `KeyedPolicyRegistry` 进行管理。该注册表针对读操作进行了极致优化（Copy-On-Write 机制），确保高并发下的读取性能。
 
 ```java
-import com.team4u.policy.KeyedPolicyRegistry;
+import com.team4u.framework.policy.KeyedPolicyRegistry;
 
 // 创建注册表
 KeyedPolicyRegistry<String, PaymentPolicy> registry = new KeyedPolicyRegistry<>(PaymentPolicy.class);
 
 // 注册策略
-registry.register(new AlipayPolicy());
+registry.
+
+        register(new AlipayPolicy());
 
 // 使用策略 (O(1) 查找)
-registry.get("ALIPAY").ifPresent(policy -> policy.pay(100.0));
+        registry.
+
+        get("ALIPAY").
+
+        ifPresent(policy ->policy.
+
+        pay(100.0));
 
 ```
 
@@ -92,7 +100,7 @@ registry.get("ALIPAY").ifPresent(policy -> policy.pay(100.0));
 继承 `ContextPolicy<C>` 接口，其中 `C` 是上下文对象的类型。
 
 ```java
-import com.team4u.policy.ContextPolicy;
+import com.team4u.framework.policy.ContextPolicy;
 
 // 定义优惠券策略
 public interface DiscountPolicy extends ContextPolicy<OrderContext> {
@@ -130,20 +138,28 @@ public class VipDiscountPolicy implements DiscountPolicy {
 使用 `OrderedPolicyChain` 管理。它会自动根据 `priority` 对策略进行排序。
 
 ```java
-import com.team4u.policy.OrderedPolicyChain;
+import com.team4u.framework.policy.OrderedPolicyChain;
 
 // 创建链
 OrderedPolicyChain<OrderContext, DiscountPolicy> chain = new OrderedPolicyChain<>(DiscountPolicy.class);
 
 // 注册 (自动排序)
-chain.register(new VipDiscountPolicy());
-chain.register(new NormalPolicy());
+chain.
 
-// 获取所有匹配的策略
-List<DiscountPolicy> matches = chain.allMatches(currentContext);
+        register(new VipDiscountPolicy());
+        chain.
+
+        register(new NormalPolicy());
+
+        // 获取所有匹配的策略
+        List<DiscountPolicy> matches = chain.allMatches(currentContext);
 
 // 或者获取第一个匹配的策略
-chain.firstMatch(currentContext).ifPresent(p -> ...);
+chain.
+
+        firstMatch(currentContext).
+
+        ifPresent(p ->...);
 
 ```
 
@@ -180,25 +196,25 @@ pipeline.executeChain(context, (policy, ctx) -> {
 假设我们需要根据一段 JSON 规则生成一个规则引擎策略：
 
 ```java
-import com.team4u.base.config.StringConfigParser;
-import com.team4u.base.instance.DynamicInstanceProvider;
-import com.team4u.base.instance.InstanceFactory;
+import com.team4u.framework.base.config.StringConfigParser;
+import com.team4u.framework.base.instance.DynamicInstanceProvider;
+import com.team4u.framework.base.instance.InstanceFactory;
 
 // 定义解析器 (String -> Config)
 StringConfigParser<RuleConfig> parser = jsonStr -> JSON.parseObject(jsonStr, RuleConfig.class);
 
-// 定义工厂 (Config -> Instance)
-InstanceFactory<RuleConfig, RulePolicy> factory = (id, config) -> new ConcreteRulePolicy(config);
+        // 定义工厂 (Config -> Instance)
+        InstanceFactory<RuleConfig, RulePolicy> factory = (id, config) -> new ConcreteRulePolicy(config);
 
-// 创建提供者 (LRU缓存容量 100)
-DynamicInstanceProvider<String, RuleConfig, RulePolicy> provider = 
-    DynamicInstanceProvider.createStringLru(100, parser, factory);
+        // 创建提供者 (LRU缓存容量 100)
+        DynamicInstanceProvider<String, RuleConfig, RulePolicy> provider =
+                DynamicInstanceProvider.createStringLru(100, parser, factory);
 
-// 获取实例 (高性能)
+        // 获取实例 (高性能)
 // 逻辑：
 // - 如果 jsonString 哈希未变，直接返回缓存实例 (无解析开销)
 // - 如果哈希变化，解析 Config -> 创建 Instance -> 更新缓存
-RulePolicy policy = provider.get("rule_id_1001", jsonStringFromDb);
+        RulePolicy policy = provider.get("rule_id_1001", jsonStringFromDb);
 
 ```
 

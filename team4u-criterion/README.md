@@ -66,8 +66,8 @@ public class CriteriaConfig {
 ### 基础用法Demo
 
 ```java
-import com.team4u.criterion.Criteria;
-import com.team4u.criterion.MatchContext;
+import com.team4u.framework.criterion.Criteria;
+import com.team4u.framework.criterion.MatchContext;
 
 public class Demo {
     static void main(String[] args) {
@@ -87,11 +87,11 @@ public class Demo {
 
         // 使用 MatchContext 传递动态变量/额外属性
         MatchContext context = MatchContext.of(user)
-            .setAttribute("minAge", 18)
-            .setAttribute("maxAge", 30);
+                .setAttribute("minAge", 18)
+                .setAttribute("maxAge", 30);
         // 动态变量必须以 $ 开头
         boolean ctxMatch = criteria.matches("age between [$minAge, $maxAge]", context); // true
-        
+
         // 变量名维度预先提取
         Set<String> vars = criteria.getVariables("age > $minAge && role == admin"); // [age, minAge, role]
     }
