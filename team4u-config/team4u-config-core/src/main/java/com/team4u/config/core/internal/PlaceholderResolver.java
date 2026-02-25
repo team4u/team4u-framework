@@ -25,10 +25,6 @@ public class PlaceholderResolver {
      * @return 解析并替换后的字符串
      */
     public static String resolve(String value, ConfigSnapshot snapshot) {
-        if (StrUtil.isBlank(value)) {
-            return value;
-        }
-
         return resolve(value, snapshot, new HashSet<>());
     }
 
@@ -41,91 +37,99 @@ public class PlaceholderResolver {
      * @return 解析并替换后的字符串
      */
     public static String resolve(String value, ConfigSnapshot snapshot, Set<String> visitedKeys) {
-        if (StrUtil.isBlank(value)) {
-            return value;
-        }
-
-        int startIndex = value.indexOf(PREFIX);
-        if (startIndex == -1) {
+        if (StrUtil.isBlank(value) || !value.contains(PREFIX)) {
             return value;
         }
 
         StringBuilder result = new StringBuilder(value);
-        int cursor = startIndex;
+        int cursor = 0;
 
         while (cursor < result.length()) {
-            int prefixIndex = result.indexOf(PREFIX, cursor);
-            if (prefixIndex == -1) {
+            int startIndex = result.indexOf(PREFIX, cursor);
+            if (startIndex == -1) {
                 break;
             }
 
-            // 寻找匹配的后缀 '}'
-            int suffixIndex = findMatchSuffixIndex(result, prefixIndex);
-            if (suffixIndex == -1) {
-                // 如果找不到闭合的 }，则表示不是合法的占位符，直接跳过处理
-                cursor = prefixIndex + PREFIX.length();
+            int endIndex = findMatchSuffixIndex(result, startIndex);
+            if (endIndex == -1) {
+                // 未找到匹配的后缀，跳过当前前缀继续处理
+                cursor = startIndex + PREFIX.length();
                 continue;
             }
 
-            // 提取出占位符内部的内容，例如 key 或 key:default
-            String placeholder = result.substring(prefixIndex + PREFIX.length(), suffixIndex);
+            // 提取占位符内容，例如 "key:default"
+            String placeholder = result.substring(startIndex + PREFIX.length(), endIndex);
+            // 递归解析占位符内容中可能存在的嵌套占位符（例如：${db.${env}.host}）
+            String resolvedPlaceholder = resolve(placeholder, snapshot, visitedKeys);
 
-            // 如果内容中还嵌套有其他的占位符，先递归解析内部的
-            if (placeholder.contains(PREFIX)) {
-                placeholder = resolve(placeholder, snapshot, visitedKeys);
-            }
+            // 解析占位符并获取最终替换值
+            String resolvedValue = resolveSinglePlaceholder(resolvedPlaceholder, snapshot, visitedKeys);
 
-            String targetKey;
-            String defaultValue = null;
-
-            int separatorIndex = placeholder.indexOf(SEPARATOR);
-            if (separatorIndex != -1) {
-                targetKey = placeholder.substring(0, separatorIndex);
-                defaultValue = placeholder.substring(separatorIndex + SEPARATOR.length());
+            if (resolvedValue != null) {
+                // 替换占位符并从新位置继续扫描
+                result.replace(startIndex, endIndex + SUFFIX.length(), resolvedValue);
+                cursor = startIndex + resolvedValue.length();
             } else {
-                targetKey = placeholder;
-            }
-
-            // 循环依赖检查
-            if (!visitedKeys.add(targetKey)) {
-                throw new IllegalArgumentException("Circular dependency detected for placeholder key: " + targetKey);
-            }
-
-            try {
-                // 查询实际包含的数据
-                String resolvedValue = snapshot.get(targetKey).orElse(null);
-
-                if (resolvedValue == null && defaultValue != null) {
-                    resolvedValue = defaultValue;
-                }
-
-                if (resolvedValue != null) {
-                    // 如果解析出的值内部还包含占位符，继续递归解析
-                    if (resolvedValue.contains(PREFIX)) {
-                        resolvedValue = resolve(resolvedValue, snapshot, visitedKeys);
-                    }
-                    result.replace(prefixIndex, suffixIndex + SUFFIX.length(), resolvedValue);
-                    cursor = prefixIndex + resolvedValue.length();
-                } else {
-                    // 无法解析且没有默认值，保持原样（或者可以抛错，由实现决定，这里选择优雅降级为原样）
-                    cursor = suffixIndex + SUFFIX.length();
-                }
-            } finally {
-                // 当前占位符解析完毕，退出其依赖追踪
-                visitedKeys.remove(targetKey);
+                // 无法解析且无默认值，保持原样并跳过
+                cursor = endIndex + SUFFIX.length();
             }
         }
 
         return result.toString();
     }
 
-    private static int findMatchSuffixIndex(StringBuilder sequence, int prefixIndex) {
+    /**
+     * 处理单个占位符内容的解析
+     *
+     * @param placeholder 占位符内容（不含 ${ 和 }）
+     */
+    private static String resolveSinglePlaceholder(String placeholder, ConfigSnapshot snapshot, Set<String> visitedKeys) {
+        PlaceholderProperty property = parseProperty(placeholder);
+
+        // 循环依赖检查
+        if (!visitedKeys.add(property.key)) {
+            throw new IllegalArgumentException("Circular dependency detected for placeholder key: " + property.key);
+        }
+
+        try {
+            // 从快照中获取值，如果不存在则使用默认值
+            String value = snapshot.get(property.key).orElse(property.defaultValue);
+
+            if (value != null && value.contains(PREFIX)) {
+                // 如果解析出的值仍包含占位符，递归解析（例如：${key} 指向的值为 ${anotherKey}）
+                return resolve(value, snapshot, visitedKeys);
+            }
+
+            return value;
+        } finally {
+            // 解析完成后移除，以便其他路径可以再次访问
+            visitedKeys.remove(property.key);
+        }
+    }
+
+    /**
+     * 将占位符内容解析为键和默认值
+     */
+    private static PlaceholderProperty parseProperty(String placeholder) {
+        int separatorIndex = placeholder.indexOf(SEPARATOR);
+        if (separatorIndex == -1) {
+            return new PlaceholderProperty(placeholder, null);
+        }
+
+        String key = placeholder.substring(0, separatorIndex);
+        String defaultValue = placeholder.substring(separatorIndex + SEPARATOR.length());
+        return new PlaceholderProperty(key, defaultValue);
+    }
+
+    /**
+     * 寻找与当前前缀匹配的后缀索引（支持嵌套检测）
+     */
+    private static int findMatchSuffixIndex(StringBuilder sequence, int startIndex) {
         int nestedCount = 0;
         int len = sequence.length();
         int prefixLen = PREFIX.length();
-        int suffixLen = SUFFIX.length();
 
-        for (int i = prefixIndex + prefixLen; i < len; i++) {
+        for (int i = startIndex + prefixLen; i < len; i++) {
             if (startsWith(sequence, i, PREFIX)) {
                 nestedCount++;
                 i += prefixLen - 1;
@@ -134,12 +138,14 @@ public class PlaceholderResolver {
                     return i;
                 }
                 nestedCount--;
-                i += suffixLen - 1;
             }
         }
         return -1;
     }
 
+    /**
+     * 检查字符串序列在指定位置是否以特定前缀开始
+     */
     private static boolean startsWith(StringBuilder sequence, int index, String prefix) {
         int prefixLen = prefix.length();
         if (index + prefixLen > sequence.length()) {
@@ -152,5 +158,18 @@ public class PlaceholderResolver {
             }
         }
         return true;
+    }
+
+    /**
+     * 占位符属性封装类
+     */
+    private static class PlaceholderProperty {
+        private final String key;
+        private final String defaultValue;
+
+        public PlaceholderProperty(String key, String defaultValue) {
+            this.key = key;
+            this.defaultValue = defaultValue;
+        }
     }
 }

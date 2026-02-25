@@ -42,8 +42,7 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
                                           ConfigProxyFactory proxyFactory) {
         this.interfaceType = interfaceType;
         // 预处理前缀，保证以 "." 结尾，减少 invoke 时的判断
-        this.prefix = (prefix == null || prefix.isEmpty()) ? "" :
-                (prefix.endsWith(".") ? prefix : prefix + ".");
+        this.prefix = (prefix == null || prefix.isEmpty()) ? "" : (prefix.endsWith(".") ? prefix : prefix + ".");
         this.snapshotProvider = snapshotProvider;
         this.isPinned = isPinned;
         this.proxyFactory = proxyFactory;
@@ -87,60 +86,26 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
      * 解析配置值：利用路径记忆加速查找
      */
     private Object resolveValue(MethodMetadata metadata, ConfigSnapshot snapshot) {
-        String rawValue = null;
-        String resolvedKey = null;
+        String baseName = metadata.baseName;
+        // 拼接前缀，例如 "app." + "serverPort" -> "app.serverPort"
+        String targetKey = prefix + baseName;
 
-        // 尝试使用“记忆”中的键进行 O(1) 查找，消除风格转换开销
-        String cachedKey = metadata.effectiveKey;
-        if (cachedKey != null) {
-            rawValue = snapshot.get(cachedKey).orElse(null);
-            if (rawValue != null) {
-                resolvedKey = cachedKey;
-            }
-        }
+        // 1. 直接调用快照的智能松散匹配获取原始值
+        String rawValue = snapshot.getSmart(targetKey).orElse(null);
 
-        // 若记忆失效或尚未建立记忆，则执行全量扫描
-        if (rawValue == null) {
-            String base = metadata.baseName;
-            String key;
-
-            // 按照驼峰 -> 中划线 -> 下划线 -> 点分隔的顺序查找
-            // 1. CamelCase (原生名)
-            key = prefix + base;
-            if ((rawValue = snapshot.get(key).orElse(null)) != null) {
-                resolvedKey = key;
-            }
-            // 2. Kebab-Case
-            else if ((rawValue = snapshot.get(key = prefix + StrUtil.toSymbolCase(base, '-')).orElse(null)) != null) {
-                resolvedKey = key;
-            }
-            // 3. Snake_Case
-            else if ((rawValue = snapshot.get(key = prefix + StrUtil.toSymbolCase(base, '_')).orElse(null)) != null) {
-                resolvedKey = key;
-            }
-            // 4. Dot.Case
-            else if ((rawValue = snapshot.get(key = prefix + StrUtil.toSymbolCase(base, '.')).orElse(null)) != null) {
-                resolvedKey = key;
-            }
-        }
-
-        // 记录或更新路径记忆，以便下次直接命中
-        if (resolvedKey != null && !resolvedKey.equals(metadata.effectiveKey)) {
-            metadata.effectiveKey = resolvedKey;
-        }
-
-        // --- 增加对嵌套接口的支持 ---
+        // 2. 如果未找到配置且返回类型是接口，尝试作为嵌套对象处理
         if (rawValue == null && metadata.returnType.isInterface()) {
-            String subPrefix = prefix + metadata.baseName;
+            // 注意：这里继续使用原始语境下的 prefix + baseName 作为子前缀
+            String subPrefix = prefix + baseName;
             return proxyFactory.createProxy(snapshotProvider, subPrefix, metadata.returnType, isPinned);
         }
 
-        // 若未找到对应配置，返回类型默认值
+        // 3. 如果依然未找到对应配置，返回类型默认值
         if (rawValue == null) {
             return ClassUtil.getDefaultValue(metadata.returnType);
         }
 
-        // 进行类型转换并处理潜在异常
+        // 4. 进行类型转换并处理潜在异常
         try {
             return Convert.convert(metadata.returnType, rawValue);
         } catch (Exception e) {
@@ -178,14 +143,14 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
      */
     private Object handleObjectMethods(Object proxy, Method method, Object[] args) {
         String name = method.getName();
-        if ("toString".equals(name)) {
-            return "ConfigProxy[" + interfaceType.getSimpleName() + "|pinned=" + isPinned + "|prefix=" + prefix + "]";
-        }
-        if ("hashCode".equals(name)) {
-            return System.identityHashCode(proxy);
-        }
-        if ("equals".equals(name)) {
-            return proxy == args[0];
+        switch (name) {
+            case "toString":
+                return "ConfigProxy[" + interfaceType.getSimpleName() + "|pinned=" + isPinned + "|prefix=" + prefix
+                        + "]";
+            case "hashCode":
+                return System.identityHashCode(proxy);
+            case "equals":
+                return proxy == args[0];
         }
         return null;
     }
@@ -196,10 +161,6 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
     private static class MethodMetadata {
         final String baseName;
         final Class<?> returnType;
-        /**
-         * 运行时记忆：上一次命中的确切配置键，使用 volatile 保证多线程可见性
-         */
-        volatile String effectiveKey;
 
         MethodMetadata(String baseName, Class<?> returnType) {
             this.baseName = baseName;

@@ -6,12 +6,7 @@ import cn.hutool.core.util.StrUtil;
 import com.team4u.config.core.internal.PlaceholderResolver;
 import lombok.Getter;
 
-import java.util.Collections;
-import java.util.HashSet;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.Optional;
-import java.util.Set;
+import java.util.*;
 
 /**
  * 核心配置快照 (不可变)
@@ -30,7 +25,11 @@ public class ConfigSnapshot {
      */
     @Getter
     private final Map<String, ConfigEntry> entries;
-
+    /**
+     * 归一化索引：存储 "normalized_key" -> "real.original.Key"
+     * 例如："serverPort" -> "server.port"
+     */
+    private final Map<String, String> looseIndex;
     /**
      * 结构化视图缓存
      */
@@ -39,6 +38,59 @@ public class ConfigSnapshot {
     public ConfigSnapshot(long version, Map<String, ConfigEntry> entries) {
         this.version = version;
         this.entries = MapUtil.isEmpty(entries) ? Collections.emptyMap() : Collections.unmodifiableMap(entries);
+        this.looseIndex = buildLooseIndex(this.entries.keySet());
+    }
+
+    /**
+     * 统一的归一化算法：转小写，移除所有分隔符（点、中划线、下划线）
+     *
+     * @param key 原始键
+     * @return 归一化后的键
+     */
+    public static String normalize(String key) {
+        if (key == null) {
+            return null;
+        }
+        return key.toLowerCase().replace(".", "").replace("-", "").replace("_", "");
+    }
+
+    /**
+     * 构建归一化索引
+     */
+    private Map<String, String> buildLooseIndex(Set<String> originalKeys) {
+        if (CollUtil.isEmpty(originalKeys)) {
+            return Collections.emptyMap();
+        }
+        Map<String, String> index = new HashMap<>(originalKeys.size());
+        for (String key : originalKeys) {
+            String normalized = normalize(key);
+            if (normalized != null) {
+                // 如果有冲突（如 my-key 和 my_key），保留原本存在的即可
+                index.putIfAbsent(normalized, key);
+            }
+        }
+        return Collections.unmodifiableMap(index);
+    }
+
+    /**
+     * 智能松散获取
+     *
+     * @param looseKey 模糊的 Key (例如 "serverPort")
+     * @return 配置值
+     */
+    public Optional<String> getSmart(String looseKey) {
+        // 1. 尝试直接获取（最快路径）
+        Optional<String> directValue = get(looseKey);
+        if (directValue.isPresent()) {
+            return directValue;
+        }
+
+        // 2. 归一化后查索引
+        String normalized = normalize(looseKey);
+        String realKey = looseIndex.get(normalized);
+
+        // 3. 用查到的真实 Key 去取值
+        return realKey != null ? get(realKey) : Optional.empty();
     }
 
     /**
@@ -90,7 +142,7 @@ public class ConfigSnapshot {
                     current.put(part, next);
                     current = next;
                 } else {
-                    //noinspection unchecked
+                    // noinspection unchecked
                     current = (Map<String, Object>) node;
                 }
                 start = dotIndex + 1;
@@ -124,7 +176,7 @@ public class ConfigSnapshot {
             if (!(node instanceof Map)) {
                 return null;
             }
-            //noinspection unchecked
+            // noinspection unchecked
             current = (Map<String, Object>) node;
             start = dotIndex + 1;
         }
@@ -161,8 +213,10 @@ public class ConfigSnapshot {
     }
 
     /**
-     * 支持按前缀搜索检索嵌套配置，返回剥离前缀后的键值映射对。<p>
-     * 例如前缀为 "app.db."，针对配置 "app.db.url" 将返回 "url" -> "jdbc..."。<p>
+     * 支持按前缀搜索检索嵌套配置，返回剥离前缀后的键值映射对。
+     * <p>
+     * 例如前缀为 "app.db."，针对配置 "app.db.url" 将返回 "url" -> "jdbc..."。
+     * <p>
      * 入参前缀无论是否以 '.' 结尾，系统均会自动补齐匹配处理。
      *
      * @param prefix 配置前缀

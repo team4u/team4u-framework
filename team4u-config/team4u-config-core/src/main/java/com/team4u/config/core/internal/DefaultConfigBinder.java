@@ -17,6 +17,7 @@ import java.util.Map;
  */
 public class DefaultConfigBinder implements ConfigBinder {
 
+    @SuppressWarnings("unchecked")
     @Override
     public <T> T bind(ConfigSnapshot snapshot, String prefix, Class<T> type) {
         if (snapshot == null || type == null) {
@@ -36,7 +37,6 @@ public class DefaultConfigBinder implements ConfigBinder {
         }
 
         // 2. 如果是嵌套 Map 结构
-        @SuppressWarnings("unchecked")
         Map<String, Object> unflattenedMap = (Map<String, Object>) unflattenedValue;
 
         // 3. 如果目标类型本身就是 Map，尝试直接转换
@@ -52,7 +52,8 @@ public class DefaultConfigBinder implements ConfigBinder {
         // 由于旧版 hutool 的 ignoreCase 可能对中划线等特殊符号支持不完美，提前将 Map 中的分隔符去除
         Map<String, Object> processedMap = new HashMap<>();
         for (Map.Entry<String, Object> entry : unflattenedMap.entrySet()) {
-            String key = entry.getKey().replace("-", "").replace("_", "");
+            // 统一调用核心的归一化算法
+            String key = ConfigSnapshot.normalize(entry.getKey());
             processedMap.put(key, entry.getValue());
         }
 

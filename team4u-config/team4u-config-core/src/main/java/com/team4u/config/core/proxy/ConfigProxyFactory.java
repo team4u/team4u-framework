@@ -4,6 +4,7 @@ import com.team4u.config.core.ConfigManager;
 import com.team4u.config.core.domain.ConfigSnapshot;
 
 import java.lang.reflect.Proxy;
+import java.util.function.Supplier;
 
 /**
  * 动态代理工厂
@@ -53,9 +54,9 @@ public class ConfigProxyFactory {
      * @return 代理对象
      */
     @SuppressWarnings("unchecked")
-    <T> T createProxy(java.util.function.Supplier<ConfigSnapshot> snapshotProvider,
-                              String prefix, Class<T> type,
-                              boolean isPinned) {
+    <T> T createProxy(Supplier<ConfigSnapshot> snapshotProvider,
+                      String prefix, Class<T> type,
+                      boolean isPinned) {
         SnapshotAwareInvocationHandler handler = new SnapshotAwareInvocationHandler(
                 type,
                 prefix,

@@ -61,4 +61,39 @@ public class ConfigSnapshotTest {
         // 验证一致性
         Assert.assertEquals(val1, val2);
     }
+
+    @Test
+    public void testNormalize() {
+        Assert.assertEquals("serverport", ConfigSnapshot.normalize("server.port"));
+        Assert.assertEquals("serverport", ConfigSnapshot.normalize("server-port"));
+        Assert.assertEquals("serverport", ConfigSnapshot.normalize("server_port"));
+        Assert.assertEquals("serverport", ConfigSnapshot.normalize("ServerPort"));
+        Assert.assertEquals("serverport", ConfigSnapshot.normalize("SERVER_PORT"));
+        Assert.assertNull(ConfigSnapshot.normalize(null));
+    }
+
+    @Test
+    public void testGetSmart() {
+        Map<String, ConfigEntry> entries = new HashMap<>();
+        long now = System.currentTimeMillis();
+        entries.put("app.server-port", new ConfigEntry("app.server-port", "8080", "src", now));
+        entries.put("db_url", new ConfigEntry("db_url", "jdbc", "src", now));
+
+        ConfigSnapshot snapshot = new ConfigSnapshot(1L, entries);
+
+        // 1. 精确匹配
+        Assert.assertEquals("8080", snapshot.getSmart("app.server-port").orElse(null));
+
+        // 2. 松散匹配 (驼峰 -> 中划线)
+        Assert.assertEquals("8080", snapshot.getSmart("appServerPort").orElse(null));
+
+        // 3. 松散匹配 (点分隔 -> 中划线)
+        Assert.assertEquals("8080", snapshot.getSmart("app.serverPort").orElse(null));
+
+        // 4. 下划线转换
+        Assert.assertEquals("jdbc", snapshot.getSmart("dbUrl").orElse(null));
+
+        // 5. 不存在的情况
+        Assert.assertFalse(snapshot.getSmart("notExist").isPresent());
+    }
 }

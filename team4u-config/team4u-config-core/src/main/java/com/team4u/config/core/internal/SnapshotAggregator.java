@@ -9,16 +9,17 @@ import com.team4u.config.core.spi.ConfigSource;
 import java.util.*;
 
 /**
- * 负责收集排序所有数据源，生成并处理合并后的 ConfigSnapshot
- * 根据优先级顺序：值越小的优先级越高。高优先级覆盖低优先级。
- * 若高优先级产生 Tombstone 语义(value==null)，则代表已从高层覆盖删除，需要忽略底层同名键。
+ * 负责收集所有配置数据源，生成并处理合并后的 ConfigSnapshot
+ * <p>
+ * 根据优先级顺序：高优先级在前，低优先级在后。
+ * 若高优先级产生 Tombstone 语义 (value==null)，则代表已从高层覆盖删除，需要忽略底层同名键。
  */
 public class SnapshotAggregator {
 
     /**
      * 将多个数据源的全量或者增量数据按优先级执行覆盖合并
      *
-     * @param sources 实现了 OrderedPolicy 的各类配置源 (需已根据优先级排序)
+     * @param sources 实现了 OrderedPolicy 的各类配置源 (需已根据优先级排序，高优先级在前)
      * @param version 最新快照需产生的版本号
      * @return 合并处理后的全新不可变快照
      */
@@ -27,34 +28,22 @@ public class SnapshotAggregator {
             return new ConfigSnapshot(version, Collections.emptyMap());
         }
 
-        // 以优先级升序排列
-        List<ConfigSource> orderedSources = new ArrayList<>(sources);
-        Collections.sort(orderedSources);
-
         Map<String, ConfigEntry> finalMap = new HashMap<>();
 
-        for (ConfigSource source : orderedSources) {
-            Map<String, ConfigEntry> loadedData;
-            try {
-                loadedData = source.load();
-            } catch (Exception e) {
-                // Initial Load 时可能直接抛出导致全站失败；由于框架定义，此异常可往上抛或记录
-                throw new IllegalStateException("Failed to load config from source: " + source.name(), e);
-            }
-
-            if (MapUtil.isEmpty(loadedData)) {
-                continue;
-            }
-
-            for (Map.Entry<String, ConfigEntry> entry : loadedData.entrySet()) {
-                String key = entry.getKey();
-                // 仅当高优先级中还没有该 Key 时，低优先级的才可以生效
-                if (!finalMap.containsKey(key)) {
-                    finalMap.put(key, entry.getValue());
-                }
-            }
+        for (ConfigSource source : sources) {
+            loadSource(source).forEach(finalMap::putIfAbsent);
         }
 
         return new ConfigSnapshot(version, finalMap);
+    }
+
+    private Map<String, ConfigEntry> loadSource(ConfigSource source) {
+        try {
+            Map<String, ConfigEntry> data = source.load();
+            return data != null ? data : Collections.emptyMap();
+        } catch (Exception e) {
+            // Initial Load 时可能直接抛出导致全站失败；由于框架定义，此异常可往上抛或记录
+            throw new IllegalStateException("Failed to load config from source: " + source.name(), e);
+        }
     }
 }
