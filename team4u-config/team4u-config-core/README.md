@@ -182,23 +182,35 @@ public interface AppConfig {
 
 当内置的绑定逻辑无法满足复杂类型（如：加密数据解密、特定格式解析）时，可以使用 `@ConfigConverter` 指定自定义转换器。
 
-1. **实现转换器接口**：
+#### 使用内置通用转换器
+框架内置了基于 Hutool JSON 的通用转换器 `JsonPropertyConverter`，可直接用于任何 POJO 类型：
+
 ```java
-public class MyJsonConverter implements PropertyConverter<MyData> {
+public interface AppConfig {
+    // 自动将 JSON 字符串转换为 User 对象
+    @ConfigConverter(JsonPropertyConverter.class)
+    User getUser();
+}
+```
+
+#### 实现自定义转换器
+如果需要特殊的转换逻辑（如解密），可以实现 `PropertyConverter` 接口：
+
+```java
+/**
+ * 解密转换器示例
+ */
+public class MyDecryptConverter implements PropertyConverter<String> {
     @Override
-    public MyData convert(String source) {
-        return JSONUtil.toBean(source, MyData.class);
+    public String convert(String source, Class<String> targetType) {
+        // source 为原始配置值，targetType 为方法返回类型
+        return SecureUtil.aes(KEY).decryptStr(source);
     }
 }
 ```
 
-2. **在接口中使用**：
-```java
-public interface AppConfig {
-    @ConfigConverter(MyJsonConverter.class)
-    MyData getData();
-}
-```
+> [!TIP]
+> **接口变更说明**：从 v1.0.0 起，`convert` 方法增加了 `targetType` 参数，这使得一个转换器实例可以根据目标类型执行不同的逻辑（如通用的 JSON 序列化）。
 
 ### 智能松散绑定 (Relaxed Binding)
 

@@ -7,7 +7,7 @@ import java.lang.annotation.*;
  * <p>
  * 用于在配置项不存在时提供兜底值。
  *
- * @author fjay
+ * @author jay.wu
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)

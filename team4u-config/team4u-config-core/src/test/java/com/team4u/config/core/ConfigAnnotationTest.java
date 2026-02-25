@@ -17,7 +17,7 @@ import java.util.Map;
 /**
  * 配置注解功能单元测试
  *
- * @author fjay
+ * @author jay.wu
  */
 public class ConfigAnnotationTest {
 

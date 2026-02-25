@@ -135,7 +135,7 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
         // 5. 优先使用自定义转换器
         if (metadata.converter != null) {
             try {
-                return metadata.converter.convert(rawValue);
+                return ((PropertyConverter<Object>) metadata.converter).convert(rawValue, (Class<Object>) metadata.returnType);
             } catch (Exception e) {
                 // 转换失败时回退到默认值
                 return metadata.defaultValue;

@@ -4,6 +4,7 @@ import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.SecureUtil;
 import cn.hutool.json.JSONUtil;
 import com.team4u.config.core.annotation.ConfigConverter;
+import com.team4u.config.core.convert.JsonPropertyConverter;
 import com.team4u.config.core.convert.PropertyConverter;
 import com.team4u.config.core.domain.ConfigEntry;
 import com.team4u.config.core.domain.ConfigSnapshot;
@@ -17,7 +18,7 @@ import java.util.Map;
 /**
  * 自定义转换器单元测试
  *
- * @author fjay
+ * @author jay.wu
  */
 public class ConfigConverterTest {
 
@@ -60,7 +61,7 @@ public class ConfigConverterTest {
         @ConfigConverter(CsvToListConverter.class)
         List<String> whiteList();
 
-        @ConfigConverter(UserInfoConverter.class)
+        @ConfigConverter(JsonPropertyConverter.class)
         User adminUser();
 
         @ConfigConverter(DecryptConverter.class)
@@ -72,7 +73,7 @@ public class ConfigConverterTest {
      */
     public static class CsvToListConverter implements PropertyConverter<List<String>> {
         @Override
-        public List<String> convert(String source) {
+        public List<String> convert(String source, Class<List<String>> targetType) {
             return StrUtil.split(source, ',');
         }
     }
@@ -82,8 +83,8 @@ public class ConfigConverterTest {
      */
     public static class UserInfoConverter implements PropertyConverter<User> {
         @Override
-        public User convert(String source) {
-            return JSONUtil.toBean(source, User.class);
+        public User convert(String source, Class<User> targetType) {
+            return JSONUtil.toBean(source, targetType);
         }
     }
 
@@ -92,7 +93,7 @@ public class ConfigConverterTest {
      */
     public static class DecryptConverter implements PropertyConverter<String> {
         @Override
-        public String convert(String source) {
+        public String convert(String source, Class<String> targetType) {
             return SecureUtil.aes("1234567812345678".getBytes()).decryptStr(source);
         }
     }

@@ -8,7 +8,7 @@ import java.lang.annotation.*;
  * 用于明确指定该方法对应的配置 Key，跳过自动推断逻辑。
  * 支持绝对路径（以点号开头，忽略类前缀）和相对路径。
  *
- * @author fjay
+ * @author jay.wu
  */
 @Documented
 @Retention(RetentionPolicy.RUNTIME)

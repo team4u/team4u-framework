@@ -5,7 +5,7 @@ package com.team4u.config.core.domain;
  * <p>
  * 当必填配置项缺失且无默认值时抛出。
  *
- * @author fjay
+ * @author jay.wu
  */
 public class ConfigMissingException extends RuntimeException {
 

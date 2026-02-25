@@ -12,10 +12,11 @@ public interface PropertyConverter<T> extends KeyedPolicy<Class<? extends Proper
     /**
      * 将配置的原始字符串转换为目标对象
      *
-     * @param source 原始配置值 (nullable)
+     * @param source     原始配置值 (nullable)
+     * @param targetType 目标类型
      * @return 转换后的对象
      */
-    T convert(String source);
+    T convert(String source, Class<T> targetType);
 
     @Override
     @SuppressWarnings("unchecked")
