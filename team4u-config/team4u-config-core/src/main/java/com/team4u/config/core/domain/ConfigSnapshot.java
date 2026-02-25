@@ -3,6 +3,7 @@ package com.team4u.config.core.domain;
 import cn.hutool.core.collection.CollUtil;
 import cn.hutool.core.map.MapUtil;
 import cn.hutool.core.util.StrUtil;
+import com.team4u.config.core.internal.PlaceholderResolver;
 import lombok.Getter;
 
 import java.util.Collections;
@@ -28,9 +29,99 @@ public class ConfigSnapshot {
     @Getter
     private final Map<String, ConfigEntry> entries;
 
+    /**
+     * 结构化视图缓存
+     */
+    private volatile Map<String, Object> unflattenedMap;
+
     public ConfigSnapshot(long version, Map<String, ConfigEntry> entries) {
         this.version = version;
         this.entries = MapUtil.isEmpty(entries) ? Collections.emptyMap() : Collections.unmodifiableMap(entries);
+    }
+
+    /**
+     * 获取全量结构化配置 Map（延迟加载并缓存）
+     *
+     * @return 嵌套的 Map 结构
+     */
+    public Map<String, Object> unflattenedMap() {
+        if (unflattenedMap == null) {
+            synchronized (this) {
+                if (unflattenedMap == null) {
+                    unflattenedMap = buildUnflattenedMap();
+                }
+            }
+        }
+        return unflattenedMap;
+    }
+
+    private Map<String, Object> buildUnflattenedMap() {
+        if (MapUtil.isEmpty(entries)) {
+            return Collections.emptyMap();
+        }
+
+        Map<String, Object> root = new LinkedHashMap<>();
+        for (Map.Entry<String, ConfigEntry> entry : entries.entrySet()) {
+            String key = entry.getKey();
+            ConfigEntry configEntry = entry.getValue();
+
+            if (key == null || configEntry.isEmptyOrDeleted()) {
+                continue;
+            }
+
+            // 解析占位符，预先解析可以显著提升后续 bind 的性能
+            String resolvedValue = PlaceholderResolver.resolve(configEntry.getValue(), this);
+
+            // 填充树形结构
+            int start = 0;
+            int dotIndex;
+            Map<String, Object> current = root;
+
+            while ((dotIndex = key.indexOf('.', start)) != -1) {
+                String part = key.substring(start, dotIndex);
+                Object node = current.get(part);
+                if (!(node instanceof Map)) {
+                    Map<String, Object> next = new LinkedHashMap<>();
+                    current.put(part, next);
+                    current = next;
+                } else {
+                    //noinspection unchecked
+                    current = (Map<String, Object>) node;
+                }
+                start = dotIndex + 1;
+            }
+
+            current.put(key.substring(start), resolvedValue);
+        }
+        return Collections.unmodifiableMap(root);
+    }
+
+    /**
+     * 根据前缀获取结构化配置子树
+     *
+     * @param prefix 前缀
+     * @return 子树对象（可能是 Map 或 String），如果不存在则返回 null
+     */
+    public Object getUnflattenedValue(String prefix) {
+        if (StrUtil.isEmpty(prefix)) {
+            return unflattenedMap();
+        }
+
+        Map<String, Object> current = unflattenedMap();
+        int start = 0;
+        int dotIndex;
+        while ((dotIndex = prefix.indexOf('.', start)) != -1) {
+            String part = prefix.substring(start, dotIndex);
+            Object node = current.get(part);
+            if (!(node instanceof Map)) {
+                return null;
+            }
+            //noinspection unchecked
+            current = (Map<String, Object>) node;
+            start = dotIndex + 1;
+        }
+
+        return current.get(prefix.substring(start));
     }
 
     /**

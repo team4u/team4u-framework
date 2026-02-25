@@ -3,7 +3,6 @@ package com.team4u.config.core.internal;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.bean.copier.CopyOptions;
 import cn.hutool.core.convert.Convert;
-import cn.hutool.core.map.MapUtil;
 import com.team4u.config.core.domain.ConfigSnapshot;
 import com.team4u.config.core.spi.ConfigBinder;
 
@@ -24,32 +23,21 @@ public class DefaultConfigBinder implements ConfigBinder {
             return null;
         }
 
-        // 1. 获取前缀下所有配置项
-        Map<String, String> prefixEntries = snapshot.getByPrefix(prefix);
+        // 1. 获取前缀下所有配置项（使用优化后的结构化视图）
+        Object unflattenedValue = snapshot.getUnflattenedValue(prefix);
 
-        // 如果直接对应一个基本类型的值（例如请求 bind(snapshot, "app.port", Integer.class) 且 app.port 没有子节点）
-        if (prefixEntries.isEmpty()) {
-            // 尝试直接获取并解析该单一 key
-            String singleValue = snapshot.get(prefix).orElse(null);
-            if (singleValue != null) {
-                String resolvedValue = PlaceholderResolver.resolve(singleValue, snapshot);
-                return Convert.convert(type, resolvedValue);
-            }
+        if (unflattenedValue == null) {
             return null;
         }
 
-        // 如果当前仅有一个 entry 且 key 就是 prefix 本身，也作为单一值对待
-        if (prefixEntries.size() == 1 && prefixEntries.containsKey(prefix)) {
-            String resolvedValue = PlaceholderResolver.resolve(prefixEntries.get(prefix), snapshot);
-            return Convert.convert(type, resolvedValue);
+        // 如果直接对应一个基本类型的值
+        if (unflattenedValue instanceof String) {
+            return Convert.convert(type, unflattenedValue);
         }
 
-        // 2. 将扁平化的 Key-Value 字典反展开 (Unflatten) 为嵌套 Map
-        Map<String, Object> unflattenedMap = unflatten(prefixEntries, prefix, snapshot);
-
-        if (MapUtil.isEmpty(unflattenedMap)) {
-            return null;
-        }
+        // 2. 如果是嵌套 Map 结构
+        @SuppressWarnings("unchecked")
+        Map<String, Object> unflattenedMap = (Map<String, Object>) unflattenedValue;
 
         // 3. 如果目标类型本身就是 Map，尝试直接转换
         if (Map.class.isAssignableFrom(type)) {
@@ -69,49 +57,5 @@ public class DefaultConfigBinder implements ConfigBinder {
         }
 
         return BeanUtil.toBean(processedMap, type, copyOptions);
-    }
-
-    /**
-     * 将扁平键值对反展开为树形 Map 结构
-     * 例如："db.host" -> "127.0.0.1", "db.port" -> "3306"
-     * 将转换为 { "db": { "host": "127.0.0.1", "port": "3306" } }
-     */
-    private Map<String, Object> unflatten(Map<String, String> flatMap, String prefix, ConfigSnapshot snapshot) {
-        Map<String, Object> result = new HashMap<>();
-        for (Map.Entry<String, String> entry : flatMap.entrySet()) {
-            // 本身的 prefix 在 getByPrefix 已经被截断，例如 prefix='server', server.host 会变成 entry(key='host', value=...)
-            // 边缘情况：如果查询前缀正好也作为单独的键存在于整体配置里，它在 prefixEntries 中可能不会出现（因为 getByPrefix 是强求 '.' 后缀前缀的）。
-            // ConfigSnapshot.getByPrefix("app") 会拉取 "app.xxx" -> "xxx" 格式的数据。
-            String relKey = entry.getKey();
-            String rawValue = entry.getValue();
-
-            if (relKey.isEmpty()) {
-                continue; // 保护逻辑
-            }
-
-            // 处理占位符
-            String resolvedValue = PlaceholderResolver.resolve(rawValue, snapshot);
-
-            // 按照 '.' 切分层级
-            String[] parts = relKey.split("\\.");
-            Map<String, Object> currentLevel = result;
-
-            for (int i = 0; i < parts.length - 1; i++) {
-                String part = parts[i];
-                Object node = currentLevel.get(part);
-                if (node instanceof Map) {
-                    currentLevel = (Map<String, Object>) node;
-                } else {
-                    Map<String, Object> nextLevel = new HashMap<>();
-                    currentLevel.put(part, nextLevel);
-                    currentLevel = nextLevel;
-                }
-            }
-
-            // 叶子节点赋值
-            currentLevel.put(parts[parts.length - 1], resolvedValue);
-        }
-
-        return result;
     }
 }
