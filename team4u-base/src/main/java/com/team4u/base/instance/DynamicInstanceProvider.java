@@ -13,30 +13,35 @@ import lombok.Data;
 import java.util.Objects;
 
 /**
- * 动态实例缓存提供者
+ * 动态实例缓存提供者 (增强型对象级缓存)
  * <p>
- * 适用于任何根据配置创建对象并需要缓存的场景。
- * 支持两种模式：
- * 1. 标识模式：通过 configId 关联实例，支持根据输入内容的哈希值自动检测变更并重建实例。
- * 2. 匿名模式：直接以原始输入对象作为缓存键，彻底消除哈希冲突风险。
+ * 适用于任何根据配置动态创建对象并需要缓存的高并发场景。
+ * <p>
+ * 核心特性：
+ * 1. <b>双模式支持</b>：
+ *    - <b>标识模式 (ID-Mode)</b>：使用明确的 {@code configId} 作为缓存键。底层自动计算 {@code input} 的 64位 MurmurHash，当输入内容变更时，能自动触发实例的重新解析与重建。
+ *    - <b>匿名模式 (Anonymous-Mode)</b>：省略 {@code configId}，直接将 {@code input} 或 {@code config} 对象本身作为缓存键。通过对象的 {@code equals/hashCode} 进行精准匹配，从根源上消除哈希碰撞导致的数据串流风险。
+ * 2. <b>高性能并发控制</b>：引入分段锁 (Striped Locking) 机制，替代传统的 {@code String.intern()} 全局锁，极大降低了并发锁竞争，并消除了动态字符串导致的常量池内存泄漏隐患。
+ * 3. <b>快速路径优化</b>：在无变更的情况下，通过散列值比对或对象等值判断实现无锁快速返回 (Fast-Path)。
  *
- * @param <I> 输入源类型 (Input)
- * @param <C> 配置类型 (Config)
- * @param <T> 实例类型 (Type)
+ * @param <I> 输入源类型 (Input)，如 JSON 字符串、Map 等
+ * @param <C> 配置类型 (Config)，由 Input 解析而来的强类型配置对象
+ * @param <T> 实例类型 (Type)，由 Config 构建的最终实例
  * @author team4u
  */
 public class DynamicInstanceProvider<I, C, T> {
 
     /**
      * 实例持有者缓存
-     * Key: Object (可以是 configId 或 原始输入对象)
-     * Value: InstanceHolder (包含配置快照 and 实例)
+     * Key: Object (标识模式下为 configId，匿名模式下为原始输入对象)
+     * Value: InstanceHolder (包含配置快照与实例对象)
      */
     private final Cache<Object, InstanceHolder<C, T>> cache;
 
     /**
      * 输入源哈希缓存
-     * 仅用于“标识模式”，记录 configId 对应的 input 的哈希值，用于变更检测。
+     * <p>
+     * 仅用于“标识模式”，记录 configId 对应的 input 的内容哈希值，用于快速检测配置是否发生变更。
      * Key: Object (configId)
      * Value: input 的 MurmurHash64 值
      */
@@ -53,7 +58,9 @@ public class DynamicInstanceProvider<I, C, T> {
     private final InstanceFactory<C, T> instanceFactory;
 
     /**
-     * 分段锁桶，避免 String.intern() 的全局竞争和潜在内存问题
+     * 分段锁桶 (Striped Locks)
+     * <p>
+     * 用于对缓存 Key 进行细粒度锁定，避免 String.intern() 的全局竞争和潜在内存问题。
      */
     private final Object[] locks = new Object[128];
 
@@ -101,7 +108,12 @@ public class DynamicInstanceProvider<I, C, T> {
     /**
      * 获取或创建实例（标识模式）
      * <p>
-     * 使用 configId 作为缓存键，并通过 input 的哈希值检测内容是否发生变更。
+     * 使用 {@code configId} 作为缓存键。内部会计算 {@code input} 的 64位哈希值。
+     * 若同一 {@code configId} 对应的输入哈希发生改变，会自动触发重新解析和实例重建。
+     *
+     * @param configId 配置的唯一标识 (不能为空)
+     * @param input    输入源（用于解析配置）
+     * @return 实例
      */
     public T get(String configId, I input) {
         Assert.notBlank(configId, "configId must not be blank");
@@ -111,7 +123,12 @@ public class DynamicInstanceProvider<I, C, T> {
     /**
      * 简化获取方法（匿名模式）
      * <p>
-     * 直接以 input 对象作为缓存键，类似于 Cache 的加强版，不存在哈希冲突问题。
+     * 直接将输入源 {@code input} 对象本身作为缓存键。
+     * 要求 {@code input} 所在类正确实现了 {@code equals} 和 {@code hashCode} 方法。
+     * 此模式不存在哈希碰撞的风险，行为类似于加强版的本地 Cache。
+     *
+     * @param input 输入源
+     * @return 实例
      */
     public T get(I input) {
         if (input == null) {
@@ -123,9 +140,9 @@ public class DynamicInstanceProvider<I, C, T> {
     /**
      * 内部统一获取逻辑
      *
-     * @param key       缓存键
+     * @param key       缓存键 (configId 或 原始输入对象)
      * @param input     输入对象
-     * @param inputHash 输入对象的哈希（null 表示不进行哈希校验，直接使用 key 进行对象匹配）
+     * @param inputHash 输入对象的哈希（null 表示匿名模式，不进行哈希校验，直接使用 key 进行对象匹配）
      */
     private T getInternal(Object key, I input, Long inputHash) {
         // 1. 无锁快路径：检查缓存及哈希一致性（如果提供了哈希）
@@ -148,13 +165,13 @@ public class DynamicInstanceProvider<I, C, T> {
                 return null;
             }
 
-            // 如果是标识模式且配置内容未变（仅 input 哈希变了，但解析出的 config 没变），则仅更新哈希并返回原实例
+            // 如果是标识模式且配置内容未变（仅 input 哈希变了，但解析出的 config 等值），则仅更新哈希并返回原实例
             if (inputHash != null && holder != null && Objects.equals(holder.config, newConfig)) {
                 inputHashCache.put(key, inputHash);
                 return holder.instance;
             }
 
-            // 创建新实例，configId 采用 key 的字符串表示作为标识
+            // 创建新实例
             T newInstance = instanceFactory.create(generateConfigId(key), newConfig);
             cache.put(key, new InstanceHolder<>(newConfig, newInstance));
 
@@ -166,7 +183,13 @@ public class DynamicInstanceProvider<I, C, T> {
     }
 
     /**
-     * 直接使用配置对象获取实例
+     * 直接使用配置对象获取实例（标识模式）
+     * <p>
+     * 使用 {@code configId} 作为缓存键。若发现缓存的配置与当前 {@code config} 不一致（基于 {@code equals}），则重建实例。
+     *
+     * @param configId 配置的唯一标识 (不能为空)
+     * @param config   配置对象
+     * @return 实例
      */
     public T getByConfig(String configId, C config) {
         Assert.notBlank(configId, "configId must not be blank");
@@ -174,7 +197,13 @@ public class DynamicInstanceProvider<I, C, T> {
     }
 
     /**
-     * 简化通过配置获取方法
+     * 简化通过配置获取实例（匿名模式）
+     * <p>
+     * 直接将配置对象 {@code config} 本身作为缓存键。
+     * 要求 {@code config} 所在类正确实现了 {@code equals} 和 {@code hashCode} 方法。
+     *
+     * @param config 配置对象
+     * @return 实例
      */
     public T getByConfig(C config) {
         if (config == null) {
@@ -208,17 +237,23 @@ public class DynamicInstanceProvider<I, C, T> {
     }
 
     /**
-     * 生成实例的配置标识
+     * 生成供 InstanceFactory 使用的配置标识
+     *
+     * @param key 缓存键
+     * @return 配置标识字符串
      */
     private String generateConfigId(Object key) {
         if (key instanceof String) {
             return (String) key;
         }
+        // 匿名模式下，回退为计算对象的哈希值作为工厂所需的标识
         return String.valueOf(computeHash(key));
     }
 
     /**
-     * 获取分段锁
+     * 获取分段锁对象
+     * <p>
+     * 基于 Key 的 hashCode 将锁分散到 128 个桶中，极大降低并发写入时的锁竞争。
      */
     private Object getLock(Object key) {
         return locks[(key.hashCode() & 0x7FFFFFFF) % locks.length];
@@ -226,7 +261,12 @@ public class DynamicInstanceProvider<I, C, T> {
 
     /**
      * 计算对象的 64 位哈希值
-     * 采用 MurmurHash3 算法，具有极低的冲突率和极高的执行性能
+     * <p>
+     * 采用 MurmurHash3 算法，主要用于标识模式下的内容变更快速检测。
+     * 注意：对于普通的 {@code Object}，直接回退到其自带的 32位 {@code hashCode()}。
+     *
+     * @param obj 需要计算哈希的对象
+     * @return 哈希值
      */
     private long computeHash(Object obj) {
         if (obj == null) {
@@ -244,6 +284,9 @@ public class DynamicInstanceProvider<I, C, T> {
         return obj.hashCode();
     }
 
+    /**
+     * 解析配置
+     */
     private C parseConfig(I input) {
         if (input == null) {
             return null;
@@ -256,20 +299,34 @@ public class DynamicInstanceProvider<I, C, T> {
         return configParser.parse(input);
     }
 
+    /**
+     * 手动失效缓存
+     *
+     * @param key 缓存键 (标识模式下为 configId，匿名模式下为 原始对象)
+     */
     public void invalidate(Object key) {
         cache.remove(key);
         inputHashCache.remove(key);
     }
 
+    /**
+     * 清空所有缓存
+     */
     public void clear() {
         cache.clear();
         inputHashCache.clear();
     }
 
+    /**
+     * 获取当前缓存的数量
+     */
     public int size() {
         return cache.size();
     }
 
+    /**
+     * 实例持有者 (保存配置快照与实例的映射)
+     */
     @Data
     @AllArgsConstructor
     public static class InstanceHolder<C, T> {
