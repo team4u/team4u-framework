@@ -221,7 +221,7 @@ ConfigManager manager = ConfigManager.builder()
 ```
 
 **方式 B：通过 SPI 自动加载（推荐用于全局通用转换器）**
-1. 在 `src/main/resources/META-INF/services/com.team4u.config.core.convert.PropertyConverter` 文件中添加实现类的全路径。
+1. 在 `src/main/resources/META-INF/services/convert.com.team4u.framework.config.core.PropertyConverter` 文件中添加实现类的全路径。
 2. 在构建时调用 `loadConvertersFromSpi()`：
 ```java
 ConfigManager manager = ConfigManager.builder()
@@ -395,7 +395,7 @@ public class MyConfigSource implements ConfigSource {
 ```
 
 - 注册服务：
-在 src/main/resources/META-INF/services/com.team4u.config.core.spi.ConfigSource 文件中添加类全路径：
+在 src/main/resources/META-INF/services/spi.com.team4u.framework.config.core.ConfigSource 文件中添加类全路径：
 ```text
 com.yourpackage.MyConfigSource
 ```
