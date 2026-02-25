@@ -7,6 +7,7 @@ import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import com.team4u.framework.config.core.internal.DefaultConfigBinder;
 import com.team4u.framework.config.core.internal.DefaultConfigManager;
 import com.team4u.framework.config.core.spi.*;
+import com.team4u.framework.policy.PolicyRegistry;
 import com.team4u.framework.policy.PolicyScanner;
 
 import java.util.Optional;
@@ -47,10 +48,7 @@ public interface ConfigManager {
         if (InstanceHolder.STANDARD_INSTANCE == null) {
             synchronized (ConfigManager.class) {
                 if (InstanceHolder.STANDARD_INSTANCE == null) {
-                    InstanceHolder.STANDARD_INSTANCE = builder()
-                            .loadSourcesFromSpi()
-                            .loadWatchersFromSpi()
-                            .build();
+                    InstanceHolder.STANDARD_INSTANCE = builder().build();
                 }
             }
         }
@@ -150,36 +148,16 @@ public interface ConfigManager {
         private ConfigBinder configBinder;
 
         Builder() {
+            init(sourceRegistry);
+            init(watcherRegistry);
+            init(converterRegistry);
         }
 
-        /**
-         * 加载 SPI 发现的所有 ConfigSource
-         *
-         * @return 当前 Builder 实例
-         */
-        public Builder loadSourcesFromSpi() {
-            PolicyScanner.registerFromServiceLoader(sourceRegistry);
-            return this;
-        }
-
-        /**
-         * 加载 SPI 发现的所有 ConfigWatcher
-         *
-         * @return 当前 Builder 实例
-         */
-        public Builder loadWatchersFromSpi() {
-            PolicyScanner.registerFromServiceLoader(watcherRegistry);
-            return this;
-        }
-
-        /**
-         * 加载 SPI 发现的所有 PropertyConverter
-         *
-         * @return 当前 Builder 实例
-         */
-        public Builder loadConvertersFromSpi() {
-            PolicyScanner.registerFromServiceLoader(converterRegistry);
-            return this;
+        private <P> void init(PolicyRegistry<P> registry) {
+            // 1. 自动扫描当前包及其子包
+            PolicyScanner.scanAndRegister(registry);
+            // 2. 通过 ServiceLoader 加载
+            PolicyScanner.registerFromServiceLoader(registry);
         }
 
         /**

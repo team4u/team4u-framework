@@ -1,7 +1,6 @@
 package com.team4u.framework.config.core.convert;
 
 import com.team4u.framework.policy.KeyedPolicyRegistry;
-import com.team4u.framework.policy.PolicyScanner;
 
 /**
  * 自定义转换器注册表
@@ -13,9 +12,5 @@ public class PropertyConverterRegistry
 
     public PropertyConverterRegistry() {
         super((Class<PropertyConverter<?>>) (Class<?>) PropertyConverter.class);
-        // 自动从 SPI 加载
-        PolicyScanner.registerFromServiceLoader(this);
-        // 自动扫描所在包下的实现
-        PolicyScanner.scanAndRegister(this);
     }
 }

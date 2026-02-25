@@ -68,14 +68,15 @@ server.description=${server.name} is running on port ${server.port}
 ConfigManager 是所有操作的入口。你可以使用内置的标准单例，也可以通过 Builder 进行深度定制。
 
 ```java
-// 标准实例（推荐）：自动通过 SPI 加载所有可用的 ConfigSource 和 ConfigWatcher
+// 标准实例（推荐）：自动扫描当前包并加载所有通过 SPI 发现的 ConfigSource 和 ConfigWatcher
 ConfigManager manager = ConfigManager.standard();
 
 // 自定义实例：使用 Builder 进行高级配置
+// Builder 在初始化时也会默认触发自动扫描和 SPI 加载
 ConfigManager customManager = ConfigManager.builder()
-    .scanSources("com.mycompany.config.sources")   // 扫描包自动注册 Source
-    .scanWatchers("com.mycompany.config.watchers") // 扫描包自动注册 Watcher
-    .addSource(new MyCustomConfigSource())         // 手动添加
+    .scanSources("com.mycompany.config.sources")   // 额外的包扫描：手动扫描包自动注册 Source
+    .scanWatchers("com.mycompany.config.watchers") // 额外的包扫描：手动扫描包自动注册 Watcher
+    .addSource(new MyCustomConfigSource())         // 手动添加实例
     .build();
 ```
 
@@ -211,7 +212,7 @@ public class MyDecryptConverter implements PropertyConverter<String> {
 
 #### 注册自定义转换器
 
-你可以通过以下两种方式注册自定义转换器，使其在全局或特定配置管理器中生效：
+你通过以下方式提供的自定义转换器将在所有 `ConfigManager` 实例中生效：
 
 **方式 A：通过 Builder 手动注册（推荐用于特定实例）**
 ```java
@@ -220,17 +221,13 @@ ConfigManager manager = ConfigManager.builder()
     .build();
 ```
 
-**方式 B：通过 SPI 自动加载（推荐用于全局通用转换器）**
-1. 在 `src/main/resources/META-INF/services/convert.com.team4u.framework.config.core.PropertyConverter` 文件中添加实现类的全路径。
-2. 在构建时调用 `loadConvertersFromSpi()`：
-```java
-ConfigManager manager = ConfigManager.builder()
-    .loadConvertersFromSpi()
-    .build();
-```
+**方式 B：自动发现（推荐用于全局通用转换器）**
+框架在初始化 `Builder` 时，会自动通过以下两种机制加载转换器：
+1. **SPI 机制**：在 `META-INF/services/com.team4u.framework.config.core.convert.PropertyConverter` 文件中添加实现类的全路径。
+2. **包扫描**：自动扫描 `com.team4u.framework.config.core.convert` 包及其子包下的所有非抽象 `PropertyConverter` 实现类。
 
 > [!TIP]
-> **优先级说明**：手动通过 `addConverter` 注册的转换器优先级高于通过 SPI 加载的转换器。如果同一个目标类型存在多个转换器，系统将采用最后注册的一个。
+> **优先级说明**：手动通过 `addConverter` 注册的转换器优先级高于自动加载的转换器。如果同一个目标类型存在多个转换器，系统将采用最后注册的一个。
 
 ### 智能松散绑定 (Relaxed Binding)
 
@@ -395,7 +392,7 @@ public class MyConfigSource implements ConfigSource {
 ```
 
 - 注册服务：
-在 src/main/resources/META-INF/services/spi.com.team4u.framework.config.core.ConfigSource 文件中添加类全路径：
+在 `src/main/resources/META-INF/services/com.team4u.framework.config.core.spi.ConfigSource` 文件中添加类全路径：
 ```text
 com.yourpackage.MyConfigSource
 ```
