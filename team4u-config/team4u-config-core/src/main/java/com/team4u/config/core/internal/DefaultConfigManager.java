@@ -6,6 +6,8 @@ import cn.hutool.log.Log;
 import cn.hutool.log.LogFactory;
 import com.team4u.config.core.ConfigChangeListener;
 import com.team4u.config.core.ConfigManager;
+import com.team4u.config.core.annotation.ConfigPrefix;
+import com.team4u.config.core.convert.PropertyConverterRegistry;
 import com.team4u.config.core.domain.ConfigEntry;
 import com.team4u.config.core.domain.ConfigSnapshot;
 import com.team4u.config.core.proxy.ConfigProxyFactory;
@@ -27,7 +29,9 @@ public class DefaultConfigManager implements ConfigManager {
     private final AtomicReference<ConfigSnapshot> snapshotRef = new AtomicReference<>();
     private final List<ConfigSource> sources;
     private final List<ConfigWatcher> watchers;
+    private final PropertyConverterRegistry converterRegistry;
     private final ConfigBinder configBinder;
+    private final ConfigProxyFactory proxyFactory;
 
     private final SnapshotAggregator aggregator = new SnapshotAggregator();
     private final HotReloadManager hotReloadManager;
@@ -36,11 +40,15 @@ public class DefaultConfigManager implements ConfigManager {
 
     private final DynamicInstanceProvider<ProxyKey, ProxyKey, Object> proxyInstanceProvider;
 
-    public DefaultConfigManager(ConfigSourceRegistry sourceRegistry, ConfigWatcherRegistry watcherRegistry,
+    public DefaultConfigManager(ConfigSourceRegistry sourceRegistry,
+                                ConfigWatcherRegistry watcherRegistry,
+                                PropertyConverterRegistry converterRegistry,
                                 ConfigBinder configBinder) {
         this.sources = sourceRegistry.getPolicies();
         this.watchers = watcherRegistry.getPolicies();
+        this.converterRegistry = converterRegistry;
         this.configBinder = configBinder;
+        this.proxyFactory = new ConfigProxyFactory(converterRegistry);
 
         // 初始化所有配置源
         initialLoad();
@@ -92,15 +100,34 @@ public class DefaultConfigManager implements ConfigManager {
     }
 
     private Object doCreateProxy(String prefix, Class<?> interfaceType) {
+        String finalPrefix = prefix;
+
+        // 根据接口上的 @ConfigPrefix 注解自动提取前缀
+        ConfigPrefix annotation = interfaceType.getAnnotation(ConfigPrefix.class);
+        if (annotation != null) {
+            String classPrefix = annotation.value();
+            if (StrUtil.isBlank(finalPrefix)) {
+                // 如果调用方没有传前缀，则直接使用注解定义的前缀
+                finalPrefix = classPrefix;
+            } else {
+                // 如果调用方传了前缀，则将两个前缀进行叠加（父子层级关系）
+                finalPrefix = finalPrefix + "." + classPrefix;
+            }
+        }
+
+        if (finalPrefix == null) {
+            finalPrefix = "";
+        }
+
         // 如果是接口，返回 Live Mode 动态代理，支持实时热更新
         if (interfaceType.isInterface()) {
-            return new ConfigProxyFactory().createLiveProxy(this, prefix, interfaceType);
+            return proxyFactory.createLiveProxy(this, finalPrefix, interfaceType);
         }
 
         if (configBinder == null) {
             throw new IllegalStateException("ConfigBinder is missing. Cannot create proxy.");
         }
-        return configBinder.bind(currentSnapshot(), prefix, interfaceType);
+        return configBinder.bind(currentSnapshot(), finalPrefix, interfaceType);
     }
 
     @Override

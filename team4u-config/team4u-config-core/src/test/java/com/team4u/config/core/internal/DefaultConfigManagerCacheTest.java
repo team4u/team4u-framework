@@ -1,5 +1,6 @@
 package com.team4u.config.core.internal;
 
+import com.team4u.config.core.convert.PropertyConverterRegistry;
 import com.team4u.config.core.domain.ConfigSnapshot;
 import com.team4u.config.core.spi.*;
 import org.junit.Assert;
@@ -43,7 +44,8 @@ public class DefaultConfigManagerCacheTest {
             }
         };
 
-        DefaultConfigManager manager = new DefaultConfigManager(sourceRegistry, watcherRegistry, configBinder);
+        DefaultConfigManager manager = new DefaultConfigManager(sourceRegistry, watcherRegistry,
+                new PropertyConverterRegistry(), configBinder);
 
         // 测试接口代理缓存
         TestInterface proxy1 = manager.createProxy("app", TestInterface.class);

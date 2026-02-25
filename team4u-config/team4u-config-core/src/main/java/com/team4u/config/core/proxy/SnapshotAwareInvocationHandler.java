@@ -3,7 +3,13 @@ package com.team4u.config.core.proxy;
 import cn.hutool.core.convert.Convert;
 import cn.hutool.core.util.ClassUtil;
 import cn.hutool.core.util.StrUtil;
+import com.team4u.config.core.annotation.ConfigConverter;
 import com.team4u.config.core.annotation.ConfigDefault;
+import com.team4u.config.core.annotation.ConfigKey;
+import com.team4u.config.core.annotation.ConfigRequired;
+import com.team4u.config.core.convert.PropertyConverter;
+import com.team4u.config.core.convert.PropertyConverterRegistry;
+import com.team4u.config.core.domain.ConfigMissingException;
 import com.team4u.config.core.domain.ConfigSnapshot;
 
 import java.lang.reflect.InvocationHandler;
@@ -25,6 +31,7 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
     private final Supplier<ConfigSnapshot> snapshotProvider;
     private final boolean isPinned;
     private final ConfigProxyFactory proxyFactory;
+    private final PropertyConverterRegistry converterRegistry;
 
     /**
      * 元数据缓存：存储方法的静态信息，避免重复解析方法名
@@ -40,13 +47,15 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
                                           String prefix,
                                           Supplier<ConfigSnapshot> snapshotProvider,
                                           boolean isPinned,
-                                          ConfigProxyFactory proxyFactory) {
+                                          ConfigProxyFactory proxyFactory,
+                                          PropertyConverterRegistry converterRegistry) {
         this.interfaceType = interfaceType;
         // 预处理前缀，保证以 "." 结尾，减少 invoke 时的判断
         this.prefix = (prefix == null || prefix.isEmpty()) ? "" : (prefix.endsWith(".") ? prefix : prefix + ".");
         this.snapshotProvider = snapshotProvider;
         this.isPinned = isPinned;
         this.proxyFactory = proxyFactory;
+        this.converterRegistry = converterRegistry;
 
         // 预热元数据缓存
         warmUp();
@@ -102,26 +111,38 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
      * 解析配置值：利用路径记忆加速查找
      */
     private Object resolveValue(MethodMetadata metadata, ConfigSnapshot snapshot) {
-        String baseName = metadata.baseName;
-        // 拼接前缀，例如 "app." + "serverPort" -> "app.serverPort"
-        String targetKey = prefix + baseName;
+        // 根据是否是绝对路径选择拼接方式
+        String targetKey = metadata.absolute ? metadata.baseName : prefix + metadata.baseName;
 
         // 1. 直接调用快照的智能松散匹配获取原始值
         String rawValue = snapshot.getSmart(targetKey).orElse(null);
 
         // 2. 如果未找到配置且返回类型是接口，尝试作为嵌套对象处理
         if (rawValue == null && metadata.returnType.isInterface()) {
-            // 注意：这里继续使用原始语境下的 prefix + baseName 作为子前缀
-            String subPrefix = prefix + baseName;
-            return proxyFactory.createProxy(snapshotProvider, subPrefix, metadata.returnType, isPinned);
+            return proxyFactory.createProxy(snapshotProvider, targetKey, metadata.returnType, isPinned);
         }
 
-        // 3. 如果依然未找到对应配置，返回预计算的默认值（包含注解值或类型零值）
+        // 3. 处理必填逻辑：如果没有原始值且没有默认值，则抛出异常
+        if (rawValue == null && metadata.required && metadata.defaultValue == null) {
+            throw new ConfigMissingException("Missing required config: [" + targetKey + "]");
+        }
+
+        // 4. 如果依然未找到对应配置，返回预计算的默认值（包含注解值或类型零值）
         if (rawValue == null) {
             return metadata.defaultValue;
         }
 
-        // 4. 进行类型转换并处理潜在异常
+        // 5. 优先使用自定义转换器
+        if (metadata.converter != null) {
+            try {
+                return metadata.converter.convert(rawValue);
+            } catch (Exception e) {
+                // 转换失败时回退到默认值
+                return metadata.defaultValue;
+            }
+        }
+
+        // 6. 进行类型转换并处理潜在异常
         try {
             return Convert.convert(metadata.returnType, rawValue);
         } catch (Exception e) {
@@ -134,19 +155,34 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
      * 创建并缓存方法元数据，提取静态特征
      */
     private MethodMetadata createMetadata(Method method) {
-        String name = method.getName();
-        String baseName = name;
-        // 自动剥离 Getter 前缀
-        if (name.startsWith("get") && name.length() > 3) {
-            baseName = StrUtil.lowerFirst(name.substring(3));
-        } else if (name.startsWith("is") && name.length() > 2) {
-            baseName = StrUtil.lowerFirst(name.substring(2));
+        String baseName;
+        boolean absolute = false;
+
+        // 1. 优先解析 @ConfigKey
+        if (method.isAnnotationPresent(ConfigKey.class)) {
+            String keyValue = method.getAnnotation(ConfigKey.class).value();
+            if (keyValue.startsWith(".")) {
+                baseName = keyValue.substring(1);
+                absolute = true;
+            } else {
+                baseName = keyValue;
+            }
+        } else {
+            // 自动推断：剥离 Getter 前缀
+            String name = method.getName();
+            if (name.startsWith("get") && name.length() > 3) {
+                baseName = StrUtil.lowerFirst(name.substring(3));
+            } else if (name.startsWith("is") && name.length() > 2) {
+                baseName = StrUtil.lowerFirst(name.substring(2));
+            } else {
+                baseName = name;
+            }
         }
 
         Class<?> returnType = method.getReturnType();
         Object defaultValue = null;
 
-        // 1. 优先查找注解
+        // 2. 解析 @ConfigDefault
         if (method.isAnnotationPresent(ConfigDefault.class)) {
             String annotationValue = method.getAnnotation(ConfigDefault.class).value();
             try {
@@ -157,12 +193,31 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
             }
         }
 
-        // 2. 如果没有注解或转换失败，使用 Java 类型的默认值 (int=0, boolean=false, Object=null)
+        // 3. 解析 @ConfigRequired
+        boolean required = method.isAnnotationPresent(ConfigRequired.class);
+
+        // 4. 解析 @ConfigConverter
+        PropertyConverter<?> converter = null;
+        if (method.isAnnotationPresent(ConfigConverter.class)) {
+            Class<? extends PropertyConverter<?>> converterClass = method.getAnnotation(ConfigConverter.class).value();
+            converter = converterRegistry.get(converterClass).orElseGet(() -> {
+                try {
+                    PropertyConverter<?> instance = converterClass.getDeclaredConstructor()
+                            .newInstance();
+                    converterRegistry.register(instance);
+                    return instance;
+                } catch (Exception e) {
+                    throw new IllegalStateException("无法实例化转换器: " + converterClass.getName(), e);
+                }
+            });
+        }
+
+        // 5. 如果没有注解或转换失败，使用 Java 类型的默认值 (int=0, boolean=false, Object=null)
         if (defaultValue == null) {
             defaultValue = ClassUtil.getDefaultValue(returnType);
         }
 
-        return new MethodMetadata(baseName, returnType, defaultValue);
+        return new MethodMetadata(baseName, returnType, defaultValue, required, absolute, converter);
     }
 
     /**
@@ -199,11 +254,22 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
         final String baseName;
         final Class<?> returnType;
         final Object defaultValue;
+        final boolean required;
+        final boolean absolute;
+        final PropertyConverter<?> converter;
 
-        MethodMetadata(String baseName, Class<?> returnType, Object defaultValue) {
+        MethodMetadata(String baseName,
+                       Class<?> returnType,
+                       Object defaultValue,
+                       boolean required,
+                       boolean absolute,
+                       PropertyConverter<?> converter) {
             this.baseName = baseName;
             this.returnType = returnType;
             this.defaultValue = defaultValue;
+            this.required = required;
+            this.absolute = absolute;
+            this.converter = converter;
         }
     }
 

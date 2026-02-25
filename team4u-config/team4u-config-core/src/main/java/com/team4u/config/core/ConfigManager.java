@@ -1,5 +1,8 @@
 package com.team4u.config.core;
 
+import com.team4u.config.core.annotation.ConfigPrefix;
+import com.team4u.config.core.convert.PropertyConverter;
+import com.team4u.config.core.convert.PropertyConverterRegistry;
 import com.team4u.config.core.domain.ConfigSnapshot;
 import com.team4u.config.core.internal.DefaultConfigBinder;
 import com.team4u.config.core.internal.DefaultConfigManager;
@@ -34,7 +37,8 @@ public interface ConfigManager {
     /**
      * 获取带有标准底层实现的全局单例配置管理引擎。
      * <p>
-     * 适用于大多数场景，直接利用 SPI (ServiceLoader) 自动发现 {@link ConfigSource} 和 {@link ConfigWatcher}。
+     * 适用于大多数场景，直接利用 SPI (ServiceLoader) 自动发现 {@link ConfigSource} 和
+     * {@link ConfigWatcher}。
      * </p>
      *
      * @return 预置的全局单例配置管理实例
@@ -92,6 +96,19 @@ public interface ConfigManager {
     <T> T createProxy(String prefix, Class<T> interfaceType);
 
     /**
+     * 生成配置接口类型的动态代理实例（自动识别前缀）
+     * <p>
+     * 内部会尝试根据 {@link ConfigPrefix} 注解自动推断前缀。
+     *
+     * @param interfaceType 期望代理出来的业务层 Java 接口类型
+     * @param <T>           强类型
+     * @return 动态生成的代理实例对象
+     */
+    default <T> T createProxy(Class<T> interfaceType) {
+        return createProxy(null, interfaceType);
+    }
+
+    /**
      * 基础键值获取快捷入口，内部委托给 {@link #currentSnapshot()} 执行
      *
      * @param key 精确配置键
@@ -129,6 +146,7 @@ public interface ConfigManager {
 
         private final ConfigSourceRegistry sourceRegistry = new ConfigSourceRegistry();
         private final ConfigWatcherRegistry watcherRegistry = new ConfigWatcherRegistry();
+        private final PropertyConverterRegistry converterRegistry = new PropertyConverterRegistry();
         private ConfigBinder configBinder;
 
         Builder() {
@@ -151,6 +169,16 @@ public interface ConfigManager {
          */
         public Builder loadWatchersFromSpi() {
             PolicyScanner.registerFromServiceLoader(watcherRegistry);
+            return this;
+        }
+
+        /**
+         * 加载 SPI 发现的所有 PropertyConverter
+         *
+         * @return 当前 Builder 实例
+         */
+        public Builder loadConvertersFromSpi() {
+            PolicyScanner.registerFromServiceLoader(converterRegistry);
             return this;
         }
 
@@ -207,6 +235,21 @@ public interface ConfigManager {
         }
 
         /**
+         * 添加自定义属性转换器
+         *
+         * @param converter 属性转换器
+         * @return 当前 Builder 实例
+         */
+        public Builder addConverter(PropertyConverter<?>... converter) {
+            if (converter != null) {
+                for (PropertyConverter<?> propertyConverter : converter) {
+                    converterRegistry.register(propertyConverter);
+                }
+            }
+            return this;
+        }
+
+        /**
          * 自定义配置绑定器
          *
          * @param configBinder 配置绑定器
@@ -226,7 +269,7 @@ public interface ConfigManager {
             if (configBinder == null) {
                 configBinder = new DefaultConfigBinder(); // 默认绑定器
             }
-            return new DefaultConfigManager(sourceRegistry, watcherRegistry, configBinder);
+            return new DefaultConfigManager(sourceRegistry, watcherRegistry, converterRegistry, configBinder);
         }
     }
 }

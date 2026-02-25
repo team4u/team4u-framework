@@ -105,9 +105,11 @@ public interface DbConfig {
     String getUsername();
 }
 
-// 创建动态代理 (Live Mode：配置变动时，值随之同步变化)
-// 前缀可以带 "." 也可以不带，如 "server" 或 "server." 效果一致
+// 方式 A：手动指定前缀
 AppConfig config = manager.createProxy("server", AppConfig.class);
+
+// 方式 B：使用 @ConfigPrefix 注解（推荐，见下文“声明式注解”章节）
+AppConfig config2 = manager.createProxy(AppConfig.class);
 
 System.out.println(config.getName());        // 内部自动查找 server.name
 System.out.println(config.getDb().getUrl()); // 访问嵌套对象
@@ -126,7 +128,77 @@ System.out.println(config.getDb().getUrl()); // 访问嵌套对象
 
 ---
 
+---
+
 ## 核心特性
+
+### 声明式注解 (Annotations)
+
+除了基本的松散绑定，框架提供了一系列注解来增强接口的可维护性和鲁棒性。
+
+#### @ConfigPrefix
+用于在接口类级别定义统一的配置前缀，简化代理创建过程。
+```java
+@ConfigPrefix("server")
+public interface AppConfig {
+    String getName();
+}
+
+// 此时无需在代码中硬编码 "server" 前缀
+AppConfig config = manager.createProxy(AppConfig.class);
+```
+
+> [!TIP]
+> **前缀合并规则**：如果你在代码中显式指定了前缀，它将与注解中的前缀进行**叠加合并**。例如，如果接口标记了 `@ConfigPrefix("db")`，而调用时使用了 `manager.createProxy("prod", DbConfig.class)`，最终生效的完整前缀将是 `prod.db`。
+
+#### @ConfigKey
+用于明确指定该方法对应的配置 Key，跳过自动推断逻辑。支持绝对路径（以点号开头）和相对路径。
+```java
+public interface AppConfig {
+    @ConfigKey("max-threads") // 显式匹配 server.max-threads
+    int threads();
+    
+    @ConfigKey(".global.version") // 绝对路径，忽略 server 前缀，匹配 global.version
+    String version();
+}
+```
+
+#### @ConfigDefault & @ConfigRequired
+用于处理缺失值：
+- `@ConfigDefault`: 提供兜底值（支持占位符和自动类型转换）。
+- `@ConfigRequired`: 标记为必填，若缺失且无默认值则抛出 `ConfigMissingException`。
+
+```java
+public interface AppConfig {
+    @ConfigDefault("8080")
+    int getPort();
+
+    @ConfigRequired
+    String getSecretKey();
+}
+```
+
+### 自定义属性转换 (Custom Converters)
+
+当内置的绑定逻辑无法满足复杂类型（如：加密数据解密、特定格式解析）时，可以使用 `@ConfigConverter` 指定自定义转换器。
+
+1. **实现转换器接口**：
+```java
+public class MyJsonConverter implements PropertyConverter<MyData> {
+    @Override
+    public MyData convert(String source) {
+        return JSONUtil.toBean(source, MyData.class);
+    }
+}
+```
+
+2. **在接口中使用**：
+```java
+public interface AppConfig {
+    @ConfigConverter(MyJsonConverter.class)
+    MyData getData();
+}
+```
 
 ### 智能松散绑定 (Relaxed Binding)
 
@@ -261,15 +333,19 @@ AppConfig pinnedConfig = SnapshotAware.pin(config);
 
 框架高度可扩展，通过实现以下 SPI 接口并配合 ServiceLoader 或 Builder 手动注册。
 
-| 扩展接口        | 功能说明                                                             | 核心路径                 |
-| --------------- | -------------------------------------------------------------------- | ------------------------ |
-| ConfigSource  | 数据源：决定配置从哪加载（如从 Redis、MySQL 或 Http 加载）。     | spi/ConfigSource.java  |
-| ConfigWatcher | 监听器：决定如何发现配置变更（如监听文件系统通知、定时拉取等）。 | spi/ConfigWatcher.java |
-| ConfigBinder  | 绑定器：决定如何将 String 数据映射到 Complex Object。            | spi/ConfigBinder.java  |
+| 扩展接口           | 功能说明                                                             | 核心路径                       |
+| ------------------ | -------------------------------------------------------------------- | ------------------------------ |
+| ConfigSource       | 数据源：决定配置从哪加载（如从 Redis、MySQL 或 Http 加载）。         | spi/ConfigSource.java          |
+| ConfigWatcher      | 监听器：决定如何发现配置变更（如监听文件系统通知、定时拉取等）。     | spi/ConfigWatcher.java         |
+| ConfigBinder       | 绑定器：决定如何将 String 数据映射到 Complex Object。                | spi/ConfigBinder.java          |
+| PropertyConverter  | 转换器：SPI 方式注册全局转换逻辑（可选）。                           | convert/PropertyConverter.java |
 
 ### 实现自定义配置源
 
-- 实现接口：
+- **Tombstone 机制**：
+  `ConfigSource` 定义了 `TOMBSTONE_VALUE` (null)。当一个源返回此值时，表示它显式“删除”或“屏蔽”了低优先级源中的同名配置，防止旧值污染。
+
+- **实现接口**：
 ```java
 public class MyConfigSource implements ConfigSource {
     @Override

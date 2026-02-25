@@ -1,6 +1,7 @@
 package com.team4u.config.core;
 
 import cn.hutool.core.thread.ThreadUtil;
+import com.team4u.config.core.convert.PropertyConverterRegistry;
 import com.team4u.config.core.domain.ConfigEntry;
 import com.team4u.config.core.domain.ConfigSnapshot;
 import com.team4u.config.core.internal.DefaultConfigManager;
@@ -26,7 +27,7 @@ public class DefaultConfigManagerTest {
 
         // 模拟绑定器以使用代理工厂执行绑定
         ConfigBinder binder = new ConfigBinder() {
-            private final ConfigProxyFactory factory = new ConfigProxyFactory();
+            private final ConfigProxyFactory factory = new ConfigProxyFactory(new PropertyConverterRegistry());
 
             @Override
             public <T> T bind(ConfigSnapshot snapshot, String prefix, Class<T> type) {
@@ -44,8 +45,8 @@ public class DefaultConfigManagerTest {
         DefaultConfigManager manager = new DefaultConfigManager(
                 sourceRegistry,
                 watcherRegistry,
-                binder
-        );
+                new PropertyConverterRegistry(),
+                binder);
 
         // 验证首次同步加载后的数据状态
         Assert.assertEquals(1, loadCount.get());

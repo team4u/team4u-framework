@@ -1,6 +1,7 @@
 package com.team4u.config.core;
 
 import com.team4u.config.core.annotation.ConfigDefault;
+import com.team4u.config.core.convert.PropertyConverterRegistry;
 import com.team4u.config.core.domain.ConfigEntry;
 import com.team4u.config.core.domain.ConfigSnapshot;
 import com.team4u.config.core.proxy.ConfigProxyFactory;
@@ -111,6 +112,7 @@ public class ConfigDefaultTest {
      */
     private static class MockConfigManager implements ConfigManager {
         private final ConfigSnapshot snapshot;
+        private final PropertyConverterRegistry converterRegistry = new PropertyConverterRegistry();
 
         public MockConfigManager(ConfigSnapshot snapshot) {
             this.snapshot = snapshot;
@@ -123,7 +125,7 @@ public class ConfigDefaultTest {
 
         @Override
         public <T> T createProxy(String prefix, Class<T> interfaceType) {
-            return new ConfigProxyFactory().createLiveProxy(this, prefix, interfaceType);
+            return new ConfigProxyFactory(converterRegistry).createLiveProxy(this, prefix, interfaceType);
         }
 
         @Override

@@ -1,6 +1,7 @@
 package com.team4u.config.core.proxy;
 
 import com.team4u.config.core.ConfigManager;
+import com.team4u.config.core.convert.PropertyConverterRegistry;
 import com.team4u.config.core.domain.ConfigSnapshot;
 
 import java.lang.reflect.Proxy;
@@ -12,6 +13,12 @@ import java.util.function.Supplier;
  * 构建代理接口实例对象以提供方法级别的自动感知取值。
  */
 public class ConfigProxyFactory {
+
+    private final PropertyConverterRegistry converterRegistry;
+
+    public ConfigProxyFactory(PropertyConverterRegistry converterRegistry) {
+        this.converterRegistry = converterRegistry;
+    }
 
     /**
      * 创建 Live Mode 的动态代理实例
@@ -62,14 +69,13 @@ public class ConfigProxyFactory {
                 prefix,
                 snapshotProvider,
                 isPinned,
-                this
-        );
+                this,
+                converterRegistry);
 
         return (T) Proxy.newProxyInstance(
                 type.getClassLoader(),
                 new Class[]{type, SnapshotAware.class},
-                handler
-        );
+                handler);
     }
 
 }

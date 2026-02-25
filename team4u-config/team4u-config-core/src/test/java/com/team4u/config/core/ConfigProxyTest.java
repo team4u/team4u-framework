@@ -1,5 +1,6 @@
 package com.team4u.config.core;
 
+import com.team4u.config.core.convert.PropertyConverterRegistry;
 import com.team4u.config.core.domain.ConfigEntry;
 import com.team4u.config.core.domain.ConfigSnapshot;
 import com.team4u.config.core.proxy.ConfigProxyFactory;
@@ -25,6 +26,8 @@ public class ConfigProxyTest {
 
         // 模拟管理器行为映射
         ConfigManager manager = new ConfigManager() {
+            private final PropertyConverterRegistry converterRegistry = new PropertyConverterRegistry();
+
             @Override
             public ConfigSnapshot currentSnapshot() {
                 return snapshot;
@@ -32,7 +35,7 @@ public class ConfigProxyTest {
 
             @Override
             public <T> T createProxy(String prefix, Class<T> interfaceType) {
-                return new ConfigProxyFactory().createLiveProxy(this, prefix, interfaceType);
+                return new ConfigProxyFactory(converterRegistry).createLiveProxy(this, prefix, interfaceType);
             }
 
             @Override
@@ -71,6 +74,8 @@ public class ConfigProxyTest {
         AtomicReference<ConfigSnapshot> currentRef = new AtomicReference<>(snapshotV1);
 
         ConfigManager manager = new ConfigManager() {
+            private final PropertyConverterRegistry converterRegistry = new PropertyConverterRegistry();
+
             @Override
             public ConfigSnapshot currentSnapshot() {
                 return currentRef.get();
@@ -78,7 +83,7 @@ public class ConfigProxyTest {
 
             @Override
             public <T> T createProxy(String prefix, Class<T> interfaceType) {
-                return new ConfigProxyFactory().createLiveProxy(this, prefix, interfaceType);
+                return new ConfigProxyFactory(converterRegistry).createLiveProxy(this, prefix, interfaceType);
             }
 
             @Override
@@ -110,6 +115,8 @@ public class ConfigProxyTest {
 
         ConfigSnapshot snapshot = new ConfigSnapshot(1L, entries);
         ConfigManager manager = new ConfigManager() {
+            private final PropertyConverterRegistry converterRegistry = new PropertyConverterRegistry();
+
             @Override
             public ConfigSnapshot currentSnapshot() {
                 return snapshot;
@@ -117,7 +124,7 @@ public class ConfigProxyTest {
 
             @Override
             public <T> T createProxy(String prefix, Class<T> type) {
-                return new ConfigProxyFactory().createLiveProxy(this, prefix, type);
+                return new ConfigProxyFactory(converterRegistry).createLiveProxy(this, prefix, type);
             }
 
             @Override
@@ -138,10 +145,13 @@ public class ConfigProxyTest {
         Map<String, ConfigEntry> entries = new HashMap<>();
         long now = System.currentTimeMillis();
         entries.put("server.name", new ConfigEntry("server.name", "nested-app", "mock", now));
-        entries.put("server.db.url", new ConfigEntry("server.db.url", "jdbc:mysql://localhost:3306/nested", "mock", now));
+        entries.put("server.db.url",
+                new ConfigEntry("server.db.url", "jdbc:mysql://localhost:3306/nested", "mock", now));
 
         ConfigSnapshot snapshot = new ConfigSnapshot(100L, entries);
         ConfigManager manager = new ConfigManager() {
+            private final PropertyConverterRegistry converterRegistry = new PropertyConverterRegistry();
+
             @Override
             public ConfigSnapshot currentSnapshot() {
                 return snapshot;
@@ -149,7 +159,7 @@ public class ConfigProxyTest {
 
             @Override
             public <T> T createProxy(String prefix, Class<T> interfaceType) {
-                return new ConfigProxyFactory().createLiveProxy(this, prefix, interfaceType);
+                return new ConfigProxyFactory(converterRegistry).createLiveProxy(this, prefix, interfaceType);
             }
 
             @Override
@@ -183,12 +193,12 @@ public class ConfigProxyTest {
     }
 
     public interface ComplexAppConfig {
-        String name();               // 匹配 app.name
+        String name(); // 匹配 app.name
 
-        int maxDbConnections();      // 匹配 app.max-db-connections (kebab)
+        int maxDbConnections(); // 匹配 app.max-db-connections (kebab)
 
-        int serverPort();           // 匹配 app.server_port (snake)
+        int serverPort(); // 匹配 app.server_port (snake)
 
-        boolean isDevMode();         // 匹配 app.is.dev.mode (dot)
+        boolean isDevMode(); // 匹配 app.is.dev.mode (dot)
     }
 }
