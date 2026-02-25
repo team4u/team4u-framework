@@ -7,9 +7,11 @@ import com.team4u.config.core.internal.PlaceholderResolver;
 import lombok.Getter;
 
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Optional;
+import java.util.Set;
 
 /**
  * 核心配置快照 (不可变)
@@ -61,6 +63,9 @@ public class ConfigSnapshot {
         }
 
         Map<String, Object> root = new LinkedHashMap<>();
+        // 复用 HashSet 以减少在高频调用下的对象分配
+        Set<String> visitedKeys = new HashSet<>();
+
         for (Map.Entry<String, ConfigEntry> entry : entries.entrySet()) {
             String key = entry.getKey();
             ConfigEntry configEntry = entry.getValue();
@@ -70,7 +75,7 @@ public class ConfigSnapshot {
             }
 
             // 解析占位符，预先解析可以显著提升后续 bind 的性能
-            String resolvedValue = PlaceholderResolver.resolve(configEntry.getValue(), this);
+            String resolvedValue = PlaceholderResolver.resolve(configEntry.getValue(), this, visitedKeys);
 
             // 填充树形结构
             int start = 0;

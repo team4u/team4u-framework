@@ -75,4 +75,27 @@ public class PlaceholderResolverTest {
         String result = PlaceholderResolver.resolve("${app.name} runs on ${db.host}:${db.port}", snapshot);
         Assert.assertEquals("Team4UApp runs on 127.0.0.1:3306", result);
     }
+
+    @Test
+    public void testNestedPlaceholderInKey() {
+        Map<String, ConfigEntry> entries = new HashMap<>();
+        entries.put("env", new ConfigEntry("env", "dev", "source", 1L));
+        entries.put("db.dev.host", new ConfigEntry("db.dev.host", "localhost", "source", 1L));
+        ConfigSnapshot nestedSnapshot = new ConfigSnapshot(2L, entries);
+
+        String result = PlaceholderResolver.resolve("Host: ${db.${env}.host}", nestedSnapshot);
+        Assert.assertEquals("Host: localhost", result);
+    }
+
+    @Test
+    public void testSharedSet() {
+        java.util.Set<String> visitedKeys = new java.util.HashSet<>();
+        String result1 = PlaceholderResolver.resolve("Hello ${app.name}", snapshot, visitedKeys);
+        Assert.assertEquals("Hello Team4UApp", result1);
+        Assert.assertTrue(visitedKeys.isEmpty());
+
+        String result2 = PlaceholderResolver.resolve("DB: ${db.host}", snapshot, visitedKeys);
+        Assert.assertEquals("DB: 127.0.0.1", result2);
+        Assert.assertTrue(visitedKeys.isEmpty());
+    }
 }

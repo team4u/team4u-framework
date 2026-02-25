@@ -32,7 +32,15 @@ public class PlaceholderResolver {
         return resolve(value, snapshot, new HashSet<>());
     }
 
-    private static String resolve(String value, ConfigSnapshot snapshot, Set<String> visitedKeys) {
+    /**
+     * 解析字符串中的占位符（支持复用已访问键集合）
+     *
+     * @param value       包含占位符的原始字符串
+     * @param snapshot    当前配置快照
+     * @param visitedKeys 已访问的键集合，用于循环依赖检测
+     * @return 解析并替换后的字符串
+     */
+    public static String resolve(String value, ConfigSnapshot snapshot, Set<String> visitedKeys) {
         if (StrUtil.isBlank(value)) {
             return value;
         }
@@ -61,7 +69,6 @@ public class PlaceholderResolver {
 
             // 提取出占位符内部的内容，例如 key 或 key:default
             String placeholder = result.substring(prefixIndex + PREFIX.length(), suffixIndex);
-            String originalPlaceholder = placeholder;
 
             // 如果内容中还嵌套有其他的占位符，先递归解析内部的
             if (placeholder.contains(PREFIX)) {
@@ -84,27 +91,29 @@ public class PlaceholderResolver {
                 throw new IllegalArgumentException("Circular dependency detected for placeholder key: " + targetKey);
             }
 
-            // 查询实际包含的数据
-            String resolvedValue = snapshot.get(targetKey).orElse(null);
+            try {
+                // 查询实际包含的数据
+                String resolvedValue = snapshot.get(targetKey).orElse(null);
 
-            if (resolvedValue == null && defaultValue != null) {
-                resolvedValue = defaultValue;
-            }
-
-            if (resolvedValue != null) {
-                // 如果解析出的值内部还包含占位符，继续递归解析
-                if (resolvedValue.contains(PREFIX)) {
-                    resolvedValue = resolve(resolvedValue, snapshot, visitedKeys);
+                if (resolvedValue == null && defaultValue != null) {
+                    resolvedValue = defaultValue;
                 }
-                result.replace(prefixIndex, suffixIndex + SUFFIX.length(), resolvedValue);
-                cursor = prefixIndex + resolvedValue.length();
-            } else {
-                // 无法解析且没有默认值，保持原样（或者可以抛错，由实现决定，这里选择优雅降级为原样）
-                cursor = suffixIndex + SUFFIX.length();
-            }
 
-            // 当前占位符解析完毕，退出其依赖追踪
-            visitedKeys.remove(targetKey);
+                if (resolvedValue != null) {
+                    // 如果解析出的值内部还包含占位符，继续递归解析
+                    if (resolvedValue.contains(PREFIX)) {
+                        resolvedValue = resolve(resolvedValue, snapshot, visitedKeys);
+                    }
+                    result.replace(prefixIndex, suffixIndex + SUFFIX.length(), resolvedValue);
+                    cursor = prefixIndex + resolvedValue.length();
+                } else {
+                    // 无法解析且没有默认值，保持原样（或者可以抛错，由实现决定，这里选择优雅降级为原样）
+                    cursor = suffixIndex + SUFFIX.length();
+                }
+            } finally {
+                // 当前占位符解析完毕，退出其依赖追踪
+                visitedKeys.remove(targetKey);
+            }
         }
 
         return result.toString();
@@ -112,18 +121,36 @@ public class PlaceholderResolver {
 
     private static int findMatchSuffixIndex(StringBuilder sequence, int prefixIndex) {
         int nestedCount = 0;
-        for (int i = prefixIndex + PREFIX.length(); i < sequence.length(); i++) {
-            if (sequence.substring(i).startsWith(PREFIX)) {
+        int len = sequence.length();
+        int prefixLen = PREFIX.length();
+        int suffixLen = SUFFIX.length();
+
+        for (int i = prefixIndex + prefixLen; i < len; i++) {
+            if (startsWith(sequence, i, PREFIX)) {
                 nestedCount++;
-                i += PREFIX.length() - 1; // 跳过额外前缀字符
-            } else if (sequence.substring(i).startsWith(SUFFIX)) {
+                i += prefixLen - 1;
+            } else if (startsWith(sequence, i, SUFFIX)) {
                 if (nestedCount == 0) {
                     return i;
                 }
                 nestedCount--;
-                i += SUFFIX.length() - 1; // 跳过额外后缀字符
+                i += suffixLen - 1;
             }
         }
         return -1;
+    }
+
+    private static boolean startsWith(StringBuilder sequence, int index, String prefix) {
+        int prefixLen = prefix.length();
+        if (index + prefixLen > sequence.length()) {
+            return false;
+        }
+
+        for (int i = 0; i < prefixLen; i++) {
+            if (sequence.charAt(index + i) != prefix.charAt(i)) {
+                return false;
+            }
+        }
+        return true;
     }
 }
