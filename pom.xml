@@ -17,6 +17,7 @@
         <module>team4u-proxy</module>
         <module>team4u-bean</module>
         <module>team4u-message</module>
+        <module>team4u-router</module>
     </modules>
 
     <properties>
