@@ -1,7 +1,5 @@
 package com.team4u.framework.config.core.proxy;
 
-import com.team4u.framework.config.core.ConfigManager;
-
 /**
  * 代理实例快照感知增强接口
  * <p>

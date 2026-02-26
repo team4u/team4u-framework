@@ -6,7 +6,10 @@ import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import com.team4u.framework.config.core.spi.ConfigSource;
 
 import java.util.List;
-import java.util.concurrent.*;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.ScheduledThreadPoolExecutor;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
@@ -71,13 +74,10 @@ public class HotReloadManager {
         this.debounceWindowMs = debounceWindowMs;
         this.onReloadSuccess = onReloadSuccess;
 
-        this.debounceExecutor = new ScheduledThreadPoolExecutor(1, new ThreadFactory() {
-            @Override
-            public Thread newThread(Runnable r) {
-                Thread t = new Thread(r, "team4u-config-reload");
-                t.setDaemon(true);
-                return t;
-            }
+        this.debounceExecutor = new ScheduledThreadPoolExecutor(1, r -> {
+            Thread t = new Thread(r, "team4u-config-reload");
+            t.setDaemon(true);
+            return t;
         });
     }
 

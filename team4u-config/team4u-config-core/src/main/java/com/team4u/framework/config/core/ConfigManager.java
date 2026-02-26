@@ -203,10 +203,10 @@ public interface ConfigManager {
          * @param packageName 包名
          * @return 当前 Builder 实例
          */
-        @SuppressWarnings({ "unchecked", "rawtypes" })
+        @SuppressWarnings({"unchecked", "rawtypes"})
         public Builder scanConverters(String packageName) {
             PolicyScanner.scanAndRegister(converterRegistry, packageName,
-                    (Class) PropertyConverter.class);
+                    PropertyConverter.class);
             return this;
         }
 

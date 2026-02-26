@@ -15,7 +15,7 @@ import java.util.Map;
 public interface ConfigSource extends OrderedPolicy {
 
     /**
-     * 配置失效哨兵值（Tombstone）
+     * 配置失效哨兵值
      * <p>
      * 当数据源返回此值时，显式表示该配置项已失效，将屏蔽低优先级源中的同名配置。
      * </p>

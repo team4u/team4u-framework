@@ -313,6 +313,7 @@ ConfigManager manager = ConfigManager.builder()
 InMemoryConfigSource memorySource = new InMemoryConfigSource("test-memory", 1);
 ConfigManager manager = ConfigManager.builder()
     .addSource(memorySource)
+    .addWatcher(memorySource) // 确保刷新信号能被监听到
     .build();
 
 // 注入配置并自动刷新

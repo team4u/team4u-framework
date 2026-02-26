@@ -31,19 +31,17 @@ import java.util.function.Supplier;
  */
 public class SnapshotAwareInvocationHandler implements InvocationHandler {
 
+    /**
+     * 全局方法元数据静态缓存
+     * 由于接口方法上的注解在运行时是静态不变的，所有代理实例共享此缓存以节省解析开销
+     */
+    private static final Map<Method, MethodMetadata> METADATA_CACHE = new ConcurrentHashMap<>();
     private final Class<?> interfaceType;
     private final String prefix;
     private final Supplier<ConfigSnapshot> snapshotProvider;
     private final boolean isPinned;
     private final ConfigProxyFactory proxyFactory;
     private final PropertyConverterRegistry converterRegistry;
-
-    /**
-     * 全局方法元数据静态缓存
-     * 由于接口方法上的注解在运行时是静态不变的，所有代理实例共享此缓存以节省解析开销
-     */
-    private static final Map<Method, MethodMetadata> METADATA_CACHE = new ConcurrentHashMap<>();
-
     /**
      * 实例级配置值缓存
      * 绑定了配置快照的版本号。当快照版本发生变更时，缓存将自动失效并重新执行解析逻辑。
@@ -70,6 +68,102 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
     // ---------------------------------------------------------------------------
     // 代理调用核心流程
     // ---------------------------------------------------------------------------
+
+    /**
+     * 构建方法级的解析元数据，该结果将被静态缓存
+     */
+    private static MethodMetadata createMetadata(Method method,
+                                                 PropertyConverterRegistry converterRegistry) {
+        String baseName = resolveBaseName(method);
+        boolean absolute = isAbsoluteKey(method);
+        Class<?> returnType = method.getReturnType();
+        boolean required = method.isAnnotationPresent(ConfigRequired.class);
+
+        // 预处理默认值
+        Object defaultValue = resolveDefaultValue(method, returnType);
+        // 预加载转换器实例
+        PropertyConverter<?> converter = ConverterLoader.load(method, converterRegistry);
+
+        return new MethodMetadata(baseName, returnType, defaultValue, required, absolute, converter);
+    }
+
+    // ---------------------------------------------------------------------------
+    // 配置值解析流程
+    // ---------------------------------------------------------------------------
+
+    /**
+     * 推断配置项名称
+     * <p>
+     * 遵循以下规则：
+     * <ul>
+     *     <li>优先读取 @ConfigKey 注解值</li>
+     *     <li>若未注解，则根据 Java Getter 规范（get/is 前缀）自动剥离并推断</li>
+     * </ul>
+     * </p>
+     */
+    private static String resolveBaseName(Method method) {
+        if (method.isAnnotationPresent(ConfigKey.class)) {
+            String keyValue = method.getAnnotation(ConfigKey.class).value();
+            return keyValue.startsWith(".") ? keyValue.substring(1) : keyValue;
+        }
+        return inferNameFromGetter(method.getName());
+    }
+
+    /**
+     * 检查是否为绝对路径定义
+     */
+    private static boolean isAbsoluteKey(Method method) {
+        if (!method.isAnnotationPresent(ConfigKey.class)) {
+            return false;
+        }
+        return method.getAnnotation(ConfigKey.class).value().startsWith(".");
+    }
+
+    /**
+     * 标准 Getter 名称解析
+     */
+    private static String inferNameFromGetter(String methodName) {
+        if (methodName.startsWith("get") && methodName.length() > 3) {
+            return StrUtil.lowerFirst(methodName.substring(3));
+        }
+        if (methodName.startsWith("is") && methodName.length() > 2) {
+            return StrUtil.lowerFirst(methodName.substring(2));
+        }
+        return methodName;
+    }
+
+    // ---------------------------------------------------------------------------
+    // 元数据构建逻辑
+    // ---------------------------------------------------------------------------
+
+    /**
+     * 预处理并转换默认值字符串
+     */
+    private static Object resolveDefaultValue(Method method, Class<?> returnType) {
+        if (method.isAnnotationPresent(ConfigDefault.class)) {
+            String annotationValue = method.getAnnotation(ConfigDefault.class).value();
+            try {
+                return Convert.convert(returnType, annotationValue);
+            } catch (Exception ignore) {
+            }
+        }
+        return ClassUtil.getDefaultValue(returnType);
+    }
+
+    private static boolean isPinMethod(Method method) {
+        return "pin".equals(method.getName())
+                && (method.getParameterCount() == 0);
+    }
+
+    /**
+     * 前缀规范化，确保始终以点号结尾
+     */
+    private static String normalizePrefix(String prefix) {
+        if (prefix == null || prefix.isEmpty()) {
+            return "";
+        }
+        return prefix.endsWith(".") ? prefix : prefix + ".";
+    }
 
     @Override
     public Object invoke(Object proxy, Method method, Object[] args) {
@@ -103,10 +197,6 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
 
         return value;
     }
-
-    // ---------------------------------------------------------------------------
-    // 配置值解析流程
-    // ---------------------------------------------------------------------------
 
     /**
      * 执行多层级的配置值检索与处理逻辑
@@ -163,6 +253,10 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
         }
     }
 
+    // ---------------------------------------------------------------------------
+    // 辅助逻辑处理
+    // ---------------------------------------------------------------------------
+
     /**
      * 调用通用类型转换器实现
      */
@@ -174,97 +268,11 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
         }
     }
 
-    // ---------------------------------------------------------------------------
-    // 元数据构建逻辑
-    // ---------------------------------------------------------------------------
-
     /**
      * 拼装完整的配置检索键
      */
     private String buildKey(MethodMetadata metadata) {
         return metadata.absolute ? metadata.baseName : prefix + metadata.baseName;
-    }
-
-    /**
-     * 构建方法级的解析元数据，该结果将被静态缓存
-     */
-    private static MethodMetadata createMetadata(Method method,
-                                                 PropertyConverterRegistry converterRegistry) {
-        String baseName = resolveBaseName(method);
-        boolean absolute = isAbsoluteKey(method);
-        Class<?> returnType = method.getReturnType();
-        boolean required = method.isAnnotationPresent(ConfigRequired.class);
-
-        // 预处理默认值
-        Object defaultValue = resolveDefaultValue(method, returnType);
-        // 预加载转换器实例
-        PropertyConverter<?> converter = ConverterLoader.load(method, converterRegistry);
-
-        return new MethodMetadata(baseName, returnType, defaultValue, required, absolute, converter);
-    }
-
-    /**
-     * 推断配置项名称
-     * <p>
-     * 遵循以下规则：
-     * <ul>
-     *     <li>优先读取 @ConfigKey 注解值</li>
-     *     <li>若未注解，则根据 Java Getter 规范（get/is 前缀）自动剥离并推断</li>
-     * </ul>
-     * </p>
-     */
-    private static String resolveBaseName(Method method) {
-        if (method.isAnnotationPresent(ConfigKey.class)) {
-            String keyValue = method.getAnnotation(ConfigKey.class).value();
-            return keyValue.startsWith(".") ? keyValue.substring(1) : keyValue;
-        }
-        return inferNameFromGetter(method.getName());
-    }
-
-    /**
-     * 检查是否为绝对路径定义
-     */
-    private static boolean isAbsoluteKey(Method method) {
-        if (!method.isAnnotationPresent(ConfigKey.class)) {
-            return false;
-        }
-        return method.getAnnotation(ConfigKey.class).value().startsWith(".");
-    }
-
-    /**
-     * 标准 Getter 名称解析
-     */
-    private static String inferNameFromGetter(String methodName) {
-        if (methodName.startsWith("get") && methodName.length() > 3) {
-            return StrUtil.lowerFirst(methodName.substring(3));
-        }
-        if (methodName.startsWith("is") && methodName.length() > 2) {
-            return StrUtil.lowerFirst(methodName.substring(2));
-        }
-        return methodName;
-    }
-
-    /**
-     * 预处理并转换默认值字符串
-     */
-    private static Object resolveDefaultValue(Method method, Class<?> returnType) {
-        if (method.isAnnotationPresent(ConfigDefault.class)) {
-            String annotationValue = method.getAnnotation(ConfigDefault.class).value();
-            try {
-                return Convert.convert(returnType, annotationValue);
-            } catch (Exception ignore) {
-            }
-        }
-        return ClassUtil.getDefaultValue(returnType);
-    }
-
-    // ---------------------------------------------------------------------------
-    // 辅助逻辑处理
-    // ---------------------------------------------------------------------------
-
-    private static boolean isPinMethod(Method method) {
-        return "pin".equals(method.getName())
-                && (method.getParameterCount() == 0);
     }
 
     /**
@@ -301,16 +309,6 @@ public class SnapshotAwareInvocationHandler implements InvocationHandler {
                 METADATA_CACHE.computeIfAbsent(method, m -> createMetadata(m, converterRegistry));
             }
         }
-    }
-
-    /**
-     * 前缀规范化，确保始终以点号结尾
-     */
-    private static String normalizePrefix(String prefix) {
-        if (prefix == null || prefix.isEmpty()) {
-            return "";
-        }
-        return prefix.endsWith(".") ? prefix : prefix + ".";
     }
 
     // ---------------------------------------------------------------------------
