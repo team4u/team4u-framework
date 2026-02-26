@@ -58,7 +58,30 @@ StandardCriterionParser.global().addOperator("is_odd", (actual, expected) -> (in
 boolean result = Criteria.standard().matches("it is_odd true", 3); // true
 ```
 
-#### 2. 自定义实例
+#### 2. Spring 自动配置
+在 Spring 环境中，你可以通过引入自动配置类来简化组件注册。只需将自定义的操作符、编译器或转换器定义为 Spring Bean，框架会自动完成全局注册：
+
+```java
+@Configuration
+@Import(Team4uCriterionAutoConfiguration.class)
+public class MyCriteriaConfig {
+    
+    // 自动注册到全局转换器列表
+    @Bean
+    public ValueConverter myConverter() {
+        return new MyCustomConverter();
+    }
+}
+
+// 业务代码中直接注入即可
+@Service
+public class MyService {
+    @Autowired
+    private Criteria criteria;
+}
+```
+
+#### 3. 自定义实例
 使用 Builder 构建完全隔离的规则引擎：
 
 ```java
