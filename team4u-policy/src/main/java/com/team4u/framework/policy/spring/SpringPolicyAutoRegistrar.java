@@ -37,20 +37,20 @@ public class SpringPolicyAutoRegistrar implements SmartInitializingSingleton, Ap
             return;
         }
 
-                // 2. 遍历每个注册表，根据其持有的 policyClass 去 Spring 容器中找对应的策略 Bean
-                for (Map.Entry<String, PolicyRegistry> entry : registries.entrySet()) {
-                    String registryBeanName = entry.getKey();
-                    PolicyRegistry registry = entry.getValue();
-        
-                    // 检查该 Bean 是否有 @PolicyAutoRegister 注解
-                    PolicyAutoRegister annotation = context.findAnnotationOnBean(registryBeanName, PolicyAutoRegister.class);
-                    if (annotation == null) {
-                        log.debug("SpringPolicyAutoRegistrar|autoRegister|skip|registry={}|reason=noAnnotation", registryBeanName);
-                        continue;
-                    }
-        
-                    Class<?> policyClass = registry.getPolicyClass();
-                    if (policyClass == null) {
+        // 2. 遍历每个注册表，根据其持有的 policyClass 去 Spring 容器中找对应的策略 Bean
+        for (Map.Entry<String, PolicyRegistry> entry : registries.entrySet()) {
+            String registryBeanName = entry.getKey();
+            PolicyRegistry registry = entry.getValue();
+
+            // 检查该 Bean 是否有 @PolicyAutoRegister 注解
+            PolicyAutoRegister annotation = context.findAnnotationOnBean(registryBeanName, PolicyAutoRegister.class);
+            if (annotation == null) {
+                log.debug("SpringPolicyAutoRegistrar|autoRegister|skip|registry={}|reason=noAnnotation", registryBeanName);
+                continue;
+            }
+
+            Class<?> policyClass = registry.getPolicyClass();
+            if (policyClass == null) {
                 log.warn("SpringPolicyAutoRegistrar|autoRegister|skip|registry={}|reason=policyClassIsNull", registryBeanName);
                 continue;
             }
@@ -60,7 +60,7 @@ public class SpringPolicyAutoRegistrar implements SmartInitializingSingleton, Ap
 
             // 4. 将这些 Bean 批量注册到注册表中
             if (!policyBeans.isEmpty()) {
-                registry.addAll((Collection) policyBeans.values());
+                registry.addAll(policyBeans.values());
                 log.info("SpringPolicyAutoRegistrar|autoRegister|success|registry={}|policyClass={}|count={}",
                         registryBeanName, policyClass.getSimpleName(), policyBeans.size());
             }

@@ -30,6 +30,12 @@ public class SpringPolicyAutoRegistrarTest {
     }
 
     /**
+     * 测试策略接口
+     */
+    interface TestPolicy extends ContextPolicy<String> {
+    }
+
+    /**
      * 测试配置类
      */
     @Configuration
@@ -60,12 +66,6 @@ public class SpringPolicyAutoRegistrarTest {
         public PolicyB policyB() {
             return new PolicyB();
         }
-    }
-
-    /**
-     * 测试策略接口
-     */
-    interface TestPolicy extends ContextPolicy<String> {
     }
 
     /**
