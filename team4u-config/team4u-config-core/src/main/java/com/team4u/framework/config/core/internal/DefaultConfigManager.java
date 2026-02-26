@@ -131,8 +131,8 @@ public class DefaultConfigManager implements ConfigManager {
 
     @Override
     @SuppressWarnings("unchecked")
-    public <T> T createProxy(String prefix, Class<T> interfaceType) {
-        return (T) proxyInstanceProvider.get(new ProxyKey(prefix, interfaceType));
+    public <T> T createProxy(String prefix, Class<T> configType) {
+        return (T) proxyInstanceProvider.get(new ProxyKey(prefix, configType));
     }
 
     /**
@@ -140,16 +140,16 @@ public class DefaultConfigManager implements ConfigManager {
      * <p>
      * 处理逻辑如下：
      * <ul>
-     *     <li>识别接口上的配置前缀注解并进行路径叠加</li>
-     *     <li>若目标为接口，则返回支持热更新的动态代理对象</li>
-     *     <li>若目标为普通类，则调用绑定器将配置映射到 Bean 属性中</li>
+     *     <li>识别配置类上的配置前缀注解并进行路径叠加</li>
+     *     <li>创建并返回支持热更新的动态代理对象</li>
+     *     <li>若代理创建失败（例如 final 类），则调用绑定器将配置映射到 Bean 属性中</li>
      * </ul>
      * </p>
      */
-    private Object doCreateProxy(String prefix, Class<?> interfaceType) {
+    private Object doCreateProxy(String prefix, Class<?> configType) {
         String finalPrefix = prefix;
 
-        ConfigPrefix annotation = interfaceType.getAnnotation(ConfigPrefix.class);
+        ConfigPrefix annotation = configType.getAnnotation(ConfigPrefix.class);
         if (annotation != null) {
             String classPrefix = annotation.value();
             if (StrUtil.isBlank(finalPrefix)) {
@@ -163,15 +163,15 @@ public class DefaultConfigManager implements ConfigManager {
             finalPrefix = "";
         }
 
-        // 优先尝试创建实时代理（支持接口和普通类）
+        // 优先尝试创建实时代理
         try {
-            return proxyFactory.createLiveProxy(this, finalPrefix, interfaceType);
+            return proxyFactory.createLiveProxy(this, finalPrefix, configType);
         } catch (Exception e) {
             // 如果代理创建失败（例如 final 类），则尝试进行单次绑定
             if (configBinder != null) {
-                return configBinder.bind(currentSnapshot(), finalPrefix, interfaceType);
+                return configBinder.bind(currentSnapshot(), finalPrefix, configType);
             }
-            throw new IllegalStateException("无法为类型创建代理且未配置绑定器: " + interfaceType.getName(), e);
+            throw new IllegalStateException("无法为类型创建代理且未配置绑定器: " + configType.getName(), e);
         }
     }
 
@@ -281,11 +281,11 @@ public class DefaultConfigManager implements ConfigManager {
     @EqualsAndHashCode
     private static class ProxyKey {
         private final String prefix;
-        private final Class<?> interfaceType;
+        private final Class<?> configType;
 
-        private ProxyKey(String prefix, Class<?> interfaceType) {
+        private ProxyKey(String prefix, Class<?> configType) {
             this.prefix = prefix;
-            this.interfaceType = interfaceType;
+            this.configType = configType;
         }
     }
 }

@@ -74,9 +74,10 @@ ConfigManager manager = ConfigManager.standard();
 // 自定义实例：使用 Builder 进行高级配置
 // Builder 在初始化时也会默认触发自动扫描和 SPI 加载
 ConfigManager customManager = ConfigManager.builder()
-    .scanSources("com.mycompany.config.sources")   // 额外的包扫描：手动扫描包自动注册 Source
-    .scanWatchers("com.mycompany.config.watchers") // 额外的包扫描：手动扫描包自动注册 Watcher
-    .addSource(new MyCustomConfigSource())         // 手动添加实例
+    .scanSources("com.mycompany.config.sources")     // 额外的包扫描：手动扫描包自动注册 Source
+    .scanWatchers("com.mycompany.config.watchers")   // 额外的包扫描：手动扫描包自动注册 Watcher
+    .scanConverters("com.mycompany.config.converters") // 额外的包扫描：手动扫描包自动注册 Converter
+    .addSource(new MyCustomConfigSource())           // 手动添加实例
     .build();
 ```
 
@@ -87,38 +88,35 @@ ConfigManager customManager = ConfigManager.builder()
 String dbUrl = manager.getString("server.db.url").orElse("jdbc:mysql://localhost:3306/default");
 ```
 
-### 进阶用法：强类型配置代理 (接口与 Bean)
+### 进阶用法：强类型配置代理 (配置 Bean)
 
-这是最推荐的使用方式。框架会自动为你的配置类（接口或 Bean）创建“实时代理”，使其具备热更新能力。
+这是最推荐的使用方式。框架会自动为你的**配置类 (Java Bean)** 创建“实时代理”，使其具备热更新能力。
 
-#### 方式 A：基于接口 (Interface)
-只需定义 Getter 规范的接口：
+> [!IMPORTANT]
+> **仅支持普通 Java 类 (POJO)**，不再支持接口。框架要求配置类必须提供**无参构造函数**，因为底层会实例化一个真实对象作为委托，以支持字段初始值作为默认值。
+
+#### 示例：定义配置 Bean
+框架会拦截 Getter 方法以支持热更新。**字段的初始值将自动作为配置缺失时的默认值**：
 ```java
-public interface AppConfig {
-    String getName();
-    int getPort();
-    DbConfig getDb(); // 支持嵌套
-}
+@ConfigPrefix("server")
+public class ServerConfig {
+    private String name = "default-name"; // 初始值即为默认值
+    private int port = 8080;
+    
+    private DbConfig db; // 支持嵌套其它 Bean
 
-// 创建实时代理
-AppConfig config = manager.createProxy("server", AppConfig.class);
-```
-
-#### 方式 B：基于普通类 (Java Bean)
-无需接口，直接代理普通 POJO。底层会拦截 Getter 方法以支持热更新：
-```java
-public class ServerBean {
-    private String name;
-    private int port;
     // 标准 Getter/Setter ...
+    public String getName() { return name; }
+    public void setName(String name) { this.name = name; }
+    // ...
 }
 
-// 同样支持 Live Mode（实时感知配置变更）
-ServerBean config = manager.createProxy("server", ServerBean.class);
+// 创建实时代理（支持 Live Mode，实时感知配置变更）
+ServerConfig config = manager.createProxy(ServerConfig.class);
 ```
 
 > [!TIP]
-> **声明式注解支持**：你可以配合 `@ConfigPrefix("server")` 注解使用 `manager.createProxy(AppConfig.class)`。
+> **Live 代理原理**：框架生成的代理对象内部持有一个真实的 Bean 实例。当配置发生变化时，代理对象会从最新的配置快照中重新计算值；如果快照中缺失，则回退到该 Bean 实例的字段初始值。
 
 #### 代理双模式：Live vs Pinned
 
@@ -137,15 +135,13 @@ ServerBean config = manager.createProxy("server", ServerBean.class);
 
 ### 声明式注解 (Annotations)
 
-除了基本的松散绑定，框架提供了一系列注解来增强代理的可维护性和鲁棒性。
+框架提供了一系列注解来增强代理的可维护性和鲁棒性。
 
 #### @ConfigPrefix
-用于定义统一的配置前缀，简化代理创建过程。
+用于定义统一的配置键前缀。
 ```java
 @ConfigPrefix("server")
-public interface AppConfig {
-    String getName();
-}
+public class AppConfig { ... }
 
 // 无需硬编码前缀
 AppConfig config = manager.createProxy(AppConfig.class);
@@ -154,19 +150,25 @@ AppConfig config = manager.createProxy(AppConfig.class);
 #### @ConfigKey
 显式指定配置键，跳过自动推断逻辑。支持绝对路径（以点号开头）。
 ```java
-public interface AppConfig {
+public class AppConfig {
     @ConfigKey("max-threads") // 匹配 server.max-threads
-    int threads();
+    private int threads;
     
     @ConfigKey(".global.version") // 忽略前缀，匹配全局 key
-    String version();
+    private String version;
+    
+    public int getThreads() { return threads; }
 }
 ```
 
-#### @ConfigDefault & @ConfigRequired
-用于处理缺失值：
-- `@ConfigDefault`: 提供兜底值（支持类型转换）。
-- `@ConfigRequired`: 标记为必填，缺失则抛出 `ConfigMissingException`。
+#### @ConfigRequired
+用于处理必填校验。若标记为必填且配置源中缺失且字段无初始值，则抛出 `ConfigMissingException`。
+```java
+public class AppConfig {
+    @ConfigRequired
+    private String apiKey;
+}
+```
 
 ### 自定义属性转换 (Custom Converters)
 
@@ -192,7 +194,7 @@ public interface AppConfig {
 支持 `${key:defaultValue}` 语法，具备深度嵌套、循环依赖检测和高性能解析（零临时对象分配）等特性。
 
 ### 热加载与变更监听
-内置 500ms 的防抖窗口，合并高频变更。通过 `addChangeListener` 可精准感知配置的增删改。
+内置 500ms 的防抖窗口，合并高频变更。通过 `addChangeListener` 可精准感知配置的增删改，支持 `*` 通配符前缀匹配（如 `app.*`）。
 
 ---
 

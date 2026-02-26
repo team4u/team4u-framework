@@ -88,30 +88,30 @@ public interface ConfigManager {
     ConfigSnapshot currentSnapshot();
 
     /**
-     * 生成配置接口的动态代理实例
+     * 生成配置类的动态代理实例
      * <p>
      * 默认返回实时更新模式（Live Mode）的代理，能够感知配置的热更新。
      * </p>
      *
-     * @param prefix        配置前缀，用于限定配置搜索范围
-     * @param interfaceType 业务层定义的 Java 接口类型
-     * @param <T>           接口强类型
+     * @param prefix     配置前缀，用于限定配置搜索范围
+     * @param configType 业务层定义的 Java 配置类类型（Bean）
+     * @param <T>        配置类强类型
      * @return 动态生成的代理实例
      */
-    <T> T createProxy(String prefix, Class<T> interfaceType);
+    <T> T createProxy(String prefix, Class<T> configType);
 
     /**
      * 根据注解自动推断前缀并生成动态代理实例
      * <p>
-     * 内部会尝试识别接口上的 {@link ConfigPrefix} 注解。
+     * 内部会尝试识别配置类上的 {@link ConfigPrefix} 注解。
      * </p>
      *
-     * @param interfaceType 业务层定义的 Java 接口类型
-     * @param <T>           接口强类型
+     * @param configType 业务层定义的 Java 配置类类型（Bean）
+     * @param <T>        配置类强类型
      * @return 动态生成的代理实例
      */
-    default <T> T createProxy(Class<T> interfaceType) {
-        return createProxy(null, interfaceType);
+    default <T> T createProxy(Class<T> configType) {
+        return createProxy(null, configType);
     }
 
     /**
