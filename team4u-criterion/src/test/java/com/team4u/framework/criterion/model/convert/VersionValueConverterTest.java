@@ -12,7 +12,7 @@ import java.util.Map;
  */
 public class VersionValueConverterTest {
 
-    private final Criteria criteria = Criteria.standard();
+    private final Criteria criteria = Criteria.global();
 
     // ==================== null 值处理测试 ====================
 

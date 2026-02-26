@@ -12,7 +12,10 @@ import com.team4u.framework.config.core.convert.PropertyConverterRegistry;
 import com.team4u.framework.config.core.domain.ConfigEntry;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import com.team4u.framework.config.core.proxy.ConfigProxyFactory;
-import com.team4u.framework.config.core.spi.*;
+import com.team4u.framework.config.core.spi.ConfigBinder;
+import com.team4u.framework.config.core.spi.ConfigSourceRegistry;
+import com.team4u.framework.config.core.spi.ConfigWatcher;
+import com.team4u.framework.config.core.spi.ConfigWatcherRegistry;
 import lombok.EqualsAndHashCode;
 
 import java.util.*;
@@ -67,10 +70,39 @@ public class DefaultConfigManager implements ConfigManager {
      */
     private final DynamicInstanceProvider<ProxyKey, ProxyKey, Object> proxyInstanceProvider;
 
+    private static volatile DefaultConfigManager GLOBAL = new DefaultConfigManager(
+            ConfigSourceRegistry.global(),
+            ConfigWatcherRegistry.global(),
+            PropertyConverterRegistry.global(),
+            new DefaultConfigBinder()
+    );
+
+    /**
+     * 获取全局标准单例配置管理引擎
+     */
+    public static DefaultConfigManager global() {
+        return GLOBAL;
+    }
+
+    /**
+     * 重置全局标准实例
+     * <p>
+     * 用于在单元测试或特定的隔离沙箱环境中清理状态，释放资源。
+     * </p>
+     */
+    public static void resetGlobal() {
+        synchronized (DefaultConfigManager.class) {
+            if (GLOBAL != null) {
+                GLOBAL.destroy();
+                GLOBAL = null;
+            }
+        }
+    }
+
     public DefaultConfigManager(ConfigSourceRegistry sourceRegistry,
-            ConfigWatcherRegistry watcherRegistry,
-            PropertyConverterRegistry converterRegistry,
-            ConfigBinder configBinder) {
+                                ConfigWatcherRegistry watcherRegistry,
+                                PropertyConverterRegistry converterRegistry,
+                                ConfigBinder configBinder) {
         this.sourceRegistry = sourceRegistry;
         this.watcherRegistry = watcherRegistry;
         this.configBinder = configBinder;

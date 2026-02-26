@@ -16,12 +16,12 @@ import java.util.Optional;
  * 配置管理中心系统总控门面接口
  * <p>
  * 推荐通过 {@link ConfigManager#builder()} 构建自定义配置管理器实例，
- * 或使用 {@link ConfigManager#standard()} 获取全局共享的标准实例。
+ * 或使用 {@link ConfigManager#global()} 获取全局共享的标准实例。
  * </p>
  *
  * <pre>
  * // 使用标准门面获取配置
- * ConfigManager manager = ConfigManager.standard();
+ * ConfigManager manager = ConfigManager.global();
  * String dbUrl = manager.getString("db.url").orElse(null);
  * DbConfig dbConfig = manager.createProxy("db", DbConfig.class);
  *
@@ -40,20 +40,12 @@ public interface ConfigManager {
      * <p>
      * 该实例通过 SPI (ServiceLoader) 机制自动发现并加载 {@link ConfigSource} 和
      * {@link ConfigWatcher}。
-     * 采用了双重检查锁定（DCL）确保多线程环境下单例的线程安全性。
      * </p>
      *
      * @return 全局单例配置管理实例
      */
-    static ConfigManager standard() {
-        if (InstanceHolder.STANDARD_INSTANCE == null) {
-            synchronized (ConfigManager.class) {
-                if (InstanceHolder.STANDARD_INSTANCE == null) {
-                    InstanceHolder.STANDARD_INSTANCE = Builder.buildStandard();
-                }
-            }
-        }
-        return InstanceHolder.STANDARD_INSTANCE;
+    static ConfigManager global() {
+        return DefaultConfigManager.global();
     }
 
     /**
@@ -62,13 +54,8 @@ public interface ConfigManager {
      * 用于在单元测试或特定的隔离沙箱环境中清理状态，释放资源。
      * </p>
      */
-    static void resetStandard() {
-        synchronized (ConfigManager.class) {
-            if (InstanceHolder.STANDARD_INSTANCE instanceof DefaultConfigManager) {
-                ((DefaultConfigManager) InstanceHolder.STANDARD_INSTANCE).destroy();
-            }
-            InstanceHolder.STANDARD_INSTANCE = null;
-        }
+    static void resetGlobal() {
+        DefaultConfigManager.resetGlobal();
     }
 
     /**
@@ -139,13 +126,6 @@ public interface ConfigManager {
     void addChangeListener(String keyPattern, ConfigChangeListener listener);
 
     /**
-     * 内部静态类，用于安全持有单例
-     */
-    class InstanceHolder {
-        static volatile ConfigManager STANDARD_INSTANCE;
-    }
-
-    /**
      * 配置管理器构造器
      * <p>
      * 负责组装配置源、监听器、转换器以及绑定器。
@@ -179,7 +159,7 @@ public interface ConfigManager {
          *
          * @return 标准配置管理器
          */
-        public static ConfigManager buildStandard() {
+        public static ConfigManager buildGlobal() {
             return new Builder(
                     ConfigSourceRegistry.global(),
                     ConfigWatcherRegistry.global(),

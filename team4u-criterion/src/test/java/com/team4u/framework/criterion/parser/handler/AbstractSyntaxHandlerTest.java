@@ -12,7 +12,7 @@ import com.team4u.framework.criterion.model.PropertyCriterion;
  */
 public abstract class AbstractSyntaxHandlerTest {
 
-    protected final Criteria criteria = Criteria.standard();
+    protected final Criteria criteria = Criteria.global();
 
     /**
      * 解析表达式并验证叶子节点的类型

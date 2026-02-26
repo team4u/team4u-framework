@@ -69,14 +69,14 @@ server.description=${server.name} is running on port ${server.port}
 ConfigManager 是所有操作的入口。你可以使用内置的标准单例，也可以通过 Builder 进行深度定制。
 
 #### 1. 标准单例（推荐）
-自动通过 SPI 发现并聚合配置。你也可以在调用 `standard()` 之前，通过全局注册表手动预填组件：
+自动通过 SPI 发现并聚合配置。你也可以在调用 `global()` 之前，通过全局注册表手动预填组件：
 
 ```java
 // 手动向全局注册表注入一个配置源
 ConfigSourceRegistry.global().register(new MyCustomConfigSource());
 
 // 获取标准单例，它会自动包含上面手动注册的源以及 SPI 加载的源
-ConfigManager manager = ConfigManager.standard();
+ConfigManager manager = ConfigManager.global();
 ```
 
 #### 2. 自定义实例
@@ -94,7 +94,7 @@ ConfigManager customManager = ConfigManager.builder()
 
 ```java
 // 重置 ConfigManager 单例
-ConfigManager.resetStandard();
+ConfigManager.resetGlobal();
 
 // 清空全局注册表中的所有组件
 ConfigSourceRegistry.global().unregisterAll();
@@ -282,7 +282,7 @@ ConfigManager manager = ConfigManager.builder()
 框架内置了 `InMemoryConfigSource`，允许在单元测试中通过代码动态注入配置，无需依赖外部文件。它同时实现了 `ConfigWatcher` 接口，支持实时刷新。
 
 ### 1. 使用标准单例测试
-通过全局注册表，你可以直接向 `ConfigManager.standard()` 注入数据：
+通过全局注册表，你可以直接向 `ConfigManager.global()` 注入数据：
 
 ```java
 @BeforeEach
@@ -294,7 +294,7 @@ public void setup() {
 @AfterEach
 public void cleanup() {
     // 清理全局状态，确保测试隔离
-    ConfigManager.resetStandard();
+    ConfigManager.resetGlobal();
     ConfigSourceRegistry.global().unregisterAll();
 }
 ```

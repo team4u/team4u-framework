@@ -15,7 +15,7 @@ import com.team4u.framework.criterion.model.PropertyCriterion;
  */
 public class StandardCriterionParserTest {
 
-    private final Criteria criteria = Criteria.standard();
+    private final Criteria criteria = Criteria.global();
 
     @Test
     public void testParseRelational() {

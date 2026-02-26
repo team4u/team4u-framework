@@ -1,6 +1,5 @@
 package com.team4u.framework.criterion;
 
-import lombok.Getter;
 import com.team4u.framework.base.instance.DynamicInstanceProvider;
 import com.team4u.framework.criterion.compiler.CompilerRegistry;
 import com.team4u.framework.criterion.compiler.CompilingVisitor;
@@ -14,6 +13,7 @@ import com.team4u.framework.criterion.parser.SyntaxHandler;
 import com.team4u.framework.criterion.parser.impl.StandardCriterionParser;
 import com.team4u.framework.criterion.trace.TraceNode;
 import com.team4u.framework.criterion.trace.TraceRecorder;
+import lombok.Getter;
 
 import java.util.*;
 import java.util.function.BiPredicate;
@@ -22,12 +22,12 @@ import java.util.function.BiPredicate;
  * 规则引擎门面类（不可变且线程安全）
  * <p>
  * 推荐通过 {@link Criteria#builder()} 构建自定义配置实例，
- * 或使用 {@link Criteria#standard()} 获取默认实例。
+ * 或使用 {@link Criteria#global()} 获取默认实例。
  * </p>
  *
  * <pre>
  * // 场景1：普通业务（使用标准库）
- * Criteria criteria = Criteria.standard();
+ * Criteria criteria = Criteria.global();
  * boolean result = criteria.matches("age > 18 && status == 'ACTIVE'", userObj);
  *
  * // 场景2：特定业务线（需要定制）
@@ -48,7 +48,7 @@ public class Criteria {
     /**
      * 默认的全局标准实例（预配置且不可变）
      */
-    private static final Criteria STANDARD_INSTANCE = new Criteria(
+    private static final Criteria GLOBAL = new Criteria(
             StandardCriterionParser.global(),
             CompilerRegistry.global()
     );
@@ -69,7 +69,7 @@ public class Criteria {
     private final DynamicInstanceProvider<String, String, MatchPredicate> compiledProvider;
 
     /**
-     * 建议通过 Builder 或 standard() 获取实例
+     * 建议通过 Builder 或 global() 获取实例
      *
      * @param parser           解析器（为 null 时使用标准解析器）
      * @param compilerRegistry 编译器注册表（为 null 时使用默认注册表）
@@ -80,7 +80,8 @@ public class Criteria {
         this.compiledProvider = DynamicInstanceProvider.createStringLru(
                 1000,
                 input -> input,
-                config -> compileExpression(config));
+                this::compileExpression
+        );
     }
 
     /**
@@ -91,8 +92,8 @@ public class Criteria {
      *
      * @return 预置标准语法的全局单例实例
      */
-    public static Criteria standard() {
-        return STANDARD_INSTANCE;
+    public static Criteria global() {
+        return GLOBAL;
     }
 
     /**
@@ -224,26 +225,14 @@ public class Criteria {
         /**
          * 编译器注册表 (当前实例私有副本)
          */
+        @Getter
         private final CompilerRegistry compilerRegistry = new CompilerRegistry();
 
         /**
          * 转换器注册表 (当前实例私有副本)
          */
+        @Getter
         private final ValueConverterRegistry converterRegistry = new ValueConverterRegistry();
-
-        /**
-         * 获取编译器注册表
-         */
-        public CompilerRegistry getCompilerRegistry() {
-            return compilerRegistry;
-        }
-
-        /**
-         * 获取转换器注册表
-         */
-        public ValueConverterRegistry getConverterRegistry() {
-            return converterRegistry;
-        }
 
         /**
          * 自定义语法处理器列表

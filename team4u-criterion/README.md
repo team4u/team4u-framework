@@ -54,8 +54,8 @@
 // 全局注册一个自定义算子
 StandardCriterionParser.global().addOperator("is_odd", (actual, expected) -> (int)actual % 2 != 0);
 
-// 后续所有 Criteria.standard() 的调用都将支持 is_odd 语法
-boolean result = Criteria.standard().matches("it is_odd true", 3); // true
+// 后续所有 Criteria.global() 的调用都将支持 is_odd 语法
+boolean result = Criteria.global().matches("it is_odd true", 3); // true
 ```
 
 #### 2. Spring 自动配置
@@ -98,7 +98,7 @@ import com.team4u.framework.criterion.MatchContext;
 
 public class Demo {
     static void main(String[] args) {
-        Criteria criteria = Criteria.standard();
+        Criteria criteria = Criteria.global();
 
         // 简单比较与语法糖隐式相等
         boolean isAdult = criteria.matches("it > 18", 20); // true
@@ -137,7 +137,7 @@ public class Demo {
 
 ```java
 public void example1_BusinessDSL() {
-    Criteria criteria = Criteria.standard();
+    Criteria criteria = Criteria.global();
 
     // 准备用户上下文（可以是 POJO 或 Map）
     MatchContext context = MatchContext.of(new HashMap<String, Object>() {{
@@ -164,7 +164,7 @@ public void example1_BusinessDSL() {
 
 ```java
 public void example2_ExecutionTrace() {
-    Criteria criteria = Criteria.standard();
+    Criteria criteria = Criteria.global();
 
     MatchContext context = MatchContext.of(new HashMap<String, Object>() {{
         put("age", 16); // 年龄不满足条件
@@ -197,7 +197,7 @@ public void example2_ExecutionTrace() {
 
 ```java
 public void example3_GrayReleaseAndABTest() {
-    Criteria criteria = Criteria.standard();
+    Criteria criteria = Criteria.global();
 
     MatchContext context = MatchContext.of(new HashMap<String, Object>() {{
         put("userId", "10086");

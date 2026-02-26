@@ -51,6 +51,14 @@ public class Team4uConfigAutoConfiguration {
     }
 
     /**
+     * 将全局配置管理器暴露为 Bean
+     */
+    @Bean
+    public ConfigManager globalConfigManager() {
+        return ConfigManager.global();
+    }
+
+    /**
      * 注册自动注册器基础设施（如果尚未注册）
      */
     @Bean
@@ -63,11 +71,6 @@ public class Team4uConfigAutoConfiguration {
      */
     @Bean
     public ApplicationListener<ContextRefreshedEvent> configRefresher() {
-        return event -> {
-            ConfigManager manager = ConfigManager.standard();
-            if (manager instanceof DefaultConfigManager) {
-                ((DefaultConfigManager) manager).refresh();
-            }
-        };
+        return event -> DefaultConfigManager.global().refresh();
     }
 }

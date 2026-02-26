@@ -22,14 +22,16 @@ public class SpringConfigIntegrationTest {
 
     @Test
     public void testSpringBeanAutoRegistration() {
-        ConfigManager.resetStandard();
+        ConfigManager.resetGlobal();
 
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
                 Team4uConfigAutoConfiguration.class,
                 TestConfig.class);
 
         try {
-            ConfigManager manager = ConfigManager.standard();
+            ConfigManager manager = context.getBean(ConfigManager.class);
+            Assert.assertNotNull("ConfigManager Bean 应该已注册", manager);
+
             Optional<String> value = manager.getString("test.key");
 
             Assert.assertTrue("配置项 'test.key' 应该存在", value.isPresent());

@@ -14,7 +14,7 @@ import java.util.Map;
  */
 public class TraceTest {
 
-    private final Criteria criteria = Criteria.standard();
+    private final Criteria criteria = Criteria.global();
 
     @Test
     public void testTraceStructure() {

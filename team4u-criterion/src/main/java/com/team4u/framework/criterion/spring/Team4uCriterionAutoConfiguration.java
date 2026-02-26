@@ -24,7 +24,7 @@ public class Team4uCriterionAutoConfiguration {
      */
     @Bean
     public Criteria globalCriteria() {
-        return Criteria.standard();
+        return Criteria.global();
     }
 
     /**

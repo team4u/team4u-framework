@@ -12,13 +12,13 @@ public class ConfigManagerFacadeTest {
 
     @After
     public void tearDown() {
-        ConfigManager.resetStandard();
+        ConfigManager.resetGlobal();
     }
 
     @Test
     public void testStandardSingleton() {
-        ConfigManager manager1 = ConfigManager.standard();
-        ConfigManager manager2 = ConfigManager.standard();
+        ConfigManager manager1 = ConfigManager.global();
+        ConfigManager manager2 = ConfigManager.global();
         Assert.assertNotNull(manager1);
         Assert.assertSame(manager1, manager2);
     }
