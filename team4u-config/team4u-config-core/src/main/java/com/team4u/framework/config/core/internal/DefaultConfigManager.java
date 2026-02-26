@@ -34,13 +34,11 @@ public class DefaultConfigManager implements ConfigManager {
      */
     private final AtomicReference<ConfigSnapshot> snapshotRef = new AtomicReference<>();
     /**
-     * 已注册的配置源列表，按优先级排序
+     * 注册表引用
      */
-    private final List<ConfigSource> sources;
-    /**
-     * 已注册的变更监听器列表
-     */
-    private final List<ConfigWatcher> watchers;
+    private final ConfigSourceRegistry sourceRegistry;
+    private final ConfigWatcherRegistry watcherRegistry;
+
     /**
      * 对象绑定器
      */
@@ -70,11 +68,11 @@ public class DefaultConfigManager implements ConfigManager {
     private final DynamicInstanceProvider<ProxyKey, ProxyKey, Object> proxyInstanceProvider;
 
     public DefaultConfigManager(ConfigSourceRegistry sourceRegistry,
-                                ConfigWatcherRegistry watcherRegistry,
-                                PropertyConverterRegistry converterRegistry,
-                                ConfigBinder configBinder) {
-        this.sources = sourceRegistry.getPolicies();
-        this.watchers = watcherRegistry.getPolicies();
+            ConfigWatcherRegistry watcherRegistry,
+            PropertyConverterRegistry converterRegistry,
+            ConfigBinder configBinder) {
+        this.sourceRegistry = sourceRegistry;
+        this.watcherRegistry = watcherRegistry;
         this.configBinder = configBinder;
         this.proxyFactory = new ConfigProxyFactory(converterRegistry);
 
@@ -84,7 +82,7 @@ public class DefaultConfigManager implements ConfigManager {
         // 配置热重载管理器，并设置 500ms 的防抖窗口以应对密集变更
         this.hotReloadManager = new HotReloadManager(
                 snapshotRef,
-                this.sources,
+                () -> this.sourceRegistry.getPolicies(),
                 this.aggregator,
                 500,
                 this::fireChangeEvents);
@@ -100,15 +98,27 @@ public class DefaultConfigManager implements ConfigManager {
     }
 
     /**
+     * 刷新配置
+     * <p>
+     * 强制重新加载配置源并重新初始化监听器。
+     * </p>
+     */
+    public void refresh() {
+        log.info("Refreshing configuration...");
+        initialLoad();
+        initWatchers();
+    }
+
+    /**
      * 同步加载全量配置
      * <p>
      * 采用快速失败策略。如果配置源不可达或加载失败，将阻断应用启动以确保系统的配置确定性。
      * </p>
      */
     private void initialLoad() {
-        ConfigSnapshot snapshot = aggregator.aggregate(sources, System.nanoTime());
+        ConfigSnapshot snapshot = aggregator.aggregate(sourceRegistry.getPolicies(), System.nanoTime());
         snapshotRef.set(snapshot);
-        log.info("Initial ConfigSnapshot built, version = {}, entries = {}", snapshot.getVersion(),
+        log.info("ConfigSnapshot built, version = {}, entries = {}", snapshot.getVersion(),
                 snapshot.getEntries().size());
     }
 
@@ -116,6 +126,7 @@ public class DefaultConfigManager implements ConfigManager {
      * 启动各配置监听器实现
      */
     private void initWatchers() {
+        List<ConfigWatcher> watchers = watcherRegistry.getPolicies();
         if (CollUtil.isNotEmpty(watchers)) {
             for (ConfigWatcher watcher : watchers) {
                 watcher.init();
@@ -140,9 +151,9 @@ public class DefaultConfigManager implements ConfigManager {
      * <p>
      * 处理逻辑如下：
      * <ul>
-     *     <li>识别配置类上的配置前缀注解并进行路径叠加</li>
-     *     <li>创建并返回支持热更新的动态代理对象</li>
-     *     <li>若代理创建失败（例如 final 类），则调用绑定器将配置映射到 Bean 属性中</li>
+     * <li>识别配置类上的配置前缀注解并进行路径叠加</li>
+     * <li>创建并返回支持热更新的动态代理对象</li>
+     * <li>若代理创建失败（例如 final 类），则调用绑定器将配置映射到 Bean 属性中</li>
      * </ul>
      * </p>
      */
@@ -251,6 +262,7 @@ public class DefaultConfigManager implements ConfigManager {
      */
     public void destroy() {
         hotReloadManager.destroy();
+        List<ConfigWatcher> watchers = watcherRegistry.getPolicies();
         if (CollUtil.isNotEmpty(watchers)) {
             for (ConfigWatcher watcher : watchers) {
                 try {

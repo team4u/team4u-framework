@@ -49,7 +49,7 @@ public interface ConfigManager {
         if (InstanceHolder.STANDARD_INSTANCE == null) {
             synchronized (ConfigManager.class) {
                 if (InstanceHolder.STANDARD_INSTANCE == null) {
-                    InstanceHolder.STANDARD_INSTANCE = builder().build();
+                    InstanceHolder.STANDARD_INSTANCE = Builder.buildStandard();
                 }
             }
         }
@@ -154,15 +154,36 @@ public interface ConfigManager {
      */
     class Builder {
 
-        private final ConfigSourceRegistry sourceRegistry = new ConfigSourceRegistry();
-        private final ConfigWatcherRegistry watcherRegistry = new ConfigWatcherRegistry();
-        private final PropertyConverterRegistry converterRegistry = new PropertyConverterRegistry();
+        private final ConfigSourceRegistry sourceRegistry;
+        private final ConfigWatcherRegistry watcherRegistry;
+        private final PropertyConverterRegistry converterRegistry;
         private ConfigBinder configBinder;
 
         Builder() {
+            this(new ConfigSourceRegistry(), new ConfigWatcherRegistry(), new PropertyConverterRegistry());
             init(sourceRegistry);
             init(watcherRegistry);
             init(converterRegistry);
+        }
+
+        Builder(ConfigSourceRegistry sourceRegistry,
+                ConfigWatcherRegistry watcherRegistry,
+                PropertyConverterRegistry converterRegistry) {
+            this.sourceRegistry = sourceRegistry;
+            this.watcherRegistry = watcherRegistry;
+            this.converterRegistry = converterRegistry;
+        }
+
+        /**
+         * 构建标准全局单例配置管理器
+         *
+         * @return 标准配置管理器
+         */
+        public static ConfigManager buildStandard() {
+            return new Builder(
+                    GlobalConfigRegistries.getSourceRegistry(),
+                    GlobalConfigRegistries.getWatcherRegistry(),
+                    GlobalConfigRegistries.getConverterRegistry()).build();
         }
 
         /**

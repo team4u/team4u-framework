@@ -13,15 +13,16 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Consumer;
+import java.util.function.Supplier;
 
 /**
  * 配置热加载管理器
  * <p>
  * 核心功能：
  * <ul>
- *     <li>收集来自各配置源的变更信号</li>
- *     <li>执行基于时间窗口的防抖处理，防止频繁重载导致的资源浪费</li>
- *     <li>执行快照的原子替换并触发后置事件回调</li>
+ * <li>收集来自各配置源的变更信号</li>
+ * <li>执行基于时间窗口的防抖处理，防止频繁重载导致的资源浪费</li>
+ * <li>执行快照的原子替换并触发后置事件回调</li>
  * </ul>
  * </p>
  */
@@ -34,9 +35,9 @@ public class HotReloadManager {
      */
     private final AtomicReference<ConfigSnapshot> currentSnapshot;
     /**
-     * 数据源列表
+     * 数据源列表提供者
      */
-    private final List<ConfigSource> configSources;
+    private final Supplier<List<ConfigSource>> configSourcesSupplier;
     /**
      * 快照聚合器
      */
@@ -64,12 +65,12 @@ public class HotReloadManager {
     private ScheduledFuture<?> pendingTask;
 
     public HotReloadManager(AtomicReference<ConfigSnapshot> currentSnapshot,
-                            List<ConfigSource> configSources,
-                            SnapshotAggregator aggregator,
-                            long debounceWindowMs,
-                            Consumer<ReloadEvent> onReloadSuccess) {
+            Supplier<List<ConfigSource>> configSourcesSupplier,
+            SnapshotAggregator aggregator,
+            long debounceWindowMs,
+            Consumer<ReloadEvent> onReloadSuccess) {
         this.currentSnapshot = currentSnapshot;
-        this.configSources = configSources;
+        this.configSourcesSupplier = configSourcesSupplier;
         this.aggregator = aggregator;
         this.debounceWindowMs = debounceWindowMs;
         this.onReloadSuccess = onReloadSuccess;
@@ -101,7 +102,7 @@ public class HotReloadManager {
     private void doReload() {
         try {
             long nextVersion = versionGenerator.incrementAndGet();
-            ConfigSnapshot newSnapshot = aggregator.aggregate(configSources, nextVersion);
+            ConfigSnapshot newSnapshot = aggregator.aggregate(configSourcesSupplier.get(), nextVersion);
 
             // 原子替换当前生效的快照
             ConfigSnapshot oldSnapshot = currentSnapshot.getAndSet(newSnapshot);
