@@ -5,7 +5,7 @@ import lombok.Data;
 /**
  * Bean 示例类
  *
- * @author team4u
+ * @author jay.wu
  */
 @Data
 public class BeanSample {

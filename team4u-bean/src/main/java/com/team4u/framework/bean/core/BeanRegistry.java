@@ -5,7 +5,7 @@ package com.team4u.framework.bean.core;
  * <p>
  * 职责：仅负责注册 Bean（写操作）
  *
- * @author team4u
+ * @author jay.wu
  */
 public interface BeanRegistry {
 

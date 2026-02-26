@@ -12,7 +12,7 @@ import java.util.stream.Collectors;
 /**
  * 本地线程安全的 Bean 容器
  *
- * @author team4u
+ * @author jay.wu
  */
 public class LocalBeanContainer implements BeanFactory, BeanRegistry {
 

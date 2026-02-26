@@ -7,7 +7,7 @@ import java.util.Map;
  * <p>
  * 职责：仅负责获取 Bean（读操作）
  *
- * @author team4u
+ * @author jay.wu
  */
 public interface BeanFactory {
 

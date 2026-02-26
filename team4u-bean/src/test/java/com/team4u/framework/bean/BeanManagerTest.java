@@ -13,7 +13,7 @@ import java.util.Map;
 /**
  * BeanManager 深度测试用例
  *
- * @author team4u
+ * @author jay.wu
  */
 public class BeanManagerTest {
 

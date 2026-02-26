@@ -15,7 +15,7 @@ import java.util.stream.Collectors;
 /**
  * Bean 门面管理器
  *
- * @author team4u
+ * @author jay.wu
  */
 public class BeanManager {
 
@@ -70,7 +70,7 @@ public class BeanManager {
     @SuppressWarnings("unchecked")
     public <T> T getBean(String name) {
         for (BeanFactory factory : factories) {
-            T bean = (T) factory.getBean(name);
+            T bean = factory.getBean(name);
             if (bean != null) {
                 return bean;
             }

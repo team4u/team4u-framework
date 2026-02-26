@@ -10,7 +10,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Spring 桥接功能测试
  *
- * @author team4u
+ * @author jay.wu
  */
 public class SpringBeanContainerTest {
 
@@ -21,7 +21,7 @@ public class SpringBeanContainerTest {
 
         // 2. 验证 SpringBeanContainer 是否已自动注册到 BeanManager
         BeanManager manager = BeanManager.getInstance();
-        
+
         // 获取 Spring 定义的 Bean
         String springBean = manager.getBean("springManagedBean");
         Assert.assertEquals("springValue", springBean);

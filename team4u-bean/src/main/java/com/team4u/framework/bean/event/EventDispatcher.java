@@ -6,7 +6,7 @@ import cn.hutool.log.LogFactory;
 /**
  * 内部简易事件分发器
  *
- * @author team4u
+ * @author jay.wu
  */
 public class EventDispatcher {
 

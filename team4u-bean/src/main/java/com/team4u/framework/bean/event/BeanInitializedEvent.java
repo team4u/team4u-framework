@@ -5,7 +5,7 @@ import lombok.Getter;
 /**
  * Bean 初始化完成事件
  *
- * @author team4u
+ * @author jay.wu
  */
 @Getter
 public class BeanInitializedEvent {

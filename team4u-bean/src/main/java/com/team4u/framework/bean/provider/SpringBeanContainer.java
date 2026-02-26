@@ -17,7 +17,7 @@ import java.util.Map;
  * <p>
  * 只有在 Spring 容器扫描并初始化此类时才会激活桥接。
  *
- * @author team4u
+ * @author jay.wu
  */
 public class SpringBeanContainer implements BeanFactory, BeanRegistry, ApplicationContextAware {
 
