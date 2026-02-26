@@ -42,10 +42,6 @@ public class DefaultConfigManager implements ConfigManager {
      */
     private final List<ConfigWatcher> watchers;
     /**
-     * 全局转换器注册表
-     */
-    private final PropertyConverterRegistry converterRegistry;
-    /**
      * 对象绑定器
      */
     private final ConfigBinder configBinder;
@@ -79,7 +75,6 @@ public class DefaultConfigManager implements ConfigManager {
                                 ConfigBinder configBinder) {
         this.sources = sourceRegistry.getPolicies();
         this.watchers = watcherRegistry.getPolicies();
-        this.converterRegistry = converterRegistry;
         this.configBinder = configBinder;
         this.proxyFactory = new ConfigProxyFactory(converterRegistry);
 

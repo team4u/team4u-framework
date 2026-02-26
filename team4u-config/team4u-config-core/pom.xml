@@ -14,11 +14,6 @@
     <dependencies>
         <dependency>
             <groupId>com.team4u</groupId>
-            <artifactId>team4u-base</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.team4u</groupId>
             <artifactId>team4u-policy</artifactId>
             <version>${project.version}</version>
         </dependency>
@@ -29,12 +24,10 @@
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
-            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
-            <scope>test</scope>
         </dependency>
     </dependencies>
 </project>
