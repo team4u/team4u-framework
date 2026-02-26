@@ -6,6 +6,7 @@ import com.team4u.framework.config.core.spi.ConfigWatcherRegistry;
 import com.team4u.framework.config.core.spi.InMemoryConfigSource;
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.router.api.RouteResult;
+import com.team4u.framework.router.factory.ExpressionRouterFactory;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
@@ -60,7 +61,7 @@ public class RoutingManagerTest {
                 .build();
 
         RoutingManager routingManager = RoutingManager.builder()
-                .expressionCriteria(criteria)
+                .addFactory(new ExpressionRouterFactory(criteria))
                 .build();
 
         String config = "{\"type\":\"expression\", \"rules\":{\"name is_special true\":\"Matched\"}}";

@@ -84,9 +84,9 @@ Criteria myCriteria = Criteria.builder()
 RoutingManager customManager = RoutingManager.builder()
         // 指定自定义的 ConfigManager，而不是全局环境
         .configManager(myIsolatedConfigManager)
-        // 注入自定义 Criteria，解耦全局算子污染
-        .expressionCriteria(myCriteria)
-        // 手动添加路由工厂（无需配置 SPI）
+        // 手动注册带有自定义 Criteria 的表达式路由器工厂，实现解耦与隔离
+        .addFactory(new ExpressionRouterFactory(myCriteria))
+        // 手动添加其他自定义路由工厂
         .addFactory(new MyCustomRouterFactory())
         .build();
 ```
@@ -135,7 +135,7 @@ if (result.isMatch()) {
 *   多样化输入：支持 `Map`、`POJO` 或 `MatchContext` 作为输入。
 *   **算子解耦**：支持通过 `ExpressionRouterFactory` 注入自定义的 `Criteria` 实例（默认为 `global()`）。这使得复杂的业务线可以使用相互隔离的自定义算子，避免全局算子互相污染。
 
-> 示例：通过 `RoutingManager.builder().expressionCriteria(myCriteria).build()` 实现算子定制。
+> 示例：通过 `RoutingManager.builder().addFactory(new ExpressionRouterFactory(myCriteria)).build()` 实现算子定制。
 
 ### 3. 多层级缓存管理
 

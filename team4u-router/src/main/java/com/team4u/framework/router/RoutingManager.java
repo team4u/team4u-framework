@@ -4,11 +4,9 @@ import cn.hutool.json.JSONUtil;
 import com.team4u.framework.base.instance.DynamicInstanceProvider;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.policy.util.PolicyScanner;
-import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.router.api.RoutePolicy;
 import com.team4u.framework.router.api.RouteResult;
 import com.team4u.framework.router.api.Router;
-import com.team4u.framework.router.factory.ExpressionRouterFactory;
 import com.team4u.framework.router.factory.RouterFactory;
 import com.team4u.framework.router.factory.RouterFactoryRegistry;
 
@@ -129,16 +127,6 @@ public class RoutingManager {
                 this.factoryRegistry.register(factory);
             }
             return this;
-        }
-
-        /**
-         * 设置表达式路由器的自定义匹配规则引擎
-         *
-         * @param criteria 匹配规则引擎
-         * @return 当前 Builder 实例
-         */
-        public Builder expressionCriteria(Criteria criteria) {
-            return addFactory(new ExpressionRouterFactory(criteria));
         }
 
         /**
