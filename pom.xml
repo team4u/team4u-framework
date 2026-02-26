@@ -15,6 +15,7 @@
         <module>team4u-criterion</module>
         <module>team4u-config</module>
         <module>team4u-proxy</module>
+        <module>team4u-bean</module>
     </modules>
 
     <properties>
@@ -27,10 +28,21 @@
         <lombok.version>1.18.30</lombok.version>
         <junit.version>4.13.2</junit.version>
         <byte-buddy.version>1.14.12</byte-buddy.version>
+        <spring.version>5.3.39</spring.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>org.springframework</groupId>
+                <artifactId>spring-context</artifactId>
+                <version>${spring.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework</groupId>
+                <artifactId>spring-test</artifactId>
+                <version>${spring.version}</version>
+            </dependency>
             <dependency>
                 <groupId>net.bytebuddy</groupId>
                 <artifactId>byte-buddy</artifactId>
