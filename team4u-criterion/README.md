@@ -479,6 +479,14 @@ CompilerRegistry.global().register(new MyCustomCompiler());
 ### 2. 通过 Builder API 局部定制
 如果你需要实例级别的隔离，可以使用 Builder 创建独立的规则引擎：
 
+```java
+// 不同业务线独立定制 Criteria，互不污染，确保绝对隔离：
+Criteria customCriteria = Criteria.builder()
+        .addOperator("intersects", new IntersectsOperator()) // 轻量增加特有算子
+        .addValueConverter(new MyMoneyConverter())           // 增加值转换器
+        .build();
+```
+
 ## 架构与原理
 
 ### 核心执行流程
