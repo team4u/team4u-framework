@@ -21,16 +21,15 @@ public class TrackInterceptor implements MethodInterceptor {
 
         tracker.before(proxy, invocation.getMethod(), invocation.getArguments());
 
-        Object result = null;
         try {
             // 继续执行后续拦截器或目标方法
-            result = invocation.proceed();
+            Object result = invocation.proceed();
+            tracker.after(proxy, invocation.getMethod(), invocation.getArguments(), result);
             return result;
         } catch (Throwable e) {
+            // 发生异常时触发异常钩子
             tracker.onException(proxy, invocation.getMethod(), invocation.getArguments(), e);
             throw e; // 异常必须向上抛出
-        } finally {
-            tracker.after(proxy, invocation.getMethod(), invocation.getArguments(), result);
         }
     }
 }
