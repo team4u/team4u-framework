@@ -21,10 +21,10 @@ team4u-config-core 是一个轻量级、高性能、类型安全的 Java 配置�
 
 ### 核心优势
 * **透明热更新**：支持 Pinned（快照）/ Live（实时）双模代理，业务无感升级，彻底告别重启。
-* **类型安全代理**：只需定义**普通 Java Bean**，一行代码自动生成代理并绑定配置，支持智能松散绑定。
-* **高性能实现**：底层基于字节码增强技术，确保配置访问性能接近原生调用。
+* **类型安全代理**：只需定义**接口或普通 Java Bean**，一行代码自动生成代理并绑定配置，支持智能松散绑定。
+* **高性能实现**：底层基于 ByteBuddy 字节码增强技术，确保配置访问性能接近原生调用。
 * **多源聚合**：内置优先级机制，支持环境变量、系统属性、远程配置的多级叠加与覆盖。
-* **智能默认值**：原生支持 Java Bean 字段初始值作为兜底默认值，无缝集成。
+* **不可变快照**：核心对象基于不可变设计，确保在一次业务处理周期内配置逻辑一致。
 
 ---
 
@@ -72,88 +72,127 @@ ConfigManager 是所有操作的入口。你可以使用内置的标准单例，
 ConfigManager manager = ConfigManager.standard();
 
 // 自定义实例：使用 Builder 进行高级配置
+// Builder 在初始化时也会默认触发自动扫描和 SPI 加载
 ConfigManager customManager = ConfigManager.builder()
-    .scanSources("com.mycompany.config.sources")
-    .scanWatchers("com.mycompany.config.watchers")
-    .addSource(new MyCustomConfigSource())
+    .scanSources("com.mycompany.config.sources")   // 额外的包扫描：手动扫描包自动注册 Source
+    .scanWatchers("com.mycompany.config.watchers") // 额外的包扫描：手动扫描包自动注册 Watcher
+    .addSource(new MyCustomConfigSource())         // 手动添加实例
     .build();
 ```
+
+### 基础用法：获取键值
+
+```java
+// 获取精准配置，返回 Optional 避免空指针
+String dbUrl = manager.getString("server.db.url").orElse("jdbc:mysql://localhost:3306/default");
+```
+
+### 进阶用法：强类型配置代理 (接口与 Bean)
+
+这是最推荐的使用方式。框架会自动为你的配置类（接口或 Bean）创建“实时代理”，使其具备热更新能力。
+
+#### 方式 A：基于接口 (Interface)
+只需定义 Getter 规范的接口：
+```java
+public interface AppConfig {
+    String getName();
+    int getPort();
+    DbConfig getDb(); // 支持嵌套
+}
+
+// 创建实时代理
+AppConfig config = manager.createProxy("server", AppConfig.class);
+```
+
+#### 方式 B：基于普通类 (Java Bean)
+无需接口，直接代理普通 POJO。底层会拦截 Getter 方法以支持热更新：
+```java
+public class ServerBean {
+    private String name;
+    private int port;
+    // 标准 Getter/Setter ...
+}
+
+// 同样支持 Live Mode（实时感知配置变更）
+ServerBean config = manager.createProxy("server", ServerBean.class);
+```
+
+> [!TIP]
+> **声明式注解支持**：你可以配合 `@ConfigPrefix("server")` 注解使用 `manager.createProxy(AppConfig.class)`。
+
+#### 代理双模式：Live vs Pinned
+
+理解这两种模式的区别对于构建高可靠系统至关重要：
+
+| 特性         | Live Mode (默认)                     | Pinned Mode (通过 pin 获取)      |
+| :----------- | :----------------------------------- | :------------------------------- |
+| 数据源       | 始终读取全局最新的快照               | 始终读取锚定时那一刻的快照       |
+| 热更新       | 实时生效，无需重启或重新获取         | 全局更新后，该实例仍保持旧值     |
+| 一致性       | 弱一致：同一个方法多次调用可能值不同 | 强一致：生命周期内值绝对不变     |
+| 适用场景     | 绝大多数业务、实时监控、开关逻辑     | 批处理、事务性计算、长连接初始化 |
 
 ---
 
 ## 核心特性
 
-### 强类型配置代理 (Live Mode)
-
-框架会自动为配置类创建“实时代理”。当配置源发生变更时，代理对象的方法返回值会自动更新。
-
-系统会自动实例化 Bean 对象，并将**代码初始值**作为最底层的默认值。
-注解（如 `@ConfigKey`）既可以标注在 **Getter 方法**上，也可以直接标注在 **Field 字段**上。
-
-```java
-@ConfigPrefix("server")
-public class ServerConfig {
-    // 自动映射到 server.host，配置缺失时保持 "localhost"
-    private String host = "localhost";
-    
-    // 映射到 server.port
-    private int port = 8080;
-
-    @ConfigKey("admin-user")
-    private String user;
-
-    public String getHost() { return host; }
-    public int getPort() { return port; }
-    public String getUser() { return user; }
-}
-```
-
-> [!IMPORTANT]
-> **值覆盖优先级**：
-> **外部配置项** (最高) > **代码初始值** (最低)
-
-#### 代理双模式对比
-
-| 特性     | Live Mode (默认)       | Pinned Mode (通过 pin 获取)      |
-| :------- | :--------------------- | :------------------------------- |
-| 数据源   | 始终读取全局最新的快照 | 始终读取锚定时那一刻的快照       |
-| 热更新   | 实时生效               | 实例保持旧值                     |
-| 一致性   | 弱一致                 | 强一致（生命周期内绝对不变）     |
-| 适用场景 | 绝大多数业务、实时开关 | 批处理、事务性计算、长连接初始化 |
-
 ### 声明式注解 (Annotations)
 
+除了基本的松散绑定，框架提供了一系列注解来增强代理的可维护性和鲁棒性。
+
 #### @ConfigPrefix
-用于定义统一的配置前缀。
+用于定义统一的配置前缀，简化代理创建过程。
 ```java
 @ConfigPrefix("server")
-public class AppConfig { ... }
+public interface AppConfig {
+    String getName();
+}
+
+// 无需硬编码前缀
+AppConfig config = manager.createProxy(AppConfig.class);
 ```
 
 #### @ConfigKey
-显式指定配置键，支持绝对路径（以点号开头）。
+显式指定配置键，跳过自动推断逻辑。支持绝对路径（以点号开头）。
 ```java
-@ConfigKey("max-threads") // 标注在方法或字段均可
-int threads();
-
-@ConfigKey(".global.version") // 忽略前缀，匹配全局配置项
-String version();
+public interface AppConfig {
+    @ConfigKey("max-threads") // 匹配 server.max-threads
+    int threads();
+    
+    @ConfigKey(".global.version") // 忽略前缀，匹配全局 key
+    String version();
+}
 ```
 
-#### @ConfigRequired
-标记为必填项。若配置中心缺失该项，且对应的 Bean 字段初始值也为 `null`，则抛出 `ConfigMissingException`。
-该注解可标注在 **Getter 方法**或 **Field 字段**上。
+#### @ConfigDefault & @ConfigRequired
+用于处理缺失值：
+- `@ConfigDefault`: 提供兜底值（支持类型转换）。
+- `@ConfigRequired`: 标记为必填，缺失则抛出 `ConfigMissingException`。
+
+### 自定义属性转换 (Custom Converters)
+
+可以使用 `@ConfigConverter` 指定自定义转换逻辑（如解密、复杂对象解析）。
+
+```java
+public interface AppConfig {
+    // 自动将 JSON 字符串转换为 User 对象
+    @ConfigConverter(JsonPropertyConverter.class)
+    User getUser();
+}
+```
 
 ### 智能松散绑定 (Relaxed Binding)
 
-系统会按以下顺序尝试匹配：
+框架对配置键采用模糊匹配算法。当你调用 `getMaxThreads()` 时，系统会尝试匹配：
 - server.maxThreads (驼峰)
 - server.max-threads (中划线)
 - server.max_threads (下划线)
 - server.max.threads (点分隔)
 
 ### 占位符解析 (Placeholder)
-支持 `${key:defaultValue}` 语法，具备深度嵌套解析、循环依赖检测和高性能实现。
+支持 `${key:defaultValue}` 语法，具备深度嵌套、循环依赖检测和高性能解析（零临时对象分配）等特性。
+
+### 热加载与变更监听
+内置 500ms 的防抖窗口，合并高频变更。通过 `addChangeListener` 可精准感知配置的增删改。
 
 ---
 
@@ -161,13 +200,17 @@ String version();
 
 ### 场景：高性能一致性快照 (Pinned Mode)
 
+在长耗时的批处理任务或涉及多步逻辑的订单处理中，应避免处理过程中配置发生跳变。
+
+#### 最佳实践：一次锚定，多次复用
 ```java
 public void process() {
-    // 在入口处锁定当前版本（Pinning）
+    // 1. 在入口处生成一个固定视角的配置对象（Pinning）
     AppConfig safeConfig = SnapshotAware.pin(config); 
 
-    // 后续所有逻辑基于该 safeConfig 执行，确保配置的一致性
+    // 2. 后续所有逻辑都使用这个 safeConfig
     if (safeConfig.isEnabled()) {
+         // 这里的逻辑保证版本一致，且读取性能极高
          int val = safeConfig.getVal(); 
     }
 }
@@ -175,18 +218,28 @@ public void process() {
 
 ---
 
+## SPI 扩展
+
+框架高度可扩展，支持自定义以下组件：
+
+| 扩展接口           | 功能说明                                                             |
+| ------------------ | -------------------------------------------------------------------- |
+| ConfigSource       | 数据源：决定配置从哪加载（如 Redis、Apollo、Http）。                 |
+| ConfigWatcher      | 监听器：决定如何发现配置变更（如文件钩子、定时拉取）。               |
+| ConfigBinder       | 绑定器：决定如何将数据映射到 Bean（仅用于非代理的单次绑定）。        |
+| PropertyConverter  | 转换器：SPI 方式注册全局转换逻辑。                                   |
+
+---
+
 ## 架构与原理
 
 ### 核心执行流程
 
-1. **探测 (Watch)**：`ConfigWatcher` 发现原始配置变更。
-2. **重载 (Reload)**：`SnapshotAggregator` 并发读取所有 `ConfigSource` 并按优先级合并为 `ConfigSnapshot`。
-3. **生效 (Commit)**：原子化替换 `ConfigManager` 中的快照引用。
-4. **代理拦截 (Proxy)**：
-    - 底层基于字节码增强技术创建代理。
-    - 方法调用被拦截后，优先从最新快照中通过 `key` 解析值。
-    - 若快照中不存在，则通过 `invocation.proceed()` 调用真实 Bean 方法获取字段初始值。
-    - **L2 Cache**：基于快照版本号的二级结果缓存，确保高频访问下性能接近原生调用。
+1. **探测 (Watch)**：`ConfigWatcher` 发现原始配置发生变更。
+2. **重载 (Reload)**：触发信号，`SnapshotAggregator` 并发读取所有 `ConfigSource`。
+3. **聚合 (Aggregate)**：根据优先级将多个 Map 压扁合并为唯一的 `ConfigSnapshot`。
+4. **生效 (Commit)**：原子化替换 `ConfigManager` 中的 `currentSnapshot` 引用。
+5. **代理拦截 (Proxy)**：代理对象（ByteBuddy/JDK）拦截调用，通过最新的快照实时计算并返回结果，同时利用版本化二级缓存（L2 Cache）确保高性能。
 
 ### 状态流转图
 
