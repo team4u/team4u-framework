@@ -1,5 +1,7 @@
 package com.team4u.framework.criterion;
 
+import com.team4u.framework.criterion.compiler.CompilerRegistry;
+import com.team4u.framework.criterion.model.convert.ValueConverterRegistry;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -11,8 +13,8 @@ public class CriteriaPrototypeTest {
     @Test
     public void testStandardDefaultsLoading() {
         // 验证全局原型是否正确加载了内置项
-        Assert.assertFalse("全局原型编译器不应为空", StandardDefaults.GLOBAL_COMPILERS.getPolicies().isEmpty());
-        Assert.assertFalse("全局原型转换器不应为空", StandardDefaults.GLOBAL_CONVERTERS.getPolicies().isEmpty());
+        Assert.assertFalse("全局原型编译器不应为空", CompilerRegistry.global().getPolicies().isEmpty());
+        Assert.assertFalse("全局原型转换器不应为空", ValueConverterRegistry.global().getPolicies().isEmpty());
     }
 
     @Test

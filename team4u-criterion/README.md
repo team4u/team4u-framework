@@ -425,22 +425,19 @@ context.setLazyResolver((ctx, key) -> {
 
 ## 自定义扩展 (SPI)
 
-自定义实例通过 Builder API 创建：
-
-| Builder 方法 | 说明 |
-|------|------|
-| `addOperator(name, logic)` | 添加自定义操作符 |
-| `addValueConverter(converter)` | 添加值转换器 |
-| `addSyntaxHandler(handler)` | 添加语法处理器 |
-| `addCompiler(compiler)` | 添加自定义编译器 |
-| `build()` | 构建不可变的 Criteria 实例 |
+### 1. 注册表自管理模式（推荐）
+你可以直接操作全局注册表，动态注入自定义组件，所有后续创建的 `Criteria` 实例（通过标准 Builder）都将自动包含这些扩展。
 
 ```java
-// 不同业务线独立定制 Criteria，互不污染，确保绝对隔离：
-Criteria customCriteria = Criteria.builder()
-        .addOperator("intersects", new IntersectsOperator()) // 轻量增加特有算子
-        .build();
+// 全局注册一个自定义转换器
+ValueConverterRegistry.global().register(new MyMoneyConverter());
+
+// 全局注册一个针对特定 Criterion 的编译器
+CompilerRegistry.global().register(new MyCustomCompiler());
 ```
+
+### 2. 通过 Builder API 局部定制
+如果你需要实例级别的隔离，可以使用 Builder 创建独立的规则引擎：
 
 ## 架构与原理
 

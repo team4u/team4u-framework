@@ -257,8 +257,8 @@ public class Criteria {
          */
         Builder() {
             // 默认行为：从全局原型中拷贝标准策略 (O(1) 内存操作，极速且隔离)
-            this.compilerRegistry.addAll(StandardDefaults.GLOBAL_COMPILERS);
-            this.converterRegistry.addAll(StandardDefaults.GLOBAL_CONVERTERS);
+            this.compilerRegistry.addAll(CompilerRegistry.global());
+            this.converterRegistry.addAll(ValueConverterRegistry.global());
         }
 
         /**
