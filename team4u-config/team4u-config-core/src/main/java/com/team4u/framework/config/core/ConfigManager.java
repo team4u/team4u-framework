@@ -183,7 +183,7 @@ public interface ConfigManager {
          * @return 当前 Builder 实例
          */
         public Builder scanSources(String packageName) {
-            PolicyScanner.scanAndRegister(sourceRegistry, packageName, ConfigSource.class);
+            PolicyScanner.scanAndRegister(sourceRegistry, packageName);
             return this;
         }
 
@@ -194,7 +194,7 @@ public interface ConfigManager {
          * @return 当前 Builder 实例
          */
         public Builder scanWatchers(String packageName) {
-            PolicyScanner.scanAndRegister(watcherRegistry, packageName, ConfigWatcher.class);
+            PolicyScanner.scanAndRegister(watcherRegistry, packageName);
             return this;
         }
 
@@ -204,11 +204,8 @@ public interface ConfigManager {
          * @param packageName 包名
          * @return 当前 Builder 实例
          */
-        @SuppressWarnings({ "unchecked", "rawtypes" })
         public Builder scanConverters(String packageName) {
-            // 通过原始类型转换绕过 Java 泛型通配符限制（Class<PropertyConverter> 无法直接赋给 Class<? extends
-            // PropertyConverter<?>>）
-            PolicyScanner.scanAndRegister(converterRegistry, packageName, (Class) PropertyConverter.class);
+            PolicyScanner.scanAndRegister(converterRegistry, packageName);
             return this;
         }
 

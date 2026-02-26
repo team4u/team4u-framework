@@ -25,7 +25,7 @@ public class PolicyScanner {
     }
 
     /**
-     * 将包下扫描到的策略注入到注册表中
+     * 将策略类包下扫描到的策略注入到注册表中
      * <p>
      * 自动通过 policyClass 所在的包路径进行扫描
      */
@@ -35,13 +35,21 @@ public class PolicyScanner {
     }
 
     /**
-     * 将包下扫描到的策略注入到注册表中
+     * 将指定包下扫描到的策略注入到注册表中
      */
-    @SuppressWarnings("unchecked")
+    public static <P> void scanAndRegister(PolicyRegistry<P> registry, String packageName) {
+        Class<? extends P> policyClass = registry.getPolicyClass();
+        scanAndRegister(registry, packageName, policyClass);
+    }
+
+    /**
+     * 将指定包、指定策略类型下扫描到的策略注入到注册表中
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public static <P> void scanAndRegister(
             PolicyRegistry<P> registry,
             String packageName,
-            Class<? extends P> policyClass) {
+            Class policyClass) {
 
         ClassUtil.scanPackageBySuper(packageName, policyClass).stream()
                 .filter(it -> {
