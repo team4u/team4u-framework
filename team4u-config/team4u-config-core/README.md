@@ -21,10 +21,11 @@ team4u-config-core 是一个轻量级、高性能、类型安全的 Java 配置�
 
 ### 核心优势
 * 透明热更新：支持 Pinned（快照）/ Live（实时）双模代理，业务无感升级，彻底告别重启。
-* 类型安全代理：只需定义接口，一行代码自动绑定配置到 Java 对象，支持智能松散绑定。
+* 类型安全代理：支持接口与普通 Java Bean，一行代码自动绑定配置到对象，支持智能松散绑定。
+* 字段默认值：支持使用 Java Bean 字段的初始值作为配置缺失时的兜底默认值。
 * 多源聚合：内置优先级机制，支持环境变量、系统属性、远程配置的多级叠加与覆盖。
 * 不可变快照：核心对象基于不可变设计，确保在一次业务处理周期内配置逻辑一致。
-* 零依赖/微依赖：核心模块极度精简，方便集成到任何 Java 环境。
+* 零依赖/微依赖：核心模块极度精简，除 Hutool 及基础组件外无冗余依赖。
 
 ---
 
@@ -68,16 +69,18 @@ server.description=${server.name} is running on port ${server.port}
 ConfigManager 是所有操作的入口。你可以使用内置的标准单例，也可以通过 Builder 进行深度定制。
 
 ```java
-// 标准实例（推荐）：自动扫描当前包并加载所有通过 SPI 发现的 ConfigSource 和 ConfigWatcher
+// 标准单例（推荐）：自动通过 SPI 发现 ConfigSource 和 ConfigWatcher
 ConfigManager manager = ConfigManager.standard();
 
 // 自定义实例：使用 Builder 进行高级配置
-// Builder 在初始化时也会默认触发自动扫描和 SPI 加载
 ConfigManager customManager = ConfigManager.builder()
-    .scanSources("com.mycompany.config.sources")   // 额外的包扫描：手动扫描包自动注册 Source
-    .scanWatchers("com.mycompany.config.watchers") // 额外的包扫描：手动扫描包自动注册 Watcher
+    .scanSources("com.mycompany.config.sources")   // 手动扫描包自动注册 Source
+    .scanWatchers("com.mycompany.config.watchers") // 手动扫描包自动注册 Watcher
     .addSource(new MyCustomConfigSource())         // 手动添加实例
     .build();
+
+// 单元测试中可重置单例状态
+ConfigManager.resetStandard();
 ```
 
 ### 基础用法：获取键值
@@ -87,33 +90,37 @@ ConfigManager customManager = ConfigManager.builder()
 String dbUrl = manager.getString("server.db.url").orElse("jdbc:mysql://localhost:3306/default");
 ```
 
-### 进阶用法：强类型接口代理
+### 进阶用法：强类型对象代理
 
-这是最推荐的使用方式，无需再手动 getString，直接操作业务接口。
+这是最推荐的使用方式。你只需定义一个普通的 Java Bean（**必须包含无参构造函数**），框架会自动将配置绑定到对象属性上。**最强大的特性是：它会自动将字段的初始值作为配置缺失时的默认值。**
 
 ```java
-public interface AppConfig {
-    String getName();
-    int getPort();
-    List<String> getTags();
-    
-    // 支持嵌套结构绑定：自动将 server.db.xxx 映射为 DbConfig 对象
-    DbConfig getDb();
+public class AppConfig {
+    private String name;
+    private int port = 8080; // 字段初始值即为默认值
+    private DbConfig db;
+
+    // Getter (必须提供，用于代理拦截)
+    public String getName() { return name; }
+    public int getPort() { return port; }
+    public DbConfig getDb() { return db; }
 }
 
-public interface DbConfig {
-    String getUrl();
-    String getUsername();
+public class DbConfig {
+    private String url;
+    private String username = "root";
+
+    public String getUrl() { return url; }
+    public String getUsername() { return username; }
 }
 
 // 方式 A：手动指定前缀
 AppConfig config = manager.createProxy("server", AppConfig.class);
 
-// 方式 B：使用 @ConfigPrefix 注解（推荐，见下文“声明式注解”章节）
+// 方式 B：使用 @ConfigPrefix 注解
 AppConfig config2 = manager.createProxy(AppConfig.class);
 
-System.out.println(config.getName());        // 内部自动查找 server.name
-System.out.println(config.getDb().getUrl()); // 访问嵌套对象
+System.out.println(config.getDb().getUsername()); // 若配置中无 server.db.username，则输出 "root"
 ```
 
 #### 代理双模式：Live vs Pinned
@@ -135,149 +142,96 @@ System.out.println(config.getDb().getUrl()); // 访问嵌套对象
 
 ### 声明式注解 (Annotations)
 
-除了基本的松散绑定，框架提供了一系列注解来增强接口的可维护性和鲁棒性。
-
 #### @ConfigPrefix
-用于在接口类级别定义统一的配置前缀，简化代理创建过程。
+用于在类级别定义统一的前缀。支持多级叠加：
 ```java
-@ConfigPrefix("server")
-public interface AppConfig {
-    String getName();
-}
+@ConfigPrefix("db")
+public class DbConfig { ... }
 
-// 此时无需在代码中硬编码 "server" 前缀
-AppConfig config = manager.createProxy(AppConfig.class);
+// 最终生效前缀为 "prod.app.db"
+DbConfig config = manager.createProxy("prod.app", DbConfig.class);
 ```
-
-> [!TIP]
-> 前缀合并规则：如果你在代码中显式指定了前缀，它将与注解中的前缀进行叠加合并。例如，如果接口标记了 `@ConfigPrefix("db")`，而调用时使用了 `manager.createProxy("prod", DbConfig.class)`，最终生效的完整前缀将是 `prod.db`。
 
 #### @ConfigKey
-用于明确指定该方法对应的配置 Key，跳过自动推断逻辑。支持绝对路径（以点号开头）和相对路径。
+用于明确指定配置 Key。支持**绝对路径**（以点号开头）：
 ```java
-public interface AppConfig {
-    @ConfigKey("max-threads") // 显式匹配 server.max-threads
-    int threads();
+public class AppConfig {
+    @ConfigKey("max-threads")      // 相对路径：匹配 server.max-threads
+    private int threads;
     
-    @ConfigKey(".global.version") // 绝对路径，忽略 server 前缀，匹配 global.version
-    String version();
+    @ConfigKey(".global.version") // 绝对路径：忽略前缀，直接匹配 global.version
+    private String version;
+
+    public int getThreads() { return threads; }
+    public String getVersion() { return version; }
 }
 ```
 
-#### @ConfigDefault & @ConfigRequired
-用于处理缺失值：
-- `@ConfigDefault`: 提供兜底值（支持占位符和自动类型转换）。
-- `@ConfigRequired`: 标记为必填，若缺失且无默认值则抛出 `ConfigMissingException`。
+#### @ConfigRequired & @ConfigDefault
+- `@ConfigRequired`: 标记为必填。若配置缺失**且字段无初始值**时抛出 `ConfigMissingException`。
+- `@ConfigDefault`: 提供字符串形式的默认值（支持占位符）。
 
-```java
-public interface AppConfig {
-    @ConfigDefault("8080")
-    int getPort();
-
-    @ConfigRequired
-    String getSecretKey();
-}
-```
-
-### 自定义属性转换 (Custom Converters)
-
-当内置的绑定逻辑无法满足复杂类型（如：加密数据解密、特定格式解析）时，可以使用 `@ConfigConverter` 指定自定义转换器。
-
-#### 使用内置通用转换器
-框架内置了基于 Hutool JSON 的通用转换器 `JsonPropertyConverter`，可直接用于任何 POJO 类型：
-
-```java
-public interface AppConfig {
-    // 自动将 JSON 字符串转换为 User 对象
-    @ConfigConverter(JsonPropertyConverter.class)
-    User getUser();
-}
-```
-
-#### 实现自定义转换器
-如果需要特殊的转换逻辑（如解密），可以实现 `PropertyConverter` 接口：
-
-```java
-/
- * 解密转换器示例
- */
-public class MyDecryptConverter implements PropertyConverter<String> {
-    @Override
-    public String convert(String source, Class<String> targetType) {
-        // source 为原始配置值，targetType 为方法返回类型
-        return SecureUtil.aes(KEY).decryptStr(source);
-    }
-}
-```
-
-#### 注册自定义转换器
-
-你通过以下方式提供的自定义转换器将在所有 `ConfigManager` 实例中生效：
-
-方式 A：通过 Builder 手动注册（推荐用于特定实例）
-```java
-ConfigManager manager = ConfigManager.builder()
-    .addConverter(new MyDecryptConverter()) // 手动添加实例
-    .build();
-```
-
-方式 B：自动发现（推荐用于全局通用转换器）
-框架在初始化 `Builder` 时，会自动通过以下两种机制加载转换器：
-1. SPI 机制：在 `META-INF/services/com.team4u.framework.config.core.convert.PropertyConverter` 文件中添加实现类的全路径。
-2. 包扫描：自动扫描 `com.team4u.framework.config.core.convert` 包及其子包下的所有非抽象 `PropertyConverter` 实现类。
-
-方式 C：手动指定包扫描
-```java
-ConfigManager manager = ConfigManager.builder()
-    .scanConverters("com.mycompany.config.converters") // 手动扫描指定包
-    .build();
-```
-
-> [!TIP]
-> 优先级说明：手动通过 `addConverter` 注册的转换器优先级高于自动加载的转换器。如果同一个目标类型存在多个转换器，系统将采用最后注册的一个。
-
-### 智能松散绑定 (Relaxed Binding)
-
-框架对配置键采用“尽力而为”的模糊匹配算法。无论是通过 ConfigManager.createProxy 生成的接口代理，还是基于 Bean 的绑定，都支持多种风格的自动转换。
-
-#### 接口代理匹配规则
-当你调用接口方法 maxDbConnections() 时，系统会按照以下顺序尝试在配置源中查找匹配项：
-- server.maxDbConnections (原始驼峰)
-- server.max-db-connections (中划线，推荐)
-- server.max_db_connections (下划线)
-- server.max.db.connections (点分隔)
-
-> [!NOTE]
-> 对于 boolean 类型的 Getter 方法（如 isDevMode()），系统会自动去除 is 前缀后再进行上述匹配逻辑（即查找 server.dev-mode 等）。
-
-#### 绑定对比示例
-| 配置键 (Config Key) | 映射关系示例      | 适用风格   |
-| :------------------ | :---------------- | :--------- |
-| server.max-threads   | getMaxThreads() | Kebab Case |
-| server.max_threads   | getMaxThreads() | Snake Case |
-| server.max.threads   | getMaxThreads() | Dot Case   |
-| server.maxThreads    | getMaxThreads() | Camel Case |
+---
 
 ### 占位符解析 (Placeholder)
 支持 `${key:defaultValue}` 语法，具备以下特性：
-- 深度嵌套支持：
-    - 键嵌套：`${db.${env}.host}`，根据 `env` 的值动态决定查找的键。
-    - 值嵌套：解析出的值若包含占位符，将自动递归解析。
-    - 默认值嵌套：`${server.port:${global.port:8080}}`，支持在默认值中嵌套其他占位符。
-- 高性能实现：
-    - 零临时对象：优化了匹配算法，在解析过程中避免了大量 `substring` 导致的临时字符串对象分配。
-    - 集合复用：在批量解析配置快照时复用依赖追踪集合，显著降低高频调用下的内存压力。
-- 循环依赖检测：系统会自动检测并防止 `${a} -> ${b} -> ${a}` 的死循环，并抛出清晰的异常信息。
-- 优雅降级：对于无法解析且未提供默认值的占位符，系统将保持原样输出，确保不会因部分配置缺失导致整体解析失败。
+- **深度嵌套支持**：
+    - 键嵌套：`${db.${env}.host}`，动态决定查找的键。
+    - 默认值嵌套：`${server.port:${global.port:8080}}`。
+- **高性能与安全**：
+    - 零临时对象：优化匹配算法，避免大量 `substring` 导致的内存压力。
+    - 循环依赖检测：自动拦截并识别 `${a} -> ${b} -> ${a}` 的无限递归。
+    - 递归深度限制：默认最大支持 20 层嵌套。
+
+---
+
+### 内置配置源 (Built-in Sources)
+
+#### SystemEnvConfigSource (系统属性与环境变量)
+自动聚合 JVM 系统属性 (`-D`) 和操作系统环境变量。
+- **自动归一化**：环境变量通常为大写下划线（如 `APP_PORT`），框架会自动生成对应的点分小写键（如 `app.port`），实现业务层感知透明。
+- **优先级**：JVM 系统属性 > 环境变量。
+
+#### PropertiesConfigSource
+支持从 `java.util.Properties` 实例或类路径（Classpath）资源文件加载静态配置。
+
+---
+
+### 自定义属性转换 (Custom Converters)
+
+#### 使用内置通用转换器
+框架内置了 `JsonPropertyConverter`，可自动处理复杂 POJO 对象的反序列化：
+
+```java
+public class AppConfig {
+    @ConfigConverter(JsonPropertyConverter.class)
+    private User admin; // 自动解析配置中的 JSON 字符串
+}
+```
+
+#### 注册与发现
+转换器支持三种加载方式：
+1. **SPI 机制**：在 `META-INF/services/...PropertyConverter` 中定义。
+2. **包扫描**：自动扫描 `com.team4u.framework.config.core.convert` 包及其子包。
+3. **手动注册**：通过 `ConfigManager.builder().addConverter(...)` 添加。
+
+---
+
+### 智能松散绑定 (Relaxed Binding)
+框架对键名执行归一化匹配（忽略大小写及 `.`, `-`, `_` 分隔符）。
+当你访问属性 `maxDbConnections` 时，以下配置均可匹配：
+- `server.maxDbConnections` (驼峰)
+- `server.max-db-connections` (中划线)
+- `server.max_db_connections` (下划线)
+- `server.max.db.connections` (点分隔)
+
+---
 
 ### 热加载与变更监听
-当 ConfigWatcher 探测到源数据变更时，ConfigManager 会触发重载。
+当 `ConfigWatcher` 探测到源数据变更时，`ConfigManager` 会执行原子快照替换。
 
-* 防抖处理：内置 500ms 的防抖窗口，合并高频变更信号，避免配置抖动对系统造成冲击。
-* 监听语义：通过 addChangeListener 注册的回调中，oldValue 和 newValue 的 null 值具有明确含义：
-    - 新增：oldValue == null, newValue != null
-    - 修改：两者均不为 null 且不相等
-    - 删除：oldValue != null, newValue == null（代表配置被移除或被高优先级源标记为删除）
+* **防抖处理**：默认内置 500ms 防抖窗口，合并瞬时高频变更。
+* **监听语义**：通过 `addChangeListener` 注册的回调中，`oldValue == null` 表示新增，`newValue == null` 表示删除。
 
 ```java
 manager.addChangeListener("server.*", (key, oldVal, newVal) -> {
@@ -302,21 +256,18 @@ ConfigManager manager = ConfigManager.builder()
 
 ## 单元测试支持
 
-框架内置了 InMemoryConfigSource，允许在单元测试中通过代码动态注入配置，无需依赖外部文件。
+框架内置了 `InMemoryConfigSource`，允许在单元测试中通过代码动态注入配置，无需依赖外部文件。它同时实现了 `ConfigWatcher` 接口，支持实时刷新。
 
 ```java
 // 构建包含内存源的 Manager
 InMemoryConfigSource memorySource = new InMemoryConfigSource("test-memory", 1);
 ConfigManager manager = ConfigManager.builder()
     .addSource(memorySource)
+    .addWatcher(memorySource) // 作为监听器注册
     .build();
 
 // 注入配置并自动刷新
 memorySource.putAndRefresh("server.name", "unit-test-app");
-
-// 验证行为
-AppConfig config = manager.createProxy("server", AppConfig.class);
-assertEquals("unit-test-app", config.getName());
 ```
 
 ---
