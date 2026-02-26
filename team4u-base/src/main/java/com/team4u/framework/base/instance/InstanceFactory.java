@@ -9,7 +9,7 @@ import java.util.function.Function;
  *
  * @param <C> 配置类型
  * @param <T> 实例类型
- * @author team4u
+ * @author jay.wu
  */
 @FunctionalInterface
 public interface InstanceFactory<C, T> {

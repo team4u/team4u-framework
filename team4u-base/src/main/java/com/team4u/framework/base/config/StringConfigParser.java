@@ -8,7 +8,7 @@ import java.util.function.Function;
  * 专门用于处理 JSON, XML, YAML 等文本格式的配置
  *
  * @param <C> 配置类型
- * @author team4u
+ * @author jay.wu
  */
 @FunctionalInterface
 public interface StringConfigParser<C> extends ConfigParser<String, C> {

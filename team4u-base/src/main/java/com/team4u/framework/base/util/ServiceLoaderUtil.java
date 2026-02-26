@@ -11,7 +11,7 @@ import java.util.stream.Collectors;
 /**
  * SPI机制中的服务加载工具类
  *
- * @author team4u
+ * @author jay.wu
  * @see cn.hutool.core.util.ServiceLoaderUtil
  */
 public class ServiceLoaderUtil extends cn.hutool.core.util.ServiceLoaderUtil {

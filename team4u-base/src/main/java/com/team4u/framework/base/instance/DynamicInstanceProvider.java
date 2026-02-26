@@ -20,7 +20,7 @@ import com.team4u.framework.base.config.StringConfigParser;
  * @param <I> 输入源类型 (Input)，必须正确实现 hashCode/equals
  * @param <C> 配置类型 (Config)，由 Input 解析而来
  * @param <T> 实例类型 (Type)，最终产物
- * @author team4u
+ * @author jay.wu
  */
 public class DynamicInstanceProvider<I, C, T> {
 
@@ -48,8 +48,8 @@ public class DynamicInstanceProvider<I, C, T> {
     private final Object[] locks = new Object[128];
 
     public DynamicInstanceProvider(Cache<Object, T> cache,
-                                   ConfigParser<I, C> configParser,
-                                   InstanceFactory<C, T> instanceFactory) {
+            ConfigParser<I, C> configParser,
+            InstanceFactory<C, T> instanceFactory) {
         this.cache = cache;
         this.configParser = configParser;
         this.instanceFactory = instanceFactory;
@@ -61,8 +61,8 @@ public class DynamicInstanceProvider<I, C, T> {
     // ---------------- Factory Methods ----------------
 
     public static <I, C, T> DynamicInstanceProvider<I, C, T> createLru(int capacity,
-                                                                       ConfigParser<I, C> configParser,
-                                                                       InstanceFactory<C, T> instanceFactory) {
+            ConfigParser<I, C> configParser,
+            InstanceFactory<C, T> instanceFactory) {
         return new DynamicInstanceProvider<>(
                 CacheUtil.newLRUCache(capacity),
                 configParser,
@@ -70,8 +70,8 @@ public class DynamicInstanceProvider<I, C, T> {
     }
 
     public static <C, T> DynamicInstanceProvider<String, C, T> createStringLru(int capacity,
-                                                                               StringConfigParser<C> configParser,
-                                                                               InstanceFactory<C, T> instanceFactory) {
+            StringConfigParser<C> configParser,
+            InstanceFactory<C, T> instanceFactory) {
         return createLru(capacity, configParser, instanceFactory);
     }
 
@@ -115,7 +115,7 @@ public class DynamicInstanceProvider<I, C, T> {
 
             // 创建实例
             instance = instanceFactory.create(config);
-            
+
             if (instance != null) {
                 cache.put(input, instance);
             }
@@ -148,7 +148,7 @@ public class DynamicInstanceProvider<I, C, T> {
             }
 
             instance = instanceFactory.create(config);
-            
+
             if (instance != null) {
                 cache.put(config, instance);
             }

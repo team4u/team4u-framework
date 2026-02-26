@@ -7,7 +7,7 @@ package com.team4u.framework.policy;
  * 默认实现 {@link #supports(Void)} 方法，始终返回 true，从而免除子类实现。
  * 适用于无需进行条件匹配、仅需依据优先级（priority）进行排序的策略。
  *
- * @author team4u
+ * @author jay.wu
  */
 public interface OrderedPolicy extends ContextPolicy<Void> {
 
