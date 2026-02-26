@@ -47,20 +47,25 @@
 
 `Criteria` 实例是不可变的，支持单例复用：
 
+#### 1. 标准实例（推荐）
+适用于大多数场景，无需任何配置，直接复用全局单例。你也可以在首次调用前，通过全局注册表注入自定义算子：
+
 ```java
-// 标准实例（推荐）：适用于大多数场景，无需任何配置，直接复用全局单例
-Criteria criteria = Criteria.standard();
+// 全局注册一个自定义算子
+StandardCriterionParser parser = (StandardCriterionParser) Criteria.standard().getParser();
+parser.addOperator("is_odd", (actual, expected) -> (int)actual % 2 != 0);
+
+// 后续所有 Criteria.standard() 的调用都将支持 is_odd 语法
+boolean result = Criteria.standard().matches("it is_odd true", 3); // true
 ```
 
-完美适配 Spring:
+#### 2. 自定义实例
+使用 Builder 构建完全隔离的规则引擎：
+
 ```java
-@Configuration
-public class CriteriaConfig {
-    @Bean
-    public Criteria defaultCriteria() {
-        return Criteria.standard();
-    }
-}
+Criteria customCriteria = Criteria.builder()
+    .addOperator("startsWith", (a, e) -> a.toString().startsWith(e.toString()))
+    .build();
 ```
 
 ### 基础用法Demo
@@ -416,12 +421,25 @@ context.setLazyResolver((ctx, key) -> {
 ```
 
 
-### Context属性共享与高级访问
+### 单元测试支持
 
-* 变量提取：通过 `criteria.getVariables(expression)` 可以静态分析出表达式中引用的所有变量名。
-* 嵌套对象防护：支持 `address.zipCode` 风格的嵌套访问，内置空指针安全保护，不怕对象链级联空指针。
-* withActual 共享复用：如果想让同一个规则测试上下文中不同的对象源，可以使用 `MatchContext#withActual()` 方法创建新上下文，它将无缝共享原上下文的全局属性, 但拥有新的目标对象。
-* 属性提取与默认值：通过 `getAttribute(key, defaultValue)` 在属性不存在时返回预设值。
+在编写单元测试时，为了保证测试间的隔离性，建议在每个测试结束后清理全局注册表的状态。
+
+```java
+@AfterEach
+public void cleanup() {
+    // 重置全局编译器
+    CompilerRegistry.global().unregisterAll();
+    // 重置全局转换器
+    ValueConverterRegistry.global().unregisterAll();
+    
+    // 重新触发 PolicyScanner 以恢复内置策略（如果需要）
+    PolicyScanner.scanAndRegister(CompilerRegistry.global());
+    PolicyScanner.scanAndRegister(ValueConverterRegistry.global());
+}
+```
+
+---
 
 ## 自定义扩展 (SPI)
 
