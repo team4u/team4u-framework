@@ -3,18 +3,21 @@ package com.team4u.framework.config.core.convert;
 import com.team4u.framework.policy.KeyedPolicy;
 
 /**
- * 自定义属性转换器 SPI
+ * 自定义属性转换器 SPI 接口
+ * <p>
+ * 用于实现从字符串配置值到特定复杂类型的转换逻辑。
+ * </p>
  *
  * @param <T> 目标类型
  */
 public interface PropertyConverter<T> extends KeyedPolicy<Class<? extends PropertyConverter<?>>> {
 
     /**
-     * 将配置的原始字符串转换为目标对象
+     * 执行转换逻辑
      *
-     * @param source     原始配置值 (nullable)
-     * @param targetType 目标类型
-     * @return 转换后的对象
+     * @param source     原始配置字符串（可能为 null）
+     * @param targetType 期望转换的目标类型
+     * @return 转换后的实例对象
      */
     T convert(String source, Class<T> targetType);
 

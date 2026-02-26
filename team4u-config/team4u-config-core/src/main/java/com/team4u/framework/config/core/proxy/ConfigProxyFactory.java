@@ -10,7 +10,9 @@ import java.util.function.Supplier;
 /**
  * 动态代理工厂
  * <p>
- * 构建代理接口实例对象以提供方法级别的自动感知取值。
+ * 负责构建配置接口的代理实例。
+ * 代理对象能够自动感知底层的配置快照变化，并执行相应的类型转换。
+ * </p>
  */
 public class ConfigProxyFactory {
 
@@ -21,44 +23,45 @@ public class ConfigProxyFactory {
     }
 
     /**
-     * 创建 Live Mode 的动态代理实例
+     * 创建支持实时热重载的动态代理实例
      * <p>
-     * 每次方法调用时实时从 {@link ConfigManager} 拉取最新的 Snapshot。
+     * 每次调用方法时，代理对象都会从 {@link ConfigManager} 拉取当前最新的配置快照。
+     * </p>
      *
-     * @param manager 全局门面
-     * @param prefix  前缀
-     * @param type    接口类型
-     * @param <T>     泛型
-     * @return 代理对象
+     * @param manager 全局配置管理门面
+     * @param prefix  配置键前缀
+     * @param type    目标接口类型
+     * @param <T>     接口强类型
+     * @return 代理对象实例
      */
     public <T> T createLiveProxy(ConfigManager manager, String prefix, Class<T> type) {
         return createProxy(manager::currentSnapshot, prefix, type, false);
     }
 
     /**
-     * 创建 Pinned Mode (快照锚定模式) 的代理实例
+     * 创建“快照锚定”模式的代理实例
      * <p>
-     * 使用给定的固定配置快照进行内部求值，后续不再随 Manager 热更新刷新。
+     * 代理对象内部绑定一个固定的配置快照，后续方法调用始终基于该快照执行，
+     * 不受全局配置热重载的影响。
+     * </p>
      *
-     * @param fixedSnapshot 被钉住的绝对版本快照
-     * @param prefix        前缀
-     * @param type          接口类型
-     * @param <T>           泛型
-     * @return 代理对象
+     * @param fixedSnapshot 被绑定的固定快照实例
+     * @param prefix        配置键前缀
+     * @param type          目标接口类型
+     * @param <T>           接口强类型
+     * @return 代理对象实例
      */
     public <T> T createPinnedProxy(ConfigSnapshot fixedSnapshot, String prefix, Class<T> type) {
         return createProxy(() -> fixedSnapshot, prefix, type, true);
     }
 
     /**
-     * 统一创建动态代理实例的辅助方法
+     * 统一代理实例构建辅助方法
      *
-     * @param snapshotProvider 快照提供者
-     * @param prefix           前缀
-     * @param type             接口类型
-     * @param isPinned         是否钉住快照
-     * @param <T>              泛型
-     * @return 代理对象
+     * @param snapshotProvider 快照提供者函数
+     * @param prefix           配置前缀
+     * @param type             目标接口类型
+     * @param isPinned         是否为固定快照模式
      */
     @SuppressWarnings("unchecked")
     <T> T createProxy(Supplier<ConfigSnapshot> snapshotProvider,

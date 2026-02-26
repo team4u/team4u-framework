@@ -10,10 +10,11 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 默认配置绑定器
+ * 默认配置绑定器实现
  * <p>
- * 基于 Hutool 的 {@link BeanUtil} 和 {@link Convert} 实现配置绑定。
- * 支持松散绑定（驼峰、下划线、中划线互转）以及嵌套对象绑定。
+ * 基于 Hutool 的 {@link BeanUtil} 和 {@link Convert} 实现配置到 Java 对象的映射。
+ * 支持松散绑定（自动处理驼峰、下划线、中划线等命名风格差异）以及深层嵌套对象的绑定。
+ * </p>
  */
 public class DefaultConfigBinder implements ConfigBinder {
 
@@ -24,35 +25,34 @@ public class DefaultConfigBinder implements ConfigBinder {
             return null;
         }
 
-        // 1. 获取前缀下所有配置项（使用优化后的结构化视图）
+        // 获取指定前缀下的结构化视图数据
         Object unflattenedValue = snapshot.getUnflattenedValue(prefix);
 
         if (unflattenedValue == null) {
             return null;
         }
 
-        // 如果直接对应一个基本类型的值
+        // 如果获取到的值直接对应一个基础类型或字符串，则执行简单类型转换
         if (unflattenedValue instanceof String) {
             return Convert.convert(type, unflattenedValue);
         }
 
-        // 2. 如果是嵌套 Map 结构
+        // 处理嵌套的 Map 结构映射
         Map<String, Object> unflattenedMap = (Map<String, Object>) unflattenedValue;
 
-        // 3. 如果目标类型本身就是 Map，尝试直接转换
+        // 如果目标类型本身就是 Map 接口或其实现类，则直接返回结构化视图数据
         if (Map.class.isAssignableFrom(type)) {
             return (T) unflattenedMap;
         }
 
-        // 4. 将 Map 注入到 Java Bean 中，使用 Hutool 的 CopyOptions 支持松散绑定
+        // 将 Map 数据注入到 Java Bean 中，利用 Hutool 的 CopyOptions 增强绑定灵活性
         CopyOptions copyOptions = CopyOptions.create()
                 .ignoreCase()
-                .ignoreError(); // 忽略个别无法转换的字段错误
+                .ignoreError();
 
-        // 由于旧版 hutool 的 ignoreCase 可能对中划线等特殊符号支持不完美，提前将 Map 中的分隔符去除
+        // 针对某些特殊命名风格的兼容性预处理：将 Map 中的键统一进行归一化处理
         Map<String, Object> processedMap = new HashMap<>();
         for (Map.Entry<String, Object> entry : unflattenedMap.entrySet()) {
-            // 统一调用核心的归一化算法
             String key = ConfigSnapshot.normalize(entry.getKey());
             processedMap.put(key, entry.getValue());
         }

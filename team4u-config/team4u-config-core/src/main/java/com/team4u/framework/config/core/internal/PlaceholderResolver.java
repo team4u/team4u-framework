@@ -7,48 +7,53 @@ import java.util.HashSet;
 import java.util.Set;
 
 /**
- * 占位符解析器
+ * 配置占位符解析器
  * <p>
- * 用于处理诸如 {@code ${key}} 或 {@code ${key:defaultValue}} 形式的占位符。
+ * 用于处理诸如 {@code ${key}} 或 {@code ${key:defaultValue}} 形式的配置项引用。
+ * 本实现具备以下特性：
+ * <ul>
+ *     <li>支持递归解析，例如：{@code ${db.${env}.host}}</li>
+ *     <li>支持默认值指定，例如：{@code ${server.port:8080}}</li>
+ *     <li>内置循环依赖检测，防止无限递归</li>
+ *     <li>严格的递归深度限制（默认最大 20 层）</li>
+ * </ul>
+ * </p>
  */
 public class PlaceholderResolver {
 
     private static final String PREFIX = "${";
     private static final String SUFFIX = "}";
     private static final String SEPARATOR = ":";
+    /**
+     * 最大递归深度，防止复杂配置导致的栈溢出
+     */
     private static final int MAX_DEPTH = 20;
 
     /**
-     * 解析字符串中的占位符
+     * 执行占位符替换
      *
-     * @param value    包含占位符的原始字符串
-     * @param snapshot 当前配置快照，提供键值对查询能力
-     * @return 解析并替换后的字符串
+     * @param value    待解析的原始字符串
+     * @param snapshot 提供键值对检索能力的配置快照
+     * @return 替换占位符后的最终字符串
      */
     public static String resolve(String value, ConfigSnapshot snapshot) {
         return resolve(value, snapshot, new HashSet<>(), 0);
     }
 
     /**
-     * 解析字符串中的占位符（支持复用已访问键集合）
-     *
-     * @param value       包含占位符的原始字符串
-     * @param snapshot    当前配置快照
-     * @param visitedKeys 已访问的键集合，用于循环依赖检测
-     * @return 解析并替换后的字符串
+     * 执行占位符替换（支持外部传入已访问键集合）
      */
     public static String resolve(String value, ConfigSnapshot snapshot, Set<String> visitedKeys) {
         return resolve(value, snapshot, visitedKeys, 0);
     }
 
     /**
-     * 解析字符串中的占位符（支持复用已访问键集合及递归深度控制）
+     * 内部递归解析核心逻辑
      *
-     * @param value        包含占位符的原始字符串
-     * @param snapshot     当前配置快照
-     * @param visitedKeys  已访问的键集合，用于循环依赖检测
-     * @param currentDepth 当前递归深度
-     * @return 解析并替换后的字符串
+     * @param value        待解析值
+     * @param snapshot     配置快照
+     * @param visitedKeys  记录解析路径上的键，用于循环依赖判定
+     * @param currentDepth 当前递归层级
      */
     private static String resolve(String value, ConfigSnapshot snapshot, Set<String> visitedKeys, int currentDepth) {
         if (currentDepth > MAX_DEPTH) {
@@ -69,28 +74,27 @@ public class PlaceholderResolver {
                 break;
             }
 
+            // 寻找匹配的结束标记，考虑嵌套情况
             int endIndex = findMatchSuffixIndex(result, startIndex);
             if (endIndex == -1) {
-                // 未找到匹配的后缀，跳过当前前缀继续处理
                 cursor = startIndex + PREFIX.length();
                 continue;
             }
 
-            // 提取占位符内容，例如 "key:default"
+            // 提取占位符内容部分
             String placeholder = result.substring(startIndex + PREFIX.length(), endIndex);
-            // 递归解析占位符内容中可能存在的嵌套占位符（例如：${db.${env}.host}）
+            // 首先递归解析占位符内容本身（支持动态键名）
             String resolvedPlaceholder = resolve(placeholder, snapshot, visitedKeys, currentDepth + 1);
 
-            // 解析占位符并获取最终替换值
+            // 根据解析后的键名获取最终配置值
             String resolvedValue = resolveSinglePlaceholder(resolvedPlaceholder, snapshot, visitedKeys,
                     currentDepth + 1);
 
             if (resolvedValue != null) {
-                // 替换占位符并从新位置继续扫描
                 result.replace(startIndex, endIndex + SUFFIX.length(), resolvedValue);
                 cursor = startIndex + resolvedValue.length();
             } else {
-                // 无法解析且无默认值，保持原样并跳过
+                // 若无法解析且无默认值，保持原始占位符文本，继续处理后续内容
                 cursor = endIndex + SUFFIX.length();
             }
         }
@@ -99,40 +103,35 @@ public class PlaceholderResolver {
     }
 
     /**
-     * 处理单个占位符内容的解析
-     *
-     * @param placeholder  占位符内容（不含 ${ 和 }）
-     * @param snapshot     配置快照
-     * @param visitedKeys  访问过的键集合
-     * @param currentDepth 当前递归深度
+     * 解析单个具体的占位符定义
      */
     private static String resolveSinglePlaceholder(String placeholder, ConfigSnapshot snapshot, Set<String> visitedKeys,
                                                    int currentDepth) {
         PlaceholderProperty property = parseProperty(placeholder);
 
-        // 循环依赖检查
+        // 循环依赖检查：同一个路径上不允许重复出现同一个配置键
         if (!visitedKeys.add(property.key)) {
             throw new IllegalArgumentException("Circular dependency detected for placeholder key: " + property.key);
         }
 
         try {
-            // 从快照中获取值，如果不存在则使用默认值
+            // 检索配置值，若缺失则尝试回退到默认值
             String value = snapshot.get(property.key).orElse(property.defaultValue);
 
             if (value != null && value.contains(PREFIX)) {
-                // 如果解析出的值仍包含占位符，递归解析（例如：${key} 指向的值为 ${anotherKey}）
+                // 解析出的值若仍包含占位符标记，继续向下执行递归解析
                 return resolve(value, snapshot, visitedKeys, currentDepth + 1);
             }
 
             return value;
         } finally {
-            // 解析完成后移除，以便其他路径可以再次访问
+            // 解析完毕后出栈，不影响同级或父级路径的再次访问
             visitedKeys.remove(property.key);
         }
     }
 
     /**
-     * 将占位符内容解析为键和默认值
+     * 将占位符文本拆解为键名与默认值部分
      */
     private static PlaceholderProperty parseProperty(String placeholder) {
         int separatorIndex = placeholder.indexOf(SEPARATOR);
@@ -146,7 +145,7 @@ public class PlaceholderResolver {
     }
 
     /**
-     * 寻找与当前前缀匹配的后缀索引（支持嵌套检测）
+     * 检索匹配的闭合后缀索引，考虑内部嵌套占位符的计数逻辑
      */
     private static int findMatchSuffixIndex(StringBuilder sequence, int startIndex) {
         int nestedCount = 0;
@@ -168,7 +167,7 @@ public class PlaceholderResolver {
     }
 
     /**
-     * 检查字符串序列在指定位置是否以特定前缀开始
+     * 检查 StringBuilder 序列在指定偏移位置是否以目标前缀开始
      */
     private static boolean startsWith(StringBuilder sequence, int index, String prefix) {
         int prefixLen = prefix.length();
@@ -185,7 +184,7 @@ public class PlaceholderResolver {
     }
 
     /**
-     * 占位符属性封装类
+     * 占位符结构封装类
      */
     private static class PlaceholderProperty {
         private final String key;

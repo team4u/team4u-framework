@@ -10,34 +10,46 @@ import java.util.Map;
 import java.util.Properties;
 
 /**
- * 基于 Properties 的配置源实现
+ * 基于 Java Properties 的配置源实现
  * <p>
- * 支持从 Java {@link Properties} 对象加载配置数据。
- * 该源通常用于加载静态的本地配置，如配置文件、系统属性等。
+ * 该实现允许从 {@link Properties} 对象或类路径下的属性文件中加载配置。
+ * 适用于加载静态的本地预置配置，例如 {@code app.properties}。
+ * </p>
  */
 public class PropertiesConfigSource implements ConfigSource {
 
     /**
-     * 数据源名称
+     * 数据源描述名称
      */
     private final String name;
 
     /**
-     * 数据源优先级，数值越小优先级越高
+     * 排序优先级
      */
     private final int priority;
 
     /**
-     * 内部存储的配置快照
+     * 内部持有的配置数据镜像
      */
     private final Map<String, ConfigEntry> store;
 
     /**
-     * 通过名称、优先级和 Properties 对象构建配置源
+     * 构建属性配置源
      *
-     * @param name       数据源名称
-     * @param priority   排序优先级
-     * @param properties 配置属性
+     * @param name       描述名称
+     * @param priority   优先级数值
+     * @param properties 原始属性集
+     */
+    public PropertiesConfigSource(int priority, Properties properties) {
+        this("Properties", priority, properties);
+    }
+
+    /**
+     * 构建属性配置源（自定义名称）
+     *
+     * @param name       描述名称
+     * @param priority   优先级数值
+     * @param properties 原始属性集
      */
     public PropertiesConfigSource(String name, int priority, Properties properties) {
         this.name = name;
@@ -46,13 +58,13 @@ public class PropertiesConfigSource implements ConfigSource {
     }
 
     /**
-     * 从类路径资源加载属性文件
+     * 从类路径资源加载属性文件并创建配置源
      *
-     * @param name         数据源名称
-     * @param priority     优先级
-     * @param resourcePath 类路径资源路径（如 "config/app.properties"）
-     * @return PropertiesConfigSource 实例
-     * @throws IOException 如果加载失败
+     * @param name         描述名称
+     * @param priority     优先级数值
+     * @param resourcePath 类路径下的资源路径（如 "config/app.properties"）
+     * @return 配置源实例
+     * @throws IOException 加载资源失败时抛出
      */
     public static PropertiesConfigSource fromResource(String name, int priority, String resourcePath) throws IOException {
         Properties properties = new Properties();
@@ -66,10 +78,7 @@ public class PropertiesConfigSource implements ConfigSource {
     }
 
     /**
-     * 将 Properties 转换为内部存储格式
-     *
-     * @param properties 配置属性
-     * @return 配置项映射
+     * 将 Properties 对象转换为内部统一的实体映射
      */
     private Map<String, ConfigEntry> convert(Properties properties) {
         if (properties == null) {

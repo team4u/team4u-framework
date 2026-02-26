@@ -6,40 +6,47 @@ import com.team4u.framework.policy.OrderedPolicy;
 import java.util.Map;
 
 /**
- * 核心配置数据源
+ * 核心配置数据源 SPI 接口
  * <p>
- * 负责加载数据。复用 {@link OrderedPolicy} 接口，从而天然具备基于 {@code priority()} 的排序和策略加载能力。
+ * 负责从特定介质（如文件、数据库、环境变量等）加载原始配置数据。
+ * 继承自 {@link OrderedPolicy}，支持基于优先级的插件化加载。
+ * </p>
  */
 public interface ConfigSource extends OrderedPolicy {
 
     /**
-     * 表示配置项已被删除或未定义的哨兵值（Tombstone）。
+     * 配置失效哨兵值（Tombstone）
      * <p>
-     * 当一个配置源返回此值时，表示它显式屏蔽了低优先级数据源中的同名配置项。
+     * 当数据源返回此值时，显式表示该配置项已失效，将屏蔽低优先级源中的同名配置。
+     * </p>
      */
     String TOMBSTONE_VALUE = null;
 
     /**
-     * 数据源名称，用于标识配置的来源环境或渠道。
-     * 例如："JDBC-Primary", "File:/opt/conf/app.prop" 等
+     * 数据源描述名称
+     * <p>
+     * 用于在日志或快照元数据中标识配置来源，例如 "JDBC-Primary" 或 "Local-File"。
+     * </p>
      *
-     * @return 明确的唯一名称
+     * @return 唯一的描述名称
      */
     String name();
 
     /**
-     * 核心全量加载逻辑
+     * 执行全量配置加载
      *
-     * @return 当前源的所有配置，包含被标记为删除的 Tombstone 数据(即 value 为 {@link #TOMBSTONE_VALUE} 的
-     * ConfigEntry)
+     * @return 当前数据源包含的所有配置映射表，应包含失效标记（Tombstone）条目
      */
     Map<String, ConfigEntry> load();
 
     /**
-     * 增量加载优化 (可选实现)，返回 null 表示当前此源不支持增量加载，需要回退到全量 load()
+     * 执行增量配置加载
+     * <p>
+     * 若数据源支持高效的增量获取，可实现此方法以提升聚合效率。
+     * </p>
      *
-     * @param timestamp 上次访问时间戳
-     * @return 变更的配置项
+     * @param timestamp 上次访问的时间戳
+     * @return 自指定时间点以来发生变更的配置项；若不支持增量加载，请返回 null，框架将回退到全量加载
      */
     default Map<String, ConfigEntry> loadSince(long timestamp) {
         return null;

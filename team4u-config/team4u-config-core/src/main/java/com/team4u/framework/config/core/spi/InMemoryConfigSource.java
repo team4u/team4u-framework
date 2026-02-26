@@ -10,47 +10,44 @@ import java.util.concurrent.ConcurrentHashMap;
 /**
  * 基于内存的配置源实现
  * <p>
- * 将配置数据完全保存在 JVM 堆内存中，适合以下场景：
+ * 将配置数据完全存储于 JVM 内存中，适用于以下场景：
  * <ul>
- * <li>单元测试：无需依赖外部数据库或文件，快速构造测试数据</li>
- * <li>动态覆盖：在运行时临时写入或覆盖来自其他数据源的配置项</li>
- * <li>默认值：作为兜底配置源，为系统提供静态默认值</li>
+ *     <li>单元测试：快速构建隔离的测试配置环境</li>
+ *     <li>运行时覆盖：动态注入或手动覆盖现有的配置项</li>
+ *     <li>静态默认值：提供系统基础的兜底配置</li>
  * </ul>
- * 本实现同时具备 {@link ConfigWatcher} 能力：
- * 通过 {@link #putAndRefresh(String, String)} 等方法写入配置后，
- * 会自动触发变更信号通知 ConfigManager 重新聚合快照。
- * <p>
- * 本实现线程安全，且完整支持 {@link ConfigSource#loadSince(long)} 增量加载逻辑。
+ * 本实现同时集成了 {@link ConfigWatcher} 能力。通过 {@code putAndRefresh} 等方法更新配置后，
+ * 会立即发送变更信号，触发配置中心的快照重载。
+ * 本类是线程安全的，并完整支持 {@link ConfigSource#loadSince(long)} 增量加载协议。
+ * </p>
  */
 public class InMemoryConfigSource implements ConfigSource, ConfigWatcher {
 
     /**
-     * 数据源名称
+     * 数据源描述名称
      */
     private final String name;
 
     /**
-     * 数据源优先级，数值越小优先级越高
+     * 排序优先级
      */
     private final int priority;
 
     /**
-     * 内部存储，key 为配置键，value 为配置条目（含时间戳）
-     * 使用 ConcurrentHashMap 保证并发写入安全
+     * 内部线程安全的存储容器
      */
     private final ConcurrentHashMap<String, ConfigEntry> store = new ConcurrentHashMap<>();
 
     /**
-     * 变更信号回调，由 ConfigManager 在启动阶段通过 {@link #watch(Runnable)} 注入。
-     * 调用此回调将通知 HotReloadManager 触发配置快照的重新聚合。
+     * 由配置中心注入的变更信号回调
      */
     private volatile Runnable changeSignal;
 
     /**
-     * 通过名称和优先级构建内存配置源
+     * 构建内存配置源
      *
-     * @param name     数据源名称，如 "defaults" 或 "override"
-     * @param priority 排序优先级，数值越小越优先（参见 {@link ConfigSource#priority()}）
+     * @param name     描述名称，例如 "defaults"
+     * @param priority 优先级数值，数值越小越优先
      */
     public InMemoryConfigSource(String name, int priority) {
         this.name = name;
@@ -58,38 +55,27 @@ public class InMemoryConfigSource implements ConfigSource, ConfigWatcher {
     }
 
     /**
-     * 写入或更新一个配置项
+     * 写入或更新配置项
      * <p>
-     * 时间戳取写入时刻的系统毫秒数，用于支持增量加载。
+     * 每次写入都会更新时间戳，以支持增量加载检索。
+     * </p>
      *
      * @param key   配置键
-     * @param value 配置值，传入 {@link ConfigSource#TOMBSTONE_VALUE} 等同于调用
-     *              {@link #delete(String)}，表示将该配置标记为删除（Tombstone）
+     * @param value 配置值；传入 {@link ConfigSource#TOMBSTONE_VALUE} 表示标记该键为失效
      */
     public void put(String key, String value) {
         store.put(key, new ConfigEntry(key, value, name, System.currentTimeMillis()));
     }
 
     /**
-     * 将一批配置项一次性写入内存源
-     * <p>
-     * 逐条调用 {@link #put(String, String)}，每条记录独立记录写入时间戳。
-     *
-     * @param entries 键值对映射，值为 {@link ConfigSource#TOMBSTONE_VALUE}
-     *                时视为删除标记（Tombstone）
+     * 批量写入配置项
      */
     public void putAll(Map<String, String> entries) {
         entries.forEach(this::put);
     }
 
     /**
-     * 写入配置项并触发变更信号
-     * <p>
-     * 等价于先调用 {@link #put(String, String)}，再通知 ConfigManager 重新聚合快照。
-     * 适用于写入后需要立即生效的场景。
-     *
-     * @param key   配置键
-     * @param value 配置值，传入 {@link ConfigSource#TOMBSTONE_VALUE} 表示标记为删除（Tombstone）
+     * 写入配置并立即刷新快照
      */
     public void putAndRefresh(String key, String value) {
         put(key, value);
@@ -97,13 +83,7 @@ public class InMemoryConfigSource implements ConfigSource, ConfigWatcher {
     }
 
     /**
-     * 批量写入配置项并触发变更信号
-     * <p>
-     * 等价于先调用 {@link #putAll(Map)}，再统一发出一次变更信号。
-     * 适用于需要一次性写入多条配置后立刻生效的场景。
-     *
-     * @param entries 键值对映射，值为 {@link ConfigSource#TOMBSTONE_VALUE}
-     *                时视为删除标记（Tombstone）
+     * 批量写入配置并立即刷新快照
      */
     public void putAllAndRefresh(Map<String, String> entries) {
         putAll(entries);
@@ -111,10 +91,7 @@ public class InMemoryConfigSource implements ConfigSource, ConfigWatcher {
     }
 
     /**
-     * 手动触发变更信号
-     * <p>
-     * 当使用 {@link #put} 或 {@link #putAll} 进行批量写入后，
-     * 可在合适的时机调用此方法统一触发一次配置重载，避免频繁刷新。
+     * 发送配置变更信号，触发全局快照重载
      */
     public void fireChange() {
         if (changeSignal != null) {
@@ -123,39 +100,34 @@ public class InMemoryConfigSource implements ConfigSource, ConfigWatcher {
     }
 
     /**
-     * 将指定配置键标记为已删除（Tombstone）
+     * 标记指定配置键为失效（Tombstone）
      * <p>
-     * 向聚合层发出删除信号，聚合时会屏蔽低优先级数据源中相同键的值。
-     *
-     * @param key 待删除的配置键
+     * 在聚合时，此标记将屏蔽低优先级源中的同名配置。
+     * </p>
      */
     public void delete(String key) {
         put(key, ConfigSource.TOMBSTONE_VALUE);
     }
 
     /**
-     * 从内存中彻底移除某个配置键（含 Tombstone）
+     * 物理移除配置项
      * <p>
-     * 与 {@link #delete(String)} 不同，此方法直接从存储中抹去该键的痕迹，
-     * 不会向聚合层发送删除信号，低优先级数据源中的同名键将重新生效。
-     *
-     * @param key 待移除的配置键
+     * 彻底从内存存储中移除该键。与 {@link #delete} 不同，物理移除后，低优先级源中的同名配置将重新生效。
+     * </p>
      */
     public void remove(String key) {
         store.remove(key);
     }
 
     /**
-     * 清空所有内存配置项
+     * 清空所有配置项
      */
     public void clear() {
         store.clear();
     }
 
     /**
-     * 返回当前内存中的配置项数量（含 Tombstone 条目）
-     *
-     * @return 配置项总数
+     * 获取当前存储的配置项总数
      */
     public int size() {
         return store.size();
@@ -185,9 +157,7 @@ public class InMemoryConfigSource implements ConfigSource, ConfigWatcher {
     }
 
     /**
-     * 返回当前内存中全部配置项的只读快照
-     *
-     * @return 不可变的配置键值映射
+     * 获取全量配置镜像
      */
     @Override
     public Map<String, ConfigEntry> load() {
@@ -195,13 +165,10 @@ public class InMemoryConfigSource implements ConfigSource, ConfigWatcher {
     }
 
     /**
-     * 增量加载：返回在指定时间戳之后发生变更的配置项
+     * 执行增量加载
      * <p>
-     * 遍历内存存储，筛选出 {@link ConfigEntry#getTimestamp()} 严格大于 {@code timestamp} 的条目，
-     * 从而避免将未变更的配置重复传递给聚合层。
-     *
-     * @param timestamp 上次加载的时间戳（毫秒）
-     * @return 在该时间戳之后被写入或更新的配置项，若无变更则返回空 Map
+     * 返回所有更新时间戳晚于指定时间点的配置条目。
+     * </p>
      */
     @Override
     public Map<String, ConfigEntry> loadSince(long timestamp) {

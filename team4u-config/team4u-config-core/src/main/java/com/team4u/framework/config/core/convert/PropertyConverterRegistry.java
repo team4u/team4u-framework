@@ -3,9 +3,11 @@ package com.team4u.framework.config.core.convert;
 import com.team4u.framework.policy.KeyedPolicyRegistry;
 
 /**
- * 自定义转换器注册表
+ * 属性转换器注册表
  * <p>
- * 继承自 {@link KeyedPolicyRegistry}，用于管理 {@link PropertyConverter} 实例。
+ * 用于统一管理和检索已注册的 {@link PropertyConverter} 实例。
+ * 继承自 {@link KeyedPolicyRegistry}，通过转换器的类名进行唯一标识。
+ * </p>
  */
 public class PropertyConverterRegistry
         extends KeyedPolicyRegistry<Class<? extends PropertyConverter<?>>, PropertyConverter<?>> {

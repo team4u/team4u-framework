@@ -3,9 +3,11 @@ package com.team4u.framework.config.core.convert;
 import cn.hutool.json.JSONUtil;
 
 /**
- * 基于 Hutool JSON 的通用属性转换器
+ * 基于 JSON 的通用属性转换器
  * <p>
- * 该转换器可以直接在 @ConfigConverter 中使用，无需为每个类型创建子类。
+ * 内部利用 Hutool JSON 工具类将配置字符串反序列化为目标 Java 对象。
+ * 该转换器可直接配合 {@link com.team4u.framework.config.core.annotation.ConfigConverter} 注解使用。
+ * </p>
  *
  * @author jay.wu
  */

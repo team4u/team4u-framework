@@ -9,29 +9,30 @@ import lombok.Getter;
 import java.util.*;
 
 /**
- * 核心配置快照 (不可变)
+ * 配置快照实体
  * <p>
- * 所有的写操作都在构造时完成，一旦构建，全量数据不可变。
- * 基于 java.util.Collections.unmodifiableMap() 保证并发安全读写一致性。
+ * 代表配置中心在某一特定时刻的完整状态。
+ * 该对象是不可变的，所有数据在构造时完成初始化。
+ * 基于 {@link Collections#unmodifiableMap} 确保了并发环境下的读取安全性与一致性。
+ * </p>
  */
 public class ConfigSnapshot {
     /**
-     * 版本号 (通常为 System.nanoTime() 或自增 Sequence)
+     * 快照版本号，通常由时间戳或递增序列生成
      */
     @Getter
     private final long version;
     /**
-     * 底层不可变字典映射
+     * 底层存储原始配置条目的映射表
      */
     @Getter
     private final Map<String, ConfigEntry> entries;
     /**
-     * 归一化索引：存储 "normalized_key" -> "real.original.Key"
-     * 例如："serverPort" -> "server.port"
+     * 归一化索引，用于支持松散匹配，存储“归一化键”到“原始键”的映射
      */
     private final Map<String, String> looseIndex;
     /**
-     * 结构化视图缓存
+     * 树形结构化视图缓存，用于支持嵌套对象的绑定
      */
     private final Map<String, Object> unflattenedMap;
 
@@ -39,15 +40,18 @@ public class ConfigSnapshot {
         this.version = version;
         this.entries = MapUtil.isEmpty(entries) ? Collections.emptyMap() : Collections.unmodifiableMap(entries);
         this.looseIndex = buildLooseIndex(this.entries.keySet());
-        // 构造阶段积极构建结构化视图（预热占位符逻辑）
+        // 构造阶段预先构建结构化视图，并处理占位符逻辑
         this.unflattenedMap = buildUnflattenedMap();
     }
 
     /**
-     * 统一的归一化算法：转小写，移除所有分隔符（点、中划线、下划线）
+     * 配置键归一化处理
+     * <p>
+     * 处理逻辑：将键转为小写，并移除所有分隔符（包括点号、中划线和下划线）。
+     * </p>
      *
-     * @param key 原始键
-     * @return 归一化后的键
+     * @param key 原始键名
+     * @return 归一化后的键名
      */
     public static String normalize(String key) {
         if (key == null) {
@@ -57,7 +61,7 @@ public class ConfigSnapshot {
     }
 
     /**
-     * 构建归一化索引
+     * 构建松散匹配所需的归一化索引
      */
     private Map<String, String> buildLooseIndex(Set<String> originalKeys) {
         if (CollUtil.isEmpty(originalKeys)) {
@@ -67,7 +71,7 @@ public class ConfigSnapshot {
         for (String key : originalKeys) {
             String normalized = normalize(key);
             if (normalized != null) {
-                // 如果有冲突（如 my-key 和 my_key），保留原本存在的即可
+                // 如果出现归一化冲突，则保留最早遇到的原始键
                 index.putIfAbsent(normalized, key);
             }
         }
@@ -75,42 +79,57 @@ public class ConfigSnapshot {
     }
 
     /**
-     * 智能松散获取
+     * 智能松散获取配置值
+     * <p>
+     * 检索逻辑如下：
+     * <ul>
+     *     <li>优先尝试使用精确键名进行检索</li>
+     *     <li>若未命中，则通过归一化索引查找匹配的真实键名并获取其值</li>
+     * </ul>
+     * </p>
      *
-     * @param looseKey 模糊的 Key (例如 "serverPort")
-     * @return 配置值
+     * @param looseKey 原始或模糊的键名（如 "serverPort"）
+     * @return 配置值的 Optional 包装
      */
     public Optional<String> getSmart(String looseKey) {
-        // 1. 尝试直接获取（最快路径）
+        // 尝试精确匹配
         Optional<String> directValue = get(looseKey);
         if (directValue.isPresent()) {
             return directValue;
         }
 
-        // 2. 归一化后查索引
+        // 尝试归一化匹配
         String normalized = normalize(looseKey);
         String realKey = looseIndex.get(normalized);
 
-        // 3. 用查到的真实 Key 去取值
         return realKey != null ? get(realKey) : Optional.empty();
     }
 
     /**
-     * 获取全量结构化配置 Map（延迟加载并缓存）
+     * 获取完整的嵌套结构化配置映射表
      *
-     * @return 嵌套的 Map 结构
+     * @return 树形结构的配置 Map
      */
     public Map<String, Object> unflattenedMap() {
         return unflattenedMap;
     }
 
+    /**
+     * 构建嵌套的树形视图
+     * <p>
+     * 该过程会执行以下操作：
+     * <ul>
+     *     <li>解析并替换配置值中的占位符</li>
+     *     <li>将扁平的点号分隔键（如 "a.b.c"）转换为嵌套的 Map 结构</li>
+     * </ul>
+     * </p>
+     */
     private Map<String, Object> buildUnflattenedMap() {
         if (MapUtil.isEmpty(entries)) {
             return Collections.emptyMap();
         }
 
         Map<String, Object> root = new LinkedHashMap<>();
-        // 复用 HashSet 以减少在高频调用下的对象分配
         Set<String> visitedKeys = new HashSet<>();
 
         for (Map.Entry<String, ConfigEntry> entry : entries.entrySet()) {
@@ -121,17 +140,16 @@ public class ConfigSnapshot {
                 continue;
             }
 
-            // 解析占位符，积极解析可以消除运行时绑定的递归开销
+            // 执行占位符替换，提前解析可以减少运行时的递归负担
             String resolvedValue;
             try {
                 resolvedValue = PlaceholderResolver.resolve(configEntry.getValue(), this, visitedKeys);
             } catch (IllegalArgumentException e) {
-                // 如果存在循环依赖或递归过深，在预加载阶段仅保持原始值，不抛出异常
-                // 这样可以保证 ConfigSnapshot 构造成功，异常将在业务实际调用时触发
+                // 若检测到循环依赖或递归深度超限，构造阶段保持原始值，确保快照创建成功
                 resolvedValue = configEntry.getValue();
             }
 
-            // 填充树形结构
+            // 填充树形 Map 节点
             int start = 0;
             int dotIndex;
             Map<String, Object> current = root;
@@ -156,17 +174,17 @@ public class ConfigSnapshot {
     }
 
     /**
-     * 根据前缀获取结构化配置子树
+     * 根据前缀检索特定的结构化子树
      *
-     * @param prefix 前缀
-     * @return 子树对象（可能是 Map 或 String），如果不存在则返回 null
+     * @param prefix 配置前缀
+     * @return 对应的子树对象（Map 或 String），若前缀不存在则返回 null
      */
     public Object getUnflattenedValue(String prefix) {
         if (StrUtil.isEmpty(prefix)) {
             return unflattenedMap();
         }
 
-        // 统一预处理前缀，去除结尾的 "." 方便统一查找逻辑
+        // 处理前缀末尾的点号，统一查找路径
         String searchPrefix = prefix.endsWith(".") ? prefix.substring(0, prefix.length() - 1) : prefix;
 
         Map<String, Object> current = unflattenedMap();
@@ -187,10 +205,10 @@ public class ConfigSnapshot {
     }
 
     /**
-     * O(1) 检索确切键的完整 ConfigEntry 对象
+     * 检索指定键对应的完整配置条目
      *
      * @param key 配置键
-     * @return 包含配置元数据的实体，如果不存在或已删除则返回 empty()
+     * @return 包含元数据的配置条目实体，若已失效则返回 empty
      */
     public Optional<ConfigEntry> getEntry(String key) {
         if (key == null) {
@@ -200,29 +218,27 @@ public class ConfigSnapshot {
         if (entry != null && !entry.isEmptyOrDeleted()) {
             return Optional.of(entry);
         }
-        // 如果值被显式删除，则视为未配置
         return Optional.empty();
     }
 
     /**
-     * O(1) 读取字符串值
+     * 获取指定键的字符串配置值
      *
      * @param key 配置键
-     * @return 配置值
+     * @return 配置值的 Optional 包装
      */
     public Optional<String> get(String key) {
         return getEntry(key).map(ConfigEntry::getValue);
     }
 
     /**
-     * 支持按前缀搜索检索嵌套配置，返回剥离前缀后的键值映射对。
+     * 根据前缀搜索配置项，并返回移除前缀后的子映射表
      * <p>
-     * 例如前缀为 "app.db."，针对配置 "app.db.url" 将返回 "url" -> "jdbc..."。
-     * <p>
-     * 入参前缀无论是否以 '.' 结尾，系统均会自动补齐匹配处理。
+     * 示例：前缀为 "app.db."，配置 "app.db.url" 将映射为 "url" -> "jdbc..."。
+     * </p>
      *
-     * @param prefix 配置前缀
-     * @return 取消前缀的子配置映射；返回不可变集合，不会为 null
+     * @param prefix 配置键前缀
+     * @return 剥离前缀后的键值映射表
      */
     public Map<String, String> getByPrefix(String prefix) {
         if (CollUtil.isEmpty(entries) || StrUtil.isBlank(prefix)) {

@@ -13,19 +13,19 @@ import com.team4u.framework.policy.PolicyScanner;
 import java.util.Optional;
 
 /**
- * 现代配置中心系统级总控门面接口
+ * 配置管理中心系统总控门面接口
  * <p>
  * 推荐通过 {@link ConfigManager#builder()} 构建自定义配置管理器实例，
- * 或使用 {@link ConfigManager#standard()} 获取默认的全局共享标准实例。
+ * 或使用 {@link ConfigManager#standard()} 获取全局共享的标准实例。
  * </p>
  *
  * <pre>
- * // 场景1：普通业务（使用标准门面）
+ * // 使用标准门面获取配置
  * ConfigManager manager = ConfigManager.standard();
  * String dbUrl = manager.getString("db.url").orElse(null);
  * DbConfig dbConfig = manager.createProxy("db", DbConfig.class);
  *
- * // 场景2：特定业务线（需要定制 ConfigSource）
+ * // 定制特定业务线的配置源
  * ConfigManager customManager = ConfigManager.builder()
  *         .addSource(new MyCustomConfigSource())
  *         .addWatcher(new MyCustomConfigWatcher())
@@ -36,13 +36,13 @@ import java.util.Optional;
 public interface ConfigManager {
 
     /**
-     * 获取带有标准底层实现的全局单例配置管理引擎。
+     * 获取全局标准单例配置管理引擎
      * <p>
-     * 适用于大多数场景，直接利用 SPI (ServiceLoader) 自动发现 {@link ConfigSource} 和
-     * {@link ConfigWatcher}。
+     * 该实例通过 SPI (ServiceLoader) 机制自动发现并加载 {@link ConfigSource} 和 {@link ConfigWatcher}。
+     * 采用了双重检查锁定（DCL）确保多线程环境下单例的线程安全性。
      * </p>
      *
-     * @return 预置的全局单例配置管理实例
+     * @return 全局单例配置管理实例
      */
     static ConfigManager standard() {
         if (InstanceHolder.STANDARD_INSTANCE == null) {
@@ -56,7 +56,10 @@ public interface ConfigManager {
     }
 
     /**
-     * 重置全局标准实例，主要用于测试或特定的沙箱环境。
+     * 重置全局标准实例
+     * <p>
+     * 用于在单元测试或特定的隔离沙箱环境中清理状态，释放资源。
+     * </p>
      */
     static void resetStandard() {
         synchronized (ConfigManager.class) {
@@ -68,7 +71,7 @@ public interface ConfigManager {
     }
 
     /**
-     * 创建一个全新的配置管理器建设者
+     * 创建配置管理器构造器
      *
      * @return Builder 实例
      */
@@ -77,67 +80,75 @@ public interface ConfigManager {
     }
 
     /**
-     * 获取当前最高版本最新的不可变配置快照
+     * 获取当前最新的不可变配置快照
      *
      * @return 最新的配置快照
      */
     ConfigSnapshot currentSnapshot();
 
     /**
-     * 生成配置接口类型的动态代理实例 (默认返回实时绑定的 Live Mode 代理)
+     * 生成配置接口的动态代理实例
+     * <p>
+     * 默认返回实时更新模式（Live Mode）的代理，能够感知配置的热更新。
+     * </p>
      *
-     * @param prefix        绑定的配置前缀
-     * @param interfaceType 期望代理出来的业务层 Java 接口类型
-     * @param <T>           强类型
-     * @return 动态生成的代理实例对象
+     * @param prefix        配置前缀，用于限定配置搜索范围
+     * @param interfaceType 业务层定义的 Java 接口类型
+     * @param <T>           接口强类型
+     * @return 动态生成的代理实例
      */
     <T> T createProxy(String prefix, Class<T> interfaceType);
 
     /**
-     * 生成配置接口类型的动态代理实例（自动识别前缀）
+     * 根据注解自动推断前缀并生成动态代理实例
      * <p>
-     * 内部会尝试根据 {@link ConfigPrefix} 注解自动推断前缀。
+     * 内部会尝试识别接口上的 {@link ConfigPrefix} 注解。
+     * </p>
      *
-     * @param interfaceType 期望代理出来的业务层 Java 接口类型
-     * @param <T>           强类型
-     * @return 动态生成的代理实例对象
+     * @param interfaceType 业务层定义的 Java 接口类型
+     * @param <T>           接口强类型
+     * @return 动态生成的代理实例
      */
     default <T> T createProxy(Class<T> interfaceType) {
         return createProxy(null, interfaceType);
     }
 
     /**
-     * 基础键值获取快捷入口，内部委托给 {@link #currentSnapshot()} 执行
+     * 获取配置字符串值的快捷方式
+     * <p>
+     * 内部委托给当前最新的快照执行检索。
+     * </p>
      *
-     * @param key 精确配置键
-     * @return 配置值
+     * @param key 配置键
+     * @return 配置值的 Optional 包装
      */
     default Optional<String> getString(String key) {
         return currentSnapshot().get(key);
     }
 
     /**
-     * 监听配置点变更
+     * 注册配置变更监听器
      * <p>
-     * (支持精准匹配或是 startWith 等模式，取决于实现内部对于 pattern 的处理机制)
+     * 支持精确匹配或通配符模式，监听范围取决于实现的模式匹配逻辑。
+     * </p>
      *
-     * @param keyPattern 要监听的键名或前缀模式
+     * @param keyPattern 监听的键名或前缀模式（如 "app.db.*"）
      * @param listener   变更回调处理程序
      */
     void addChangeListener(String keyPattern, ConfigChangeListener listener);
 
     /**
-     * 持有单例的内部类
+     * 内部静态类，用于安全持有单例
      */
     class InstanceHolder {
         static volatile ConfigManager STANDARD_INSTANCE;
     }
 
     /**
-     * 配置管理器的构造器
+     * 配置管理器构造器
      * <p>
-     * 用于组装自定义的配置源、配置监听器、配置绑定器。
-     * 组装完成后生成的 {@link ConfigManager} 是不可变且线程安全的。
+     * 负责组装配置源、监听器、转换器以及绑定器。
+     * 构建完成后，配置管理器内部状态是不可变且线程安全的。
      * </p>
      */
     class Builder {
@@ -153,15 +164,19 @@ public interface ConfigManager {
             init(converterRegistry);
         }
 
+        /**
+         * 初始化注册表，执行自动扫描与 SPI 加载
+         * <p>
+         * 首先扫描当前包下的组件，然后通过标准 SPI 机制加载扩展实现。
+         * </p>
+         */
         private <P> void init(PolicyRegistry<P> registry) {
-            // 1. 自动扫描当前包及其子包
             PolicyScanner.scanAndRegister(registry);
-            // 2. 通过 ServiceLoader 加载
             PolicyScanner.registerFromServiceLoader(registry);
         }
 
         /**
-         * 扫描并加载包下所有的 ConfigSource
+         * 指定包路径扫描配置源实现
          *
          * @param packageName 包名
          * @return 当前 Builder 实例
@@ -172,7 +187,7 @@ public interface ConfigManager {
         }
 
         /**
-         * 扫描并加载包下所有的 ConfigWatcher
+         * 指定包路径扫描配置监听器实现
          *
          * @param packageName 包名
          * @return 当前 Builder 实例
@@ -183,23 +198,22 @@ public interface ConfigManager {
         }
 
         /**
-         * 扫描并加载包下所有的 PropertyConverter
+         * 指定包路径扫描属性转换器实现
          *
          * @param packageName 包名
          * @return 当前 Builder 实例
          */
         @SuppressWarnings({ "unchecked", "rawtypes" })
         public Builder scanConverters(String packageName) {
-            // 由于泛型擦除，强制转换在运行时是安全的
             PolicyScanner.scanAndRegister(converterRegistry, packageName,
                     (Class) PropertyConverter.class);
             return this;
         }
 
         /**
-         * 添加自定义配置源
+         * 手动添加配置源
          *
-         * @param source 配置源
+         * @param source 配置源实例
          * @return 当前 Builder 实例
          */
         public Builder addSource(ConfigSource... source) {
@@ -212,9 +226,9 @@ public interface ConfigManager {
         }
 
         /**
-         * 添加自定义配置变动监听器
+         * 手动添加配置监听器
          *
-         * @param watcher 配置变动监听器
+         * @param watcher 监听器实例
          * @return 当前 Builder 实例
          */
         public Builder addWatcher(ConfigWatcher... watcher) {
@@ -227,9 +241,9 @@ public interface ConfigManager {
         }
 
         /**
-         * 添加自定义属性转换器
+         * 手动添加自定义属性转换器
          *
-         * @param converter 属性转换器
+         * @param converter 转换器实例
          * @return 当前 Builder 实例
          */
         public Builder addConverter(PropertyConverter<?>... converter) {
@@ -242,9 +256,9 @@ public interface ConfigManager {
         }
 
         /**
-         * 自定义配置绑定器
+         * 设置自定义配置绑定器
          *
-         * @param configBinder 配置绑定器
+         * @param configBinder 绑定器实例
          * @return 当前 Builder 实例
          */
         public Builder configBinder(ConfigBinder configBinder) {
@@ -259,7 +273,7 @@ public interface ConfigManager {
          */
         public ConfigManager build() {
             if (configBinder == null) {
-                configBinder = new DefaultConfigBinder(); // 默认绑定器
+                configBinder = new DefaultConfigBinder();
             }
             return new DefaultConfigManager(sourceRegistry, watcherRegistry, converterRegistry, configBinder);
         }
