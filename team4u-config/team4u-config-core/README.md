@@ -68,19 +68,37 @@ server.description=${server.name} is running on port ${server.port}
 
 ConfigManager 是所有操作的入口。你可以使用内置的标准单例，也可以通过 Builder 进行深度定制。
 
-```java
-// 标准单例（推荐）：自动通过 SPI 发现 ConfigSource 和 ConfigWatcher
-ConfigManager manager = ConfigManager.standard();
+#### 1. 标准单例（推荐）
+自动通过 SPI 发现并聚合配置。你也可以在调用 `standard()` 之前，通过全局注册表手动预填组件：
 
-// 自定义实例：使用 Builder 进行高级配置
+```java
+// 手动向全局注册表注入一个配置源
+ConfigSourceRegistry.global().register(new MyCustomConfigSource());
+
+// 获取标准单例，它会自动包含上面手动注册的源以及 SPI 加载的源
+ConfigManager manager = ConfigManager.standard();
+```
+
+#### 2. 自定义实例
+使用 Builder 构建完全隔离的配置环境：
+
+```java
 ConfigManager customManager = ConfigManager.builder()
-    .scanSources("com.mycompany.config.sources")   // 手动扫描包自动注册 Source
-    .scanWatchers("com.mycompany.config.watchers") // 手动扫描包自动注册 Watcher
+    .scanSources("com.mycompany.config.sources")   // 扫描包自动注册
     .addSource(new MyCustomConfigSource())         // 手动添加实例
     .build();
+```
 
-// 单元测试中可重置单例状态
+#### 3. 状态重置
+在单元测试或隔离沙箱中，你可以清理全局状态：
+
+```java
+// 重置 ConfigManager 单例
 ConfigManager.resetStandard();
+
+// 清空全局注册表中的所有组件
+ConfigSourceRegistry.global().unregisterAll();
+ConfigWatcherRegistry.global().unregisterAll();
 ```
 
 ### 基础用法：获取键值
@@ -210,10 +228,15 @@ public class AppConfig {
 ```
 
 #### 注册与发现
-转换器支持三种加载方式：
-1. **SPI 机制**：在 `META-INF/services/...PropertyConverter` 中定义。
-2. **包扫描**：自动扫描 `com.team4u.framework.config.core.convert` 包及其子包。
-3. **手动注册**：通过 `ConfigManager.builder().addConverter(...)` 添加。
+转换器支持以下三种加载方式，均会注册到 `PropertyConverterRegistry.global()` 实例中：
+1. **SPI 机制**：在 `META-INF/services/com.team4u.framework.config.core.convert.PropertyConverter` 中定义类路径。
+2. **包扫描**：框架初始化时会自动扫描 `com.team4u.framework.config.core.convert` 包。
+3. **手动注册（推荐）**：直接通过全局注册表注册，无需通过 Builder 重新构建。
+
+```java
+// 在应用启动时手动注入一个特定转换器
+PropertyConverterRegistry.global().register(new MyCustomConverter());
+```
 
 ---
 
@@ -258,8 +281,28 @@ ConfigManager manager = ConfigManager.builder()
 
 框架内置了 `InMemoryConfigSource`，允许在单元测试中通过代码动态注入配置，无需依赖外部文件。它同时实现了 `ConfigWatcher` 接口，支持实时刷新。
 
+### 1. 使用标准单例测试
+通过全局注册表，你可以直接向 `ConfigManager.standard()` 注入数据：
+
 ```java
-// 构建包含内存源的 Manager
+@BeforeEach
+public void setup() {
+    // 注入内存配置源
+    ConfigSourceRegistry.global().register(new InMemoryConfigSource("test", 1));
+}
+
+@AfterEach
+public void cleanup() {
+    // 清理全局状态，确保测试隔离
+    ConfigManager.resetStandard();
+    ConfigSourceRegistry.global().unregisterAll();
+}
+```
+
+### 2. 使用 Builder 构建隔离环境
+推荐在复杂的集成测试中使用 Builder，以获得完全隔离的配置空间：
+
+```java
 InMemoryConfigSource memorySource = new InMemoryConfigSource("test-memory", 1);
 ConfigManager manager = ConfigManager.builder()
     .addSource(memorySource)

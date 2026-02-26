@@ -47,7 +47,7 @@ public class SpringConfigIntegrationTest {
             return new ConfigSource() {
                 @Override
                 public Map<String, ConfigEntry> load() {
-                    return Collections.singletonMap("test.key", new ConfigEntry("test.key", "test.value", "test"));
+                    return Collections.singletonMap("test.key", new ConfigEntry("test.key", "test.value", "test", 0L));
                 }
 
                 @Override

@@ -1,7 +1,6 @@
 package com.team4u.framework.config.core.spring;
 
 import com.team4u.framework.config.core.ConfigManager;
-import com.team4u.framework.config.core.GlobalConfigRegistries;
 import com.team4u.framework.config.core.convert.PropertyConverterRegistry;
 import com.team4u.framework.config.core.internal.DefaultConfigManager;
 import com.team4u.framework.config.core.spi.ConfigSourceRegistry;
@@ -30,7 +29,7 @@ public class Team4uConfigAutoConfiguration {
     @Bean
     @PolicyAutoRegister
     public ConfigSourceRegistry globalSourceRegistry() {
-        return GlobalConfigRegistries.getSourceRegistry();
+        return ConfigSourceRegistry.global();
     }
 
     /**
@@ -39,7 +38,7 @@ public class Team4uConfigAutoConfiguration {
     @Bean
     @PolicyAutoRegister
     public ConfigWatcherRegistry globalWatcherRegistry() {
-        return GlobalConfigRegistries.getWatcherRegistry();
+        return ConfigWatcherRegistry.global();
     }
 
     /**
@@ -48,7 +47,7 @@ public class Team4uConfigAutoConfiguration {
     @Bean
     @PolicyAutoRegister
     public PropertyConverterRegistry globalConverterRegistry() {
-        return GlobalConfigRegistries.getConverterRegistry();
+        return PropertyConverterRegistry.global();
     }
 
     /**

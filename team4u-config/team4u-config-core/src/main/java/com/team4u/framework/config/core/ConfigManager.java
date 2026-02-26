@@ -181,9 +181,9 @@ public interface ConfigManager {
          */
         public static ConfigManager buildStandard() {
             return new Builder(
-                    GlobalConfigRegistries.getSourceRegistry(),
-                    GlobalConfigRegistries.getWatcherRegistry(),
-                    GlobalConfigRegistries.getConverterRegistry()).build();
+                    ConfigSourceRegistry.global(),
+                    ConfigWatcherRegistry.global(),
+                    PropertyConverterRegistry.global()).build();
         }
 
         /**
