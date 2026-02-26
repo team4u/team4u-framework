@@ -3,7 +3,7 @@ package com.team4u.framework.proxy;
 /**
  * 代理接口示例
  *
- * @author team4u
+ * @author jay.wu
  */
 public interface ProxySample {
     /**

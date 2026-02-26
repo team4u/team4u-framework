@@ -12,7 +12,7 @@ import java.util.concurrent.ConcurrentMap;
 /**
  * 委托拦截器：将方法调用安全地转发给真正的目标对象
  *
- * @author team4u
+ * @author jay.wu
  */
 public class DelegateInterceptor implements MethodInterceptor {
 

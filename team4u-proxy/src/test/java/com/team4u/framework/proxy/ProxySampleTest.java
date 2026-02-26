@@ -6,7 +6,7 @@ import org.junit.Test;
 /**
  * 代理示例测试类
  *
- * @author team4u
+ * @author jay.wu
  */
 public class ProxySampleTest {
 

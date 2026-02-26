@@ -25,7 +25,7 @@ import java.util.Set;
  * </p>
  *
  * @param <T> 代理的目标类型
- * @author team4u
+ * @author jay.wu
  */
 public final class ProxyBuilder<T> {
 

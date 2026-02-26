@@ -5,7 +5,7 @@ import java.util.List;
 /**
  * 动态代理引擎抽象接口
  *
- * @author team4u
+ * @author jay.wu
  */
 public interface ProxyEngine {
 

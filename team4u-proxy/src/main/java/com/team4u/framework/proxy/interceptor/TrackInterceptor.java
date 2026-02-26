@@ -8,7 +8,7 @@ import lombok.RequiredArgsConstructor;
 /**
  * 追踪拦截器：执行日志、耗时统计、审计等切面功能
  *
- * @author team4u
+ * @author jay.wu
  */
 @RequiredArgsConstructor
 public class TrackInterceptor implements MethodInterceptor {

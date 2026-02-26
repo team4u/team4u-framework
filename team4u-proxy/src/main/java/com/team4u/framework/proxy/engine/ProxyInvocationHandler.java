@@ -11,7 +11,7 @@ import java.util.List;
 /**
  * 核心调度器：将底层代理引擎的方法调用，桥接到 AOP 拦截器链
  *
- * @author team4u
+ * @author jay.wu
  */
 @RequiredArgsConstructor
 public class ProxyInvocationHandler implements InvocationHandler {

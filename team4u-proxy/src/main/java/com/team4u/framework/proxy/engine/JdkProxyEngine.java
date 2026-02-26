@@ -12,7 +12,7 @@ import java.util.stream.Stream;
  * 基于 JDK 原生反射的动态代理引擎
  * <p>适用场景：目标类型全部为接口</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 public class JdkProxyEngine implements ProxyEngine {
 

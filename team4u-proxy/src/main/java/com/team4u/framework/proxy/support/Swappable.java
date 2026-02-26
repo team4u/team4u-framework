@@ -3,7 +3,7 @@ package com.team4u.framework.proxy.support;
 /**
  * 动态可热交换契约
  *
- * @author team4u
+ * @author jay.wu
  */
 public interface Swappable {
     /**

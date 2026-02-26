@@ -16,7 +16,7 @@ import java.util.List;
  * 基于 ByteBuddy 的高性能字节码代理引擎
  * <p>适用场景：目标类型中包含普通 Class (非 final 类)</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 public class ByteBuddyProxyEngine implements ProxyEngine {
 

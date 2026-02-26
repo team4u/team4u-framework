@@ -5,7 +5,7 @@ import java.lang.reflect.Method;
 /**
  * 统一的方法执行上下文
  *
- * @author team4u
+ * @author jay.wu
  */
 public interface MethodInvocation {
 

@@ -8,7 +8,7 @@ import java.lang.reflect.Method;
 /**
  * 热交换拦截器：支持运行时无缝、线程安全地替换委托对象
  *
- * @author team4u
+ * @author jay.wu
  */
 public class HotSwapInterceptor extends DelegateInterceptor {
 

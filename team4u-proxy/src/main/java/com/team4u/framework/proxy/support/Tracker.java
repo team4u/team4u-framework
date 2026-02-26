@@ -5,7 +5,7 @@ import java.lang.reflect.Method;
 /**
  * 追踪器接口
  *
- * @author team4u
+ * @author jay.wu
  */
 public interface Tracker {
     void before(Object proxy, Method method, Object[] args);

@@ -3,7 +3,7 @@ package com.team4u.framework.proxy.core;
 /**
  * 代理组件全局基础异常
  *
- * @author team4u
+ * @author jay.wu
  */
 public class ProxyException extends RuntimeException {
 

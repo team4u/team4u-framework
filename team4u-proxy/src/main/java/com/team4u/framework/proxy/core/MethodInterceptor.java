@@ -3,7 +3,7 @@ package com.team4u.framework.proxy.core;
 /**
  * 统一的方法拦截器接口 (AOP 环绕增强)
  *
- * @author team4u
+ * @author jay.wu
  */
 public interface MethodInterceptor {
 
