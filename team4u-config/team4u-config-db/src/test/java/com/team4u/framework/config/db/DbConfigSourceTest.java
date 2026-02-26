@@ -1,0 +1,205 @@
+package com.team4u.framework.config.db;
+
+import cn.hutool.core.thread.ThreadUtil;
+import cn.hutool.db.Db;
+import cn.hutool.db.Entity;
+import cn.hutool.db.ds.simple.SimpleDataSource;
+import com.team4u.framework.config.core.domain.ConfigEntry;
+import com.team4u.framework.config.core.spi.ConfigSource;
+import org.junit.After;
+import org.junit.Before;
+import org.junit.Test;
+
+import javax.sql.DataSource;
+import java.sql.SQLException;
+import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
+
+import static org.junit.Assert.*;
+
+/**
+ * 数据库配置源及监听器集成测试。
+ */
+public class DbConfigSourceTest {
+
+    /**
+     * H2 内存数据库数据源
+     */
+    private DataSource dataSource;
+
+    @Before
+    public void setUp() throws SQLException {
+        // 初始化 H2 内存数据库，开启 MySQL 兼容模式
+        String jdbcUrl = "jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1";
+        dataSource = new SimpleDataSource(jdbcUrl, "sa", "");
+
+        // 建表 DDL
+        String ddl = "DROP TABLE IF EXISTS system_config;\n" +
+                "CREATE TABLE system_config\n" +
+                "(\n" +
+                "    id           BIGINT(20) UNSIGNED NOT NULL AUTO_INCREMENT,\n" +
+                "    enabled      TINYINT      DEFAULT 1  NOT NULL,\n" +
+                "    config_type  VARCHAR(32)  DEFAULT '' NOT NULL,\n" +
+                "    config_key   VARCHAR(50)  DEFAULT '' NOT NULL,\n" +
+                "    config_value VARCHAR(500) DEFAULT '' NOT NULL,\n" +
+                "    description  VARCHAR(255) DEFAULT '' NOT NULL,\n" +
+                "    create_time  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP,\n" +
+                "    update_time  TIMESTAMP    NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,\n" +
+                "    PRIMARY KEY (id),\n" +
+                "    UNIQUE INDEX uniq_config_id (config_type, config_key)\n" +
+                ");";
+        Db.use(dataSource).execute(ddl);
+
+        // 插入初始测试数据
+        Db.use(dataSource).insert(Entity.create("system_config")
+                .set("config_type", "app")
+                .set("config_key", "name")
+                .set("config_value", "Team4uApp"));
+        Db.use(dataSource).insert(Entity.create("system_config")
+                .set("config_type", "app")
+                .set("config_key", "port")
+                .set("config_value", "8080"));
+        Db.use(dataSource).insert(Entity.create("system_config")
+                .set("config_type", "db")
+                .set("config_key", "url")
+                .set("config_value", "jdbc:mysql://localhost:3306/test"));
+    }
+
+    @After
+    public void tearDown() throws SQLException {
+        Db.use(dataSource).execute("DROP TABLE IF EXISTS system_config");
+    }
+
+    /**
+     * 全量加载场景。
+     */
+    @Test
+    public void testLoadAll() {
+        DbConfigSource source = new DbConfigSource("DB-All", 100, dataSource);
+        Map<String, ConfigEntry> config = source.load();
+
+        assertEquals(3, config.size());
+        assertEquals("Team4uApp", config.get("app.name").getValue());
+        assertEquals("8080", config.get("app.port").getValue());
+        assertEquals("jdbc:mysql://localhost:3306/test", config.get("db.url").getValue());
+    }
+
+
+    /**
+     * 软删除逻辑测试。
+     */
+    @Test
+    public void testSoftDeleteTombstone() throws SQLException {
+        DbConfigSource source = new DbConfigSource("DB-All", 100, dataSource);
+
+        // 将 app.port 软删除
+        Db.use(dataSource).execute("UPDATE system_config SET enabled = 0 WHERE config_key = 'port'");
+
+        Map<String, ConfigEntry> config = source.load();
+
+        ConfigEntry portEntry = config.get("app.port");
+        assertNotNull("软删除条目仍应存在于结果集中", portEntry);
+        assertEquals("软删除条目的值应为 TOMBSTONE_VALUE", ConfigSource.TOMBSTONE_VALUE, portEntry.getValue());
+        assertTrue("isEmptyOrDeleted() 应返回 true", portEntry.isEmptyOrDeleted());
+
+        // 未删除的条目应保持正常
+        assertFalse("正常条目不应被判断为已删除", config.get("app.name").isEmptyOrDeleted());
+    }
+
+    /**
+     * 增量加载场景。
+     */
+    @Test
+    public void testIncrementalLoad() throws SQLException {
+        DbConfigSource source = new DbConfigSource("DB-All", 100, dataSource);
+
+        // 记录当前时间作为快照基线
+        long snapshotTime = System.currentTimeMillis();
+
+        // 停顿 1 秒，确保后续写入的 update_time 大于快照时间
+        ThreadUtil.sleep(1100);
+
+        // 新增一条记录
+        Db.use(dataSource).insert(Entity.create("system_config")
+                .set("config_type", "app")
+                .set("config_key", "timeout")
+                .set("config_value", "3000"));
+
+        // 修改一条已有记录
+        Db.use(dataSource).execute("UPDATE system_config SET config_value = '9090' WHERE config_key = 'port'");
+
+        // 执行增量加载，只应返回新增和修改的两条
+        Map<String, ConfigEntry> changes = source.loadSince(snapshotTime);
+
+        assertEquals("增量结果应包含新增和修改各一条", 2, changes.size());
+        assertEquals("3000", changes.get("app.timeout").getValue());
+        assertEquals("9090", changes.get("app.port").getValue());
+        // 未发生变更的条目不应出现在增量结果中
+        assertNull("未变更的条目不应出现在增量结果中", changes.get("app.name"));
+    }
+
+    /**
+     * 自定义映射测试，验证表名和字段名可配置。
+     */
+    @Test
+    public void testCustomConfiguration() throws SQLException {
+        // 创建自定义表
+        String customDdl = "CREATE TABLE my_custom_config\n" +
+                "(\n" +
+                "    my_type  VARCHAR(32),\n" +
+                "    my_key   VARCHAR(50),\n" +
+                "    my_value VARCHAR(500),\n" +
+                "    my_status TINYINT DEFAULT 1,\n" +
+                "    my_time  TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n" +
+                ");";
+        Db.use(dataSource).execute(customDdl);
+
+        Db.use(dataSource).insert(Entity.create("my_custom_config")
+                .set("my_type", "custom")
+                .set("my_key", "foo")
+                .set("my_value", "bar"));
+
+        // 配置映射选项
+        DbConfigOptions options = new DbConfigOptions()
+                .setTableName("my_custom_config")
+                .setConfigTypeColumn("my_type")
+                .setConfigKeyColumn("my_key")
+                .setConfigValueColumn("my_value")
+                .setEnabledColumn("my_status")
+                .setUpdateTimeColumn("my_time");
+
+        DbConfigSource source = new DbConfigSource("Custom", 100, dataSource, options);
+        Map<String, ConfigEntry> config = source.load();
+
+        assertEquals(1, config.size());
+        assertEquals("bar", config.get("custom.foo").getValue());
+
+        Db.use(dataSource).execute("DROP TABLE my_custom_config");
+    }
+
+    /**
+     * 变更探测监听测试。
+     */
+    @Test
+    public void testWatcherTriggering() throws SQLException {
+        // 轮询间隔设为 1 秒以加快测试速度
+        DbConfigWatcher watcher = new DbConfigWatcher(dataSource, 1);
+
+        AtomicBoolean triggered = new AtomicBoolean(false);
+        watcher.watch(() -> triggered.set(true));
+
+        // 等待初始轮询完成，建立基线
+        ThreadUtil.sleep(1200);
+        assertFalse("初始化阶段不应触发 changeSignal", triggered.get());
+
+        // 修改数据库中的配置值
+        Db.use(dataSource).execute("UPDATE system_config SET config_value = '9090' WHERE config_key = 'port'");
+
+        // 等待下一轮轮询完成
+        ThreadUtil.sleep(1500);
+
+        assertTrue("数据库发生变更后，应触发 changeSignal 回调", triggered.get());
+
+        watcher.destroy();
+    }
+}
