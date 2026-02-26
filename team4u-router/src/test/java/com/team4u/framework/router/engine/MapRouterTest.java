@@ -52,4 +52,25 @@ public class MapRouterTest {
         RouteResult<String> resultC = router.route("C");
         Assert.assertFalse(resultC.isMatch());
     }
+
+    @Test
+    public void testFallbackValue() {
+        RoutePolicy policy = new RoutePolicy();
+        policy.setFallbackValue("ExplicitFallback");
+
+        LinkedHashMap<String, Object> rules = new LinkedHashMap<>();
+        rules.put("A", "ValueA");
+        rules.put("*", "ValueStar");
+        policy.setRules(rules);
+
+        MapRouter router = new MapRouter(policy);
+
+        // 精准匹配正常工作
+        Assert.assertEquals("ValueA", router.<String>route("A").getValue());
+
+        // fallbackValue 优先级高于 *
+        RouteResult<String> result = router.route("B");
+        Assert.assertTrue(result.isMatch());
+        Assert.assertEquals("ExplicitFallback", result.getValue());
+    }
 }

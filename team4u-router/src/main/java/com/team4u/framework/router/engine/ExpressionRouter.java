@@ -16,6 +16,7 @@ public class ExpressionRouter implements Router {
 
     private final Map<String, Object> rules;
     private final Criteria criteria;
+    private final Object fallbackValue;
 
     public ExpressionRouter(RoutePolicy policy) {
         this(policy, null);
@@ -24,21 +25,45 @@ public class ExpressionRouter implements Router {
     public ExpressionRouter(RoutePolicy policy, Criteria criteria) {
         this.rules = policy.getRules();
         this.criteria = criteria != null ? criteria : Criteria.global();
+        this.fallbackValue = policy.getFallbackValue();
     }
 
     @SuppressWarnings("unchecked")
     @Override
     public <T> RouteResult<T> route(Object request) {
+        // 构建匹配上下文，确保请求对象可用作表达式计算
         MatchContext context = (request instanceof MatchContext) ?
                 (MatchContext) request : MatchContext.of(request);
 
+        // 按顺序遍历所有路由规则进行匹配
         for (Map.Entry<String, Object> entry : rules.entrySet()) {
             String expr = entry.getKey();
-            if ("*".equals(expr) || criteria.matches(expr, context)) {
+            // 跳过通配符 Key，统一由兜底逻辑处理，避免顺序带来的逻辑困扰
+            if ("*".equals(expr)) {
+                continue;
+            }
+
+            // 执行表达式匹配
+            if (criteria.matches(expr, context)) {
                 return RouteResult.matched((T) entry.getValue());
             }
         }
 
-        return RouteResult.unmatch();
+        // 所有规则未匹配时走兜底逻辑
+        return fallback();
+    }
+
+    /**
+     * 执行兜底逻辑
+     * 优先使用策略中的显式兜底值，若无则尝试匹配 "*" 规则（兼容旧机制）
+     */
+    @SuppressWarnings("unchecked")
+    private <T> RouteResult<T> fallback() {
+        if (fallbackValue != null) {
+            return RouteResult.matched((T) fallbackValue);
+        }
+
+        Object target = rules.get("*");
+        return target != null ? RouteResult.matched((T) target) : RouteResult.unmatch();
     }
 }

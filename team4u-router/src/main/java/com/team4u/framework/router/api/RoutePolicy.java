@@ -25,4 +25,10 @@ public class RoutePolicy {
      * 使用 LinkedHashMap 以保证有序，特别是对于表达式路由
      */
     private LinkedHashMap<String, Object> rules = new LinkedHashMap<>();
+
+    /**
+     * 兜底路由值
+     * 当所有规则都不匹配时，返回该值
+     */
+    private Object fallbackValue;
 }

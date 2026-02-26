@@ -53,9 +53,9 @@ team4u-router 是一个轻量级、插件化的 Java 路由框架。它旨在将
   "type": "expression",
   "rules": {
     "region == 'CN'": "china-handler",
-    "amount > 1000": "vip-handler",
-    "*": "default-handler"
-  }
+    "amount > 1000": "vip-handler"
+  },
+  "fallbackValue": "default-handler"
 }
 ```
 
@@ -124,7 +124,7 @@ if (result.isMatch()) {
 
 *   配置类型：`type: "map"`
 *   匹配逻辑：`rules.get(String.valueOf(request))`
-*   兜底机制：支持使用 `*` 作为 Key 进行全量覆盖。
+*   兜底机制：**标准化兜底**。优先使用 `fallbackValue` 字段；为兼容旧配置，也支持 `rules` 中以 `*` 为 Key 的规则。
 
 ### 2. ExpressionRouter (表达式路由)
 
@@ -132,6 +132,7 @@ if (result.isMatch()) {
 
 *   配置类型：`type: "expression"`
 *   短路匹配：规则按定义的顺序（LinkedHashMap）依次执行，一旦匹配成功立即返回。
+*   **可靠兜底**：兜底逻辑（`fallbackValue` 或 `*`）在所有表达式均不匹配后执行。这解决了在 `rules` 中配置 `*` 可能因位置靠前而导致拦截后续正常规则的问题。
 *   多样化输入：支持 `Map`、`POJO` 或 `MatchContext` 作为输入。
 *   **算子解耦**：支持通过 `ExpressionRouterFactory` 注入自定义的 `Criteria` 实例（默认为 `global()`）。这使得复杂的业务线可以使用相互隔离的自定义算子，避免全局算子互相污染。
 
@@ -156,9 +157,9 @@ if (result.isMatch()) {
   "type": "map",
   "rules": {
     "v1": "handler-v1",
-    "v2": "handler-v2",
-    "*": "handler-v1"
-  }
+    "v2": "handler-v2"
+  },
+  "fallbackValue": "handler-v1"
 }
 ```
 
@@ -170,9 +171,9 @@ if (result.isMatch()) {
 {
   "type": "expression",
   "rules": {
-    "userId hash 0.1": "gray-version",
-    "*": "stable-version"
-  }
+    "userId hash 0.1": "gray-version"
+  },
+  "fallbackValue": "stable-version"
 }
 ```
 
@@ -190,9 +191,9 @@ if (result.isMatch()) {
   "type": "expression",
   "rules": {
     "userId hash 0.2": "strategy-A",
-    "userId hash 0.5": "strategy-B",
-    "*": "strategy-C"
-  }
+    "userId hash 0.5": "strategy-B"
+  },
+  "fallbackValue": "strategy-C"
 }
 ```
 
@@ -205,9 +206,9 @@ if (result.isMatch()) {
   "type": "expression",
   "rules": {
     "category == 'ELECTRONICS' && amount > 5000": "special-discount-model",
-    "userRank >= 5 || tags contains 'VIP'": "vip-pricing-model",
-    "*": "standard-pricing-model"
-  }
+    "userRank >= 5 || tags contains 'VIP'": "vip-pricing-model"
+  },
+  "fallbackValue": "standard-pricing-model"
 }
 ```
 

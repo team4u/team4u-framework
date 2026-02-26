@@ -97,4 +97,32 @@ public class ExpressionRouterTest {
         result = router.route(req);
         Assert.assertFalse(result.isMatch());
     }
+
+    @Test
+    public void testFallbackValueAndOrderIndependence() {
+        RoutePolicy policy = new RoutePolicy();
+        policy.setFallbackValue("ExplicitFallback");
+
+        LinkedHashMap<String, Object> rules = new LinkedHashMap<>();
+        // 即使 * 在第一位，由于我们重构了逻辑，它不再拦截后续正常的表达式匹配
+        rules.put("*", "ValueStar");
+        rules.put("name == 'A'", "ValueA");
+        policy.setRules(rules);
+
+        ExpressionRouter router = new ExpressionRouter(policy);
+
+        // 精准匹配正常工作，说明 * 的位置不再影响结果
+        Map<String, Object> req1 = new HashMap<>();
+        req1.put("name", "A");
+        RouteResult<String> result1 = router.route(req1);
+        Assert.assertTrue(result1.isMatch());
+        Assert.assertEquals("ValueA", result1.getValue());
+
+        // fallbackValue 优先级高于 *
+        Map<String, Object> req2 = new HashMap<>();
+        req2.put("name", "B");
+        RouteResult<String> result2 = router.route(req2);
+        Assert.assertTrue(result2.isMatch());
+        Assert.assertEquals("ExplicitFallback", result2.getValue());
+    }
 }

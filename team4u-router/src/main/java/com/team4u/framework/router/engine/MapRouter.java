@@ -12,28 +12,41 @@ import java.util.Map;
 public class MapRouter implements Router {
 
     private final Map<String, Object> rules;
+    private final Object fallbackValue;
 
     public MapRouter(RoutePolicy policy) {
         this.rules = policy.getRules();
+        this.fallbackValue = policy.getFallbackValue();
     }
 
     @SuppressWarnings("unchecked")
     @Override
     public <T> RouteResult<T> route(Object request) {
+        // 请求对象为空时直接走兜底逻辑
         if (request == null) {
             return fallback();
         }
 
+        // 尝试从规则库中精确匹配
         Object target = rules.get(String.valueOf(request));
         if (target != null) {
             return RouteResult.matched((T) target);
         }
 
+        // 未匹配时走兜底逻辑
         return fallback();
     }
 
+    /**
+     * 执行兜底逻辑
+     * 优先使用策略中的显式兜底值，若无则尝试匹配 "*" 规则（兼容旧机制）
+     */
     @SuppressWarnings("unchecked")
     private <T> RouteResult<T> fallback() {
+        if (fallbackValue != null) {
+            return RouteResult.matched((T) fallbackValue);
+        }
+
         Object target = rules.get("*");
         return target != null ? RouteResult.matched((T) target) : RouteResult.unmatch();
     }
