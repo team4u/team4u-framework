@@ -48,7 +48,10 @@ public class Criteria {
     /**
      * 默认的全局标准实例（预配置且不可变）
      */
-    private static final Criteria STANDARD_INSTANCE = builder().build();
+    private static final Criteria STANDARD_INSTANCE = new Criteria(
+            StandardCriterionParser.global(),
+            CompilerRegistry.global()
+    );
 
     /**
      * 解析器

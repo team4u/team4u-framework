@@ -48,12 +48,11 @@
 `Criteria` 实例是不可变的，支持单例复用：
 
 #### 1. 标准实例（推荐）
-适用于大多数场景，无需任何配置，直接复用全局单例。你也可以在首次调用前，通过全局注册表注入自定义算子：
+适用于大多数场景，无需任何配置，直接复用全局单例。你也可以在首次调用前，通过全局解析器注入自定义算子：
 
 ```java
 // 全局注册一个自定义算子
-StandardCriterionParser parser = (StandardCriterionParser) Criteria.standard().getParser();
-parser.addOperator("is_odd", (actual, expected) -> (int)actual % 2 != 0);
+StandardCriterionParser.global().addOperator("is_odd", (actual, expected) -> (int)actual % 2 != 0);
 
 // 后续所有 Criteria.standard() 的调用都将支持 is_odd 语法
 boolean result = Criteria.standard().matches("it is_odd true", 3); // true

@@ -28,6 +28,17 @@ import java.util.regex.Pattern;
  */
 public class StandardCriterionParser implements CriterionParser {
 
+    private static final StandardCriterionParser GLOBAL = new StandardCriterionParser(ValueConverterRegistry.global());
+
+    /**
+     * 获取全局共享的标准表达式解析器实例
+     *
+     * @return 全局解析器实例
+     */
+    public static StandardCriterionParser global() {
+        return GLOBAL;
+    }
+
     /**
      * 语法处理器注册表
      */
