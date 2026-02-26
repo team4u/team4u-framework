@@ -47,13 +47,13 @@ public class DefaultConfigManagerCacheTest {
         DefaultConfigManager manager = new DefaultConfigManager(sourceRegistry, watcherRegistry,
                 new PropertyConverterRegistry(), configBinder);
 
-        // 测试接口代理缓存
-        TestInterface proxy1 = manager.createProxy("app", TestInterface.class);
-        TestInterface proxy2 = manager.createProxy("app", TestInterface.class);
-        Assert.assertSame("多次调用 createProxy 创建接口代理应返回同一实例", proxy1, proxy2);
+        // 测试 Bean 代理缓存
+        TestConfig proxy1 = manager.createProxy("app", TestConfig.class);
+        TestConfig proxy2 = manager.createProxy("app", TestConfig.class);
+        Assert.assertSame("多次调用 createProxy 应返回同一代理实例", proxy1, proxy2);
 
         // 测试不同前缀
-        TestInterface proxy3 = manager.createProxy("other", TestInterface.class);
+        TestConfig proxy3 = manager.createProxy("other", TestConfig.class);
         Assert.assertNotSame("不同前缀应返回不同代理实例", proxy1, proxy3);
 
         // 测试 Bean 绑定缓存
@@ -66,8 +66,16 @@ public class DefaultConfigManagerCacheTest {
         Assert.assertTrue("结果应该是代理对象", result1 instanceof com.team4u.framework.config.core.proxy.SnapshotAware);
     }
 
-    public interface TestInterface {
-        String name();
+    public static class TestConfig {
+        private String name;
+
+        public String getName() {
+            return name;
+        }
+
+        public void setName(String name) {
+            this.name = name;
+        }
     }
 
     public static class TestBean {

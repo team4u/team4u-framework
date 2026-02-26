@@ -2,7 +2,7 @@ package com.team4u.framework.config.core;
 
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.SecureUtil;
-import cn.hutool.json.JSONUtil;
+
 import com.team4u.framework.config.core.annotation.ConfigConverter;
 import com.team4u.framework.config.core.convert.JsonPropertyConverter;
 import com.team4u.framework.config.core.convert.PropertyConverter;
@@ -18,8 +18,6 @@ import java.util.Map;
 
 /**
  * 自定义转换器单元测试
- *
- * @author jay.wu
  */
 public class ConfigConverterTest {
 
@@ -44,29 +42,52 @@ public class ConfigConverterTest {
         ConverterConfig config = manager.createProxy("app", ConverterConfig.class);
 
         // 验证 CSV 转换
-        List<String> list = config.whiteList();
+        List<String> list = config.getWhiteList();
         Assert.assertEquals(3, list.size());
         Assert.assertEquals("a", list.get(0));
 
         // 验证 JSON 转换
-        User admin = config.adminUser();
+        User admin = config.getAdminUser();
         Assert.assertEquals("jay", admin.getName());
         Assert.assertEquals(18, admin.getAge());
 
         // 验证解密转换
-        Assert.assertEquals("secret_pwd", config.password());
+        Assert.assertEquals("secret_pwd", config.getPassword());
     }
 
-    public interface ConverterConfig {
-
+    public static class ConverterConfig {
         @ConfigConverter(CsvToListConverter.class)
-        List<String> whiteList();
+        private List<String> whiteList;
 
         @ConfigConverter(JsonPropertyConverter.class)
-        User adminUser();
+        private User adminUser;
 
         @ConfigConverter(DecryptConverter.class)
-        String password();
+        private String password;
+
+        public List<String> getWhiteList() {
+            return whiteList;
+        }
+
+        public void setWhiteList(List<String> whiteList) {
+            this.whiteList = whiteList;
+        }
+
+        public User getAdminUser() {
+            return adminUser;
+        }
+
+        public void setAdminUser(User adminUser) {
+            this.adminUser = adminUser;
+        }
+
+        public String getPassword() {
+            return password;
+        }
+
+        public void setPassword(String password) {
+            this.password = password;
+        }
     }
 
     /**
@@ -76,16 +97,6 @@ public class ConfigConverterTest {
         @Override
         public List<String> convert(String source, Class<List<String>> targetType) {
             return StrUtil.split(source, ',');
-        }
-    }
-
-    /**
-     * JSON 转 User 转换器
-     */
-    public static class UserInfoConverter implements PropertyConverter<User> {
-        @Override
-        public User convert(String source, Class<User> targetType) {
-            return JSONUtil.toBean(source, targetType);
         }
     }
 

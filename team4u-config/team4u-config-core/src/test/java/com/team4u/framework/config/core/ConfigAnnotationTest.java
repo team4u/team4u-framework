@@ -1,6 +1,5 @@
 package com.team4u.framework.config.core;
 
-import com.team4u.framework.config.core.annotation.ConfigDefault;
 import com.team4u.framework.config.core.annotation.ConfigKey;
 import com.team4u.framework.config.core.annotation.ConfigRequired;
 import com.team4u.framework.config.core.convert.PropertyConverterRegistry;
@@ -36,9 +35,9 @@ public class ConfigAnnotationTest {
         OssConfig config = manager.createProxy("oss", OssConfig.class);
 
         // 测试相对路径映射
-        Assert.assertEquals(100, config.maxKeys());
+        Assert.assertEquals(100, config.getMaxKeys());
         // 测试绝对路径映射
-        Assert.assertEquals("http://oss.com", config.endpoint());
+        Assert.assertEquals("http://oss.com", config.getEndpoint());
     }
 
     @Test
@@ -49,16 +48,16 @@ public class ConfigAnnotationTest {
 
         DbConfig config = manager.createProxy("db", DbConfig.class);
 
-        // url 标记了 @ConfigRequired 且无默认值，应抛出异常
+        // url 标记了 @ConfigRequired 且无配置，应抛出异常
         try {
-            config.url();
+            config.getUrl();
             Assert.fail("Should throw ConfigMissingException");
         } catch (ConfigMissingException e) {
             Assert.assertTrue(e.getMessage().contains("db.url"));
         }
 
-        // username 标记了 @ConfigRequired 但有 @ConfigDefault，不应报错
-        Assert.assertEquals("root", config.username());
+        // username 有字段初始值，@ConfigRequired 不会触发异常
+        Assert.assertEquals("root", config.getUsername());
     }
 
     @Test
@@ -72,8 +71,8 @@ public class ConfigAnnotationTest {
 
         PaymentConfig config = manager.createProxy("payment", PaymentConfig.class);
 
-        Assert.assertEquals("http://gateway.com", config.gatewayUrl());
-        Assert.assertEquals(3000L, config.timeoutMs());
+        Assert.assertEquals("http://gateway.com", config.getGatewayUrl());
+        Assert.assertEquals(3000L, config.getTimeoutMs());
     }
 
     private ConfigManager createMockManager(ConfigSnapshot snapshot) {
@@ -86,8 +85,8 @@ public class ConfigAnnotationTest {
             }
 
             @Override
-            public <T> T createProxy(String prefix, Class<T> interfaceType) {
-                return new ConfigProxyFactory(converterRegistry).createLiveProxy(this, prefix, interfaceType);
+            public <T> T createProxy(String prefix, Class<T> type) {
+                return new ConfigProxyFactory(converterRegistry).createLiveProxy(this, prefix, type);
             }
 
             @Override
@@ -96,31 +95,79 @@ public class ConfigAnnotationTest {
         };
     }
 
-    public interface OssConfig {
-        // 别名映射: oss.max-keys -> oss.max_keys_count
+    public static class OssConfig {
+        // 别名映射: getMaxKeys -> oss.max_keys_count
         @ConfigKey("max_keys_count")
-        int maxKeys();
+        private int maxKeys;
 
-        // 强制映射: oss.endpoint -> aliyun.oss.endpoint
+        // 强制映射: getEndpoint -> aliyun.oss.endpoint
         @ConfigKey(".aliyun.oss.endpoint")
-        String endpoint();
+        private String endpoint;
+
+        public int getMaxKeys() {
+            return maxKeys;
+        }
+
+        public void setMaxKeys(int maxKeys) {
+            this.maxKeys = maxKeys;
+        }
+
+        public String getEndpoint() {
+            return endpoint;
+        }
+
+        public void setEndpoint(String endpoint) {
+            this.endpoint = endpoint;
+        }
     }
 
-    public interface DbConfig {
+    public static class DbConfig {
         @ConfigRequired
-        String url();
+        private String url;
 
+        // 字段初始值作为默认值，@ConfigRequired 与字段初始值共存时，只要有初始值就不抛异常
         @ConfigRequired
-        @ConfigDefault("root")
-        String username();
+        private String username = "root";
+
+        public String getUrl() {
+            return url;
+        }
+
+        public void setUrl(String url) {
+            this.url = url;
+        }
+
+        public String getUsername() {
+            return username;
+        }
+
+        public void setUsername(String username) {
+            this.username = username;
+        }
     }
 
-    public interface PaymentConfig {
+    public static class PaymentConfig {
         @ConfigKey(".gateway.prod.url")
         @ConfigRequired
-        String gatewayUrl();
+        private String gatewayUrl;
 
-        @ConfigDefault("3000")
-        long timeoutMs();
+        // 字段初始值作为默认值
+        private long timeoutMs = 3000L;
+
+        public String getGatewayUrl() {
+            return gatewayUrl;
+        }
+
+        public void setGatewayUrl(String gatewayUrl) {
+            this.gatewayUrl = gatewayUrl;
+        }
+
+        public long getTimeoutMs() {
+            return timeoutMs;
+        }
+
+        public void setTimeoutMs(long timeoutMs) {
+            this.timeoutMs = timeoutMs;
+        }
     }
 }

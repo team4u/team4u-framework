@@ -28,7 +28,7 @@ public class ConfigPrefixTest {
 
         // 使用不带前缀的方法，应自动识别注解中的前缀 "app.db"
         DbConfig config = manager.createProxy(DbConfig.class);
-        Assert.assertEquals("jdbc:mysql://localhost:3306/test", config.url());
+        Assert.assertEquals("jdbc:mysql://localhost:3306/test", config.getUrl());
     }
 
     @Test
@@ -42,7 +42,7 @@ public class ConfigPrefixTest {
 
         // 显式传入 "prod" 前缀，应与注解叠加
         DbConfig config = manager.createProxy("prod", DbConfig.class);
-        Assert.assertEquals("jdbc:mysql://prod:3306/test", config.url());
+        Assert.assertEquals("jdbc:mysql://prod:3306/test", config.getUrl());
     }
 
     @Test
@@ -53,9 +53,9 @@ public class ConfigPrefixTest {
 
         ConfigManager manager = createConfigManager(entries);
 
-        // 接口无注解且不传前缀，应使用根路径
+        // 无注解且不传前缀，应使用根路径
         NoAnnotationConfig config = manager.createProxy(NoAnnotationConfig.class);
-        Assert.assertEquals("http://localhost", config.url());
+        Assert.assertEquals("http://localhost", config.getUrl());
     }
 
     private ConfigManager createConfigManager(Map<String, ConfigEntry> entries) {
@@ -76,11 +76,27 @@ public class ConfigPrefixTest {
     }
 
     @ConfigPrefix("app.db")
-    public interface DbConfig {
-        String url();
+    public static class DbConfig {
+        private String url;
+
+        public String getUrl() {
+            return url;
+        }
+
+        public void setUrl(String url) {
+            this.url = url;
+        }
     }
 
-    public interface NoAnnotationConfig {
-        String url();
+    public static class NoAnnotationConfig {
+        private String url;
+
+        public String getUrl() {
+            return url;
+        }
+
+        public void setUrl(String url) {
+            this.url = url;
+        }
     }
 }

@@ -21,10 +21,10 @@ team4u-config-core 是一个轻量级、高性能、类型安全的 Java 配置�
 
 ### 核心优势
 * **透明热更新**：支持 Pinned（快照）/ Live（实时）双模代理，业务无感升级，彻底告别重启。
-* **类型安全代理**：只需定义**接口或普通 Java Bean**，一行代码自动生成代理并绑定配置，支持智能松散绑定。
-* **高性能实现**：底层基于 ByteBuddy 字节码增强技术，确保配置访问性能接近原生调用。
+* **类型安全代理**：只需定义**普通 Java Bean**，一行代码自动生成代理并绑定配置，支持智能松散绑定。
+* **高性能实现**：底层基于字节码增强技术，确保配置访问性能接近原生调用。
 * **多源聚合**：内置优先级机制，支持环境变量、系统属性、远程配置的多级叠加与覆盖。
-* **智能默认值**：支持从代码初始值、注解默认值到外部配置的多级覆盖机制。
+* **智能默认值**：原生支持 Java Bean 字段初始值作为兜底默认值，无缝集成。
 
 ---
 
@@ -87,44 +87,39 @@ ConfigManager customManager = ConfigManager.builder()
 
 框架会自动为配置类创建“实时代理”。当配置源发生变更时，代理对象的方法返回值会自动更新。
 
-#### 方式 A：基于接口 (Interface)
-```java
-public interface AppConfig {
-    String getName();
-    
-    @ConfigDefault("8080")
-    int getPort();
-}
-```
+系统会自动实例化 Bean 对象，并将**代码初始值**作为最底层的默认值。
+注解（如 `@ConfigKey`）既可以标注在 **Getter 方法**上，也可以直接标注在 **Field 字段**上。
 
-#### 方式 B：基于普通类 (Java Bean)
-Java Bean 模式下支持直接使用**代码初始值**作为最底层的默认值：
 ```java
-public class ServerBean {
-    // 1. 最底层的默认值：代码初始值
+@ConfigPrefix("server")
+public class ServerConfig {
+    // 自动映射到 server.host，配置缺失时保持 "localhost"
     private String host = "localhost";
+    
+    // 映射到 server.port
     private int port = 8080;
 
-    public String getHost() { return host; }
+    @ConfigKey("admin-user")
+    private String user;
 
-    // 2. 中层默认值：通过注解指定，会覆盖代码初始值
-    @ConfigDefault("9090")
+    public String getHost() { return host; }
     public int getPort() { return port; }
+    public String getUser() { return user; }
 }
 ```
 
 > [!IMPORTANT]
 > **值覆盖优先级**：
-> **外部配置项** (最高) > **`@ConfigDefault` 注解值** > **代码初始值** (最低，仅限 Bean 模式)
+> **外部配置项** (最高) > **代码初始值** (最低)
 
 #### 代理双模式对比
 
-| 特性         | Live Mode (默认)                     | Pinned Mode (通过 pin 获取)      |
-| :----------- | :----------------------------------- | :------------------------------- |
-| 数据源       | 始终读取全局最新的快照               | 始终读取锚定时那一刻的快照       |
-| 热更新       | 实时生效                             | 实例保持旧值                     |
-| 一致性       | 弱一致                               | 强一致（生命周期内绝对不变）     |
-| 适用场景     | 绝大多数业务、实时开关               | 批处理、事务性计算、长连接初始化 |
+| 特性     | Live Mode (默认)       | Pinned Mode (通过 pin 获取)      |
+| :------- | :--------------------- | :------------------------------- |
+| 数据源   | 始终读取全局最新的快照 | 始终读取锚定时那一刻的快照       |
+| 热更新   | 实时生效               | 实例保持旧值                     |
+| 一致性   | 弱一致                 | 强一致（生命周期内绝对不变）     |
+| 适用场景 | 绝大多数业务、实时开关 | 批处理、事务性计算、长连接初始化 |
 
 ### 声明式注解 (Annotations)
 
@@ -132,22 +127,22 @@ public class ServerBean {
 用于定义统一的配置前缀。
 ```java
 @ConfigPrefix("server")
-public interface AppConfig { ... }
+public class AppConfig { ... }
 ```
 
 #### @ConfigKey
 显式指定配置键，支持绝对路径（以点号开头）。
 ```java
-@ConfigKey("max-threads") // 匹配 server.max-threads
+@ConfigKey("max-threads") // 标注在方法或字段均可
 int threads();
 
-@ConfigKey(".global.version") // 忽略前缀，匹配全局 global.version
+@ConfigKey(".global.version") // 忽略前缀，匹配全局配置项
 String version();
 ```
 
-#### @ConfigDefault & @ConfigRequired
-- `@ConfigDefault`: 提供兜底值。
-- `@ConfigRequired`: 标记为必填，缺失且无默认值时抛出 `ConfigMissingException`。
+#### @ConfigRequired
+标记为必填项。若配置中心缺失该项，且对应的 Bean 字段初始值也为 `null`，则抛出 `ConfigMissingException`。
+该注解可标注在 **Getter 方法**或 **Field 字段**上。
 
 ### 智能松散绑定 (Relaxed Binding)
 
@@ -188,8 +183,9 @@ public void process() {
 2. **重载 (Reload)**：`SnapshotAggregator` 并发读取所有 `ConfigSource` 并按优先级合并为 `ConfigSnapshot`。
 3. **生效 (Commit)**：原子化替换 `ConfigManager` 中的快照引用。
 4. **代理拦截 (Proxy)**：
-    - 底层基于 **ByteBuddy** (类代理) 或 **JDK Proxy** (接口代理)。
-    - 方法调用被拦截后，通过最新快照实时解析值。
+    - 底层基于字节码增强技术创建代理。
+    - 方法调用被拦截后，优先从最新快照中通过 `key` 解析值。
+    - 若快照中不存在，则通过 `invocation.proceed()` 调用真实 Bean 方法获取字段初始值。
     - **L2 Cache**：基于快照版本号的二级结果缓存，确保高频访问下性能接近原生调用。
 
 ### 状态流转图

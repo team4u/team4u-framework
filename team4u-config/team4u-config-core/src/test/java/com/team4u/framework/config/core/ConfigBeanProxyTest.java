@@ -1,6 +1,5 @@
 package com.team4u.framework.config.core;
 
-import com.team4u.framework.config.core.annotation.ConfigDefault;
 import com.team4u.framework.config.core.proxy.SnapshotAware;
 import com.team4u.framework.config.core.spi.InMemoryConfigSource;
 import org.junit.Assert;
@@ -25,19 +24,19 @@ public class ConfigBeanProxyTest {
         // 为普通 Java Bean 创建代理
         AppBean config = manager.createProxy("app", AppBean.class);
 
-        // 1. 验证基本功能
+        // 验证基本功能
         Assert.assertTrue("应为 SnapshotAware 实例", config instanceof SnapshotAware);
         Assert.assertEquals("old-app", config.getName());
         Assert.assertEquals(8080, config.getPort());
 
-        // 2. 验证实时热更新
+        // 验证实时热更新
         source.putAndRefresh("app.name", "new-app");
         // 等待防抖时间（默认 500ms）
         sleep(800);
-        
+
         Assert.assertEquals("代理应能实时感知配置变更", "new-app", config.getName());
 
-        // 3. 验证快照锚定 (Pinning)
+        // 验证快照锚定 (Pinning)
         AppBean pinned = SnapshotAware.pin(config);
         source.putAndRefresh("app.name", "latest-app");
         sleep(800);
@@ -56,14 +55,14 @@ public class ConfigBeanProxyTest {
 
         AppBeanWithDefault config = manager.createProxy("app", AppBeanWithDefault.class);
 
-        // 1. 没有任何配置和注解，应使用字段初始值
+        // 没有任何配置，应使用字段初始值
         Assert.assertEquals("field-default", config.getName());
         Assert.assertEquals(9090, config.getPort());
 
-        // 2. 有注解时，注解覆盖字段初始值
-        Assert.assertEquals("annotation-default", config.getAnnotationValue());
+        // 字段初始值也可以通过 @ConfigKey 映射到不同配置项进行验证
+        Assert.assertEquals("initial-value", config.getAnnotationValue());
 
-        // 3. 有配置时，配置覆盖所有
+        // 有配置时，配置覆盖所有默认值
         source.putAndRefresh("app.name", "config-value");
         sleep(800);
         Assert.assertEquals("config-value", config.getName());
@@ -79,7 +78,6 @@ public class ConfigBeanProxyTest {
     public static class AppBeanWithDefault {
         private String name = "field-default";
         private int port = 9090;
-        private String annotationValue = "field-initial";
 
         public String getName() {
             return name;
@@ -97,7 +95,9 @@ public class ConfigBeanProxyTest {
             this.port = port;
         }
 
-        @ConfigDefault("annotation-default")
+        // 字段初始值就是天然的默认值
+        private String annotationValue = "initial-value";
+
         public String getAnnotationValue() {
             return annotationValue;
         }

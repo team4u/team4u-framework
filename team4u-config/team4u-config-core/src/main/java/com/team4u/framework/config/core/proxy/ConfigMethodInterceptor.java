@@ -1,11 +1,8 @@
 package com.team4u.framework.config.core.proxy;
 
 import cn.hutool.core.convert.Convert;
-import cn.hutool.core.util.ClassUtil;
 import cn.hutool.core.util.StrUtil;
-import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.annotation.ConfigConverter;
-import com.team4u.framework.config.core.annotation.ConfigDefault;
 import com.team4u.framework.config.core.annotation.ConfigKey;
 import com.team4u.framework.config.core.annotation.ConfigRequired;
 import com.team4u.framework.config.core.convert.PropertyConverter;
@@ -19,12 +16,15 @@ import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.Supplier;
+import java.lang.annotation.Annotation;
+import java.lang.reflect.Field;
+import java.util.Optional;
 
 /**
- * 现代化的配置方法拦截器
+ * 配置方法拦截器
  * <p>
- * 基于 team4u-proxy 提供的拦截机制，实现配置项到方法调用的自动映射。
- * 支持接口代理和 Java Bean 增强模式。
+ * 实现配置项到方法调用的自动映射。
+ * 支持 Java Bean 增强模式，Bean 字段初始值作为配置缺失时的兜底默认值。
  * </p>
  *
  * @author jay.wu
@@ -32,28 +32,51 @@ import java.util.function.Supplier;
 public class ConfigMethodInterceptor implements MethodInterceptor {
 
     /**
-     * 全局方法元数据静态缓存
+     * 全局方法元数据静态缓存，用于存储方法解析后的元数据信息
      */
     private static final Map<Method, MethodMetadata> METADATA_CACHE = new ConcurrentHashMap<>();
 
+    /**
+     * 目标配置类的类型
+     */
     private final Class<?> targetType;
+
+    /**
+     * 配置键前缀
+     */
     private final String prefix;
+
+    /**
+     * 配置快照提供者，用于支持配置的动态热更新
+     */
     private final Supplier<ConfigSnapshot> snapshotProvider;
+
+    /**
+     * 是否为快照锚定模式
+     */
     private final boolean isPinned;
+
+    /**
+     * 配置代理工厂，用于创建嵌套配置的代理对象
+     */
     private final ConfigProxyFactory proxyFactory;
+
+    /**
+     * 属性转换器注册表
+     */
     private final PropertyConverterRegistry converterRegistry;
 
     /**
-     * 实例级配置值缓存，绑定快照版本号
+     * 实例级配置值缓存，绑定快照版本号，版本变更时缓存失效
      */
     private final Map<Method, CacheNode> valueCache = new ConcurrentHashMap<>();
 
     public ConfigMethodInterceptor(Class<?> targetType,
-                                   String prefix,
-                                   Supplier<ConfigSnapshot> snapshotProvider,
-                                   boolean isPinned,
-                                   ConfigProxyFactory proxyFactory,
-                                   PropertyConverterRegistry converterRegistry) {
+            String prefix,
+            Supplier<ConfigSnapshot> snapshotProvider,
+            boolean isPinned,
+            ConfigProxyFactory proxyFactory,
+            PropertyConverterRegistry converterRegistry) {
         this.targetType = targetType;
         this.prefix = normalizePrefix(prefix);
         this.snapshotProvider = snapshotProvider;
@@ -66,64 +89,73 @@ public class ConfigMethodInterceptor implements MethodInterceptor {
     public Object invoke(MethodInvocation invocation) throws Throwable {
         Method method = invocation.getMethod();
 
-        // 1. 拦截 SnapshotAware.pin() 锚定请求
+        // 拦截 SnapshotAware 接口中的 pin 方法，用于锚定当前配置快照
         if (isPinMethod(method)) {
             return handlePin(invocation.getProxy());
         }
 
-        // 2. 检查是否为需要处理的方法（无参且非 Object 基础方法）
+        // 跳过无需拦截的方法，例如 Object 基础方法或带参数的方法
         if (shouldSkip(method)) {
             return invocation.proceed();
         }
 
+        // 获取当前最新或绑定的配置快照
         ConfigSnapshot snapshot = snapshotProvider.get();
         long currentVersion = snapshot.getVersion();
 
-        // 3. 尝试从版本化缓存中快速获取
+        // 优先从二级缓存中通过版本号匹配获取解析后的结果
         CacheNode cached = valueCache.get(method);
         if (cached != null && cached.version == currentVersion) {
             return cached.value;
         }
 
-        // 4. 解析元数据
+        // 获取并缓存方法的元数据，包括配置键、转换器、必填属性等
         MethodMetadata metadata = METADATA_CACHE.computeIfAbsent(
                 method, m -> createMetadata(m, converterRegistry));
 
-        // 5. 执行解析逻辑
+        // 根据元数据解析最终的配置值
         Object value = resolveValue(metadata, snapshot, invocation);
 
-        // 6. 更新缓存
+        // 更新版本化缓存
         valueCache.put(method, new CacheNode(currentVersion, value));
 
         return value;
     }
 
+    /**
+     * 判断是否为 pin 方法
+     */
     private boolean isPinMethod(Method method) {
         return "pin".equals(method.getName()) && (method.getParameterCount() == 0);
     }
 
+    /**
+     * 判断是否需要跳过当前方法的拦截
+     */
     private boolean shouldSkip(Method method) {
-        // Object 的基础方法不拦截
+        // 不拦截 Object 类定义的 toString、hashCode 等基础方法
         if (method.getDeclaringClass() == Object.class) {
             return true;
         }
-        // 有参数的方法暂不视为配置 Getter
+        // 配置 Getter 必须是无参方法
         return method.getParameterCount() > 0;
     }
 
+    /**
+     * 判断类型是否可以进行代理增强，非基础类型且非标准集合类型通常视为可代理的配置对象
+     */
     private boolean isProxyable(Class<?> type) {
-        if (type.isInterface()) {
-            return true;
-        }
-        // 排除基础类型、字符串、数组、集合、映射等简单类型或标准容器
         return !type.isPrimitive()
                 && type != String.class
                 && !type.isArray()
                 && !Iterable.class.isAssignableFrom(type)
                 && !Map.class.isAssignableFrom(type)
-                && !java.util.Optional.class.isAssignableFrom(type);
+                && !Optional.class.isAssignableFrom(type);
     }
 
+    /**
+     * 处理快照锚定逻辑
+     */
     private Object handlePin(Object proxy) {
         if (isPinned) {
             return proxy;
@@ -131,62 +163,76 @@ public class ConfigMethodInterceptor implements MethodInterceptor {
         return proxyFactory.createPinnedProxy(snapshotProvider.get(), prefix, targetType);
     }
 
-    private Object resolveValue(MethodMetadata metadata, ConfigSnapshot snapshot, MethodInvocation invocation) throws Throwable {
+    /**
+     * 解析配置值
+     */
+    private Object resolveValue(MethodMetadata metadata, ConfigSnapshot snapshot, MethodInvocation invocation)
+            throws Throwable {
         String key = buildKey(metadata);
 
-        // 获取经过松散匹配处理后的原始配置值
+        // 获取经过松散匹配处理后的原始配置字符串
         String rawValue = snapshot.getSmart(key).orElse(null);
 
-        // 处理嵌套对象：若当前层级无直接配置，且方法返回类型可能是配置对象，则将其视为下级配置节点进行代理
+        // 处理嵌套配置对象：当没有直接配置且返回类型为可代理对象时，创建并返回嵌套代理
         if (rawValue == null && isProxyable(metadata.returnType)) {
             return proxyFactory.createProxy(snapshotProvider, key, metadata.returnType, isPinned);
         }
 
-        // 必填项缺失校验
-        if (rawValue == null && metadata.required && !metadata.hasDefaultAnnotation) {
-            throw new ConfigMissingException("配置项缺失: [" + key + "]");
-        }
-
-        // 若原始配置不存在
+        // 当配置项不存在时，调用真实 Bean 的 Getter 方法获取字段初始值
         if (rawValue == null) {
-            // 如果有注解默认值，则使用注解值
-            if (metadata.hasDefaultAnnotation) {
-                return metadata.defaultValue;
+            Object defaultValue = invocation.proceed();
+            // 如果字段也未初始化且标记为必填，则抛出异常
+            if (defaultValue == null && metadata.required) {
+                throw new ConfigMissingException("配置项缺失: [" + key + "]");
             }
-            // 否则，放行调用（如果是 Bean 则返回字段初始值，如果是接口则由 proxy 引擎返回空值）
-            return invocation.proceed();
+            return defaultValue;
         }
 
-        // 优先应用显式声明的自定义属性转换器
+        // 如果配置了自定义转换器，则使用转换器处理
         if (metadata.converter != null) {
-            return convertWithCustomConverter(rawValue, metadata);
+            return convertWithCustomConverter(rawValue, metadata, invocation);
         }
 
-        // 应用通用类型转换引擎
-        return convert(rawValue, metadata);
+        // 使用通用转换引擎进行处理
+        return convert(rawValue, metadata, invocation);
     }
 
-    @SuppressWarnings({"rawtypes", "unchecked"})
-    private Object convertWithCustomConverter(String rawValue, MethodMetadata metadata) {
+    /**
+     * 使用自定义转换器进行转换
+     */
+    @SuppressWarnings({ "rawtypes", "unchecked" })
+    private Object convertWithCustomConverter(String rawValue, MethodMetadata metadata, MethodInvocation invocation)
+            throws Throwable {
         try {
             return ((PropertyConverter) metadata.converter).convert(rawValue, metadata.returnType);
         } catch (Exception e) {
-            return metadata.defaultValue;
+            // 转换发生异常时回退到字段初始值
+            return invocation.proceed();
         }
     }
 
-    private Object convert(String rawValue, MethodMetadata metadata) {
+    /**
+     * 执行通用类型转换
+     */
+    private Object convert(String rawValue, MethodMetadata metadata, MethodInvocation invocation) throws Throwable {
         try {
             return Convert.convert(metadata.returnType, rawValue);
         } catch (Exception e) {
-            return metadata.defaultValue;
+            // 转换失败时回退到字段初始值
+            return invocation.proceed();
         }
     }
 
+    /**
+     * 构建完整的配置键
+     */
     private String buildKey(MethodMetadata metadata) {
         return metadata.absolute ? metadata.baseName : prefix + metadata.baseName;
     }
 
+    /**
+     * 标准化路径前缀，确保以点号结尾
+     */
     private String normalizePrefix(String prefix) {
         if (prefix == null || prefix.isEmpty()) {
             return "";
@@ -194,30 +240,77 @@ public class ConfigMethodInterceptor implements MethodInterceptor {
         return prefix.endsWith(".") ? prefix : prefix + ".";
     }
 
+    /**
+     * 创建方法相关的元数据信息
+     */
     private static MethodMetadata createMetadata(Method method, PropertyConverterRegistry converterRegistry) {
-        String baseName = resolveBaseName(method);
-        boolean absolute = isAbsoluteKey(method);
         Class<?> returnType = method.getReturnType();
-        boolean required = method.isAnnotationPresent(ConfigRequired.class);
-        boolean hasDefaultAnnotation = method.isAnnotationPresent(ConfigDefault.class);
-        Object defaultValue = resolveDefaultValue(method, returnType);
-        PropertyConverter<?> converter = loadConverter(method, converterRegistry);
+        Field field = findField(method);
 
-        return new MethodMetadata(baseName, returnType, defaultValue, hasDefaultAnnotation, required, absolute, converter);
+        String baseName = resolveBaseName(method, field);
+        boolean absolute = isAbsoluteKey(method, field);
+        boolean required = isAnnotationPresent(method, field, ConfigRequired.class);
+        PropertyConverter<?> converter = loadConverter(method, field, converterRegistry);
+
+        return new MethodMetadata(baseName, returnType, required, absolute, converter);
     }
 
-    private static String resolveBaseName(Method method) {
+    /**
+     * 查找方法对应的类字段
+     */
+    private static Field findField(Method method) {
+        String propertyName = inferNameFromGetter(method.getName());
+        try {
+            return method.getDeclaringClass().getDeclaredField(propertyName);
+        } catch (NoSuchFieldException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 检查方法或对应字段上是否存在指定注解
+     */
+    private static boolean isAnnotationPresent(Method method, Field field,
+            Class<? extends Annotation> annotationClass) {
+        return method.isAnnotationPresent(annotationClass)
+                || (field != null && field.isAnnotationPresent(annotationClass));
+    }
+
+    /**
+     * 解析配置基础键名，支持从方法或字段的注解中提取，或根据 Getter 方法名推断
+     */
+    private static String resolveBaseName(Method method, Field field) {
+        ConfigKey annotation = null;
         if (method.isAnnotationPresent(ConfigKey.class)) {
-            String keyValue = method.getAnnotation(ConfigKey.class).value();
+            annotation = method.getAnnotation(ConfigKey.class);
+        } else if (field != null && field.isAnnotationPresent(ConfigKey.class)) {
+            annotation = field.getAnnotation(ConfigKey.class);
+        }
+
+        if (annotation != null) {
+            String keyValue = annotation.value();
+            // 绝对路径标记会在后续逻辑中通过 absolute 标志识别
             return keyValue.startsWith(".") ? keyValue.substring(1) : keyValue;
         }
         return inferNameFromGetter(method.getName());
     }
 
-    private static boolean isAbsoluteKey(Method method) {
-        return method.isAnnotationPresent(ConfigKey.class) && method.getAnnotation(ConfigKey.class).value().startsWith(".");
+    /**
+     * 判断是否为绝对路径配置键
+     */
+    private static boolean isAbsoluteKey(Method method, Field field) {
+        ConfigKey annotation = null;
+        if (method.isAnnotationPresent(ConfigKey.class)) {
+            annotation = method.getAnnotation(ConfigKey.class);
+        } else if (field != null && field.isAnnotationPresent(ConfigKey.class)) {
+            annotation = field.getAnnotation(ConfigKey.class);
+        }
+        return annotation != null && annotation.value().startsWith(".");
     }
 
+    /**
+     * 从 Getter 方法名推断其属性名称
+     */
     private static String inferNameFromGetter(String methodName) {
         if (methodName.startsWith("get") && methodName.length() > 3) {
             return StrUtil.lowerFirst(methodName.substring(3));
@@ -228,54 +321,57 @@ public class ConfigMethodInterceptor implements MethodInterceptor {
         return methodName;
     }
 
-    private static Object resolveDefaultValue(Method method, Class<?> returnType) {
-        if (method.isAnnotationPresent(ConfigDefault.class)) {
-            String annotationValue = method.getAnnotation(ConfigDefault.class).value();
-            try {
-                return Convert.convert(returnType, annotationValue);
-            } catch (Exception ignore) {
-            }
+    /**
+     * 加载并初始化属性转换器
+     */
+    private static PropertyConverter<?> loadConverter(Method method, Field field,
+            PropertyConverterRegistry registry) {
+        ConfigConverter annotation = null;
+        if (method.isAnnotationPresent(ConfigConverter.class)) {
+            annotation = method.getAnnotation(ConfigConverter.class);
+        } else if (field != null && field.isAnnotationPresent(ConfigConverter.class)) {
+            annotation = field.getAnnotation(ConfigConverter.class);
         }
-        return ClassUtil.getDefaultValue(returnType);
-    }
 
-    private static PropertyConverter<?> loadConverter(Method method, PropertyConverterRegistry registry) {
-        if (!method.isAnnotationPresent(ConfigConverter.class)) {
+        if (annotation == null) {
             return null;
         }
 
-        Class<? extends PropertyConverter<?>> converterClass = method.getAnnotation(ConfigConverter.class).value();
+        Class<? extends PropertyConverter<?>> converterClass = annotation.value();
         return registry.get(converterClass).orElseGet(() -> {
             try {
                 PropertyConverter<?> instance = converterClass.getDeclaredConstructor().newInstance();
                 registry.register(instance);
                 return instance;
             } catch (Exception e) {
-                throw new IllegalStateException("无法实例化转换器: " + converterClass.getName(), e);
+                throw new IllegalStateException("实例化转换器失败: " + converterClass.getName(), e);
             }
         });
     }
 
+    /**
+     * 方法元数据内部类
+     */
     private static final class MethodMetadata {
         final String baseName;
         final Class<?> returnType;
-        final Object defaultValue;
-        final boolean hasDefaultAnnotation;
         final boolean required;
         final boolean absolute;
         final PropertyConverter<?> converter;
 
-        MethodMetadata(String baseName, Class<?> returnType, Object defaultValue, boolean hasDefaultAnnotation, boolean required, boolean absolute, PropertyConverter<?> converter) {
+        MethodMetadata(String baseName, Class<?> returnType, boolean required, boolean absolute,
+                PropertyConverter<?> converter) {
             this.baseName = baseName;
             this.returnType = returnType;
-            this.defaultValue = defaultValue;
-            this.hasDefaultAnnotation = hasDefaultAnnotation;
             this.required = required;
             this.absolute = absolute;
             this.converter = converter;
         }
     }
 
+    /**
+     * 缓存节点内部类，通过版本号实现缓存失效机制
+     */
     private static final class CacheNode {
         final long version;
         final Object value;
