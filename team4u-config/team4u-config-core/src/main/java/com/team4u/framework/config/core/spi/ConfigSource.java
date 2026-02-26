@@ -1,7 +1,7 @@
 package com.team4u.framework.config.core.spi;
 
 import com.team4u.framework.config.core.domain.ConfigEntry;
-import com.team4u.framework.policy.OrderedPolicy;
+import com.team4u.framework.policy.api.OrderedPolicy;
 
 import java.util.Map;
 

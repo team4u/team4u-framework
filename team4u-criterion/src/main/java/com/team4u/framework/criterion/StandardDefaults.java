@@ -2,8 +2,8 @@ package com.team4u.framework.criterion;
 
 import com.team4u.framework.criterion.compiler.CompilerRegistry;
 import com.team4u.framework.criterion.model.convert.ValueConverterRegistry;
-import com.team4u.framework.policy.PolicyRegistry;
-import com.team4u.framework.policy.PolicyScanner;
+import com.team4u.framework.policy.api.PolicyRegistry;
+import com.team4u.framework.policy.util.PolicyScanner;
 
 /**
  * 规则引擎标准默认策略持有者

@@ -1,6 +1,6 @@
 package com.team4u.framework.config.core.spi;
 
-import com.team4u.framework.policy.OrderedPolicy;
+import com.team4u.framework.policy.api.OrderedPolicy;
 
 /**
  * 配置变更监听器 SPI 接口

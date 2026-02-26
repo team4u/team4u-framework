@@ -2,7 +2,7 @@ package com.team4u.framework.criterion.parser;
 
 import com.team4u.framework.criterion.model.Criterion;
 import com.team4u.framework.criterion.parser.handler.RelationalOperatorSyntaxHandler;
-import com.team4u.framework.policy.ContextPolicy;
+import com.team4u.framework.policy.api.ContextPolicy;
 
 /**
  * 语法处理器接口

@@ -1,6 +1,6 @@
 package com.team4u.framework.criterion.model.convert;
 
-import com.team4u.framework.policy.KeyedPolicyRegistry;
+import com.team4u.framework.policy.core.KeyedPolicyRegistry;
 
 /**
  * 转换器注册表

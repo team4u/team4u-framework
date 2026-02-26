@@ -1,6 +1,6 @@
 package com.team4u.framework.config.core.spi;
 
-import com.team4u.framework.policy.OrderedPolicyChain;
+import com.team4u.framework.policy.core.OrderedPolicyChain;
 
 /**
  * 配置源注册表

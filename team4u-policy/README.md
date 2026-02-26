@@ -33,13 +33,12 @@
 继承 `KeyedPolicy<K>` 接口，其中 `K` 是路由键的类型（通常是 String 或 Integer）。
 
 ```java
-import com.team4u.framework.policy.KeyedPolicy;
+import com.team4u.framework.policy.api.KeyedPolicy;
 
 // 定义支付策略接口
 public interface PaymentPolicy extends KeyedPolicy<String> {
     void pay(double amount);
 }
-
 ```
 
 ### 实现具体策略
@@ -58,7 +57,6 @@ public class AlipayPolicy implements PaymentPolicy {
         System.out.println("Using Alipay: " + amount);
     }
 }
-
 ```
 
 ### 注册与使用 (`KeyedPolicyRegistry`)
@@ -66,25 +64,16 @@ public class AlipayPolicy implements PaymentPolicy {
 使用 `KeyedPolicyRegistry` 进行管理。该注册表针对读操作进行了极致优化（Copy-On-Write 机制），确保高并发下的读取性能。
 
 ```java
-import com.team4u.framework.policy.KeyedPolicyRegistry;
+import com.team4u.framework.policy.core.KeyedPolicyRegistry;
 
 // 创建注册表
 KeyedPolicyRegistry<String, PaymentPolicy> registry = new KeyedPolicyRegistry<>(PaymentPolicy.class);
 
 // 注册策略
-registry.
-
-        register(new AlipayPolicy());
+registry.register(new AlipayPolicy());
 
 // 使用策略 (O(1) 查找)
-        registry.
-
-        get("ALIPAY").
-
-        ifPresent(policy ->policy.
-
-        pay(100.0));
-
+registry.get("ALIPAY").ifPresent(policy -> policy.pay(100.0));
 ```
 
 ---
@@ -98,13 +87,12 @@ registry.
 继承 `ContextPolicy<C>` 接口，其中 `C` 是上下文对象的类型。
 
 ```java
-import com.team4u.framework.policy.ContextPolicy;
+import com.team4u.framework.policy.api.ContextPolicy;
 
 // 定义优惠券策略
 public interface DiscountPolicy extends ContextPolicy<OrderContext> {
     double calculate(OrderContext context);
 }
-
 ```
 
 ### 实现具体策略
@@ -128,7 +116,6 @@ public class VipDiscountPolicy implements DiscountPolicy {
         return context.getPrice() * 0.8;
     }
 }
-
 ```
 
 ### 注册与使用 (`OrderedPolicyChain`)
@@ -136,29 +123,20 @@ public class VipDiscountPolicy implements DiscountPolicy {
 使用 `OrderedPolicyChain` 管理。它会自动根据 `priority` 对策略进行排序。
 
 ```java
-import com.team4u.framework.policy.OrderedPolicyChain;
+import com.team4u.framework.policy.core.OrderedPolicyChain;
 
 // 创建链
 OrderedPolicyChain<OrderContext, DiscountPolicy> chain = new OrderedPolicyChain<>(DiscountPolicy.class);
 
 // 注册 (自动排序)
-chain.
+chain.register(new VipDiscountPolicy());
+chain.register(new NormalPolicy());
 
-        register(new VipDiscountPolicy());
-        chain.
-
-        register(new NormalPolicy());
-
-        // 获取所有匹配的策略
-        List<DiscountPolicy> matches = chain.allMatches(currentContext);
+// 获取所有匹配的策略
+List<DiscountPolicy> matches = chain.allMatches(currentContext);
 
 // 或者获取第一个匹配的策略
-chain.
-
-        firstMatch(currentContext).
-
-        ifPresent(p ->...);
-
+chain.firstMatch(currentContext).ifPresent(p -> ...);
 ```
 
 ### 高级用法：策略流水线 (`PolicyPipeline`)
@@ -166,6 +144,8 @@ chain.
 如果你需要按顺序执行策略，并在某个策略返回 false 时中断流程（如风控拦截），可以使用 `PolicyPipeline`。
 
 ```java
+import com.team4u.framework.policy.engine.PolicyPipeline;
+
 PolicyPipeline<OrderContext> pipeline = new PolicyPipeline<>(chain);
 
 pipeline.executeChain(context, (policy, ctx) -> {
@@ -174,7 +154,6 @@ pipeline.executeChain(context, (policy, ctx) -> {
     // 返回 true 继续下一个策略，返回 false 中断流水线
     return pass;
 });
-
 ```
 
 ---
@@ -188,12 +167,13 @@ pipeline.executeChain(context, (policy, ctx) -> {
 自动扫描指定包下所有实现了策略接口的类，并注册到 Registry 中。
 
 ```java
+import com.team4u.framework.policy.util.PolicyScanner;
+
 // 扫描 PaymentPolicy 所在包下的所有实现类并注册
 PolicyScanner.scanAndRegister(registry);
 
 // 或者指定具体包名
 PolicyScanner.scanAndRegister(registry, "com.myapp.strategies", PaymentPolicy.class);
-
 ```
 
 ### ServiceLoader (SPI) 注册
@@ -201,16 +181,50 @@ PolicyScanner.scanAndRegister(registry, "com.myapp.strategies", PaymentPolicy.cl
 基于 Java 标准的 SPI 机制加载。
 
 ```java
+import com.team4u.framework.policy.util.PolicyScanner;
+
 PolicyScanner.registerFromServiceLoader(registry);
 ```
 
-配置步骤：
+### Spring 自动化集成
 
-- 在项目的 `src/main/resources/` 目录下创建 `META-INF/services/` 文件夹。
-- 创建一个以策略接口全限定名命名的文件（例如：`com.myapp.PaymentPolicy`）。
-- 在该文件中写入具体实现类的全限定名，每行一个。
+在 Spring 项目中，可以通过 `@PolicyAutoRegister` 注解实现策略的零代码自动注册。
 
-目录结构示例：
+1. **配置注册表 Bean**：使用 `@PolicyAutoRegister` 标注 Registry Bean。
+
+```java
+@Configuration
+public class PolicyConfig {
+
+    @Bean
+    @PolicyAutoRegister // 标注此注解，框架将自动从 Spring 容器中拉取所有 PaymentPolicy 实现类并注册
+    public KeyedPolicyRegistry<String, PaymentPolicy> paymentPolicyRegistry() {
+        return new KeyedPolicyRegistry<>(PaymentPolicy.class);
+    }
+}
+```
+
+2. **实现策略并注册为 Bean**：
+
+```java
+@Component
+public class AlipayPolicy implements PaymentPolicy {
+    // ... 实现方法
+}
+```
+
+3. **启用自动注册器**：在 Spring 配置类中引入 `SpringPolicyAutoRegistrar`。
+
+```java
+@Bean
+public SpringPolicyAutoRegistrar springPolicyAutoRegistrar() {
+    return new SpringPolicyAutoRegistrar();
+}
+```
+
+---
+
+## 目录结构示例
 
 ```text
 src/main/resources/
@@ -231,12 +245,14 @@ com.myapp.impl.WechatPolicy
 
 ## API 速查表
 
-| 组件 | 适用场景 | 关键特性 | 引用源 |
+| 组件 | 适用场景 | 关键特性 | 包路径 |
 | --- | --- | --- | --- |
-| KeyedPolicyRegistry | 明确 Key 的路由 (Map模式) | 读写分离，读取无锁，高性能 |  |
-| OrderedPolicyChain | 需排序、条件过滤的链式处理 | 自动排序，volatile 读优化 |  |
-| PolicyPipeline | 需中断控制的流程执行 | 封装了循环与回调逻辑 |  |
-| PolicyScanner | 策略自动发现 | 支持反射扫描与 SPI |  |
+| KeyedPolicyRegistry | 明确 Key 的路由 (Map模式) | 读写分离，读取无锁，高性能 | `com.team4u.framework.policy.core` |
+| OrderedPolicyChain | 需排序、条件过滤的链式处理 | 自动排序，volatile 读优化 | `com.team4u.framework.policy.core` |
+| PolicyPipeline | 需中断控制的流程执行 | 封装了循环与回调逻辑 | `com.team4u.framework.policy.engine` |
+| PolicyScanner | 策略自动发现 | 支持反射扫描与 SPI | `com.team4u.framework.policy.util` |
+| PolicyAutoRegister | Spring 自动注册标记 | 零代码自动注入策略 | `com.team4u.framework.policy.spring` |
+| SpringPolicyAutoRegistrar | Spring 策略发现引擎 | 自动发现并关联策略与注册表 | `com.team4u.framework.policy.spring` |
 
 ## 最佳实践
 

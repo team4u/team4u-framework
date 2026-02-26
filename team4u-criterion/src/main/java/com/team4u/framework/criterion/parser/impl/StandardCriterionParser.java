@@ -12,7 +12,7 @@ import com.team4u.framework.criterion.parser.SyntaxHandler;
 import com.team4u.framework.criterion.parser.handler.*;
 import com.team4u.framework.criterion.parser.token.Token;
 import com.team4u.framework.criterion.parser.token.TokenType;
-import com.team4u.framework.policy.OrderedPolicyChain;
+import com.team4u.framework.policy.core.OrderedPolicyChain;
 
 import java.util.ArrayList;
 import java.util.Arrays;

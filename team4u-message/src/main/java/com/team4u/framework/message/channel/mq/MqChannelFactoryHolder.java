@@ -3,7 +3,7 @@ package com.team4u.framework.message.channel.mq;
 import cn.hutool.core.io.IoUtil;
 import cn.hutool.core.util.RuntimeUtil;
 import cn.hutool.core.util.StrUtil;
-import com.team4u.framework.policy.KeyedPolicyRegistry;
+import com.team4u.framework.policy.core.KeyedPolicyRegistry;
 
 /**
  * 通道工厂注册持有者

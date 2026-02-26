@@ -1,4 +1,4 @@
-package com.team4u.framework.policy;
+package com.team4u.framework.policy.api;
 
 import java.util.Collection;
 import java.util.List;

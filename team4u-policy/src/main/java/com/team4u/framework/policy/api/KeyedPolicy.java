@@ -1,4 +1,4 @@
-package com.team4u.framework.policy;
+package com.team4u.framework.policy.api;
 
 /**
  * 键值路由策略 (用于 O(1) 极速匹配)

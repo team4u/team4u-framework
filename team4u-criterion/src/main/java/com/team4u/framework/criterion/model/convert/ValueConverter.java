@@ -1,6 +1,6 @@
 package com.team4u.framework.criterion.model.convert;
 
-import com.team4u.framework.policy.KeyedPolicy;
+import com.team4u.framework.policy.api.KeyedPolicy;
 
 import java.util.function.Function;
 

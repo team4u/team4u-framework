@@ -1,6 +1,6 @@
 package com.team4u.framework.config.core.convert;
 
-import com.team4u.framework.policy.KeyedPolicy;
+import com.team4u.framework.policy.api.KeyedPolicy;
 
 /**
  * 自定义属性转换器 SPI 接口

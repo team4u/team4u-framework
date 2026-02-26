@@ -1,6 +1,6 @@
 package com.team4u.framework.message.channel.mq;
 
-import com.team4u.framework.policy.KeyedPolicy;
+import com.team4u.framework.policy.api.KeyedPolicy;
 
 /**
  * 消息队列通道工厂 SPI 契约

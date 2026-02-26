@@ -1,4 +1,4 @@
-package com.team4u.framework.policy;
+package com.team4u.framework.policy.api;
 
 /**
  * 基于上下文匹配的策略接口

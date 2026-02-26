@@ -7,8 +7,8 @@ import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import com.team4u.framework.config.core.internal.DefaultConfigBinder;
 import com.team4u.framework.config.core.internal.DefaultConfigManager;
 import com.team4u.framework.config.core.spi.*;
-import com.team4u.framework.policy.PolicyRegistry;
-import com.team4u.framework.policy.PolicyScanner;
+import com.team4u.framework.policy.api.PolicyRegistry;
+import com.team4u.framework.policy.util.PolicyScanner;
 
 import java.util.Optional;
 

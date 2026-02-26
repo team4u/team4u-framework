@@ -1,6 +1,6 @@
 package com.team4u.framework.message.core;
 
-import com.team4u.framework.policy.ContextPolicy;
+import com.team4u.framework.policy.api.ContextPolicy;
 
 import java.util.concurrent.Executor;
 

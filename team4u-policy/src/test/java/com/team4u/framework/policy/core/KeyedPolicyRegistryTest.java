@@ -1,5 +1,8 @@
-package com.team4u.framework.policy;
+package com.team4u.framework.policy.core;
 
+import com.team4u.framework.policy.api.ContextPolicy;
+import com.team4u.framework.policy.api.KeyedPolicy;
+import com.team4u.framework.policy.exception.PolicyException;
 import org.junit.Assert;
 import org.junit.Test;
 

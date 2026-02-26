@@ -1,4 +1,4 @@
-package com.team4u.framework.policy;
+package com.team4u.framework.policy.api;
 
 /**
  * 仅提供排序功能的策略接口（无上下文匹配需求）

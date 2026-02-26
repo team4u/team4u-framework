@@ -1,7 +1,7 @@
 package com.team4u.framework.message.core.interceptor;
 
 import com.team4u.framework.message.core.Message;
-import com.team4u.framework.policy.ContextPolicy;
+import com.team4u.framework.policy.api.ContextPolicy;
 
 /**
  * 消息处理拦截器

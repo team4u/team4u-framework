@@ -1,9 +1,10 @@
-package com.team4u.framework.policy;
+package com.team4u.framework.policy.util;
 
 import cn.hutool.core.util.ClassUtil;
 import cn.hutool.core.util.ReflectUtil;
 import cn.hutool.log.Log;
 import com.team4u.framework.base.util.ServiceLoaderUtil;
+import com.team4u.framework.policy.api.PolicyRegistry;
 
 import java.lang.reflect.Modifier;
 import java.util.Objects;

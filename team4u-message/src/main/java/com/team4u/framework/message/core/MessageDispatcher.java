@@ -2,7 +2,7 @@ package com.team4u.framework.message.core;
 
 import cn.hutool.core.collection.CollUtil;
 import com.team4u.framework.message.core.interceptor.MessageInterceptor;
-import com.team4u.framework.policy.OrderedPolicyChain;
+import com.team4u.framework.policy.core.OrderedPolicyChain;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;

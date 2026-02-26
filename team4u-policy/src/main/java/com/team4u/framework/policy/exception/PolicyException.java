@@ -1,4 +1,4 @@
-package com.team4u.framework.policy;
+package com.team4u.framework.policy.exception;
 
 /**
  * 策略异常

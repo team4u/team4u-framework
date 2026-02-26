@@ -3,7 +3,7 @@ package com.team4u.framework.criterion.compiler;
 import com.team4u.framework.criterion.MatchPredicate;
 import com.team4u.framework.criterion.model.Criterion;
 import com.team4u.framework.criterion.model.CriterionVisitor;
-import com.team4u.framework.policy.KeyedPolicy;
+import com.team4u.framework.policy.api.KeyedPolicy;
 
 /**
  * 规则编译器接口 (SPI)

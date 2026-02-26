@@ -1,5 +1,7 @@
-package com.team4u.framework.policy;
+package com.team4u.framework.policy.engine;
 
+import com.team4u.framework.policy.api.ContextPolicy;
+import com.team4u.framework.policy.core.OrderedPolicyChain;
 import org.junit.Assert;
 import org.junit.Test;
 
