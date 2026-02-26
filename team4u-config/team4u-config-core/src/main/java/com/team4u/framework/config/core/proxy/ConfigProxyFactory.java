@@ -63,10 +63,22 @@ public class ConfigProxyFactory {
                 converterRegistry
         );
 
-        return ProxyBuilder.forClass(type)
+        ProxyBuilder<T> builder = ProxyBuilder.forClass(type)
                 .withInterfaces(SnapshotAware.class)
-                .asEmptyObject()
-                .addInterceptor(interceptor)
-                .build();
+                .addInterceptor(interceptor);
+
+        if (type.isInterface()) {
+            builder.asEmptyObject();
+        } else {
+            // 对于类，实例化一个真实对象作为委托，以保留字段的初始值
+            try {
+                builder.withDelegate(cn.hutool.core.util.ReflectUtil.newInstance(type));
+            } catch (Exception e) {
+                // 如果实例化失败（如没有默认构造函数），则退而求其次使用空对象模式
+                builder.asEmptyObject();
+            }
+        }
+
+        return builder.build();
     }
 }

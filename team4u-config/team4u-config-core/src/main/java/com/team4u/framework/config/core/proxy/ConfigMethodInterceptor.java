@@ -90,7 +90,7 @@ public class ConfigMethodInterceptor implements MethodInterceptor {
                 method, m -> createMetadata(m, converterRegistry));
 
         // 5. 执行解析逻辑
-        Object value = resolveValue(metadata, snapshot);
+        Object value = resolveValue(metadata, snapshot, invocation);
 
         // 6. 更新缓存
         valueCache.put(method, new CacheNode(currentVersion, value));
@@ -131,7 +131,7 @@ public class ConfigMethodInterceptor implements MethodInterceptor {
         return proxyFactory.createPinnedProxy(snapshotProvider.get(), prefix, targetType);
     }
 
-    private Object resolveValue(MethodMetadata metadata, ConfigSnapshot snapshot) {
+    private Object resolveValue(MethodMetadata metadata, ConfigSnapshot snapshot, MethodInvocation invocation) throws Throwable {
         String key = buildKey(metadata);
 
         // 获取经过松散匹配处理后的原始配置值
@@ -143,13 +143,18 @@ public class ConfigMethodInterceptor implements MethodInterceptor {
         }
 
         // 必填项缺失校验
-        if (rawValue == null && metadata.required && metadata.defaultValue == null) {
+        if (rawValue == null && metadata.required && !metadata.hasDefaultAnnotation) {
             throw new ConfigMissingException("配置项缺失: [" + key + "]");
         }
 
-        // 若原始配置不存在，则使用预解析的默认值
+        // 若原始配置不存在
         if (rawValue == null) {
-            return metadata.defaultValue;
+            // 如果有注解默认值，则使用注解值
+            if (metadata.hasDefaultAnnotation) {
+                return metadata.defaultValue;
+            }
+            // 否则，放行调用（如果是 Bean 则返回字段初始值，如果是接口则由 proxy 引擎返回空值）
+            return invocation.proceed();
         }
 
         // 优先应用显式声明的自定义属性转换器
@@ -194,10 +199,11 @@ public class ConfigMethodInterceptor implements MethodInterceptor {
         boolean absolute = isAbsoluteKey(method);
         Class<?> returnType = method.getReturnType();
         boolean required = method.isAnnotationPresent(ConfigRequired.class);
+        boolean hasDefaultAnnotation = method.isAnnotationPresent(ConfigDefault.class);
         Object defaultValue = resolveDefaultValue(method, returnType);
         PropertyConverter<?> converter = loadConverter(method, converterRegistry);
 
-        return new MethodMetadata(baseName, returnType, defaultValue, required, absolute, converter);
+        return new MethodMetadata(baseName, returnType, defaultValue, hasDefaultAnnotation, required, absolute, converter);
     }
 
     private static String resolveBaseName(Method method) {
@@ -254,14 +260,16 @@ public class ConfigMethodInterceptor implements MethodInterceptor {
         final String baseName;
         final Class<?> returnType;
         final Object defaultValue;
+        final boolean hasDefaultAnnotation;
         final boolean required;
         final boolean absolute;
         final PropertyConverter<?> converter;
 
-        MethodMetadata(String baseName, Class<?> returnType, Object defaultValue, boolean required, boolean absolute, PropertyConverter<?> converter) {
+        MethodMetadata(String baseName, Class<?> returnType, Object defaultValue, boolean hasDefaultAnnotation, boolean required, boolean absolute, PropertyConverter<?> converter) {
             this.baseName = baseName;
             this.returnType = returnType;
             this.defaultValue = defaultValue;
+            this.hasDefaultAnnotation = hasDefaultAnnotation;
             this.required = required;
             this.absolute = absolute;
             this.converter = converter;
