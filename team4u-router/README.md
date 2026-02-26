@@ -124,7 +124,7 @@ if (result.isMatch()) {
 
 *   配置类型：`type: "map"`
 *   匹配逻辑：`rules.get(String.valueOf(request))`
-*   兜底机制：**标准化兜底**。优先使用 `fallbackValue` 字段；为兼容旧配置，也支持 `rules` 中以 `*` 为 Key 的规则。
+*   兜底机制：**标准化兜底**。使用 `fallbackValue` 字段作为唯一的兜底机制。
 
 ### 2. ExpressionRouter (表达式路由)
 
@@ -132,7 +132,7 @@ if (result.isMatch()) {
 
 *   配置类型：`type: "expression"`
 *   短路匹配：规则按定义的顺序（LinkedHashMap）依次执行，一旦匹配成功立即返回。
-*   **可靠兜底**：兜底逻辑（`fallbackValue` 或 `*`）在所有表达式均不匹配后执行。这解决了在 `rules` 中配置 `*` 可能因位置靠前而导致拦截后续正常规则的问题。
+*   **可靠兜底**：使用 `fallbackValue` 字段作为唯一的兜底机制，在所有表达式均不匹配后执行。
 *   多样化输入：支持 `Map`、`POJO` 或 `MatchContext` 作为输入。
 *   **算子解耦**：支持通过 `ExpressionRouterFactory` 注入自定义的 `Criteria` 实例（默认为 `global()`）。这使得复杂的业务线可以使用相互隔离的自定义算子，避免全局算子互相污染。
 
