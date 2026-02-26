@@ -4,6 +4,7 @@ import com.team4u.framework.message.core.MessageDispatcher;
 import com.team4u.framework.message.core.MessageHandler;
 import com.team4u.framework.message.core.interceptor.MessageInterceptor;
 import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.context.annotation.Configuration;
 
@@ -21,6 +22,7 @@ public class MessagingAutoConfiguration implements BeanPostProcessor {
 
     private final MessageDispatcher globalDispatcher;
 
+    @Autowired
     public MessagingAutoConfiguration(MessageDispatcher globalDispatcher) {
         this.globalDispatcher = globalDispatcher;
     }

@@ -26,7 +26,7 @@ public interface MessageConverter {
     /**
      * 将原始传输数据反序列化为特定的业务对象实例
      *
-     * @param rawMessage 原始物理数据
+     * @param rawMessage  原始物理数据
      * @param targetClass 预期的目标业务类
      * @param <T>         业务类型泛型
      * @return 转换后的业务载荷实例

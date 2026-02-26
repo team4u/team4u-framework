@@ -67,7 +67,6 @@ public class BeanManager {
     /**
      * 根据名称获取 Bean
      */
-    @SuppressWarnings("unchecked")
     public <T> T getBean(String name) {
         for (BeanFactory factory : factories) {
             T bean = factory.getBean(name);

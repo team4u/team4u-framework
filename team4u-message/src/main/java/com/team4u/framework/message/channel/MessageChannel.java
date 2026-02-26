@@ -41,24 +41,6 @@ public interface MessageChannel {
     }
 
     /**
-     * 发送异步消息的回调监听器
-     */
-    interface SendListener {
-        /**
-         * 发送成功回调
-         */
-        void onSucceeded(Message<?> message);
-
-        /**
-         * 发送失败或执行产生异常时的回调
-         *
-         * @param message   原始消息
-         * @param exception 捕获到的异常，若无异常则可能为 null
-         */
-        void onFailed(Message<?> message, Exception exception);
-    }
-
-    /**
      * 发送异步消息并触发回调结果
      *
      * @param message  消息信封
@@ -93,4 +75,22 @@ public interface MessageChannel {
      * @param handler 待取消的业务处理器
      */
     void unsubscribe(MessageHandler<?> handler);
+
+    /**
+     * 发送异步消息的回调监听器
+     */
+    interface SendListener {
+        /**
+         * 发送成功回调
+         */
+        void onSucceeded(Message<?> message);
+
+        /**
+         * 发送失败或执行产生异常时的回调
+         *
+         * @param message   原始消息
+         * @param exception 捕获到的异常，若无异常则可能为 null
+         */
+        void onFailed(Message<?> message, Exception exception);
+    }
 }

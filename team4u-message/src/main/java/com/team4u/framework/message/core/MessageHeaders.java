@@ -18,35 +18,23 @@ import java.util.Map;
 @Getter
 public class MessageHeaders extends HashMap<String, Object> implements Serializable {
 
-    private static final long serialVersionUID = 1L;
-
     /**
      * 消息唯一标识的属性名
      */
     public static final String ID = "id";
-
     /**
      * 消息产生时间戳的属性名
      */
     public static final String TIMESTAMP = "timestamp";
-
     /**
      * 消息业务类型的属性名
      */
     public static final String MESSAGE_TYPE = "message-type";
-
     /**
      * 指定回复通道的属性名
      */
     public static final String REPLY_CHANNEL = "reply-channel";
-
-    /**
-     * 初始化基础元数据，确保消息具备可追踪的标识与时间属性
-     */
-    public final void initDefaultHeaders() {
-        this.putIfAbsent(ID, IdUtil.fastSimpleUUID());
-        this.putIfAbsent(TIMESTAMP, System.currentTimeMillis());
-    }
+    private static final long serialVersionUID = 1L;
 
     public MessageHeaders() {
         super();
@@ -56,6 +44,14 @@ public class MessageHeaders extends HashMap<String, Object> implements Serializa
     public MessageHeaders(Map<String, Object> headers) {
         super(headers);
         initDefaultHeaders();
+    }
+
+    /**
+     * 初始化基础元数据，确保消息具备可追踪的标识与时间属性
+     */
+    public final void initDefaultHeaders() {
+        this.putIfAbsent(ID, IdUtil.fastSimpleUUID());
+        this.putIfAbsent(TIMESTAMP, System.currentTimeMillis());
     }
 
     /**
