@@ -11,7 +11,7 @@ import org.springframework.context.annotation.Configuration;
 /**
  * Spring 策略自动注册器单元测试
  *
- * @author gemini-cli
+ * @author jay.wu
  */
 public class SpringPolicyAutoRegistrarTest {
 

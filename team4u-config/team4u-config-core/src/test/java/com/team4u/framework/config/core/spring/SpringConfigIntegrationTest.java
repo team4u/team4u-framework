@@ -16,7 +16,7 @@ import java.util.Optional;
 /**
  * Spring 配置集成测试
  *
- * @author gemini-cli
+ * @author jay.wu
  */
 public class SpringConfigIntegrationTest {
 

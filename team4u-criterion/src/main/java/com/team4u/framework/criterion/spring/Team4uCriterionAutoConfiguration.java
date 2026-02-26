@@ -14,7 +14,7 @@ import org.springframework.context.annotation.Configuration;
  * <p>
  * 将全局共享注册表暴露为 Spring Bean，并开启自动装配逻辑。
  *
- * @author gemini-cli
+ * @author jay.wu
  */
 @Configuration
 public class Team4uCriterionAutoConfiguration {

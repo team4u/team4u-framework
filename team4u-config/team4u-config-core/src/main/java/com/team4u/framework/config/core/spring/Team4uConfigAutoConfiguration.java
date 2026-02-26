@@ -18,7 +18,7 @@ import org.springframework.context.event.ContextRefreshedEvent;
  * 将全局共享注册表暴露为 Spring Bean，并开启自动装配逻辑。
  * </p>
  *
- * @author gemini-cli
+ * @author jay.wu
  */
 @Configuration
 public class Team4uConfigAutoConfiguration {

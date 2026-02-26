@@ -15,7 +15,7 @@ import java.util.Map;
  * 监听 Spring 容器初始化完成事件，自动发现容器内的 PolicyRegistry，
  * 并将对应的 Policy 自动注入到对应的 Registry 中。
  *
- * @author gemini-cli
+ * @author jay.wu
  */
 public class SpringPolicyAutoRegistrar implements SmartInitializingSingleton, ApplicationContextAware {
 
