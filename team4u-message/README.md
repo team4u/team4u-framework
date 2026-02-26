@@ -19,11 +19,11 @@ team4u-message 是一个高性能、强类型、高扩展的消息抽象框架�
 本模块通过对消息生命周期的深度解耦，解决了业务逻辑与底层传输介质、并发策略以及路由规则之间的硬编码耦合。开发者只需关注业务载荷 (Payload) 本身，其余的线程调度、拦截过滤、序列化适配及通道路由均由框架自动完成。
 
 ### 核心优势
-* **强类型信封模型**：摒弃裸对象传递，通过统一的 `Message<T>` 信封携带业务载荷与元数据（Headers），实现全链路的可追溯性。
-* **极速策略路由**：深度整合 `team4u-policy`，利用无锁有序策略链实现 O(1) 或近 O(n) 的极速订阅者查找。
-* **职责彻底分离**：引入 `MessageDispatcher` 统筹调度，支持处理器级别的独立线程池配置，实现业务执行环境的物理隔离。
-* **全生命周期拦截**：提供 `MessageInterceptor` 扩展点，支持在分发前、分发后及完成后进行横切逻辑注入（如 TraceId 传递、耗时统计）。
-* **极致开发者体验**：提供 Lambda 构建器、自动泛型推断基类以及 Spring 全自动装配，让复杂的架构拥有极简的 API。
+* 强类型信封模型：摒弃裸对象传递，通过统一的 `Message<T>` 信封携带业务载荷与元数据（Headers），实现全链路的可追溯性。
+* 极速策略路由：深度整合 `team4u-policy`，利用无锁有序策略链实现 O(1) 或近 O(n) 的极速订阅者查找。
+* 职责彻底分离：引入 `MessageDispatcher` 统筹调度，支持处理器级别的独立线程池配置，实现业务执行环境的物理隔离。
+* 全生命周期拦截：提供 `MessageInterceptor` 扩展点，支持在分发前、分发后及完成后进行横切逻辑注入（如 TraceId 传递、耗时统计）。
+* 极致开发者体验：提供 Lambda 构建器、自动泛型推断基类以及 Spring 全自动装配，让复杂的架构拥有极简的 API。
 
 ---
 
@@ -214,13 +214,13 @@ kafkaChannel.subscribe(orderSyncHandler);
 
 ### 核心执行流程
 
-1. **投递 (Submit)**：业务调用 `MessageTemplate` 发送数据。
-2. **路由 (Route)**：`MessageDispatcher` 根据消息载荷类型在 `OrderedPolicyChain` 中匹配处理器。
-3. **拦截 (Intercept)**：正序执行拦截器链的 `preHandle` 方法。
-4. **执行 (Execute)**：
+1. 投递 (Submit)：业务调用 `MessageTemplate` 发送数据。
+2. 路由 (Route)：`MessageDispatcher` 根据消息载荷类型在 `OrderedPolicyChain` 中匹配处理器。
+3. 拦截 (Intercept)：正序执行拦截器链的 `preHandle` 方法。
+4. 执行 (Execute)：
     - 若处理器指定了 `Executor`，则进入独立线程池执行。
     - 否则进入全局分发执行流。
-5. **回调 (Callback)**：依次执行拦截器的 `postHandle` 和 `afterCompletion`（倒序）。
+5. 回调 (Callback)：依次执行拦截器的 `postHandle` 和 `afterCompletion`（倒序）。
 
 ### 逻辑架构图
 
