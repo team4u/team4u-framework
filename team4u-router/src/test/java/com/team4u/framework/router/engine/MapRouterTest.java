@@ -19,8 +19,9 @@ public class MapRouterTest {
         LinkedHashMap<String, Object> rules = new LinkedHashMap<>();
         rules.put("A", "ValueA");
         rules.put("B", "ValueB");
-        rules.put("*", "ValueDefault");
         policy.setRules(rules);
+        // 使用标准的兜底字段
+        policy.setFallbackValue("ValueDefault");
 
         MapRouter router = new MapRouter(policy);
 
@@ -60,6 +61,7 @@ public class MapRouterTest {
 
         LinkedHashMap<String, Object> rules = new LinkedHashMap<>();
         rules.put("A", "ValueA");
+        // * 不再具有兜底意义，此时它只是一个普通的 Key
         rules.put("*", "ValueStar");
         policy.setRules(rules);
 
@@ -68,7 +70,10 @@ public class MapRouterTest {
         // 精准匹配正常工作
         Assert.assertEquals("ValueA", router.<String>route("A").getValue());
 
-        // fallbackValue 优先级高于 *
+        // 此时命中 * 会返回其对应值，不再作为降级兜底方案
+        Assert.assertEquals("ValueStar", router.<String>route("*").getValue());
+
+        // 其他不存在的 Key 统一走显式的 fallbackValue
         RouteResult<String> result = router.route("B");
         Assert.assertTrue(result.isMatch());
         Assert.assertEquals("ExplicitFallback", result.getValue());

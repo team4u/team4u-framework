@@ -38,11 +38,6 @@ public class ExpressionRouter implements Router {
         // 按顺序遍历所有路由规则进行匹配
         for (Map.Entry<String, Object> entry : rules.entrySet()) {
             String expr = entry.getKey();
-            // 跳过通配符 Key，统一由兜底逻辑处理，避免顺序带来的逻辑困扰
-            if ("*".equals(expr)) {
-                continue;
-            }
-
             // 执行表达式匹配
             if (criteria.matches(expr, context)) {
                 return RouteResult.matched((T) entry.getValue());
@@ -55,15 +50,10 @@ public class ExpressionRouter implements Router {
 
     /**
      * 执行兜底逻辑
-     * 优先使用策略中的显式兜底值，若无则尝试匹配 "*" 规则（兼容旧机制）
+     * 使用策略中的显式兜底值
      */
     @SuppressWarnings("unchecked")
     private <T> RouteResult<T> fallback() {
-        if (fallbackValue != null) {
-            return RouteResult.matched((T) fallbackValue);
-        }
-
-        Object target = rules.get("*");
-        return target != null ? RouteResult.matched((T) target) : RouteResult.unmatch();
+        return fallbackValue != null ? RouteResult.matched((T) fallbackValue) : RouteResult.unmatch();
     }
 }

@@ -19,13 +19,14 @@ public class ExpressionRouterTest {
     public void testRoute() {
         RoutePolicy policy = new RoutePolicy();
         policy.setType("expression");
+        // 设置标准兜底字段
+        policy.setFallbackValue("ValueDefault");
+
         LinkedHashMap<String, Object> rules = new LinkedHashMap<>();
         // 规则 1: name 等于 'A'
         rules.put("name == 'A'", "ValueA");
         // 规则 2: age 大于 18
         rules.put("age > 18", "ValueAdult");
-        // 规则 3: 兜底
-        rules.put("*", "ValueDefault");
         policy.setRules(rules);
 
         ExpressionRouter router = new ExpressionRouter(policy);
@@ -45,7 +46,7 @@ public class ExpressionRouterTest {
         Assert.assertTrue(result2.isMatch());
         Assert.assertEquals("ValueAdult", result2.getValue());
 
-        // 匹配兜底
+        // 匹配显式兜底
         Map<String, Object> req3 = new HashMap<>();
         req3.put("name", "B");
         req3.put("age", 10);
@@ -99,26 +100,24 @@ public class ExpressionRouterTest {
     }
 
     @Test
-    public void testFallbackValueAndOrderIndependence() {
+    public void testFallbackValue() {
         RoutePolicy policy = new RoutePolicy();
         policy.setFallbackValue("ExplicitFallback");
 
         LinkedHashMap<String, Object> rules = new LinkedHashMap<>();
-        // 即使 * 在第一位，由于我们重构了逻辑，它不再拦截后续正常的表达式匹配
-        rules.put("*", "ValueStar");
         rules.put("name == 'A'", "ValueA");
         policy.setRules(rules);
 
         ExpressionRouter router = new ExpressionRouter(policy);
 
-        // 精准匹配正常工作，说明 * 的位置不再影响结果
+        // 精准匹配正常工作
         Map<String, Object> req1 = new HashMap<>();
         req1.put("name", "A");
         RouteResult<String> result1 = router.route(req1);
         Assert.assertTrue(result1.isMatch());
         Assert.assertEquals("ValueA", result1.getValue());
 
-        // fallbackValue 优先级高于 *
+        // 所有规则未命中时走 fallbackValue
         Map<String, Object> req2 = new HashMap<>();
         req2.put("name", "B");
         RouteResult<String> result2 = router.route(req2);

@@ -39,15 +39,10 @@ public class MapRouter implements Router {
 
     /**
      * 执行兜底逻辑
-     * 优先使用策略中的显式兜底值，若无则尝试匹配 "*" 规则（兼容旧机制）
+     * 使用策略中的显式兜底值
      */
     @SuppressWarnings("unchecked")
     private <T> RouteResult<T> fallback() {
-        if (fallbackValue != null) {
-            return RouteResult.matched((T) fallbackValue);
-        }
-
-        Object target = rules.get("*");
-        return target != null ? RouteResult.matched((T) target) : RouteResult.unmatch();
+        return fallbackValue != null ? RouteResult.matched((T) fallbackValue) : RouteResult.unmatch();
     }
 }
