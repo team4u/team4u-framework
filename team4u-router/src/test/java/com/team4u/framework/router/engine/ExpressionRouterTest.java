@@ -1,5 +1,6 @@
 package com.team4u.framework.router.engine;
 
+import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.router.api.RoutePolicy;
 import com.team4u.framework.router.api.RouteResult;
 import org.junit.Assert;
@@ -69,5 +70,31 @@ public class ExpressionRouterTest {
         RouteResult<String> result = router.route(req);
         // 应该匹配第一个，体现顺序重要性
         Assert.assertEquals("EarlyMatch", result.getValue());
+    }
+
+    @Test
+    public void testCustomCriteria() {
+        RoutePolicy policy = new RoutePolicy();
+        LinkedHashMap<String, Object> rules = new LinkedHashMap<>();
+        // 使用自定义操作符 is_special
+        rules.put("name is_special true", "Matched");
+        policy.setRules(rules);
+
+        // 创建自定义 Criteria，支持 is_special 操作符
+        Criteria criteria = Criteria.builder()
+                .addOperator("is_special", (actual, expected) -> "special".equals(actual))
+                .build();
+
+        ExpressionRouter router = new ExpressionRouter(policy, criteria);
+
+        Map<String, Object> req = new HashMap<>();
+        req.put("name", "special");
+        RouteResult<String> result = router.route(req);
+        Assert.assertTrue(result.isMatch());
+        Assert.assertEquals("Matched", result.getValue());
+
+        req.put("name", "normal");
+        result = router.route(req);
+        Assert.assertFalse(result.isMatch());
     }
 }

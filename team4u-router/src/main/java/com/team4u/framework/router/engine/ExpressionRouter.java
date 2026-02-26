@@ -14,10 +14,16 @@ import java.util.Map;
  */
 public class ExpressionRouter implements Router {
 
-    private final LinkedHashMap<String, Object> rules;
+    private final Map<String, Object> rules;
+    private final Criteria criteria;
 
     public ExpressionRouter(RoutePolicy policy) {
+        this(policy, null);
+    }
+
+    public ExpressionRouter(RoutePolicy policy, Criteria criteria) {
         this.rules = policy.getRules();
+        this.criteria = criteria != null ? criteria : Criteria.global();
     }
 
     @SuppressWarnings("unchecked")
@@ -25,8 +31,6 @@ public class ExpressionRouter implements Router {
     public <T> RouteResult<T> route(Object request) {
         MatchContext context = (request instanceof MatchContext) ?
                 (MatchContext) request : MatchContext.of(request);
-
-        Criteria criteria = Criteria.global();
 
         for (Map.Entry<String, Object> entry : rules.entrySet()) {
             String expr = entry.getKey();

@@ -4,10 +4,14 @@ import com.team4u.framework.config.core.internal.DefaultConfigManager;
 import com.team4u.framework.config.core.spi.ConfigSourceRegistry;
 import com.team4u.framework.config.core.spi.ConfigWatcherRegistry;
 import com.team4u.framework.config.core.spi.InMemoryConfigSource;
+import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.router.api.RouteResult;
 import org.junit.Assert;
 import org.junit.BeforeClass;
 import org.junit.Test;
+
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * RoutingManager 单元测试
@@ -47,6 +51,25 @@ public class RoutingManagerTest {
         RouteResult<String> result = RoutingManager.global().route(routerId, "ok");
         Assert.assertTrue(result.isMatch());
         Assert.assertEquals("bingo", result.getValue());
+    }
+
+    @Test
+    public void testCustomExpressionCriteria() {
+        Criteria criteria = Criteria.builder()
+                .addOperator("is_special", (actual, expected) -> "special".equals(actual))
+                .build();
+
+        RoutingManager routingManager = RoutingManager.builder()
+                .expressionCriteria(criteria)
+                .build();
+
+        String config = "{\"type\":\"expression\", \"rules\":{\"name is_special true\":\"Matched\"}}";
+
+        Map<String, Object> req = new HashMap<>();
+        req.put("name", "special");
+        RouteResult<String> result = routingManager.routeByConfig(config, req);
+        Assert.assertTrue(result.isMatch());
+        Assert.assertEquals("Matched", result.getValue());
     }
 
     @Test

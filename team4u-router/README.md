@@ -76,9 +76,16 @@ RoutingManager manager = RoutingManager.global();
 适合在需要环境隔离（如单元测试）、或使用不同配置源上下文时，通过 Builder 构建独立的实例：
 
 ```java
+// 创建自定义的 Criteria，注册特定业务线的算子
+Criteria myCriteria = Criteria.builder()
+        .addOperator("is_special", (actual, expected) -> "special".equals(actual))
+        .build();
+
 RoutingManager customManager = RoutingManager.builder()
         // 指定自定义的 ConfigManager，而不是全局环境
         .configManager(myIsolatedConfigManager)
+        // 注入自定义 Criteria，解耦全局算子污染
+        .expressionCriteria(myCriteria)
         // 手动添加路由工厂（无需配置 SPI）
         .addFactory(new MyCustomRouterFactory())
         .build();
@@ -126,6 +133,9 @@ if (result.isMatch()) {
 *   配置类型：`type: "expression"`
 *   短路匹配：规则按定义的顺序（LinkedHashMap）依次执行，一旦匹配成功立即返回。
 *   多样化输入：支持 `Map`、`POJO` 或 `MatchContext` 作为输入。
+*   **算子解耦**：支持通过 `ExpressionRouterFactory` 注入自定义的 `Criteria` 实例（默认为 `global()`）。这使得复杂的业务线可以使用相互隔离的自定义算子，避免全局算子互相污染。
+
+> 示例：通过 `RoutingManager.builder().expressionCriteria(myCriteria).build()` 实现算子定制。
 
 ### 3. 多层级缓存管理
 

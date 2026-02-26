@@ -4,9 +4,11 @@ import cn.hutool.json.JSONUtil;
 import com.team4u.framework.base.instance.DynamicInstanceProvider;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.policy.util.PolicyScanner;
+import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.router.api.RoutePolicy;
 import com.team4u.framework.router.api.RouteResult;
 import com.team4u.framework.router.api.Router;
+import com.team4u.framework.router.factory.ExpressionRouterFactory;
 import com.team4u.framework.router.factory.RouterFactory;
 import com.team4u.framework.router.factory.RouterFactoryRegistry;
 
@@ -130,6 +132,16 @@ public class RoutingManager {
         }
 
         /**
+         * 设置表达式路由器的自定义匹配规则引擎
+         *
+         * @param criteria 匹配规则引擎
+         * @return 当前 Builder 实例
+         */
+        public Builder expressionCriteria(Criteria criteria) {
+            return addFactory(new ExpressionRouterFactory(criteria));
+        }
+
+        /**
          * 指定配置管理器，如果未指定则默认使用 {@link ConfigManager#global()}
          */
         public Builder configManager(ConfigManager configManager) {
@@ -146,14 +158,17 @@ public class RoutingManager {
                 registry = RouterFactoryRegistry.global();
             }
 
-            PolicyScanner.registerFromServiceLoader(registry);
-            PolicyScanner.scanAndRegister(registry);
+            // 先自动扫描和加载，后注册手动添加的工厂，以确保手动注册具有更高优先级（覆盖自动发现的同名工厂）
+            RouterFactoryRegistry finalRegistry = new RouterFactoryRegistry();
+            PolicyScanner.registerFromServiceLoader(finalRegistry);
+            PolicyScanner.scanAndRegister(finalRegistry);
+            finalRegistry.addAll(registry);
 
             ConfigManager cm = this.configManager;
             if (cm == null) {
                 cm = ConfigManager.global();
             }
-            return new RoutingManager(registry, cm);
+            return new RoutingManager(finalRegistry, cm);
         }
     }
 }
