@@ -96,7 +96,7 @@ public class DefaultConfigManager implements ConfigManager {
         this.proxyInstanceProvider = DynamicInstanceProvider.createLru(
                 1024,
                 key -> key,
-                key -> doCreateProxy(key.prefix, key.interfaceType));
+                key -> doCreateProxy(key.prefix, key.configType));
     }
 
     /**
