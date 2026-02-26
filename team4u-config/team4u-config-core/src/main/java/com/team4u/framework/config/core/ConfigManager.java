@@ -38,7 +38,8 @@ public interface ConfigManager {
     /**
      * 获取全局标准单例配置管理引擎
      * <p>
-     * 该实例通过 SPI (ServiceLoader) 机制自动发现并加载 {@link ConfigSource} 和 {@link ConfigWatcher}。
+     * 该实例通过 SPI (ServiceLoader) 机制自动发现并加载 {@link ConfigSource} 和
+     * {@link ConfigWatcher}。
      * 采用了双重检查锁定（DCL）确保多线程环境下单例的线程安全性。
      * </p>
      *
@@ -203,10 +204,11 @@ public interface ConfigManager {
          * @param packageName 包名
          * @return 当前 Builder 实例
          */
-        @SuppressWarnings({"unchecked", "rawtypes"})
+        @SuppressWarnings({ "unchecked", "rawtypes" })
         public Builder scanConverters(String packageName) {
-            PolicyScanner.scanAndRegister(converterRegistry, packageName,
-                    PropertyConverter.class);
+            // 通过原始类型转换绕过 Java 泛型通配符限制（Class<PropertyConverter> 无法直接赋给 Class<? extends
+            // PropertyConverter<?>>）
+            PolicyScanner.scanAndRegister(converterRegistry, packageName, (Class) PropertyConverter.class);
             return this;
         }
 
