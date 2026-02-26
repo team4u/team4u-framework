@@ -61,7 +61,9 @@ public class DefaultConfigManagerCacheTest {
         TestBean result2 = manager.createProxy("bean", TestBean.class);
 
         Assert.assertSame("多次调用 createProxy 绑定对象应返回同一实例", result1, result2);
-        Assert.assertEquals("ConfigBinder.bind 应只被调用一次", 1, bindCount.get());
+        // 由于现在默认使用代理，ConfigBinder 不再被调用
+        Assert.assertEquals("由于使用了代理，ConfigBinder.bind 不应被调用", 0, bindCount.get());
+        Assert.assertTrue("结果应该是代理对象", result1 instanceof com.team4u.framework.config.core.proxy.SnapshotAware);
     }
 
     public interface TestInterface {

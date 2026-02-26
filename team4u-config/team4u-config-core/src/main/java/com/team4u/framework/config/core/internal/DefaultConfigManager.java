@@ -163,14 +163,16 @@ public class DefaultConfigManager implements ConfigManager {
             finalPrefix = "";
         }
 
-        if (interfaceType.isInterface()) {
+        // 优先尝试创建实时代理（支持接口和普通类）
+        try {
             return proxyFactory.createLiveProxy(this, finalPrefix, interfaceType);
+        } catch (Exception e) {
+            // 如果代理创建失败（例如 final 类），则尝试进行单次绑定
+            if (configBinder != null) {
+                return configBinder.bind(currentSnapshot(), finalPrefix, interfaceType);
+            }
+            throw new IllegalStateException("无法为类型创建代理且未配置绑定器: " + interfaceType.getName(), e);
         }
-
-        if (configBinder == null) {
-            throw new IllegalStateException("ConfigBinder is missing. Cannot create proxy.");
-        }
-        return configBinder.bind(currentSnapshot(), finalPrefix, interfaceType);
     }
 
     @Override

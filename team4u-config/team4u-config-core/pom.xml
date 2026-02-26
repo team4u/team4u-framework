@@ -14,6 +14,11 @@
     <dependencies>
         <dependency>
             <groupId>com.team4u</groupId>
+            <artifactId>team4u-proxy</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.team4u</groupId>
             <artifactId>team4u-policy</artifactId>
             <version>${project.version}</version>
         </dependency>
