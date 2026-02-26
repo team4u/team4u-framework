@@ -12,13 +12,13 @@ import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
 
-import java.lang.reflect.Method;
-import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.function.Supplier;
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.util.Map;
 import java.util.Optional;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 /**
  * 配置方法拦截器
@@ -72,17 +72,126 @@ public class ConfigMethodInterceptor implements MethodInterceptor {
     private final Map<Method, CacheNode> valueCache = new ConcurrentHashMap<>();
 
     public ConfigMethodInterceptor(Class<?> targetType,
-            String prefix,
-            Supplier<ConfigSnapshot> snapshotProvider,
-            boolean isPinned,
-            ConfigProxyFactory proxyFactory,
-            PropertyConverterRegistry converterRegistry) {
+                                   String prefix,
+                                   Supplier<ConfigSnapshot> snapshotProvider,
+                                   boolean isPinned,
+                                   ConfigProxyFactory proxyFactory,
+                                   PropertyConverterRegistry converterRegistry) {
         this.targetType = targetType;
         this.prefix = normalizePrefix(prefix);
         this.snapshotProvider = snapshotProvider;
         this.isPinned = isPinned;
         this.proxyFactory = proxyFactory;
         this.converterRegistry = converterRegistry;
+    }
+
+    /**
+     * 创建方法相关的元数据信息
+     */
+    private static MethodMetadata createMetadata(Method method, PropertyConverterRegistry converterRegistry) {
+        Class<?> returnType = method.getReturnType();
+        Field field = findField(method);
+
+        String baseName = resolveBaseName(method, field);
+        boolean absolute = isAbsoluteKey(method, field);
+        boolean required = isAnnotationPresent(method, field, ConfigRequired.class);
+        PropertyConverter<?> converter = loadConverter(method, field, converterRegistry);
+
+        return new MethodMetadata(baseName, returnType, required, absolute, converter);
+    }
+
+    /**
+     * 查找方法对应的类字段
+     */
+    private static Field findField(Method method) {
+        String propertyName = inferNameFromGetter(method.getName());
+        try {
+            return method.getDeclaringClass().getDeclaredField(propertyName);
+        } catch (NoSuchFieldException e) {
+            return null;
+        }
+    }
+
+    /**
+     * 检查方法或对应字段上是否存在指定注解
+     */
+    private static boolean isAnnotationPresent(Method method, Field field,
+                                               Class<? extends Annotation> annotationClass) {
+        return method.isAnnotationPresent(annotationClass)
+                || (field != null && field.isAnnotationPresent(annotationClass));
+    }
+
+    /**
+     * 解析配置基础键名，支持从方法或字段的注解中提取，或根据 Getter 方法名推断
+     */
+    private static String resolveBaseName(Method method, Field field) {
+        ConfigKey annotation = null;
+        if (method.isAnnotationPresent(ConfigKey.class)) {
+            annotation = method.getAnnotation(ConfigKey.class);
+        } else if (field != null && field.isAnnotationPresent(ConfigKey.class)) {
+            annotation = field.getAnnotation(ConfigKey.class);
+        }
+
+        if (annotation != null) {
+            String keyValue = annotation.value();
+            // 绝对路径标记会在后续逻辑中通过 absolute 标志识别
+            return keyValue.startsWith(".") ? keyValue.substring(1) : keyValue;
+        }
+        return inferNameFromGetter(method.getName());
+    }
+
+    /**
+     * 判断是否为绝对路径配置键
+     */
+    private static boolean isAbsoluteKey(Method method, Field field) {
+        ConfigKey annotation = null;
+        if (method.isAnnotationPresent(ConfigKey.class)) {
+            annotation = method.getAnnotation(ConfigKey.class);
+        } else if (field != null && field.isAnnotationPresent(ConfigKey.class)) {
+            annotation = field.getAnnotation(ConfigKey.class);
+        }
+        return annotation != null && annotation.value().startsWith(".");
+    }
+
+    /**
+     * 从 Getter 方法名推断其属性名称
+     */
+    private static String inferNameFromGetter(String methodName) {
+        if (methodName.startsWith("get") && methodName.length() > 3) {
+            return StrUtil.lowerFirst(methodName.substring(3));
+        }
+        if (methodName.startsWith("is") && methodName.length() > 2) {
+            return StrUtil.lowerFirst(methodName.substring(2));
+        }
+        return methodName;
+    }
+
+    /**
+     * 加载并初始化属性转换器
+     */
+    private static PropertyConverter<?> loadConverter(Method method, Field field,
+                                                      PropertyConverterRegistry registry) {
+        ConfigConverter annotation = null;
+        if (method.isAnnotationPresent(ConfigConverter.class)) {
+            annotation = method.getAnnotation(ConfigConverter.class);
+        } else if (field != null && field.isAnnotationPresent(ConfigConverter.class)) {
+            annotation = field.getAnnotation(ConfigConverter.class);
+        }
+
+        if (annotation == null) {
+            return null;
+        }
+
+        Class<? extends PropertyConverter<?>> converterClass = annotation.value();
+        return registry.get(converterClass).orElseGet(() -> {
+            try {
+                PropertyConverter<?> instance = converterClass.getDeclaredConstructor().newInstance();
+                registry.register(instance);
+                return instance;
+            } catch (Exception e) {
+                throw new IllegalStateException("实例化转换器失败: " + converterClass.getName(), e);
+            }
+        });
     }
 
     @Override
@@ -200,7 +309,7 @@ public class ConfigMethodInterceptor implements MethodInterceptor {
     /**
      * 使用自定义转换器进行转换
      */
-    @SuppressWarnings({ "rawtypes", "unchecked" })
+    @SuppressWarnings({"rawtypes", "unchecked"})
     private Object convertWithCustomConverter(String rawValue, MethodMetadata metadata, MethodInvocation invocation)
             throws Throwable {
         try {
@@ -241,115 +350,6 @@ public class ConfigMethodInterceptor implements MethodInterceptor {
     }
 
     /**
-     * 创建方法相关的元数据信息
-     */
-    private static MethodMetadata createMetadata(Method method, PropertyConverterRegistry converterRegistry) {
-        Class<?> returnType = method.getReturnType();
-        Field field = findField(method);
-
-        String baseName = resolveBaseName(method, field);
-        boolean absolute = isAbsoluteKey(method, field);
-        boolean required = isAnnotationPresent(method, field, ConfigRequired.class);
-        PropertyConverter<?> converter = loadConverter(method, field, converterRegistry);
-
-        return new MethodMetadata(baseName, returnType, required, absolute, converter);
-    }
-
-    /**
-     * 查找方法对应的类字段
-     */
-    private static Field findField(Method method) {
-        String propertyName = inferNameFromGetter(method.getName());
-        try {
-            return method.getDeclaringClass().getDeclaredField(propertyName);
-        } catch (NoSuchFieldException e) {
-            return null;
-        }
-    }
-
-    /**
-     * 检查方法或对应字段上是否存在指定注解
-     */
-    private static boolean isAnnotationPresent(Method method, Field field,
-            Class<? extends Annotation> annotationClass) {
-        return method.isAnnotationPresent(annotationClass)
-                || (field != null && field.isAnnotationPresent(annotationClass));
-    }
-
-    /**
-     * 解析配置基础键名，支持从方法或字段的注解中提取，或根据 Getter 方法名推断
-     */
-    private static String resolveBaseName(Method method, Field field) {
-        ConfigKey annotation = null;
-        if (method.isAnnotationPresent(ConfigKey.class)) {
-            annotation = method.getAnnotation(ConfigKey.class);
-        } else if (field != null && field.isAnnotationPresent(ConfigKey.class)) {
-            annotation = field.getAnnotation(ConfigKey.class);
-        }
-
-        if (annotation != null) {
-            String keyValue = annotation.value();
-            // 绝对路径标记会在后续逻辑中通过 absolute 标志识别
-            return keyValue.startsWith(".") ? keyValue.substring(1) : keyValue;
-        }
-        return inferNameFromGetter(method.getName());
-    }
-
-    /**
-     * 判断是否为绝对路径配置键
-     */
-    private static boolean isAbsoluteKey(Method method, Field field) {
-        ConfigKey annotation = null;
-        if (method.isAnnotationPresent(ConfigKey.class)) {
-            annotation = method.getAnnotation(ConfigKey.class);
-        } else if (field != null && field.isAnnotationPresent(ConfigKey.class)) {
-            annotation = field.getAnnotation(ConfigKey.class);
-        }
-        return annotation != null && annotation.value().startsWith(".");
-    }
-
-    /**
-     * 从 Getter 方法名推断其属性名称
-     */
-    private static String inferNameFromGetter(String methodName) {
-        if (methodName.startsWith("get") && methodName.length() > 3) {
-            return StrUtil.lowerFirst(methodName.substring(3));
-        }
-        if (methodName.startsWith("is") && methodName.length() > 2) {
-            return StrUtil.lowerFirst(methodName.substring(2));
-        }
-        return methodName;
-    }
-
-    /**
-     * 加载并初始化属性转换器
-     */
-    private static PropertyConverter<?> loadConverter(Method method, Field field,
-            PropertyConverterRegistry registry) {
-        ConfigConverter annotation = null;
-        if (method.isAnnotationPresent(ConfigConverter.class)) {
-            annotation = method.getAnnotation(ConfigConverter.class);
-        } else if (field != null && field.isAnnotationPresent(ConfigConverter.class)) {
-            annotation = field.getAnnotation(ConfigConverter.class);
-        }
-
-        if (annotation == null) {
-            return null;
-        }
-
-        Class<? extends PropertyConverter<?>> converterClass = annotation.value();
-        return registry.get(converterClass).orElseGet(() -> {
-            try {
-                PropertyConverter<?> instance = converterClass.getDeclaredConstructor().newInstance();
-                registry.register(instance);
-                return instance;
-            } catch (Exception e) {
-                throw new IllegalStateException("实例化转换器失败: " + converterClass.getName(), e);
-            }
-        });
-    }
-
-    /**
      * 方法元数据内部类
      */
     private static final class MethodMetadata {
@@ -360,7 +360,7 @@ public class ConfigMethodInterceptor implements MethodInterceptor {
         final PropertyConverter<?> converter;
 
         MethodMetadata(String baseName, Class<?> returnType, boolean required, boolean absolute,
-                PropertyConverter<?> converter) {
+                       PropertyConverter<?> converter) {
             this.baseName = baseName;
             this.returnType = returnType;
             this.required = required;

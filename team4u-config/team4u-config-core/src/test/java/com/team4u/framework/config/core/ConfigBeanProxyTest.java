@@ -78,6 +78,8 @@ public class ConfigBeanProxyTest {
     public static class AppBeanWithDefault {
         private String name = "field-default";
         private int port = 9090;
+        // 字段初始值就是天然的默认值
+        private String annotationValue = "initial-value";
 
         public String getName() {
             return name;
@@ -94,9 +96,6 @@ public class ConfigBeanProxyTest {
         public void setPort(int port) {
             this.port = port;
         }
-
-        // 字段初始值就是天然的默认值
-        private String annotationValue = "initial-value";
 
         public String getAnnotationValue() {
             return annotationValue;

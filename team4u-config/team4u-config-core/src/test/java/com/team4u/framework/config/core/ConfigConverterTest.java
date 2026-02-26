@@ -2,7 +2,6 @@ package com.team4u.framework.config.core;
 
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.crypto.SecureUtil;
-
 import com.team4u.framework.config.core.annotation.ConfigConverter;
 import com.team4u.framework.config.core.convert.JsonPropertyConverter;
 import com.team4u.framework.config.core.convert.PropertyConverter;

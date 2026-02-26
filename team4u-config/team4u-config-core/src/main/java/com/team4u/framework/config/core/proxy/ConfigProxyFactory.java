@@ -1,10 +1,10 @@
 package com.team4u.framework.config.core.proxy;
 
+import cn.hutool.core.util.ReflectUtil;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.convert.PropertyConverterRegistry;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import com.team4u.framework.proxy.ProxyBuilder;
-import cn.hutool.core.util.ReflectUtil;
 
 import java.util.function.Supplier;
 
@@ -65,8 +65,8 @@ public class ConfigProxyFactory {
      * @return 代理对象实例
      */
     public <T> T createProxy(Supplier<ConfigSnapshot> snapshotProvider,
-            String prefix, Class<T> type,
-            boolean isPinned) {
+                             String prefix, Class<T> type,
+                             boolean isPinned) {
         // 构建方法拦截器，处理配置解析核心逻辑
         ConfigMethodInterceptor interceptor = new ConfigMethodInterceptor(
                 type,
