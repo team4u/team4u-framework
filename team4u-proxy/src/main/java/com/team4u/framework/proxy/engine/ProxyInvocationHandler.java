@@ -1,8 +1,8 @@
 package com.team4u.framework.proxy.engine;
 
-import lombok.RequiredArgsConstructor;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.ReflectiveMethodInvocation;
+import lombok.RequiredArgsConstructor;
 
 import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.Method;

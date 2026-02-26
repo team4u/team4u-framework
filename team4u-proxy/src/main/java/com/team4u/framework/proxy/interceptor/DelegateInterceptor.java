@@ -5,7 +5,6 @@ import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
 import com.team4u.framework.proxy.core.ProxyException;
 
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
