@@ -14,6 +14,7 @@
         <module>team4u-policy</module>
         <module>team4u-criterion</module>
         <module>team4u-config</module>
+        <module>team4u-proxy</module>
     </modules>
 
     <properties>
@@ -25,10 +26,16 @@
         <hutool.version>5.8.43</hutool.version>
         <lombok.version>1.18.30</lombok.version>
         <junit.version>4.13.2</junit.version>
+        <byte-buddy.version>1.14.12</byte-buddy.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>net.bytebuddy</groupId>
+                <artifactId>byte-buddy</artifactId>
+                <version>${byte-buddy.version}</version>
+            </dependency>
             <dependency>
                 <groupId>cn.hutool</groupId>
                 <artifactId>hutool-all</artifactId>
