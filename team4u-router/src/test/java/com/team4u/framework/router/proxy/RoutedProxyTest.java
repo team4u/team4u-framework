@@ -6,7 +6,6 @@ import com.team4u.framework.config.core.spi.InMemoryConfigSource;
 import com.team4u.framework.router.RoutingManager;
 import com.team4u.framework.router.proxy.annotation.RouteContext;
 import com.team4u.framework.router.proxy.annotation.Routed;
-import com.team4u.framework.router.util.RoutedBeanLocator;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;

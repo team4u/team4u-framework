@@ -6,7 +6,6 @@ import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
 import com.team4u.framework.router.proxy.annotation.RouteContext;
 import com.team4u.framework.router.proxy.annotation.Routed;
-import com.team4u.framework.router.util.RoutedBeanLocator;
 import lombok.Data;
 
 import java.lang.annotation.Annotation;

@@ -1,4 +1,4 @@
-package com.team4u.framework.router.util;
+package com.team4u.framework.router.proxy;
 
 import cn.hutool.core.util.StrUtil;
 import com.team4u.framework.bean.BeanManager;
