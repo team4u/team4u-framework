@@ -77,13 +77,13 @@ ConfigManager 是所有操作的入口。你可以使用内置的标准单例，
 
 #### 1. 标准单例（推荐）
 
-自动通过 SPI 发现并聚合配置。你也可以在调用 `global()` 之前，通过全局注册表手动预填组件：
+自动通过 SPI 发现并聚合配置。你也可以在调用 `global()` 之前，通过统一的引导类 `ConfigBootstrap` 手动预填组件：
 
 ```java
-// 手动向全局注册表注入一个配置源
-ConfigSourceRegistry.global().
-
-register(new MyCustomConfigSource());
+// 使用统一入口进行全局注册
+ConfigBootstrap.global()
+    .registerSource(new MyCustomConfigSource())
+    .lock(); // 注册完成后建议锁定
 
 // 获取标准单例，它会自动包含上面手动注册的源以及 SPI 加载的源
 ConfigManager manager = ConfigManager.global();
@@ -275,13 +275,11 @@ public class AppConfig {
 
 1. **SPI 机制**：在 `META-INF/services/com.team4u.framework.config.core.convert.PropertyConverter` 中定义类路径。
 2. **包扫描**：框架初始化时会自动扫描 `com.team4u.framework.config.core.convert` 包。
-3. **手动注册（推荐）**：直接通过全局注册表注册，无需通过 Builder 重新构建。
+3. **手动注册（推荐）**：直接通过全局引导类进行注册，无需通过 Builder 重新构建。
 
 ```java
-// 在应用启动时手动注入一个特定转换器
-PropertyConverterRegistry.global().
-
-register(new MyCustomConverter());
+// 在应用启动时通过统一入口手动注入一个特定转换器
+ConfigBootstrap.global().registerConverter(new MyCustomConverter());
 ```
 
 ---
@@ -339,19 +337,19 @@ ConfigManager manager = ConfigManager.builder()
 
 ### 1. 使用标准单例测试
 
-通过全局注册表，你可以直接向 `ConfigManager.global()` 注入数据：
+通过全局引导类，你可以直接向 `ConfigManager.global()` 注入数据：
 
 ```java
 
 @BeforeEach
 public void setup() {
-    // 注入内存配置源
-    ConfigSourceRegistry.global().register(new InMemoryConfigSource("test", 1));
+    // 通过统一入口注入内存配置源
+    ConfigBootstrap.global().registerSource(new InMemoryConfigSource("test", 1));
 }
 
 @AfterEach
 public void cleanup() {
-    // 清理全局注册表中的组件
+    // 清理全局注册表中的组件（注意：仅在测试环境下不调用 lock() 才能清理）
     ConfigSourceRegistry.global().unregisterAll();
 }
 ```

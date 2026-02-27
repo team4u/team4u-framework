@@ -48,14 +48,11 @@
 `Criteria` 实例是不可变的，支持单例复用：
 
 #### 1. 标准实例（推荐）
-适用于大多数场景，无需任何配置，直接复用全局单例。你也可以在首次调用前，通过全局解析器注入自定义算子：
+适用于大多数场景，无需任何配置，直接复用全局单例。你可以在应用启动阶段通过 `CriterionBootstrap` 注入自定义算子。
 
 ```java
-// 全局注册一个自定义算子
-StandardCriterionParser.global().addOperator("is_odd", (actual, expected) -> (int)actual % 2 != 0);
-
-// 后续所有 Criteria.global() 的调用都将支持 is_odd 语法
-boolean result = Criteria.global().matches("it is_odd true", 3); // true
+// 只要全局已注册，所有 Criteria.global() 的调用都将生效
+boolean result = Criteria.global().matches("it is_odd true", 3);
 ```
 
 #### 2. Spring 自动配置
@@ -466,14 +463,21 @@ public void cleanup() {
 ## 自定义扩展 (SPI)
 
 ### 1. 注册表自管理模式（推荐）
-你可以直接操作全局注册表，动态注入自定义组件，所有后续创建的 `Criteria` 实例（通过标准 Builder）都将自动包含这些扩展。
+你可以使用统一的引导类 `CriterionBootstrap` 直接操作全局注册表，动态注入自定义组件。所有后续创建的 `Criteria` 实例（通过标准 Builder）都将自动包含这些扩展。
+
+**建议在应用启动阶段（如 Spring 启动完成时）统一调用：**
 
 ```java
-// 全局注册一个自定义转换器
-ValueConverterRegistry.global().register(new MyMoneyConverter());
-
-// 全局注册一个针对特定 Criterion 的编译器
-CompilerRegistry.global().register(new MyCustomCompiler());
+// 使用统一入口进行全局配置
+CriterionBootstrap.global()
+    // 1. 注册全局自定义算子
+    .registerOperator("is_odd", (actual, expected) -> (int) actual % 2 != 0)
+    // 2. 注册全局自定义转换器
+    .registerConverter(new MyMoneyConverter())
+    // 3. 注册全局编译器（针对特定自定义 Criterion）
+    .registerCompiler(new MyCustomCompiler())
+    // 4. 配置完成后可以锁定注册表，防止运行时被篡改
+    .lock();
 ```
 
 ### 2. 通过 Builder API 局部定制
