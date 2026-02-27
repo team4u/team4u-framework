@@ -28,6 +28,7 @@ public class RoutingManager {
 
     private final RouterFactoryRegistry factoryRegistry;
     private final RoutePolicyParser configParser;
+    private final String configPrefix;
 
     /**
      * 配置驱动的路由器注册表
@@ -36,12 +37,14 @@ public class RoutingManager {
 
     private RoutingManager(RouterFactoryRegistry factoryRegistry,
                            ConfigManager configManager,
-                           RoutePolicyParser configParser) {
+                           RoutePolicyParser configParser,
+                           String configPrefix) {
         this.factoryRegistry = factoryRegistry;
         this.configParser = configParser;
+        this.configPrefix = configPrefix.endsWith(".") ? configPrefix : configPrefix + ".";
         this.routerRegistry = new ConfigDrivenRegistry<>(
                 configManager,
-                "router.",
+                this.configPrefix,
                 this::buildRouterFromConfig);
     }
 
@@ -101,7 +104,7 @@ public class RoutingManager {
      * 获取指定标识的路由器
      */
     private Router getRouter(String routerId) {
-        Router router = routerRegistry.get("router." + routerId);
+        Router router = routerRegistry.get(this.configPrefix + routerId);
         if (router == null) {
             // 当路由器未找到时，记录 DEBUG 级别的日志辅助排障
             if (log.isDebugEnabled()) {
@@ -257,6 +260,7 @@ public class RoutingManager {
         private RouterFactoryRegistry factoryRegistry;
         private ConfigManager configManager;
         private RoutePolicyParser configParser;
+        private String configPrefix = "router.";
 
         public Builder() {
         }
@@ -299,6 +303,16 @@ public class RoutingManager {
         }
 
         /**
+         * 自定义配置前缀，默认值为 "router."
+         */
+        public Builder configPrefix(String configPrefix) {
+            if (StrUtil.isNotBlank(configPrefix)) {
+                this.configPrefix = configPrefix;
+            }
+            return this;
+        }
+
+        /**
          * 构建路由管理器实例
          */
         public RoutingManager build() {
@@ -331,7 +345,7 @@ public class RoutingManager {
                 finalParser = new DefaultRoutePolicyParser();
             }
 
-            return new RoutingManager(finalRegistry, cm, finalParser);
+            return new RoutingManager(finalRegistry, cm, finalParser, configPrefix);
         }
     }
 }

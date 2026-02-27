@@ -50,10 +50,14 @@ team4u-router 是一个轻量级、插件化的 Java 路由框架。它旨在将
 
 ### 准备路由配置
 
-在配置中心或本地配置文件中定义路由规则（以 JSON 形式）。注意：`rules` 在代码中定义为列表结构以保证执行顺序：
+在配置中心或本地配置文件中定义路由规则（以 JSON 形式）。
+**注意：** 默认情况下，配置键必须遵循 `router.{routerId}` 的命名约定（例如 `router.order-router`）。
+
+`rules` 在代码中定义为列表结构以保证执行顺序：
 
 ```json
 {
+  "id": "order-router",
   "type": "expression",
   "rules": [
     {
@@ -83,7 +87,7 @@ RoutingManager manager = RoutingManager.global();
 
 #### 2. 自定义实例 (Builder)
 
-适合在需要环境隔离（如单元测试）、或使用不同配置源上下文时，通过 Builder 构建独立的实例。Builder 会自动通过 SPI 和包扫描发现工厂，手动添加的工厂具有更高优先级：
+适合在需要环境隔离（如单元测试）、或使用不同配置源上下文时，通过 Builder 构建独立的实例。Builder 会自动通过 SPI 和包扫描发现工厂，**手动添加的工厂具有更高优先级**（会覆盖同名的自动发现工厂）：
 
 ```java
 // 创建自定义的 Criteria，注册特定业务线的算子
@@ -94,7 +98,9 @@ Criteria myCriteria = Criteria.builder()
 RoutingManager customManager = RoutingManager.builder()
         // 指定自定义的 ConfigManager，而不是全局环境
         .configManager(myIsolatedConfigManager)
-        // 指定自定义的解析器（默认使用基于 Hutool 的 JSON 解析器）
+        // 指定自定义的配置前缀（默认为 "router."），例如改为 "biz.router."
+        .configPrefix("biz.router.")
+        // 指定自定义的解析器（默认使用基于 Hutool 的 JSON 解析器，支持 SPI 扩展）
         .configParser(new MyYamlRoutePolicyParser())
         // 手动注册带有自定义 Criteria 的表达式路由器工厂
         .addFactory(new ExpressionRouterFactory(myCriteria))
@@ -114,14 +120,14 @@ Map<String, Object> request = new HashMap<>();
 request.put("region", "CN");
 request.put("amount", 2000);
 
-// 3. 执行路由逻辑
+// 3. 执行路由逻辑（底层会自动查找配置项 router.order-router）
 RouteResult<String> result = manager.route("order-router", request);
 
 // 4. 处理匹配结果
 if (result.isMatch()) {
     String handlerName = result.getValue();
     System.out.println("匹配到的处理器：" + handlerName); // 输出：china-handler
-    // 新增：获取命中的规则条件（表达式或 Key）
+    // 获取命中的规则条件（表达式或 Key）
     System.out.println("命中的条件：" + result.getMatchedCondition()); // 输出：region == 'CN'
 }
 
@@ -322,6 +328,7 @@ public class RoutingConfig {
 *   配置类型：`type: "map"`
 *   匹配逻辑：`rules.get(String.valueOf(request))`
 *   兜底机制：使用 `fallbackValue` 字段作为唯一的兜底机制。
+*   安全校验：内置重复 Key 校验，初始化时若检测到重复的 `condition` 会抛出异常，防止逻辑冲突。
 
 ### 2. ExpressionRouter (表达式路由)
 
@@ -457,8 +464,15 @@ for (RuleTrace step : trace.getSteps()) {
         public Router create(RoutePolicy policy) { return new MyRouter(policy); }
     }
     ```
-2.  注册服务：在 `META-INF/services/com.team4u.framework.router.factory.RouterFactory` 中添加类全路径。
+2.  注册服务：在 `META-INF/services/com.team4u.framework.router.spi.RouterFactory` 中添加类全路径。
 3.  使用：配置 JSON 中指定 `"type": "my-custom"` 即可。
+
+### 注册优先级
+
+`RoutingManager` 在构建时会通过以下顺序加载工厂，后加载的会覆盖先加载的（即优先级更高）：
+1.  **SPI 发现**：通过 `ServiceLoader` 发现的 `RouterFactory`。
+2.  **包扫描**：自动扫描 `com.team4u.framework.router` 包下的工厂。
+3.  **手动添加**：通过 `Builder.addFactory()` 手动注册的工厂（具有最高优先级）。
 
 ---
 

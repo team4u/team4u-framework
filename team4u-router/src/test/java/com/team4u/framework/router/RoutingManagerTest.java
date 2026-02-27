@@ -170,6 +170,24 @@ public class RoutingManagerTest {
         Assert.assertEquals("grpc://main-cluster:8080", routingManager.routeByPolicy(policy, normalReq).getValue());
     }
 
+    @Test
+    public void testCustomConfigPrefix() {
+        String customPrefix = "biz.router.";
+        RoutingManager customManager = RoutingManager.builder()
+                .configManager(configContext.getManager())
+                .configPrefix(customPrefix)
+                .build();
+
+        String routerId = "order";
+        String config = "{\"type\":\"map\", \"rules\":[{\"condition\":\"CN\", \"value\":\"china\"}]}";
+        // 使用自定义前缀存储配置
+        configContext.put(customPrefix + routerId, config);
+
+        RouteResult<String> result = customManager.route(routerId, "CN");
+        Assert.assertTrue(result.isMatch());
+        Assert.assertEquals("china", result.getValue());
+    }
+
     public static class TargetService {
         private String host;
         private Integer port;
