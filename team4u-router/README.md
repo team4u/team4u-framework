@@ -227,18 +227,29 @@ RouteTrace<String> trace = manager.traceByPolicy(exprPolicy, request);
 
 ### 1. 标记路由注解
 
-使用 `@Routed` 标记接口或方法，使用 `@RouteContext` 标记用于路由计算的参数：
+使用 `@Routed` 标记接口或方法。`routerId` 既可以是一个静态的配置键，也可以是一个 **属性表达式**，用于从路由上下文中动态提取真实的路由 ID。
+
+*   **静态路由 ID**：直接指向配置中心的 `router.{routerId}`。
+*   **动态路由 ID**：如果 `routerId` 对应 `@RouteContext` 参数中的某个属性名（支持嵌套，如 `user.tenantId`），则会自动提取该属性值作为真实的路由 ID。如果提取失败，则回退使用字面量。
 
 ```java
-// 1. 在接口或方法上指定路由策略 ID
-@Routed(routerId = "router.payment-router")
+// 示例：根据请求中的 tenantId 属性动态决定路由策略 ID
 public interface PaymentService {
 
-    // 2. 标记哪个参数作为路由计算的上下文 (如不标记，默认取第一个参数)
+    // routerId = "tenantId" 表示从 PaymentRequest 的 tenantId 属性中获取值。
+    // 如果获取到的值是 "alipay-tenant"，则最终查找的配置键为 "router.alipay-tenant"
+    @Routed(routerId = "tenantId")
     String process(@RouteContext PaymentRequest request);
 }
 
-// 3. 不同的业务实现类，注册为不同名称的 Bean
+// 请求对象
+@Data
+public class PaymentRequest {
+    private String tenantId; // 值为 "alipay-tenant" 或 "wechat-tenant"
+    private long amount;
+}
+
+// 2. 不同的业务实现类，注册为不同名称的 Bean
 @Component("alipay-service")
 public class AlipayPaymentService implements PaymentService {
     @Override
@@ -312,21 +323,21 @@ service.process(myRequest);
 > [!IMPORTANT]
 > 声明式路由依赖于 [`BeanManager`](../team4u-bean/README.md) 容器。请确保路由策略配置的 `value` 字段与容器中 Bean 的名称一致。
 
-### 5. Spring 集成
+### 6. ID 约定与配置前缀
 
-如果你的项目基于 Spring 框架，只需在配置类中添加 [`SpringBeanContainer`](../team4u-bean/README.md) 即可。它会自动将 Spring 容器中的所有 Bean 桥接到 [`BeanManager`](../team4u-bean/README.md) 中，供路由器及其它 SDK 组件使用：
+为了降低业务代码对物理配置路径的依赖，`team4u-router` 采用 **“关注逻辑 ID，隐藏物理前缀”** 的架构设计。
 
-```java
-@Configuration
-public class RoutingConfig {
+*   **逻辑 ID (Logical ID)**：在业务代码中使用的 ID，如 `@Routed(routerId = "payment-router")`。
+*   **物理配置键 (Full Key)**：在配置中心定义的完整键，如 `router.payment-router`。
 
-    @Bean
-    public SpringBeanContainer springBeanContainer() {
-        // 该 Bean 初始化后会自动挂载到 BeanManager，实现两套容器体系的无缝集成
-        return new SpringBeanContainer();
-    }
-}
-```
+#### 拼接规则与智能处理
+
+1.  **自动补全**：`RoutingManager` 默认前缀为 `router.`。调用 `route("my-id")` 时，框架会自动查找 `router.my-id`。
+2.  **逃生舱（自动去重）**：如果你的逻辑 ID 已经包含了前缀（如 `route("router.my-id")`），框架会智能识别并**不再重复拼接**。
+3.  **自定义前缀**：你可以通过 `RoutingManager.builder().configPrefix("biz.router.")` 更改或通过传入空字符串禁用此前缀逻辑。
+
+> [!TIP]
+> 这种设计的优势在于：当底层配置路径发生变化时（如从 `router.` 迁移到 `app.config.router.`），你只需要在 `RoutingManager` 初始化时修改一处配置，而无需搜索替换成百上千个业务注解中的 `routerId`。
 
 ---
 

@@ -1,6 +1,7 @@
 package com.team4u.framework.router.proxy;
 
 import cn.hutool.core.annotation.AnnotationUtil;
+import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.ArrayUtil;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
@@ -103,11 +104,22 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
         // 提取路由上下文
         Object context = extractContext(invocation.getArguments(), metadata.getContextParamIndex());
 
+        // 尝试从上下文中获取动态路由 ID
+        String routerId = metadata.getRouterId();
+        // 如果上下文不为空，尝试根据属性表达式提取真实的路由 ID
+        if (context != null) {
+            // 使用 Hutool 的属性表达式从上下文中提取值
+            Object dynamicRouterId = BeanUtil.getProperty(context, routerId);
+            if (dynamicRouterId != null) {
+                routerId = dynamicRouterId.toString();
+            }
+        }
+
         // 使用 Locator 动态查找真正的目标 Bean
         // 注意：这里期望的类型就是当前方法所在的接口类
         Object targetBean = RoutedBeanLocator.locate(
                 this.routingManager,
-                metadata.getRouterId(),
+                routerId,
                 context,
                 method.getDeclaringClass());
 
