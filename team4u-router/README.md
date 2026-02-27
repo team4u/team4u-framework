@@ -11,6 +11,7 @@
 - [快速入门](#快速入门)
 - [核心特性](#核心特性)
 - [典型场景](#典型场景)
+- [路由诊断](#路由诊断)
 - [SPI 扩展](#spi-扩展)
 - [架构与原理](#架构与原理)
 
@@ -27,7 +28,8 @@ team4u-router 是一个轻量级、插件化的 Java 路由框架。它旨在将
 * 配置驱动：路由规则支持动态重载，无需重启应用即可调整业务走向。
 * 多种模式：内置精准匹配 (Map) 与规则引擎 (Expression) 两种核心路由器。
 * 透明集成：无缝对接 [team4u-config](../team4u-config/README.md)，实现路由规则的统一配置管理。
-* 高性能：内置 LRU 缓存，避免重复解析配置造成的性能开销。
+* 高性能：内置两级缓存（配置实例缓存 + 类型转换缓存），确保极致的路由性能。
+* 路由诊断：提供完善的 Trace 能力，支持查看每一条规则的匹配状态及表达式计算细节。
 * 极简 API：统一入口 `RoutingManager`，极简的交互逻辑，学习成本极低。
 
 ---
@@ -121,6 +123,10 @@ if (result.isMatch()) {
 
 // 5. 也可以直接通过原始配置字符串进行路由（常用于测试或临时策略）
 RouteResult<String> tempResult = manager.routeByConfig(rawJsonConfig, request);
+
+// 6. 执行带诊断信息的路由（Trace）
+RouteTrace<String> trace = manager.trace("order-router", request);
+System.out.println("路由总耗时：" + trace.getCostMs() + "ms");
 ```
 
 ### 类型安全路由（防类型擦除）
@@ -151,25 +157,50 @@ if (result.isMatch()) {
 
 *   配置类型：`type: "map"`
 *   匹配逻辑：`rules.get(String.valueOf(request))`
-*   兜底机制：**标准化兜底**。使用 `fallbackValue` 字段作为唯一的兜底机制。
+*   兜底机制：使用 `fallbackValue` 字段作为唯一的兜底机制。
 
 ### 2. ExpressionRouter (表达式路由)
 
 集成 [team4u-criterion](../team4u-criterion/README.md)，支持复杂的布尔逻辑和多条件判断。
 
 *   配置类型：`type: "expression"`
-*   短路匹配：规则按定义的顺序（LinkedHashMap）依次执行，一旦匹配成功立即返回。
-*   **可靠兜底**：使用 `fallbackValue` 字段作为唯一的兜底机制，在所有表达式均不匹配后执行。
+*   短路匹配：规则按定义的顺序依次执行，一旦匹配成功立即返回。
+*   可靠兜底：使用 `fallbackValue` 字段作为唯一的兜底机制，在所有表达式均不匹配后执行。
 *   多样化输入：支持 `Map`、`POJO` 或 `MatchContext` 作为输入。
-*   **算子解耦**：支持通过 `ExpressionRouterFactory` 注入自定义的 `Criteria` 实例（默认为 `global()`）。这使得复杂的业务线可以使用相互隔离的自定义算子，避免全局算子互相污染。
-
-> 示例：通过 `RoutingManager.builder().addFactory(new ExpressionRouterFactory(myCriteria)).build()` 实现算子定制。
+*   算子解耦：支持通过 `ExpressionRouterFactory` 注入自定义的 `Criteria` 实例。
 
 ### 3. 多层级缓存管理
 
-`RoutingManager` 提供了完善的缓存机制：
-*   **配置实例缓存**：内部通过 `ConfigDrivenRegistry` 自动监听配置变更，并缓存由配置生成的 `Router` 实例，确保高性能路由。
-*   **类型转换缓存**：`AbstractRouter` 内置了转换缓存，避免在将路由结果（如 Map）转换为 POJO 时产生重复的反射与转换开销。
+`RoutingManager` 提供了完善的缓存机制以确保高性能：
+*   **配置实例缓存**：内部通过 `ConfigDrivenRegistry` 自动监听配置变更，并缓存由配置生成的 `Router` 实例。
+*   **类型转换缓存**：`AbstractRouter` 内置了转换缓存，避免在将路由结果（如 Map）转换为 POJO 时产生重复的反射与转换开销，生命周期随路由器实例销毁而销毁。
+
+---
+
+## 路由诊断
+
+对于复杂的表达式路由，仅知道最终结果往往是不够的。`RoutingManager` 提供了 `trace` 接口，允许开发者查看完整的匹配轨迹。
+
+```java
+// 执行诊断路由
+RouteTrace<String> trace = manager.trace("order-router", request);
+
+// 查看诊断细节
+for (RuleTrace step : trace.getSteps()) {
+    System.out.printf("条件: %s, 是否匹配: %b, 详细诊断: %s, 是否兜底: %b%n",
+            step.getCondition(),
+            step.isMatched(),
+            step.getDiagnosticDetail(), // 对于表达式路由，这里包含 Criterion 渲染的计算细节
+            step.isFallback()
+    );
+}
+```
+
+路由轨迹包含以下关键信息：
+- `routerType`: 实际执行的路由器类型。
+- `steps`: 每一个评估步骤的明细，包括是否匹配、原始条件以及底层诊断信息。
+- `costMs`: 本次路由计算的耗时。
+- `result`: 最终的路由结果。
 
 ---
 
