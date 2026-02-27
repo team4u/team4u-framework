@@ -154,13 +154,15 @@ public class ExpressionRouterTest {
         RouteResult<List<String>> result1 = router.route(req1);
         Assert.assertTrue(result1.isMatch());
         Assert.assertEquals(Arrays.asList("V10", "V20"), result1.getValue());
-        Assert.assertEquals("age > 10,age > 20", result1.getMatchedCondition());
+        Assert.assertEquals("age > 10", result1.getMatchedCondition());
+        Assert.assertEquals(Arrays.asList("age > 10", "age > 20"), result1.getMatchedConditions());
 
         // 匹配全部规则
         Map<String, Object> req2 = new HashMap<>();
         req2.put("age", 35);
         RouteResult<List<String>> result2 = router.route(req2);
         Assert.assertEquals(Arrays.asList("V10", "V20", "V30"), result2.getValue());
+        Assert.assertEquals(Arrays.asList("age > 10", "age > 20", "age > 30"), result2.getMatchedConditions());
 
         // 走兜底逻辑
         Map<String, Object> req3 = new HashMap<>();
@@ -171,7 +173,8 @@ public class ExpressionRouterTest {
         // 验证 trace
         RouteTrace<List<String>> trace1 = router.trace(req1);
         Assert.assertEquals(Arrays.asList("V10", "V20"), trace1.getResult().getValue());
-        Assert.assertEquals("age > 10,age > 20", trace1.getResult().getMatchedCondition());
+        Assert.assertEquals("age > 10", trace1.getResult().getMatchedCondition());
+        Assert.assertEquals(Arrays.asList("age > 10", "age > 20"), trace1.getResult().getMatchedConditions());
     }
 
     @Test

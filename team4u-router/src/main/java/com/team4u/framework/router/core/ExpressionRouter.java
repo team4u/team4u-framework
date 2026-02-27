@@ -59,7 +59,7 @@ public class ExpressionRouter extends AbstractRouter {
                     return RouteResult.matched((T) rule.getValue(), expr);
                 }
 
-                // 多重匹配模式：记录匹配结果，继续循环
+                // 记录匹配结果，继续循环
                 matchedValues.add(rule.getValue());
                 matchedConditions.add(expr);
             }
@@ -67,12 +67,11 @@ public class ExpressionRouter extends AbstractRouter {
 
         // 处理多重匹配结果
         if (!matchedValues.isEmpty()) {
-            String combinedCondition = String.join(",", matchedConditions);
             if (log.isTraceEnabled()) {
-                log.trace("Route multi-matched: conditions [{}] -> values [{}]", combinedCondition, matchedValues);
+                log.trace("Route multi-matched: conditions [{}] -> values [{}]", matchedConditions, matchedValues);
             }
             // 泛型 T 在多重匹配下期望是 List 类型
-            return RouteResult.matched((T) matchedValues, combinedCondition);
+            return RouteResult.matched((T) matchedValues, matchedConditions);
         }
 
         // 未匹配时记录日志 (仅在 TRACE 级别)
@@ -119,8 +118,7 @@ public class ExpressionRouter extends AbstractRouter {
         }
 
         if (!matchedValues.isEmpty()) {
-            String combinedCondition = String.join(",", matchedConditions);
-            routeTrace.setResult(RouteResult.matched((T) matchedValues, combinedCondition));
+            routeTrace.setResult(RouteResult.matched((T) matchedValues, matchedConditions));
         } else {
             // 记录兜底轨迹
             boolean fallbackMatched = (fallbackValue != null);

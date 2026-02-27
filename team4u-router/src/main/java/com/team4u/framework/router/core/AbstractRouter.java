@@ -22,12 +22,12 @@ public abstract class AbstractRouter implements Router {
 
         Object rawValue = result.getValue();
         if (rawValue == null) {
-            return RouteResult.matched(null, result.getMatchedCondition());
+            return RouteResult.matched(null, result.getMatchedConditions());
         }
 
         if (targetType != null && !targetType.isInstance(rawValue)) {
             T convertedValue = Convert.convert(targetType, rawValue);
-            return RouteResult.matched(convertedValue, result.getMatchedCondition());
+            return RouteResult.matched(convertedValue, result.getMatchedConditions());
         }
 
         return (RouteResult<T>) result;

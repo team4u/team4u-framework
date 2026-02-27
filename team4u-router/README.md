@@ -376,6 +376,8 @@ public class RoutingConfig {
 RouteResult<List<String>> result = manager.route("router.coupon-router", request, List.class);
 if (result.isMatch()) {
     List<String> matchedCoupons = result.getValue();
+    // 多重匹配模式下，建议使用 getMatchedConditions() 获取全量条件列表
+    List<String> conditions = result.getMatchedConditions();
 }
 ```
 
@@ -422,9 +424,10 @@ for (RuleTrace step : trace.getSteps()) {
 - `steps`: 每一个评估步骤的明细，包括是否匹配、原始条件以及底层诊断信息。
 - `costMs`: 本次路由计算的耗时。
 - `result`: 最终的路由结果。
-    - 其中包含 `matchedCondition`：
-        - 命中规则时：为对应 Key 或表达式。
-        - 命中兜底 (Fallback) 时：为 `null`。
+    - `getMatchedCondition()`：获取首个命中的条件。
+    - `getMatchedConditions()`：获取所有命中的条件列表（List<String>）。
+        - 命中规则时：包含对应 Key 或表达式。
+        - 命中兜底 (Fallback) 时：返回 `null`。
 
 ---
 

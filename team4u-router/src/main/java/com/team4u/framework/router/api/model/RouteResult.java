@@ -2,6 +2,9 @@ package com.team4u.framework.router.api.model;
 
 import lombok.Data;
 
+import java.util.Collections;
+import java.util.List;
+
 /**
  * 路由结果
  *
@@ -16,20 +19,12 @@ public class RouteResult<T> {
     private static final RouteResult<?> UNMATCH_INSTANCE = new RouteResult<>(false, null, null);
     private final boolean match;
     private final T value;
-    /**
-     * 命中的规则条件
-     * <ul>
-     * <li>对于 MapRouter，为命中的 Key</li>
-     * <li>对于 ExpressionRouter，为命中的表达式</li>
-     * <li>对于兜底逻辑 (Fallback) 或未匹配，通常为 null</li>
-     * </ul>
-     */
-    private final String matchedCondition;
+    private final List<String> matchedConditions;
 
-    private RouteResult(boolean match, T value, String matchedCondition) {
+    private RouteResult(boolean match, T value, List<String> matchedConditions) {
         this.match = match;
         this.value = value;
-        this.matchedCondition = matchedCondition;
+        this.matchedConditions = matchedConditions;
     }
 
     /**
@@ -44,7 +39,7 @@ public class RouteResult<T> {
     }
 
     /**
-     * 匹配成功
+     * 匹配成功 (单条件匹配)
      *
      * @param value            匹配值
      * @param matchedCondition 命中条件
@@ -52,7 +47,20 @@ public class RouteResult<T> {
      * @return 路由结果
      */
     public static <T> RouteResult<T> matched(T value, String matchedCondition) {
-        return new RouteResult<>(true, value, matchedCondition);
+        List<String> conditions = matchedCondition != null ? Collections.singletonList(matchedCondition) : null;
+        return new RouteResult<>(true, value, conditions);
+    }
+
+    /**
+     * 匹配成功 (多重匹配)
+     *
+     * @param value             匹配值
+     * @param matchedConditions 命中的所有条件
+     * @param <T>               结果类型
+     * @return 路由结果
+     */
+    public static <T> RouteResult<T> matched(T value, List<String> matchedConditions) {
+        return new RouteResult<>(true, value, matchedConditions);
     }
 
     /**
@@ -68,5 +76,21 @@ public class RouteResult<T> {
 
     public boolean isNotMatch() {
         return !match;
+    }
+
+    /**
+     * 获取单个命中的规则条件（返回第一个匹配项）
+     * <p>
+     * 提供此便利方法用于向后兼容和只需要单个条件的场景。
+     * 如果是多重匹配模式，建议直接使用 {@link #getMatchedConditions()}。
+     * </p>
+     *
+     * @return 第一个匹配的条件，如果没有命中条件则返回 null
+     */
+    public String getMatchedCondition() {
+        if (matchedConditions != null && !matchedConditions.isEmpty()) {
+            return matchedConditions.get(0);
+        }
+        return null;
     }
 }
