@@ -5,6 +5,8 @@ import com.team4u.framework.config.core.spi.ConfigSourceRegistry;
 import com.team4u.framework.config.core.spi.ConfigWatcherRegistry;
 import com.team4u.framework.config.core.spi.InMemoryConfigSource;
 import com.team4u.framework.criterion.Criteria;
+import com.team4u.framework.router.api.builder.RoutePolicyBuilder;
+import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.factory.ExpressionRouterFactory;
 import org.junit.Assert;
@@ -141,6 +143,44 @@ public class RoutingManagerTest {
         Assert.assertNotNull(result.getValue());
         Assert.assertEquals("127.0.0.1", result.getValue().getHost());
         Assert.assertEquals(Integer.valueOf(8080), result.getValue().getPort());
+    }
+
+    @Test
+    public void testMapRouterWithBuilder() {
+        // 使用强类型的构建器创建路由策略
+        RoutePolicy policy = RoutePolicyBuilder.<String>map()
+                .id("pay_channel_router")
+                .rule("ALIPAY", "AlipayService")
+                .rule("WECHAT", "WechatPayService")
+                .fallback("CashService")
+                .build();
+
+        // 执行路由并验证结果
+        RoutingManager manager = RoutingManager.global();
+
+        Assert.assertEquals("AlipayService", manager.routeByPolicy(policy, "ALIPAY").getValue());
+        Assert.assertEquals("CashService", manager.routeByPolicy(policy, "UNKNOWN_PAY").getValue());
+    }
+
+    @Test
+    public void testExpressionRouterWithBuilder() {
+        // 使用强类型的构建器创建表达式路由策略
+        RoutePolicy policy = RoutePolicyBuilder.<String>expression()
+                .id("grpc_gray_router")
+                .rule("isVip == true", "grpc://vip-cluster:8080")
+                .fallback("grpc://main-cluster:8080")
+                .build();
+
+        // 执行路由并验证结果
+        RoutingManager manager = RoutingManager.global();
+
+        Map<String, Object> vipReq = new HashMap<>();
+        vipReq.put("isVip", true);
+        Assert.assertEquals("grpc://vip-cluster:8080", manager.routeByPolicy(policy, vipReq).getValue());
+
+        Map<String, Object> normalReq = new HashMap<>();
+        normalReq.put("isVip", false);
+        Assert.assertEquals("grpc://main-cluster:8080", manager.routeByPolicy(policy, normalReq).getValue());
     }
 
     public static class TargetService {

@@ -35,8 +35,8 @@ public class RoutingManager {
     private final ConfigDrivenRegistry<Router> routerRegistry;
 
     private RoutingManager(RouterFactoryRegistry factoryRegistry,
-                           ConfigManager configManager,
-                           RoutePolicyParser configParser) {
+            ConfigManager configManager,
+            RoutePolicyParser configParser) {
         this.factoryRegistry = factoryRegistry;
         this.configParser = configParser;
         this.routerRegistry = new ConfigDrivenRegistry<>(
@@ -75,6 +75,17 @@ public class RoutingManager {
             throw new IllegalArgumentException("Unable to parse route policy from config: " + config);
         }
 
+        return buildRouter(policy);
+    }
+
+    /**
+     * 内部工厂方法：策略对象 -> 路由器实例
+     */
+    public Router buildRouter(RoutePolicy policy) {
+        if (policy == null || StrUtil.isBlank(policy.getType())) {
+            throw new IllegalArgumentException("Invalid route policy or missing type");
+        }
+
         Router router = this.factoryRegistry.get(policy.getType())
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported router type: " + policy.getType()))
                 .create(policy);
@@ -87,6 +98,29 @@ public class RoutingManager {
     }
 
     /**
+     * 获取指定标识的路由器
+     */
+    private Router getRouter(String routerId) {
+        Router router = routerRegistry.get("router." + routerId);
+        if (router == null) {
+            // 当路由器未找到时，记录 DEBUG 级别的日志辅助排障
+            if (log.isDebugEnabled()) {
+                log.debug("Route unmatch: Router [{}] not found or failed to initialize.", routerId);
+            }
+        }
+        return router;
+    }
+
+    /**
+     * 构造空的路由追踪对象
+     */
+    private <T> RouteTrace<T> emptyTrace() {
+        RouteTrace<T> trace = new RouteTrace<>();
+        trace.setResult(RouteResult.unmatch());
+        return trace;
+    }
+
+    /**
      * 执行路由（通过路由唯一标识）
      *
      * @param routerId 路由唯一标识（对应的配置键为 router.{routerId}）
@@ -95,15 +129,8 @@ public class RoutingManager {
      * @return 路由结果
      */
     public <T> RouteResult<T> route(String routerId, Object request) {
-        Router router = routerRegistry.get("router." + routerId);
-        if (router == null) {
-            // 当路由器未找到时，记录 DEBUG 级别的日志辅助排障
-            if (log.isDebugEnabled()) {
-                log.debug("Route unmatch: Router [{}] not found or failed to initialize.", routerId);
-            }
-            return RouteResult.unmatch();
-        }
-        return router.route(request);
+        Router router = getRouter(routerId);
+        return router != null ? router.route(request) : RouteResult.unmatch();
     }
 
     /**
@@ -116,15 +143,8 @@ public class RoutingManager {
      * @return 路由结果
      */
     public <T> RouteResult<T> route(String routerId, Object request, Class<T> targetType) {
-        Router router = routerRegistry.get("router." + routerId);
-        if (router == null) {
-            // 当路由器未找到时，记录 DEBUG 级别的日志辅助排障
-            if (log.isDebugEnabled()) {
-                log.debug("Route unmatch: Router [{}] not found or failed to initialize.", routerId);
-            }
-            return RouteResult.unmatch();
-        }
-        return router.route(request, targetType);
+        Router router = getRouter(routerId);
+        return router != null ? router.route(request, targetType) : RouteResult.unmatch();
     }
 
     /**
@@ -136,13 +156,18 @@ public class RoutingManager {
      * @return 路由诊断轨迹
      */
     public <T> RouteTrace<T> trace(String routerId, Object request) {
-        Router router = routerRegistry.get("router." + routerId);
-        if (router == null) {
-            RouteTrace<T> trace = new RouteTrace<>();
-            trace.setResult(RouteResult.unmatch());
-            return trace;
+        Router router = getRouter(routerId);
+        return router != null ? router.trace(request) : emptyTrace();
+    }
+
+    /**
+     * 获取原始配置对应的路由器
+     */
+    private Router getRouterByConfig(String rawConfig) {
+        if (StrUtil.isBlank(rawConfig)) {
+            return null;
         }
-        return router.trace(request);
+        return buildRouterFromConfig(rawConfig);
     }
 
     /**
@@ -157,12 +182,8 @@ public class RoutingManager {
      * @return 路由结果
      */
     public <T> RouteResult<T> routeByConfig(String rawConfig, Object request) {
-        if (StrUtil.isBlank(rawConfig)) {
-            return RouteResult.unmatch();
-        }
-
-        Router router = buildRouterFromConfig(rawConfig);
-        return router.route(request);
+        Router router = getRouterByConfig(rawConfig);
+        return router != null ? router.route(request) : RouteResult.unmatch();
     }
 
     /**
@@ -175,12 +196,8 @@ public class RoutingManager {
      * @return 路由结果
      */
     public <T> RouteResult<T> routeByConfig(String rawConfig, Object request, Class<T> targetType) {
-        if (StrUtil.isBlank(rawConfig)) {
-            return RouteResult.unmatch();
-        }
-
-        Router router = buildRouterFromConfig(rawConfig);
-        return router.route(request, targetType);
+        Router router = getRouterByConfig(rawConfig);
+        return router != null ? router.route(request, targetType) : RouteResult.unmatch();
     }
 
     /**
@@ -192,14 +209,44 @@ public class RoutingManager {
      * @return 路由诊断轨迹
      */
     public <T> RouteTrace<T> traceByConfig(String rawConfig, Object request) {
-        if (StrUtil.isBlank(rawConfig)) {
-            RouteTrace<T> trace = new RouteTrace<>();
-            trace.setResult(RouteResult.unmatch());
-            return trace;
-        }
+        Router router = getRouterByConfig(rawConfig);
+        return router != null ? router.trace(request) : emptyTrace();
+    }
 
-        Router router = buildRouterFromConfig(rawConfig);
-        return router.trace(request);
+    /**
+     * 获取路由策略对应的路由器
+     */
+    private Router getRouter(RoutePolicy policy) {
+        if (policy == null) {
+            return null;
+        }
+        return buildRouter(policy);
+    }
+
+    /**
+     * 执行路由（针对编程式构建的 RoutePolicy）
+     *
+     * @param policy  路由策略对象
+     * @param request 请求对象
+     * @param <T>     结果类型
+     * @return 路由结果
+     */
+    public <T> RouteResult<T> routeByPolicy(RoutePolicy policy, Object request) {
+        Router router = getRouter(policy);
+        return router != null ? router.route(request) : RouteResult.unmatch();
+    }
+
+    /**
+     * 执行路由并返回诊断轨迹（针对编程式构建的 RoutePolicy）
+     *
+     * @param policy  路由策略对象
+     * @param request 请求对象
+     * @param <T>     结果类型
+     * @return 路由诊断轨迹
+     */
+    public <T> RouteTrace<T> traceByPolicy(RoutePolicy policy, Object request) {
+        Router router = getRouter(policy);
+        return router != null ? router.trace(request) : emptyTrace();
     }
 
     /**

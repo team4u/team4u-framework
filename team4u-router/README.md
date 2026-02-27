@@ -10,6 +10,7 @@
 - [简介](#简介)
 - [快速入门](#快速入门)
 - [核心特性](#核心特性)
+- [编程式路由 (Fluent Builder)](#编程式路由-fluent-builder)
 - [典型场景](#典型场景)
 - [路由诊断](#路由诊断)
 - [SPI 扩展](#spi-扩展)
@@ -154,6 +155,51 @@ if (result.isMatch()) {
     System.out.println("路由目标 Port：" + target.getPort());
 }
 ```
+
+---
+
+## 编程式路由 (Fluent Builder)
+
+除了通过 JSON 配置，`team4u-router` 还提供了强大的流式构建器（Fluent Builder），支持在代码中强类型、动态地构建路由策略。
+
+### 1. 使用 RoutePolicyBuilder
+
+你可以通过 `RoutePolicyBuilder` 快速创建 `map` 或 `expression` 类型的策略：
+
+```java
+// 1. 创建映射路由 (Map Router)
+RoutePolicy mapPolicy = RoutePolicyBuilder.<String>map()
+        .id("region-router")
+        .rule("CN", "china-handler")
+        .rule("US", "usa-handler")
+        .fallback("default-handler")
+        .build();
+
+// 2. 创建表达式路由 (Expression Router)
+RoutePolicy exprPolicy = RoutePolicyBuilder.<String>expression()
+        .id("gray-router")
+        .rule("userId hash 0.1", "gray-version")
+        .rule("userRank > 5", "vip-version")
+        .fallback("stable-version")
+        .build();
+```
+
+### 2. 执行编程式路由
+
+`RoutingManager` 提供了直接针对 `RoutePolicy` 对象的路由方法：
+
+```java
+RoutingManager manager = RoutingManager.global();
+
+// 执行路由
+RouteResult<String> result = manager.routeByPolicy(exprPolicy, request);
+
+// 执行带诊断信息的路由
+RouteTrace<String> trace = manager.traceByPolicy(exprPolicy, request);
+```
+
+> [!TIP]
+> 编程式路由非常适合单元测试、从数据库动态加载规则、或构建简单的静态路由策略等场景。
 
 ---
 
