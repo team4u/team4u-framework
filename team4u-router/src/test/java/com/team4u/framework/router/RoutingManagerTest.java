@@ -120,6 +120,18 @@ public class RoutingManagerTest {
     }
 
     @Test
+    public void testInvalidConfig() {
+        String config = "{\"type\":\"map\""; // 错误的 JSON
+        try {
+            RoutingManager.global().routeByConfig(config, "test");
+            Assert.fail("Should throw exception for invalid config");
+        } catch (Exception e) {
+            // 可能是由于 JSON 解析失败或者 buildRouterFromConfig 抛出的异常
+            Assert.assertNotNull(e.getMessage());
+        }
+    }
+
+    @Test
     public void testTypeConversion() {
         String config = "{\"type\":\"map\", \"rules\":[{\"condition\":\"serviceA\", \"value\":{\"host\":\"127.0.0.1\",\"port\":8080}}]}";
         RouteResult<TargetService> result = RoutingManager.global().routeByConfig(config, "serviceA",

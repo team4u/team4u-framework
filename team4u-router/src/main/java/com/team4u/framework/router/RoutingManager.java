@@ -69,16 +69,23 @@ public class RoutingManager {
     }
 
     /**
-     * 内部工厂方法：Config String -> Policy -> Router
+     * 内部工厂方法：配置字符串 -> 策略 -> 路由器实例
      */
     private Router buildRouterFromConfig(String config) {
         RoutePolicy policy = configParser.parse(config);
         if (policy == null) {
-            return null;
+            throw new IllegalArgumentException("Unable to parse route policy from config: " + config);
         }
-        return this.factoryRegistry.get(policy.getType())
+
+        Router router = this.factoryRegistry.get(policy.getType())
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported router type: " + policy.getType()))
                 .create(policy);
+
+        if (router == null) {
+            throw new IllegalStateException("Router created from policy is null, type: " + policy.getType());
+        }
+
+        return router;
     }
 
     /**
