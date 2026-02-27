@@ -30,6 +30,7 @@ public class RoutedProxyTest {
         ConfigManager cm = ConfigManager.builder()
                 .addSource(inMemoryConfigSource)
                 .addWatcher(inMemoryConfigSource)
+                .debounceWindow(0)
                 .build();
 
         // 3. 构建局部 RoutingManager
@@ -38,21 +39,11 @@ public class RoutedProxyTest {
                 .build();
     }
 
-    private void sleep() {
-        try {
-            // HotReloadManager 默认有 500ms 防抖延迟
-            Thread.sleep(600);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
-    }
-
     @Test
     public void testRoutedBeanLocator() {
         // 配置路由规则
         inMemoryConfigSource.putAndRefresh("router.test_router",
                 "{\"type\":\"map\",\"rules\":[{\"condition\":\"A\",\"value\":\"serviceA\"},{\"condition\":\"B\",\"value\":\"serviceB\"}]}");
-        sleep();
 
         // 测试定位 A
         TestService serviceA = RoutedBeanLocator.locate(routingManager, "test_router", "A", TestService.class);
@@ -71,7 +62,6 @@ public class RoutedProxyTest {
         // team4u-criterion 中 "it" 代表根对象（完整名：SUBJECT_IT = "it"）
         inMemoryConfigSource.putAndRefresh("router.test_proxy_router",
                 "{\"type\":\"expression\",\"rules\":[{\"condition\":\"it == 'A'\",\"value\":\"serviceA\"}],\"fallbackValue\":\"serviceB\"}");
-        sleep();
 
         // 创建代理，显式传入 routingManager
         TestService proxy = RoutedProxyFactory.createProxy(TestService.class, routingManager);
@@ -88,7 +78,6 @@ public class RoutedProxyTest {
         // 配置无兜底的路由规则
         inMemoryConfigSource.putAndRefresh("router.unmatch_router",
                 "{\"type\":\"map\",\"rules\":[{\"condition\":\"A\",\"value\":\"serviceA\"}]}");
-        sleep();
         // 请求 C，无法匹配，期望抛出 IllegalStateException
         RoutedBeanLocator.locate(routingManager, "unmatch_router", "C", TestService.class);
     }
