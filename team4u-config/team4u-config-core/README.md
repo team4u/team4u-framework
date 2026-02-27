@@ -299,24 +299,58 @@ ConfigBootstrap.global().addConverter(new MyCustomConverter());
 
 ### 热加载与变更监听
 
-当 `ConfigWatcher` 探测到源数据变更时，`ConfigManager` 会执行原子快照替换。
+当配置发生变更时，`team4u-config` 能够通过 `ConfigWatcher` 机制感知并执行原子化的快照替换，从而实现业务无感的热更新。
 
-* **防抖处理**：默认内置 500ms 防抖窗口，合并瞬时高频变更。可以通过 Builder 的 `debounceWindow(long)` 进行自定义。设置为 0 或负数时，变更信号将同步执行重载。
-* **监听语义**：通过 `addChangeListener` 注册的回调中，`oldValue == null` 表示新增，`newValue == null` 表示删除。
+#### 1. ConfigWatcher 的核心作用
+
+`ConfigWatcher` 是框架的“眼睛”，负责探测原始配置源的变动。它的核心逻辑如下：
+- **主动探测**：例如监听本地文件系统的修改信号（Watcher），或定时轮询远程配置中心的版本号。
+- **触发重载**：一旦探测到变更，它会向 `ConfigManager` 发送重载信号。
+- **解耦设计**：`ConfigSource` 只负责“读数据”，而 `ConfigWatcher` 只负责“感知变更”。一个源可以配合多个监听器。
+
+> [!TIP]
+> **静态 vs 动态配置源的使用建议：**
+> - **静态源 (Static Source)**：对于 `Properties` 文件、系统属性、环境变量等一旦启动通常不再变更的配置源，可以**不注册** `ConfigWatcher`。这能减少不必要的资源监控开销。
+> - **动态源 (Dynamic Source)**：对于数据库、Apollo/Nacos 等远程配置中心，为了实现“配置秒级生效”，必须**显式注册**对应的 `ConfigWatcher`（除非该源已内置监听逻辑）。
+> - **复合实现**：诸如 `InMemoryConfigSource` 这种既能读数据又能自感知的组件，通常同时实现了这两个接口，一并注册即可。
+
+#### 2. 防抖处理 (Debounce)
+
+为了防止配置中心瞬时高频变更（如批量修改 100 个配置项）导致系统频繁重载，`ConfigManager` 内置了 500ms 的防抖窗口。
+- 窗口内所有的变更信号将被合并为一次真实的重载操作。
+- 在单元测试中，建议通过 `Builder.debounceWindow(0)` 将其关闭，以确保变更立即生效，消除不必要的等待。
+
+#### 3. 注册用法
+
+通常情况下，开发者无需手动操作 `ConfigWatcher`，因为大多数扩展（如 `team4u-config-db` 或 `InMemoryConfigSource`）已经内置了监听逻辑。如果你实现了自定义的监听器，可以通过以下方式注册：
+
+**方式 A：全局注册（推荐）**
+```java
+ConfigBootstrap.global().addWatcher(new MyCustomConfigWatcher()).lock();
+```
+
+**方式 B：Builder 局部注册**
+```java
+ConfigManager manager = ConfigManager.builder()
+        .addSource(mySource)
+        .addWatcher(myWatcher)
+        .build();
+```
+
+#### 4. 业务监听器 (Change Listener)
+
+如果你想在配置变更后执行额外的业务逻辑（如重新建立数据库连接池），可以注册业务监听器：
 
 ```java
-manager.addChangeListener("server.*",(key, oldVal, newVal) ->{
-        if(newVal ==null){
-        System.out.
-
-println("Config deleted: "+key);
-    }else{
-            System.out.
-
-println("Config changed: "+key +" from "+oldVal+" to "+newVal);
+manager.addChangeListener("server.*", (key, oldVal, newVal) -> {
+    if (newVal == null) {
+        System.out.println("配置已删除: " + key);
+    } else {
+        System.out.println("配置已更新: " + key + "，新值为: " + newVal);
     }
-            });
+});
 ```
+
 
 ### 多源优先级聚合
 
