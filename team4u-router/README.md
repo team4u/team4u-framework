@@ -46,15 +46,21 @@ team4u-router 是一个轻量级、插件化的 Java 路由框架。它旨在将
 
 ### 准备路由配置
 
-在配置中心或本地配置文件中定义路由规则（以 JSON 形式）：
+在配置中心或本地配置文件中定义路由规则（以 JSON 形式）。注意：`rules` 在代码中定义为列表结构以保证执行顺序：
 
 ```json
 {
   "type": "expression",
-  "rules": {
-    "region == 'CN'": "china-handler",
-    "amount > 1000": "vip-handler"
-  },
+  "rules": [
+    {
+      "condition": "region == 'CN'",
+      "value": "china-handler"
+    },
+    {
+      "condition": "amount > 1000",
+      "value": "vip-handler"
+    }
+  ],
   "fallbackValue": "default-handler"
 }
 ```
@@ -73,7 +79,7 @@ RoutingManager manager = RoutingManager.global();
 
 #### 2. 自定义实例 (Builder)
 
-适合在需要环境隔离（如单元测试）、或使用不同配置源上下文时，通过 Builder 构建独立的实例：
+适合在需要环境隔离（如单元测试）、或使用不同配置源上下文时，通过 Builder 构建独立的实例。Builder 会自动通过 SPI 和包扫描发现工厂，手动添加的工厂具有更高优先级：
 
 ```java
 // 创建自定义的 Criteria，注册特定业务线的算子
@@ -84,10 +90,10 @@ Criteria myCriteria = Criteria.builder()
 RoutingManager customManager = RoutingManager.builder()
         // 指定自定义的 ConfigManager，而不是全局环境
         .configManager(myIsolatedConfigManager)
-        // 手动注册带有自定义 Criteria 的表达式路由器工厂，实现解耦与隔离
+        // 指定自定义的解析器（默认使用基于 Hutool 的 JSON 解析器）
+        .configParser(new MyYamlRoutePolicyParser())
+        // 手动注册带有自定义 Criteria 的表达式路由器工厂
         .addFactory(new ExpressionRouterFactory(myCriteria))
-        // 手动添加其他自定义路由工厂
-        .addFactory(new MyCustomRouterFactory())
         .build();
 ```
 
@@ -112,6 +118,9 @@ if (result.isMatch()) {
     String handlerName = result.getValue();
     System.out.println("匹配到的处理器：" + handlerName); // 输出：china-handler
 }
+
+// 5. 也可以直接通过原始配置字符串进行路由（常用于测试或临时策略）
+RouteResult<String> tempResult = manager.routeByConfig(rawJsonConfig, request);
 ```
 
 ### 类型安全路由（防类型擦除）
@@ -158,9 +167,9 @@ if (result.isMatch()) {
 
 ### 3. 多层级缓存管理
 
-`RoutingManager` 内部维护了一个高性能的 `DynamicInstanceProvider`：
-*   LRU 策略：默认缓存 1000 个最近使用的配置解析实例。
-*   解耦解析：自动将 JSON 配置解析为 `RoutePolicy` 并动态创建对应的 `Router` 实例。
+`RoutingManager` 提供了完善的缓存机制：
+*   **配置实例缓存**：内部通过 `ConfigDrivenRegistry` 自动监听配置变更，并缓存由配置生成的 `Router` 实例，确保高性能路由。
+*   **类型转换缓存**：`AbstractRouter` 内置了转换缓存，避免在将路由结果（如 Map）转换为 POJO 时产生重复的反射与转换开销。
 
 ---
 
@@ -173,10 +182,10 @@ if (result.isMatch()) {
 ```json
 {
   "type": "map",
-  "rules": {
-    "v1": "handler-v1",
-    "v2": "handler-v2"
-  },
+  "rules": [
+    {"condition": "v1", "value": "handler-v1"},
+    {"condition": "v2", "value": "handler-v2"}
+  ],
   "fallbackValue": "handler-v1"
 }
 ```
@@ -188,9 +197,9 @@ if (result.isMatch()) {
 ```json
 {
   "type": "expression",
-  "rules": {
-    "userId hash 0.1": "gray-version"
-  },
+  "rules": [
+    {"condition": "userId hash 0.1", "value": "gray-version"}
+  ],
   "fallbackValue": "stable-version"
 }
 ```
@@ -207,10 +216,10 @@ if (result.isMatch()) {
 ```json
 {
   "type": "expression",
-  "rules": {
-    "userId hash 0.2": "strategy-A",
-    "userId hash 0.5": "strategy-B"
-  },
+  "rules": [
+    {"condition": "userId hash 0.2", "value": "strategy-A"},
+    {"condition": "userId hash 0.5", "value": "strategy-B"}
+  ],
   "fallbackValue": "strategy-C"
 }
 ```
@@ -222,10 +231,10 @@ if (result.isMatch()) {
 ```json
 {
   "type": "expression",
-  "rules": {
-    "category == 'ELECTRONICS' && amount > 5000": "special-discount-model",
-    "userRank >= 5 || tags contains 'VIP'": "vip-pricing-model"
-  },
+  "rules": [
+    {"condition": "category == 'ELECTRONICS' && amount > 5000", "value": "special-discount-model"},
+    {"condition": "userRank >= 5 || tags contains 'VIP'", "value": "vip-pricing-model"}
+  ],
   "fallbackValue": "standard-pricing-model"
 }
 ```
@@ -257,23 +266,23 @@ if (result.isMatch()) {
 
 ### 核心执行流程
 
-1.  获取配置：`RoutingManager` 从 `ConfigManager` 获取指定 ID 的原始 JSON 字符串。
-2.  查询缓存：以配置字符串为 Key，在 LruCache 中寻找已实例化的 `Router`。
-3.  动态创建（Cache Miss）：
-    *   将 JSON 反序列化为 `RoutePolicy` 对象。
-    *   根据 `type` 从 `RouterFactoryRegistry` 寻找对应工厂。
-    *   通过工厂创建 `Router` 实例并存入缓存。
-4.  执行路由：调用 `Router.route(request)` 返回 `RouteResult`。
+1.  **获取配置**：`RoutingManager` 通过 `ConfigDrivenRegistry` 从 `ConfigManager` 获取配置。
+2.  **实例管理**：`ConfigDrivenRegistry` 负责维护配置与 `Router` 实例的映射。当配置变更时，会自动重新解析并实例化。
+3.  **动态创建**：
+    *   通过 `RoutePolicyParser` 将配置解析为 `RoutePolicy` 对象。
+    *   从 `RouterFactoryRegistry` 中查找匹配 `type` 的工厂并创建 `Router` 实例。
+4.  **执行路由**：调用 `Router.route(request)` 执行匹配逻辑并返回结果。
 
 ### 状态流转图
 
 ```mermaid
 graph TD
-    A[RoutingManager] -->|Get JSON| B[ConfigManager]
-    B -->|Return JSON| A
-    A -->|Lookup Cache| C{Cached Router?}
-    C -->|Yes| E[Execute Router]
-    C -->|No| D[Factory Create & Cache]
-    D --> E
-    E -->|Return| F[RouteResult]
+    A[RoutingManager] -->|Lookup| B[ConfigDrivenRegistry]
+    B -->|Miss| C[ConfigManager]
+    C -->|Return Config| D[PolicyParser]
+    D -->|RoutePolicy| E[RouterFactory]
+    E -->|Create| F[Router Instance]
+    F -->|Cache| B
+    B -->|Return| G[Router]
+    G -->|Execute| H[RouteResult]
 ```

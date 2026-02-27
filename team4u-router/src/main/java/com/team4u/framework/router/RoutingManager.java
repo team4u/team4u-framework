@@ -91,6 +91,10 @@ public class RoutingManager {
     public <T> RouteResult<T> route(String routerId, Object request) {
         Router router = routerRegistry.get("router." + routerId);
         if (router == null) {
+            // 当路由器未找到时，记录 DEBUG 级别的日志辅助排障
+            if (log.isDebugEnabled()) {
+                log.debug("Route unmatch: Router [{}] not found or failed to initialize.", routerId);
+            }
             return RouteResult.unmatch();
         }
         return router.route(request);
@@ -108,9 +112,31 @@ public class RoutingManager {
     public <T> RouteResult<T> route(String routerId, Object request, Class<T> targetType) {
         Router router = routerRegistry.get("router." + routerId);
         if (router == null) {
+            // 当路由器未找到时，记录 DEBUG 级别的日志辅助排障
+            if (log.isDebugEnabled()) {
+                log.debug("Route unmatch: Router [{}] not found or failed to initialize.", routerId);
+            }
             return RouteResult.unmatch();
         }
         return router.route(request, targetType);
+    }
+
+    /**
+     * 执行路由并返回诊断轨迹（通过路由唯一标识）
+     *
+     * @param routerId 路由唯一标识
+     * @param request  路由请求对象
+     * @param <T>      结果类型
+     * @return 路由诊断轨迹
+     */
+    public <T> com.team4u.framework.router.api.trace.RouteTrace<T> trace(String routerId, Object request) {
+        Router router = routerRegistry.get("router." + routerId);
+        if (router == null) {
+            com.team4u.framework.router.api.trace.RouteTrace<T> trace = new com.team4u.framework.router.api.trace.RouteTrace<>();
+            trace.setResult(RouteResult.unmatch());
+            return trace;
+        }
+        return router.trace(request);
     }
 
     /**
@@ -119,9 +145,9 @@ public class RoutingManager {
      * 方便单元测试或直接透传配置场景。
      * </p>
      *
-     * @param rawJsonConfig JSON 配置字符串
-     * @param request       路由请求对象
-     * @param <T>           结果类型
+     * @param rawConfig 配置字符串
+     * @param request   路由请求对象
+     * @param <T>       结果类型
      * @return 路由结果
      */
     public <T> RouteResult<T> routeByConfig(String rawConfig, Object request) {
@@ -149,6 +175,25 @@ public class RoutingManager {
 
         Router router = buildRouterFromConfig(rawConfig);
         return router.route(request, targetType);
+    }
+
+    /**
+     * 执行路由并返回诊断轨迹（针对原始配置）
+     *
+     * @param rawConfig 配置字符串
+     * @param request   路由请求对象
+     * @param <T>       结果类型
+     * @return 路由诊断轨迹
+     */
+    public <T> com.team4u.framework.router.api.trace.RouteTrace<T> traceByConfig(String rawConfig, Object request) {
+        if (StrUtil.isBlank(rawConfig)) {
+            com.team4u.framework.router.api.trace.RouteTrace<T> trace = new com.team4u.framework.router.api.trace.RouteTrace<>();
+            trace.setResult(RouteResult.unmatch());
+            return trace;
+        }
+
+        Router router = buildRouterFromConfig(rawConfig);
+        return router.trace(request);
     }
 
     /**

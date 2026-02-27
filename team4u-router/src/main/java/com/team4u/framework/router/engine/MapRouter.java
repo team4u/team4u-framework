@@ -8,10 +8,17 @@ import com.team4u.framework.router.api.RouteRule;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+import cn.hutool.log.Log;
+import cn.hutool.log.LogFactory;
+import com.team4u.framework.router.api.trace.RouteTrace;
+import com.team4u.framework.router.api.trace.RuleTrace;
+
 /**
  * 映射路由器
  */
 public class MapRouter extends AbstractRouter {
+
+    private static final Log log = LogFactory.get();
 
     private final Map<String, Object> rules;
     private final Object fallbackValue;
@@ -33,13 +40,53 @@ public class MapRouter extends AbstractRouter {
         }
 
         // 尝试从规则库中精确匹配
-        Object target = rules.get(String.valueOf(request));
+        String routingKey = String.valueOf(request);
+        Object target = rules.get(routingKey);
+
         if (target != null) {
+            // 记录匹配命中的日志 (仅在 TRACE 级别)
+            if (log.isTraceEnabled()) {
+                log.trace("Route matched: key [{}] -> value [{}]", routingKey, target);
+            }
             return RouteResult.matched((T) target);
+        }
+
+        // 未匹配时记录日志 (仅在 TRACE 级别)
+        if (log.isTraceEnabled()) {
+            log.trace("Route unmatch: key [{}] not found, using fallback [{}]", routingKey, fallbackValue);
         }
 
         // 未匹配时走兜底逻辑
         return fallback();
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> RouteTrace<T> trace(Object request) {
+        long start = System.currentTimeMillis();
+        RouteTrace<T> routeTrace = new RouteTrace<>();
+        routeTrace.setRouterType("map");
+
+        if (request == null) {
+            routeTrace.setResult(fallback());
+            routeTrace.setCostMs(System.currentTimeMillis() - start);
+            return routeTrace;
+        }
+
+        String routingKey = String.valueOf(request);
+        Object target = rules.get(routingKey);
+
+        if (target != null) {
+            routeTrace.addStep(RuleTrace.normal(routingKey, true, null));
+            routeTrace.setResult(RouteResult.matched((T) target));
+        } else {
+            routeTrace.addStep(RuleTrace.normal(routingKey, false, null));
+            routeTrace.addStep(RuleTrace.fallback(fallbackValue != null));
+            routeTrace.setResult(fallback());
+        }
+
+        routeTrace.setCostMs(System.currentTimeMillis() - start);
+        return routeTrace;
     }
 
     /**

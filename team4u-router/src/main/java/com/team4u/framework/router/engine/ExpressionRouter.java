@@ -6,6 +6,10 @@ import com.team4u.framework.router.api.AbstractRouter;
 import com.team4u.framework.router.api.RoutePolicy;
 import com.team4u.framework.router.api.RouteResult;
 import com.team4u.framework.router.api.RouteRule;
+import cn.hutool.log.Log;
+import cn.hutool.log.LogFactory;
+import com.team4u.framework.router.api.trace.RouteTrace;
+import com.team4u.framework.router.api.trace.RuleTrace;
 
 import java.util.List;
 
@@ -13,6 +17,8 @@ import java.util.List;
  * 表达式路由器
  */
 public class ExpressionRouter extends AbstractRouter {
+
+    private static final Log log = LogFactory.get();
 
     private final List<RouteRule> rules;
     private final Criteria criteria;
@@ -39,12 +45,56 @@ public class ExpressionRouter extends AbstractRouter {
             String expr = rule.getCondition();
             // 执行表达式匹配
             if (criteria.matches(expr, context)) {
+                // 记录匹配命中的日志 (仅在 TRACE 级别)
+                if (log.isTraceEnabled()) {
+                    log.trace("Route matched: condition [{}] -> value [{}]", expr, rule.getValue());
+                }
                 return RouteResult.matched((T) rule.getValue());
             }
         }
 
+        // 未匹配时记录日志 (仅在 TRACE 级别)
+        if (log.isTraceEnabled()) {
+            log.trace("Route fallback: no rules matched, using fallback [{}]", fallbackValue);
+        }
+
         // 所有规则未匹配时走兜底逻辑
         return fallback();
+    }
+
+    @Override
+    @SuppressWarnings("unchecked")
+    public <T> RouteTrace<T> trace(Object request) {
+        long start = System.currentTimeMillis();
+        RouteTrace<T> routeTrace = new RouteTrace<>();
+        routeTrace.setRouterType("expression");
+
+        MatchContext context = (request instanceof MatchContext) ? (MatchContext) request : MatchContext.of(request);
+
+        for (RouteRule rule : rules) {
+            String expr = rule.getCondition();
+
+            // 核心：使用 criterion 的 trace 方法获取底层执行树
+            com.team4u.framework.criterion.trace.TraceNode node = criteria.trace(expr, context);
+            boolean isMatch = node.isMatched();
+
+            // 将底层 TraceNode 挂载到路由轨迹中
+            routeTrace.addStep(RuleTrace.normal(expr, isMatch, node.render()));
+
+            if (isMatch) {
+                routeTrace.setResult(RouteResult.matched((T) rule.getValue()));
+                routeTrace.setCostMs(System.currentTimeMillis() - start);
+                return routeTrace;
+            }
+        }
+
+        // 记录兜底轨迹
+        boolean fallbackMatched = (fallbackValue != null);
+        routeTrace.addStep(RuleTrace.fallback(fallbackMatched));
+        routeTrace.setResult(this.fallback());
+        routeTrace.setCostMs(System.currentTimeMillis() - start);
+
+        return routeTrace;
     }
 
     /**
