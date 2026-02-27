@@ -188,6 +188,7 @@ RoutePolicy exprPolicy = RoutePolicyBuilder.<String>expression()
         .rule("userRank > 5", "vip-version")
         .rule("tags contains 'PREMIUM'", "premium-version")
         .fallback("standard-version")
+        .ext("multiMatch", true) // 设置扩展属性
         .build();
 
 // 3. 创建权重路由 (Weight Router)
@@ -344,10 +345,39 @@ public class RoutingConfig {
 集成 [team4u-criterion](../team4u-criterion/README.md)，支持复杂的布尔逻辑和多条件判断。
 
 *   配置类型：`type: "expression"`
-*   短路匹配：规则按定义的顺序依次执行，一旦匹配成功立即返回。
+*   短路匹配：默认情况下，规则按定义的顺序依次执行，一旦匹配成功立即返回。
+*   多重匹配：支持通过扩展属性 `ext.multiMatch` 开启多重匹配，返回所有命中的结果列表。
 *   可靠兜底：使用 `fallbackValue` 字段作为唯一的兜底机制，在所有表达式均不匹配后执行。
 *   多样化输入：支持 `Map`、`POJO` 或 `MatchContext` 作为输入。
 *   算子解耦：支持通过 `ExpressionRouterFactory` 注入自定义的 `Criteria` 实例。
+
+#### 多重匹配配置说明
+
+当需要获取所有匹配成功的规则（例如在营销场景下匹配所有符合条件的优惠券）时，可以开启 `multiMatch` 模式：
+
+```json
+{
+  "id": "coupon-router",
+  "type": "expression",
+  "ext": {
+    "multiMatch": true
+  },
+  "rules": [
+    {"condition": "isNewUser", "value": "coupon-A"},
+    {"condition": "amount > 100", "value": "coupon-B"}
+  ],
+  "fallbackValue": ["default-coupon"]
+}
+```
+
+在调用端，通过显式指定 `List.class` 即可获得类型转换后的匹配列表：
+
+```java
+RouteResult<List<String>> result = manager.route("router.coupon-router", request, List.class);
+if (result.isMatch()) {
+    List<String> matchedCoupons = result.getValue();
+}
+```
 
 ### 3. WeightRouter (权重/比例分流)
 

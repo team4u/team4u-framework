@@ -4,7 +4,9 @@ import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteRule;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * 路由策略流式构建器
@@ -17,6 +19,7 @@ public class RoutePolicyBuilder<T> {
     private final List<RouteRule> rules = new ArrayList<>();
     private String id;
     private T fallbackValue;
+    private final Map<String, Object> ext = new HashMap<>();
 
     // 私有化构造器，强制使用静态工厂方法
     private RoutePolicyBuilder(String type) {
@@ -97,6 +100,24 @@ public class RoutePolicyBuilder<T> {
     }
 
     /**
+     * 设置扩展属性
+     */
+    public RoutePolicyBuilder<T> ext(String key, Object value) {
+        this.ext.put(key, value);
+        return this;
+    }
+
+    /**
+     * 批量设置扩展属性
+     */
+    public RoutePolicyBuilder<T> ext(Map<String, Object> ext) {
+        if (ext != null) {
+            this.ext.putAll(ext);
+        }
+        return this;
+    }
+
+    /**
      * 构建最终的路由策略对象
      */
     public RoutePolicy build() {
@@ -106,6 +127,7 @@ public class RoutePolicyBuilder<T> {
         // 使用新 List 防止外部修改
         policy.setRules(new ArrayList<>(this.rules));
         policy.setFallbackValue(this.fallbackValue);
+        policy.getExt().putAll(this.ext);
         return policy;
     }
 }

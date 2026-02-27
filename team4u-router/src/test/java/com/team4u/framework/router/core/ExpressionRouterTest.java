@@ -1,6 +1,7 @@
 package com.team4u.framework.router.core;
 
 import com.team4u.framework.criterion.Criteria;
+import com.team4u.framework.router.api.builder.RoutePolicyBuilder;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.model.RouteRule;
@@ -11,6 +12,7 @@ import org.junit.Test;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -130,5 +132,56 @@ public class ExpressionRouterTest {
         RouteResult<String> result2 = router.route(req2);
         Assert.assertTrue(result2.isMatch());
         Assert.assertEquals("ExplicitFallback", result2.getValue());
+    }
+
+    @Test
+    public void testMultiMatch() {
+        RoutePolicy policy = new RoutePolicy();
+        policy.setType("expression");
+        policy.getExt().put("multiMatch", true);
+        policy.setFallbackValue(Arrays.asList("default"));
+
+        policy.setRules(Arrays.asList(
+                new RouteRule("age > 10", "V10"),
+                new RouteRule("age > 20", "V20"),
+                new RouteRule("age > 30", "V30")));
+
+        ExpressionRouter router = new ExpressionRouter(policy);
+
+        // 匹配多个规则
+        Map<String, Object> req1 = new HashMap<>();
+        req1.put("age", 25);
+        RouteResult<List<String>> result1 = router.route(req1);
+        Assert.assertTrue(result1.isMatch());
+        Assert.assertEquals(Arrays.asList("V10", "V20"), result1.getValue());
+        Assert.assertEquals("age > 10,age > 20", result1.getMatchedCondition());
+
+        // 匹配全部规则
+        Map<String, Object> req2 = new HashMap<>();
+        req2.put("age", 35);
+        RouteResult<List<String>> result2 = router.route(req2);
+        Assert.assertEquals(Arrays.asList("V10", "V20", "V30"), result2.getValue());
+
+        // 走兜底逻辑
+        Map<String, Object> req3 = new HashMap<>();
+        req3.put("age", 5);
+        RouteResult<List<String>> result3 = router.route(req3);
+        Assert.assertEquals(Arrays.asList("default"), result3.getValue());
+
+        // 验证 trace
+        RouteTrace<List<String>> trace1 = router.trace(req1);
+        Assert.assertEquals(Arrays.asList("V10", "V20"), trace1.getResult().getValue());
+        Assert.assertEquals("age > 10,age > 20", trace1.getResult().getMatchedCondition());
+    }
+
+    @Test
+    public void testRoutePolicyBuilderWithExt() {
+        RoutePolicy policy = RoutePolicyBuilder.expression()
+                .ext("multiMatch", true)
+                .ext("other", "value")
+                .build();
+
+        Assert.assertTrue(policy.getExtProperty("multiMatch", false));
+        Assert.assertEquals("value", policy.getExtProperty("other", "default"));
     }
 }

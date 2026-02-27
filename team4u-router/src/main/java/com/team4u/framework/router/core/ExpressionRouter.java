@@ -11,6 +11,7 @@ import com.team4u.framework.router.api.model.RouteRule;
 import com.team4u.framework.router.api.trace.RouteTrace;
 import com.team4u.framework.router.api.trace.RuleTrace;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -23,6 +24,7 @@ public class ExpressionRouter extends AbstractRouter {
     private final List<RouteRule> rules;
     private final Criteria criteria;
     private final Object fallbackValue;
+    private final boolean multiMatch;
 
     public ExpressionRouter(RoutePolicy policy) {
         this(policy, null);
@@ -32,6 +34,7 @@ public class ExpressionRouter extends AbstractRouter {
         this.rules = policy.getRules();
         this.criteria = criteria != null ? criteria : Criteria.global();
         this.fallbackValue = policy.getFallbackValue();
+        this.multiMatch = policy.getExtProperty("multiMatch", false);
     }
 
     @SuppressWarnings("unchecked")
@@ -40,17 +43,36 @@ public class ExpressionRouter extends AbstractRouter {
         // 构建匹配上下文，确保请求对象可用作表达式计算
         MatchContext context = (request instanceof MatchContext) ? (MatchContext) request : MatchContext.of(request);
 
+        List<Object> matchedValues = new ArrayList<>();
+        List<String> matchedConditions = new ArrayList<>();
+
         // 按顺序遍历所有路由规则进行匹配
         for (RouteRule rule : rules) {
             String expr = rule.getCondition();
             // 执行表达式匹配
             if (criteria.matches(expr, context)) {
-                // 记录匹配命中的日志 (仅在 TRACE 级别)
-                if (log.isTraceEnabled()) {
-                    log.trace("Route matched: condition [{}] -> value [{}]", expr, rule.getValue());
+                if (!multiMatch) {
+                    // 非多重匹配模式：记录匹配命中的日志 (仅在 TRACE 级别) 并立即返回
+                    if (log.isTraceEnabled()) {
+                        log.trace("Route matched: condition [{}] -> value [{}]", expr, rule.getValue());
+                    }
+                    return RouteResult.matched((T) rule.getValue(), expr);
                 }
-                return RouteResult.matched((T) rule.getValue(), expr);
+
+                // 多重匹配模式：记录匹配结果，继续循环
+                matchedValues.add(rule.getValue());
+                matchedConditions.add(expr);
             }
+        }
+
+        // 处理多重匹配结果
+        if (!matchedValues.isEmpty()) {
+            String combinedCondition = String.join(",", matchedConditions);
+            if (log.isTraceEnabled()) {
+                log.trace("Route multi-matched: conditions [{}] -> values [{}]", combinedCondition, matchedValues);
+            }
+            // 泛型 T 在多重匹配下期望是 List 类型
+            return RouteResult.matched((T) matchedValues, combinedCondition);
         }
 
         // 未匹配时记录日志 (仅在 TRACE 级别)
@@ -71,6 +93,9 @@ public class ExpressionRouter extends AbstractRouter {
 
         MatchContext context = (request instanceof MatchContext) ? (MatchContext) request : MatchContext.of(request);
 
+        List<Object> matchedValues = new ArrayList<>();
+        List<String> matchedConditions = new ArrayList<>();
+
         for (RouteRule rule : rules) {
             String expr = rule.getCondition();
 
@@ -82,18 +107,28 @@ public class ExpressionRouter extends AbstractRouter {
             routeTrace.addStep(RuleTrace.normal(expr, isMatch, node.render()));
 
             if (isMatch) {
-                routeTrace.setResult(RouteResult.matched((T) rule.getValue(), expr));
-                routeTrace.setCostMs(System.currentTimeMillis() - start);
-                return routeTrace;
+                if (!multiMatch) {
+                    routeTrace.setResult(RouteResult.matched((T) rule.getValue(), expr));
+                    routeTrace.setCostMs(System.currentTimeMillis() - start);
+                    return routeTrace;
+                }
+
+                matchedValues.add(rule.getValue());
+                matchedConditions.add(expr);
             }
         }
 
-        // 记录兜底轨迹
-        boolean fallbackMatched = (fallbackValue != null);
-        routeTrace.addStep(RuleTrace.fallback(fallbackMatched));
-        routeTrace.setResult(this.fallback());
-        routeTrace.setCostMs(System.currentTimeMillis() - start);
+        if (!matchedValues.isEmpty()) {
+            String combinedCondition = String.join(",", matchedConditions);
+            routeTrace.setResult(RouteResult.matched((T) matchedValues, combinedCondition));
+        } else {
+            // 记录兜底轨迹
+            boolean fallbackMatched = (fallbackValue != null);
+            routeTrace.addStep(RuleTrace.fallback(fallbackMatched));
+            routeTrace.setResult(this.fallback());
+        }
 
+        routeTrace.setCostMs(System.currentTimeMillis() - start);
         return routeTrace;
     }
 
