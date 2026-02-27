@@ -2,9 +2,10 @@ package com.team4u.framework.router.parser;
 
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
-import java.util.ArrayList;
 import com.team4u.framework.router.api.RoutePolicy;
 import com.team4u.framework.router.api.RoutePolicyParser;
+
+import java.util.ArrayList;
 
 /**
  * 默认的路由策略解析器 (基于 Hutool JSON)

@@ -10,6 +10,10 @@ import lombok.Data;
 @Data
 public class RouteResult<T> {
 
+    /**
+     * 匹配失败的单例对象，用于减少不必要的对象创建
+     */
+    private static final RouteResult<?> UNMATCH_INSTANCE = new RouteResult<>(false, null, null);
     private final boolean match;
     private final T value;
     /**
@@ -50,11 +54,6 @@ public class RouteResult<T> {
     public static <T> RouteResult<T> matched(T value, String matchedCondition) {
         return new RouteResult<>(true, value, matchedCondition);
     }
-
-    /**
-     * 匹配失败的单例对象，用于减少不必要的对象创建
-     */
-    private static final RouteResult<?> UNMATCH_INSTANCE = new RouteResult<>(false, null, null);
 
     /**
      * 匹配失败

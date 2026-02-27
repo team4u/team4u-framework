@@ -180,9 +180,9 @@ if (result.isMatch()) {
 ### 3. 配置驱动与动态发现
 
 `RoutingManager` 提供了完善的机制以确保高性能与灵活性：
-*   **配置实例缓存**：内部通过 `ConfigDrivenRegistry` 自动监听配置变更，并缓存由配置生成的 `Router` 实例。
-*   **自动发现机制**：`RoutingManager` 在构建时会通过 `PolicyScanner` 自动扫描包及 SPI (`RouterFactory`)，实现零配置集成。
-*   **高性能路由**：`AbstractRouter` 封装了通用的类型转换逻辑，确保从原始配置到业务对象的平滑过渡。
+*   配置实例缓存：内部通过 `ConfigDrivenRegistry` 自动监听配置变更，并缓存由配置生成的 `Router` 实例。
+*   自动发现机制：`RoutingManager` 在构建时会通过 `PolicyScanner` 自动扫描包及 SPI (`RouterFactory`)，实现零配置集成。
+*   高性能路由：`AbstractRouter` 封装了通用的类型转换逻辑，确保从原始配置到业务对象的平滑过渡。
 
 ---
 
@@ -212,7 +212,7 @@ for (RuleTrace step : trace.getSteps()) {
 - `result`: 最终的路由结果。
     - 其中包含 `matchedCondition`：
         - 命中规则时：为对应 Key 或表达式。
-        - **命中兜底 (Fallback) 时：为 `null`**。
+        - 命中兜底 (Fallback) 时：为 `null`。
 
 ---
 
@@ -309,12 +309,12 @@ for (RuleTrace step : trace.getSteps()) {
 
 ### 核心执行流程
 
-1.  **获取配置**：`RoutingManager` 通过 `ConfigDrivenRegistry` 从 `ConfigManager` 获取配置。
-2.  **实例管理**：`ConfigDrivenRegistry` 负责维护配置与 `Router` 实例的映射。当配置变更时，会自动重新解析并实例化。
-3.  **动态创建**：
+1.  获取配置：`RoutingManager` 通过 `ConfigDrivenRegistry` 从 `ConfigManager` 获取配置。
+2.  实例管理：`ConfigDrivenRegistry` 负责维护配置与 `Router` 实例的映射。当配置变更时，会自动重新解析并实例化。
+3.  动态创建：
     *   通过 `RoutePolicyParser` 将配置解析为 `RoutePolicy` 对象。
     *   从 `RouterFactoryRegistry` 中查找匹配 `type` 的工厂并创建 `Router` 实例。
-4.  **执行路由**：调用 `Router.route(request)` 执行匹配逻辑并返回结果。
+4.  执行路由：调用 `Router.route(request)` 执行匹配逻辑并返回结果。
 
 ### 状态流转图
 

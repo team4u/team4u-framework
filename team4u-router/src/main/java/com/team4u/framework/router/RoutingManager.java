@@ -1,8 +1,8 @@
 package com.team4u.framework.router;
 
+import cn.hutool.core.util.StrUtil;
 import cn.hutool.log.Log;
 import cn.hutool.log.LogFactory;
-import cn.hutool.core.util.StrUtil;
 import com.team4u.framework.base.util.ServiceLoaderUtil;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
@@ -35,8 +35,8 @@ public class RoutingManager {
     private final ConfigDrivenRegistry<Router> routerRegistry;
 
     private RoutingManager(RouterFactoryRegistry factoryRegistry,
-            ConfigManager configManager,
-            RoutePolicyParser configParser) {
+                           ConfigManager configManager,
+                           RoutePolicyParser configParser) {
         this.factoryRegistry = factoryRegistry;
         this.configManager = configManager;
         this.configParser = configParser;
@@ -44,19 +44,6 @@ public class RoutingManager {
                 this.configManager,
                 "router.",
                 this::buildRouterFromConfig);
-    }
-
-    /**
-     * 内部工厂方法：Config String -> Policy -> Router
-     */
-    private Router buildRouterFromConfig(String config) {
-        RoutePolicy policy = configParser.parse(config);
-        if (policy == null) {
-            return null;
-        }
-        return this.factoryRegistry.get(policy.getType())
-                .orElseThrow(() -> new IllegalArgumentException("Unsupported router type: " + policy.getType()))
-                .create(policy);
     }
 
     /**
@@ -78,6 +65,19 @@ public class RoutingManager {
      */
     public static Builder builder() {
         return new Builder();
+    }
+
+    /**
+     * 内部工厂方法：Config String -> Policy -> Router
+     */
+    private Router buildRouterFromConfig(String config) {
+        RoutePolicy policy = configParser.parse(config);
+        if (policy == null) {
+            return null;
+        }
+        return this.factoryRegistry.get(policy.getType())
+                .orElseThrow(() -> new IllegalArgumentException("Unsupported router type: " + policy.getType()))
+                .create(policy);
     }
 
     /**
