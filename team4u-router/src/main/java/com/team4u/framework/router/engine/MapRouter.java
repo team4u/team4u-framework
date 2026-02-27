@@ -48,7 +48,7 @@ public class MapRouter extends AbstractRouter {
             if (log.isTraceEnabled()) {
                 log.trace("Route matched: key [{}] -> value [{}]", routingKey, target);
             }
-            return RouteResult.matched((T) target);
+            return RouteResult.matched((T) target, routingKey);
         }
 
         // 未匹配时记录日志 (仅在 TRACE 级别)

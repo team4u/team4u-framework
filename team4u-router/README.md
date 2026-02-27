@@ -119,6 +119,8 @@ RouteResult<String> result = manager.route("order-router", request);
 if (result.isMatch()) {
     String handlerName = result.getValue();
     System.out.println("匹配到的处理器：" + handlerName); // 输出：china-handler
+    // 新增：获取命中的规则条件（表达式或 Key）
+    System.out.println("命中的条件：" + result.getMatchedCondition()); // 输出：region == 'CN'
 }
 
 // 5. 也可以直接通过原始配置字符串进行路由（常用于测试或临时策略）
@@ -201,6 +203,9 @@ for (RuleTrace step : trace.getSteps()) {
 - `steps`: 每一个评估步骤的明细，包括是否匹配、原始条件以及底层诊断信息。
 - `costMs`: 本次路由计算的耗时。
 - `result`: 最终的路由结果。
+    - 其中包含 `matchedCondition`：
+        - 命中规则时：为对应 Key 或表达式。
+        - **命中兜底 (Fallback) 时：为 `null`**。
 
 ---
 

@@ -30,7 +30,8 @@ public abstract class AbstractRouter implements Router {
 
         Object rawValue = result.getValue();
         if (rawValue == null) {
-            return RouteResult.matched(null);
+            // 透传 matchedCondition
+            return RouteResult.matched(null, result.getMatchedCondition());
         }
 
         if (targetType != null && !targetType.isInstance(rawValue)) {
@@ -40,7 +41,8 @@ public abstract class AbstractRouter implements Router {
             // computeIfAbsent 保证高并发下 Map->Bean 的转换只执行一次
             Object convertedValue = convertedCache.computeIfAbsent(cacheKey,
                     k -> Convert.convert(targetType, rawValue));
-            return RouteResult.matched((T) convertedValue);
+            // 透传 matchedCondition
+            return RouteResult.matched((T) convertedValue, result.getMatchedCondition());
         }
 
         return (RouteResult<T>) result;

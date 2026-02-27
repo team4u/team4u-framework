@@ -49,7 +49,7 @@ public class ExpressionRouter extends AbstractRouter {
                 if (log.isTraceEnabled()) {
                     log.trace("Route matched: condition [{}] -> value [{}]", expr, rule.getValue());
                 }
-                return RouteResult.matched((T) rule.getValue());
+                return RouteResult.matched((T) rule.getValue(), expr);
             }
         }
 

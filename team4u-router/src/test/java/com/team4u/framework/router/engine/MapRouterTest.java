@@ -29,16 +29,19 @@ public class MapRouterTest {
         RouteResult<String> resultA = router.route("A");
         Assert.assertTrue(resultA.isMatch());
         Assert.assertEquals("ValueA", resultA.getValue());
+        Assert.assertEquals("A", resultA.getMatchedCondition());
 
         // 测试不存在的 Key 走兜底
         RouteResult<String> resultC = router.route("C");
         Assert.assertTrue(resultC.isMatch());
         Assert.assertEquals("ValueDefault", resultC.getValue());
+        Assert.assertNull(resultC.getMatchedCondition());
 
         // 测试 null 走兜底
         RouteResult<String> resultNull = router.route(null);
         Assert.assertTrue(resultNull.isMatch());
         Assert.assertEquals("ValueDefault", resultNull.getValue());
+        Assert.assertNull(resultNull.getMatchedCondition());
     }
 
     @Test

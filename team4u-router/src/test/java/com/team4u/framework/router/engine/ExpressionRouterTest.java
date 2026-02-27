@@ -35,6 +35,7 @@ public class ExpressionRouterTest {
         RouteResult<String> result1 = router.route(req1);
         Assert.assertTrue(result1.isMatch());
         Assert.assertEquals("ValueA", result1.getValue());
+        Assert.assertEquals("name == 'A'", result1.getMatchedCondition());
 
         // 匹配规则 2 (即便满足后续规则，也会在满足规则 2 时短路)
         Map<String, Object> req2 = new HashMap<>();
@@ -43,6 +44,7 @@ public class ExpressionRouterTest {
         RouteResult<String> result2 = router.route(req2);
         Assert.assertTrue(result2.isMatch());
         Assert.assertEquals("ValueAdult", result2.getValue());
+        Assert.assertEquals("age > 18", result2.getMatchedCondition());
 
         // 匹配显式兜底
         Map<String, Object> req3 = new HashMap<>();
@@ -51,6 +53,7 @@ public class ExpressionRouterTest {
         RouteResult<String> result3 = router.route(req3);
         Assert.assertTrue(result3.isMatch());
         Assert.assertEquals("ValueDefault", result3.getValue());
+        Assert.assertNull(result3.getMatchedCondition());
     }
 
     @Test
