@@ -30,7 +30,7 @@ team4u-router 是一个轻量级、插件化的 Java 路由框架。它旨在将
 * 配置驱动：路由规则支持动态重载，无需重启应用即可调整业务走向。
 * 多种模式：内置精准匹配 (Map) 与规则引擎 (Expression) 两种核心路由器。
 * 透明集成：无缝对接 [team4u-config](../team4u-config/README.md)，实现路由规则的统一配置管理。
-* 高性能：内置两级缓存（配置实例缓存 + 类型转换缓存），确保极致的路由性能。
+* 高性能：内置配置实例缓存，确保极致的路由性能。
 * 路由诊断：提供完善的 Trace 能力，支持查看每一条规则的匹配状态及表达式计算细节。
 * 极简 API：统一入口 `RoutingManager`，极简的交互逻辑，学习成本极低。
 
@@ -121,7 +121,7 @@ request.put("region", "CN");
 request.put("amount", 2000);
 
 // 3. 执行路由逻辑（底层会自动查找配置项 router.order-router）
-RouteResult<String> result = manager.route("order-router", request);
+RouteResult<String> result = manager.route("router.order-router", request);
 
 // 4. 处理匹配结果
 if (result.isMatch()) {
@@ -138,7 +138,7 @@ RouteResult<TargetService> typedTempResult = manager.routeByConfig(rawJsonConfig
 
 // 6. 执行带诊断信息的路由（Trace）
 // 支持通过 routerId 诊断
-RouteTrace<String> trace = manager.trace("order-router", request);
+RouteTrace<String> trace = manager.trace("router.order-router", request);
 // 也支持通过原始配置诊断
 RouteTrace<String> configTrace = manager.traceByConfig(rawJsonConfig, request);
 
@@ -154,7 +154,7 @@ System.out.println("路由总耗时：" + trace.getCostMs() + "ms");
 ```java
 // 假设路由配置返回的是一个复杂的服务节点信息：{"host": "127.0.0.1", "port": 8080}
 // 传入目标类型 TargetService.class 进行自动转换绑定
-RouteResult<TargetService> result = manager.route("service-router", request, TargetService.class);
+RouteResult<TargetService> result = manager.route("router.service-router", request, TargetService.class);
 
 if (result.isMatch()) {
     TargetService target = result.getValue();
@@ -176,7 +176,7 @@ if (result.isMatch()) {
 ```java
 // 1. 创建映射路由 (Map Router)
 RoutePolicy mapPolicy = RoutePolicyBuilder.<String>map()
-        .id("region-router")
+        .id("router.region-router")
         .rule("CN", "china-handler")
         .rule("US", "usa-handler")
         .fallback("default-handler")
@@ -184,7 +184,7 @@ RoutePolicy mapPolicy = RoutePolicyBuilder.<String>map()
 
 // 2. 创建表达式路由 (Expression Router)
 RoutePolicy exprPolicy = RoutePolicyBuilder.<String>expression()
-        .id("gray-router")
+        .id("router.gray-router")
         .rule("userId hash 0.1", "gray-version")
         .rule("userRank > 5", "vip-version")
         .fallback("stable-version")
@@ -220,7 +220,7 @@ RouteTrace<String> trace = manager.traceByPolicy(exprPolicy, request);
 
 ```java
 // 1. 在接口或方法上指定路由策略 ID
-@Routed(routerId = "payment-router")
+@Routed(routerId = "router.payment-router")
 public interface PaymentService {
 
     // 2. 标记哪个参数作为路由计算的上下文 (如不标记，默认取第一个参数)
@@ -269,7 +269,7 @@ paymentService.process(myRequest);
 
 ```java
 // 方式 A：使用全局管理器手动查找匹配的 Bean 实例
-PaymentService service = RoutedBeanLocator.locate("payment-router", myRequest, PaymentService.class);
+PaymentService service = RoutedBeanLocator.locate("router.payment-router", myRequest, PaymentService.class);
 
 // 方式 B：使用自定义管理器查找
 PaymentService customService = RoutedBeanLocator.locate(myCustomManager, "payment-router", myRequest, PaymentService.class);
@@ -279,7 +279,7 @@ service.process(myRequest);
 
 ### 4. 路由规则配置
 
-为了让上述 `payment-router` 生效，你需要在配置中心或配置文件中定义如下 JSON 规则。`value` 必须与 Spring 容器或 [`BeanManager`](../team4u-bean/README.md) 中的 Bean 名称对应：
+为了让上述 `router.payment-router` 生效，你需要在配置中心或配置文件中定义如下 JSON 规则。`value` 必须与 Spring 容器或 [`BeanManager`](../team4u-bean/README.md) 中的 Bean 名称对应：
 
 ```json
 {
@@ -356,7 +356,7 @@ public class RoutingConfig {
 
 ```java
 // 执行诊断路由
-RouteTrace<String> trace = manager.trace("order-router", request);
+RouteTrace<String> trace = manager.trace("router.order-router", request);
 
 // 查看诊断细节
 for (RuleTrace step : trace.getSteps()) {
@@ -383,7 +383,7 @@ for (RuleTrace step : trace.getSteps()) {
 ## 典型场景
 
 ### 场景 A：动态业务开关
-通过修改配置中心中的 `rules`，可以实时切换业务路径（例如从 A 服务切换到 B 服务），实现平滑迁移或故障预案。
+通过修改配置中心中的 `rules`，可以实时切换业务路径（例如从 A 服务切换到 B 服务），实现平滑迁移或故障预案。router.order-router
 
 配置示例 (MapRouter)：
 ```json
