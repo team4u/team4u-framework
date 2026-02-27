@@ -35,7 +35,7 @@ public interface Router {
         }
         
         if (targetType != null && !targetType.isInstance(value)) {
-            T convertedValue = cn.hutool.core.convert.Convert.convert(targetType, value);
+            T convertedValue = RouteConversionCache.convert(value, targetType);
             return RouteResult.matched(convertedValue);
         }
         
