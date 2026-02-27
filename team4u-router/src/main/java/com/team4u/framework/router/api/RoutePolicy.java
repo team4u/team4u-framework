@@ -2,7 +2,8 @@ package com.team4u.framework.router.api;
 
 import lombok.Data;
 
-import java.util.LinkedHashMap;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 路由配置策略
@@ -22,9 +23,9 @@ public class RoutePolicy {
 
     /**
      * 路由规则
-     * 使用 LinkedHashMap 以保证有序，特别是对于表达式路由
+     * 使用 List 以保证顺序，特别是对于表达式路由
      */
-    private LinkedHashMap<String, Object> rules = new LinkedHashMap<>();
+    private List<RouteRule> rules = new ArrayList<>();
 
     /**
      * 兜底路由值

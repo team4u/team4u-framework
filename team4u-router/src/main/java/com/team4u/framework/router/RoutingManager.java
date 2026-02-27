@@ -2,15 +2,18 @@ package com.team4u.framework.router;
 
 import cn.hutool.log.Log;
 import cn.hutool.log.LogFactory;
-import cn.hutool.json.JSONUtil;
+import cn.hutool.core.util.StrUtil;
+import com.team4u.framework.base.util.ServiceLoaderUtil;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.policy.util.PolicyScanner;
 import com.team4u.framework.router.api.RoutePolicy;
+import com.team4u.framework.router.api.RoutePolicyParser;
 import com.team4u.framework.router.api.RouteResult;
 import com.team4u.framework.router.api.Router;
 import com.team4u.framework.router.factory.RouterFactory;
 import com.team4u.framework.router.factory.RouterFactoryRegistry;
+import com.team4u.framework.router.parser.DefaultRoutePolicyParser;
 
 /**
  * 路由管理器
@@ -24,26 +27,33 @@ public class RoutingManager {
 
     private final RouterFactoryRegistry factoryRegistry;
     private final ConfigManager configManager;
+    private final RoutePolicyParser configParser;
 
     /**
      * 配置驱动的路由器注册表
      */
     private final ConfigDrivenRegistry<Router> routerRegistry;
 
-    private RoutingManager(RouterFactoryRegistry factoryRegistry, ConfigManager configManager) {
+    private RoutingManager(RouterFactoryRegistry factoryRegistry,
+            ConfigManager configManager,
+            RoutePolicyParser configParser) {
         this.factoryRegistry = factoryRegistry;
         this.configManager = configManager;
+        this.configParser = configParser;
         this.routerRegistry = new ConfigDrivenRegistry<>(
                 this.configManager,
                 "router.",
-                this::buildRouterFromJson);
+                this::buildRouterFromConfig);
     }
 
     /**
-     * 内部工厂方法：JSON -> Policy -> Router
+     * 内部工厂方法：Config String -> Policy -> Router
      */
-    private Router buildRouterFromJson(String json) {
-        RoutePolicy policy = JSONUtil.toBean(json, RoutePolicy.class);
+    private Router buildRouterFromConfig(String config) {
+        RoutePolicy policy = configParser.parse(config);
+        if (policy == null) {
+            return null;
+        }
         return this.factoryRegistry.get(policy.getType())
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported router type: " + policy.getType()))
                 .create(policy);
@@ -114,30 +124,30 @@ public class RoutingManager {
      * @param <T>           结果类型
      * @return 路由结果
      */
-    public <T> RouteResult<T> routeByConfig(String rawJsonConfig, Object request) {
-        if (rawJsonConfig == null || rawJsonConfig.trim().isEmpty()) {
+    public <T> RouteResult<T> routeByConfig(String rawConfig, Object request) {
+        if (StrUtil.isBlank(rawConfig)) {
             return RouteResult.unmatch();
         }
 
-        Router router = buildRouterFromJson(rawJsonConfig);
+        Router router = buildRouterFromConfig(rawConfig);
         return router.route(request);
     }
 
     /**
-     * 执行路由并转换结果类型（针对原始 JSON 配置）
+     * 执行路由并转换结果类型（针对原始配置）
      *
-     * @param rawJsonConfig JSON 配置字符串
-     * @param request       路由请求对象
-     * @param targetType    期望转换的目标类型
-     * @param <T>           结果类型
+     * @param rawConfig  配置字符串
+     * @param request    路由请求对象
+     * @param targetType 期望转换的目标类型
+     * @param <T>        结果类型
      * @return 路由结果
      */
-    public <T> RouteResult<T> routeByConfig(String rawJsonConfig, Object request, Class<T> targetType) {
-        if (rawJsonConfig == null || rawJsonConfig.trim().isEmpty()) {
+    public <T> RouteResult<T> routeByConfig(String rawConfig, Object request, Class<T> targetType) {
+        if (StrUtil.isBlank(rawConfig)) {
             return RouteResult.unmatch();
         }
 
-        Router router = buildRouterFromJson(rawJsonConfig);
+        Router router = buildRouterFromConfig(rawConfig);
         return router.route(request, targetType);
     }
 
@@ -148,6 +158,7 @@ public class RoutingManager {
 
         private RouterFactoryRegistry factoryRegistry;
         private ConfigManager configManager;
+        private RoutePolicyParser configParser;
 
         public Builder() {
         }
@@ -182,6 +193,14 @@ public class RoutingManager {
         }
 
         /**
+         * 自定义路由策略解析器
+         */
+        public Builder configParser(RoutePolicyParser configParser) {
+            this.configParser = configParser;
+            return this;
+        }
+
+        /**
          * 构建路由管理器实例
          */
         public RoutingManager build() {
@@ -200,7 +219,21 @@ public class RoutingManager {
             if (cm == null) {
                 cm = ConfigManager.global();
             }
-            return new RoutingManager(finalRegistry, cm);
+
+            // 1. 优先使用 Builder 手动传入的 parser
+            RoutePolicyParser finalParser = this.configParser;
+
+            // 2. 如果未指定，尝试通过 SPI 机制发现用户提供的实现
+            if (finalParser == null) {
+                finalParser = ServiceLoaderUtil.loadFirstAvailable(RoutePolicyParser.class);
+            }
+
+            // 3. 如果 SPI 也没有，兜底使用默认实现 (Hutool)
+            if (finalParser == null) {
+                finalParser = new DefaultRoutePolicyParser();
+            }
+
+            return new RoutingManager(finalRegistry, cm, finalParser);
         }
     }
 }

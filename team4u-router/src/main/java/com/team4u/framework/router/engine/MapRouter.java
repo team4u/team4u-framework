@@ -3,8 +3,10 @@ package com.team4u.framework.router.engine;
 import com.team4u.framework.router.api.AbstractRouter;
 import com.team4u.framework.router.api.RoutePolicy;
 import com.team4u.framework.router.api.RouteResult;
+import com.team4u.framework.router.api.RouteRule;
 
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 映射路由器
@@ -15,7 +17,10 @@ public class MapRouter extends AbstractRouter {
     private final Object fallbackValue;
 
     public MapRouter(RoutePolicy policy) {
-        this.rules = policy.getRules();
+        this.rules = policy.getRules().stream()
+                .filter(rule -> rule.getCondition() != null)
+                .collect(Collectors.toMap(RouteRule::getCondition,
+                        rule -> rule.getValue() != null ? rule.getValue() : ""));
         this.fallbackValue = policy.getFallbackValue();
     }
 

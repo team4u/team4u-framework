@@ -3,11 +3,12 @@ package com.team4u.framework.router.engine;
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.router.api.RoutePolicy;
 import com.team4u.framework.router.api.RouteResult;
+import com.team4u.framework.router.api.RouteRule;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.HashMap;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -22,12 +23,9 @@ public class ExpressionRouterTest {
         // 设置标准兜底字段
         policy.setFallbackValue("ValueDefault");
 
-        LinkedHashMap<String, Object> rules = new LinkedHashMap<>();
-        // 规则 1: name 等于 'A'
-        rules.put("name == 'A'", "ValueA");
-        // 规则 2: age 大于 18
-        rules.put("age > 18", "ValueAdult");
-        policy.setRules(rules);
+        policy.setRules(Arrays.asList(
+                new RouteRule("name == 'A'", "ValueA"),
+                new RouteRule("age > 18", "ValueAdult")));
 
         ExpressionRouter router = new ExpressionRouter(policy);
 
@@ -58,11 +56,9 @@ public class ExpressionRouterTest {
     @Test
     public void testOrderImportance() {
         RoutePolicy policy = new RoutePolicy();
-        LinkedHashMap<String, Object> rules = new LinkedHashMap<>();
-        // 故意让范围大的在前
-        rules.put("age > 10", "EarlyMatch");
-        rules.put("age > 20", "LateMatch");
-        policy.setRules(rules);
+        policy.setRules(Arrays.asList(
+                new RouteRule("age > 10", "EarlyMatch"),
+                new RouteRule("age > 20", "LateMatch")));
 
         ExpressionRouter router = new ExpressionRouter(policy);
 
@@ -76,10 +72,8 @@ public class ExpressionRouterTest {
     @Test
     public void testCustomCriteria() {
         RoutePolicy policy = new RoutePolicy();
-        LinkedHashMap<String, Object> rules = new LinkedHashMap<>();
-        // 使用自定义操作符 is_special
-        rules.put("name is_special true", "Matched");
-        policy.setRules(rules);
+        policy.setRules(Arrays.asList(
+                new RouteRule("name is_special true", "Matched")));
 
         // 创建自定义 Criteria，支持 is_special 操作符
         Criteria criteria = Criteria.builder()
@@ -104,9 +98,8 @@ public class ExpressionRouterTest {
         RoutePolicy policy = new RoutePolicy();
         policy.setFallbackValue("ExplicitFallback");
 
-        LinkedHashMap<String, Object> rules = new LinkedHashMap<>();
-        rules.put("name == 'A'", "ValueA");
-        policy.setRules(rules);
+        policy.setRules(Arrays.asList(
+                new RouteRule("name == 'A'", "ValueA")));
 
         ExpressionRouter router = new ExpressionRouter(policy);
 

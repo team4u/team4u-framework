@@ -5,15 +5,16 @@ import com.team4u.framework.criterion.MatchContext;
 import com.team4u.framework.router.api.AbstractRouter;
 import com.team4u.framework.router.api.RoutePolicy;
 import com.team4u.framework.router.api.RouteResult;
+import com.team4u.framework.router.api.RouteRule;
 
-import java.util.Map;
+import java.util.List;
 
 /**
  * 表达式路由器
  */
 public class ExpressionRouter extends AbstractRouter {
 
-    private final Map<String, Object> rules;
+    private final List<RouteRule> rules;
     private final Criteria criteria;
     private final Object fallbackValue;
 
@@ -34,11 +35,11 @@ public class ExpressionRouter extends AbstractRouter {
         MatchContext context = (request instanceof MatchContext) ? (MatchContext) request : MatchContext.of(request);
 
         // 按顺序遍历所有路由规则进行匹配
-        for (Map.Entry<String, Object> entry : rules.entrySet()) {
-            String expr = entry.getKey();
+        for (RouteRule rule : rules) {
+            String expr = rule.getCondition();
             // 执行表达式匹配
             if (criteria.matches(expr, context)) {
-                return RouteResult.matched((T) entry.getValue());
+                return RouteResult.matched((T) rule.getValue());
             }
         }
 

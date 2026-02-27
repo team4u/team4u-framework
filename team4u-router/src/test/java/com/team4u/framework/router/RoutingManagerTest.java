@@ -33,7 +33,7 @@ public class RoutingManagerTest {
     @Test
     public void testRouteMap() {
         String routerId = "test.map";
-        String config = "{\"type\":\"map\", \"rules\":{\"test\":\"success\"}}";
+        String config = "{\"type\":\"map\", \"rules\":[{\"condition\":\"test\", \"value\":\"success\"}]}";
         configSource.putAndRefresh("router." + routerId, config);
         DefaultConfigManager.global().refresh();
 
@@ -45,7 +45,7 @@ public class RoutingManagerTest {
     @Test
     public void testRouteExpression() {
         String routerId = "test.expression";
-        String config = "{\"type\":\"expression\", \"rules\":{\"ok\":\"bingo\"}}";
+        String config = "{\"type\":\"expression\", \"rules\":[{\"condition\":\"ok\", \"value\":\"bingo\"}]}";
         configSource.putAndRefresh("router." + routerId, config);
         DefaultConfigManager.global().refresh();
 
@@ -64,7 +64,7 @@ public class RoutingManagerTest {
                 .addFactory(new ExpressionRouterFactory(criteria))
                 .build();
 
-        String config = "{\"type\":\"expression\", \"rules\":{\"name is_special true\":\"Matched\"}}";
+        String config = "{\"type\":\"expression\", \"rules\":[{\"condition\":\"name is_special true\", \"value\":\"Matched\"}]}";
 
         Map<String, Object> req = new HashMap<>();
         req.put("name", "special");
@@ -76,7 +76,7 @@ public class RoutingManagerTest {
     @Test
     public void testCacheEffect() {
         String routerId = "test.cache";
-        String config = "{\"type\":\"map\", \"rules\":{\"k\":\"v\"}}";
+        String config = "{\"type\":\"map\", \"rules\":[{\"condition\":\"k\", \"value\":\"v\"}]}";
         configSource.putAndRefresh("router." + routerId, config);
         DefaultConfigManager.global().refresh();
 
@@ -93,7 +93,7 @@ public class RoutingManagerTest {
     @Test
     public void testUnsupportedType() {
         String routerId = "test.unknown";
-        String config = "{\"type\":\"unknown\", \"rules\":{}}";
+        String config = "{\"type\":\"unknown\", \"rules\":[]}";
         configSource.putAndRefresh("router." + routerId, config);
         DefaultConfigManager.global().refresh();
 
@@ -107,7 +107,7 @@ public class RoutingManagerTest {
 
     @Test
     public void testRouteByConfig() {
-        String config = "{\"type\":\"map\", \"rules\":{\"direct\":\"ok\"}}";
+        String config = "{\"type\":\"map\", \"rules\":[{\"condition\":\"direct\", \"value\":\"ok\"}]}";
         RouteResult<String> result = RoutingManager.global().routeByConfig(config, "direct");
         Assert.assertTrue(result.isMatch());
         Assert.assertEquals("ok", result.getValue());
@@ -121,7 +121,7 @@ public class RoutingManagerTest {
 
     @Test
     public void testTypeConversion() {
-        String config = "{\"type\":\"map\", \"rules\":{\"serviceA\":{\"host\":\"127.0.0.1\",\"port\":8080}}}";
+        String config = "{\"type\":\"map\", \"rules\":[{\"condition\":\"serviceA\", \"value\":{\"host\":\"127.0.0.1\",\"port\":8080}}]}";
         RouteResult<TargetService> result = RoutingManager.global().routeByConfig(config, "serviceA",
                 TargetService.class);
 

@@ -2,10 +2,11 @@ package com.team4u.framework.router.engine;
 
 import com.team4u.framework.router.api.RoutePolicy;
 import com.team4u.framework.router.api.RouteResult;
+import com.team4u.framework.router.api.RouteRule;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.LinkedHashMap;
+import java.util.Arrays;
 
 /**
  * MapRouter 单元测试
@@ -16,10 +17,9 @@ public class MapRouterTest {
     public void testRoute() {
         RoutePolicy policy = new RoutePolicy();
         policy.setType("map");
-        LinkedHashMap<String, Object> rules = new LinkedHashMap<>();
-        rules.put("A", "ValueA");
-        rules.put("B", "ValueB");
-        policy.setRules(rules);
+        policy.setRules(Arrays.asList(
+                new RouteRule("A", "ValueA"),
+                new RouteRule("B", "ValueB")));
         // 使用标准的兜底字段
         policy.setFallbackValue("ValueDefault");
 
@@ -44,9 +44,8 @@ public class MapRouterTest {
     @Test
     public void testNoFallback() {
         RoutePolicy policy = new RoutePolicy();
-        LinkedHashMap<String, Object> rules = new LinkedHashMap<>();
-        rules.put("A", "ValueA");
-        policy.setRules(rules);
+        policy.setRules(Arrays.asList(
+                new RouteRule("A", "ValueA")));
 
         MapRouter router = new MapRouter(policy);
 
@@ -59,11 +58,9 @@ public class MapRouterTest {
         RoutePolicy policy = new RoutePolicy();
         policy.setFallbackValue("ExplicitFallback");
 
-        LinkedHashMap<String, Object> rules = new LinkedHashMap<>();
-        rules.put("A", "ValueA");
-        // * 不再具有兜底意义，此时它只是一个普通的 Key
-        rules.put("*", "ValueStar");
-        policy.setRules(rules);
+        policy.setRules(Arrays.asList(
+                new RouteRule("A", "ValueA"),
+                new RouteRule("*", "ValueStar")));
 
         MapRouter router = new MapRouter(policy);
 
