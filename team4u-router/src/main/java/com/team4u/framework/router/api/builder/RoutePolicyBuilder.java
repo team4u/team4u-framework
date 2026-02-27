@@ -13,9 +13,9 @@ import java.util.List;
  */
 public class RoutePolicyBuilder<T> {
 
-    private String id;
     private final String type;
     private final List<RouteRule> rules = new ArrayList<>();
+    private String id;
     private T fallbackValue;
 
     // 私有化构造器，强制使用静态工厂方法

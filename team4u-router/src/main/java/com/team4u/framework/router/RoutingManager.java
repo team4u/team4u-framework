@@ -35,8 +35,8 @@ public class RoutingManager {
     private final ConfigDrivenRegistry<Router> routerRegistry;
 
     private RoutingManager(RouterFactoryRegistry factoryRegistry,
-            ConfigManager configManager,
-            RoutePolicyParser configParser) {
+                           ConfigManager configManager,
+                           RoutePolicyParser configParser) {
         this.factoryRegistry = factoryRegistry;
         this.configParser = configParser;
         this.routerRegistry = new ConfigDrivenRegistry<>(
