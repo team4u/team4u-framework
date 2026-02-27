@@ -34,7 +34,7 @@ public class RoutedBeanLocator {
         // 如果未命中且没有兜底，抛出异常阻断
         if (result == null || result.isNotMatch() || StrUtil.isBlank(result.getValue())) {
             throw new IllegalStateException(String.format(
-                    "路由失败：未找到匹配的规则或兜底配置，路由 ID [%s]", routerId));
+                    "Routing failed: No matching rule or fallback configuration found for router ID [%s]", routerId));
         }
 
         String targetBeanName = result.getValue();
@@ -44,13 +44,14 @@ public class RoutedBeanLocator {
 
         if (bean == null) {
             throw new IllegalStateException(String.format(
-                    "路由匹配到 [%s]，但容器中未找到对应的 Bean 实例", targetBeanName));
+                    "Routing matched [%s], but no corresponding bean instance was found in the container",
+                    targetBeanName));
         }
 
         // 3. 类型安全校验
         if (!expectedType.isInstance(bean)) {
             throw new ClassCastException(String.format(
-                    "路由到的 Bean [%s] 类型为 [%s]，但期望类型为 [%s]",
+                    "The routed bean [%s] is of type [%s], but expected type is [%s]",
                     targetBeanName, bean.getClass().getName(), expectedType.getName()));
         }
 
