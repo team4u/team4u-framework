@@ -14,6 +14,7 @@
 - [声明式路由](#声明式路由)
 - [典型场景](#典型场景)
 - [路由诊断](#路由诊断)
+- [路由拦截器](#路由拦截器)
 - [SPI 扩展](#spi-扩展)
 - [架构与原理](#架构与原理)
 
@@ -538,27 +539,118 @@ for (RuleTrace step : trace.getSteps()) {
 
 ---
 
+## 路由拦截器
+
+为了实现更通用的横切关注点（如监控、鉴权、全局上下文注入等），`team4u-router` 提供了基于 **责任链模式 (Chain of Responsibility)** 的通用拦截器机制。
+
+拦截器位于 `RoutingManager` 这一层，对所有类型的 `Router`（Map, Expression, Weight 等）均生效。
+
+### 1. 核心接口
+
+- **`RouteInterceptor`**：拦截器核心接口，继承自 `OrderedPolicy`。
+    - `intercept(invocation)`：执行拦截逻辑。
+    - `priority()`：定义执行优先级（越小优先级越高）。
+- **`RouteInvocation`**：拦截执行上下文。
+    - `getRequest()` / `setRequest()`：允许在链条中增强或替换请求对象。
+    - `proceed()`：驱动执行链向下流转。
+
+### 2. 拦截器注册中心 (`RouteInterceptorRegistry`)
+
+拦截器由 `RouteInterceptorRegistry` 统一管理，支持多种运行模式：
+
+- **全局单例**：使用 `RouteInterceptorRegistry.global()`，注册后对全局生效。
+- **自动发现**：支持通过 `autoScan()` 自动扫描 SPI 设置和 `com.team4u.framework.router` 包路径下的实现类。
+- **实例隔离**：可以创建独立的注册表实例，通过 `RoutingManager.builder().interceptorRegistry(registry)` 绑定。
+
+### 3. 典型使用场景
+
+#### 场景 A：全局上下文注入 (Context Enricher)
+
+自动将业务全局变量（如租户 ID、用户区域）注入请求上下文，无需在各业务处手动传递。
+
+```java
+public class GlobalContextInterceptor implements RouteInterceptor {
+    @Override
+    public <T> RouteResult<T> intercept(RouteInvocation<T> invocation) {
+        Object request = invocation.getRequest();
+        
+        // 利用 team4u-criterion 的 MatchContext 增强原生请求
+        MatchContext context = (request instanceof MatchContext) ? 
+                               (MatchContext) request : MatchContext.of(request);
+                               
+        // 从 ThreadLocal 注入全局上下文
+        context.set("tenantId", TenantContext.getTenantId());
+        
+        invocation.setRequest(context);
+        return invocation.proceed();
+    }
+}
+```
+
+#### 场景 B：路由指标监控 (Metrics Monitor)
+
+统一收集所有 Router 的匹配耗时、命中率和规则分布。
+
+```java
+public class RouteMetricsInterceptor implements RouteInterceptor {
+    @Override
+    public <T> RouteResult<T> intercept(RouteInvocation<T> invocation) {
+        long start = System.currentTimeMillis();
+        try {
+            RouteResult<T> result = invocation.proceed();
+            long cost = System.currentTimeMillis() - start;
+            
+            // 埋点上报：记录耗时与命中情况
+            Metrics.record("router.cost", cost, "routerId", invocation.getRouterId());
+            
+            return result;
+        } catch (Exception e) {
+            Metrics.increment("router.error", "routerId", invocation.getRouterId());
+            throw e;
+        }
+    }
+}
+```
+
+#### 场景 C：异常熔断与兜底 (Graceful Fallback)
+
+当表达式计算出错或配置解析严重异常时，防止阻断主业务流程。
+
+```java
+public class SafeFallbackInterceptor implements RouteInterceptor {
+    @Override
+    public <T> RouteResult<T> intercept(RouteInvocation<T> invocation) {
+        try {
+            return invocation.proceed();
+        } catch (Exception e) {
+            log.error("Routing failed for: {}", invocation.getRouterId(), e);
+            // 发生异常时，短路并返回一个未匹配结果，防止上层业务中断
+            return RouteResult.unmatch();
+        }
+    }
+}
+```
+
+---
+
 ## 架构与原理
 
 ### 核心执行流程
 
 1.  获取配置：`RoutingManager` 通过 `ConfigDrivenRegistry` 从 `ConfigManager` 获取配置。
-2.  实例管理：`ConfigDrivenRegistry` 负责维护配置与 `Router` 实例的映射。当配置变更时，会自动重新解析并实例化。
-3.  动态创建：
-    *   通过 `RoutePolicyParser` 将配置解析为 `RoutePolicy` 对象。
-    *   从 `RouterFactoryRegistry` 中查找匹配 `type` 的工厂并创建 `Router` 实例。
-4.  执行路由：调用 `Router.route(request)` 执行匹配逻辑并返回结果。
+2.  实例管理：`ConfigDrivenRegistry` 负责维护配置与 `Router` 实例的映射。
+3.  驱动拦截器链：
+    - 构建 `DefaultRouteInvocation`，封装 `RouterId`、`Router` 实例、`Request` 及当前生效的拦截器列表。
+    - 按优先级执行拦截器。
+4.  执行路由：最后一个拦截器执行 `invocation.proceed()` 时，调用真实的 `Router.route(request)`。
 
 ### 状态流转图
 
 ```mermaid
 graph TD
     A[RoutingManager] -->|Lookup| B[ConfigDrivenRegistry]
-    B -->|Miss| C[ConfigManager]
-    C -->|Return Config| D[PolicyParser]
-    D -->|RoutePolicy| E[RouterFactory]
-    E -->|Create| F[Router Instance]
-    F -->|Cache| B
-    B -->|Return| G[Router]
-    G -->|Execute| H[RouteResult]
+    B -->|Router Found| C[Build Invocation Chain]
+    C -->|Interceptor 1| D[...]
+    D -->|Interceptor N| E[True Router Instance]
+    E -->|Execute| F[RouteResult]
 ```

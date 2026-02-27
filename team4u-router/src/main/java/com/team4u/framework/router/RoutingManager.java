@@ -8,6 +8,10 @@ import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.policy.util.PolicyScanner;
 import com.team4u.framework.router.api.Router;
+import com.team4u.framework.router.api.interceptor.DefaultRouteInvocation;
+import com.team4u.framework.router.api.interceptor.RouteInterceptor;
+import com.team4u.framework.router.api.interceptor.RouteInterceptorRegistry;
+import com.team4u.framework.router.api.interceptor.RouteInvocation;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.trace.RouteTrace;
@@ -15,6 +19,8 @@ import com.team4u.framework.router.factory.RouterFactoryRegistry;
 import com.team4u.framework.router.parser.DefaultRoutePolicyParser;
 import com.team4u.framework.router.spi.RoutePolicyParser;
 import com.team4u.framework.router.spi.RouterFactory;
+
+import java.util.List;
 
 /**
  * 路由管理器
@@ -29,6 +35,7 @@ public class RoutingManager {
     private final RouterFactoryRegistry factoryRegistry;
     private final RoutePolicyParser configParser;
     private final String configPrefix;
+    private final RouteInterceptorRegistry interceptorRegistry;
 
     /**
      * 配置驱动的路由器注册表
@@ -38,10 +45,12 @@ public class RoutingManager {
     private RoutingManager(RouterFactoryRegistry factoryRegistry,
                            ConfigManager configManager,
                            RoutePolicyParser configParser,
-                           String configPrefix) {
+                           String configPrefix,
+                           RouteInterceptorRegistry interceptorRegistry) {
         this.factoryRegistry = factoryRegistry;
         this.configParser = configParser;
         this.configPrefix = configPrefix.endsWith(".") ? configPrefix : configPrefix + ".";
+        this.interceptorRegistry = interceptorRegistry;
         this.routerRegistry = new ConfigDrivenRegistry<>(
                 configManager,
                 this.configPrefix,
@@ -115,12 +124,19 @@ public class RoutingManager {
     }
 
     /**
-     * 构造空的路由追踪对象
+     * 获取路由追踪对象构造工具
      */
     private <T> RouteTrace<T> emptyTrace() {
         RouteTrace<T> trace = new RouteTrace<>();
         trace.setResult(RouteResult.unmatch());
         return trace;
+    }
+
+    /**
+     * 获取拦截器注册中心
+     */
+    public RouteInterceptorRegistry interceptorRegistry() {
+        return interceptorRegistry;
     }
 
     /**
@@ -132,8 +148,7 @@ public class RoutingManager {
      * @return 路由结果
      */
     public <T> RouteResult<T> route(String routerId, Object request) {
-        Router router = getRouter(routerId);
-        return router != null ? router.route(request) : RouteResult.unmatch();
+        return route(routerId, request, null);
     }
 
     /**
@@ -147,7 +162,24 @@ public class RoutingManager {
      */
     public <T> RouteResult<T> route(String routerId, Object request, Class<T> targetType) {
         Router router = getRouter(routerId);
-        return router != null ? router.route(request, targetType) : RouteResult.unmatch();
+        return doRoute(routerId, router, request, targetType);
+    }
+
+    /**
+     * 统一路由执行逻辑，支持拦截器链
+     */
+    private <T> RouteResult<T> doRoute(String routerId, Router router, Object request, Class<T> targetType) {
+        List<RouteInterceptor> interceptors = interceptorRegistry.getInterceptors();
+        if (interceptors == null || interceptors.isEmpty()) {
+            if (router == null) {
+                return RouteResult.unmatch();
+            }
+            return targetType != null ? router.route(request, targetType) : router.route(request);
+        }
+
+        RouteInvocation<T> invocation = new DefaultRouteInvocation<>(
+                routerId, router, request, targetType, interceptors);
+        return invocation.proceed();
     }
 
     /**
@@ -185,8 +217,7 @@ public class RoutingManager {
      * @return 路由结果
      */
     public <T> RouteResult<T> routeByConfig(String rawConfig, Object request) {
-        Router router = getRouterByConfig(rawConfig);
-        return router != null ? router.route(request) : RouteResult.unmatch();
+        return routeByConfig(rawConfig, request, null);
     }
 
     /**
@@ -200,7 +231,7 @@ public class RoutingManager {
      */
     public <T> RouteResult<T> routeByConfig(String rawConfig, Object request, Class<T> targetType) {
         Router router = getRouterByConfig(rawConfig);
-        return router != null ? router.route(request, targetType) : RouteResult.unmatch();
+        return doRoute("raw-config", router, request, targetType);
     }
 
     /**
@@ -236,7 +267,7 @@ public class RoutingManager {
      */
     public <T> RouteResult<T> routeByPolicy(RoutePolicy policy, Object request) {
         Router router = getRouter(policy);
-        return router != null ? router.route(request) : RouteResult.unmatch();
+        return doRoute(policy.getId(), router, request, null);
     }
 
     /**
@@ -261,6 +292,8 @@ public class RoutingManager {
         private ConfigManager configManager;
         private RoutePolicyParser configParser;
         private String configPrefix = "router.";
+        private RouteInterceptorRegistry interceptorRegistry;
+        private boolean useGlobalInterceptors = true;
 
         public Builder() {
         }
@@ -313,6 +346,37 @@ public class RoutingManager {
         }
 
         /**
+         * 设置拦截器注册中心
+         */
+        public Builder interceptorRegistry(RouteInterceptorRegistry interceptorRegistry) {
+            this.interceptorRegistry = interceptorRegistry;
+            this.useGlobalInterceptors = false; // 如果手动指定了注册中心，则不使用全局的
+            return this;
+        }
+
+        /**
+         * 是否使用全局拦截器（默认为 true）
+         */
+        public Builder useGlobalInterceptors(boolean useGlobalInterceptors) {
+            this.useGlobalInterceptors = useGlobalInterceptors;
+            return this;
+        }
+
+        /**
+         * 添加拦截器到当前注册中心
+         */
+        public Builder addInterceptor(RouteInterceptor interceptor) {
+            if (interceptor != null) {
+                if (this.interceptorRegistry == null) {
+                    this.interceptorRegistry = new RouteInterceptorRegistry();
+                    this.useGlobalInterceptors = false;
+                }
+                this.interceptorRegistry.register(interceptor);
+            }
+            return this;
+        }
+
+        /**
          * 构建路由管理器实例
          */
         public RoutingManager build() {
@@ -345,7 +409,21 @@ public class RoutingManager {
                 finalParser = new DefaultRoutePolicyParser();
             }
 
-            return new RoutingManager(finalRegistry, cm, finalParser, configPrefix);
+            // 拦截器处理
+            RouteInterceptorRegistry finalInterceptorRegistry = this.interceptorRegistry;
+            if (finalInterceptorRegistry == null) {
+                finalInterceptorRegistry = useGlobalInterceptors ? RouteInterceptorRegistry.global()
+                        : new RouteInterceptorRegistry();
+            }
+
+            // 如果是新创建的对象或者是全局对象且尚未初始化，可以考虑在这里 autoScan
+            // 但通常全局对象应该由用户手动控制或在特定生命周期初始化
+            // 这里的逻辑是：如果是 Builder 模式默认创建的，且没有手动指定过 registry，则尝试扫描
+            if (this.interceptorRegistry == null) {
+                finalInterceptorRegistry.autoScan();
+            }
+
+            return new RoutingManager(finalRegistry, cm, finalParser, configPrefix, finalInterceptorRegistry);
         }
     }
 }

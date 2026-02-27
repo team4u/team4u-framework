@@ -43,7 +43,7 @@ public class RoutedBeanLocator {
      */
     @SuppressWarnings("unchecked")
     public static <T> T locate(RoutingManager routingManager, String routerId, Object routeContext,
-            Class<T> expectedType) {
+                               Class<T> expectedType) {
         // 1. 执行路由计算，期望策略中配置的 value 是目标 Bean 的名称
         RouteResult<String> result = routingManager.route(routerId, routeContext, String.class);
 

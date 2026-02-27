@@ -4,6 +4,7 @@ import cn.hutool.core.annotation.AnnotationUtil;
 import cn.hutool.core.util.ArrayUtil;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
+import com.team4u.framework.router.RoutingManager;
 import com.team4u.framework.router.proxy.annotation.RouteContext;
 import com.team4u.framework.router.proxy.annotation.Routed;
 import lombok.Data;
@@ -13,7 +14,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import com.team4u.framework.router.RoutingManager;
 
 /**
  * 声明式路由方法拦截器
@@ -34,14 +34,6 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
      * 全局默认拦截器实例
      */
     private static final RoutedMethodInterceptor GLOBAL = new RoutedMethodInterceptor();
-
-    /**
-     * 获取全局拦截器实例
-     */
-    public static RoutedMethodInterceptor global() {
-        return GLOBAL;
-    }
-
     private final RoutingManager routingManager;
 
     /**
@@ -58,6 +50,42 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
      */
     public RoutedMethodInterceptor(RoutingManager routingManager) {
         this.routingManager = routingManager != null ? routingManager : RoutingManager.global();
+    }
+
+    /**
+     * 获取全局拦截器实例
+     */
+    public static RoutedMethodInterceptor global() {
+        return GLOBAL;
+    }
+
+    /**
+     * 解析方法元数据（仅在方法首次被调用时执行一次）
+     */
+    private static RouteMetadata parseMetadata(Method method) {
+        // 优先找方法上的注解，再找类上的注解
+        Routed routed = AnnotationUtil.getAnnotation(method, Routed.class);
+        if (routed == null) {
+            routed = AnnotationUtil.getAnnotation(method.getDeclaringClass(), Routed.class);
+        }
+
+        if (routed == null) {
+            return new RouteMetadata(false, null, -1);
+        }
+
+        // 寻找哪个参数被标记了 @RouteContext
+        int contextIndex = -1;
+        Annotation[][] parameterAnnotations = method.getParameterAnnotations();
+        for (int i = 0; i < parameterAnnotations.length; i++) {
+            for (Annotation ann : parameterAnnotations[i]) {
+                if (ann instanceof RouteContext) {
+                    contextIndex = i;
+                    break;
+                }
+            }
+        }
+
+        return new RouteMetadata(true, routed.routerId(), contextIndex);
     }
 
     @Override
@@ -105,35 +133,6 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
         }
         // 默认兜底：如果没有标注，直接使用第一个参数作为上下文
         return args[0];
-    }
-
-    /**
-     * 解析方法元数据（仅在方法首次被调用时执行一次）
-     */
-    private static RouteMetadata parseMetadata(Method method) {
-        // 优先找方法上的注解，再找类上的注解
-        Routed routed = AnnotationUtil.getAnnotation(method, Routed.class);
-        if (routed == null) {
-            routed = AnnotationUtil.getAnnotation(method.getDeclaringClass(), Routed.class);
-        }
-
-        if (routed == null) {
-            return new RouteMetadata(false, null, -1);
-        }
-
-        // 寻找哪个参数被标记了 @RouteContext
-        int contextIndex = -1;
-        Annotation[][] parameterAnnotations = method.getParameterAnnotations();
-        for (int i = 0; i < parameterAnnotations.length; i++) {
-            for (Annotation ann : parameterAnnotations[i]) {
-                if (ann instanceof RouteContext) {
-                    contextIndex = i;
-                    break;
-                }
-            }
-        }
-
-        return new RouteMetadata(true, routed.routerId(), contextIndex);
     }
 
     /**

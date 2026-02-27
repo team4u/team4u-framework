@@ -17,9 +17,9 @@ public class RoutePolicyBuilder<T> {
 
     private final String type;
     private final List<RouteRule> rules = new ArrayList<>();
+    private final Map<String, Object> ext = new HashMap<>();
     private String id;
     private T fallbackValue;
-    private final Map<String, Object> ext = new HashMap<>();
 
     // 私有化构造器，强制使用静态工厂方法
     private RoutePolicyBuilder(String type) {

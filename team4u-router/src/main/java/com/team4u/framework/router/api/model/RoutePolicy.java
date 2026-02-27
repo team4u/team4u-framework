@@ -1,13 +1,12 @@
 package com.team4u.framework.router.api.model;
 
+import cn.hutool.core.convert.Convert;
 import lombok.Data;
 
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-
-import cn.hutool.core.convert.Convert;
 
 /**
  * 路由配置策略
