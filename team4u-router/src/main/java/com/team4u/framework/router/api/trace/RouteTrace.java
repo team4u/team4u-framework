@@ -1,6 +1,6 @@
 package com.team4u.framework.router.api.trace;
 
-import com.team4u.framework.router.api.RouteResult;
+import com.team4u.framework.router.api.model.RouteResult;
 import lombok.Data;
 
 import java.util.ArrayList;

@@ -1,4 +1,4 @@
-package com.team4u.framework.router.api;
+package com.team4u.framework.router.api.model;
 
 import org.junit.Assert;
 import org.junit.Test;

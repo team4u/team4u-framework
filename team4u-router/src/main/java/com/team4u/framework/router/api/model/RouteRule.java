@@ -1,4 +1,4 @@
-package com.team4u.framework.router.api;
+package com.team4u.framework.router.api.model;
 
 import lombok.AllArgsConstructor;
 import lombok.Data;

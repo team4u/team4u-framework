@@ -1,7 +1,7 @@
 package com.team4u.framework.router;
 
-import com.team4u.framework.router.api.RoutePolicy;
-import com.team4u.framework.router.api.RouteRule;
+import com.team4u.framework.router.api.model.RoutePolicy;
+import com.team4u.framework.router.api.model.RouteRule;
 import com.team4u.framework.router.api.trace.RouteTrace;
 import com.team4u.framework.router.api.trace.RuleTrace;
 import org.junit.Assert;

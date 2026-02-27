@@ -1,6 +1,6 @@
 package com.team4u.framework.router.parser;
 
-import com.team4u.framework.router.api.RoutePolicy;
+import com.team4u.framework.router.api.model.RoutePolicy;
 import org.junit.Assert;
 import org.junit.Test;
 

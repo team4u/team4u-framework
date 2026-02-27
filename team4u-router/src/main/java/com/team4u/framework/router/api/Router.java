@@ -1,5 +1,6 @@
 package com.team4u.framework.router.api;
 
+import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.trace.RouteTrace;
 
 /**

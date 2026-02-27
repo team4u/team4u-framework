@@ -1,9 +1,9 @@
-package com.team4u.framework.router.engine;
+package com.team4u.framework.router.core;
 
 import com.team4u.framework.criterion.Criteria;
-import com.team4u.framework.router.api.RoutePolicy;
-import com.team4u.framework.router.api.RouteResult;
-import com.team4u.framework.router.api.RouteRule;
+import com.team4u.framework.router.api.model.RoutePolicy;
+import com.team4u.framework.router.api.model.RouteResult;
+import com.team4u.framework.router.api.model.RouteRule;
 import com.team4u.framework.router.api.trace.RouteTrace;
 import org.junit.Assert;
 import org.junit.Test;

@@ -1,6 +1,7 @@
 package com.team4u.framework.router.factory;
 
 import com.team4u.framework.policy.core.KeyedPolicyRegistry;
+import com.team4u.framework.router.spi.RouterFactory;
 
 /**
  * 路由工厂注册表

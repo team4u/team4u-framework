@@ -1,4 +1,7 @@
-package com.team4u.framework.router.api;
+package com.team4u.framework.router.core;
+
+import com.team4u.framework.router.api.Router;
+import com.team4u.framework.router.api.model.RouteResult;
 
 import cn.hutool.core.convert.Convert;
 

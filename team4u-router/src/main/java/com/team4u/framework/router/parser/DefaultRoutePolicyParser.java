@@ -2,8 +2,8 @@ package com.team4u.framework.router.parser;
 
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
-import com.team4u.framework.router.api.RoutePolicy;
-import com.team4u.framework.router.api.RoutePolicyParser;
+import com.team4u.framework.router.api.model.RoutePolicy;
+import com.team4u.framework.router.spi.RoutePolicyParser;
 
 import java.util.ArrayList;
 

@@ -7,11 +7,11 @@ import com.team4u.framework.base.util.ServiceLoaderUtil;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.policy.util.PolicyScanner;
-import com.team4u.framework.router.api.RoutePolicy;
-import com.team4u.framework.router.api.RoutePolicyParser;
-import com.team4u.framework.router.api.RouteResult;
+import com.team4u.framework.router.api.model.RoutePolicy;
+import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.Router;
-import com.team4u.framework.router.factory.RouterFactory;
+import com.team4u.framework.router.spi.RoutePolicyParser;
+import com.team4u.framework.router.spi.RouterFactory;
 import com.team4u.framework.router.factory.RouterFactoryRegistry;
 import com.team4u.framework.router.parser.DefaultRoutePolicyParser;
 
@@ -35,8 +35,8 @@ public class RoutingManager {
     private final ConfigDrivenRegistry<Router> routerRegistry;
 
     private RoutingManager(RouterFactoryRegistry factoryRegistry,
-                           ConfigManager configManager,
-                           RoutePolicyParser configParser) {
+            ConfigManager configManager,
+            RoutePolicyParser configParser) {
         this.factoryRegistry = factoryRegistry;
         this.configManager = configManager;
         this.configParser = configParser;
@@ -257,7 +257,7 @@ public class RoutingManager {
             // 先自动扫描和加载，后注册手动添加的工厂，以确保手动注册具有更高优先级（覆盖自动发现的同名工厂）
             RouterFactoryRegistry finalRegistry = new RouterFactoryRegistry();
             PolicyScanner.registerFromServiceLoader(finalRegistry);
-            PolicyScanner.scanAndRegister(finalRegistry);
+            PolicyScanner.scanAndRegister(finalRegistry, "com.team4u.framework.router");
             finalRegistry.addAll(registry);
 
             ConfigManager cm = this.configManager;

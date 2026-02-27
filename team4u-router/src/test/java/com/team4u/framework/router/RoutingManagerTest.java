@@ -5,7 +5,7 @@ import com.team4u.framework.config.core.spi.ConfigSourceRegistry;
 import com.team4u.framework.config.core.spi.ConfigWatcherRegistry;
 import com.team4u.framework.config.core.spi.InMemoryConfigSource;
 import com.team4u.framework.criterion.Criteria;
-import com.team4u.framework.router.api.RouteResult;
+import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.factory.ExpressionRouterFactory;
 import org.junit.Assert;
 import org.junit.BeforeClass;
