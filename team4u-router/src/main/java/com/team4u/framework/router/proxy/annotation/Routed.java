@@ -1,4 +1,4 @@
-package com.team4u.framework.router.annotation;
+package com.team4u.framework.router.proxy.annotation;
 
 import java.lang.annotation.*;
 

@@ -4,9 +4,10 @@ import cn.hutool.core.annotation.AnnotationUtil;
 import cn.hutool.core.util.ArrayUtil;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
-import com.team4u.framework.router.annotation.RouteContext;
-import com.team4u.framework.router.annotation.Routed;
+import com.team4u.framework.router.proxy.annotation.RouteContext;
+import com.team4u.framework.router.proxy.annotation.Routed;
 import com.team4u.framework.router.util.RoutedBeanLocator;
+import lombok.Data;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
@@ -107,27 +108,10 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
     /**
      * 内部类：缓存解析结果，避免重复反射
      */
+    @Data
     private static class RouteMetadata {
         private final boolean routed;
         private final String routerId;
         private final int contextParamIndex;
-
-        public RouteMetadata(boolean routed, String routerId, int contextParamIndex) {
-            this.routed = routed;
-            this.routerId = routerId;
-            this.contextParamIndex = contextParamIndex;
-        }
-
-        public boolean isRouted() {
-            return routed;
-        }
-
-        public String getRouterId() {
-            return routerId;
-        }
-
-        public int getContextParamIndex() {
-            return contextParamIndex;
-        }
     }
 }
