@@ -114,6 +114,24 @@ if (result.isMatch()) {
 }
 ```
 
+### 类型安全路由（防类型擦除）
+
+在处理复杂对象路由（如路由结果是一个包含 host 和 port 的 JSON 对象）时，默认解析出的值通常为原生的 `LinkedHashMap`。如果直接进行类型强转极易引发 `ClassCastException`。
+
+为了解决这一痛点，`RoutingManager` 提供了带有目标类型参数的 `route` 方法，它会自动将解析结果转换为指定的 Java Bean（基于 Hutool 的 Convert）：
+
+```java
+// 假设路由配置返回的是一个复杂的服务节点信息：{"host": "127.0.0.1", "port": 8080}
+// 传入目标类型 TargetService.class 进行自动转换绑定
+RouteResult<TargetService> result = manager.route("service-router", request, TargetService.class);
+
+if (result.isMatch()) {
+    TargetService target = result.getValue();
+    System.out.println("路由目标 Host：" + target.getHost());
+    System.out.println("路由目标 Port：" + target.getPort());
+}
+```
+
 ---
 
 ## 核心特性

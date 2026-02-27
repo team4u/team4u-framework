@@ -118,4 +118,36 @@ public class RoutingManagerTest {
         RouteResult<String> result = RoutingManager.global().route("non.existent", "test");
         Assert.assertFalse(result.isMatch());
     }
+
+    @Test
+    public void testTypeConversion() {
+        String config = "{\"type\":\"map\", \"rules\":{\"serviceA\":{\"host\":\"127.0.0.1\",\"port\":8080}}}";
+        RouteResult<TargetService> result = RoutingManager.global().routeByConfig(config, "serviceA", TargetService.class);
+        
+        Assert.assertTrue(result.isMatch());
+        Assert.assertNotNull(result.getValue());
+        Assert.assertEquals("127.0.0.1", result.getValue().getHost());
+        Assert.assertEquals(Integer.valueOf(8080), result.getValue().getPort());
+    }
+
+    public static class TargetService {
+        private String host;
+        private Integer port;
+
+        public String getHost() {
+            return host;
+        }
+
+        public void setHost(String host) {
+            this.host = host;
+        }
+
+        public Integer getPort() {
+            return port;
+        }
+
+        public void setPort(Integer port) {
+            this.port = port;
+        }
+    }
 }

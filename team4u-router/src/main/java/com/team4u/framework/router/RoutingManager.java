@@ -73,6 +73,20 @@ public class RoutingManager {
     }
 
     /**
+     * 执行路由并转换结果类型（通过路由唯一标识）
+     *
+     * @param routerId   路由唯一标识
+     * @param request    路由请求对象
+     * @param targetType 期望转换的目标类型
+     * @param <T>        结果类型
+     * @return 路由结果
+     */
+    public <T> RouteResult<T> route(String routerId, Object request, Class<T> targetType) {
+        String rawJsonConfig = configManager.getString(routerId).orElse(null);
+        return routeByConfig(rawJsonConfig, request, targetType);
+    }
+
+    /**
      * 执行路由（针对原始 JSON 配置）
      * <p>
      * 方便单元测试或直接透传配置场景。
@@ -95,6 +109,28 @@ public class RoutingManager {
         }
 
         return router.route(request);
+    }
+
+    /**
+     * 执行路由并转换结果类型（针对原始 JSON 配置）
+     *
+     * @param rawJsonConfig JSON 配置字符串
+     * @param request       路由请求对象
+     * @param targetType    期望转换的目标类型
+     * @param <T>           结果类型
+     * @return 路由结果
+     */
+    public <T> RouteResult<T> routeByConfig(String rawJsonConfig, Object request, Class<T> targetType) {
+        if (rawJsonConfig == null || rawJsonConfig.trim().isEmpty()) {
+            return RouteResult.unmatch();
+        }
+
+        Router router = provider.get(rawJsonConfig);
+        if (router == null) {
+            return RouteResult.unmatch();
+        }
+
+        return router.route(request, targetType);
     }
 
     /**
