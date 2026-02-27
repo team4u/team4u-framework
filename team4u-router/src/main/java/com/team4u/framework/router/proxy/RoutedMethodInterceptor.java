@@ -13,6 +13,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import com.team4u.framework.router.RoutingManager;
 
 /**
  * 声明式路由方法拦截器
@@ -27,31 +28,50 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
     /**
      * 方法元数据缓存，确保 O(1) 的超高性能
      */
-    private final Map<Method, RouteMetadata> metadataCache = new ConcurrentHashMap<>();
+    private static final Map<Method, RouteMetadata> METADATA_CACHE = new ConcurrentHashMap<>();
+
+    private final RoutingManager routingManager;
+
+    /**
+     * 使用全局默认的路由管理器构建拦截器
+     */
+    public RoutedMethodInterceptor() {
+        this(null);
+    }
+
+    /**
+     * 使用自定义的路由管理器构建拦截器
+     *
+     * @param routingManager 自定义路由管理器
+     */
+    public RoutedMethodInterceptor(RoutingManager routingManager) {
+        this.routingManager = routingManager != null ? routingManager : RoutingManager.global();
+    }
 
     @Override
     public Object invoke(MethodInvocation invocation) throws Throwable {
         Method method = invocation.getMethod();
 
-        // 1. 获取或解析方法路由元数据
-        RouteMetadata metadata = metadataCache.computeIfAbsent(method, this::parseMetadata);
+        // 获取或解析方法路由元数据
+        RouteMetadata metadata = METADATA_CACHE.computeIfAbsent(method, RoutedMethodInterceptor::parseMetadata);
 
         // 如果该方法没有 @Routed 注解，直接放行（调用原逻辑）
         if (!metadata.isRouted()) {
             return invocation.proceed();
         }
 
-        // 2. 提取路由上下文
+        // 提取路由上下文
         Object context = extractContext(invocation.getArguments(), metadata.getContextParamIndex());
 
-        // 3. 使用 Locator 动态查找真正的目标 Bean
+        // 使用 Locator 动态查找真正的目标 Bean
         // 注意：这里期望的类型就是当前方法所在的接口类
         Object targetBean = RoutedBeanLocator.locate(
+                this.routingManager,
                 metadata.getRouterId(),
                 context,
                 method.getDeclaringClass());
 
-        // 4. 动态分派：将方法调用转发给真正匹配的目标 Bean
+        // 动态分派：将方法调用转发给真正匹配的目标 Bean
         try {
             return method.invoke(targetBean, invocation.getArguments());
         } catch (InvocationTargetException e) {
@@ -78,7 +98,7 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
     /**
      * 解析方法元数据（仅在方法首次被调用时执行一次）
      */
-    private RouteMetadata parseMetadata(Method method) {
+    private static RouteMetadata parseMetadata(Method method) {
         // 优先找方法上的注解，再找类上的注解
         Routed routed = AnnotationUtil.getAnnotation(method, Routed.class);
         if (routed == null) {

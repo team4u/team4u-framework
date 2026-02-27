@@ -241,11 +241,14 @@ public class WechatPaymentService implements PaymentService {
 
 ### 2. 创建并使用代理
 
-通过 `RoutedProxyFactory` 一行代码即可创建代理实例：
+通过 `RoutedProxyFactory` 一行代码即可创建代理实例。如果需要环境隔离或自定义配置，可以传入自定义的 `RoutingManager`：
 
 ```java
-// 创建路由代理
+// 方式 A：使用全局默认路由管理器创建代理
 PaymentService paymentService = RoutedProxyFactory.createProxy(PaymentService.class);
+
+// 方式 B：使用自定义路由管理器创建代理（适用于环境隔离）
+PaymentService customProxy = RoutedProxyFactory.createProxy(PaymentService.class, myCustomManager);
 
 // 调用方法时，内部会自动：
 // 1. 提取 request 对象
@@ -256,11 +259,15 @@ paymentService.process(myRequest);
 
 ### 3. 热插拔 Bean 定位器
 
-如果你不想使用代理，也可以通过 `RoutedBeanLocator` 手动根据路由规则查找 Bean：
+如果你不想使用代理，也可以通过 `RoutedBeanLocator` 手动根据路由规则查找 Bean。同样支持自定义路由管理器：
 
 ```java
-// 手动查找匹配的 Bean 实例
+// 方式 A：使用全局管理器手动查找匹配的 Bean 实例
 PaymentService service = RoutedBeanLocator.locate("payment-router", myRequest, PaymentService.class);
+
+// 方式 B：使用自定义管理器查找
+PaymentService customService = RoutedBeanLocator.locate(myCustomManager, "payment-router", myRequest, PaymentService.class);
+
 service.process(myRequest);
 ```
 

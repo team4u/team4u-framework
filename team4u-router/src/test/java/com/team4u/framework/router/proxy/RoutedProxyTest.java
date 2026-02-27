@@ -82,6 +82,26 @@ public class RoutedProxyTest {
         Assert.assertEquals("B", proxy.sayHello("otherValue"));
     }
 
+    @Test
+    public void testRoutedProxyWithCustomManager() {
+        ConfigManager cm = ConfigManager.builder()
+                .addSource(inMemoryConfigSource)
+                .addWatcher(inMemoryConfigSource)
+                .build();
+        RoutingManager customManager = RoutingManager.builder()
+                .configManager(cm)
+                .build();
+
+        inMemoryConfigSource.putAndRefresh("router.test_proxy_router",
+                "{\"type\":\"expression\",\"rules\":[{\"condition\":\"it == 'A'\",\"value\":\"serviceA\"}],\"fallbackValue\":\"serviceB\"}");
+        sleep();
+
+        TestService proxy = RoutedProxyFactory.createProxy(TestService.class, customManager);
+
+        Assert.assertEquals("A", proxy.sayHello("A"));
+        Assert.assertEquals("B", proxy.sayHello("otherValue"));
+    }
+
     @Test(expected = IllegalStateException.class)
     public void testRouteUnmatch() {
         // 配置无兜底的路由规则

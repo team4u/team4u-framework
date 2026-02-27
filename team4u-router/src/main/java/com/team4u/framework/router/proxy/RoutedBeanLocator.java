@@ -26,10 +26,26 @@ public class RoutedBeanLocator {
      * @return 匹配的 Bean 实例
      * @throws IllegalStateException 当路由未命中或 Bean 不存在时抛出
      */
-    @SuppressWarnings("unchecked")
     public static <T> T locate(String routerId, Object routeContext, Class<T> expectedType) {
+        return locate(RoutingManager.global(), routerId, routeContext, expectedType);
+    }
+
+    /**
+     * 根据自定义路由管理器、路由规则和上下文，动态获取对应的 Bean 实例
+     *
+     * @param routingManager 自定义路由管理器
+     * @param routerId       路由策略 ID (对应配置中心的 router.{routerId})
+     * @param routeContext   路由上下文 (参与条件计算的请求对象)
+     * @param expectedType   期望返回的 Bean 接口类型
+     * @param <T>            期望的类型
+     * @return 匹配的 Bean 实例
+     * @throws IllegalStateException 当路由未命中或 Bean 不存在时抛出
+     */
+    @SuppressWarnings("unchecked")
+    public static <T> T locate(RoutingManager routingManager, String routerId, Object routeContext,
+            Class<T> expectedType) {
         // 1. 执行路由计算，期望策略中配置的 value 是目标 Bean 的名称
-        RouteResult<String> result = RoutingManager.global().route(routerId, routeContext, String.class);
+        RouteResult<String> result = routingManager.route(routerId, routeContext, String.class);
 
         // 如果未命中且没有兜底，抛出异常阻断
         if (result == null || result.isNotMatch() || StrUtil.isBlank(result.getValue())) {
