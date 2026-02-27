@@ -16,6 +16,7 @@ import org.junit.Test;
 public class RoutedProxyTest {
 
     private final InMemoryConfigSource inMemoryConfigSource = new InMemoryConfigSource("test", 100);
+    private RoutingManager routingManager;
 
     @Before
     public void setup() {
@@ -31,10 +32,10 @@ public class RoutedProxyTest {
                 .addWatcher(inMemoryConfigSource)
                 .build();
 
-        // 3. 构建并注入新的 RoutingManager
-        RoutingManager.setGlobal(RoutingManager.builder()
+        // 3. 构建局部 RoutingManager
+        routingManager = RoutingManager.builder()
                 .configManager(cm)
-                .build());
+                .build();
     }
 
     private void sleep() {
@@ -54,12 +55,12 @@ public class RoutedProxyTest {
         sleep();
 
         // 测试定位 A
-        TestService serviceA = RoutedBeanLocator.locate("test_router", "A", TestService.class);
+        TestService serviceA = RoutedBeanLocator.locate(routingManager, "test_router", "A", TestService.class);
         Assert.assertTrue(serviceA instanceof ServiceA);
         Assert.assertEquals("A", serviceA.sayHello("context"));
 
         // 测试定位 B
-        TestService serviceB = RoutedBeanLocator.locate("test_router", "B", TestService.class);
+        TestService serviceB = RoutedBeanLocator.locate(routingManager, "test_router", "B", TestService.class);
         Assert.assertTrue(serviceB instanceof ServiceB);
         Assert.assertEquals("B", serviceB.sayHello("context"));
     }
@@ -72,33 +73,13 @@ public class RoutedProxyTest {
                 "{\"type\":\"expression\",\"rules\":[{\"condition\":\"it == 'A'\",\"value\":\"serviceA\"}],\"fallbackValue\":\"serviceB\"}");
         sleep();
 
-        // 创建代理
-        TestService proxy = RoutedProxyFactory.createProxy(TestService.class);
+        // 创建代理，显式传入 routingManager
+        TestService proxy = RoutedProxyFactory.createProxy(TestService.class, routingManager);
 
         // 调用代理，期望路由到 serviceA
         Assert.assertEquals("A", proxy.sayHello("A"));
 
         // 调用代理，期望走 fallback 路由到 serviceB
-        Assert.assertEquals("B", proxy.sayHello("otherValue"));
-    }
-
-    @Test
-    public void testRoutedProxyWithCustomManager() {
-        ConfigManager cm = ConfigManager.builder()
-                .addSource(inMemoryConfigSource)
-                .addWatcher(inMemoryConfigSource)
-                .build();
-        RoutingManager customManager = RoutingManager.builder()
-                .configManager(cm)
-                .build();
-
-        inMemoryConfigSource.putAndRefresh("router.test_proxy_router",
-                "{\"type\":\"expression\",\"rules\":[{\"condition\":\"it == 'A'\",\"value\":\"serviceA\"}],\"fallbackValue\":\"serviceB\"}");
-        sleep();
-
-        TestService proxy = RoutedProxyFactory.createProxy(TestService.class, customManager);
-
-        Assert.assertEquals("A", proxy.sayHello("A"));
         Assert.assertEquals("B", proxy.sayHello("otherValue"));
     }
 
@@ -109,7 +90,7 @@ public class RoutedProxyTest {
                 "{\"type\":\"map\",\"rules\":[{\"condition\":\"A\",\"value\":\"serviceA\"}]}");
         sleep();
         // 请求 C，无法匹配，期望抛出 IllegalStateException
-        RoutedBeanLocator.locate("unmatch_router", "C", TestService.class);
+        RoutedBeanLocator.locate(routingManager, "unmatch_router", "C", TestService.class);
     }
 
     @Routed(routerId = "test_proxy_router")

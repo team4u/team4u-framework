@@ -23,7 +23,7 @@ public class RoutedProxyFactory {
     public static <T> T createProxy(Class<T> interfaceClass) {
         return ProxyBuilder.forClass(interfaceClass)
                 .asEmptyObject()
-                .addInterceptor(new RoutedMethodInterceptor())
+                .addInterceptor(RoutedMethodInterceptor.global())
                 .build();
     }
 

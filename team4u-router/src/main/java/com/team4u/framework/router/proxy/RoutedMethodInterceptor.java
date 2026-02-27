@@ -30,6 +30,18 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
      */
     private static final Map<Method, RouteMetadata> METADATA_CACHE = new ConcurrentHashMap<>();
 
+    /**
+     * 全局默认拦截器实例
+     */
+    private static final RoutedMethodInterceptor GLOBAL = new RoutedMethodInterceptor();
+
+    /**
+     * 获取全局拦截器实例
+     */
+    public static RoutedMethodInterceptor global() {
+        return GLOBAL;
+    }
+
     private final RoutingManager routingManager;
 
     /**
