@@ -8,6 +8,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 
 /**
  * MapRouter 单元测试
@@ -53,7 +54,7 @@ public class MapRouterTest {
     @Test
     public void testNoFallback() {
         RoutePolicy policy = new RoutePolicy();
-        policy.setRules(Arrays.asList(
+        policy.setRules(Collections.singletonList(
                 new RouteRule("A", "ValueA")));
 
         MapRouter router = new MapRouter(policy);

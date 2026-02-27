@@ -7,13 +7,13 @@ import com.team4u.framework.base.util.ServiceLoaderUtil;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.policy.util.PolicyScanner;
+import com.team4u.framework.router.api.Router;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
-import com.team4u.framework.router.api.Router;
-import com.team4u.framework.router.spi.RoutePolicyParser;
-import com.team4u.framework.router.spi.RouterFactory;
 import com.team4u.framework.router.factory.RouterFactoryRegistry;
 import com.team4u.framework.router.parser.DefaultRoutePolicyParser;
+import com.team4u.framework.router.spi.RoutePolicyParser;
+import com.team4u.framework.router.spi.RouterFactory;
 
 /**
  * 路由管理器
@@ -35,8 +35,8 @@ public class RoutingManager {
     private final ConfigDrivenRegistry<Router> routerRegistry;
 
     private RoutingManager(RouterFactoryRegistry factoryRegistry,
-            ConfigManager configManager,
-            RoutePolicyParser configParser) {
+                           ConfigManager configManager,
+                           RoutePolicyParser configParser) {
         this.factoryRegistry = factoryRegistry;
         this.configManager = configManager;
         this.configParser = configParser;

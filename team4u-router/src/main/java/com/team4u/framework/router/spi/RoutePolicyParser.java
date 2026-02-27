@@ -1,8 +1,7 @@
 package com.team4u.framework.router.spi;
 
-import com.team4u.framework.router.api.model.RoutePolicy;
-
 import com.team4u.framework.base.config.StringConfigParser;
+import com.team4u.framework.router.api.model.RoutePolicy;
 
 /**
  * 路由策略解析器

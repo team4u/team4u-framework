@@ -6,8 +6,6 @@ import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.criterion.MatchContext;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
-import com.team4u.framework.router.api.model.RoutePolicy;
-import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.model.RouteRule;
 import com.team4u.framework.router.api.trace.RouteTrace;
 import com.team4u.framework.router.api.trace.RuleTrace;

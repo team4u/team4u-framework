@@ -1,8 +1,8 @@
 package com.team4u.framework.router.spi;
 
 import com.team4u.framework.policy.api.KeyedPolicy;
-import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.Router;
+import com.team4u.framework.router.api.model.RoutePolicy;
 
 /**
  * 路由工厂

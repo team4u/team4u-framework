@@ -4,8 +4,6 @@ import cn.hutool.log.Log;
 import cn.hutool.log.LogFactory;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
-import com.team4u.framework.router.api.model.RoutePolicy;
-import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.model.RouteRule;
 import com.team4u.framework.router.api.trace.RouteTrace;
 import com.team4u.framework.router.api.trace.RuleTrace;

@@ -9,6 +9,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -85,7 +86,7 @@ public class ExpressionRouterTest {
     @Test
     public void testCustomCriteria() {
         RoutePolicy policy = new RoutePolicy();
-        policy.setRules(Arrays.asList(
+        policy.setRules(Collections.singletonList(
                 new RouteRule("name is_special true", "Matched")));
 
         // 创建自定义 Criteria，支持 is_special 操作符
@@ -111,7 +112,7 @@ public class ExpressionRouterTest {
         RoutePolicy policy = new RoutePolicy();
         policy.setFallbackValue("ExplicitFallback");
 
-        policy.setRules(Arrays.asList(
+        policy.setRules(Collections.singletonList(
                 new RouteRule("name == 'A'", "ValueA")));
 
         ExpressionRouter router = new ExpressionRouter(policy);

@@ -1,9 +1,8 @@
 package com.team4u.framework.router.core;
 
+import cn.hutool.core.convert.Convert;
 import com.team4u.framework.router.api.Router;
 import com.team4u.framework.router.api.model.RouteResult;
-
-import cn.hutool.core.convert.Convert;
 
 /**
  * 抽象路由器，处理通用的类型转换和本地缓存逻辑
