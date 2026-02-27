@@ -1,8 +1,7 @@
 package com.team4u.framework.router.proxy;
 
 import com.team4u.framework.bean.BeanManager;
-import com.team4u.framework.config.core.ConfigManager;
-import com.team4u.framework.config.core.spi.InMemoryConfigSource;
+import com.team4u.framework.config.test.TestConfigContext;
 import com.team4u.framework.router.RoutingManager;
 import com.team4u.framework.router.proxy.annotation.RouteContext;
 import com.team4u.framework.router.proxy.annotation.Routed;
@@ -15,7 +14,7 @@ import org.junit.Test;
  */
 public class RoutedProxyTest {
 
-    private final InMemoryConfigSource inMemoryConfigSource = new InMemoryConfigSource("test", 100);
+    private TestConfigContext configContext;
     private RoutingManager routingManager;
 
     @Before
@@ -24,25 +23,19 @@ public class RoutedProxyTest {
         BeanManager.getInstance().registerBean("serviceA", new ServiceA());
         BeanManager.getInstance().registerBean("serviceB", new ServiceB());
 
-        // 2. 初始化本地配置管理器
-        // InMemoryConfigSource 同时实现了 ConfigSource 和 ConfigWatcher
-        // 必须同时用 addSource + addWatcher 注册，putAndRefresh 才能触发热重载
-        ConfigManager cm = ConfigManager.builder()
-                .addSource(inMemoryConfigSource)
-                .addWatcher(inMemoryConfigSource)
-                .debounceWindow(0)
-                .build();
+        // 2. 初始化本地配置管理测试上下文
+        configContext = TestConfigContext.create();
 
         // 3. 构建局部 RoutingManager
         routingManager = RoutingManager.builder()
-                .configManager(cm)
+                .configManager(configContext.getManager())
                 .build();
     }
 
     @Test
     public void testRoutedBeanLocator() {
         // 配置路由规则
-        inMemoryConfigSource.putAndRefresh("router.test_router",
+        configContext.put("router.test_router",
                 "{\"type\":\"map\",\"rules\":[{\"condition\":\"A\",\"value\":\"serviceA\"},{\"condition\":\"B\",\"value\":\"serviceB\"}]}");
 
         // 测试定位 A
@@ -60,7 +53,7 @@ public class RoutedProxyTest {
     public void testRoutedProxy() {
         // 配置路由规则
         // team4u-criterion 中 "it" 代表根对象（完整名：SUBJECT_IT = "it"）
-        inMemoryConfigSource.putAndRefresh("router.test_proxy_router",
+        configContext.put("router.test_proxy_router",
                 "{\"type\":\"expression\",\"rules\":[{\"condition\":\"it == 'A'\",\"value\":\"serviceA\"}],\"fallbackValue\":\"serviceB\"}");
 
         // 创建代理，显式传入 routingManager
@@ -76,7 +69,7 @@ public class RoutedProxyTest {
     @Test(expected = IllegalStateException.class)
     public void testRouteUnmatch() {
         // 配置无兜底的路由规则
-        inMemoryConfigSource.putAndRefresh("router.unmatch_router",
+        configContext.put("router.unmatch_router",
                 "{\"type\":\"map\",\"rules\":[{\"condition\":\"A\",\"value\":\"serviceA\"}]}");
         // 请求 C，无法匹配，期望抛出 IllegalStateException
         RoutedBeanLocator.locate(routingManager, "unmatch_router", "C", TestService.class);

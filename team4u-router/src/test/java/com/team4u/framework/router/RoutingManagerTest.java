@@ -1,16 +1,13 @@
 package com.team4u.framework.router;
 
-import com.team4u.framework.config.core.internal.DefaultConfigManager;
-import com.team4u.framework.config.core.spi.ConfigSourceRegistry;
-import com.team4u.framework.config.core.spi.ConfigWatcherRegistry;
-import com.team4u.framework.config.core.spi.InMemoryConfigSource;
+import com.team4u.framework.config.test.TestConfigContext;
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.router.api.builder.RoutePolicyBuilder;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.factory.ExpressionRouterFactory;
 import org.junit.Assert;
-import org.junit.BeforeClass;
+import org.junit.Before;
 import org.junit.Test;
 
 import java.util.HashMap;
@@ -21,25 +18,24 @@ import java.util.Map;
  */
 public class RoutingManagerTest {
 
-    private static final InMemoryConfigSource configSource = new InMemoryConfigSource("test", 100);
+    private TestConfigContext configContext;
+    private RoutingManager routingManager;
 
-    @BeforeClass
-    public static void setUp() {
-        // 注册内存配置源到全局注册表
-        ConfigSourceRegistry.global().register(configSource);
-        ConfigWatcherRegistry.global().register(configSource);
-        // 强制刷新全局配置管理器以加载新配置源
-        DefaultConfigManager.global().refresh();
+    @Before
+    public void setUp() {
+        configContext = TestConfigContext.create();
+        routingManager = RoutingManager.builder()
+                .configManager(configContext.getManager())
+                .build();
     }
 
     @Test
     public void testRouteMap() {
         String routerId = "test.map";
         String config = "{\"type\":\"map\", \"rules\":[{\"condition\":\"test\", \"value\":\"success\"}]}";
-        configSource.putAndRefresh("router." + routerId, config);
-        DefaultConfigManager.global().refresh();
+        configContext.put("router." + routerId, config);
 
-        RouteResult<String> result = RoutingManager.global().route(routerId, "test");
+        RouteResult<String> result = routingManager.route(routerId, "test");
         Assert.assertTrue(result.isMatch());
         Assert.assertEquals("success", result.getValue());
     }
@@ -48,10 +44,9 @@ public class RoutingManagerTest {
     public void testRouteExpression() {
         String routerId = "test.expression";
         String config = "{\"type\":\"expression\", \"rules\":[{\"condition\":\"ok\", \"value\":\"bingo\"}]}";
-        configSource.putAndRefresh("router." + routerId, config);
-        DefaultConfigManager.global().refresh();
+        configContext.put("router." + routerId, config);
 
-        RouteResult<String> result = RoutingManager.global().route(routerId, "ok");
+        RouteResult<String> result = routingManager.route(routerId, "ok");
         Assert.assertTrue(result.isMatch());
         Assert.assertEquals("bingo", result.getValue());
     }
@@ -79,16 +74,13 @@ public class RoutingManagerTest {
     public void testCacheEffect() {
         String routerId = "test.cache";
         String config = "{\"type\":\"map\", \"rules\":[{\"condition\":\"k\", \"value\":\"v\"}]}";
-        configSource.putAndRefresh("router." + routerId, config);
-        DefaultConfigManager.global().refresh();
-
-        RoutingManager manager = RoutingManager.global();
+        configContext.put("router." + routerId, config);
 
         // 第一次路由，触发解析与工厂创建
-        manager.route(routerId, "k");
+        routingManager.route(routerId, "k");
 
         // 验证结果
-        RouteResult<String> result = manager.route(routerId, "k");
+        RouteResult<String> result = routingManager.route(routerId, "k");
         Assert.assertEquals("v", result.getValue());
     }
 
@@ -96,11 +88,10 @@ public class RoutingManagerTest {
     public void testUnsupportedType() {
         String routerId = "test.unknown";
         String config = "{\"type\":\"unknown\", \"rules\":[]}";
-        configSource.putAndRefresh("router." + routerId, config);
-        DefaultConfigManager.global().refresh();
+        configContext.put("router." + routerId, config);
 
         try {
-            RoutingManager.global().route(routerId, "test");
+            routingManager.route(routerId, "test");
             Assert.fail("Should throw exception for unknown type");
         } catch (Exception e) {
             Assert.assertTrue(e.getMessage().contains("Unsupported router type"));
@@ -110,14 +101,14 @@ public class RoutingManagerTest {
     @Test
     public void testRouteByConfig() {
         String config = "{\"type\":\"map\", \"rules\":[{\"condition\":\"direct\", \"value\":\"ok\"}]}";
-        RouteResult<String> result = RoutingManager.global().routeByConfig(config, "direct");
+        RouteResult<String> result = routingManager.routeByConfig(config, "direct");
         Assert.assertTrue(result.isMatch());
         Assert.assertEquals("ok", result.getValue());
     }
 
     @Test
     public void testConfigNotFound() {
-        RouteResult<String> result = RoutingManager.global().route("non.existent", "test");
+        RouteResult<String> result = routingManager.route("non.existent", "test");
         Assert.assertFalse(result.isMatch());
     }
 
@@ -125,7 +116,7 @@ public class RoutingManagerTest {
     public void testInvalidConfig() {
         String config = "{\"type\":\"map\""; // 错误的 JSON
         try {
-            RoutingManager.global().routeByConfig(config, "test");
+            routingManager.routeByConfig(config, "test");
             Assert.fail("Should throw exception for invalid config");
         } catch (Exception e) {
             // 可能是由于 JSON 解析失败或者 buildRouterFromConfig 抛出的异常
@@ -136,7 +127,7 @@ public class RoutingManagerTest {
     @Test
     public void testTypeConversion() {
         String config = "{\"type\":\"map\", \"rules\":[{\"condition\":\"serviceA\", \"value\":{\"host\":\"127.0.0.1\",\"port\":8080}}]}";
-        RouteResult<TargetService> result = RoutingManager.global().routeByConfig(config, "serviceA",
+        RouteResult<TargetService> result = routingManager.routeByConfig(config, "serviceA",
                 TargetService.class);
 
         Assert.assertTrue(result.isMatch());
@@ -156,10 +147,8 @@ public class RoutingManagerTest {
                 .build();
 
         // 执行路由并验证结果
-        RoutingManager manager = RoutingManager.global();
-
-        Assert.assertEquals("AlipayService", manager.routeByPolicy(policy, "ALIPAY").getValue());
-        Assert.assertEquals("CashService", manager.routeByPolicy(policy, "UNKNOWN_PAY").getValue());
+        Assert.assertEquals("AlipayService", routingManager.routeByPolicy(policy, "ALIPAY").getValue());
+        Assert.assertEquals("CashService", routingManager.routeByPolicy(policy, "UNKNOWN_PAY").getValue());
     }
 
     @Test
@@ -172,15 +161,13 @@ public class RoutingManagerTest {
                 .build();
 
         // 执行路由并验证结果
-        RoutingManager manager = RoutingManager.global();
-
         Map<String, Object> vipReq = new HashMap<>();
         vipReq.put("isVip", true);
-        Assert.assertEquals("grpc://vip-cluster:8080", manager.routeByPolicy(policy, vipReq).getValue());
+        Assert.assertEquals("grpc://vip-cluster:8080", routingManager.routeByPolicy(policy, vipReq).getValue());
 
         Map<String, Object> normalReq = new HashMap<>();
         normalReq.put("isVip", false);
-        Assert.assertEquals("grpc://main-cluster:8080", manager.routeByPolicy(policy, normalReq).getValue());
+        Assert.assertEquals("grpc://main-cluster:8080", routingManager.routeByPolicy(policy, normalReq).getValue());
     }
 
     public static class TargetService {

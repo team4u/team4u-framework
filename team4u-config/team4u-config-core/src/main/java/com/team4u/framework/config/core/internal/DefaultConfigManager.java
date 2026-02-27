@@ -215,6 +215,10 @@ public class DefaultConfigManager implements ConfigManager {
         }
     }
 
+    public void setDebounceWindowMs(long debounceWindowMs) {
+        this.hotReloadManager.setDebounceWindowMs(debounceWindowMs);
+    }
+
     /**
      * 分发配置变更事件
      * <p>

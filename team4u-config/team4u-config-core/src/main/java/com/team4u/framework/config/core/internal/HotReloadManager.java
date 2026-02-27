@@ -54,7 +54,7 @@ public class HotReloadManager {
     /**
      * 防抖延迟时间（毫秒）
      */
-    private final long debounceWindowMs;
+    private long debounceWindowMs;
     /**
      * 版本生成器
      */
@@ -80,6 +80,10 @@ public class HotReloadManager {
             t.setDaemon(true);
             return t;
         });
+    }
+
+    public void setDebounceWindowMs(long debounceWindowMs) {
+        this.debounceWindowMs = debounceWindowMs;
     }
 
     /**

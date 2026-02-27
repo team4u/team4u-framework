@@ -28,7 +28,7 @@ Nacos, Git, File 等），并享受强类型代理和原子化热更新带来的
 ### 核心优势
 
 * 透明热更新：支持 Pinned（快照）/ Live（实时）双模代理，业务无感升级，彻底告别重启。
-* 类型安全代理：支持接口与普通 Java Bean，一行代码自动绑定配置到对象，支持智能松散绑定。
+* 类型安全代理：支持普通 Java Bean，一行代码自动绑定配置到对象，支持智能松散绑定。
 * 字段默认值：支持使用 Java Bean 字段的初始值作为配置缺失时的兜底默认值。
 * 多源聚合：内置优先级机制，支持环境变量、系统属性、远程配置的多级叠加与覆盖。
 * 不可变快照：核心对象基于不可变设计，确保在一次业务处理周期内配置逻辑一致。
@@ -372,6 +372,23 @@ ConfigManager manager = ConfigManager.builder()
 memorySource.putAndRefresh("server.name","unit-test-app");
 ```
 
+### 3. 使用 TestConfigContext 工具类 (推荐)
+
+对于大多数单元测试场景，推荐使用 `team4u-config-test` 模块提供的 `TestConfigContext`。它封装了 `InMemoryConfigSource` 和同步重载的 `ConfigManager`，并提供了链式调用的快捷方法。
+
+```java
+// 1. 创建测试上下文
+TestConfigContext context = TestConfigContext.create();
+
+// 2. 注入配置并自动同步刷新
+context.put("app.name", "test-app")
+       .put("app.port", "8080");
+
+// 3. 获取配置或创建代理
+AppConfig config = context.createProxy("app", AppConfig.class);
+Assert.assertEquals("test-app", config.getName());
+```
+
 ---
 
 ## 可靠性与故障排查
@@ -457,9 +474,9 @@ public void process() {
 }
 ```
 
-### 场景：基于接口的配置驱动编程
+### 场景：基于配置驱动的强类型编程
 
-通过 createProxy，你可以将配置完全视为一个普通的 Java 服务，极大地增强了代码的可测试性和自描述性。
+通过 createProxy，你可以将配置完全视为一个普通的 Java 对象，极大地增强了代码的可测试性和自描述性。
 
 ---
 
