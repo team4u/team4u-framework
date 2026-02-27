@@ -8,8 +8,8 @@ import com.team4u.framework.router.api.model.RouteRule;
 import com.team4u.framework.router.api.trace.RouteTrace;
 import com.team4u.framework.router.api.trace.RuleTrace;
 
+import java.util.HashMap;
 import java.util.Map;
-import java.util.stream.Collectors;
 
 /**
  * 映射路由器
@@ -22,11 +22,42 @@ public class MapRouter extends AbstractRouter {
     private final Object fallbackValue;
 
     public MapRouter(RoutePolicy policy) {
-        this.rules = policy.getRules().stream()
-                .filter(rule -> rule.getCondition() != null)
-                .collect(Collectors.toMap(RouteRule::getCondition,
-                        rule -> rule.getValue() != null ? rule.getValue() : ""));
+        this.rules = initializeRules(policy);
         this.fallbackValue = policy.getFallbackValue();
+    }
+
+    /**
+     * 初始化路由规则映射表
+     *
+     * @param policy 路由策略配置
+     * @return 精确匹配的规则映射表
+     * @throws IllegalArgumentException 当配置中存在重复的匹配条件 (Condition) 时抛出，以防止业务逻辑冲突
+     */
+    private Map<String, Object> initializeRules(RoutePolicy policy) {
+        Map<String, Object> ruleMap = new HashMap<>();
+
+        if (policy.getRules() != null) {
+            for (RouteRule rule : policy.getRules()) {
+                // 跳过匹配条件为空的规则
+                if (rule.getCondition() == null) {
+                    continue;
+                }
+
+                String key = rule.getCondition();
+                Object value = rule.getValue();
+
+                // 拦截重复 Key，抛出附带 Policy ID 和具体冲突值的精确异常，提升排障效率
+                if (ruleMap.containsKey(key)) {
+                    throw new IllegalArgumentException(String.format(
+                            "Invalid configuration in RoutePolicy [%s]: Duplicate condition key '%s' found. " +
+                                    "Cannot map to both [%s] and [%s].",
+                            policy.getId(), key, ruleMap.get(key), value));
+                }
+                ruleMap.put(key, value);
+            }
+        }
+
+        return ruleMap;
     }
 
     @SuppressWarnings("unchecked")

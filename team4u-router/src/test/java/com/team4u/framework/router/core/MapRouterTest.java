@@ -106,4 +106,16 @@ public class MapRouterTest {
         Assert.assertTrue(result.isMatch());
         Assert.assertEquals("ExplicitFallback", result.getValue());
     }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testDuplicateKeyException() {
+        RoutePolicy policy = new RoutePolicy();
+        policy.setId("test-policy");
+        policy.setRules(Arrays.asList(
+                new RouteRule("A", "Value1"),
+                new RouteRule("A", "Value2")));
+
+        // 构造函数应抛出异常
+        new MapRouter(policy);
+    }
 }
