@@ -10,6 +10,7 @@ import com.team4u.framework.policy.util.PolicyScanner;
 import com.team4u.framework.router.api.Router;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
+import com.team4u.framework.router.api.trace.RouteTrace;
 import com.team4u.framework.router.factory.RouterFactoryRegistry;
 import com.team4u.framework.router.parser.DefaultRoutePolicyParser;
 import com.team4u.framework.router.spi.RoutePolicyParser;
@@ -35,8 +36,8 @@ public class RoutingManager {
     private final ConfigDrivenRegistry<Router> routerRegistry;
 
     private RoutingManager(RouterFactoryRegistry factoryRegistry,
-                           ConfigManager configManager,
-                           RoutePolicyParser configParser) {
+            ConfigManager configManager,
+            RoutePolicyParser configParser) {
         this.factoryRegistry = factoryRegistry;
         this.configManager = configManager;
         this.configParser = configParser;
@@ -129,10 +130,10 @@ public class RoutingManager {
      * @param <T>      结果类型
      * @return 路由诊断轨迹
      */
-    public <T> com.team4u.framework.router.api.trace.RouteTrace<T> trace(String routerId, Object request) {
+    public <T> RouteTrace<T> trace(String routerId, Object request) {
         Router router = routerRegistry.get("router." + routerId);
         if (router == null) {
-            com.team4u.framework.router.api.trace.RouteTrace<T> trace = new com.team4u.framework.router.api.trace.RouteTrace<>();
+            RouteTrace<T> trace = new RouteTrace<>();
             trace.setResult(RouteResult.unmatch());
             return trace;
         }
@@ -185,9 +186,9 @@ public class RoutingManager {
      * @param <T>       结果类型
      * @return 路由诊断轨迹
      */
-    public <T> com.team4u.framework.router.api.trace.RouteTrace<T> traceByConfig(String rawConfig, Object request) {
+    public <T> RouteTrace<T> traceByConfig(String rawConfig, Object request) {
         if (StrUtil.isBlank(rawConfig)) {
-            com.team4u.framework.router.api.trace.RouteTrace<T> trace = new com.team4u.framework.router.api.trace.RouteTrace<>();
+            RouteTrace<T> trace = new RouteTrace<>();
             trace.setResult(RouteResult.unmatch());
             return trace;
         }

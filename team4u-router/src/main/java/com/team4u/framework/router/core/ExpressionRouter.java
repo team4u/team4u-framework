@@ -4,6 +4,7 @@ import cn.hutool.log.Log;
 import cn.hutool.log.LogFactory;
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.criterion.MatchContext;
+import com.team4u.framework.criterion.trace.TraceNode;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.model.RouteRule;
@@ -74,7 +75,7 @@ public class ExpressionRouter extends AbstractRouter {
             String expr = rule.getCondition();
 
             // 核心：使用 criterion 的 trace 方法获取底层执行树
-            com.team4u.framework.criterion.trace.TraceNode node = criteria.trace(expr, context);
+            TraceNode node = criteria.trace(expr, context);
             boolean isMatch = node.isMatched();
 
             // 将底层 TraceNode 挂载到路由轨迹中
