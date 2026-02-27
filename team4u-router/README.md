@@ -10,7 +10,8 @@
 - [简介](#简介)
 - [快速入门](#快速入门)
 - [核心特性](#核心特性)
-- [编程式路由 (Fluent Builder)](#编程式路由-fluent-builder)
+- [编程式路由](#编程式路由)
+- [声明式路由](#声明式路由)
 - [典型场景](#典型场景)
 - [路由诊断](#路由诊断)
 - [SPI 扩展](#spi-扩展)
@@ -158,7 +159,7 @@ if (result.isMatch()) {
 
 ---
 
-## 编程式路由 (Fluent Builder)
+## 编程式路由
 
 除了通过 JSON 配置，`team4u-router` 还提供了强大的流式构建器（Fluent Builder），支持在代码中强类型、动态地构建路由策略。
 
@@ -203,6 +204,108 @@ RouteTrace<String> trace = manager.traceByPolicy(exprPolicy, request);
 
 ---
 
+## 声明式路由
+
+`team4u-router` 提供了基于注解的声明式路由支持，通过动态代理将接口方法调用透明地转发到具体的业务实现。这种模式下，业务方只需关注接口定义，而无需关心路由细节。
+
+### 1. 标记路由注解
+
+使用 `@Routed` 标记接口或方法，使用 `@RouteContext` 标记用于路由计算的参数：
+
+```java
+// 1. 在接口或方法上指定路由策略 ID
+@Routed(routerId = "payment-router")
+public interface PaymentService {
+
+    // 2. 标记哪个参数作为路由计算的上下文 (如不标记，默认取第一个参数)
+    String process(@RouteContext PaymentRequest request);
+}
+
+// 3. 不同的业务实现类，注册为不同名称的 Bean
+@Component("alipay-service")
+public class AlipayPaymentService implements PaymentService {
+    @Override
+    public String process(PaymentRequest request) {
+        return "Using Alipay: " + request.getAmount();
+    }
+}
+
+@Component("wechat-service")
+public class WechatPaymentService implements PaymentService {
+    @Override
+    public String process(PaymentRequest request) {
+        return "Using WeChat: " + request.getAmount();
+    }
+}
+```
+
+### 2. 创建并使用代理
+
+通过 `RoutedProxyFactory` 一行代码即可创建代理实例：
+
+```java
+// 创建路由代理
+PaymentService paymentService = RoutedProxyFactory.createProxy(PaymentService.class);
+
+// 调用方法时，内部会自动：
+// 1. 提取 request 对象
+// 2. 根据 "payment-router" 策略执行路由，得到目标 Bean 名称（如 "alipay-service"）
+// 3. 从容器中获取 Bean 并执行真实逻辑
+paymentService.process(myRequest);
+```
+
+### 3. 热插拔 Bean 定位器
+
+如果你不想使用代理，也可以通过 `RoutedBeanLocator` 手动根据路由规则查找 Bean：
+
+```java
+// 手动查找匹配的 Bean 实例
+PaymentService service = RoutedBeanLocator.locate("payment-router", myRequest, PaymentService.class);
+service.process(myRequest);
+```
+
+### 4. 路由规则配置
+
+为了让上述 `payment-router` 生效，你需要在配置中心或配置文件中定义如下 JSON 规则。`value` 必须与 Spring 容器或 [`BeanManager`](../team4u-bean/README.md) 中的 Bean 名称对应：
+
+```json
+{
+  "type": "expression",
+  "rules": [
+    {
+      "condition": "paymentMethod == 'ALIPAY' && amount < 1000",
+      "value": "alipay-service"
+    },
+    {
+      "condition": "paymentMethod == 'WECHAT' || tags contains 'SMALL_AMOUNT'",
+      "value": "wechat-service"
+    }
+  ],
+  "fallbackValue": "default-payment-service"
+}
+```
+
+> [!IMPORTANT]
+> 声明式路由依赖于 [`BeanManager`](../team4u-bean/README.md) 容器。请确保路由策略配置的 `value` 字段与容器中 Bean 的名称一致。
+
+### 5. Spring 集成
+
+如果你的项目基于 Spring 框架，只需在配置类中添加 [`SpringBeanContainer`](../team4u-bean/README.md) 即可。它会自动将 Spring 容器中的所有 Bean 桥接到 [`BeanManager`](../team4u-bean/README.md) 中，供路由器及其它 SDK 组件使用：
+
+```java
+@Configuration
+public class RoutingConfig {
+
+    @Bean
+    public SpringBeanContainer springBeanContainer() {
+        // 该 Bean 初始化后会自动挂载到 BeanManager，实现两套容器体系的无缝集成
+        return new SpringBeanContainer();
+    }
+}
+```
+
+---
+
 ## 核心特性
 
 ### 1. MapRouter (精准匹配)
@@ -228,6 +331,7 @@ RouteTrace<String> trace = manager.traceByPolicy(exprPolicy, request);
 `RoutingManager` 提供了完善的机制以确保高性能与灵活性：
 *   配置实例缓存：内部通过 `ConfigDrivenRegistry` 自动监听配置变更，并缓存由配置生成的 `Router` 实例。
 *   自动发现机制：`RoutingManager` 在构建时会通过 `PolicyScanner` 自动扫描包及 SPI (`RouterFactory`)，实现零配置集成。
+*   声明式支持：提供 `@Routed`、`@RouteContext` 注解及 `RoutedProxyFactory`，实现零侵入的方法级动态路由。
 *   高性能路由：`AbstractRouter` 封装了通用的类型转换逻辑，确保从原始配置到业务对象的平滑过渡。
 
 ---

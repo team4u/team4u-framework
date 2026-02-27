@@ -27,6 +27,16 @@
             <artifactId>team4u-criterion</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-bean</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-proxy</artifactId>
+            <version>${project.version}</version>
+        </dependency>
 
         <dependency>
             <groupId>cn.hutool</groupId>
