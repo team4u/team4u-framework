@@ -11,6 +11,7 @@
 - [快速入门](#快速入门)
 - [核心特性](#核心特性)
 - [典型场景](#典型场景)
+- [高级：配置驱动的实例生命周期管理](#高级配置驱动的实例生命周期管理)
 - [SPI 扩展](#spi-扩展)
 - [架构与原理](#架构与原理)
 
@@ -182,12 +183,12 @@ getUsername()); // 若配置中无 server.db.username，则输出 "root"
 
 通过 createProxy 创建的实例默认即为 Live Mode（实时模式）。理解这两种模式的区别对于构建高可靠系统至关重要：
 
-| 特性   | Live Mode (默认)     | Pinned Mode (通过 pin 获取) |
-|:-----|:-------------------|:------------------------|
-| 数据源  | 始终读取全局最新的快照        | 始终读取锚定时那一刻的快照           |
-| 热更新  | 实时生效，无需重启或重新获取     | 全局更新后，该实例仍保持旧值          |
-| 一致性  | 弱一致：同一个方法多次调用可能值不同 | 强一致：生命周期内值绝对不变          |
-| 适用场景 | 绝大多数业务、实时监控、开关逻辑   | 批处理、事务性计算、长连接初始化        |
+| 特性     | Live Mode (默认)                     | Pinned Mode (通过 pin 获取)      |
+| :------- | :----------------------------------- | :------------------------------- |
+| 数据源   | 始终读取全局最新的快照               | 始终读取锚定时那一刻的快照       |
+| 热更新   | 实时生效，无需重启或重新获取         | 全局更新后，该实例仍保持旧值     |
+| 一致性   | 弱一致：同一个方法多次调用可能值不同 | 强一致：生命周期内值绝对不变     |
+| 适用场景 | 绝大多数业务、实时监控、开关逻辑     | 批处理、事务性计算、长连接初始化 |
 
 ---
 
@@ -256,11 +257,11 @@ public class AppConfig {
 
 ### 内置或官方扩展配置源
 
-| 来源类型                   | 说明                | 文档链接                                              |
-|:-----------------------|:------------------|:--------------------------------------------------|
-| **System Properties**  | JVM 参数 (-D)       | [查看详情](#built-in-sources)                         |
-| **System Environment** | 操作系统环境变量          | [查看详情](#built-in-sources)                         |
-| **Properties File**    | 本地 .properties 文件 | [查看详情](#built-in-sources)                         |
+| 来源类型               | 说明                    | 文档链接                                          |
+| :--------------------- | :---------------------- | :------------------------------------------------ |
+| **System Properties**  | JVM 参数 (-D)           | [查看详情](#built-in-sources)                     |
+| **System Environment** | 操作系统环境变量        | [查看详情](#built-in-sources)                     |
+| **Properties File**    | 本地 .properties 文件   | [查看详情](#built-in-sources)                     |
 | **Relational DB**      | 关系型数据库 (MySQL/H2) | [team4u-config-db](../team4u-config-db/README.md) |
 
 #### SystemEnvConfigSource (系统属性与环境变量)
@@ -485,16 +486,49 @@ public void process() {
 
 ---
 
+## 高级：配置驱动的实例生命周期管理
+
+这是一个经典的企业级需求：**配置变更 -> 实例热重载**。`team4u-config-core` 提供了 `ConfigDrivenRegistry<T>` 抽象，统一管理配置项与运行时对象实例的映射关系。
+
+### 核心设计思想
+
+1.  **安全热替换 (Safe Swap)**：监听配置变更时，先尝试用新配置构建新实例。构建成功后再替换旧实例；如果构建失败（如配置语法错误），保留旧实例并报警，确保服务不受影响。
+2.  **资源优雅释放 (Graceful Shutdown)**：旧实例被替换或移除时，若其实现了 `AutoCloseable` 接口，框架会自动回收资源。
+3.  **高性能缓存**：消除重复的反序列化开销，查找复杂度为完美的 `O(1)`。
+
+### 使用示例
+
+假设你需要管理一组动态路由：
+
+```java
+// 1. 初始化注册表，监听 "router." 前缀
+ConfigDrivenRegistry<Router> routerRegistry = new ConfigDrivenRegistry<>(
+        ConfigManager.global(),
+        "router.",
+        json -> {
+            // 工厂函数：将原始 JSON 转换为 Router 实例
+            RoutePolicy policy = JSONUtil.toBean(json, RoutePolicy.class);
+            return createRouter(policy);
+        }
+);
+
+// 2. 获取实例（O(1) 性能，支持热更新）
+// 访问 "router.order_route" 配置对应的 Router 实例
+Router router = routerRegistry.get("router.order_route");
+```
+
+---
+
 ## SPI 扩展
 
 框架高度可扩展，通过实现以下 SPI 接口并配合 ServiceLoader 或 Builder 手动注册。
 
-| 扩展接口              | 功能说明                                    | 核心路径                           |
-|-------------------|-----------------------------------------|--------------------------------|
-| ConfigSource      | 数据源：决定配置从哪加载（如从 Redis、MySQL 或 Http 加载）。 | spi/ConfigSource.java          |
-| ConfigWatcher     | 监听器：决定如何发现配置变更（如监听文件系统通知、定时拉取等）。        | spi/ConfigWatcher.java         |
-| ConfigBinder      | 绑定器：决定如何将 String 数据映射到 Complex Object。  | spi/ConfigBinder.java          |
-| PropertyConverter | 转换器：SPI 方式注册全局转换逻辑（可选）。                 | convert/PropertyConverter.java |
+| 扩展接口          | 功能说明                                                         | 核心路径                       |
+| ----------------- | ---------------------------------------------------------------- | ------------------------------ |
+| ConfigSource      | 数据源：决定配置从哪加载（如从 Redis、MySQL 或 Http 加载）。     | spi/ConfigSource.java          |
+| ConfigWatcher     | 监听器：决定如何发现配置变更（如监听文件系统通知、定时拉取等）。 | spi/ConfigWatcher.java         |
+| ConfigBinder      | 绑定器：决定如何将 String 数据映射到 Complex Object。            | spi/ConfigBinder.java          |
+| PropertyConverter | 转换器：SPI 方式注册全局转换逻辑（可选）。                       | convert/PropertyConverter.java |
 
 ### 实现自定义配置源
 

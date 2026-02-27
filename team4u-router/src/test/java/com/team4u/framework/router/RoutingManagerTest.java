@@ -34,7 +34,7 @@ public class RoutingManagerTest {
     public void testRouteMap() {
         String routerId = "test.map";
         String config = "{\"type\":\"map\", \"rules\":{\"test\":\"success\"}}";
-        configSource.putAndRefresh(routerId, config);
+        configSource.putAndRefresh("router." + routerId, config);
         DefaultConfigManager.global().refresh();
 
         RouteResult<String> result = RoutingManager.global().route(routerId, "test");
@@ -46,7 +46,7 @@ public class RoutingManagerTest {
     public void testRouteExpression() {
         String routerId = "test.expression";
         String config = "{\"type\":\"expression\", \"rules\":{\"ok\":\"bingo\"}}";
-        configSource.putAndRefresh(routerId, config);
+        configSource.putAndRefresh("router." + routerId, config);
         DefaultConfigManager.global().refresh();
 
         RouteResult<String> result = RoutingManager.global().route(routerId, "ok");
@@ -77,7 +77,7 @@ public class RoutingManagerTest {
     public void testCacheEffect() {
         String routerId = "test.cache";
         String config = "{\"type\":\"map\", \"rules\":{\"k\":\"v\"}}";
-        configSource.putAndRefresh(routerId, config);
+        configSource.putAndRefresh("router." + routerId, config);
         DefaultConfigManager.global().refresh();
 
         RoutingManager manager = RoutingManager.global();
@@ -94,7 +94,7 @@ public class RoutingManagerTest {
     public void testUnsupportedType() {
         String routerId = "test.unknown";
         String config = "{\"type\":\"unknown\", \"rules\":{}}";
-        configSource.putAndRefresh(routerId, config);
+        configSource.putAndRefresh("router." + routerId, config);
         DefaultConfigManager.global().refresh();
 
         try {
@@ -122,8 +122,9 @@ public class RoutingManagerTest {
     @Test
     public void testTypeConversion() {
         String config = "{\"type\":\"map\", \"rules\":{\"serviceA\":{\"host\":\"127.0.0.1\",\"port\":8080}}}";
-        RouteResult<TargetService> result = RoutingManager.global().routeByConfig(config, "serviceA", TargetService.class);
-        
+        RouteResult<TargetService> result = RoutingManager.global().routeByConfig(config, "serviceA",
+                TargetService.class);
+
         Assert.assertTrue(result.isMatch());
         Assert.assertNotNull(result.getValue());
         Assert.assertEquals("127.0.0.1", result.getValue().getHost());

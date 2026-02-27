@@ -1,8 +1,10 @@
 package com.team4u.framework.router;
 
+import cn.hutool.log.Log;
+import cn.hutool.log.LogFactory;
 import cn.hutool.json.JSONUtil;
-import com.team4u.framework.base.instance.DynamicInstanceProvider;
 import com.team4u.framework.config.core.ConfigManager;
+import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.policy.util.PolicyScanner;
 import com.team4u.framework.router.api.RoutePolicy;
 import com.team4u.framework.router.api.RouteResult;
@@ -12,30 +14,39 @@ import com.team4u.framework.router.factory.RouterFactoryRegistry;
 
 /**
  * 路由管理器
- * 统一门面，负责工厂发现与实例缓存
+ * 统一门面，负责工厂发现与路由实例注册管理
  */
 public class RoutingManager {
+
+    private static final Log log = LogFactory.get();
 
     private static volatile RoutingManager GLOBAL = builder().build();
 
     private final RouterFactoryRegistry factoryRegistry;
     private final ConfigManager configManager;
+
     /**
-     * 高性能实例提供者
-     * String (JSON) -> RoutePolicy -> Router
+     * 配置驱动的路由器注册表
      */
-    private final DynamicInstanceProvider<String, RoutePolicy, Router> provider;
+    private final ConfigDrivenRegistry<Router> routerRegistry;
 
     private RoutingManager(RouterFactoryRegistry factoryRegistry, ConfigManager configManager) {
         this.factoryRegistry = factoryRegistry;
         this.configManager = configManager;
-        this.provider = DynamicInstanceProvider.createStringLru(
-                1000,
-                json -> JSONUtil.toBean(json, RoutePolicy.class),
-                policy -> this.factoryRegistry.get(policy.getType())
-                        .orElseThrow(() -> new IllegalArgumentException("Unsupported router type: " + policy.getType()))
-                        .create(policy)
-        );
+        this.routerRegistry = new ConfigDrivenRegistry<>(
+                this.configManager,
+                "router.",
+                this::buildRouterFromJson);
+    }
+
+    /**
+     * 内部工厂方法：JSON -> Policy -> Router
+     */
+    private Router buildRouterFromJson(String json) {
+        RoutePolicy policy = JSONUtil.toBean(json, RoutePolicy.class);
+        return this.factoryRegistry.get(policy.getType())
+                .orElseThrow(() -> new IllegalArgumentException("Unsupported router type: " + policy.getType()))
+                .create(policy);
     }
 
     /**
@@ -62,14 +73,17 @@ public class RoutingManager {
     /**
      * 执行路由（通过路由唯一标识）
      *
-     * @param routerId 路由唯一标识（用于从 ConfigManager 获取 JSON 配置）
+     * @param routerId 路由唯一标识（对应的配置键为 router.{routerId}）
      * @param request  路由请求对象
      * @param <T>      结果类型
      * @return 路由结果
      */
     public <T> RouteResult<T> route(String routerId, Object request) {
-        String rawJsonConfig = configManager.getString(routerId).orElse(null);
-        return routeByConfig(rawJsonConfig, request);
+        Router router = routerRegistry.get("router." + routerId);
+        if (router == null) {
+            return RouteResult.unmatch();
+        }
+        return router.route(request);
     }
 
     /**
@@ -82,8 +96,11 @@ public class RoutingManager {
      * @return 路由结果
      */
     public <T> RouteResult<T> route(String routerId, Object request, Class<T> targetType) {
-        String rawJsonConfig = configManager.getString(routerId).orElse(null);
-        return routeByConfig(rawJsonConfig, request, targetType);
+        Router router = routerRegistry.get("router." + routerId);
+        if (router == null) {
+            return RouteResult.unmatch();
+        }
+        return router.route(request, targetType);
     }
 
     /**
@@ -102,12 +119,7 @@ public class RoutingManager {
             return RouteResult.unmatch();
         }
 
-        // 获取或创建缓存的 Router 实例
-        Router router = provider.get(rawJsonConfig);
-        if (router == null) {
-            return RouteResult.unmatch();
-        }
-
+        Router router = buildRouterFromJson(rawJsonConfig);
         return router.route(request);
     }
 
@@ -125,11 +137,7 @@ public class RoutingManager {
             return RouteResult.unmatch();
         }
 
-        Router router = provider.get(rawJsonConfig);
-        if (router == null) {
-            return RouteResult.unmatch();
-        }
-
+        Router router = buildRouterFromJson(rawJsonConfig);
         return router.route(request, targetType);
     }
 
