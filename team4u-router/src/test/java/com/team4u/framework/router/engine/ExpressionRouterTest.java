@@ -4,6 +4,7 @@ import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.router.api.RoutePolicy;
 import com.team4u.framework.router.api.RouteResult;
 import com.team4u.framework.router.api.RouteRule;
+import com.team4u.framework.router.api.trace.RouteTrace;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -54,6 +55,15 @@ public class ExpressionRouterTest {
         Assert.assertTrue(result3.isMatch());
         Assert.assertEquals("ValueDefault", result3.getValue());
         Assert.assertNull(result3.getMatchedCondition());
+
+        // 验证 trace() 方法返回的 matchedCondition
+        RouteTrace<String> trace1 = router.trace(req1);
+        Assert.assertTrue(trace1.getResult().isMatch());
+        Assert.assertEquals("name == 'A'", trace1.getResult().getMatchedCondition());
+
+        RouteTrace<String> trace2 = router.trace(req2);
+        Assert.assertTrue(trace2.getResult().isMatch());
+        Assert.assertEquals("age > 18", trace2.getResult().getMatchedCondition());
     }
 
     @Test

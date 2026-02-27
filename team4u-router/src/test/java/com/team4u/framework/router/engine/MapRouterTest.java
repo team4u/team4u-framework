@@ -3,6 +3,7 @@ package com.team4u.framework.router.engine;
 import com.team4u.framework.router.api.RoutePolicy;
 import com.team4u.framework.router.api.RouteResult;
 import com.team4u.framework.router.api.RouteRule;
+import com.team4u.framework.router.api.trace.RouteTrace;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -42,6 +43,11 @@ public class MapRouterTest {
         Assert.assertTrue(resultNull.isMatch());
         Assert.assertEquals("ValueDefault", resultNull.getValue());
         Assert.assertNull(resultNull.getMatchedCondition());
+
+        // 验证 trace() 方法返回的 matchedCondition
+        RouteTrace<String> traceA = router.trace("A");
+        Assert.assertTrue(traceA.getResult().isMatch());
+        Assert.assertEquals("A", traceA.getResult().getMatchedCondition());
     }
 
     @Test
@@ -54,6 +60,27 @@ public class MapRouterTest {
 
         RouteResult<String> resultC = router.route("C");
         Assert.assertFalse(resultC.isMatch());
+    }
+
+    @Test
+    public void testRouteWithTypeConversion() {
+        RoutePolicy policy = new RoutePolicy();
+        policy.setType("map");
+        policy.setRules(Arrays.asList(
+                new RouteRule("1", "100"),
+                new RouteRule("2", "200")));
+
+        MapRouter router = new MapRouter(policy);
+
+        // 测试从 String 到 Integer 的自动转换
+        RouteResult<Integer> result = router.route("1", Integer.class);
+        Assert.assertTrue(result.isMatch());
+        Assert.assertEquals(Integer.valueOf(100), result.getValue());
+
+        // 再次调用，确认无缓存情况下依然正确（虽然目前不再测试缓存，但确保逻辑通畅）
+        RouteResult<Integer> result2 = router.route("2", Integer.class);
+        Assert.assertTrue(result2.isMatch());
+        Assert.assertEquals(Integer.valueOf(200), result2.getValue());
     }
 
     @Test

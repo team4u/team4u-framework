@@ -82,7 +82,7 @@ public class ExpressionRouter extends AbstractRouter {
             routeTrace.addStep(RuleTrace.normal(expr, isMatch, node.render()));
 
             if (isMatch) {
-                routeTrace.setResult(RouteResult.matched((T) rule.getValue()));
+                routeTrace.setResult(RouteResult.matched((T) rule.getValue(), expr));
                 routeTrace.setCostMs(System.currentTimeMillis() - start);
                 return routeTrace;
             }

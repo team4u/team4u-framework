@@ -125,9 +125,15 @@ if (result.isMatch()) {
 
 // 5. 也可以直接通过原始配置字符串进行路由（常用于测试或临时策略）
 RouteResult<String> tempResult = manager.routeByConfig(rawJsonConfig, request);
+// 支持类型转换的配置路由
+RouteResult<TargetService> typedTempResult = manager.routeByConfig(rawJsonConfig, request, TargetService.class);
 
 // 6. 执行带诊断信息的路由（Trace）
+// 支持通过 routerId 诊断
 RouteTrace<String> trace = manager.trace("order-router", request);
+// 也支持通过原始配置诊断
+RouteTrace<String> configTrace = manager.traceByConfig(rawJsonConfig, request);
+
 System.out.println("路由总耗时：" + trace.getCostMs() + "ms");
 ```
 
@@ -171,11 +177,12 @@ if (result.isMatch()) {
 *   多样化输入：支持 `Map`、`POJO` 或 `MatchContext` 作为输入。
 *   算子解耦：支持通过 `ExpressionRouterFactory` 注入自定义的 `Criteria` 实例。
 
-### 3. 多层级缓存管理
+### 3. 配置驱动与动态发现
 
-`RoutingManager` 提供了完善的缓存机制以确保高性能：
+`RoutingManager` 提供了完善的机制以确保高性能与灵活性：
 *   **配置实例缓存**：内部通过 `ConfigDrivenRegistry` 自动监听配置变更，并缓存由配置生成的 `Router` 实例。
-*   **类型转换缓存**：`AbstractRouter` 内置了转换缓存，避免在将路由结果（如 Map）转换为 POJO 时产生重复的反射与转换开销，生命周期随路由器实例销毁而销毁。
+*   **自动发现机制**：`RoutingManager` 在构建时会通过 `PolicyScanner` 自动扫描包及 SPI (`RouterFactory`)，实现零配置集成。
+*   **高性能路由**：`AbstractRouter` 封装了通用的类型转换逻辑，确保从原始配置到业务对象的平滑过渡。
 
 ---
 

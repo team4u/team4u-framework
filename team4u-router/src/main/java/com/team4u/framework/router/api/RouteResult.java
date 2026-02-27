@@ -52,13 +52,19 @@ public class RouteResult<T> {
     }
 
     /**
+     * 匹配失败的单例对象，用于减少不必要的对象创建
+     */
+    private static final RouteResult<?> UNMATCH_INSTANCE = new RouteResult<>(false, null, null);
+
+    /**
      * 匹配失败
      *
      * @param <T> 结果类型
      * @return 路由结果
      */
+    @SuppressWarnings("unchecked")
     public static <T> RouteResult<T> unmatch() {
-        return new RouteResult<>(false, null, null);
+        return (RouteResult<T>) UNMATCH_INSTANCE;
     }
 
     public boolean isNotMatch() {

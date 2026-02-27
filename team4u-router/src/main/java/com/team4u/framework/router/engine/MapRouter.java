@@ -78,7 +78,7 @@ public class MapRouter extends AbstractRouter {
 
         if (target != null) {
             routeTrace.addStep(RuleTrace.normal(routingKey, true, null));
-            routeTrace.setResult(RouteResult.matched((T) target));
+            routeTrace.setResult(RouteResult.matched((T) target, routingKey));
         } else {
             routeTrace.addStep(RuleTrace.normal(routingKey, false, null));
             routeTrace.addStep(RuleTrace.fallback(fallbackValue != null));
