@@ -468,7 +468,7 @@ for (RuleTrace step : trace.getSteps()) {
     *   **方式 A (推荐)：使用统一入口进行全局注册**
         ```java
         RouterBootstrap.global()
-            .registerFactory(new MyRouterFactory())
+            .addFactory(new MyRouterFactory())
             .lock(); // 注册完成后锁定
         ```
     *   **方式 B：SPI 自动发现**
@@ -480,7 +480,7 @@ for (RuleTrace step : trace.getSteps()) {
 `RoutingManager` 在构建时会通过以下顺序加载工厂，后加载的会覆盖先加载的（即优先级更高）：
 1.  **SPI 发现**：通过 `ServiceLoader` 发现的 `RouterFactory`。
 2.  **包扫描**：自动扫描 `com.team4u.framework.router` 包下的工厂。
-3.  **全局注册**：通过 `RouterBootstrap.global().registerFactory()` 注册的工厂。
+3.  **全局注册**：通过 `RouterBootstrap.global().addFactory()` 注册的工厂。
 4.  **手动添加**：通过 `Builder.addFactory()` 手动注册的工厂（具有最高优先级）。
 
 ---

@@ -36,7 +36,7 @@ public class CriterionBootstrap {
      * @param operator 算子名称（如 "is_odd"）
      * @param logic    匹配逻辑 (actual, expected) -> boolean
      */
-    public synchronized CriterionBootstrap registerOperator(String operator, BiPredicate<Object, Object> logic) {
+    public synchronized CriterionBootstrap addOperator(String operator, BiPredicate<Object, Object> logic) {
         checkLocked();
         StandardCriterionParser.global().addOperator(operator, logic);
         return this;
@@ -47,7 +47,7 @@ public class CriterionBootstrap {
      *
      * @param converter 转换器实现
      */
-    public synchronized CriterionBootstrap registerConverter(ValueConverter converter) {
+    public synchronized CriterionBootstrap addConverter(ValueConverter converter) {
         checkLocked();
         ValueConverterRegistry.global().register(converter);
         return this;
@@ -58,7 +58,7 @@ public class CriterionBootstrap {
      *
      * @param compiler 编译器实现
      */
-    public synchronized CriterionBootstrap registerCompiler(CriterionCompiler<?> compiler) {
+    public synchronized CriterionBootstrap addCompiler(CriterionCompiler<?> compiler) {
         checkLocked();
         CompilerRegistry.global().register(compiler);
         return this;

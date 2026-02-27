@@ -82,7 +82,8 @@ ConfigManager 是所有操作的入口。你可以使用内置的标准单例，
 ```java
 // 使用统一入口进行全局注册
 ConfigBootstrap.global()
-    .registerSource(new MyCustomConfigSource())
+    .addSource(new MyCustomConfigSource())
+    .addWatcher(new MyCustomConfigWatcher()) // 显式注册自定义监听器
     .lock(); // 注册完成后建议锁定
 
 // 获取标准单例，它会自动包含上面手动注册的源以及 SPI 加载的源
@@ -279,7 +280,7 @@ public class AppConfig {
 
 ```java
 // 在应用启动时通过统一入口手动注入一个特定转换器
-ConfigBootstrap.global().registerConverter(new MyCustomConverter());
+ConfigBootstrap.global().addConverter(new MyCustomConverter());
 ```
 
 ---
@@ -344,7 +345,7 @@ ConfigManager manager = ConfigManager.builder()
 @BeforeEach
 public void setup() {
     // 通过统一入口注入内存配置源
-    ConfigBootstrap.global().registerSource(new InMemoryConfigSource("test", 1));
+    ConfigBootstrap.global().addSource(new InMemoryConfigSource("test", 1));
 }
 
 @AfterEach

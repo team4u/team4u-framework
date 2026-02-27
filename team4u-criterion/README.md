@@ -471,11 +471,11 @@ public void cleanup() {
 // 使用统一入口进行全局配置
 CriterionBootstrap.global()
     // 1. 注册全局自定义算子
-    .registerOperator("is_odd", (actual, expected) -> (int) actual % 2 != 0)
+    .addOperator("is_odd", (actual, expected) -> (int) actual % 2 != 0)
     // 2. 注册全局自定义转换器
-    .registerConverter(new MyMoneyConverter())
+    .addConverter(new MyMoneyConverter())
     // 3. 注册全局编译器（针对特定自定义 Criterion）
-    .registerCompiler(new MyCustomCompiler())
+    .addCompiler(new MyCustomCompiler())
     // 4. 配置完成后可以锁定注册表，防止运行时被篡改
     .lock();
 ```

@@ -34,7 +34,7 @@ public class ConfigBootstrap {
      *
      * @param source 配置源实例
      */
-    public synchronized ConfigBootstrap registerSource(ConfigSource source) {
+    public synchronized ConfigBootstrap addSource(ConfigSource source) {
         checkLocked();
         ConfigSourceRegistry.global().register(source);
         return this;
@@ -45,7 +45,7 @@ public class ConfigBootstrap {
      *
      * @param watcher 监听器实例
      */
-    public synchronized ConfigBootstrap registerWatcher(ConfigWatcher watcher) {
+    public synchronized ConfigBootstrap addWatcher(ConfigWatcher watcher) {
         checkLocked();
         ConfigWatcherRegistry.global().register(watcher);
         return this;
@@ -56,7 +56,7 @@ public class ConfigBootstrap {
      *
      * @param converter 转换器实例
      */
-    public synchronized ConfigBootstrap registerConverter(PropertyConverter<?> converter) {
+    public synchronized ConfigBootstrap addConverter(PropertyConverter<?> converter) {
         checkLocked();
         PropertyConverterRegistry.global().register(converter);
         return this;

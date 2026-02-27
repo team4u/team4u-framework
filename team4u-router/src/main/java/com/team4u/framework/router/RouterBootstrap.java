@@ -30,7 +30,7 @@ public class RouterBootstrap {
      *
      * @param factory 路由工厂实现
      */
-    public synchronized RouterBootstrap registerFactory(RouterFactory factory) {
+    public synchronized RouterBootstrap addFactory(RouterFactory factory) {
         checkLocked();
         RouterFactoryRegistry.global().register(factory);
         return this;
