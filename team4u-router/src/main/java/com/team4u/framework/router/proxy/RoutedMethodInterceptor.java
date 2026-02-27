@@ -3,6 +3,7 @@ package com.team4u.framework.router.proxy;
 import cn.hutool.core.annotation.AnnotationUtil;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.ArrayUtil;
+import cn.hutool.core.util.ReUtil;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
 import com.team4u.framework.router.RoutingManager;
@@ -104,16 +105,8 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
         // 提取路由上下文
         Object context = extractContext(invocation.getArguments(), metadata.getContextParamIndex());
 
-        // 尝试从上下文中获取动态路由 ID
-        String routerId = metadata.getRouterId();
-        // 如果上下文不为空，尝试根据属性表达式提取真实的路由 ID
-        if (context != null) {
-            // 使用 Hutool 的属性表达式从上下文中提取值
-            Object dynamicRouterId = BeanUtil.getProperty(context, routerId);
-            if (dynamicRouterId != null) {
-                routerId = dynamicRouterId.toString();
-            }
-        }
+        // 解析真实的路由 ID
+        String routerId = resolveRouterId(metadata.getRouterId(), context);
 
         // 使用 Locator 动态查找真正的目标 Bean
         // 注意：这里期望的类型就是当前方法所在的接口类
@@ -131,6 +124,27 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
             throw e.getTargetException();
         }
     }
+
+    /**
+     * 解析真实的路由 ID
+     * <p>
+     * 1. 如果包含 ${property} 占位符，则从 context 中解析并替换变量。
+     * 2. 如果不包含占位符，则直接将其视为字面量常量。
+     * </p>
+     */
+    private String resolveRouterId(String template, Object context) {
+        if (context == null || !template.contains("${")) {
+            return template;
+        }
+
+        // 解析并替换占位符，支持 "biz.${tenantId}.router" 这种混合模式
+        return ReUtil.replaceAll(template, "\\$\\{(.+?)\\}", match -> {
+            String propertyName = match.group(1);
+            Object value = BeanUtil.getProperty(context, propertyName);
+            return value != null ? value.toString() : match.group(0);
+        });
+    }
+
 
     /**
      * 提取路由上下文

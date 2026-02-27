@@ -227,27 +227,29 @@ RouteTrace<String> trace = manager.traceByPolicy(exprPolicy, request);
 
 ### 1. 标记路由注解
 
-使用 `@Routed` 标记接口或方法。`routerId` 既可以是一个静态的配置键，也可以是一个 **属性表达式**，用于从路由上下文中动态提取真实的路由 ID。
+使用 `@Routed` 标记接口或方法。`routerId` 既可以是一个静态的配置键，也可以是一个包含 **`${property}` 占位符** 的动态模板。
 
-*   **静态路由 ID**：直接指向配置中心的 `router.{routerId}`。
-*   **动态路由 ID**：如果 `routerId` 对应 `@RouteContext` 参数中的某个属性名（支持嵌套，如 `user.tenantId`），则会自动提取该属性值作为真实的路由 ID。如果提取失败，则回退使用字面量。
+*   **常量模式**：如果不包含 `${}`，则直接作为字面量常量。例如 `routerId = "payment-router"` 指向 `router.payment-router`。
+*   **变量模式**：包含 `${property}`，则从路由上下文中解析并替换变量。例如 `routerId = "${tenantId}.router"`，如果上下文中的 `tenantId` 为 `alipay`，则指向 `router.alipay.router`。
+*   **混合模式**：支持常量与变量混合，如 `routerId = "biz.${region}.router"`。
 
 ```java
-// 示例：根据请求中的 tenantId 属性动态决定路由策略 ID
+// 示例：根据请求中的租户和区域动态决定路由策略 ID
 public interface PaymentService {
 
-    // routerId = "tenantId" 表示从 PaymentRequest 的 tenantId 属性中获取值。
-    // 如果获取到的值是 "alipay-tenant"，则最终查找的配置键为 "router.alipay-tenant"
-    @Routed(routerId = "tenantId")
+    // 解析占位符：如果 region=CN, tenant=alipay，则最终查找 "router.biz.CN.alipay.router"
+    @Routed(routerId = "biz.${region}.${tenant}.router")
     String process(@RouteContext PaymentRequest request);
 }
 
 // 请求对象
 @Data
 public class PaymentRequest {
-    private String tenantId; // 值为 "alipay-tenant" 或 "wechat-tenant"
+    private String region;
+    private String tenant;
     private long amount;
 }
+```
 
 // 2. 不同的业务实现类，注册为不同名称的 Bean
 @Component("alipay-service")

@@ -13,7 +13,7 @@ import org.junit.Test;
 /**
  * 动态路由 ID 测试
  * <p>
- * 验证 @Routed 注解中的 routerId 是否支持属性表达式动态提取。
+ * 验证 @Routed 注解中的 routerId 是否支持 ${property} 占位符表达式。
  * </p>
  *
  * @author jay.wu
@@ -36,7 +36,7 @@ public class DynamicRouterIdTest {
     }
 
     @Test
-    public void testDynamicRouterId() {
+    public void testPlaceholderRouterId() {
         // 配置两个不同的路由策略
         configContext.put("router.routerA",
                 "{\"type\":\"map\",\"rules\":[{\"condition\":\"A\",\"value\":\"dynamicServiceA\"}]}");
@@ -46,13 +46,13 @@ public class DynamicRouterIdTest {
         // 创建代理
         TestService proxy = RoutedProxyFactory.createProxy(TestService.class, routingManager);
 
-        // 1. 测试动态路由 A：通过 request.routerName 找到 "routerA"
+        // 1. 测试占位符路由 A：通过 ${routerName} 找到 "routerA"
         TestRequest requestA = new TestRequest();
         requestA.setRouterName("routerA");
         requestA.setTenant("A");
         Assert.assertEquals("A", proxy.sayHello(requestA));
 
-        // 2. 测试动态路由 B：通过 request.routerName 找到 "routerB"
+        // 2. 测试占位符路由 B：通过 ${routerName} 找到 "routerB"
         TestRequest requestB = new TestRequest();
         requestB.setRouterName("routerB");
         requestB.setTenant("B");
@@ -60,32 +60,54 @@ public class DynamicRouterIdTest {
     }
 
     @Test
-    public void testStaticFallback() {
-        // 配置静态路由策略
+    public void testMixedRouterId() {
+        // 配置混合模式路由策略
+        configContext.put("router.biz.tenantA.router",
+                "{\"type\":\"map\",\"rules\":[{\"condition\":\"A\",\"value\":\"dynamicServiceA\"}]}");
+
+        TestService proxy = RoutedProxyFactory.createProxy(TestService.class, routingManager);
+
+        // 占位符 + 常量混合
+        TestRequest request = new TestRequest();
+        request.setTenantId("tenantA");
+        request.setTenant("A");
+        Assert.assertEquals("A", proxy.sayHelloMixed(request));
+    }
+
+    @Test
+    public void testConstantRouterId() {
+        // 配置常量路由策略
         configContext.put("router.staticRouter",
                 "{\"type\":\"map\",\"rules\":[{\"condition\":\"S\",\"value\":\"dynamicServiceA\"}]}");
 
         TestService proxy = RoutedProxyFactory.createProxy(TestService.class, routingManager);
 
-        // 传入一个没有 'staticRouter' 属性的对象，应该回退到使用 'staticRouter' 作为字面量
+        // 即使请求中包含 staticRouter 属性，也不会作为变量解析（因为它在注解中没用 ${}）
         TestRequest request = new TestRequest();
+        request.setStaticRouter("ignore_me");
         request.setTenant("S");
-        Assert.assertEquals("A", proxy.sayHelloStatic(request));
+        Assert.assertEquals("A", proxy.sayHelloConstant(request));
     }
 
     public interface TestService {
-        // routerId 指向 request 中的 routerName 属性
-        @Routed(routerId = "routerName")
+        // 带占位符：解析变量
+        @Routed(routerId = "${routerName}")
         String sayHello(@RouteContext TestRequest request);
 
-        // routerId 是一个静态值，request 中没有该属性
+        // 混合模式：常量 + 变量
+        @Routed(routerId = "biz.${tenantId}.router")
+        String sayHelloMixed(@RouteContext TestRequest request);
+
+        // 不带占位符：视为字面量常量
         @Routed(routerId = "staticRouter")
-        String sayHelloStatic(@RouteContext TestRequest request);
+        String sayHelloConstant(@RouteContext TestRequest request);
     }
 
     @Data
     public static class TestRequest {
         private String routerName;
+        private String tenantId;
+        private String staticRouter;
         private String tenant;
 
         @Override
@@ -101,7 +123,12 @@ public class DynamicRouterIdTest {
         }
 
         @Override
-        public String sayHelloStatic(TestRequest request) {
+        public String sayHelloMixed(TestRequest request) {
+            return "A";
+        }
+
+        @Override
+        public String sayHelloConstant(TestRequest request) {
             return "A";
         }
     }
@@ -113,7 +140,12 @@ public class DynamicRouterIdTest {
         }
 
         @Override
-        public String sayHelloStatic(TestRequest request) {
+        public String sayHelloMixed(TestRequest request) {
+            return "B";
+        }
+
+        @Override
+        public String sayHelloConstant(TestRequest request) {
             return "B";
         }
     }
