@@ -28,7 +28,7 @@ team4u-router 是一个轻量级、插件化的 Java 路由框架。它旨在将
 ### 核心优势
 
 * 配置驱动：路由规则支持动态重载，无需重启应用即可调整业务走向。
-* 多种模式：内置精准匹配 (Map) 与规则引擎 (Expression) 两种核心路由器。
+* 多种模式：内置精准匹配 (Map)、规则引擎 (Expression) 与权重分流 (Weight) 三种核心路由器。
 * 透明集成：无缝对接 [team4u-config](../team4u-config/README.md)，实现路由规则的统一配置管理。
 * 高性能：内置配置实例缓存，确保极致的路由性能。
 * 路由诊断：提供完善的 Trace 能力，支持查看每一条规则的匹配状态及表达式计算细节。
@@ -184,10 +184,19 @@ RoutePolicy mapPolicy = RoutePolicyBuilder.<String>map()
 
 // 2. 创建表达式路由 (Expression Router)
 RoutePolicy exprPolicy = RoutePolicyBuilder.<String>expression()
-        .id("router.gray-router")
-        .rule("userId hash 0.1", "gray-version")
+        .id("router.vip-router")
         .rule("userRank > 5", "vip-version")
-        .fallback("stable-version")
+        .rule("tags contains 'PREMIUM'", "premium-version")
+        .fallback("standard-version")
+        .build();
+
+// 3. 创建权重路由 (Weight Router)
+RoutePolicy weightPolicy = RoutePolicyBuilder.<String>weight()
+        .id("router.gray-router")
+        .rule("20", "strategy-A") // 20% 流量
+        .rule("30", "strategy-B") // 30% 流量
+        .rule("50", "strategy-C") // 50% 流量
+        .fallback("strategy-default")
         .build();
 ```
 
@@ -340,7 +349,16 @@ public class RoutingConfig {
 *   多样化输入：支持 `Map`、`POJO` 或 `MatchContext` 作为输入。
 *   算子解耦：支持通过 `ExpressionRouterFactory` 注入自定义的 `Criteria` 实例。
 
-### 3. 配置驱动与动态发现
+### 3. WeightRouter (权重/比例分流)
+
+适用于灰度发布、A/B 测试等需要按精确比例分发的场景，自动处理权重累加逻辑。
+
+*   配置类型：`type: "weight"`
+*   匹配逻辑：基于 Hash 取模。将请求（如 userId）映射为 `[0, totalWeight)` 范围内的整数，再通过 `TreeMap` 快速定位区间。
+*   配置友好：无需手动计算累加概率，直接配置各个规则的相对权重。
+*   高性能：$O(\log N)$ 查找复杂度，性能接近精准匹配。
+
+### 4. 配置驱动与动态发现
 
 `RoutingManager` 提供了完善的机制以确保高性能与灵活性：
 *   配置实例缓存：内部通过 `ConfigDrivenRegistry` 自动监听配置变更，并缓存由配置生成的 `Router` 实例。
@@ -397,37 +415,39 @@ for (RuleTrace step : trace.getSteps()) {
 }
 ```
 
-### 场景 B：灰度/实验控制
-利用 `ExpressionRouter` 的条件匹配功能，针对特定用户属性（如 `userId % 100 < 10`）下发特定策略。
+### 场景 B：基于业务标签的精细化分流
+利用 `ExpressionRouter` 的条件匹配功能，针对特定用户属性（如等级、标签等）下发特定策略。
 
 配置示例 (ExpressionRouter)：
 ```json
 {
   "type": "expression",
   "rules": [
-    {"condition": "userId hash 0.1", "value": "gray-version"}
+    {"condition": "userRank >= 5", "value": "vip-version"},
+    {"condition": "tags contains 'BETA_USER'", "value": "beta-version"}
   ],
   "fallbackValue": "stable-version"
 }
 ```
 
-### 场景 C：复杂分流与流量比例控制
-在 A/B 测试或灰度发布中，常需要将流量按精确比例切分。利用 `ExpressionRouter` 的有序匹配特性，可以非常优雅地实现这一点。
+### 场景 C：精确的权重比例分流 (A/B 测试)
+在 A/B 测试或灰度发布中，常需要将流量按精确比例切分。不再需要手动计算累加百分比，直接配置各分支对应的权重即可。
 
 配置需求：
-- 策略 A (20%)：拦截前 20% 的流量（`userId hash 0.2`）。
-- 策略 B (30%)：拦截接下来的 10% ~ 50% 流量（`userId hash 0.5`）。由于前面的 A 已经拦截了 20%，剩下的 80% 中命中该规则的实际占总流量的 30%。
-- 策略 C (50%)：兜底策略，接收剩余 50% 的所有流量。
+- 策略 A：占总流量的 20%
+- 策略 B：占总流量的 30%
+- 策略 C：占总流量的 50%
 
-配置示例：
+配置示例 (WeightRouter)：
 ```json
 {
-  "type": "expression",
+  "type": "weight",
   "rules": [
-    {"condition": "userId hash 0.2", "value": "strategy-A"},
-    {"condition": "userId hash 0.5", "value": "strategy-B"}
+    {"condition": "20", "value": "strategy-A"},
+    {"condition": "30", "value": "strategy-B"},
+    {"condition": "50", "value": "strategy-C"}
   ],
-  "fallbackValue": "strategy-C"
+  "fallbackValue": "strategy-default"
 }
 ```
 

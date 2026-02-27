@@ -38,6 +38,13 @@ public class RoutePolicyBuilder<T> {
     }
 
     /**
+     * 创建一个 Weight (权重) 类型的路由策略构建器
+     */
+    public static <T> RoutePolicyBuilder<T> weight() {
+        return new RoutePolicyBuilder<>("weight");
+    }
+
+    /**
      * 创建一个自定义类型的路由策略构建器 (用于 SPI 扩展)
      *
      * @param type 路由器类型标识
