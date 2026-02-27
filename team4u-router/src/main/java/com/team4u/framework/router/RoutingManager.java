@@ -27,7 +27,6 @@ public class RoutingManager {
     private static volatile RoutingManager GLOBAL = builder().build();
 
     private final RouterFactoryRegistry factoryRegistry;
-    private final ConfigManager configManager;
     private final RoutePolicyParser configParser;
 
     /**
@@ -36,13 +35,12 @@ public class RoutingManager {
     private final ConfigDrivenRegistry<Router> routerRegistry;
 
     private RoutingManager(RouterFactoryRegistry factoryRegistry,
-            ConfigManager configManager,
-            RoutePolicyParser configParser) {
+                           ConfigManager configManager,
+                           RoutePolicyParser configParser) {
         this.factoryRegistry = factoryRegistry;
-        this.configManager = configManager;
         this.configParser = configParser;
         this.routerRegistry = new ConfigDrivenRegistry<>(
-                this.configManager,
+                configManager,
                 "router.",
                 this::buildRouterFromConfig);
     }
@@ -148,7 +146,7 @@ public class RoutingManager {
     }
 
     /**
-     * 执行路由（针对原始 JSON 配置）
+     * 执行路由（针对原始配置）
      * <p>
      * 方便单元测试或直接透传配置场景。
      * </p>
