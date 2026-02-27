@@ -66,7 +66,7 @@ public class ConfigPrefixTest {
         PropertyConverterRegistry converterRegistry = new PropertyConverterRegistry();
 
         DefaultConfigManager manager = new DefaultConfigManager(sourceRegistry, watcherRegistry, converterRegistry,
-                null) {
+                null, 0) {
             @Override
             public ConfigSnapshot currentSnapshot() {
                 return snapshot;

@@ -83,12 +83,21 @@ public class HotReloadManager {
     }
 
     /**
-     * 接收变更信号并触发防抖逻辑
+     * 接收变更信号并触发重载逻辑
      * <p>
-     * 如果在延迟窗口内多次接收到信号，之前的任务将被取消，重新计时。
+     * 当 {@code debounceWindowMs <= 0} 时，直接在当前线程同步执行重载，适用于单元测试场景，
+     * 无需任何等待即可验证热重载结果。
+     * 当 {@code debounceWindowMs > 0} 时，在延迟窗口内多次接收到信号则取消旧任务并重新计时，
+     * 从而在高频变更场景下避免资源浪费。
      * </p>
      */
     public synchronized void signalChange() {
+        // 防抖窗口为 0 或负数时，旁路调度器，直接同步执行，供测试环境使用
+        if (debounceWindowMs <= 0) {
+            doReload();
+            return;
+        }
+
         if (pendingTask != null && !pendingTask.isDone()) {
             pendingTask.cancel(false);
         }

@@ -22,8 +22,6 @@ public class SpringConfigIntegrationTest {
 
     @Test
     public void testSpringBeanAutoRegistration() {
-        ConfigManager.resetGlobal();
-
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
                 Team4uConfigAutoConfiguration.class,
                 TestConfig.class);

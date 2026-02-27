@@ -70,12 +70,12 @@ public class DefaultConfigManager implements ConfigManager {
      */
     private final DynamicInstanceProvider<ProxyKey, ProxyKey, Object> proxyInstanceProvider;
 
-    private static volatile DefaultConfigManager GLOBAL = new DefaultConfigManager(
+    private static final DefaultConfigManager GLOBAL = new DefaultConfigManager(
             ConfigSourceRegistry.global(),
             ConfigWatcherRegistry.global(),
             PropertyConverterRegistry.global(),
-            new DefaultConfigBinder()
-    );
+            new DefaultConfigBinder(),
+            500);
 
     /**
      * 获取全局标准单例配置管理引擎
@@ -85,24 +85,14 @@ public class DefaultConfigManager implements ConfigManager {
     }
 
     /**
-     * 重置全局标准实例
-     * <p>
-     * 用于在单元测试或特定的隔离沙箱环境中清理状态，释放资源。
-     * </p>
+     * @param debounceWindowMs 防抖延迟时间（毫秒）。传入 0 或负数时，变更信号将同步立即执行重载，
+     *                         可用于单元测试环境中完全消除 {@code Thread.sleep} 等待。
      */
-    public static void resetGlobal() {
-        synchronized (DefaultConfigManager.class) {
-            if (GLOBAL != null) {
-                GLOBAL.destroy();
-                GLOBAL = null;
-            }
-        }
-    }
-
     public DefaultConfigManager(ConfigSourceRegistry sourceRegistry,
-                                ConfigWatcherRegistry watcherRegistry,
-                                PropertyConverterRegistry converterRegistry,
-                                ConfigBinder configBinder) {
+            ConfigWatcherRegistry watcherRegistry,
+            PropertyConverterRegistry converterRegistry,
+            ConfigBinder configBinder,
+            long debounceWindowMs) {
         this.sourceRegistry = sourceRegistry;
         this.watcherRegistry = watcherRegistry;
         this.configBinder = configBinder;
@@ -111,12 +101,12 @@ public class DefaultConfigManager implements ConfigManager {
         // 执行初始化的同步配置加载
         initialLoad();
 
-        // 配置热重载管理器，并设置 500ms 的防抖窗口以应对密集变更
+        // 配置热重载管理器，防抖窗口由外部传入，支持测试环境配置为 0 以实现同步重载
         this.hotReloadManager = new HotReloadManager(
                 snapshotRef,
                 () -> this.sourceRegistry.getPolicies(),
                 this.aggregator,
-                500,
+                debounceWindowMs,
                 this::fireChangeEvents);
 
         // 启动各配置源的监控任务

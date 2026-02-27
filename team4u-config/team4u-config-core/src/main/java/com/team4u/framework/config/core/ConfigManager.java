@@ -49,16 +49,6 @@ public interface ConfigManager {
     }
 
     /**
-     * 重置全局标准实例
-     * <p>
-     * 用于在单元测试或特定的隔离沙箱环境中清理状态，释放资源。
-     * </p>
-     */
-    static void resetGlobal() {
-        DefaultConfigManager.resetGlobal();
-    }
-
-    /**
      * 创建配置管理器构造器
      *
      * @return Builder 实例
@@ -138,6 +128,11 @@ public interface ConfigManager {
         private final ConfigWatcherRegistry watcherRegistry;
         private final PropertyConverterRegistry converterRegistry;
         private ConfigBinder configBinder;
+        /**
+         * 防抖时间窗口（毫秒），默认 500ms。设置为 0 或负数时，变更信号将同步执行重载，
+         * 适用于单元测试环境以消除 {@code Thread.sleep} 等待。
+         */
+        private long debounceWindowMs = 500;
 
         Builder() {
             this(new ConfigSourceRegistry(), new ConfigWatcherRegistry(), new PropertyConverterRegistry());
@@ -267,6 +262,21 @@ public interface ConfigManager {
         }
 
         /**
+         * 设置防抖时间窗口
+         * <p>
+         * 生产环境默认 500ms，可有效过滤密集变更；测试环境传入 0 可实现变更信号同步执行重载，
+         * 彻底消除测试中的 {@code Thread.sleep} 等待。
+         * </p>
+         *
+         * @param debounceWindowMs 防抖时间窗口，单位毫秒，传入 0 或负数表示同步重载
+         * @return 当前 Builder 实例
+         */
+        public Builder debounceWindow(long debounceWindowMs) {
+            this.debounceWindowMs = debounceWindowMs;
+            return this;
+        }
+
+        /**
          * 构建配置管理器实例
          *
          * @return 配置管理器实例
@@ -275,7 +285,8 @@ public interface ConfigManager {
             if (configBinder == null) {
                 configBinder = new DefaultConfigBinder();
             }
-            return new DefaultConfigManager(sourceRegistry, watcherRegistry, converterRegistry, configBinder);
+            return new DefaultConfigManager(sourceRegistry, watcherRegistry, converterRegistry, configBinder,
+                    debounceWindowMs);
         }
     }
 }

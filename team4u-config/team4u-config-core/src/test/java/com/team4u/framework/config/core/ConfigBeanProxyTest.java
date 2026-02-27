@@ -19,6 +19,7 @@ public class ConfigBeanProxyTest {
         ConfigManager manager = ConfigManager.builder()
                 .addSource(source)
                 .addWatcher(source)
+                .debounceWindow(0)
                 .build();
 
         // 为普通 Java Bean 创建代理
@@ -31,15 +32,11 @@ public class ConfigBeanProxyTest {
 
         // 验证实时热更新
         source.putAndRefresh("app.name", "new-app");
-        // 等待防抖时间（默认 500ms）
-        sleep(800);
-
         Assert.assertEquals("代理应能实时感知配置变更", "new-app", config.getName());
 
-        // 验证快照锚定 (Pinning)
+        // 验证快照锚定 (Pinning)：锚定后代理值不再更新
         AppBean pinned = SnapshotAware.pin(config);
         source.putAndRefresh("app.name", "latest-app");
-        sleep(800);
 
         Assert.assertEquals("原始代理应继续更新", "latest-app", config.getName());
         Assert.assertEquals("锚定后的代理应保持旧值", "new-app", pinned.getName());
@@ -50,7 +47,8 @@ public class ConfigBeanProxyTest {
         InMemoryConfigSource source = new InMemoryConfigSource("test", 1);
         ConfigManager manager = ConfigManager.builder()
                 .addSource(source)
-                .addWatcher(source) // 启用 watcher 以便 putAndRefresh 生效
+                .addWatcher(source)
+                .debounceWindow(0)
                 .build();
 
         AppBeanWithDefault config = manager.createProxy("app", AppBeanWithDefault.class);
@@ -64,15 +62,7 @@ public class ConfigBeanProxyTest {
 
         // 有配置时，配置覆盖所有默认值
         source.putAndRefresh("app.name", "config-value");
-        sleep(800);
         Assert.assertEquals("config-value", config.getName());
-    }
-
-    private void sleep(long ms) {
-        try {
-            Thread.sleep(ms);
-        } catch (InterruptedException ignored) {
-        }
     }
 
     public static class AppBeanWithDefault {

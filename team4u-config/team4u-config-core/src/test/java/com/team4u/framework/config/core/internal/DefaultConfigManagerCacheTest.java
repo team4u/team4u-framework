@@ -45,7 +45,7 @@ public class DefaultConfigManagerCacheTest {
         };
 
         DefaultConfigManager manager = new DefaultConfigManager(sourceRegistry, watcherRegistry,
-                new PropertyConverterRegistry(), configBinder);
+                new PropertyConverterRegistry(), configBinder, 500);
 
         // 测试 Bean 代理缓存
         TestConfig proxy1 = manager.createProxy("app", TestConfig.class);

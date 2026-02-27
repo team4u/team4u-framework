@@ -10,11 +10,6 @@ import org.junit.Test;
 
 public class ConfigManagerFacadeTest {
 
-    @After
-    public void tearDown() {
-        ConfigManager.resetGlobal();
-    }
-
     @Test
     public void testStandardSingleton() {
         ConfigManager manager1 = ConfigManager.global();

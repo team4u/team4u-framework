@@ -22,39 +22,37 @@ public class ConfigDrivenRegistryTest {
         configManager = ConfigManager.builder()
                 .addSource(configSource)
                 .addWatcher(configSource)
+                .debounceWindow(0)
                 .build();
     }
 
     @Test
-    public void testLazyLoad() throws InterruptedException {
+    public void testLazyLoad() {
         ConfigDrivenRegistry<String> registry = new ConfigDrivenRegistry<>(
                 configManager, "test.", String::toUpperCase);
 
         configSource.putAndRefresh("test.k1", "v1");
-        Thread.sleep(600);
 
         // 验证延迟初始化逻辑
         Assert.assertEquals("V1", registry.get("test.k1"));
     }
 
     @Test
-    public void testHotReload() throws InterruptedException {
+    public void testHotReload() {
         ConfigDrivenRegistry<String> registry = new ConfigDrivenRegistry<>(
                 configManager, "test.", String::toUpperCase);
 
         configSource.putAndRefresh("test.k1", "v1");
-        Thread.sleep(600);
         Assert.assertEquals("V1", registry.get("test.k1"));
 
         // 更新配置
         configSource.putAndRefresh("test.k1", "v2");
-        Thread.sleep(600);
         // 验证自动刷新逻辑
         Assert.assertEquals("V2", registry.get("test.k1"));
     }
 
     @Test
-    public void testSafeSwap() throws InterruptedException {
+    public void testSafeSwap() {
         ConfigDrivenRegistry<String> registry = new ConfigDrivenRegistry<>(
                 configManager, "test.", val -> {
                     if ("error".equals(val)) {
@@ -64,18 +62,15 @@ public class ConfigDrivenRegistryTest {
                 });
 
         configSource.putAndRefresh("test.k1", "v1");
-        Thread.sleep(600);
         Assert.assertEquals("V1", registry.get("test.k1"));
 
         // 模拟配置异常
         configSource.putAndRefresh("test.k1", "error");
-        Thread.sleep(600);
         // 异常时应保留历史版本实例
         Assert.assertEquals("V1", registry.get("test.k1"));
 
         // 恢复正常配置
         configSource.putAndRefresh("test.k1", "v2");
-        Thread.sleep(600);
         Assert.assertEquals("V2", registry.get("test.k1"));
     }
 
@@ -87,13 +82,11 @@ public class ConfigDrivenRegistryTest {
                 configManager, "test.", name -> new MockInstance(name, closeCount));
 
         configSource.putAndRefresh("test.k1", "i1");
-        Thread.sleep(600);
         MockInstance i1 = registry.get("test.k1");
         Assert.assertEquals("i1", i1.toString());
 
         // 执行实例替换
         configSource.putAndRefresh("test.k1", "i2");
-        Thread.sleep(600);
         Assert.assertEquals("i2", registry.get("test.k1").toString());
 
         // 验证历史实例资源已回收
@@ -101,7 +94,6 @@ public class ConfigDrivenRegistryTest {
 
         // 执行配置删除
         configSource.putAndRefresh("test.k1", null);
-        Thread.sleep(600);
         Assert.assertNull(registry.get("test.k1"));
         // 验证实例资源已回收
         Assert.assertEquals(2, closeCount.get());

@@ -100,27 +100,6 @@ ConfigManager customManager = ConfigManager.builder()
         .build();
 ```
 
-#### 3. 状态重置
-
-在单元测试或隔离沙箱中，你可以清理全局状态：
-
-```java
-// 重置 ConfigManager 单例
-ConfigManager.resetGlobal();
-
-// 清空全局注册表中的所有组件
-ConfigSourceRegistry.
-
-global().
-
-unregisterAll();
-ConfigWatcherRegistry.
-
-global().
-
-unregisterAll();
-```
-
 ### 基础用法：获取键值
 
 ```java
@@ -323,7 +302,7 @@ register(new MyCustomConverter());
 
 当 `ConfigWatcher` 探测到源数据变更时，`ConfigManager` 会执行原子快照替换。
 
-* **防抖处理**：默认内置 500ms 防抖窗口，合并瞬时高频变更。
+* **防抖处理**：默认内置 500ms 防抖窗口，合并瞬时高频变更。可以通过 Builder 的 `debounceWindow(long)` 进行自定义。设置为 0 或负数时，变更信号将同步执行重载。
 * **监听语义**：通过 `addChangeListener` 注册的回调中，`oldValue == null` 表示新增，`newValue == null` 表示删除。
 
 ```java
@@ -372,8 +351,7 @@ public void setup() {
 
 @AfterEach
 public void cleanup() {
-    // 清理全局状态，确保测试隔离
-    ConfigManager.resetGlobal();
+    // 清理全局注册表中的组件
     ConfigSourceRegistry.global().unregisterAll();
 }
 ```
@@ -387,12 +365,11 @@ InMemoryConfigSource memorySource = new InMemoryConfigSource("test-memory", 1);
 ConfigManager manager = ConfigManager.builder()
         .addSource(memorySource)
         .addWatcher(memorySource) // 作为监听器注册
+        .debounceWindow(0)        // 测试环境建议设置为 0，实现同步重载，消除 Thread.sleep 等待
         .build();
 
-// 注入配置并自动刷新
-memorySource.
-
-putAndRefresh("server.name","unit-test-app");
+// 注入配置并自动刷新（由于 debounceWindow 为 0，此处为同步执行）
+memorySource.putAndRefresh("server.name","unit-test-app");
 ```
 
 ---

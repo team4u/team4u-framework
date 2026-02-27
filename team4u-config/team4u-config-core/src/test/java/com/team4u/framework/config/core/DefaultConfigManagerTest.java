@@ -46,7 +46,8 @@ public class DefaultConfigManagerTest {
                 sourceRegistry,
                 watcherRegistry,
                 new PropertyConverterRegistry(),
-                binder);
+                binder,
+                500);
 
         // 验证首次同步加载后的数据状态
         Assert.assertEquals(1, loadCount.get());
