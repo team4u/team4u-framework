@@ -1,15 +1,15 @@
 package com.team4u.framework.router.engine;
 
+import com.team4u.framework.router.api.AbstractRouter;
 import com.team4u.framework.router.api.RoutePolicy;
 import com.team4u.framework.router.api.RouteResult;
-import com.team4u.framework.router.api.Router;
 
 import java.util.Map;
 
 /**
  * 映射路由器
  */
-public class MapRouter implements Router {
+public class MapRouter extends AbstractRouter {
 
     private final Map<String, Object> rules;
     private final Object fallbackValue;

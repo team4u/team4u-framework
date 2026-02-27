@@ -22,23 +22,5 @@ public interface Router {
      * @param <T>        结果类型
      * @return 路由结果
      */
-    @SuppressWarnings("unchecked")
-    default <T> RouteResult<T> route(Object request, Class<T> targetType) {
-        RouteResult<?> result = route(request);
-        if (result == null || result.isNotMatch()) {
-            return RouteResult.unmatch();
-        }
-        
-        Object value = result.getValue();
-        if (value == null) {
-            return RouteResult.matched(null);
-        }
-        
-        if (targetType != null && !targetType.isInstance(value)) {
-            T convertedValue = RouteConversionCache.convert(value, targetType);
-            return RouteResult.matched(convertedValue);
-        }
-        
-        return (RouteResult<T>) result;
-    }
+    <T> RouteResult<T> route(Object request, Class<T> targetType);
 }

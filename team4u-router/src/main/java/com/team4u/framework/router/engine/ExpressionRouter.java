@@ -2,17 +2,16 @@ package com.team4u.framework.router.engine;
 
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.criterion.MatchContext;
+import com.team4u.framework.router.api.AbstractRouter;
 import com.team4u.framework.router.api.RoutePolicy;
 import com.team4u.framework.router.api.RouteResult;
-import com.team4u.framework.router.api.Router;
 
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
  * 表达式路由器
  */
-public class ExpressionRouter implements Router {
+public class ExpressionRouter extends AbstractRouter {
 
     private final Map<String, Object> rules;
     private final Criteria criteria;
@@ -32,8 +31,7 @@ public class ExpressionRouter implements Router {
     @Override
     public <T> RouteResult<T> route(Object request) {
         // 构建匹配上下文，确保请求对象可用作表达式计算
-        MatchContext context = (request instanceof MatchContext) ?
-                (MatchContext) request : MatchContext.of(request);
+        MatchContext context = (request instanceof MatchContext) ? (MatchContext) request : MatchContext.of(request);
 
         // 按顺序遍历所有路由规则进行匹配
         for (Map.Entry<String, Object> entry : rules.entrySet()) {
