@@ -3,9 +3,6 @@ package com.team4u.framework.router.api.interceptor;
 import com.team4u.framework.policy.core.OrderedPolicyChain;
 import com.team4u.framework.policy.util.PolicyScanner;
 
-import java.util.Collection;
-import java.util.List;
-
 /**
  * 路由拦截器注册中心
  * <p>
