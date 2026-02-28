@@ -13,6 +13,11 @@ public class RouteException extends RuntimeException {
     private static final long serialVersionUID = 1L;
 
     /**
+     * 错误码：类型不匹配
+     */
+    public static final String TYPE_MISMATCH = "TYPE_MISMATCH";
+
+    /**
      * 错误码
      */
     private final String errorCode;
@@ -44,5 +49,20 @@ public class RouteException extends RuntimeException {
      */
     public String getErrorCode() {
         return errorCode;
+    }
+
+    /**
+     * 创建类型不匹配异常
+     *
+     * @param beanName     Bean 名称
+     * @param actualType   实际类型
+     * @param expectedType 期望类型
+     * @return 异常实例
+     */
+    public static RouteException typeMismatch(String beanName, Class<?> actualType, Class<?> expectedType) {
+        return new RouteException(
+                TYPE_MISMATCH,
+                String.format("The routed bean [%s] is of type [%s], but expected type is [%s]",
+                        beanName, actualType.getName(), expectedType.getName()));
     }
 }

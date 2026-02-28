@@ -1,6 +1,7 @@
 package com.team4u.framework.router.api.builder;
 
 import com.team4u.framework.router.api.RouterType;
+import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteRule;
 
@@ -55,7 +56,7 @@ public class RoutePolicyBuilder<T> {
      */
     public static <T> RoutePolicyBuilder<T> custom(String type) {
         if (type == null || type.trim().isEmpty()) {
-            throw new IllegalArgumentException("Router type cannot be empty");
+            throw RouteConfigException.validationError("Router type cannot be empty");
         }
         return new RoutePolicyBuilder<>(type);
     }
@@ -76,7 +77,7 @@ public class RoutePolicyBuilder<T> {
      */
     public RoutePolicyBuilder<T> rule(String condition, T value) {
         if (condition == null || condition.trim().isEmpty()) {
-            throw new IllegalArgumentException("Route condition cannot be empty");
+            throw RouteConfigException.validationError("Route condition cannot be empty");
         }
         this.rules.add(new RouteRule(condition, value));
         return this;

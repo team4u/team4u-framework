@@ -3,6 +3,7 @@ package com.team4u.framework.router.proxy;
 import cn.hutool.core.util.StrUtil;
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.router.RoutingManager;
+import com.team4u.framework.router.api.exception.RouteException;
 import com.team4u.framework.router.api.exception.RouteNotFoundException;
 import com.team4u.framework.router.api.model.RouteResult;
 
@@ -44,7 +45,7 @@ public class RoutedBeanLocator {
      */
     @SuppressWarnings("unchecked")
     public static <T> T locate(RoutingManager routingManager, String routerId, Object routeContext,
-                               Class<T> expectedType) {
+            Class<T> expectedType) {
         // 1. 执行路由计算，期望策略中配置的 value 是目标 Bean 的名称
         RouteResult<String> result = routingManager.route(routerId, routeContext, String.class);
 
@@ -64,9 +65,7 @@ public class RoutedBeanLocator {
 
         // 3. 类型安全校验
         if (!expectedType.isInstance(bean)) {
-            throw new ClassCastException(String.format(
-                    "The routed bean [%s] is of type [%s], but expected type is [%s]",
-                    targetBeanName, bean.getClass().getName(), expectedType.getName()));
+            throw RouteException.typeMismatch(targetBeanName, bean.getClass(), expectedType);
         }
 
         return (T) bean;

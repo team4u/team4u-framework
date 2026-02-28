@@ -32,6 +32,11 @@ public class RouteConfigException extends RouteException {
      */
     public static final String DUPLICATE_CONFIG = "DUPLICATE_CONFIG";
 
+    /**
+     * 错误码：注册表已锁定
+     */
+    public static final String REGISTRY_LOCKED = "REGISTRY_LOCKED";
+
     private final String policyId;
 
     public RouteConfigException(String message) {
@@ -64,6 +69,16 @@ public class RouteConfigException extends RouteException {
     }
 
     /**
+     * 创建注册表锁定异常
+     *
+     * @return 异常实例
+     */
+    public static RouteConfigException registryLocked() {
+        return new RouteConfigException(REGISTRY_LOCKED,
+                "Router global registry is locked, no more registrations allowed.");
+    }
+
+    /**
      * 创建不支持的类型异常
      *
      * @param type 不支持的类型
@@ -72,8 +87,17 @@ public class RouteConfigException extends RouteException {
     public static RouteConfigException unsupportedType(String type) {
         return new RouteConfigException(
                 UNSUPPORTED_TYPE,
-                String.format("Unsupported router type: %s", type)
-        );
+                String.format("Unsupported router type: %s", type));
+    }
+
+    /**
+     * 创建配置解析失败异常
+     *
+     * @param message 错误信息
+     * @return 异常实例
+     */
+    public static RouteConfigException parseError(String message) {
+        return new RouteConfigException(PARSE_ERROR, message);
     }
 
     /**
@@ -88,22 +112,42 @@ public class RouteConfigException extends RouteException {
     }
 
     /**
+     * 创建配置验证失败异常
+     *
+     * @param message 错误信息
+     * @return 异常实例
+     */
+    public static RouteConfigException validationError(String message) {
+        return new RouteConfigException(VALIDATION_ERROR, message);
+    }
+
+    /**
+     * 创建配置验证失败异常
+     *
+     * @param policyId 策略 ID
+     * @param message  错误信息
+     * @return 异常实例
+     */
+    public static RouteConfigException validationError(String policyId, String message) {
+        return new RouteConfigException(VALIDATION_ERROR, policyId, message);
+    }
+
+    /**
      * 创建重复配置异常
      *
-     * @param policyId       策略 ID
-     * @param condition      重复的条件
-     * @param existingValue  已存在的值
-     * @param newValue       新值
+     * @param policyId      策略 ID
+     * @param condition     重复的条件
+     * @param existingValue 已存在的值
+     * @param newValue      新值
      * @return 异常实例
      */
     public static RouteConfigException duplicateCondition(String policyId, String condition,
-                                                          Object existingValue, Object newValue) {
+            Object existingValue, Object newValue) {
         return new RouteConfigException(
                 DUPLICATE_CONFIG,
                 policyId,
                 String.format("Invalid configuration in RoutePolicy [%s]: Duplicate condition key '%s' found. " +
-                                "Cannot map to both [%s] and [%s].",
-                        policyId, condition, existingValue, newValue)
-        );
+                        "Cannot map to both [%s] and [%s].",
+                        policyId, condition, existingValue, newValue));
     }
 }

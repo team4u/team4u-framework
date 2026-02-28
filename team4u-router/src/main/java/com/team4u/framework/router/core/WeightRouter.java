@@ -47,11 +47,9 @@ public class WeightRouter extends AbstractRouter {
         // 初始化时，自动完成权重的累加逻辑
         for (RouteRule rule : policy.getRules()) {
             if (!NumberUtil.isInteger(rule.getCondition())) {
-                throw new RouteConfigException(
-                        RouteConfigException.VALIDATION_ERROR,
+                throw RouteConfigException.validationError(
                         policy.getId(),
-                        "WeightRouter condition must be an integer, but got: " + rule.getCondition()
-                );
+                        "WeightRouter condition must be an integer, but got: " + rule.getCondition());
             }
             int weight = Integer.parseInt(rule.getCondition());
             if (weight > 0) {

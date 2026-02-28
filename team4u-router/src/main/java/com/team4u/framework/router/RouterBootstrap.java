@@ -1,5 +1,6 @@
 package com.team4u.framework.router;
 
+import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.interceptor.RouteInterceptor;
 import com.team4u.framework.router.api.interceptor.RouteInterceptorRegistry;
 import com.team4u.framework.router.factory.RouterFactoryRegistry;
@@ -133,7 +134,7 @@ public class RouterBootstrap {
      */
     private void checkLocked() {
         if (locked.get()) {
-            throw new IllegalStateException("Router global registry is locked, no more registrations allowed.");
+            throw RouteConfigException.registryLocked();
         }
     }
 }

@@ -31,10 +31,7 @@ public class DefaultRoutePolicyParser implements RoutePolicyParser {
         if (policy != null) {
             // 校验：策略类型不能为空
             if (StrUtil.isBlank(policy.getType())) {
-                throw new RouteConfigException(
-                        RouteConfigException.VALIDATION_ERROR,
-                        "RoutePolicy type cannot be null or empty."
-                );
+                throw RouteConfigException.validationError("RoutePolicy type cannot be null or empty.");
             }
 
             // 防御性校验：确保 rules 不为 null

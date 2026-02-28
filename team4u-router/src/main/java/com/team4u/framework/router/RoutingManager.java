@@ -44,10 +44,10 @@ public class RoutingManager {
     private final ConfigDrivenRegistry<Router> routerRegistry;
 
     private RoutingManager(RouterFactoryRegistry factoryRegistry,
-                           ConfigManager configManager,
-                           RoutePolicyParser configParser,
-                           String configPrefix,
-                           RouteInterceptorRegistry interceptorRegistry) {
+            ConfigManager configManager,
+            RoutePolicyParser configParser,
+            String configPrefix,
+            RouteInterceptorRegistry interceptorRegistry) {
         this.factoryRegistry = factoryRegistry;
         this.configParser = configParser;
         this.configPrefix = configPrefix.endsWith(".") ? configPrefix : configPrefix + ".";
@@ -90,10 +90,7 @@ public class RoutingManager {
             throw RouteConfigException.parseError("Failed to parse route policy from config: " + config, e);
         }
         if (policy == null) {
-            throw new RouteConfigException(
-                    RouteConfigException.PARSE_ERROR,
-                    "Unable to parse route policy from config: " + config
-            );
+            throw RouteConfigException.parseError("Unable to parse route policy from config: " + config);
         }
 
         return buildRouter(policy);
@@ -104,10 +101,7 @@ public class RoutingManager {
      */
     public Router buildRouter(RoutePolicy policy) {
         if (policy == null || StrUtil.isBlank(policy.getType())) {
-            throw new RouteConfigException(
-                    RouteConfigException.VALIDATION_ERROR,
-                    "Invalid route policy or missing type"
-            );
+            throw RouteConfigException.validationError("Invalid route policy or missing type");
         }
 
         String routerType = policy.getType();
@@ -116,11 +110,9 @@ public class RoutingManager {
                 .create(policy);
 
         if (router == null) {
-            throw new RouteConfigException(
-                    RouteConfigException.VALIDATION_ERROR,
+            throw RouteConfigException.validationError(
                     policy.getId(),
-                    "Router created from policy is null, type: " + routerType
-            );
+                    "Router created from policy is null, type: " + routerType);
         }
 
         return router;
@@ -201,8 +193,7 @@ public class RoutingManager {
         }
 
         RouteInvocation<T> invocation = new DefaultRouteInvocation<>(
-                routerId, router, request, targetType, interceptors
-        );
+                routerId, router, request, targetType, interceptors);
         return invocation.proceed();
     }
 
