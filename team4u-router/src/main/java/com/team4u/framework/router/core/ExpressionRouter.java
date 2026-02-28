@@ -35,6 +35,15 @@ public class ExpressionRouter extends AbstractRouter {
         this.rules = policy.getRules();
         this.criteria = criteria != null ? criteria : Criteria.global();
         this.multiMatch = policy.getExtProperty("multiMatch", false);
+
+        // 初始化时预热表达式编译缓存，提升首次匹配性能
+        if (rules != null) {
+            for (RouteRule rule : rules) {
+                if (rule.getCondition() != null) {
+                    this.criteria.compileExpression(rule.getCondition());
+                }
+            }
+        }
     }
 
     @SuppressWarnings("unchecked")

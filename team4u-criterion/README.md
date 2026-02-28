@@ -118,6 +118,9 @@ public class Demo {
 
         // 变量名维度预先提取
         Set<String> vars = criteria.getVariables("age > $minAge && role == admin"); // [age, minAge, role]
+
+        // 表达式预热：在应用启动或配置加载阶段，提前编译表达式以填充缓存，消除首次运行的性能抖动
+        criteria.compileExpression("age > 18 && role == admin");
     }
 }
 ```
@@ -497,6 +500,22 @@ Criteria customCriteria = Criteria.builder()
 整个引擎通过 JIT 的思路将表达式一次编译，无限次极速复用：
 
 `词法树解析 (Parser)` ➔ ` AST 预编译生成闭包 (Visitor+Compiler)` ➔ ` 高效复用执行 (Predicate.test)`
+
+### 性能优化：表达式预热 (Pre-warming)
+由于引擎采用编译模式，首次执行 `matches` 或 `trace` 时会触发表达式的解析与编译流程。在对 RT（响应时间）极其敏感的场景（如高并发网关路由）下，首次执行可能带来毫秒级的延迟波动。
+
+**解决方案：**
+利用 `Criteria.compileExpression(expression)` 手动触发预热。该方法会立即执行解析与编译，并将生成的 `MatchPredicate` 存入 LRU 缓存。
+
+```java
+// 在应用启动或配置推送更新后立即调用
+public void onConfigUpdate(List<String> rules) {
+    for (String rule : rules) {
+        // 提前预热，确保流量进入时已是编译后的闭包状态
+        Criteria.global().compileExpression(rule);
+    }
+}
+```
 
 <details>
 <summary>👉 点击查看详细的执行步骤与内部流转细节</summary>

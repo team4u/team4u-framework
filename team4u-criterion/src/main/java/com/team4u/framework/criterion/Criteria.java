@@ -80,7 +80,7 @@ public class Criteria {
         this.compiledProvider = DynamicInstanceProvider.createStringLru(
                 1000,
                 input -> input,
-                this::compileExpression
+                this::doCompileExpression
         );
     }
 
@@ -143,19 +143,25 @@ public class Criteria {
         }
 
         // 从缓存获取（或触发编译）
-        MatchPredicate function = getCompiledPredicate(expression);
+        MatchPredicate function = compileExpression(expression);
         // 执行闭包
         return function.test(context);
     }
 
-    private MatchPredicate getCompiledPredicate(String expression) {
+    /**
+     * 获取编译后的匹配谓词（带 LRU 缓存）
+     *
+     * @param expression 规则表达式
+     * @return 编译后的匹配谓词
+     */
+    public MatchPredicate compileExpression(String expression) {
         return compiledProvider.get(expression);
     }
 
     /**
      * 执行"解析 + 编译"全流程
      */
-    private MatchPredicate compileExpression(String expression) {
+    private MatchPredicate doCompileExpression(String expression) {
         // 解析 (String -> Criterion AST)
         Criterion criterion = parse(expression);
 
@@ -205,7 +211,7 @@ public class Criteria {
         context.setRecorder(recorder);
 
         // 2. 获取编译后的函数 (带 Tracing 装饰器的)
-        MatchPredicate function = getCompiledPredicate(expression);
+        MatchPredicate function = compileExpression(expression);
 
         // 3. 执行
         function.test(context);
