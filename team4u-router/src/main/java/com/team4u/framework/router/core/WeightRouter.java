@@ -108,10 +108,10 @@ public class WeightRouter extends AbstractRouter {
         Map.Entry<Integer, Object> entry = weightMap.ceilingEntry(hashValue + 1);
 
         if (entry != null) {
-            routeTrace.addStep(RuleTrace.normal("weight_hash:" + hashValue, true, entry.getKey()));
+            routeTrace.addStep(RuleTrace.normal(String.valueOf(hashValue), true, entry.getKey()));
             routeTrace.setResult(RouteResult.matched((T) entry.getValue(), String.valueOf(entry.getKey())));
         } else {
-            routeTrace.addStep(RuleTrace.normal("weight_hash:" + hashValue, false, null));
+            routeTrace.addStep(RuleTrace.normal(String.valueOf(hashValue), false, null));
             routeTrace.addStep(RuleTrace.fallback(fallbackValue != null));
             routeTrace.setResult(fallback());
         }

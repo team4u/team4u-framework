@@ -4,6 +4,8 @@ import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.model.RouteRule;
+import com.team4u.framework.router.api.trace.RouteTrace;
+import com.team4u.framework.router.api.trace.RuleTrace;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -18,6 +20,29 @@ import java.util.Map;
  * @author jay.wu
  */
 public class WeightRouterTest {
+
+    @Test
+    public void testTrace() {
+        RoutePolicy policy = new RoutePolicy();
+        policy.setType("weight");
+        policy.setRules(Arrays.asList(
+                new RouteRule("20", "A"),
+                new RouteRule("30", "B")));
+
+        WeightRouter router = new WeightRouter(policy);
+        String request = "user_1";
+        // 路由因子对应的 Hash
+        int hashValue = (request.hashCode() & Integer.MAX_VALUE) % 50;
+
+        RouteTrace<String> trace = router.trace(request);
+        Assert.assertNotNull(trace);
+        Assert.assertEquals(1, trace.getSteps().size());
+
+        RuleTrace step = trace.getSteps().get(0);
+        // 验证轨迹中的条件没有 "weight_hash:" 前缀
+        Assert.assertEquals(String.valueOf(hashValue), step.getCondition());
+        Assert.assertTrue(step.isMatched());
+    }
 
     /**
      * 测试权重分布是否大致符合预期
