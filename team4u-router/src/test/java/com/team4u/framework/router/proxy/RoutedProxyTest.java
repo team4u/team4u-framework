@@ -81,9 +81,57 @@ public class RoutedProxyTest {
         String sayHello(@RouteContext String request);
     }
 
-    public static class ServiceA implements TestService {
+    @Test
+    public void testRoutedProxyWithSimpleType() {
+        // 使用 map 类型，条件 123 对应 serviceA
+        configContext.put("router.router_123",
+                "{\"type\":\"map\",\"rules\":[{\"condition\":\"123\",\"value\":\"serviceA\"}]}");
+
+        // 创建代理
+        SimpleTypeService proxy = RoutedProxyFactory.createProxy(SimpleTypeService.class, routingManager);
+
+        // 调用代理，routerId = router_123，context = 123
+        // 路由成功则返回 A
+        Assert.assertEquals("A", proxy.sayHello(123));
+    }
+
+    /**
+     * 测试通过基本类型进行路由
+     */
+    @Routed(routerId = "router_${id}")
+    public interface SimpleTypeService {
+        String sayHello(@RouteContext int id);
+    }
+
+    @Test
+    public void testRoutedProxyWithStringDynamic() {
+        // 配置路由规则：user_abc 对应 serviceA
+        configContext.put("router.user_abc",
+                "{\"type\":\"map\",\"rules\":[{\"condition\":\"abc\",\"value\":\"serviceA\"}]}");
+
+        // 创建代理
+        UserTypeService proxy = RoutedProxyFactory.createProxy(UserTypeService.class, routingManager);
+
+        // 调用代理，userId = "abc"，routerId = "user_abc"
+        Assert.assertEquals("A", proxy.sayHello("abc"));
+    }
+
+    /**
+     * 测试通过 String 类型进行动态路由
+     */
+    @Routed(routerId = "user_${userId}")
+    public interface UserTypeService {
+        String sayHello(@RouteContext String userId);
+    }
+
+    public static class ServiceA implements TestService, SimpleTypeService, UserTypeService {
         @Override
         public String sayHello(String request) {
+            return "A";
+        }
+
+        @Override
+        public String sayHello(int id) {
             return "A";
         }
     }

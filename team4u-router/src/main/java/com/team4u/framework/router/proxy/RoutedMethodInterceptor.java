@@ -3,6 +3,7 @@ package com.team4u.framework.router.proxy;
 import cn.hutool.core.annotation.AnnotationUtil;
 import cn.hutool.core.bean.BeanUtil;
 import cn.hutool.core.util.ArrayUtil;
+import cn.hutool.core.util.ClassUtil;
 import com.team4u.framework.base.util.TextTemplate;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
@@ -109,7 +110,18 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
         Object context = extractContext(invocation.getArguments(), metadata.getContextParamIndex());
 
         // 解析真实的路由 ID：通过 Lambda 桥接 BeanUtil 和 TextTemplate
-        String routerId = metadata.getTemplate().render(prop -> BeanUtil.getProperty(context, prop));
+        String routerId = metadata.getTemplate().render(prop -> {
+            if (context == null) {
+                return null;
+            }
+
+            // 如果是简单类型或 String，直接返回其字符串形式
+            if (ClassUtil.isSimpleValueType(context.getClass())) {
+                return String.valueOf(context);
+            }
+
+            return BeanUtil.getProperty(context, prop);
+        });
 
         // 使用 Locator 动态查找真正的目标 Bean
         // 注意：这里期望的类型就是当前方法所在的接口类
