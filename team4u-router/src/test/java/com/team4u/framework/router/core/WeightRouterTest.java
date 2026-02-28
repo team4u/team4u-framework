@@ -1,5 +1,6 @@
 package com.team4u.framework.router.core;
 
+import cn.hutool.core.util.HashUtil;
 import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
@@ -9,6 +10,7 @@ import com.team4u.framework.router.api.trace.RuleTrace;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.HashMap;
@@ -32,7 +34,7 @@ public class WeightRouterTest {
         WeightRouter router = new WeightRouter(policy);
         String request = "user_1";
         // 路由因子对应的 Hash
-        int hashValue = (request.hashCode() & Integer.MAX_VALUE) % 50;
+        int hashValue = (HashUtil.murmur32(request.getBytes(StandardCharsets.UTF_8)) & Integer.MAX_VALUE) % 50;
 
         RouteTrace<String> trace = router.trace(request);
         Assert.assertNotNull(trace);

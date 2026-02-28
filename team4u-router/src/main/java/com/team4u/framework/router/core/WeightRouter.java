@@ -1,5 +1,6 @@
 package com.team4u.framework.router.core;
 
+import cn.hutool.core.util.HashUtil;
 import cn.hutool.core.util.NumberUtil;
 import cn.hutool.log.Log;
 import cn.hutool.log.LogFactory;
@@ -11,6 +12,7 @@ import com.team4u.framework.router.api.model.RouteRule;
 import com.team4u.framework.router.api.trace.RouteTrace;
 import com.team4u.framework.router.api.trace.RuleTrace;
 
+import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.TreeMap;
 
@@ -71,8 +73,8 @@ public class WeightRouter extends AbstractRouter {
         String routingKey = String.valueOf(request);
 
         // 2. 将路由因子转换为一个 [0, totalWeight) 范围内的整数
-        // 注意：Math.abs 遇到 Integer.MIN_VALUE 会溢出变负数，采用按位与处理
-        int hashValue = (routingKey.hashCode() & Integer.MAX_VALUE) % totalWeight;
+        // 使用 MurmurHash 算法替代原生 hashCode 以保证流量分布更加均匀，避免哈希碰撞
+        int hashValue = (HashUtil.murmur32(routingKey.getBytes(StandardCharsets.UTF_8)) & Integer.MAX_VALUE) % totalWeight;
 
         // 3. 利用 TreeMap 的特性，寻找大于 hashValue 的最小 Key
         // 例如：规则是 20, 30。Map 中存的是 {20: A, 50: B}
@@ -102,7 +104,7 @@ public class WeightRouter extends AbstractRouter {
         }
 
         String routingKey = String.valueOf(request);
-        int hashValue = (routingKey.hashCode() & Integer.MAX_VALUE) % totalWeight;
+        int hashValue = (HashUtil.murmur32(routingKey.getBytes(StandardCharsets.UTF_8)) & Integer.MAX_VALUE) % totalWeight;
         Map.Entry<Integer, Object> entry = weightMap.ceilingEntry(hashValue + 1);
 
         if (entry != null) {
@@ -117,3 +119,4 @@ public class WeightRouter extends AbstractRouter {
         return completeTrace(routeTrace, start);
     }
 }
+

@@ -230,19 +230,27 @@ RouteTrace<String> trace = manager.traceByPolicy(exprPolicy, request);
 使用 `@Routed` 标记接口或方法。`routerId` 既可以是一个静态的配置键，也可以是一个包含 **`${property}` 占位符** 的动态模板。
 
 *   **常量模式**：如果不包含 `${}`，则直接作为字面量常量。例如 `routerId = "payment-router"` 指向 `router.payment-router`。
-*   **变量模式**：包含 `${property}`，则从路由上下文中解析并替换变量。例如 `routerId = "${tenantId}.router"`，如果上下文中的 `tenantId` 为 `alipay`，则指向 `router.alipay.router`。
+*   **变量模式**：包含 `${property}`，则从路由上下文（可以是 POJO 对象或简单类型）中解析并替换变量。例如 `routerId = "${tenantId}.router"`，如果上下文中的 `tenantId` 为 `alipay`，则指向 `router.alipay.router`。
 *   **混合模式**：支持常量与变量混合，如 `routerId = "biz.${region}.router"`。
 
 ```java
-// 示例：根据请求中的租户和区域动态决定路由策略 ID
+// 示例 1：对象上下文模式
 public interface PaymentService {
-
     // 解析占位符：如果 region=CN, tenant=alipay，则最终查找 "router.biz.CN.alipay.router"
     @Routed(routerId = "biz.${region}.${tenant}.router")
     String process(@RouteContext PaymentRequest request);
 }
 
-// 请求对象
+// 示例 2：简单类型上下文模式
+// 框架支持直接将 String, int 等简单类型作为路由上下文。
+// 此时，`${property}` 占位符会被直接替换为该简单类型参数的值。
+public interface SimpleService {
+    // 如果 userId=123，则最终查找 "router.user_123"
+    @Routed(routerId = "router.user_${userId}")
+    String getUserInfo(@RouteContext String userId);
+}
+
+// 示例 1 的请求对象
 @Data
 public class PaymentRequest {
     private String region;
