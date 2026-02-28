@@ -573,7 +573,7 @@ for (RuleTrace step : trace.getSteps()) {
 
 拦截器由 `RouteInterceptorRegistry` 统一管理，支持多种运行模式：
 
-- **全局单例**：使用 `RouteInterceptorRegistry.global()`，注册后对全局生效。
+- **全局单例**：使用 `RouterBootstrap.global().addInterceptor(interceptor)` 进行注册（推荐）。
 - **自动发现**：支持通过 `autoScan()` 自动扫描并加载 SPI 定义的拦截器。
 - **实例隔离**：可以创建独立的注册表实例，通过 `RoutingManager.builder().interceptorRegistry(registry)` 绑定。
 

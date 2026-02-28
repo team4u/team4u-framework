@@ -1,5 +1,7 @@
 package com.team4u.framework.router;
 
+import com.team4u.framework.router.api.interceptor.RouteInterceptor;
+import com.team4u.framework.router.api.interceptor.RouteInterceptorRegistry;
 import com.team4u.framework.router.factory.RouterFactoryRegistry;
 import com.team4u.framework.router.spi.RouterFactory;
 
@@ -78,6 +80,19 @@ public class RouterBootstrap {
     public RouterBootstrap addFactory(RouterFactory factory) {
         checkLocked();
         RouterFactoryRegistry.global().register(factory);
+        return this;
+    }
+
+    /**
+     * 注册全局路由拦截器
+     *
+     * @param interceptor 路由拦截器
+     * @return 当前实例（支持链式调用）
+     * @throws IllegalStateException 如果已锁定
+     */
+    public RouterBootstrap addInterceptor(RouteInterceptor interceptor) {
+        checkLocked();
+        RouteInterceptorRegistry.global().register(interceptor);
         return this;
     }
 
