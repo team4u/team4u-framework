@@ -25,7 +25,7 @@ public class RoutedBeanLocator {
      * @param expectedType 期望返回的 Bean 接口类型
      * @param <T>          期望的类型
      * @return 匹配的 Bean 实例
-     * @throws IllegalStateException 当路由未命中或 Bean 不存在时抛出
+     * @throws RouteNotFoundException 当路由未命中或 Bean 不存在时抛出
      */
     public static <T> T locate(String routerId, Object routeContext, Class<T> expectedType) {
         return locate(RoutingManager.global(), routerId, routeContext, expectedType);
@@ -40,7 +40,7 @@ public class RoutedBeanLocator {
      * @param expectedType   期望返回的 Bean 接口类型
      * @param <T>            期望的类型
      * @return 匹配的 Bean 实例
-     * @throws IllegalStateException 当路由未命中或 Bean 不存在时抛出
+     * @throws RouteNotFoundException 当路由未命中或 Bean 不存在时抛出
      */
     @SuppressWarnings("unchecked")
     public static <T> T locate(RoutingManager routingManager, String routerId, Object routeContext,

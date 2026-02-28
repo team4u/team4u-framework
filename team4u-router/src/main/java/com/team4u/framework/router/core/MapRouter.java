@@ -32,7 +32,7 @@ public class MapRouter extends AbstractRouter {
      *
      * @param policy 路由策略配置
      * @return 精确匹配的规则映射表
-     * @throws IllegalArgumentException 当配置中存在重复的匹配条件 (Condition) 时抛出，以防止业务逻辑冲突
+     * @throws RouteConfigException 当配置中存在重复的匹配条件 (Condition) 时抛出，以防止业务逻辑冲突
      */
     private Map<String, Object> initializeRules(RoutePolicy policy) {
         Map<String, Object> ruleMap = new HashMap<>();
