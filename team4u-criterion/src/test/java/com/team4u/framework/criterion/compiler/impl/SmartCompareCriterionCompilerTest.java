@@ -16,7 +16,7 @@ import java.util.Date;
  */
 public class SmartCompareCriterionCompilerTest {
 
-    private final Criteria criteria = Criteria.global();
+    private final Criteria criteria = Criteria.builder().build();
 
     @Test
     public void testFixedNumberCompare() {

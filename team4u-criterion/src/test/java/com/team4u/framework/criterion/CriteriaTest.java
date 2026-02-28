@@ -16,7 +16,7 @@ import java.util.Set;
  */
 public class CriteriaTest {
 
-    private final Criteria criteria = Criteria.global();
+    private final Criteria criteria = Criteria.builder().build();
 
     @Test
     public void testComplexExpression() {

@@ -14,7 +14,7 @@ import com.team4u.framework.criterion.Criteria;
  */
 public class PropertyCriterionCompilerTest {
 
-    private final Criteria criteria = Criteria.global();
+    private final Criteria criteria = Criteria.builder().build();
 
     @Test
     public void nestedPropertyAccess() {

@@ -15,7 +15,7 @@ import java.util.List;
 @Getter
 public class DefaultRouteInvocation<T> implements RouteInvocation<T> {
     private final String routerId;
-    private final Router targetRouter;
+    private final Router router;
     private final Class<T> targetType;
     private final List<RouteInterceptor> interceptors;
     @Setter
@@ -23,12 +23,12 @@ public class DefaultRouteInvocation<T> implements RouteInvocation<T> {
     private int currentIndex = 0;
 
     public DefaultRouteInvocation(String routerId,
-                                  Router targetRouter,
+                                  Router router,
                                   Object request,
                                   Class<T> targetType,
                                   List<RouteInterceptor> interceptors) {
         this.routerId = routerId;
-        this.targetRouter = targetRouter;
+        this.router = router;
         this.request = request;
         this.targetType = targetType;
         this.interceptors = interceptors;
@@ -43,10 +43,10 @@ public class DefaultRouteInvocation<T> implements RouteInvocation<T> {
         }
 
         // 所有拦截器执行完毕，执行真正的目标路由逻辑
-        if (targetRouter == null) {
+        if (router == null) {
             return RouteResult.unmatch();
         }
 
-        return targetType != null ? targetRouter.route(request, targetType) : targetRouter.route(request);
+        return targetType != null ? router.route(request, targetType) : router.route(request);
     }
 }

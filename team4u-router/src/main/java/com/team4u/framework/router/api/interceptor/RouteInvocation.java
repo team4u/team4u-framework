@@ -1,5 +1,6 @@
 package com.team4u.framework.router.api.interceptor;
 
+import com.team4u.framework.router.api.Router;
 import com.team4u.framework.router.api.model.RouteResult;
 
 /**
@@ -11,6 +12,11 @@ import com.team4u.framework.router.api.model.RouteResult;
  * @param <T> 路由结果类型
  */
 public interface RouteInvocation<T> {
+
+    /**
+     * 获取当前路由实例
+     */
+    Router getRouter();
 
     /**
      * 获取当前路由策略 ID (如: router.order-router)

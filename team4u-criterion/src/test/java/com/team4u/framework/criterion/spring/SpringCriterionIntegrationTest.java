@@ -1,10 +1,8 @@
 package com.team4u.framework.criterion.spring;
 
 import com.team4u.framework.criterion.Criteria;
-import com.team4u.framework.criterion.compiler.CompilerRegistry;
 import com.team4u.framework.criterion.model.convert.ValueConverter;
 import com.team4u.framework.criterion.model.convert.ValueConverterRegistry;
-import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -16,31 +14,24 @@ import org.springframework.context.annotation.Configuration;
  */
 public class SpringCriterionIntegrationTest {
 
-    @After
-    public void cleanup() {
-        // 清理全局状态，防止干扰其他测试
-        CompilerRegistry.global().unregisterAll();
-        ValueConverterRegistry.global().unregisterAll();
-    }
-
     @Test
     public void testSpringBeanAutoRegistration() {
-        // 创建 Spring 上下文并加载自动配置和测试配置
+        // 恢复使用全局自动配置类进行测试，因为这里验证的就是配置类本身对全局单例的装配能力
         AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
                 Team4uCriterionAutoConfiguration.class,
                 TestConfig.class);
 
         try {
-            // 验证 Criteria Bean 是否已注册
+            // 验证 Criteria Bean 是否已注册（应为全局单例）
             Criteria criteria = context.getBean(Criteria.class);
             Assert.assertNotNull(criteria);
+            Assert.assertSame(Criteria.global(), criteria);
 
             // 验证自定义转换器是否通过 Spring 自动注册到了全局注册表中
             ValueConverterRegistry registry = ValueConverterRegistry.global();
-            Assert.assertTrue("自定义转换器应该被自动注册", registry.get("mock").isPresent());
+            Assert.assertTrue("自定义转换器应该被自动注册到全局注册表中", registry.get("mock").isPresent());
 
             // 验证表达式匹配是否使用了新注册的转换器
-            // it:mock > 100 -> 将 "100" 转换为 MockComparable(100)，然后与 100 比较
             Assert.assertTrue(criteria.matches("it:mock == 100", 100));
         } finally {
             context.close();
