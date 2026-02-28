@@ -27,6 +27,8 @@ public class RoutingManagerTest {
         routingManager = RoutingManager.builder()
                 .configManager(configContext.getManager())
                 .build();
+
+        RoutingManager.setGlobal(routingManager);
     }
 
     @Test
@@ -186,6 +188,40 @@ public class RoutingManagerTest {
         RouteResult<String> result = customManager.route(routerId, "CN");
         Assert.assertTrue(result.isMatch());
         Assert.assertEquals("china", result.getValue());
+    }
+
+    @Test
+    public void testCompositeRouter() {
+        // 先定义两个子路由（这里简单用 Map 路由演示）
+        String childA = "test.childA";
+        String configA = "{\"type\":\"map\", \"rules\":[{\"condition\":\"ruleA\", \"value\":\"Hit-A\"}], \"fallbackValue\":\"Fallback-A\"}";
+        configContext.put("router." + childA, configA);
+
+        String childB = "test.childB";
+        String configB = "{\"type\":\"map\", \"rules\":[{\"condition\":\"ruleB\", \"value\":\"Hit-B\"}], \"fallbackValue\":\"Fallback-B\"}";
+        configContext.put("router." + childB, configB);
+
+        // 定义组合路由包含 A 和 B
+        String compositeId = "test.composite";
+        String compositeConfig = "{\"type\":\"composite\",  \"ext\":{\"delegates\":[\"test.childA\", \"test.childB\"]}}";
+        configContext.put("router." + compositeId, compositeConfig);
+
+        // 场景 1：命中第一组子路由 (A即拦截截断)
+        RouteResult<String> result1 = routingManager.route(compositeId, "ruleA");
+        Assert.assertTrue(result1.isMatch());
+        Assert.assertEquals("Hit-A", result1.getValue());
+
+        // 场景 2：第一组不命中，命中第二组子路由 (穿透 A 到 B)
+        RouteResult<String> result2 = routingManager.route(compositeId, "ruleB");
+        Assert.assertTrue(result2.isMatch());
+        Assert.assertEquals("Hit-B", result2.getValue());
+
+        // 场景 3：全部不命中，验证兜底是否能抽取到最后一个能触发的
+        // 这里 "unknown" 均不满足 A 和 B，Fallback-A 与 Fallback-B 皆可发生，
+        // 按照执行队列，最后执行的 B 将覆盖前面 A 贡献的兜底。
+        RouteResult<String> result3 = routingManager.route(compositeId, "unknown");
+        Assert.assertTrue(result3.isMatch());
+        Assert.assertEquals("Fallback-B", result3.getValue());
     }
 
     public static class TargetService {

@@ -10,13 +10,11 @@ package com.team4u.framework.router.api.exception;
  */
 public class RouteException extends RuntimeException {
 
-    private static final long serialVersionUID = 1L;
-
     /**
      * 错误码：类型不匹配
      */
     public static final String TYPE_MISMATCH = "TYPE_MISMATCH";
-
+    private static final long serialVersionUID = 1L;
     /**
      * 错误码
      */
@@ -43,15 +41,6 @@ public class RouteException extends RuntimeException {
     }
 
     /**
-     * 获取错误码
-     *
-     * @return 错误码，可能为 null
-     */
-    public String getErrorCode() {
-        return errorCode;
-    }
-
-    /**
      * 创建类型不匹配异常
      *
      * @param beanName     Bean 名称
@@ -64,5 +53,14 @@ public class RouteException extends RuntimeException {
                 TYPE_MISMATCH,
                 String.format("The routed bean [%s] is of type [%s], but expected type is [%s]",
                         beanName, actualType.getName(), expectedType.getName()));
+    }
+
+    /**
+     * 获取错误码
+     *
+     * @return 错误码，可能为 null
+     */
+    public String getErrorCode() {
+        return errorCode;
     }
 }

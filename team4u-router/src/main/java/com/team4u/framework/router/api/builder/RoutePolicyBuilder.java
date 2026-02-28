@@ -50,6 +50,13 @@ public class RoutePolicyBuilder<T> {
     }
 
     /**
+     * 创建一个 Composite (组合) 类型的路由策略构建器
+     */
+    public static <T> RoutePolicyBuilder<T> composite() {
+        return new RoutePolicyBuilder<>(RouterType.COMPOSITE);
+    }
+
+    /**
      * 创建一个自定义类型的路由策略构建器 (用于 SPI 扩展)
      *
      * @param type 路由器类型标识
@@ -107,6 +114,16 @@ public class RoutePolicyBuilder<T> {
     public RoutePolicyBuilder<T> ext(String key, Object value) {
         this.ext.put(key, value);
         return this;
+    }
+
+    /**
+     * 设置组合路由的委托子路由标识列表 (仅针对 composite 模式生效)
+     *
+     * @param delegates 委托路由 ID 列表
+     * @return 当前构建器
+     */
+    public RoutePolicyBuilder<T> delegates(List<String> delegates) {
+        return ext("delegates", delegates);
     }
 
     /**

@@ -20,16 +20,14 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class RouterBootstrap {
 
     private static final RouterBootstrap INSTANCE = new RouterBootstrap();
-
-    /**
-     * 全局配置前缀，使用 volatile 保证可见性
-     */
-    private volatile String configPrefix = "router.";
-
     /**
      * 锁定标志，使用 AtomicBoolean 保证原子性操作
      */
     private final AtomicBoolean locked = new AtomicBoolean(false);
+    /**
+     * 全局配置前缀，使用 volatile 保证可见性
+     */
+    private volatile String configPrefix = "router.";
 
     private RouterBootstrap() {
     }

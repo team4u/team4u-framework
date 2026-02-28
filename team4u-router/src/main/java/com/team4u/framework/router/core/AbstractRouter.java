@@ -78,9 +78,9 @@ public abstract class AbstractRouter implements Router {
     /**
      * 完成追踪并设置耗时
      *
-     * @param trace  追踪对象
-     * @param start  开始时间戳（毫秒）
-     * @param <T>    结果类型
+     * @param trace 追踪对象
+     * @param start 开始时间戳（毫秒）
+     * @param <T>   结果类型
      * @return 完成的追踪对象
      */
     protected <T> RouteTrace<T> completeTrace(RouteTrace<T> trace, long start) {

@@ -1,0 +1,3 @@
+com.team4u.framework.translator.render.builtin.FallbackRenderPolicy
+com.team4u.framework.translator.render.builtin.I18nRenderPolicy
+com.team4u.framework.translator.render.builtin.TemplateRenderPolicy

@@ -10,10 +10,6 @@ package com.team4u.framework.router.api;
  */
 public final class RouterType {
 
-    private RouterType() {
-        // 防止实例化
-    }
-
     /**
      * 映射路由类型
      * <p>
@@ -21,7 +17,6 @@ public final class RouterType {
      * </p>
      */
     public static final String MAP = "map";
-
     /**
      * 表达式路由类型
      * <p>
@@ -29,7 +24,6 @@ public final class RouterType {
      * </p>
      */
     public static final String EXPRESSION = "expression";
-
     /**
      * 权重路由类型
      * <p>
@@ -37,6 +31,17 @@ public final class RouterType {
      * </p>
      */
     public static final String WEIGHT = "weight";
+    /**
+     * 组合路由类型
+     * <p>
+     * 具备分发联动属性的组合路由组件，瀑布式执行内部多个子路由。
+     * </p>
+     */
+    public static final String COMPOSITE = "composite";
+
+    private RouterType() {
+        // 防止实例化
+    }
 
     /**
      * 验证路由类型是否有效
@@ -45,6 +50,6 @@ public final class RouterType {
      * @return 如果是标准类型返回 true
      */
     public static boolean isValid(String type) {
-        return MAP.equals(type) || EXPRESSION.equals(type) || WEIGHT.equals(type);
+        return MAP.equals(type) || EXPRESSION.equals(type) || WEIGHT.equals(type) || COMPOSITE.equals(type);
     }
 }

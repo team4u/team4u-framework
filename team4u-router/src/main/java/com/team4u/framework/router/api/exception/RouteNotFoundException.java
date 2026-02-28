@@ -10,23 +10,19 @@ package com.team4u.framework.router.api.exception;
  */
 public class RouteNotFoundException extends RouteException {
 
-    private static final long serialVersionUID = 1L;
-
     /**
      * 错误码：路由器未找到
      */
     public static final String ROUTER_NOT_FOUND = "ROUTER_NOT_FOUND";
-
     /**
      * 错误码：规则未匹配
      */
     public static final String RULE_NOT_MATCHED = "RULE_NOT_MATCHED";
-
     /**
      * 错误码：Bean 未找到
      */
     public static final String BEAN_NOT_FOUND = "BEAN_NOT_FOUND";
-
+    private static final long serialVersionUID = 1L;
     private final String routerId;
 
     public RouteNotFoundException(String routerId) {
@@ -37,15 +33,6 @@ public class RouteNotFoundException extends RouteException {
     public RouteNotFoundException(String errorCode, String routerId, String message) {
         super(errorCode, message);
         this.routerId = routerId;
-    }
-
-    /**
-     * 获取路由 ID
-     *
-     * @return 路由 ID
-     */
-    public String getRouterId() {
-        return routerId;
     }
 
     /**
@@ -65,7 +52,7 @@ public class RouteNotFoundException extends RouteException {
     /**
      * 创建 Bean 未找到异常
      *
-     * @param routerId      路由 ID
+     * @param routerId       路由 ID
      * @param targetBeanName 目标 Bean 名称
      * @return 异常实例
      */
@@ -75,5 +62,14 @@ public class RouteNotFoundException extends RouteException {
                 routerId,
                 String.format("Routing matched [%s], but no corresponding bean instance was found in the container", targetBeanName)
         );
+    }
+
+    /**
+     * 获取路由 ID
+     *
+     * @return 路由 ID
+     */
+    public String getRouterId() {
+        return routerId;
     }
 }

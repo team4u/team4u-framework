@@ -7,8 +7,8 @@ import com.team4u.framework.base.util.ServiceLoaderUtil;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.policy.util.PolicyScanner;
-import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.Router;
+import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.interceptor.DefaultRouteInvocation;
 import com.team4u.framework.router.api.interceptor.RouteInterceptor;
 import com.team4u.framework.router.api.interceptor.RouteInterceptorRegistry;
@@ -16,6 +16,7 @@ import com.team4u.framework.router.api.interceptor.RouteInvocation;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.trace.RouteTrace;
+import com.team4u.framework.router.factory.CompositeRouterFactory;
 import com.team4u.framework.router.factory.RouterFactoryRegistry;
 import com.team4u.framework.router.parser.DefaultRoutePolicyParser;
 import com.team4u.framework.router.spi.RoutePolicyParser;
@@ -44,10 +45,10 @@ public class RoutingManager {
     private final ConfigDrivenRegistry<Router> routerRegistry;
 
     private RoutingManager(RouterFactoryRegistry factoryRegistry,
-            ConfigManager configManager,
-            RoutePolicyParser configParser,
-            String configPrefix,
-            RouteInterceptorRegistry interceptorRegistry) {
+                           ConfigManager configManager,
+                           RoutePolicyParser configParser,
+                           String configPrefix,
+                           RouteInterceptorRegistry interceptorRegistry) {
         this.factoryRegistry = factoryRegistry;
         this.configParser = configParser;
         this.configPrefix = configPrefix.endsWith(".") ? configPrefix : configPrefix + ".";
@@ -59,7 +60,7 @@ public class RoutingManager {
     }
 
     /**
-     * 获取全局实例
+     * 获取指定 ID 的 Router 对象
      */
     public static RoutingManager global() {
         return GLOBAL;
@@ -77,6 +78,13 @@ public class RoutingManager {
      */
     public static Builder builder() {
         return new Builder();
+    }
+
+    /**
+     * 获取路由工厂注册器，可供外部手工补充注册自定义工厂
+     */
+    public RouterFactoryRegistry getFactoryRegistry() {
+        return factoryRegistry;
     }
 
     /**
@@ -401,7 +409,12 @@ public class RoutingManager {
             RoutePolicyParser parser = resolveConfigParser();
             RouteInterceptorRegistry interceptorRegistry = buildInterceptorRegistry();
 
-            return new RoutingManager(finalRegistry, configManager, parser, configPrefix, interceptorRegistry);
+            RoutingManager manager = new RoutingManager(finalRegistry, configManager, parser, configPrefix,
+                    interceptorRegistry);
+            // 每一个 RoutingManager 实例都应该持有绑定自己上下文的复合工厂，防止其退化到 global 查找引发的加载循环或逻辑隔离失效
+            finalRegistry.register(new CompositeRouterFactory(manager));
+
+            return manager;
         }
 
         /**

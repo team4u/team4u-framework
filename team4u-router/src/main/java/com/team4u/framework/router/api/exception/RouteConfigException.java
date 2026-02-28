@@ -10,33 +10,27 @@ package com.team4u.framework.router.api.exception;
  */
 public class RouteConfigException extends RouteException {
 
-    private static final long serialVersionUID = 1L;
-
     /**
      * 错误码：配置解析失败
      */
     public static final String PARSE_ERROR = "PARSE_ERROR";
-
     /**
      * 错误码：配置验证失败
      */
     public static final String VALIDATION_ERROR = "VALIDATION_ERROR";
-
     /**
      * 错误码：不支持的类型
      */
     public static final String UNSUPPORTED_TYPE = "UNSUPPORTED_TYPE";
-
     /**
      * 错误码：重复的配置
      */
     public static final String DUPLICATE_CONFIG = "DUPLICATE_CONFIG";
-
     /**
      * 错误码：注册表已锁定
      */
     public static final String REGISTRY_LOCKED = "REGISTRY_LOCKED";
-
+    private static final long serialVersionUID = 1L;
     private final String policyId;
 
     public RouteConfigException(String message) {
@@ -57,15 +51,6 @@ public class RouteConfigException extends RouteException {
     public RouteConfigException(String errorCode, String message, Throwable cause) {
         super(errorCode, message, cause);
         this.policyId = null;
-    }
-
-    /**
-     * 获取策略 ID
-     *
-     * @return 策略 ID，可能为 null
-     */
-    public String getPolicyId() {
-        return policyId;
     }
 
     /**
@@ -142,12 +127,21 @@ public class RouteConfigException extends RouteException {
      * @return 异常实例
      */
     public static RouteConfigException duplicateCondition(String policyId, String condition,
-            Object existingValue, Object newValue) {
+                                                          Object existingValue, Object newValue) {
         return new RouteConfigException(
                 DUPLICATE_CONFIG,
                 policyId,
                 String.format("Invalid configuration in RoutePolicy [%s]: Duplicate condition key '%s' found. " +
-                        "Cannot map to both [%s] and [%s].",
+                                "Cannot map to both [%s] and [%s].",
                         policyId, condition, existingValue, newValue));
+    }
+
+    /**
+     * 获取策略 ID
+     *
+     * @return 策略 ID，可能为 null
+     */
+    public String getPolicyId() {
+        return policyId;
     }
 }

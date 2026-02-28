@@ -28,9 +28,9 @@ team4u-router 是一个轻量级、插件化的 Java 路由框架。它旨在将
 
 ### 核心优势
 
-* 配置驱动：路由规则支持动态重载，无需重启应用即可调整业务走向。
-* 多种模式：内置精准匹配 (Map)、规则引擎 (Expression) 与权重分流 (Weight) 三种核心路由器。
-* 透明集成：无缝对接 [team4u-config](../team4u-config/README.md)，实现路由规则的统一配置管理。
+*   配置驱动：路由规则支持动态重载，无需重启应用即可调整业务走向。
+*   多种模式：内置精准匹配 (Map)、规则引擎 (Expression)、权重分流 (Weight) 与 **组合代理 (Composite)** 四种核心路由器。
+*   透明集成：无缝对接 [team4u-config](../team4u-config/README.md)，实现路由规则的统一配置管理。
 * 高性能：内置配置实例缓存，确保极致的路由性能。
 * 路由诊断：提供完善的 Trace 能力，支持查看每一条规则的匹配状态及表达式计算细节。
 * 极简 API：统一入口 `RoutingManager`，极简的交互逻辑，学习成本极低。
@@ -199,6 +199,13 @@ RoutePolicy weightPolicy = RoutePolicyBuilder.<String>weight()
         .rule("30", "strategy-B") // 30% 流量
         .rule("50", "strategy-C") // 50% 流量
         .fallback("strategy-default")
+        .build();
+
+// 4. 创建组合路由 (Composite Router)
+RoutePolicy compositePolicy = RoutePolicyBuilder.<String>composite()
+        .id("combined-router")
+        .delegates(Arrays.asList("router.biz-special", "router.common-default"))
+        .fallback("final-backup-value")
         .build();
 ```
 
@@ -414,6 +421,32 @@ if (result.isMatch()) {
 *   配置友好：无需手动计算累加概率，直接配置各个规则的相对权重。
 *   高性能：$O(\log N)$ 查找复杂度，性能接近精准匹配。
 
+### 4. CompositeRouter (组合/代理路由)
+
+适用于将多个独立配置的路由器逻辑进行串联、叠加或降级的场景。
+
+*   配置类型：`type: "composite"`
+*   瀑布流执行：按照 `ext.delegates` 中定义的 ID 顺序依次调用 `RoutingManager` 执行下层路由。
+*   短路截断：一旦其中一个子路由产生 **真实匹配 (MatchedConditions != null)**，则立即停止并返回该结果。
+*   降级叠加：如果子路由未触发真实匹配但返回了 `fallbackValue`，组合路由会临时持有该值，并继续尝试后续委托项，直到找到真实命中或返回最后一个触发的兜底值。
+*   透明递归：支持嵌套组合（即子路由也可以是另一个 `composite` 类型）。
+
+#### 组合路由配置示例
+
+```json
+{
+  "id": "combined-translator",
+  "type": "composite",
+  "ext": {
+    "delegates": [
+        "translator.biz-A",   // 业务定制规则（高优先级）
+        "translator.common"   // 全局通用规则（低优先级）
+    ]
+  },
+  "fallbackValue": "UNKNOWN_ERROR"
+}
+```
+
 ### 4. 配置驱动与动态发现
 
 `RoutingManager` 提供了完善的机制以确保高性能与灵活性：
@@ -522,6 +555,31 @@ for (RuleTrace step : trace.getSteps()) {
   "fallbackValue": "standard-pricing-model"
 }
 ```
+
+### 场景 E：多级策略叠加与降级 (Composite Router)
+在大型系统中，通常需要为特定业务线（如：直播业务）配置“定制规则”，同时保留一份全局通用的“基准规则”。通过组合路由可以实现逻辑的解耦与复用。
+
+**业务逻辑：**
+1.  **直播业务定制路由 (`live.special.router`)**：处理直播间打赏、弹幕异常等特有逻辑。
+2.  **全局通用路由 (`system.common.router`)**：处理网络超时、限流、数据库连接等系统级逻辑。
+3.  **聚合出口 (`main.translator`)**：组合上述两者。
+
+**配置示例：**
+```json
+{
+  "id": "main.translator",
+  "type": "composite",
+  "ext": {
+    "delegates": [
+      "live.special.router",    // 高优先级：业务线私有规则柜
+      "system.common.router"    // 低优先级：系统全局公用柜
+    ]
+  },
+  "fallbackValue": "UNKNOWN_SYSTEM_ERROR"
+}
+```
+
+---
 
 ---
 
