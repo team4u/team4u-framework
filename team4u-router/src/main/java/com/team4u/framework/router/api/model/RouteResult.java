@@ -1,10 +1,9 @@
 package com.team4u.framework.router.api.model;
 
-import lombok.Getter;
+import lombok.Value;
 
 import java.util.Collections;
 import java.util.List;
-import java.util.Objects;
 
 /**
  * 路由结果
@@ -15,21 +14,18 @@ import java.util.Objects;
  * @param <T> 结果类型
  * @author jay.wu
  */
-@Getter
+@Value
 public class RouteResult<T> {
 
     /**
      * 匹配失败的单例对象，用于减少不必要的对象创建。
-     * <p>
-     * 类型安全说明：由于 Java 泛型擦除，此单例可以安全地转换为任意泛型类型，
-     * 因为它的 value 总是 null，且所有读取操作都不会产生类型错误。
      * </p>
      */
     private static final RouteResult<?> UNMATCH_INSTANCE = new RouteResult<>(false, null, null);
 
-    private final boolean match;
-    private final T value;
-    private final List<String> matchedConditions;
+    boolean match;
+    T value;
+    List<String> matchedConditions;
 
     private RouteResult(boolean match, T value, List<String> matchedConditions) {
         this.match = match;
@@ -113,29 +109,5 @@ public class RouteResult<T> {
             return matchedConditions.get(0);
         }
         return null;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        RouteResult<?> that = (RouteResult<?>) o;
-        return match == that.match &&
-                Objects.equals(value, that.value) &&
-                Objects.equals(matchedConditions, that.matchedConditions);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(match, value, matchedConditions);
-    }
-
-    @Override
-    public String toString() {
-        return "RouteResult{" +
-                "match=" + match +
-                ", value=" + value +
-                ", matchedConditions=" + matchedConditions +
-                '}';
     }
 }

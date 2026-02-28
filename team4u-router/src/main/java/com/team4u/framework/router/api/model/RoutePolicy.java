@@ -58,7 +58,6 @@ public class RoutePolicy {
         if (value == null) {
             return defaultValue;
         }
-        // 使用 Hutool 进行安全类型转换
         return (T) Convert.convert(defaultValue.getClass(), value);
     }
 }
