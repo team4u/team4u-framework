@@ -201,7 +201,8 @@ public class RoutingManager {
         }
 
         RouteInvocation<T> invocation = new DefaultRouteInvocation<>(
-                routerId, router, request, targetType, interceptors);
+                routerId, router, request, targetType, interceptors
+        );
         return invocation.proceed();
     }
 

@@ -2,6 +2,8 @@ package com.team4u.framework.router.api.interceptor;
 
 import com.team4u.framework.router.api.Router;
 import com.team4u.framework.router.api.model.RouteResult;
+import lombok.Getter;
+import lombok.Setter;
 
 import java.util.List;
 
@@ -10,11 +12,13 @@ import java.util.List;
  *
  * @param <T> 路由结果类型
  */
+@Getter
 public class DefaultRouteInvocation<T> implements RouteInvocation<T> {
     private final String routerId;
     private final Router targetRouter;
     private final Class<T> targetType;
     private final List<RouteInterceptor> interceptors;
+    @Setter
     private Object request;
     private int currentIndex = 0;
 
@@ -28,26 +32,6 @@ public class DefaultRouteInvocation<T> implements RouteInvocation<T> {
         this.request = request;
         this.targetType = targetType;
         this.interceptors = interceptors;
-    }
-
-    @Override
-    public String getRouterId() {
-        return routerId;
-    }
-
-    @Override
-    public Object getRequest() {
-        return request;
-    }
-
-    @Override
-    public void setRequest(Object request) {
-        this.request = request;
-    }
-
-    @Override
-    public Class<T> getTargetType() {
-        return targetType;
     }
 
     @Override
