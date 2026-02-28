@@ -249,7 +249,6 @@ public class PaymentRequest {
     private String tenant;
     private long amount;
 }
-```
 
 // 2. 不同的业务实现类，注册为不同名称的 Bean
 @Component("alipay-service")
