@@ -5,6 +5,7 @@
 ## 目录
 - [核心特性](#核心特性)
 - [关键组件详解](#关键组件详解)
+  - [文本模板解析器 (TextTemplate)](#文本模板解析器-texttemplate)
   - [动态实例提供者 (DynamicInstanceProvider)](#动态实例提供者-dynamicinstanceprovider)
   - [单例工厂 (SingletonFactory)](#单例工厂-singletonfactory)
   - [健壮的服务加载器 (ServiceLoaderUtil)](#健壮的服务加载器-serviceloaderutil)
@@ -23,6 +24,36 @@
 ---
 
 ## 关键组件详解
+
+### 文本模板解析器 (TextTemplate)
+
+高性能的通用文本模板引擎，支持 `${property}` 格式占位符。专为高性能路由、动态配置和消息模板场景设计。
+
+*   **极致性能**：采用“预解析 + 运行时拼接”模式。在构造模板时将字符串拆分为静态段（Literal）和变量段（Placeholder），渲染时仅需简单的 `StringBuilder` 拼接，彻底避开正则表达式的运行开销。
+*   **灵活渲染**：支持通过 `Map` 或 `Function`（值提供者函数）进行渲染。
+*   **变量自发现**：支持提取模板中定义的所有变量名，并保持其出现的顺序。
+
+#### 基本用法
+
+```java
+// 1. 预解析模板（建议在初始化或静态块中完成并缓存实例）
+TextTemplate template = new TextTemplate("biz.${region}.${tenantId}.router");
+
+// 2. 提取变量名
+Set<String> vars = template.getVariableNames(); // ["region", "tenantId"]
+
+// 3. 多样化渲染
+// 方式 A：通过 Map 渲染
+Map<String, String> context = new HashMap<>();
+context.put("region", "shanghai");
+context.put("tenantId", "alipay");
+String result1 = template.render(context); // "biz.shanghai.alipay.router"
+
+// 方式 B：通过 Function 渲染（极速桥接任意数据源，如 Bean、配置库等）
+String result2 = template.render(prop -> {
+    return MyConfigManager.get(prop); // 从自定义配置源中提取值
+});
+```
 
 ### 动态实例提供者 (DynamicInstanceProvider)
 
