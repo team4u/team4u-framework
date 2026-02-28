@@ -3,6 +3,7 @@ package com.team4u.framework.router.proxy;
 import cn.hutool.core.util.StrUtil;
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.router.RoutingManager;
+import com.team4u.framework.router.api.exception.RouteNotFoundException;
 import com.team4u.framework.router.api.model.RouteResult;
 
 /**
@@ -49,8 +50,7 @@ public class RoutedBeanLocator {
 
         // 如果未命中且没有兜底，抛出异常阻断
         if (result == null || result.isNotMatch() || StrUtil.isBlank(result.getValue())) {
-            throw new IllegalStateException(String.format(
-                    "Routing failed: No matching rule or fallback configuration found for router ID [%s]", routerId));
+            throw RouteNotFoundException.ruleNotMatched(routerId);
         }
 
         String targetBeanName = result.getValue();
@@ -59,9 +59,7 @@ public class RoutedBeanLocator {
         Object bean = BeanManager.getInstance().getBean(targetBeanName);
 
         if (bean == null) {
-            throw new IllegalStateException(String.format(
-                    "Routing matched [%s], but no corresponding bean instance was found in the container",
-                    targetBeanName));
+            throw RouteNotFoundException.beanNotFound(routerId, targetBeanName);
         }
 
         // 3. 类型安全校验

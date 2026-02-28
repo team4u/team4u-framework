@@ -2,6 +2,8 @@ package com.team4u.framework.router.core;
 
 import cn.hutool.log.Log;
 import cn.hutool.log.LogFactory;
+import com.team4u.framework.router.api.RouterType;
+import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.model.RouteRule;
@@ -19,11 +21,10 @@ public class MapRouter extends AbstractRouter {
     private static final Log log = LogFactory.get();
 
     private final Map<String, Object> rules;
-    private final Object fallbackValue;
 
     public MapRouter(RoutePolicy policy) {
+        super(policy);
         this.rules = initializeRules(policy);
-        this.fallbackValue = policy.getFallbackValue();
     }
 
     /**
@@ -48,10 +49,7 @@ public class MapRouter extends AbstractRouter {
 
                 // 拦截重复 Key，抛出附带 Policy ID 和具体冲突值的精确异常，提升排障效率
                 if (ruleMap.containsKey(key)) {
-                    throw new IllegalArgumentException(String.format(
-                            "Invalid configuration in RoutePolicy [%s]: Duplicate condition key '%s' found. " +
-                                    "Cannot map to both [%s] and [%s].",
-                            policy.getId(), key, ruleMap.get(key), value));
+                    throw RouteConfigException.duplicateCondition(policy.getId(), key, ruleMap.get(key), value);
                 }
                 ruleMap.put(key, value);
             }
@@ -70,9 +68,10 @@ public class MapRouter extends AbstractRouter {
 
         // 尝试从规则库中精确匹配
         String routingKey = String.valueOf(request);
-        Object target = rules.get(routingKey);
 
-        if (target != null) {
+        // 使用 containsKey 判断 key 是否存在，正确处理 value 为 null 的情况
+        if (rules.containsKey(routingKey)) {
+            Object target = rules.get(routingKey);
             // 记录匹配命中的日志 (仅在 TRACE 级别)
             if (log.isTraceEnabled()) {
                 log.trace("Route matched: key [{}] -> value [{}]", routingKey, target);
@@ -93,19 +92,18 @@ public class MapRouter extends AbstractRouter {
     @SuppressWarnings("unchecked")
     public <T> RouteTrace<T> trace(Object request) {
         long start = System.currentTimeMillis();
-        RouteTrace<T> routeTrace = new RouteTrace<>();
-        routeTrace.setRouterType("map");
+        RouteTrace<T> routeTrace = createTrace(RouterType.MAP);
 
         if (request == null) {
             routeTrace.setResult(fallback());
-            routeTrace.setCostMs(System.currentTimeMillis() - start);
-            return routeTrace;
+            return completeTrace(routeTrace, start);
         }
 
         String routingKey = String.valueOf(request);
-        Object target = rules.get(routingKey);
 
-        if (target != null) {
+        // 使用 containsKey 判断 key 是否存在，正确处理 value 为 null 的情况
+        if (rules.containsKey(routingKey)) {
+            Object target = rules.get(routingKey);
             routeTrace.addStep(RuleTrace.normal(routingKey, true, null));
             routeTrace.setResult(RouteResult.matched((T) target, routingKey));
         } else {
@@ -114,16 +112,6 @@ public class MapRouter extends AbstractRouter {
             routeTrace.setResult(fallback());
         }
 
-        routeTrace.setCostMs(System.currentTimeMillis() - start);
-        return routeTrace;
-    }
-
-    /**
-     * 执行兜底逻辑
-     * 使用策略中的显式兜底值
-     */
-    @SuppressWarnings("unchecked")
-    private <T> RouteResult<T> fallback() {
-        return fallbackValue != null ? RouteResult.matched((T) fallbackValue) : RouteResult.unmatch();
+        return completeTrace(routeTrace, start);
     }
 }

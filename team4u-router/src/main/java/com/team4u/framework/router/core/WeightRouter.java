@@ -3,6 +3,8 @@ package com.team4u.framework.router.core;
 import cn.hutool.core.util.NumberUtil;
 import cn.hutool.log.Log;
 import cn.hutool.log.LogFactory;
+import com.team4u.framework.router.api.RouterType;
+import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.model.RouteRule;
@@ -25,11 +27,10 @@ public class WeightRouter extends AbstractRouter {
 
     // 使用 TreeMap 存储累加权重和目标值的映射，利用其 ceilingEntry 快速定位区间
     private final TreeMap<Integer, Object> weightMap = new TreeMap<>();
-    private final Object fallbackValue;
     private int totalWeight = 0;
 
     public WeightRouter(RoutePolicy policy) {
-        this.fallbackValue = policy.getFallbackValue();
+        super(policy);
         this.initializeRules(policy);
     }
 
@@ -46,8 +47,11 @@ public class WeightRouter extends AbstractRouter {
         // 初始化时，自动完成权重的累加逻辑
         for (RouteRule rule : policy.getRules()) {
             if (!NumberUtil.isInteger(rule.getCondition())) {
-                throw new IllegalArgumentException(
-                        "WeightRouter condition must be an integer, but got: " + rule.getCondition());
+                throw new RouteConfigException(
+                        RouteConfigException.VALIDATION_ERROR,
+                        policy.getId(),
+                        "WeightRouter condition must be an integer, but got: " + rule.getCondition()
+                );
             }
             int weight = Integer.parseInt(rule.getCondition());
             if (weight > 0) {
@@ -92,13 +96,11 @@ public class WeightRouter extends AbstractRouter {
     @SuppressWarnings("unchecked")
     public <T> RouteTrace<T> trace(Object request) {
         long start = System.currentTimeMillis();
-        RouteTrace<T> routeTrace = new RouteTrace<>();
-        routeTrace.setRouterType("weight");
+        RouteTrace<T> routeTrace = createTrace(RouterType.WEIGHT);
 
         if (totalWeight == 0 || request == null) {
             routeTrace.setResult(fallback());
-            routeTrace.setCostMs(System.currentTimeMillis() - start);
-            return routeTrace;
+            return completeTrace(routeTrace, start);
         }
 
         String routingKey = String.valueOf(request);
@@ -114,15 +116,6 @@ public class WeightRouter extends AbstractRouter {
             routeTrace.setResult(fallback());
         }
 
-        routeTrace.setCostMs(System.currentTimeMillis() - start);
-        return routeTrace;
-    }
-
-    /**
-     * 执行兜底逻辑
-     */
-    @SuppressWarnings("unchecked")
-    private <T> RouteResult<T> fallback() {
-        return fallbackValue != null ? RouteResult.matched((T) fallbackValue) : RouteResult.unmatch();
+        return completeTrace(routeTrace, start);
     }
 }

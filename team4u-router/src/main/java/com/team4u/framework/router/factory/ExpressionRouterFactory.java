@@ -2,6 +2,7 @@ package com.team4u.framework.router.factory;
 
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.router.api.Router;
+import com.team4u.framework.router.api.RouterType;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.core.ExpressionRouter;
 import com.team4u.framework.router.spi.RouterFactory;
@@ -28,6 +29,6 @@ public class ExpressionRouterFactory implements RouterFactory {
 
     @Override
     public String key() {
-        return "expression";
+        return RouterType.EXPRESSION;
     }
 }

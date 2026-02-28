@@ -1,22 +1,32 @@
 package com.team4u.framework.router.api.model;
 
-import lombok.Data;
+import lombok.Getter;
 
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 路由结果
+ * <p>
+ * 不可变对象，表示一次路由操作的结果。包含匹配状态、路由值和命中的条件。
+ * </p>
  *
  * @param <T> 结果类型
+ * @author jay.wu
  */
-@Data
+@Getter
 public class RouteResult<T> {
 
     /**
-     * 匹配失败的单例对象，用于减少不必要的对象创建
+     * 匹配失败的单例对象，用于减少不必要的对象创建。
+     * <p>
+     * 类型安全说明：由于 Java 泛型擦除，此单例可以安全地转换为任意泛型类型，
+     * 因为它的 value 总是 null，且所有读取操作都不会产生类型错误。
+     * </p>
      */
     private static final RouteResult<?> UNMATCH_INSTANCE = new RouteResult<>(false, null, null);
+
     private final boolean match;
     private final T value;
     private final List<String> matchedConditions;
@@ -24,7 +34,10 @@ public class RouteResult<T> {
     private RouteResult(boolean match, T value, List<String> matchedConditions) {
         this.match = match;
         this.value = value;
-        this.matchedConditions = matchedConditions;
+        // 使用不可变列表确保对象的不可变性
+        this.matchedConditions = matchedConditions != null
+                ? Collections.unmodifiableList(matchedConditions)
+                : null;
     }
 
     /**
@@ -65,15 +78,23 @@ public class RouteResult<T> {
 
     /**
      * 匹配失败
+     * <p>
+     * 返回一个共享的未匹配实例，避免不必要的对象创建。
+     * </p>
      *
      * @param <T> 结果类型
-     * @return 路由结果
+     * @return 未匹配的路由结果
      */
     @SuppressWarnings("unchecked")
     public static <T> RouteResult<T> unmatch() {
         return (RouteResult<T>) UNMATCH_INSTANCE;
     }
 
+    /**
+     * 判断是否未匹配
+     *
+     * @return 如果未匹配返回 true
+     */
     public boolean isNotMatch() {
         return !match;
     }
@@ -92,5 +113,29 @@ public class RouteResult<T> {
             return matchedConditions.get(0);
         }
         return null;
+    }
+
+    @Override
+    public boolean equals(Object o) {
+        if (this == o) return true;
+        if (o == null || getClass() != o.getClass()) return false;
+        RouteResult<?> that = (RouteResult<?>) o;
+        return match == that.match &&
+                Objects.equals(value, that.value) &&
+                Objects.equals(matchedConditions, that.matchedConditions);
+    }
+
+    @Override
+    public int hashCode() {
+        return Objects.hash(match, value, matchedConditions);
+    }
+
+    @Override
+    public String toString() {
+        return "RouteResult{" +
+                "match=" + match +
+                ", value=" + value +
+                ", matchedConditions=" + matchedConditions +
+                '}';
     }
 }

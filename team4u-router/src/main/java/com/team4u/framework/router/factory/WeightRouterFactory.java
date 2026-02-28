@@ -1,6 +1,7 @@
 package com.team4u.framework.router.factory;
 
 import com.team4u.framework.router.api.Router;
+import com.team4u.framework.router.api.RouterType;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.core.WeightRouter;
 import com.team4u.framework.router.spi.RouterFactory;
@@ -19,6 +20,6 @@ public class WeightRouterFactory implements RouterFactory {
 
     @Override
     public String key() {
-        return "weight";
+        return RouterType.WEIGHT;
     }
 }

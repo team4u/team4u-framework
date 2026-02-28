@@ -1,5 +1,6 @@
 package com.team4u.framework.router.core;
 
+import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.model.RouteRule;
@@ -107,7 +108,7 @@ public class MapRouterTest {
         Assert.assertEquals("ExplicitFallback", result.getValue());
     }
 
-    @Test(expected = IllegalArgumentException.class)
+    @Test(expected = RouteConfigException.class)
     public void testDuplicateKeyException() {
         RoutePolicy policy = new RoutePolicy();
         policy.setId("test-policy");

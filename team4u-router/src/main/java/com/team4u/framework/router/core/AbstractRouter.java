@@ -2,14 +2,26 @@ package com.team4u.framework.router.core;
 
 import cn.hutool.core.convert.Convert;
 import com.team4u.framework.router.api.Router;
+import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
+import com.team4u.framework.router.api.trace.RouteTrace;
 
 /**
- * 抽象路由器，处理通用的类型转换和本地缓存逻辑
+ * 抽象路由器，处理通用的类型转换和兜底逻辑
  *
  * @author jay.wu
  */
 public abstract class AbstractRouter implements Router {
+
+    /**
+     * 兜底路由值
+     * 当所有规则都不匹配时，返回该值
+     */
+    protected final Object fallbackValue;
+
+    protected AbstractRouter(RoutePolicy policy) {
+        this.fallbackValue = policy.getFallbackValue();
+    }
 
     @SuppressWarnings("unchecked")
     @Override
@@ -31,5 +43,48 @@ public abstract class AbstractRouter implements Router {
         }
 
         return (RouteResult<T>) result;
+    }
+
+    /**
+     * 执行兜底逻辑
+     * <p>
+     * 使用策略中的显式兜底值，子类可直接调用此方法
+     * </p>
+     *
+     * @param <T> 结果类型
+     * @return 如果有兜底值则返回匹配结果，否则返回未匹配
+     */
+    @SuppressWarnings("unchecked")
+    protected <T> RouteResult<T> fallback() {
+        return fallbackValue != null ? RouteResult.matched((T) fallbackValue) : RouteResult.unmatch();
+    }
+
+    /**
+     * 创建路由追踪对象
+     * <p>
+     * 子类在实现 {@link #trace(Object)} 方法时可以调用此方法创建基础追踪对象。
+     * </p>
+     *
+     * @param routerType 路由器类型
+     * @param <T>        结果类型
+     * @return 新的追踪对象
+     */
+    protected <T> RouteTrace<T> createTrace(String routerType) {
+        RouteTrace<T> trace = new RouteTrace<>();
+        trace.setRouterType(routerType);
+        return trace;
+    }
+
+    /**
+     * 完成追踪并设置耗时
+     *
+     * @param trace  追踪对象
+     * @param start  开始时间戳（毫秒）
+     * @param <T>    结果类型
+     * @return 完成的追踪对象
+     */
+    protected <T> RouteTrace<T> completeTrace(RouteTrace<T> trace, long start) {
+        trace.setCostMs(System.currentTimeMillis() - start);
+        return trace;
     }
 }

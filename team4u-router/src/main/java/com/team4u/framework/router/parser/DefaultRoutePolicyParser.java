@@ -2,6 +2,7 @@ package com.team4u.framework.router.parser;
 
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.json.JSONUtil;
+import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.spi.RoutePolicyParser;
 
@@ -20,12 +21,20 @@ public class DefaultRoutePolicyParser implements RoutePolicyParser {
             return null;
         }
 
-        RoutePolicy policy = JSONUtil.toBean(input, RoutePolicy.class);
+        RoutePolicy policy;
+        try {
+            policy = JSONUtil.toBean(input, RoutePolicy.class);
+        } catch (Exception e) {
+            throw RouteConfigException.parseError("Failed to parse JSON to RoutePolicy", e);
+        }
 
         if (policy != null) {
             // 校验：策略类型不能为空
             if (StrUtil.isBlank(policy.getType())) {
-                throw new IllegalArgumentException("RoutePolicy type cannot be null or empty.");
+                throw new RouteConfigException(
+                        RouteConfigException.VALIDATION_ERROR,
+                        "RoutePolicy type cannot be null or empty."
+                );
             }
 
             // 防御性校验：确保 rules 不为 null

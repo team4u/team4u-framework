@@ -1,5 +1,6 @@
 package com.team4u.framework.router.core;
 
+import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.model.RouteRule;
@@ -74,7 +75,7 @@ public class WeightRouterTest {
     /**
      * 测试无效的权重格式
      */
-    @Test(expected = IllegalArgumentException.class)
+    @Test(expected = RouteConfigException.class)
     public void testInvalidWeightFormat() {
         RoutePolicy policy = new RoutePolicy();
         policy.setRules(Collections.singletonList(new RouteRule("invalid", "A")));

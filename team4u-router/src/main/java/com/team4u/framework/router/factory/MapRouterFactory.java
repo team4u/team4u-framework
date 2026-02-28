@@ -1,6 +1,7 @@
 package com.team4u.framework.router.factory;
 
 import com.team4u.framework.router.api.Router;
+import com.team4u.framework.router.api.RouterType;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.core.MapRouter;
 import com.team4u.framework.router.spi.RouterFactory;
@@ -17,6 +18,6 @@ public class MapRouterFactory implements RouterFactory {
 
     @Override
     public String key() {
-        return "map";
+        return RouterType.MAP;
     }
 }

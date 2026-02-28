@@ -1,5 +1,6 @@
 package com.team4u.framework.router.api.builder;
 
+import com.team4u.framework.router.api.RouterType;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteRule;
 
@@ -30,21 +31,21 @@ public class RoutePolicyBuilder<T> {
      * 创建一个 Map (映射) 类型的路由策略构建器
      */
     public static <T> RoutePolicyBuilder<T> map() {
-        return new RoutePolicyBuilder<>("map");
+        return new RoutePolicyBuilder<>(RouterType.MAP);
     }
 
     /**
      * 创建一个 Expression (表达式) 类型的路由策略构建器
      */
     public static <T> RoutePolicyBuilder<T> expression() {
-        return new RoutePolicyBuilder<>("expression");
+        return new RoutePolicyBuilder<>(RouterType.EXPRESSION);
     }
 
     /**
      * 创建一个 Weight (权重) 类型的路由策略构建器
      */
     public static <T> RoutePolicyBuilder<T> weight() {
-        return new RoutePolicyBuilder<>("weight");
+        return new RoutePolicyBuilder<>(RouterType.WEIGHT);
     }
 
     /**

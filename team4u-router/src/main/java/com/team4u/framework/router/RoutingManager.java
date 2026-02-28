@@ -7,6 +7,7 @@ import com.team4u.framework.base.util.ServiceLoaderUtil;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.policy.util.PolicyScanner;
+import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.Router;
 import com.team4u.framework.router.api.interceptor.DefaultRouteInvocation;
 import com.team4u.framework.router.api.interceptor.RouteInterceptor;
@@ -82,9 +83,17 @@ public class RoutingManager {
      * 内部工厂方法：配置字符串 -> 策略 -> 路由器实例
      */
     private Router buildRouterFromConfig(String config) {
-        RoutePolicy policy = configParser.parse(config);
+        RoutePolicy policy;
+        try {
+            policy = configParser.parse(config);
+        } catch (Exception e) {
+            throw RouteConfigException.parseError("Failed to parse route policy from config: " + config, e);
+        }
         if (policy == null) {
-            throw new IllegalArgumentException("Unable to parse route policy from config: " + config);
+            throw new RouteConfigException(
+                    RouteConfigException.PARSE_ERROR,
+                    "Unable to parse route policy from config: " + config
+            );
         }
 
         return buildRouter(policy);
@@ -95,15 +104,23 @@ public class RoutingManager {
      */
     public Router buildRouter(RoutePolicy policy) {
         if (policy == null || StrUtil.isBlank(policy.getType())) {
-            throw new IllegalArgumentException("Invalid route policy or missing type");
+            throw new RouteConfigException(
+                    RouteConfigException.VALIDATION_ERROR,
+                    "Invalid route policy or missing type"
+            );
         }
 
-        Router router = this.factoryRegistry.get(policy.getType())
-                .orElseThrow(() -> new IllegalArgumentException("Unsupported router type: " + policy.getType()))
+        String routerType = policy.getType();
+        Router router = this.factoryRegistry.get(routerType)
+                .orElseThrow(() -> RouteConfigException.unsupportedType(routerType))
                 .create(policy);
 
         if (router == null) {
-            throw new IllegalStateException("Router created from policy is null, type: " + policy.getType());
+            throw new RouteConfigException(
+                    RouteConfigException.VALIDATION_ERROR,
+                    policy.getId(),
+                    "Router created from policy is null, type: " + routerType
+            );
         }
 
         return router;
@@ -387,50 +404,75 @@ public class RoutingManager {
          * 构建路由管理器实例
          */
         public RoutingManager build() {
-            RouterFactoryRegistry registry = this.factoryRegistry;
-            if (registry == null) {
-                registry = RouterFactoryRegistry.global();
-            }
+            RouterFactoryRegistry finalRegistry = buildFactoryRegistry();
+            ConfigManager configManager = resolveConfigManager();
+            RoutePolicyParser parser = resolveConfigParser();
+            RouteInterceptorRegistry interceptorRegistry = buildInterceptorRegistry();
 
-            // 先自动扫描和加载，后注册手动添加的工厂，以确保手动注册具有更高优先级（覆盖自动发现的同名工厂）
+            return new RoutingManager(finalRegistry, configManager, parser, configPrefix, interceptorRegistry);
+        }
+
+        /**
+         * 构建工厂注册表
+         */
+        private RouterFactoryRegistry buildFactoryRegistry() {
+            RouterFactoryRegistry sourceRegistry = this.factoryRegistry != null
+                    ? this.factoryRegistry
+                    : RouterFactoryRegistry.global();
+
+            // 先自动扫描和加载，后注册手动添加的工厂，以确保手动注册具有更高优先级
             RouterFactoryRegistry finalRegistry = new RouterFactoryRegistry();
             PolicyScanner.registerFromServiceLoader(finalRegistry);
             PolicyScanner.scanAndRegister(finalRegistry, "com.team4u.framework.router");
-            finalRegistry.addAll(registry);
+            finalRegistry.addAll(sourceRegistry);
 
-            ConfigManager cm = this.configManager;
-            if (cm == null) {
-                cm = ConfigManager.global();
+            return finalRegistry;
+        }
+
+        /**
+         * 解析配置管理器
+         */
+        private ConfigManager resolveConfigManager() {
+            return this.configManager != null ? this.configManager : ConfigManager.global();
+        }
+
+        /**
+         * 解析配置解析器
+         * <p>
+         * 优先级：手动传入 > SPI 发现 > 默认实现
+         * </p>
+         */
+        private RoutePolicyParser resolveConfigParser() {
+            if (this.configParser != null) {
+                return this.configParser;
             }
 
-            // 1. 优先使用 Builder 手动传入的 parser
-            RoutePolicyParser finalParser = this.configParser;
-
-            // 2. 如果未指定，尝试通过 SPI 机制发现用户提供的实现
-            if (finalParser == null) {
-                finalParser = ServiceLoaderUtil.loadFirstAvailable(RoutePolicyParser.class);
+            RoutePolicyParser spiParser = ServiceLoaderUtil.loadFirstAvailable(RoutePolicyParser.class);
+            if (spiParser != null) {
+                return spiParser;
             }
 
-            // 3. 如果 SPI 也没有，兜底使用默认实现 (Hutool)
-            if (finalParser == null) {
-                finalParser = new DefaultRoutePolicyParser();
-            }
+            return new DefaultRoutePolicyParser();
+        }
 
-            // 拦截器处理
-            RouteInterceptorRegistry finalInterceptorRegistry = this.interceptorRegistry;
-            if (finalInterceptorRegistry == null) {
-                finalInterceptorRegistry = useGlobalInterceptors ? RouteInterceptorRegistry.global()
+        /**
+         * 构建拦截器注册表
+         */
+        private RouteInterceptorRegistry buildInterceptorRegistry() {
+            RouteInterceptorRegistry registry = this.interceptorRegistry;
+
+            if (registry == null) {
+                registry = useGlobalInterceptors
+                        ? RouteInterceptorRegistry.global()
                         : new RouteInterceptorRegistry();
             }
 
-            // 如果是新创建的对象或者是全局对象且尚未初始化，可以考虑在这里 autoScan
-            // 但通常全局对象应该由用户手动控制或在特定生命周期初始化
-            // 这里的逻辑是：如果是 Builder 模式默认创建的，且没有手动指定过 registry，则尝试扫描
+            // 如果没有手动指定过注册中心，则尝试自动扫描
             if (this.interceptorRegistry == null) {
-                finalInterceptorRegistry.autoScan();
+                registry.autoScan();
             }
 
-            return new RoutingManager(finalRegistry, cm, finalParser, configPrefix, finalInterceptorRegistry);
+            return registry;
         }
     }
 }

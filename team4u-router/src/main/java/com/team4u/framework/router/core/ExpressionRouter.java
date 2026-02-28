@@ -5,6 +5,7 @@ import cn.hutool.log.LogFactory;
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.criterion.MatchContext;
 import com.team4u.framework.criterion.trace.TraceNode;
+import com.team4u.framework.router.api.RouterType;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.model.RouteRule;
@@ -23,7 +24,6 @@ public class ExpressionRouter extends AbstractRouter {
 
     private final List<RouteRule> rules;
     private final Criteria criteria;
-    private final Object fallbackValue;
     private final boolean multiMatch;
 
     public ExpressionRouter(RoutePolicy policy) {
@@ -31,9 +31,9 @@ public class ExpressionRouter extends AbstractRouter {
     }
 
     public ExpressionRouter(RoutePolicy policy, Criteria criteria) {
+        super(policy);
         this.rules = policy.getRules();
         this.criteria = criteria != null ? criteria : Criteria.global();
-        this.fallbackValue = policy.getFallbackValue();
         this.multiMatch = policy.getExtProperty("multiMatch", false);
     }
 
@@ -87,8 +87,7 @@ public class ExpressionRouter extends AbstractRouter {
     @SuppressWarnings("unchecked")
     public <T> RouteTrace<T> trace(Object request) {
         long start = System.currentTimeMillis();
-        RouteTrace<T> routeTrace = new RouteTrace<>();
-        routeTrace.setRouterType("expression");
+        RouteTrace<T> routeTrace = createTrace(RouterType.EXPRESSION);
 
         MatchContext context = (request instanceof MatchContext) ? (MatchContext) request : MatchContext.of(request);
 
@@ -108,8 +107,7 @@ public class ExpressionRouter extends AbstractRouter {
             if (isMatch) {
                 if (!multiMatch) {
                     routeTrace.setResult(RouteResult.matched((T) rule.getValue(), expr));
-                    routeTrace.setCostMs(System.currentTimeMillis() - start);
-                    return routeTrace;
+                    return completeTrace(routeTrace, start);
                 }
 
                 matchedValues.add(rule.getValue());
@@ -126,16 +124,6 @@ public class ExpressionRouter extends AbstractRouter {
             routeTrace.setResult(this.fallback());
         }
 
-        routeTrace.setCostMs(System.currentTimeMillis() - start);
-        return routeTrace;
-    }
-
-    /**
-     * 执行兜底逻辑
-     * 使用策略中的显式兜底值
-     */
-    @SuppressWarnings("unchecked")
-    private <T> RouteResult<T> fallback() {
-        return fallbackValue != null ? RouteResult.matched((T) fallbackValue) : RouteResult.unmatch();
+        return completeTrace(routeTrace, start);
     }
 }

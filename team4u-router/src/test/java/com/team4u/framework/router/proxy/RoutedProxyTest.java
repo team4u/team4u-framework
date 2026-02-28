@@ -3,6 +3,7 @@ package com.team4u.framework.router.proxy;
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.config.test.TestConfigContext;
 import com.team4u.framework.router.RoutingManager;
+import com.team4u.framework.router.api.exception.RouteNotFoundException;
 import com.team4u.framework.router.proxy.annotation.RouteContext;
 import com.team4u.framework.router.proxy.annotation.Routed;
 import org.junit.Assert;
@@ -66,7 +67,7 @@ public class RoutedProxyTest {
         Assert.assertEquals("B", proxy.sayHello("otherValue"));
     }
 
-    @Test(expected = IllegalStateException.class)
+    @Test(expected = RouteNotFoundException.class)
     public void testRouteUnmatch() {
         // 配置无兜底的路由规则
         configContext.put("router.unmatch_router",
