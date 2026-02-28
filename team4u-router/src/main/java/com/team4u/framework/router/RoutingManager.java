@@ -297,7 +297,8 @@ public class RoutingManager {
         private RouterFactoryRegistry factoryRegistry;
         private ConfigManager configManager;
         private RoutePolicyParser configParser;
-        private String configPrefix = "router.";
+        // 默认配置前缀从全局引导配置中获取，支持通过 RouterBootstrap 全局统一配置
+        private String configPrefix = RouterBootstrap.global().getConfigPrefix();
         private RouteInterceptorRegistry interceptorRegistry;
         private boolean useGlobalInterceptors = true;
 

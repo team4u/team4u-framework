@@ -336,10 +336,12 @@ service.process(myRequest);
 
 1.  **自动补全**：`RoutingManager` 默认前缀为 `router.`。调用 `route("my-id")` 时，框架会自动查找 `router.my-id`。
 2.  **逃生舱（自动去重）**：如果你的逻辑 ID 已经包含了前缀（如 `route("router.my-id")`），框架会智能识别并**不再重复拼接**。
-3.  **自定义前缀**：你可以通过 `RoutingManager.builder().configPrefix("biz.router.")` 更改或通过传入空字符串禁用此前缀逻辑。
+3.  **自定义前缀**：
+    *   **全局设置 (推荐)**：通过 `RouterBootstrap.global().configPrefix("biz.router.")` 进行一次性配置。这会同时自动刷新 `RoutingManager` 的全局实例。
+    *   **实例隔离**：在需要环境隔离时，通过 `RoutingManager.builder().configPrefix("other.router.")` 构建局部实例。
 
 > [!TIP]
-> 这种设计的优势在于：当底层配置路径发生变化时（如从 `router.` 迁移到 `app.config.router.`），你只需要在 `RoutingManager` 初始化时修改一处配置，而无需搜索替换成百上千个业务注解中的 `routerId`。
+> 这种设计的优势在于：当底层配置路径发生变化时（如从 `router.` 迁移到 `app.config.router.`），你只需要通过 `RouterBootstrap` 在应用启动阶段修改一处配置，而无需搜索替换成百上千个业务注解中的 `routerId`。
 
 ---
 

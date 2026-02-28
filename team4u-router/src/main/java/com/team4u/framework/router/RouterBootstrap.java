@@ -13,6 +13,8 @@ public class RouterBootstrap {
 
     private static final RouterBootstrap INSTANCE = new RouterBootstrap();
 
+    private volatile String configPrefix = "router.";
+
     private volatile boolean locked = false;
 
     private RouterBootstrap() {
@@ -26,8 +28,33 @@ public class RouterBootstrap {
     }
 
     /**
-     * 注册全局自定义路由工厂
+     * 获取全局配置前缀（默认为 router.）
+     */
+    public String getConfigPrefix() {
+        return configPrefix;
+    }
+
+    /**
+     * 设置全局配置前缀
+     * <p>
+     * 设置后将自动重置 RoutingManager 的全局实例，以应用新的前缀。
+     * </p>
      *
+     * @param configPrefix 配置前缀
+     */
+    public synchronized RouterBootstrap configPrefix(String configPrefix) {
+        checkLocked();
+        this.configPrefix = configPrefix;
+        // 设置前缀后，由于 RoutingManager.global() 是在加载时就初始化的，
+        // 这里需要强制刷新全局实例以使前缀生效。
+        RoutingManager.setGlobal(RoutingManager.builder().build());
+        return this;
+    }
+
+    /**
+     * 注册全局自定义路由工厂
+...
+
      * @param factory 路由工厂实现
      */
     public synchronized RouterBootstrap addFactory(RouterFactory factory) {
