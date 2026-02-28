@@ -122,7 +122,7 @@ request.put("region", "CN");
 request.put("amount", 2000);
 
 // 3. 执行路由逻辑（底层会自动查找配置项 router.order-router）
-RouteResult<String> result = manager.route("router.order-router", request);
+RouteResult<String> result = manager.route("order-router", request);
 
 // 4. 处理匹配结果
 if (result.isMatch()) {
@@ -139,7 +139,7 @@ RouteResult<TargetService> typedTempResult = manager.routeByConfig(rawJsonConfig
 
 // 6. 执行带诊断信息的路由（Trace）
 // 支持通过 routerId 诊断
-RouteTrace<String> trace = manager.trace("router.order-router", request);
+RouteTrace<String> trace = manager.trace("order-router", request);
 // 也支持通过原始配置诊断
 RouteTrace<String> configTrace = manager.traceByConfig(rawJsonConfig, request);
 
@@ -155,7 +155,7 @@ System.out.println("路由总耗时：" + trace.getCostMs() + "ms");
 ```java
 // 假设路由配置返回的是一个复杂的服务节点信息：{"host": "127.0.0.1", "port": 8080}
 // 传入目标类型 TargetService.class 进行自动转换绑定
-RouteResult<TargetService> result = manager.route("router.service-router", request, TargetService.class);
+RouteResult<TargetService> result = manager.route("service-router", request, TargetService.class);
 
 if (result.isMatch()) {
     TargetService target = result.getValue();
@@ -177,7 +177,7 @@ if (result.isMatch()) {
 ```java
 // 1. 创建映射路由 (Map Router)
 RoutePolicy mapPolicy = RoutePolicyBuilder.<String>map()
-        .id("router.region-router")
+        .id("region-router")
         .rule("CN", "china-handler")
         .rule("US", "usa-handler")
         .fallback("default-handler")
@@ -185,7 +185,7 @@ RoutePolicy mapPolicy = RoutePolicyBuilder.<String>map()
 
 // 2. 创建表达式路由 (Expression Router)
 RoutePolicy exprPolicy = RoutePolicyBuilder.<String>expression()
-        .id("router.vip-router")
+        .id("vip-router")
         .rule("userRank > 5", "vip-version")
         .rule("tags contains 'PREMIUM'", "premium-version")
         .fallback("standard-version")
@@ -194,7 +194,7 @@ RoutePolicy exprPolicy = RoutePolicyBuilder.<String>expression()
 
 // 3. 创建权重路由 (Weight Router)
 RoutePolicy weightPolicy = RoutePolicyBuilder.<String>weight()
-        .id("router.gray-router")
+        .id("gray-router")
         .rule("20", "strategy-A") // 20% 流量
         .rule("30", "strategy-B") // 30% 流量
         .rule("50", "strategy-C") // 50% 流量
@@ -292,7 +292,7 @@ paymentService.process(myRequest);
 
 ```java
 // 方式 A：使用全局管理器手动查找匹配的 Bean 实例
-PaymentService service = RoutedBeanLocator.locate("router.payment-router", myRequest, PaymentService.class);
+PaymentService service = RoutedBeanLocator.locate("payment-router", myRequest, PaymentService.class);
 
 // 方式 B：使用自定义管理器查找
 PaymentService customService = RoutedBeanLocator.locate(myCustomManager, "payment-router", myRequest, PaymentService.class);
@@ -302,7 +302,8 @@ service.process(myRequest);
 
 ### 4. 路由规则配置
 
-为了让上述 `router.payment-router` 生效，你需要在配置中心或配置文件中定义如下 JSON 规则。`value` 必须与 Spring 容器或 [`BeanManager`](../team4u-bean/README.md) 中的 Bean 名称对应：
+为了让上述 `payment-router` 生效，你需要在配置中心或配置文件中定义如下 JSON 规则。`value` 必须与 Spring 容器或 [`BeanManager`](../team4u-bean/README.md) 中的 Bean 名称对应：
+
 
 ```json
 {
@@ -386,7 +387,7 @@ service.process(myRequest);
 在调用端，通过显式指定 `List.class` 即可获得类型转换后的匹配列表：
 
 ```java
-RouteResult<List<String>> result = manager.route("router.coupon-router", request, List.class);
+RouteResult<List<String>> result = manager.route("coupon-router", request, List.class);
 if (result.isMatch()) {
     List<String> matchedCoupons = result.getValue();
     // 多重匹配模式下，建议使用 getMatchedConditions() 获取全量条件列表
@@ -419,7 +420,7 @@ if (result.isMatch()) {
 
 ```java
 // 执行诊断路由
-RouteTrace<String> trace = manager.trace("router.order-router", request);
+RouteTrace<String> trace = manager.trace("order-router", request);
 
 // 查看诊断细节
 for (RuleTrace step : trace.getSteps()) {
@@ -447,7 +448,7 @@ for (RuleTrace step : trace.getSteps()) {
 ## 典型场景
 
 ### 场景 A：动态业务开关
-通过修改配置中心中的 `rules`，可以实时切换业务路径（例如从 A 服务切换到 B 服务），实现平滑迁移或故障预案。router.order-router
+通过修改配置中心中的 `rules`，可以实时切换业务路径（例如从 A 服务切换到 B 服务），实现平滑迁移或故障预案（如：`order-router`）。
 
 配置示例 (MapRouter)：
 ```json
