@@ -24,9 +24,7 @@ public class CompositeRouter extends AbstractRouter {
     public CompositeRouter(RoutePolicy policy, RoutingManager manager) {
         super(policy);
         this.manager = manager;
-        // 解析 JSON 里 ext.delegates 的数组，提供 ArrayList 作为默认推断类型以避免 Hutool 生成不可修改集合
-        List<String> parsedDelegates = policy.getExtProperty("delegates", new ArrayList<String>());
-        this.delegates = parsedDelegates != null ? parsedDelegates : new ArrayList<>();
+        this.delegates = policy.getExtProperty("delegates", new ArrayList<>());
     }
 
     @SuppressWarnings("unchecked")
@@ -74,8 +72,10 @@ public class CompositeRouter extends AbstractRouter {
             boolean childRealMatched = result != null && result.isMatch() && result.getMatchedConditions() != null;
 
             // 将子路由的追踪结果转化为一个普通的 Node 组装到当前父组合 Trace
-            routeTrace.addStep(RuleTrace.normal("Delegate -> " + delegateId,
-                    childRealMatched, childTrace));
+            routeTrace.addStep(RuleTrace.normal(
+                    "Delegate -> " + delegateId,
+                    childRealMatched, childTrace
+            ));
 
             if (childRealMatched) {
                 routeTrace.setResult(result);
