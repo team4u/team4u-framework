@@ -9,19 +9,17 @@ import java.util.regex.Pattern;
  * 通用的文本模板解析器
  * <p>
  * 支持 ${property} 占位符解析。数据由调用方通过 Map 或值提供者函数传入，
- * 本身不依赖具体的 Bean 工具类，保持极简。
  * </p>
  *
  * @author jay.wu
  */
 public class TextTemplate {
 
-    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{(.+?)\\}");
+    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{(.+?)}");
 
     private final String template;
     private final List<Segment> segments;
     private final Set<String> variableNames;
-    private final boolean dynamic;
 
     /**
      * 构建模板
@@ -32,14 +30,13 @@ public class TextTemplate {
         this.template = template;
         this.variableNames = new LinkedHashSet<>();
         this.segments = parseSegments(template);
-        this.dynamic = !variableNames.isEmpty();
     }
 
     /**
      * 判断是否为动态模板（包含占位符）
      */
     public boolean isDynamic() {
-        return dynamic;
+        return !variableNames.isEmpty();
     }
 
     /**
@@ -68,7 +65,7 @@ public class TextTemplate {
      * @return 渲染后的文本
      */
     public String render(Function<String, Object> valueProvider) {
-        if (!dynamic || valueProvider == null) {
+        if (!isDynamic() || valueProvider == null) {
             return template;
         }
 
