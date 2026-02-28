@@ -15,15 +15,6 @@ public class CompositeRouterFactory implements RouterFactory {
     private final RoutingManager manager;
 
     /**
-     * 空构造方法供 SPI 使用，如果是通过 SPI 初始化，后续内部需在合适时机注入 manager
-     * （如果框架有生命周期 Aware 处理，也可配合）
-     */
-    public CompositeRouterFactory() {
-        // 兜底退化支持，如果未显式提供，尝试使用全局（但不推荐）
-        this.manager = RoutingManager.global();
-    }
-
-    /**
      * 带管理器的构造，供 Builder 显式注册使用
      */
     public CompositeRouterFactory(RoutingManager manager) {

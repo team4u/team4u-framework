@@ -409,8 +409,13 @@ public class RoutingManager {
             RoutePolicyParser parser = resolveConfigParser();
             RouteInterceptorRegistry interceptorRegistry = buildInterceptorRegistry();
 
-            RoutingManager manager = new RoutingManager(finalRegistry, configManager, parser, configPrefix,
-                    interceptorRegistry);
+            RoutingManager manager = new RoutingManager(
+                    finalRegistry,
+                    configManager,
+                    parser,
+                    configPrefix,
+                    interceptorRegistry
+            );
             // 每一个 RoutingManager 实例都应该持有绑定自己上下文的复合工厂，防止其退化到 global 查找引发的加载循环或逻辑隔离失效
             finalRegistry.register(new CompositeRouterFactory(manager));
 
