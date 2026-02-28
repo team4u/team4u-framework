@@ -13,14 +13,12 @@ import java.util.List;
  * 支持全局单例模式和实例模式。
  * </p>
  */
-public class RouteInterceptorRegistry {
+public class RouteInterceptorRegistry extends OrderedPolicyChain<Void, RouteInterceptor> {
 
     private static final RouteInterceptorRegistry GLOBAL = new RouteInterceptorRegistry();
 
-    private final OrderedPolicyChain<Void, RouteInterceptor> chain;
-
     public RouteInterceptorRegistry() {
-        this.chain = new OrderedPolicyChain<>(RouteInterceptor.class);
+        super(RouteInterceptor.class);
     }
 
     /**
@@ -31,31 +29,9 @@ public class RouteInterceptorRegistry {
     }
 
     /**
-     * 注册单个拦截器
-     */
-    public void register(RouteInterceptor interceptor) {
-        chain.register(interceptor);
-    }
-
-    /**
-     * 批量注册拦截器
-     */
-    public void registerAll(Collection<? extends RouteInterceptor> interceptors) {
-        chain.addAll(interceptors);
-    }
-
-    /**
-     * 自动从 SPI 和指定包路径加载拦截器
+     * 自动从 SPI 加载拦截器
      */
     public void autoScan() {
-        PolicyScanner.registerFromServiceLoader(chain);
-        PolicyScanner.scanAndRegister(chain, "com.team4u.framework.router");
-    }
-
-    /**
-     * 获取按优先级排序后的拦截器列表
-     */
-    public List<RouteInterceptor> getInterceptors() {
-        return chain.getPolicies();
+        PolicyScanner.registerFromServiceLoader(this);
     }
 }

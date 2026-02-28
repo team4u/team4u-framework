@@ -192,7 +192,7 @@ public class RoutingManager {
      * 统一路由执行逻辑，支持拦截器链
      */
     private <T> RouteResult<T> doRoute(String routerId, Router router, Object request, Class<T> targetType) {
-        List<RouteInterceptor> interceptors = interceptorRegistry.getInterceptors();
+        List<RouteInterceptor> interceptors = interceptorRegistry.getPolicies();
         if (interceptors == null || interceptors.isEmpty()) {
             if (router == null) {
                 return RouteResult.unmatch();
