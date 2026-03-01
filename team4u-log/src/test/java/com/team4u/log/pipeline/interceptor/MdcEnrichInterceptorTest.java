@@ -2,6 +2,7 @@ package com.team4u.log.pipeline.interceptor;
 
 import com.team4u.log.core.LogEvent;
 import org.junit.Assert;
+import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.MDC;
 
@@ -10,21 +11,34 @@ import org.slf4j.MDC;
  */
 public class MdcEnrichInterceptorTest {
 
-    @Test
-    public void testHandleWithTraceId() {
-        MDC.put("traceId", "test-trace-id");
-        try {
-            LogEvent event = new LogEvent();
-            MdcEnrichInterceptor.getInstance().handle(event);
-            Assert.assertEquals("test-trace-id", event.getTraceId());
-        } finally {
-            MDC.clear();
-        }
+    @Before
+    public void setUp() {
+        MdcEnrichInterceptor.getInstance().reset();
+        MDC.clear();
     }
 
     @Test
-    public void testHandleWithoutTraceId() {
-        MDC.remove("traceId");
+    public void testHandleWithDefaultKey() {
+        // 测试默认键名: traceId
+        MDC.put("traceId", "default-trace-id");
+        LogEvent event = new LogEvent();
+        MdcEnrichInterceptor.getInstance().handle(event);
+        Assert.assertEquals("default-trace-id", event.getTraceId());
+    }
+
+    @Test
+    public void testHandleWithCustomKey() {
+        // 测试自定义键名: requestId
+        MdcEnrichInterceptor.getInstance().setTraceIdKey("requestId");
+        MDC.put("requestId", "custom-req-id");
+
+        LogEvent event = new LogEvent();
+        MdcEnrichInterceptor.getInstance().handle(event);
+        Assert.assertEquals("custom-req-id", event.getTraceId());
+    }
+
+    @Test
+    public void testHandleWithoutAnyId() {
         LogEvent event = new LogEvent();
         MdcEnrichInterceptor.getInstance().handle(event);
         Assert.assertNull(event.getTraceId());
@@ -32,6 +46,7 @@ public class MdcEnrichInterceptorTest {
 
     @Test
     public void testPriority() {
+        // 验证优先级是否为最高 (HIGH = -1000)
         Assert.assertEquals(-1000, MdcEnrichInterceptor.getInstance().priority());
     }
 }

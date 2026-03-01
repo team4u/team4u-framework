@@ -79,7 +79,12 @@ Loggers.of(OrderService.class)
 | `fork()` | **派生日志器**。基于当前状态拷贝出一个独立的副本。常用于定义日志模板。 |
 | `log()` | 终结方法，将事件提交给日志引擎的流水线进行拦截与输出。 |
 
-*注意：MDC 中的 `traceId` 键值会被 `MdcEnrichInterceptor` 拦截器自动提取并放入最外层结构中。*
+*注意：默认情况下，MDC 中的 `traceId` 键值会被 `MdcEnrichInterceptor` 拦截器自动提取并放入最外层结构中。若需自定义键名（如 `requestId`），可以通过以下方式设置：*
+
+```java
+// 自定义从 MDC 中提取的键名为 "requestId"
+MdcEnrichInterceptor.getInstance().setTraceIdKey("requestId");
+```
 
 #### 日志器派生 (Template Logger / fork)
 为了减少重复代码（如每个方法都要手动 `.kv("module", "Trade")`），您可以预定义一个**模板日志器**，在具体业务点通过 `fork()` 派生出独立实例。派生实例会继承模板的所有 KV 和配置，且后续的修改**互不污染**。
@@ -540,7 +545,7 @@ LogEngine.getInstance().setAppender(new LogAppender() {
 
 当调用 `log()` 方法时，日志事件 (`LogEvent`) 将经历如下流水线处理：
 
-*   MdcEnrichInterceptor (最高优先级)：从 SLF4J 提取 `traceId` 注入到上下文中。
+*   MdcEnrichInterceptor (最高优先级)：从 SLF4J MDC 中提取链路 ID（默认键名为 `traceId`，可配置）并注入到日志事件中。
 *   TargetedDyeingInterceptor (普通优先级)：判断条件，如果命中则修改 Level 提权/降权。
 *   RateLimitInterceptor (低优先级)：针对携带 Exception 的日志进行签名（action+ExceptionClass），计算 1 秒内频次，超限则中断流水线。
 *   序列化与脱敏：由 `LogEngine` 调用定制后的 `ObjectMapper` 进行 JSON 化。脱敏修饰器 (`DynamicMaskSerializerModifier`) 会在此时拦截注解和配置，执行 `FastMasker` 极速脱敏。
