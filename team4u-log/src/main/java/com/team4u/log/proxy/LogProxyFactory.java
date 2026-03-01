@@ -12,10 +12,22 @@ public class LogProxyFactory {
     /**
      * 为指定对象创建日志代理
      *
-     * @param target      被代理的目标对象
-     * @param targetClass 对象类型
-     * @param <T>         泛型类型
-     * @return 代理后的对象
+     * @param target 目标对象
+     * @param <T>    对象类型
+     * @return 代理对象
+     */
+    @SuppressWarnings("unchecked")
+    public static <T> T createProxy(T target) {
+        return createProxy(target, (Class<T>) target.getClass());
+    }
+
+    /**
+     * 为指定对象创建日志代理
+     *
+     * @param target      目标对象
+     * @param targetClass 代理类型（用于支持接口或父类代理）
+     * @param <T>         对象类型
+     * @return 代理对象
      */
     public static <T> T createProxy(T target, Class<T> targetClass) {
         return ProxyBuilder.forClass(targetClass)
@@ -25,12 +37,24 @@ public class LogProxyFactory {
     }
 
     /**
-     * 为指定对象创建基于动态配置的日志代理（免侵入，专为第三方类库设计）
+     * 为指定对象创建动态配置驱动的日志代理
      *
-     * @param target      被代理的目标对象
-     * @param targetClass 对象类型
-     * @param <T>         泛型类型
-     * @return 代理后的对象
+     * @param target 目标对象
+     * @param <T>    对象类型
+     * @return 代理对象
+     */
+    @SuppressWarnings("unchecked")
+    public static <T> T createDynamicProxy(T target) {
+        return createDynamicProxy(target, (Class<T>) target.getClass());
+    }
+
+    /**
+     * 为指定对象创建动态配置驱动的日志代理
+     *
+     * @param target      目标对象
+     * @param targetClass 代理类型
+     * @param <T>         对象类型
+     * @return 代理对象
      */
     public static <T> T createDynamicProxy(T target, Class<T> targetClass) {
         return ProxyBuilder.forClass(targetClass)

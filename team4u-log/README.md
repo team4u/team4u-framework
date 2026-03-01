@@ -131,8 +131,8 @@ public class OrderService {
 
 *   创建代理对象：
 ```java
-// 使用工厂创建代理（底层基于 ByteBuddy）
-UserService service = LogProxyFactory.createProxy(new UserService(), UserService.class);
+// 使用工厂创建代理（简洁模式：自动识别类型）
+UserService service = LogProxyFactory.createProxy(new UserService());
 
 // 调用时自动打印入参、出参、耗时及异常
 service.register(req); 
@@ -266,9 +266,6 @@ try {
     // 停止捕获并重置环境
     helper.stop();
 }
-```
-
-## 高阶特性
 ```
 
 ## 高阶特性

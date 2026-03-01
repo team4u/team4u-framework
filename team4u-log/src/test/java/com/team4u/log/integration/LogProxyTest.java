@@ -1,6 +1,5 @@
 package com.team4u.log.integration;
 
-import com.team4u.log.core.LogEngine;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.mask.Mask;
 import com.team4u.log.mask.MaskType;
@@ -36,7 +35,7 @@ public class LogProxyTest {
     @Test
     public void testAutoLogAndMasking() throws Exception {
         // 1. 创建代理
-        UserService service = LogProxyFactory.createProxy(new UserService(), UserService.class);
+        UserService service = LogProxyFactory.createProxy(new UserService());
 
         // 2. 构造带有敏感信息的请求
         UserReq req = new UserReq("1001", "周杰伦", "13812345678");
@@ -53,7 +52,7 @@ public class LogProxyTest {
 
         // 5. 验证序列化掩码输出
         String json = logHelper.lastJson();
-        Assert.assertTrue("输出应包含参数名", json.contains("\"req\":{\"req\":"));
+        Assert.assertTrue("输出应包含参数 Map 结构", json.contains("\"req\":{\"arg0\":"));
         Assert.assertTrue("输出应包含脱敏后的姓名", json.contains("周*伦"));
         Assert.assertTrue("输出应包含脱敏后的手机号", json.contains("138****5678"));
         Assert.assertFalse("不应包含原始姓名", json.contains("周杰伦"));
@@ -74,7 +73,7 @@ public class LogProxyTest {
 
     @Test
     public void testDefaultAction() {
-        UserService service = LogProxyFactory.createProxy(new UserService(), UserService.class);
+        UserService service = LogProxyFactory.createProxy(new UserService());
         try {
             service.throwNormalException();
         } catch (Exception e) {
@@ -87,7 +86,7 @@ public class LogProxyTest {
     @Test
     public void testClassLevelAnnotation() {
         // 创建带有类级别注解的服务代理
-        OrderService service = LogProxyFactory.createProxy(new OrderService(), OrderService.class);
+        OrderService service = LogProxyFactory.createProxy(new OrderService());
         service.create("ORD-100");
 
         LogEvent event = logHelper.lastEvent();

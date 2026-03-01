@@ -59,9 +59,9 @@ public class LogDynamicProxyTest {
         String config = "{\"proxyRules\":{\"" + className + "\":{\"methods\":[\"send\"]}}}";
         testConfigContext.put("team4u.log.config", config);
 
-        // 3. 执行调用
+        // 3. 执行
         ThirdPartySmsClient rawClient = new ThirdPartySmsClient();
-        ThirdPartySmsClient safeClient = LogProxyFactory.createDynamicProxy(rawClient, ThirdPartySmsClient.class);
+        ThirdPartySmsClient safeClient = LogProxyFactory.createDynamicProxy(rawClient);
         safeClient.send("13812345678", "sk_123", "Content");
 
         // 4. 验证
@@ -87,7 +87,7 @@ public class LogDynamicProxyTest {
                 "}";
         testConfigContext.put("team4u.log.config", config);
 
-        ThirdPartySmsClient safeClient = LogProxyFactory.createDynamicProxy(new ThirdPartySmsClient(), ThirdPartySmsClient.class);
+        ThirdPartySmsClient safeClient = LogProxyFactory.createDynamicProxy(new ThirdPartySmsClient());
         try {
             safeClient.send("", "", "");
         } catch (IllegalArgumentException ignored) {
