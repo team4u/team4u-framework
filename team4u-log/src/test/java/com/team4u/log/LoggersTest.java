@@ -2,7 +2,8 @@ package com.team4u.log;
 
 import com.team4u.log.core.LogEngine;
 import com.team4u.log.core.LogEvent;
-import com.team4u.log.support.MockLogAppender;
+import com.team4u.log.support.TestLogHelper;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -13,13 +14,16 @@ import org.slf4j.event.Level;
  */
 public class LoggersTest {
 
-    private MockLogAppender mockAppender;
+    private TestLogHelper logHelper;
 
     @Before
     public void setup() {
-        LogEngine.getInstance().reset();
-        mockAppender = new MockLogAppender();
-        LogEngine.getInstance().setAppender(mockAppender);
+        logHelper = TestLogHelper.start();
+    }
+
+    @After
+    public void teardown() {
+        logHelper.stop();
     }
 
     @Test
@@ -32,7 +36,7 @@ public class LoggersTest {
                 .kv("key1", "val1")
                 .log();
 
-        LogEvent event = mockAppender.lastEvent();
+        LogEvent event = logHelper.lastEvent();
         Assert.assertEquals("Action", event.getAction());
         Assert.assertEquals("processing", event.getStatus());
         Assert.assertEquals(50L, event.getDurationMs());
@@ -44,7 +48,7 @@ public class LoggersTest {
     @Test
     public void testSuccessShortcut() {
         Loggers.of(this.getClass()).success().log();
-        LogEvent event = mockAppender.lastEvent();
+        LogEvent event = logHelper.lastEvent();
         Assert.assertEquals("success", event.getStatus());
         Assert.assertEquals(Level.INFO, event.getLevel());
     }
@@ -54,7 +58,7 @@ public class LoggersTest {
         RuntimeException e = new RuntimeException("fail");
         Loggers.of(this.getClass()).failed(e).log();
         
-        LogEvent event = mockAppender.lastEvent();
+        LogEvent event = logHelper.lastEvent();
         Assert.assertEquals("failed", event.getStatus());
         Assert.assertEquals(Level.ERROR, event.getLevel());
         Assert.assertEquals(e, event.getException());
@@ -65,10 +69,10 @@ public class LoggersTest {
         Loggers loggers = Loggers.of(this.getClass());
         
         loggers.atWarn().log();
-        Assert.assertEquals(Level.WARN, mockAppender.lastEvent().getLevel());
+        Assert.assertEquals(Level.WARN, logHelper.lastEvent().getLevel());
         
         loggers.atError().log();
-        Assert.assertEquals(Level.ERROR, mockAppender.lastEvent().getLevel());
+        Assert.assertEquals(Level.ERROR, logHelper.lastEvent().getLevel());
     }
 
     @Test
@@ -77,6 +81,6 @@ public class LoggersTest {
         // 这个测试验证 Loggers.log() 中的性能保护逻辑是否正确处理染色
         // 详细逻辑在 FinalReviewFixTest 中已覆盖集成，此处侧重 Fluent API 交互
         Loggers.of(this.getClass()).action("Test").log();
-        Assert.assertEquals(1, mockAppender.size());
+        Assert.assertEquals(1, logHelper.allEvents().size());
     }
 }

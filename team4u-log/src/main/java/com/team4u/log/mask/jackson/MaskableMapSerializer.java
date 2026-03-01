@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.ser.ContextualSerializer;
 import com.fasterxml.jackson.databind.ser.std.MapSerializer;
+import com.team4u.log.core.LogEngine;
 import com.team4u.log.mask.FastMasker;
 import com.team4u.log.mask.MaskType;
 import com.team4u.log.mask.config.MaskRuleRepository;
@@ -47,10 +48,17 @@ public class MaskableMapSerializer extends JsonSerializer<Map<?, ?>> implements 
                 String strKey = (String) key;
                 MaskType maskType = MaskRuleRepository.getInstance().findRule(mapClassName, strKey);
 
+                String strVal = (String) val;
                 if (maskType != null) {
-                    gen.writeString(FastMasker.mask((String) val, maskType));
+                    strVal = FastMasker.mask(strVal, maskType);
+                }
+
+                // 应用长度截断
+                int maxLength = LogEngine.getInstance().getMaxStringLength();
+                if (maxLength > 0 && strVal.length() > maxLength) {
+                    gen.writeString(strVal.substring(0, maxLength) + "... [Truncated len:" + strVal.length() + "]");
                 } else {
-                    gen.writeString((String) val);
+                    gen.writeString(strVal);
                 }
             } else {
                 // 递归处理复杂对象

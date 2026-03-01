@@ -13,7 +13,9 @@ import java.lang.annotation.*;
 public @interface AutoLogTrace {
 
     /**
-     * 业务动作标识，默认取方法名
+     * 业务动作标识（可选）。
+     * <p>
+     * 若不指定，则默认使用当前调用的方法名称。
      */
     String action() default "";
 

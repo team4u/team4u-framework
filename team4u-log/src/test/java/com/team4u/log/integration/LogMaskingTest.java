@@ -4,7 +4,7 @@ import com.team4u.log.Loggers;
 import com.team4u.log.core.LogEngine;
 import com.team4u.log.mask.MaskType;
 import com.team4u.log.mask.config.MaskRuleRepository;
-import com.team4u.log.support.MockLogAppender;
+import com.team4u.log.support.TestLogHelper;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.junit.After;
@@ -20,18 +20,16 @@ import java.util.Map;
  */
 public class LogMaskingTest {
 
-    private MockLogAppender mockAppender;
+    private TestLogHelper logHelper;
 
     @Before
     public void setup() {
-        LogEngine.getInstance().reset();
-        mockAppender = new MockLogAppender();
-        LogEngine.getInstance().setAppender(mockAppender);
+        logHelper = TestLogHelper.start();
     }
 
     @After
     public void teardown() {
-        LogEngine.getInstance().reset();
+        logHelper.stop();
     }
 
     @Test
@@ -42,7 +40,7 @@ public class LogMaskingTest {
 
         Loggers.of(this.getClass()).kv("data", data).log();
 
-        String json = mockAppender.lastJson();
+        String json = logHelper.lastJson();
         Assert.assertTrue("密码应脱敏", json.contains("\"password\":\"******\""));
         Assert.assertTrue("信用卡应脱敏", json.contains("\"creditCard\":\"***\""));
     }
@@ -60,7 +58,7 @@ public class LogMaskingTest {
 
         Loggers.of(this.getClass()).kv("user", user).log();
 
-        String json = mockAppender.lastJson();
+        String json = logHelper.lastJson();
         Assert.assertTrue("第三方 DTO 手机号应脱敏", json.contains("138****8000"));
     }
 
@@ -78,7 +76,7 @@ public class LogMaskingTest {
 
         Loggers.of(this.getClass()).kv("data", data).log();
 
-        String json = mockAppender.lastJson();
+        String json = logHelper.lastJson();
         Assert.assertTrue("通配符匹配手机号应脱敏", json.contains("139****2222"));
     }
 

@@ -56,7 +56,17 @@ public class LogDynamicConfig {
 
     @Data
     public static class FinOpsConfig {
+        /**
+         * 整体日志最大长度（兜底保护）
+         */
         private int maxLogLength = 5000;
+        /**
+         * 单个字符串字段的最大长度（防止单个大报文/文件撑爆内存）
+         */
+        private int maxStringLength = 2000;
+        /**
+         * 每秒错误日志限流阈值
+         */
         private int errorLimitPerSecond = 10;
     }
 }

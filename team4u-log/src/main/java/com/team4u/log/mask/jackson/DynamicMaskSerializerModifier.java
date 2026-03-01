@@ -10,6 +10,7 @@ import com.fasterxml.jackson.databind.ser.BeanSerializerModifier;
 import com.fasterxml.jackson.databind.ser.std.MapSerializer;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.fasterxml.jackson.databind.type.MapType;
+import com.team4u.log.core.LogEngine;
 import com.team4u.log.mask.FastMasker;
 import com.team4u.log.mask.Mask;
 import com.team4u.log.mask.MaskType;
@@ -80,8 +81,17 @@ public class DynamicMaskSerializerModifier extends BeanSerializerModifier {
                 gen.writeNull();
                 return;
             }
+
             // 直接由 FastMasker 处理，无反射、无正则
-            gen.writeString(FastMasker.mask(value.toString(), maskType));
+            String masked = FastMasker.mask(value.toString(), maskType);
+
+            // 应用长度截断
+            int maxLength = LogEngine.getInstance().getMaxStringLength();
+            if (maxLength > 0 && masked.length() > maxLength) {
+                gen.writeString(masked.substring(0, maxLength) + "... [Truncated len:" + masked.length() + "]");
+            } else {
+                gen.writeString(masked);
+            }
         }
     }
 }

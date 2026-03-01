@@ -97,29 +97,55 @@ Loggers.of(OrderService.class)
 
 
 ### 自动日志追踪代理 (@AutoLogTrace)
-通过为目标类生成动态代理，可以免去手动编写日志的麻烦。
+通过为目标类生成动态代理，可以自动记录方法调用的全过程。
 
 *   标记目标方法或类：
 ```java
 public class UserService {
     
-    @AutoLogTrace(
-        action = "RegisterUser", 
-        slowThreshold = 200, // 超过200ms的请求自动升级为 WARN 级别，状态变为 slow_success
-        ignoreExceptions = {BusinessException.class} // 忽略该异常的报错，降级为 WARN 级别
-    )
+    // 简洁模式：默认 action 为方法名 "register"
+    @AutoLogTrace
     public String register(UserReq req) {
-        // 业务逻辑...
+        // ...
         return "SUCCESS";
     }
+
+    // 自定义模式
+    @AutoLogTrace(
+        action = "UserLogin", // 自定义动作名称
+        slowThreshold = 200,   // 超过200ms的请求自动升级为 WARN 级别
+        ignoreExceptions = {BusinessException.class} // 业务异常降级为 WARN，不触发 ERROR 告警
+    )
+    public void login(String username) {
+        // ...
+    }
+}
+
+// 类级别应用：该类所有公共方法都会被拦截，且默认 action 为方法名
+@AutoLogTrace(slowThreshold = 500) 
+public class OrderService {
+    public void create(OrderReq req) { /* 自动追踪，action="create" */ }
+    public void cancel(String id) { /* 自动追踪，action="cancel" */ }
 }
 ```
 
 *   创建代理对象：
 ```java
+// 使用工厂创建代理（底层基于 ByteBuddy）
 UserService service = LogProxyFactory.createProxy(new UserService(), UserService.class);
-service.register(req); // 调用此方法时会自动打印入参、出参和耗时
+
+// 调用时自动打印入参、出参、耗时及异常
+service.register(req); 
 ```
+
+#### 配置项说明
+| 属性 | 类型 | 默认值 | 说明 |
+| :--- | :--- | :--- | :--- |
+| `action` | String | `""` | 业务动作标识。若不填，则**自动取当前方法名**。 |
+| `slowThreshold` | long | `-1` | 慢日志阈值(ms)。超过此值时，日志级别自动提升为 `WARN`。 |
+| `ignoreExceptions` | Class[] | `{}` | 忽略的异常列表。命中时日志级别降为 `WARN`（用于过滤业务类异常）。 |
+| `reqLimit` | int | `2000` | 入参最大打印长度，超长会被截断。 |
+| `respLimit` | int | `2000` | 出参最大打印长度。 |
 
 #### 异常处理策略解析
 `LogTraceInterceptor` 对异常做了精细化处理，这直接关系到报警策略的配置：
@@ -138,113 +164,52 @@ service.register(req); // 调用此方法时会自动打印入参、出参和耗
 ### 高性能敏感数据脱敏
 引擎内置了基于 Jackson 序列化的极速脱敏机制，无需正则匹配。内置的脱敏类型包括：姓名、手机号、身份证、密码。
 
-#### 方式 A：注解脱敏（适用于可修改的 DTO）
+#### 注解脱敏（适用于可修改的 DTO）
 直接在字段上打上 `@Mask` 注解即可：
 ```java
 public class UserReq {
     @Mask(MaskType.NAME)
     private String name;     // 周杰伦 -> 周*伦
-    
+
     @Mask(MaskType.PHONE)
     private String phone;    // 13812345678 -> 1385678
 }
 ```
 
-#### 方式 B：动态 Map 嵌套脱敏
+#### 外部动态脱敏（Map 或第三方 DTO）
 
-当我们不使用实体类，而是直接打印 `Map<String, Object>` 时，无法使用 `@Mask` 注解。此时，日志底层会根据 Map 的全限定类名（如 `java.util.HashMap`）和 Map 内部的 Key（键名）去匹配脱敏规则。
+当无法通过 `@Mask` 注解标记源码时（例如使用 `Map` 存放数据，或调用外部 jar 包中的 DTO），可以通过配置中心下发脱敏规则。
 
-##### 默认开箱即用的脱敏
-为了保证安全性，框架在底层默认对 `java.util.HashMap` 和 `java.util.LinkedHashMap` 的 `"password"` 和 `"creditCard"` 字段开启了脱敏。
+##### 1. 基于全限定类名的精确匹配
+系统会根据对象的**全限定类名**和**字段名（或 Map 的 Key）**去匹配规则。
 
-代码示例：
-```java
-Map<String, Object> userContext = new HashMap<>();
-userContext.put("username", "admin");
-userContext.put("password", "secret123"); // 敏感字段
-userContext.put("age", 25);
+**默认开箱即用：**
+框架默认对 `java.util.HashMap` 和 `java.util.LinkedHashMap` 的 `"password"` 和 `"creditCard"` 字段开启了脱敏。
 
-// 打印日志
-Loggers.of(UserService.class)
-       .action("Login")
-       .kv("context", userContext)
-       .log();
-```
-输出结果示例：
-```json
-{
-  "action": "Login",
-  "payload": {
-    "context": {
-      "username": "admin",
-      "password": "",  // <-- 自动被掩码处理
-      "age": 25
-    }
-  }
-}
-```
-
-##### 如何通过动态配置追加 Map 脱敏规则？
-假设您的业务线在 Map 中存放了 `"mobile"`（手机号），你想让系统在打印任何 `HashMap` 时，只要看到 `"mobile"` 这个 Key，就自动脱敏成手机号格式。
-
-步骤一：向配置中心（`team4u.log.config`）推送以下 JSON 规则：
-注意：规则的结构是 `全限定类名 -> (键名 -> 脱敏类型)`。
+**如何自定义追加规则？**
+向配置中心推送以下 JSON（注意结构是 `类名 -> {字段名: 脱敏类型}`）：
 
 ```json
 {
   "maskRules": {
     "java.util.HashMap": {
-      "mobile": "PHONE",
-      "idCardNo": "IDCARD"
+      "mobile": "PHONE"
     },
-    "java.util.LinkedHashMap": {
-      "mobile": "PHONE",
-      "idCardNo": "IDCARD"
+    "com.thirdparty.OuterUserDto": {
+      "idCard": "IDCARD"
     }
   }
 }
 ```
 
-步骤二：代码保持不变，规则实时生效：
-```java
-// 假设这是某个动态生成的参数 Map
-Map<String, Object> reqData = new HashMap<>();
-reqData.put("userId", "1001");
-reqData.put("mobile", "13800000000"); 
+##### 2. 💡 技巧：直接使用 `.kv()` 的情况
+如果您直接使用 Fluent API 的 `kv("mobile", "13800000000")` 存放数据，这些数据底层会被存放在一个 `LinkedHashMap` 中。因此，只要给 `java.util.LinkedHashMap` 配置了规则，这里也会自动生效。
 
-Loggers.of(OrderService.class)
-       .action("Create")
-       .kv("requestParams", reqData)
-       .log();
-```
-推送配置后的输出结果：
-```json
-{
-  "action": "Create",
-  "payload": {
-    "requestParams": {
-      "userId": "1001",
-      "mobile": "1380000"  // <-- 成功命中动态配置的手机号类型脱敏
-    }
-  }
-}
-```
+#### 全局通配符脱敏（一劳永逸）
+在微服务场景中，DTO 可能多达上千个。本模块支持使用特殊的类名 `"*"` 来定义**全局脱敏规则**。
 
-#### 💡 补充技巧：直接使用 `.kv()` 的情况
-如果您直接使用 Fluent API 的 `kv(key, value)` 存放数据：
-```java
-Loggers.of(this.getClass()).action("Test").kv("mobile", "13800000000").log();
-```
-这些数据底层实际上是存放在 `LogEvent` 的 `payload` 属性中，而 `payload` 的默认实现是 `java.util.LinkedHashMap`。因此，只要你在配置中给 `java.util.LinkedHashMap` 配置了 `mobile: PHONE` 的规则，这里也会自动生效！
-
-#### 方式 C：第三方类库脱敏（外部不可修改类）
-针对无法修改源码加注解的第三方 DTO，可通过动态配置下发规则（详见 [配置中心动态热重载](#配置中心动态热重载)）。
-
-#### 方式 D：全局通配符脱敏（一劳永逸）
-在微服务或大量接入第三方 SDK 的场景中，DTO 类可能多达上千个。如果每个类都要配置一遍规则，配置将难以维护。本模块支持使用特殊的类名 `"*"` 来定义 全局脱敏规则。
-
-*   匹配优先级：优先进行“类名精确匹配”（高优先级，支持特例覆盖）；若未命中，则回退到 `"*"` 进行“全局字段匹配”（低优先级，兜底治理）。
-*   治理效果：只要配置了通配符规则，全系统内（包括所有 DTO、第三方类、任意类型的 Map）只要字段名匹配，就会自动触发脱敏，彻底解决“同名字段配置爆炸”的问题。
+*   **匹配优先级**：优先进行“类名精确匹配”；若未命中，则回退到 `"*"` 进行“全局字段匹配”。
+*   **治理效果**：只要配置了通配符规则，全系统内（包括所有 DTO、第三方类、任意类型的 Map）只要字段名匹配，就会自动触发脱敏。
 
 动态配置示例：
 ```json
@@ -252,51 +217,42 @@ Loggers.of(this.getClass()).action("Test").kv("mobile", "13800000000").log();
   "maskRules": {
     "*": {
       "mobile": "PHONE",
-      "password": "PASSWORD",
-      "idCardNo": "IDCARD"
-    },
-    "com.demo.AdminUser": {
-      "mobile": "DYNAMIC" 
+      "password": "PASSWORD"
     }
   }
 }
 ```
-*效果：全系统所有的 `password` 都会被掩码，所有的 `mobile` 都会被脱敏。但 `AdminUser` 的 `mobile` 字段会因为精确匹配而应用特殊规则。*
+## 单元测试与日志验证
 
+得益于结构化的设计，本模块具有极佳的可测试性。框架内置了 `TestLogHelper` 工具类，您可以在单元测试中轻松捕获并断言日志内容。
 
-
-## 在单元测试中断言日志 (可测试性支持)
-
-源码的测试类（如 `FinalPhaseTest`、`LogNextTest`）中大量使用了 `MockMemoryAppender`。在单元测试中断言日志内容是该模块的一个巨大亮点，有助于提升业务代码的测试覆盖率。
-
-展示如何替换全局 Appender 以在 JUnit 中进行日志断言：
+以下是单元测试中的推荐做法：
 
 ```java
-// 定义一个简单的内存 Appender
-private static class MockMemoryAppender implements LogAppender {
-    private final List<LogEvent> capturedEvents = new ArrayList<>();
-    @Override
-    public void append(LogEvent event) { capturedEvents.add(event); }
-    public List<LogEvent> getCapturedEvents() { return capturedEvents; }
-}
+import com.team4u.log.support.TestLogHelper;
 
-// 在测试用例中使用
-LogAppender originalAppender = LogEngine.getInstance().getAppender();
-MockMemoryAppender mockAppender = new MockMemoryAppender();
-LogEngine.getInstance().setAppender(mockAppender);
+// 1. 开启日志捕获
+TestLogHelper helper = TestLogHelper.start();
 
 try {
-    // 执行业务逻辑
-    userService.register("周杰伦");
+    userService.register(new UserReq("周杰伦", "13800138000"));
     
-    // 断言日志是否正确输出、脱敏是否生效
-    LogEvent event = mockAppender.getCapturedEvents().get(0);
+    // 2. 获取最近的一条日志并进行断言
+    LogEvent event = helper.lastEvent();
     Assert.assertEquals("RegisterUser", event.getAction());
-    Assert.assertTrue(event.getPayload().toString().contains("周*伦"));
+    Assert.assertEquals("success", event.getStatus());
+    
+    // 验证脱敏后的 JSON 输出是否符合预期
+    String json = helper.lastJson();
+    Assert.assertTrue(json.contains("周*伦"));
+    
 } finally {
-    // 测试结束恢复原生 Appender
-    LogEngine.getInstance().setAppender(originalAppender);
+    // 3. 停止捕获并重置环境
+    helper.stop();
 }
+```
+
+## 高阶特性
 ```
 
 ## 高阶特性
@@ -403,17 +359,20 @@ safeClient.send("13812345678", "sk_live_123abc", "您的验证码是 9527");
 *效果：一旦条件匹配（利用 `team4u-criterion` 表达式引擎），日志级别将被自动篡改，并在 Payload 中打上标记 `"dyeingRuleMatched": "vip_user_debug"`。*
 
 ### 防雪崩限流与长度截断
-为了防止底层数据库宕机导致的异常日志风暴（拖垮磁盘 IO 和日志采集系统）以及超大报文引起的 OOM，模块内置了保护机制。
+为了防止底层数据库宕机导致的异常日志风暴（拖垮磁盘 IO 和日志采集系统）以及超大报文引起的 OOM，模块内置了双重保护机制。
 
 *   雪崩限流：针对同一种类异常（特征：`Action` + `ExceptionClassName`），默认限制 10条 / 秒。超出部分的日志将被静默丢弃，系统仅输出一条简短的超限告警。
-*   长度截断：单条 JSON 日志序列化后的字符串默认最大长度为 5000 字符。超过部分将被截断并追加 `... [Truncated at 5000]`。
+*   字段级截断（Value-Level）：在 Jackson 序列化阶段，单个 `String` 字段若超过 `maxStringLength`（默认 2000），将直接被截断并追加 `... [Truncated len:xxx]`。这能有效防止大报文在序列化过程中消耗过多内存和 CPU。
+*   字节数组防御：为了防止将大文件（`byte[]`）序列化为巨大的 Base64 字符串，系统会拦截所有 `byte[]` 类型的输出，统一替换为大小提示（如 `[byte[] size: 1024 bytes]`）。
+*   日志级截断（Log-Level）：单条 JSON 日志序列化后的字符串整体默认最大长度为 `maxLogLength`（默认 5000）。超过部分将被截断并追加 `... [Truncated at 5000]`。
 
 动态调整阈值：
 ```json
 {
   "finOpsConfig": {
-    "maxLogLength": 2000,
-    "errorLimitPerSecond": 5
+    "maxLogLength": 5000,
+    "maxStringLength": 2000,
+    "errorLimitPerSecond": 10
   }
 }
 ```
@@ -447,6 +406,7 @@ safeClient.send("13812345678", "sk_live_123abc", "您的验证码是 9527");
   ],
   "finOpsConfig": {
     "maxLogLength": 5000,
+    "maxStringLength": 2000,
     "errorLimitPerSecond": 10
   }
 }

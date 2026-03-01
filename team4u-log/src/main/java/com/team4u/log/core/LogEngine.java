@@ -7,7 +7,9 @@ import com.team4u.framework.policy.engine.PolicyPipeline;
 import com.team4u.log.appender.LogAppender;
 import com.team4u.log.appender.Slf4jLogAppender;
 import com.team4u.log.mask.config.MaskRuleRepository;
+import com.team4u.log.mask.jackson.ByteArrayLogSerializer;
 import com.team4u.log.mask.jackson.DynamicMaskSerializerModifier;
+import com.team4u.log.mask.jackson.TruncatingStringSerializer;
 import com.team4u.log.pipeline.LogInterceptor;
 import com.team4u.log.pipeline.interceptor.MdcEnrichInterceptor;
 import com.team4u.log.pipeline.interceptor.RateLimitInterceptor;
@@ -34,6 +36,11 @@ public class LogEngine {
     private volatile int maxLogLength = 5000;
 
     /**
+     * 单个字符串字段的最大长度（防止单个大报文/文件撑爆内存）
+     */
+    private volatile int maxStringLength = 2000;
+
+    /**
      * 日志追加器适配器
      */
     private LogAppender appender = new Slf4jLogAppender();
@@ -58,10 +65,18 @@ public class LogEngine {
 
     private ObjectMapper createObjectMapper() {
         ObjectMapper mapper = new ObjectMapper();
-        SimpleModule maskModule = new SimpleModule();
-        // 注册动态脱敏修饰器，对接 MaskRuleRepository
-        maskModule.setSerializerModifier(new DynamicMaskSerializerModifier());
-        mapper.registerModule(maskModule);
+        SimpleModule module = new SimpleModule();
+
+        // 1. 注册全局字符串截断器 (防大文本)
+        module.addSerializer(String.class, new TruncatingStringSerializer());
+
+        // 2. 注册字节数组拦截器 (防大文件 Base64 内存溢出)
+        module.addSerializer(byte[].class, new ByteArrayLogSerializer());
+
+        // 3. 注册动态脱敏修饰器 (对接规则库)
+        module.setSerializerModifier(new DynamicMaskSerializerModifier());
+
+        mapper.registerModule(module);
         return mapper;
     }
 
@@ -81,11 +96,20 @@ public class LogEngine {
         this.maxLogLength = maxLogLength;
     }
 
+    public int getMaxStringLength() {
+        return maxStringLength;
+    }
+
+    public void setMaxStringLength(int maxStringLength) {
+        this.maxStringLength = maxStringLength;
+    }
+
     /**
      * 重置引擎配置及拦截器状态
      */
     public void reset() {
         this.maxLogLength = 5000;
+        this.maxStringLength = 2000;
         this.appender = new Slf4jLogAppender();
         MdcEnrichInterceptor.getInstance().reset();
         TargetedDyeingInterceptor.getInstance().reset();

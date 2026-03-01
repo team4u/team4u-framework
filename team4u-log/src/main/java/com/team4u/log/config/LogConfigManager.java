@@ -74,6 +74,7 @@ public class LogConfigManager {
         if (newConfig.getFinOpsConfig() != null) {
             RateLimitInterceptor.getInstance().updateLimit(newConfig.getFinOpsConfig().getErrorLimitPerSecond());
             LogEngine.getInstance().setMaxLogLength(newConfig.getFinOpsConfig().getMaxLogLength());
+            LogEngine.getInstance().setMaxStringLength(newConfig.getFinOpsConfig().getMaxStringLength());
         }
     }
 

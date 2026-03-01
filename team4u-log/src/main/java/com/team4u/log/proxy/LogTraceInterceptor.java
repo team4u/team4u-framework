@@ -6,6 +6,10 @@ import com.team4u.log.Loggers;
 
 import java.lang.reflect.Method;
 
+import java.lang.reflect.Parameter;
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * 自动日志追踪拦截器
  * <p>
@@ -27,6 +31,8 @@ public class LogTraceInterceptor implements MethodInterceptor {
         long start = System.currentTimeMillis();
         String action = config.action().isEmpty() ? method.getName() : config.action();
         Object[] args = invocation.getArguments();
+        // 将参数转换为命名的 Map，以便触发 Jackson 字段脱敏
+        Map<String, Object> namedArgs = buildNamedArguments(method, args);
 
         try {
             Object result = invocation.proceed();
@@ -35,7 +41,7 @@ public class LogTraceInterceptor implements MethodInterceptor {
             Loggers loggers = Loggers.of(method.getDeclaringClass())
                     .action(action)
                     .duration(cost)
-                    .kv("req", args)
+                    .kv("req", namedArgs)
                     .kv("resp", result);
 
             if (config.slowThreshold() > 0 && cost > config.slowThreshold()) {
@@ -58,7 +64,7 @@ public class LogTraceInterceptor implements MethodInterceptor {
             Loggers loggers = Loggers.of(method.getDeclaringClass())
                     .action(action)
                     .duration(cost)
-                    .kv("req", args);
+                    .kv("req", namedArgs);
 
             if (isIgnoredException(e, config.ignoreExceptions())) {
                 loggers.atWarn()
@@ -71,6 +77,21 @@ public class LogTraceInterceptor implements MethodInterceptor {
             loggers.log();
             throw e;
         }
+    }
+
+    private Map<String, Object> buildNamedArguments(Method method, Object[] args) {
+        Map<String, Object> namedArgs = new LinkedHashMap<>();
+        if (args == null || args.length == 0) {
+            return namedArgs;
+        }
+
+        Parameter[] parameters = method.getParameters();
+        for (int i = 0; i < args.length; i++) {
+            // 获取参数名，若未开启 -parameters 编译参数则回退到 arg0, arg1...
+            String paramName = (i < parameters.length) ? parameters[i].getName() : "arg" + i;
+            namedArgs.put(paramName, args[i]);
+        }
+        return namedArgs;
     }
 
     private AutoLogTrace getAnnotation(MethodInvocation invocation, Method method) {

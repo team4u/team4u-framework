@@ -15,7 +15,11 @@ public class Slf4jLogAppender implements LogAppender {
 
     @Override
     public void append(LogEvent event) {
-        Logger logger = LoggerFactory.getLogger(event.getLoggerName());
+        String loggerName = event.getLoggerName();
+        if (loggerName == null) {
+            loggerName = LogEngine.class.getName(); // 默认兜底名称
+        }
+        Logger logger = LoggerFactory.getLogger(loggerName);
         Level level = event.getLevel();
 
         // 预检查日志级别，避免不必要的 JSON 序列化
@@ -26,7 +30,9 @@ public class Slf4jLogAppender implements LogAppender {
         // 确定输出时执行序列化和脱敏处理
         String finalLogMsg = LogEngine.getInstance().toJson(event);
 
-        switch (level) {
+        Level finalLevel = level != null ? level : Level.INFO;
+
+        switch (finalLevel) {
             case INFO:
                 logger.info(finalLogMsg);
                 break;

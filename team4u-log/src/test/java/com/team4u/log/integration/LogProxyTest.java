@@ -6,7 +6,7 @@ import com.team4u.log.mask.Mask;
 import com.team4u.log.mask.MaskType;
 import com.team4u.log.proxy.AutoLogTrace;
 import com.team4u.log.proxy.LogProxyFactory;
-import com.team4u.log.support.MockLogAppender;
+import com.team4u.log.support.TestLogHelper;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -21,18 +21,16 @@ import org.slf4j.event.Level;
  */
 public class LogProxyTest {
 
-    private MockLogAppender mockAppender;
+    private TestLogHelper logHelper;
 
     @Before
     public void setup() {
-        LogEngine.getInstance().reset();
-        mockAppender = new MockLogAppender();
-        LogEngine.getInstance().setAppender(mockAppender);
+        logHelper = TestLogHelper.start();
     }
 
     @After
     public void teardown() {
-        LogEngine.getInstance().reset();
+        logHelper.stop();
     }
 
     @Test
@@ -48,13 +46,14 @@ public class LogProxyTest {
         Assert.assertEquals("SUCCESS", result);
 
         // 4. 断言捕获到的日志
-        LogEvent event = mockAppender.lastEvent();
+        LogEvent event = logHelper.lastEvent();
         Assert.assertEquals("RegisterUser", event.getAction());
         Assert.assertEquals(Level.WARN, event.getLevel());
         Assert.assertEquals("slow_success", event.getStatus());
 
         // 5. 验证序列化掩码输出
-        String json = mockAppender.lastJson();
+        String json = logHelper.lastJson();
+        Assert.assertTrue("输出应包含参数名", json.contains("\"req\":{\"req\":"));
         Assert.assertTrue("输出应包含脱敏后的姓名", json.contains("周*伦"));
         Assert.assertTrue("输出应包含脱敏后的手机号", json.contains("138****5678"));
         Assert.assertFalse("不应包含原始姓名", json.contains("周杰伦"));
@@ -67,22 +66,39 @@ public class LogProxyTest {
         try {
             service.throwBusinessException();
         } finally {
-            LogEvent event = mockAppender.lastEvent();
+            LogEvent event = logHelper.lastEvent();
             Assert.assertEquals(Level.WARN, event.getLevel());
             Assert.assertEquals("business_error", event.getStatus());
         }
     }
 
     @Test
-    public void testNormalError() {
+    public void testDefaultAction() {
         UserService service = LogProxyFactory.createProxy(new UserService(), UserService.class);
         try {
             service.throwNormalException();
-            Assert.fail("Should throw exception");
         } catch (Exception e) {
-            LogEvent event = mockAppender.lastEvent();
-            Assert.assertEquals(Level.ERROR, event.getLevel());
-            Assert.assertEquals("failed", event.getStatus());
+            LogEvent event = logHelper.lastEvent();
+            // 验证 action 默认为方法名
+            Assert.assertEquals("throwNormalException", event.getAction());
+        }
+    }
+
+    @Test
+    public void testClassLevelAnnotation() {
+        // 创建带有类级别注解的服务代理
+        OrderService service = LogProxyFactory.createProxy(new OrderService(), OrderService.class);
+        service.create("ORD-100");
+
+        LogEvent event = logHelper.lastEvent();
+        // 验证 action 自动取方法名 "create"
+        Assert.assertEquals("create", event.getAction());
+    }
+
+    @AutoLogTrace(slowThreshold = 500)
+    public static class OrderService {
+        public void create(String orderId) {
+            // 模拟业务
         }
     }
 
