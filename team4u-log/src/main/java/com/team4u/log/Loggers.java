@@ -24,6 +24,11 @@ public class Loggers {
         this.event = new LogEvent().setLoggerName(clazz.getName());
     }
 
+    private Loggers(Logger slf4jLogger, LogEvent event) {
+        this.slf4jLogger = slf4jLogger;
+        this.event = event;
+    }
+
     /**
      * 为指定类创建日志记录器
      *
@@ -32,6 +37,18 @@ public class Loggers {
      */
     public static Loggers of(Class<?> clazz) {
         return new Loggers(clazz);
+    }
+
+    /**
+     * 派生当前日志器状态，生成一个新的独立实例。
+     * <p>
+     * 常用于将当前 Loggers 作为模板（Template），
+     * 预置公共的 KV 属性或动作，在具体使用时 fork 出来，避免状态污染。
+     *
+     * @return 派生的 Loggers 实例
+     */
+    public Loggers fork() {
+        return new Loggers(this.slf4jLogger, this.event.fork());
     }
 
     public LogEvent getEvent() {

@@ -76,9 +76,31 @@ Loggers.of(OrderService.class)
 | `failed(Throwable e)` | 快捷方法：状态置为 `failed`，绑定异常，级别设为 `ERROR`。 |
 | `atWarn() / atError()` | 手动指定日志输出级别。 |
 | `status(String status)` | 手动指定业务状态（如 `processing`）。 |
+| `fork()` | **派生日志器**。基于当前状态拷贝出一个独立的副本。常用于定义日志模板。 |
 | `log()` | 终结方法，将事件提交给日志引擎的流水线进行拦截与输出。 |
 
 *注意：MDC 中的 `traceId` 键值会被 `MdcEnrichInterceptor` 拦截器自动提取并放入最外层结构中。*
+
+#### 日志器派生 (Template Logger / fork)
+为了减少重复代码（如每个方法都要手动 `.kv("module", "Trade")`），您可以预定义一个**模板日志器**，在具体业务点通过 `fork()` 派生出独立实例。派生实例会继承模板的所有 KV 和配置，且后续的修改**互不污染**。
+
+```java
+public class OrderService {
+    // 1. 定义模板：预置公共 KV
+    private static final Loggers BASE_LOG = Loggers.of(OrderService.class)
+            .kv("module", "OrderCenter")
+            .kv("version", "v2.0");
+
+    public void createOrder(String id) {
+        // 2. 派生副本使用：副本上的 action/kv 不会影响 BASE_LOG 模板
+        BASE_LOG.fork()
+                .action("CreateOrder")
+                .kv("orderId", id)
+                .success()
+                .log();
+    }
+}
+```
 
 #### 日志标准字段说明
 采用结构化日志后，为了方便接入 ELK 或类似系统，下表列出了 `LogEvent` 序列化后的核心字段及其含义：

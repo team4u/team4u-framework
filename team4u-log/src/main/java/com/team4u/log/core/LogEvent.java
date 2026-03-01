@@ -53,4 +53,30 @@ public class LogEvent {
      * 是否被抑制（例如因限流而不输出）
      */
     private boolean suppressed = false;
+
+    /**
+     * 派生当前日志事件状态，生成一个新的独立实例。
+     * <p>
+     * 常用于将当前 LogEvent 作为模板（Template），
+     * 预置公共的 KV 属性或动作，在具体使用时 fork 出来，避免状态污染。
+     * 特别说明：payload (KV 映射) 会进行浅拷贝（创建新的 Map）。
+     *
+     * @return 派生的 LogEvent 实例
+     */
+    public LogEvent fork() {
+        LogEvent copy = new LogEvent();
+        copy.setLoggerName(this.loggerName);
+        copy.setLevel(this.level);
+        copy.setTraceId(this.traceId);
+        copy.setAction(this.action);
+        copy.setStatus(this.status);
+        copy.setDurationMs(this.durationMs);
+        copy.setException(this.exception);
+        copy.setSuppressed(this.suppressed);
+
+        if (this.payload != null) {
+            copy.setPayload(new LinkedHashMap<>(this.payload));
+        }
+        return copy;
+    }
 }

@@ -82,4 +82,49 @@ public class LoggersTest {
         Loggers.of(this.getClass()).action("Test").log();
         Assert.assertEquals(1, logHelper.allEvents().size());
     }
+
+    /**
+     * 测试 fork 功能，确保派生出的日志器与原日志器状态隔离
+     */
+    @Test
+    public void testFork() {
+        // 1. 定义模板日志器
+        Loggers baseLog = Loggers.of(LoggersTest.class)
+                .kv("module", "TestModule")
+                .kv("version", "1.0");
+
+        // 2. 第一次派生并记录日志
+        baseLog.fork()
+                .action("Action1")
+                .kv("user", "Alice")
+                .success()
+                .log();
+
+        // 验证第一次日志内容
+        LogEvent event1 = logHelper.lastEvent();
+        Assert.assertEquals("Action1", event1.getAction());
+        Assert.assertEquals("Alice", event1.getPayload().get("user"));
+        Assert.assertEquals("TestModule", event1.getPayload().get("module"));
+
+        // 3. 第二次派生并记录日志
+        baseLog.fork()
+                .action("Action2")
+                .kv("orderId", "ORDER_123")
+                .success()
+                .log();
+
+        // 验证第二次日志内容，应包含模板属性，但不包含第一次派生的 user=Alice
+        LogEvent event2 = logHelper.lastEvent();
+        Assert.assertEquals("Action2", event2.getAction());
+        Assert.assertEquals("ORDER_123", event2.getPayload().get("orderId"));
+        // 关键：不应包含第一次派生的 user 属性
+        Assert.assertNull(event2.getPayload().get("user"));
+        Assert.assertEquals("TestModule", event2.getPayload().get("module"));
+
+        // 验证模板日志器本身未被污染
+        Assert.assertNull(baseLog.getEvent().getAction());
+        Assert.assertNull(baseLog.getEvent().getPayload().get("user"));
+        Assert.assertNull(baseLog.getEvent().getPayload().get("orderId"));
+        Assert.assertEquals("TestModule", baseLog.getEvent().getPayload().get("module"));
+    }
 }
