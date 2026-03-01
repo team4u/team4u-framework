@@ -4,8 +4,8 @@ import cn.hutool.cache.CacheUtil;
 import cn.hutool.cache.impl.TimedCache;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.pipeline.LogInterceptor;
-
 import org.slf4j.LoggerFactory;
+
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**

@@ -95,7 +95,7 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
                     // 命中染色规则，调整日志级别
                     event.setLevel(rule.getTargetLevel());
                     event.getPayload().put("dyeingRuleMatched", rule.getId());
-                    break; 
+                    break;
                 }
             } catch (Exception e) {
                 // 安全隔离：单条规则匹配错误不影响整体流程

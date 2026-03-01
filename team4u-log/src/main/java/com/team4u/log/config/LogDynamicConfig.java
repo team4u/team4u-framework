@@ -22,6 +22,14 @@ public class LogDynamicConfig {
      * 免侵入代理规则：ClassName -> ProxyRule
      */
     private Map<String, ProxyRule> proxyRules;
+    /**
+     * 动态染色规则列表
+     */
+    private List<DyeingRule> dyeingRules;
+    /**
+     * 限流及长度限制配置
+     */
+    private FinOpsConfig finOpsConfig;
 
     @Data
     public static class ProxyRule {
@@ -38,16 +46,6 @@ public class LogDynamicConfig {
          */
         private List<String> ignoreExceptions;
     }
-
-    /**
-     * 动态染色规则列表
-     */
-    private List<DyeingRule> dyeingRules;
-
-    /**
-     * 限流及长度限制配置
-     */
-    private FinOpsConfig finOpsConfig;
 
     @Data
     public static class DyeingRule {

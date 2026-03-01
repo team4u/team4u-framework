@@ -27,8 +27,8 @@ public class DynamicMaskSerializerModifier extends BeanSerializerModifier {
 
     @Override
     public List<BeanPropertyWriter> changeProperties(SerializationConfig config,
-            BeanDescription beanDesc,
-            List<BeanPropertyWriter> beanProperties) {
+                                                     BeanDescription beanDesc,
+                                                     List<BeanPropertyWriter> beanProperties) {
         String className = beanDesc.getBeanClass().getName();
 
         for (BeanPropertyWriter writer : beanProperties) {
@@ -53,9 +53,9 @@ public class DynamicMaskSerializerModifier extends BeanSerializerModifier {
 
     @Override
     public JsonSerializer<?> modifyMapSerializer(SerializationConfig config,
-            MapType valueType,
-            BeanDescription beanDesc,
-            JsonSerializer<?> serializer) {
+                                                 MapType valueType,
+                                                 BeanDescription beanDesc,
+                                                 JsonSerializer<?> serializer) {
         // 针对 Map 类型的特殊处理，实现无侵入脱敏
         if (serializer instanceof MapSerializer) {
             return new MaskableMapSerializer((MapSerializer) serializer, beanDesc.getBeanClass().getName());
