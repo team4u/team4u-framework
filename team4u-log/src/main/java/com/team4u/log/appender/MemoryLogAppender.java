@@ -14,13 +14,12 @@ import java.util.concurrent.LinkedBlockingDeque;
  */
 public class MemoryLogAppender implements LogAppender {
 
+    private final LinkedBlockingDeque<LogEvent> events = new LinkedBlockingDeque<>();
     /**
      * 最大存储容量，默认 1000 条
      */
     @Setter
     private int capacity = 1000;
-
-    private final LinkedBlockingDeque<LogEvent> events = new LinkedBlockingDeque<>();
 
     @Override
     public void append(LogEvent event) {

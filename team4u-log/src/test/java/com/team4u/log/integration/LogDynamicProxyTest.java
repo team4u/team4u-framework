@@ -48,10 +48,9 @@ public class LogDynamicProxyTest {
     public void testThirdPartyDynamicProxy() {
         // 1. 同步注入脱敏规则
         Map<String, MaskType> globalRules = new HashMap<>();
-        // 针对参数名 "mobile" 配置脱敏（若编译带参数名）
+        // 针对参数名 "mobile" 配置脱敏
         globalRules.put("mobile", MaskType.PHONE);
-        // 针对兜底参数名 "arg0" 配置脱敏（若编译不带参数名）
-        globalRules.put("arg0", MaskType.PHONE);
+        globalRules.put("appSecret", MaskType.PASSWORD);
         MaskRuleRepository.getInstance().refreshRules(Collections.singletonMap("*", globalRules));
 
         // 2. 推送动态代理规则
@@ -59,7 +58,7 @@ public class LogDynamicProxyTest {
         String config = "{\"proxyRules\":{\"" + className + "\":{\"methods\":[\"send\"]}}}";
         testConfigContext.put("team4u.log.config", config);
 
-        // 3. 执行
+        // 3. 执行调用
         ThirdPartySmsClient rawClient = new ThirdPartySmsClient();
         ThirdPartySmsClient safeClient = LogProxyFactory.createDynamicProxy(rawClient);
         safeClient.send("13812345678", "sk_123", "Content");
@@ -70,7 +69,7 @@ public class LogDynamicProxyTest {
         Assert.assertEquals("send", event.getAction());
 
         String json = logHelper.lastJson();
-        // 验证入参已从数组变为对象，且至少命中了一种脱敏（mobile 或 arg0）
+        // 验证入参已从数组变为对象，且通过参数名 mobile 成功脱敏
         Assert.assertTrue("入参手机号应脱敏，JSON 内容为: " + json, json.contains("138****5678"));
     }
 

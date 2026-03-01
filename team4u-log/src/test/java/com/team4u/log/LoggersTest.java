@@ -1,6 +1,5 @@
 package com.team4u.log;
 
-import com.team4u.log.core.LogEngine;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.support.TestLogHelper;
 import org.junit.After;
@@ -57,7 +56,7 @@ public class LoggersTest {
     public void testFailedShortcut() {
         RuntimeException e = new RuntimeException("fail");
         Loggers.of(this.getClass()).failed(e).log();
-        
+
         LogEvent event = logHelper.lastEvent();
         Assert.assertEquals("failed", event.getStatus());
         Assert.assertEquals(Level.ERROR, event.getLevel());
@@ -67,10 +66,10 @@ public class LoggersTest {
     @Test
     public void testLevelShortcuts() {
         Loggers loggers = Loggers.of(this.getClass());
-        
+
         loggers.atWarn().log();
         Assert.assertEquals(Level.WARN, logHelper.lastEvent().getLevel());
-        
+
         loggers.atError().log();
         Assert.assertEquals(Level.ERROR, logHelper.lastEvent().getLevel());
     }

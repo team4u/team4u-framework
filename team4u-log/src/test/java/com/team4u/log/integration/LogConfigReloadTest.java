@@ -3,7 +3,6 @@ package com.team4u.log.integration;
 import com.team4u.framework.config.test.TestConfigContext;
 import com.team4u.log.LogBootstrap;
 import com.team4u.log.Loggers;
-import com.team4u.log.core.LogEngine;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.support.TestLogHelper;
 import org.junit.After;

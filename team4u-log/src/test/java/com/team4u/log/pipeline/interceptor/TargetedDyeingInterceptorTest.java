@@ -85,7 +85,7 @@ public class TargetedDyeingInterceptorTest {
         rule.setId("invalid");
         rule.setCondition("!!! invalid syntax !!!");
         rule.setTargetLevel(Level.WARN);
-        
+
         // 刷新规则不应抛出异常（安全隔离）
         interceptor.refreshRules(Collections.singletonList(rule));
 

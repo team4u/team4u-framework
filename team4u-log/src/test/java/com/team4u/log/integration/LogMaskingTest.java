@@ -1,7 +1,6 @@
 package com.team4u.log.integration;
 
 import com.team4u.log.Loggers;
-import com.team4u.log.core.LogEngine;
 import com.team4u.log.mask.MaskType;
 import com.team4u.log.mask.config.MaskRuleRepository;
 import com.team4u.log.support.TestLogHelper;
@@ -48,7 +47,7 @@ public class LogMaskingTest {
     @Test
     public void testThirdPartyDtoMasking() {
         ThirdPartyUser user = new ThirdPartyUser("13800138000");
-        
+
         // 动态注入规则
         Map<String, MaskType> userRules = new HashMap<>();
         userRules.put("mobile", MaskType.PHONE);

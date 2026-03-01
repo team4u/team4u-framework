@@ -5,7 +5,6 @@ import com.team4u.framework.proxy.core.MethodInvocation;
 import com.team4u.log.Loggers;
 
 import java.lang.reflect.Method;
-
 import java.lang.reflect.Parameter;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -41,7 +40,7 @@ public class LogTraceInterceptor implements MethodInterceptor {
             Loggers loggers = Loggers.of(method.getDeclaringClass())
                     .action(action)
                     .duration(cost)
-                    .kv("req", namedArgs)
+                    .kvs(namedArgs)
                     .kv("resp", result);
 
             if (config.slowThreshold() > 0 && cost > config.slowThreshold()) {
@@ -64,7 +63,7 @@ public class LogTraceInterceptor implements MethodInterceptor {
             Loggers loggers = Loggers.of(method.getDeclaringClass())
                     .action(action)
                     .duration(cost)
-                    .kv("req", namedArgs);
+                    .kvs(namedArgs);
 
             if (isIgnoredException(e, config.ignoreExceptions())) {
                 loggers.atWarn()
@@ -85,9 +84,16 @@ public class LogTraceInterceptor implements MethodInterceptor {
             return namedArgs;
         }
 
-        Parameter[] parameters = method.getParameters();
+        // 尝试获取原始方法以确保能拿到参数名（代理子类可能丢失此信息）
+        Method originalMethod = method;
+        try {
+            originalMethod = method.getDeclaringClass().getDeclaredMethod(method.getName(), method.getParameterTypes());
+        } catch (NoSuchMethodException ignored) {
+        }
+
+        Parameter[] parameters = originalMethod.getParameters();
         for (int i = 0; i < args.length; i++) {
-            // 获取参数名，若未开启 -parameters 编译参数则回退到 arg0, arg1...
+            // 获取参数名
             String paramName = (i < parameters.length) ? parameters[i].getName() : "arg" + i;
             namedArgs.put(paramName, args[i]);
         }

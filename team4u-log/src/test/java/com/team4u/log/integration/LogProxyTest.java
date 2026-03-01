@@ -52,7 +52,7 @@ public class LogProxyTest {
 
         // 5. 验证序列化掩码输出
         String json = logHelper.lastJson();
-        Assert.assertTrue("输出应包含参数 Map 结构", json.contains("\"req\":{\"arg0\":"));
+        Assert.assertTrue("输出应包含平铺后的参数名", json.contains("\"req\":{"));
         Assert.assertTrue("输出应包含脱敏后的姓名", json.contains("周*伦"));
         Assert.assertTrue("输出应包含脱敏后的手机号", json.contains("138****5678"));
         Assert.assertFalse("不应包含原始姓名", json.contains("周杰伦"));

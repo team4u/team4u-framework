@@ -7,6 +7,8 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.event.Level;
 
+import java.util.Map;
+
 /**
  * 结构化日志 Fluent API
  * <p>
@@ -135,6 +137,19 @@ public class Loggers {
      */
     public Loggers kv(String key, Object value) {
         this.event.getPayload().put(key, value);
+        return this;
+    }
+
+    /**
+     * 批量添加业务数据 K-V 对
+     *
+     * @param map K-V 集合
+     * @return 当前实例
+     */
+    public Loggers kvs(Map<String, Object> map) {
+        if (map != null) {
+            this.event.getPayload().putAll(map);
+        }
         return this;
     }
 

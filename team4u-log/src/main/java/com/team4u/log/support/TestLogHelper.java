@@ -31,7 +31,7 @@ public class TestLogHelper {
      */
     public static TestLogHelper start() {
         LogAppender currentAppender = LogEngine.getInstance().getAppender();
-        
+
         // 如果当前已经是复合 Appender，不再嵌套
         if (currentAppender instanceof CompositeLogAppender) {
             MemoryLogAppender memoryAppender = new MemoryLogAppender();

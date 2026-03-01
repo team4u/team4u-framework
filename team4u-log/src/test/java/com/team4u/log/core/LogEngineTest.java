@@ -86,10 +86,13 @@ public class LogEngineTest {
     public void testSerializationError() {
         // 构造一个无法序列化的循环引用对象
         class Circular {
-            Circular self = this;
-            public Circular getSelf() { return self; }
+            final Circular self = this;
+
+            public Circular getSelf() {
+                return self;
+            }
         }
-        
+
         LogEvent event = new LogEvent().setAction("Error");
         event.getPayload().put("circular", new Circular());
 
