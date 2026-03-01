@@ -204,7 +204,7 @@ RoutePolicy weightPolicy = RoutePolicyBuilder.<String>weight()
 // 4. 创建组合路由 (Composite Router)
 RoutePolicy compositePolicy = RoutePolicyBuilder.<String>composite()
         .id("combined-router")
-        .delegates(Arrays.asList("router.biz-special", "router.common-default"))
+        .delegates("router.biz-special", "router.common-default") // 优雅的可变参数支持
         .fallback("final-backup-value")
         .build();
 ```

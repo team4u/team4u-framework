@@ -9,11 +9,7 @@ import com.team4u.framework.router.api.trace.RouteTrace;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.Arrays;
-import java.util.Collections;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * ExpressionRouter 单元测试
@@ -139,7 +135,7 @@ public class ExpressionRouterTest {
         RoutePolicy policy = new RoutePolicy();
         policy.setType("expression");
         policy.getExt().put("multiMatch", true);
-        policy.setFallbackValue(Arrays.asList("default"));
+        policy.setFallbackValue(Collections.singletonList("default"));
 
         policy.setRules(Arrays.asList(
                 new RouteRule("age > 10", "V10"),
@@ -168,7 +164,7 @@ public class ExpressionRouterTest {
         Map<String, Object> req3 = new HashMap<>();
         req3.put("age", 5);
         RouteResult<List<String>> result3 = router.route(req3);
-        Assert.assertEquals(Arrays.asList("default"), result3.getValue());
+        Assert.assertEquals(Collections.singletonList("default"), result3.getValue());
 
         // 验证 trace
         RouteTrace<List<String>> trace1 = router.trace(req1);

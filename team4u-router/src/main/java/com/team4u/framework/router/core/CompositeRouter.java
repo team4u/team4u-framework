@@ -73,7 +73,7 @@ public class CompositeRouter extends AbstractRouter {
 
             // 将子路由的追踪结果转化为一个普通的 Node 组装到当前父组合 Trace
             routeTrace.addStep(RuleTrace.normal(
-                    "Delegate -> " + delegateId,
+                    delegateId,
                     childRealMatched, childTrace
             ));
 

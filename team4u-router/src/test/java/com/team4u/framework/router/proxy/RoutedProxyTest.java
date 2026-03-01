@@ -76,11 +76,6 @@ public class RoutedProxyTest {
         RoutedBeanLocator.locate(routingManager, "unmatch_router", "C", TestService.class);
     }
 
-    @Routed(routerId = "test_proxy_router")
-    public interface TestService {
-        String sayHello(@RouteContext String request);
-    }
-
     @Test
     public void testRoutedProxyWithSimpleType() {
         // 使用 map 类型，条件 123 对应 serviceA
@@ -95,14 +90,6 @@ public class RoutedProxyTest {
         Assert.assertEquals("A", proxy.sayHello(123));
     }
 
-    /**
-     * 测试通过基本类型进行路由
-     */
-    @Routed(routerId = "router_${id}")
-    public interface SimpleTypeService {
-        String sayHello(@RouteContext int id);
-    }
-
     @Test
     public void testRoutedProxyWithStringDynamic() {
         // 配置路由规则：user_abc 对应 serviceA
@@ -114,6 +101,19 @@ public class RoutedProxyTest {
 
         // 调用代理，userId = "abc"，routerId = "user_abc"
         Assert.assertEquals("A", proxy.sayHello("abc"));
+    }
+
+    @Routed(routerId = "test_proxy_router")
+    public interface TestService {
+        String sayHello(@RouteContext String request);
+    }
+
+    /**
+     * 测试通过基本类型进行路由
+     */
+    @Routed(routerId = "router_${id}")
+    public interface SimpleTypeService {
+        String sayHello(@RouteContext int id);
     }
 
     /**
