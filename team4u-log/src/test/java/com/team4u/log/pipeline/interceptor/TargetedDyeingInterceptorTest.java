@@ -1,5 +1,6 @@
 package com.team4u.log.pipeline.interceptor;
 
+import com.team4u.log.LogContext;
 import com.team4u.log.config.LogDynamicConfig;
 import com.team4u.log.core.LogEvent;
 import org.junit.Assert;
@@ -43,25 +44,6 @@ public class TargetedDyeingInterceptorTest {
     }
 
     @Test
-    public void testDyeingByMdc() {
-        // 1. 配置规则：userId 为 '10086' 则染色为 ERROR
-        LogDynamicConfig.DyeingRule rule = new LogDynamicConfig.DyeingRule();
-        rule.setId("rule-mdc");
-        rule.setCondition("userId == '10086'");
-        rule.setTargetLevel(Level.ERROR);
-        interceptor.refreshRules(Collections.singletonList(rule));
-
-        // 2. 模拟 MDC
-        MDC.put("X-User-Id", "10086");
-
-        LogEvent event = new LogEvent().setAction("AnyAction").setLevel(Level.INFO);
-        interceptor.handle(event);
-
-        // 3. 验证结果
-        Assert.assertEquals(Level.ERROR, event.getLevel());
-    }
-
-    @Test
     public void testNoMatch() {
         LogDynamicConfig.DyeingRule rule = new LogDynamicConfig.DyeingRule();
         rule.setCondition("action == 'Special'");
@@ -72,6 +54,46 @@ public class TargetedDyeingInterceptorTest {
         interceptor.handle(event);
 
         Assert.assertEquals(Level.INFO, event.getLevel());
+    }
+
+    @Test
+    public void testDyeingByFullMdc() {
+        // 1. 配置规则：验证全量 MDC 注入（使用 mdc. 前缀）
+        LogDynamicConfig.DyeingRule rule = new LogDynamicConfig.DyeingRule();
+        rule.setId("rule-full-mdc");
+        rule.setCondition("mdc.traceId == 'T123' && mdc.cluster == 'gray'");
+        rule.setTargetLevel(Level.TRACE);
+        interceptor.refreshRules(Collections.singletonList(rule));
+
+        // 2. 模拟 MDC
+        MDC.put("traceId", "T123");
+        MDC.put("cluster", "gray");
+
+        LogEvent event = new LogEvent().setAction("Test").setLevel(Level.INFO);
+        interceptor.handle(event);
+
+        // 3. 验证结果
+        Assert.assertEquals(Level.TRACE, event.getLevel());
+        Assert.assertEquals("rule-full-mdc", event.getPayload().get("dyeingRuleMatched"));
+    }
+
+    @Test
+    public void testDyeingByCustomContributor() {
+        // 1. 配置规则：引用自定义注入的变量
+        LogDynamicConfig.DyeingRule rule = new LogDynamicConfig.DyeingRule();
+        rule.setId("rule-custom");
+        rule.setCondition("customAttr == 'V1'");
+        rule.setTargetLevel(Level.DEBUG);
+        interceptor.refreshRules(Collections.singletonList(rule));
+
+        // 2. 注册自定义贡献者 (使用全局静态入口)
+        LogContext.addContributor((event, context) -> context.put("customAttr", "V1"));
+
+        LogEvent event = new LogEvent().setAction("Test").setLevel(Level.INFO);
+        interceptor.handle(event);
+
+        // 3. 验证结果
+        Assert.assertEquals(Level.DEBUG, event.getLevel());
     }
 
     @Test

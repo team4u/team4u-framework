@@ -322,7 +322,7 @@ public class ThirdPartySmsClient {
 ThirdPartySmsClient rawClient = new ThirdPartySmsClient();
 
 // 2. 一行代码生成动态代理（底层基于 team4u-proxy 的 ByteBuddy 引擎）
-ThirdPartySmsClient safeClient = LogProxyFactory.createDynamicProxy(rawClient, ThirdPartySmsClient.class);
+ThirdPartySmsClient safeClient = LogProxyFactory.createDynamicProxy(rawClient);
 
 // 3. 业务方毫无感知地调用代理对象
 safeClient.send("13812345678", "sk_live_123abc", "您的验证码是 9527");
@@ -353,21 +353,61 @@ safeClient.send("13812345678", "sk_live_123abc", "您的验证码是 9527");
 ```
 
 ### 动态靶向染色
-在排查线上问题时，可能需要将特定用户（如白名单用户）或特定接口的日志级别从 `INFO` / `TRACE` 动态提升到 `DEBUG`。
+在排查线上问题时，可能需要将特定用户、特定环境或特定业务标识的日志级别从 `INFO` / `TRACE` 动态提升到 `DEBUG`。
 
-依赖的上下文变量： 载荷 `payload` 中的属性、`action`、`level` 以及 MDC 中的 `X-User-Id`。
+#### 多维匹配上下文
+染色规则支持从以下多个维度提取变量进行匹配（优先级从高到低）：
+- **业务载荷 (Payload)**：日志方法中传入的 Map 参数。
+- **当前线程上下文 (Current)**：通过 `LogContext.setCurrent` 注入的临时属性。
+- **MDC 属性 (MDC)**：SLF4J MDC 中的全量属性（需加 `mdc.` 前缀）。
+- **基础元数据 (Metadata)**：自动注入的 `action`, `level`, `logger`, `thread` 等。
+- **全局静态上下文 (Global)**：通过 `LogContext.setGlobal` 注入的应用级属性。
 
-动态配置示例：
+#### 开发 API 使用
+开发者可以随时向上下文中注入额外信息以辅助染色判定：
+
+```java
+// 设置应用全局属性（如环境、机房）
+LogContext.setGlobal("env", "prod");
+LogContext.setGlobal("region", "cn-hangzhou");
+
+// 设置当前线程属性（如单次请求的业务对象）
+// 🚨 注意：必须在请求结束时调用 clearCurrent()
+try {
+    LogContext.setCurrent("order", currentOrder);
+    // 执行业务逻辑...
+} finally {
+    LogContext.clearCurrent();
+}
+```
+
+#### 动态配置示例
+在配置中心的 JSON 配置中编写规则：
+
 ```json
 {
   "dyeingRules": [
     {
-      "id": "vip_user_debug",
-      "condition": "(action == 'Pay' || userId == '10086') && level == 'ERROR'",
+      "id": "vip_order_debug",
+      "condition": "order.amount > 1000 && env == 'prod'",
       "targetLevel": "DEBUG"
+    },
+    {
+      "id": "trace_staining",
+      "condition": "mdc.traceId == 'T12345' || mdc.userId == 'U888'",
+      "targetLevel": "TRACE"
     }
   ]
 }
+```
+
+#### 高级扩展：自定义贡献者
+如果内置的维度不足以满足需求，可以通过实现 `LogContextContributor` 并注册或通过 SPI 自动发现来扩展：
+
+```java
+LogContext.addContributor((event, context) -> {
+    context.put("custom_key", "custom_value");
+});
 ```
 *效果：一旦条件匹配（利用 `team4u-criterion` 表达式引擎），日志级别将被自动篡改，并在 Payload 中打上标记 `"dyeingRuleMatched": "vip_user_debug"`。*
 
@@ -429,8 +469,8 @@ safeClient.send("13812345678", "sk_live_123abc", "您的验证码是 9527");
 
 ## 自定义扩展与底层配置注意事项
 
-### MDC 上下文隐式规则
-特别指出模块不仅提取 `traceId`，在执行“动态染色”匹配时，还会默认提取 `MDC.get("X-User-Id")` 作为上下文变量 `userId`。如果开发者在网关层统一塞入该值，可配合染色规则大幅提升排障效率。
+### MDC 全量上下文支持
+特别指出，在执行“动态染色”匹配时，框架会自动提取当前线程所有的 MDC 变量。这些变量会以 `mdc.` 为前缀暴露给规则引擎（例如 `mdc.traceId`, `mdc.orderId`, `mdc.userId`）。如果开发者在网关层统一塞入关键的流量标识（如 `userId`, `tenantId` 等），配合染色规则即可大幅提升排障效率。
 
 ### 自定义 Appender
 框架允许越过 SLF4J，直接将结构化对象推送到远程系统（如直接发送至 Kafka/Elasticsearch）。

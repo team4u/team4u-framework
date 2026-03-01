@@ -1,14 +1,15 @@
 package com.team4u.log.pipeline.interceptor;
 
+import cn.hutool.log.Log;
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.criterion.MatchContext;
+import com.team4u.log.LogContext;
 import com.team4u.log.config.LogDynamicConfig.DyeingRule;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.pipeline.LogInterceptor;
-import org.slf4j.MDC;
+import com.team4u.log.pipeline.context.LogContextCollector;
 
 import java.util.ArrayList;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -16,8 +17,11 @@ import java.util.Map;
  * 定向染色拦截器
  * <p>
  * 支持根据规则动态调整日志级别，基于 team4u-criterion 进行高效匹配。
+ * 通过 LogContext 全局收集上下文信息。
  */
 public class TargetedDyeingInterceptor implements LogInterceptor {
+
+    private static final Log log = Log.get();
 
     private static final TargetedDyeingInterceptor INSTANCE = new TargetedDyeingInterceptor();
 
@@ -33,6 +37,8 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
 
     public void reset() {
         this.activeRules = new ArrayList<>();
+        // 同步重置全局日志上下文
+        LogContext.reset();
     }
 
     /**
@@ -43,7 +49,7 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
     }
 
     /**
-     * 刷新限流规则
+     * 刷新染色规则
      *
      * @param rules 染色规则列表
      */
@@ -59,14 +65,14 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
             try {
                 Criteria.global().compileExpression(rule.getCondition());
             } catch (Exception e) {
-                System.err.println("[Team4u-Log] Failed to compile dyeing rule condition: " + rule.getId());
+                log.error("TargetedDyeingInterceptor|refreshRules|error|ruleId={}|msg={}", rule.getId(), e.getMessage());
             }
         }
     }
 
     @Override
     public int priority() {
-        return NORMAL; // 在 MDC 数据填充之后执行
+        return NORMAL; // 在数据填充后执行，确保能收集到完整的上下文
     }
 
     @Override
@@ -76,16 +82,9 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
             return true;
         }
 
-        // 构建匹配上下文
-        Map<String, Object> ctxMap = new HashMap<>(event.getPayload());
-        ctxMap.put("action", event.getAction());
-        ctxMap.put("level", event.getLevel() != null ? event.getLevel().name() : "UNKNOWN");
-
-        String userId = MDC.get("X-User-Id");
-        if (userId != null) {
-            ctxMap.put("userId", userId);
-        }
-
+        // 核心步骤：通过全局收集器聚合 Payload、MDC、全局属性及自定义插件
+        LogContextCollector collector = LogContext.getCollector();
+        Map<String, Object> ctxMap = collector.collect(event);
         MatchContext matchContext = MatchContext.of(ctxMap);
 
         // 逐条匹配规则
@@ -94,12 +93,13 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
                 if (Criteria.global().matches(rule.getCondition(), matchContext)) {
                     // 命中染色规则，调整日志级别
                     event.setLevel(rule.getTargetLevel());
+                    // 在 Payload 中标记命中，方便追溯
                     event.getPayload().put("dyeingRuleMatched", rule.getId());
                     break;
                 }
             } catch (Exception e) {
                 // 安全隔离：单条规则匹配错误不影响整体流程
-                System.err.println("[Team4u-Log] TargetedDyeing Error: " + rule.getId());
+                log.error("TargetedDyeingInterceptor|match|error|ruleId={}|msg={}", rule.getId(), e.getMessage());
             }
         }
 

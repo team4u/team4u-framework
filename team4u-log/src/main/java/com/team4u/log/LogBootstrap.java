@@ -1,5 +1,6 @@
 package com.team4u.log;
 
+import cn.hutool.log.Log;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.log.config.LogConfigManager;
 import com.team4u.log.core.LogEngine;
@@ -10,6 +11,8 @@ import com.team4u.log.core.LogEngine;
  * 负责在应用启动阶段初始化动态脱敏、染色限流以及配置中心集成。
  */
 public class LogBootstrap {
+
+    private static final Log log = Log.get();
 
     /**
      * 启动日志模块自举
@@ -23,6 +26,6 @@ public class LogBootstrap {
         // 2. 初始化核心引擎
         LogEngine.getInstance();
 
-        System.out.println("[Team4u-Log] Bootstrap initialized. Dynamic Masking & Targeted Dyeing enabled.");
+        log.info("LogBootstrap|start|success|Dynamic Masking & Targeted Dyeing enabled.");
     }
 }
