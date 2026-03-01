@@ -2,16 +2,10 @@ package com.team4u.log.proxy;
 
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
-import com.team4u.log.Loggers;
 import com.team4u.log.config.LogConfigManager;
 import com.team4u.log.config.LogDynamicConfig;
-import com.team4u.log.mask.FastMasker;
-import com.team4u.log.mask.config.MaskRuleRepository;
 
-import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
-import java.lang.reflect.Parameter;
-import java.lang.reflect.UndeclaredThrowableException;
 import java.util.List;
 
 /**
@@ -24,20 +18,7 @@ public class DynamicLogProxyInterceptor implements MethodInterceptor {
     @Override
     public Object invoke(MethodInvocation invocation) throws Throwable {
         Method method = invocation.getMethod();
-        Class<?> proxyClass = invocation.getProxy().getClass();
-        Class<?> targetClass;
-
-        if (java.lang.reflect.Proxy.isProxyClass(proxyClass)) {
-            // JDK dynamic proxy
-            targetClass = method.getDeclaringClass();
-        } else {
-            // ByteBuddy proxy
-            targetClass = proxyClass.getSuperclass();
-        }
-
-        if (targetClass == null || targetClass == Object.class) {
-            targetClass = method.getDeclaringClass();
-        }
+        Class<?> targetClass = LogTraceSupport.getTargetClass(invocation, method);
 
         String className = targetClass.getName();
         String methodName = method.getName();
@@ -54,87 +35,15 @@ public class DynamicLogProxyInterceptor implements MethodInterceptor {
             return invocation.proceed();
         }
 
-        // 3. 命中规则，执行日志追踪与脱敏 (复用 Loggers 逻辑)
-        long start = System.currentTimeMillis();
-        Object[] args = invocation.getArguments();
+        // 3. 命中规则，执行日志追踪与脱敏 (复用 LogTraceSupport 逻辑)
+        LogTraceSupport.LogTraceOptions options = LogTraceSupport.LogTraceOptions.builder()
+                .targetClass(targetClass)
+                .action(methodName)
+                .slowThreshold(rule.getSlowThreshold())
+                .ignoreExceptionNames(rule.getIgnoreExceptions())
+                .build();
 
-        try {
-            Object result = invocation.proceed();
-            long cost = System.currentTimeMillis() - start;
-
-            // 对入参进行主动脱敏处理（补齐 Jackson 无法对数组内简单字符串脱敏的短板）
-            Object maskedArgs = maskArgs(method, args, targetClass);
-
-            Loggers loggers = Loggers.of(targetClass)
-                    .action(methodName)
-                    .duration(cost)
-                    .kv("req", maskedArgs)
-                    .kv("resp", result);
-
-            if (rule.getSlowThreshold() > 0 && cost > rule.getSlowThreshold()) {
-                loggers.atWarn().status("slow_success").kv("slowThreshold", rule.getSlowThreshold());
-            } else {
-                loggers.success();
-            }
-            loggers.log();
-            return result;
-
-        } catch (Throwable e) {
-            Throwable throwable = e;
-            if (throwable instanceof InvocationTargetException && throwable.getCause() != null) {
-                throwable = throwable.getCause();
-            } else if (throwable instanceof UndeclaredThrowableException && throwable.getCause() != null) {
-                throwable = throwable.getCause();
-            }
-            long cost = System.currentTimeMillis() - start;
-
-            Object maskedArgs = maskArgs(method, args, targetClass);
-
-            Loggers loggers = Loggers.of(targetClass)
-                    .action(methodName)
-                    .duration(cost)
-                    .kv("req", maskedArgs);
-
-            if (isIgnoredException(throwable, rule.getIgnoreExceptions())) {
-                loggers.atWarn()
-                        .status("business_error")
-                        .kv("errMsg", throwable.getMessage());
-            } else {
-                loggers.failed(throwable);
-            }
-
-            loggers.log();
-            throw throwable;
-        }
-    }
-
-    /**
-     * 对方法入参进行主动脱敏
-     */
-    private Object maskArgs(Method method, Object[] args, Class<?> targetClass) {
-        if (args == null || args.length == 0) {
-            return args;
-        }
-
-        Parameter[] parameters = method.getParameters();
-        Object[] maskedArgs = new Object[args.length];
-        String className = targetClass.getName();
-
-        for (int i = 0; i < args.length; i++) {
-            Object arg = args[i];
-            if (arg instanceof String && i < parameters.length) {
-                String paramName = parameters[i].getName();
-                String maskType = MaskRuleRepository.getInstance()
-                        .findRule(className, paramName);
-                if (maskType != null) {
-                    maskedArgs[i] = FastMasker.mask((String) arg, maskType);
-                    continue;
-                }
-            }
-            // 其它类型（如 DTO）交给 Jackson 的 DynamicMaskSerializerModifier 后置处理
-            maskedArgs[i] = arg;
-        }
-        return maskedArgs;
+        return LogTraceSupport.proceed(invocation, options);
     }
 
     private boolean isMethodMatched(String methodName, List<String> configuredMethods) {
@@ -145,18 +54,5 @@ public class DynamicLogProxyInterceptor implements MethodInterceptor {
             return true;
         }
         return configuredMethods.contains(methodName);
-    }
-
-    private boolean isIgnoredException(Throwable e, List<String> ignoreExceptions) {
-        if (ignoreExceptions == null || ignoreExceptions.isEmpty()) {
-            return false;
-        }
-        String exceptionClassName = e.getClass().getName();
-        for (String ignore : ignoreExceptions) {
-            if (exceptionClassName.equals(ignore)) {
-                return true;
-            }
-        }
-        return false;
     }
 }
