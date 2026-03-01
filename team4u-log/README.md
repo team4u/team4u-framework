@@ -147,6 +147,27 @@ service.register(req);
 | `reqLimit` | int | `2000` | 入参最大打印长度，超长会被截断。 |
 | `respLimit` | int | `2000` | 出参最大打印长度。 |
 
+#### 参数名捕获与脱敏技巧
+本模块支持自动捕获方法的**参数名称**（如 `req`、`mobile`），并以 Map 结构记录在日志的 `req` 字段中。
+
+**优势：**
+*   **结构清晰**：日志从 `["val1", "val2"]` 变为 `{"paramName": "val1", "arg1": "val2"}`。
+*   **支持平铺参数脱敏**：即便入参不是 DTO 而是基础类型（如 `String mobile`），只要参数名命中脱敏规则，即可自动掩码。
+
+**最佳实践：**
+建议在项目的 `pom.xml` 中开启 `-parameters` 编译参数，以获取真实的参数名而非 `arg0`：
+```xml
+<plugin>
+    <groupId>org.apache.maven.plugins</groupId>
+    <artifactId>maven-compiler-plugin</artifactId>
+    <configuration>
+        <compilerArgs>
+            <arg>-parameters</arg>
+        </compilerArgs>
+    </configuration>
+</plugin>
+```
+
 #### 异常处理策略解析
 `LogTraceInterceptor` 对异常做了精细化处理，这直接关系到报警策略的配置：
 *   未命中 `ignoreExceptions` 的未知异常（如 `NullPointerException`、`SQLException`）：
@@ -176,34 +197,29 @@ public class UserReq {
 }
 ```
 
-#### 外部动态脱敏（Map 或第三方 DTO）
+#### 外部动态脱敏（Map、参数名或第三方 DTO）
 
-当无法通过 `@Mask` 注解标记源码时（例如使用 `Map` 存放数据，或调用外部 jar 包中的 DTO），可以通过配置中心下发脱敏规则。
+当无法通过 `@Mask` 注解标记源码时（例如使用 `Map` 存放数据，或调用外部 jar 包中的方法），可以通过配置中心下发脱敏规则。
 
-##### 1. 基于全限定类名的精确匹配
-系统会根据对象的**全限定类名**和**字段名（或 Map 的 Key）**去匹配规则。
+##### 基于名称的精确匹配
+系统会根据对象的**全限定类名**（或通配符 `"*"`）和**字段名/Map Key/方法参数名**去匹配规则。
 
-**默认开箱即用：**
-框架默认对 `java.util.HashMap` 和 `java.util.LinkedHashMap` 的 `"password"` 和 `"creditCard"` 字段开启了脱敏。
-
-**如何自定义追加规则？**
-向配置中心推送以下 JSON（注意结构是 `类名 -> {字段名: 脱敏类型}`）：
+**脱敏方法参数示例：**
+若方法定义为 `send(String mobile, String appSecret)`，开启 `-parameters` 后，可通过以下配置脱敏：
 
 ```json
 {
   "maskRules": {
-    "java.util.HashMap": {
-      "mobile": "PHONE"
-    },
-    "com.thirdparty.OuterUserDto": {
-      "idCard": "IDCARD"
+    "*": {
+      "mobile": "PHONE",
+      "appSecret": "PASSWORD"
     }
   }
 }
 ```
 
-##### 2. 💡 技巧：直接使用 `.kv()` 的情况
-如果您直接使用 Fluent API 的 `kv("mobile", "13800000000")` 存放数据，这些数据底层会被存放在一个 `LinkedHashMap` 中。因此，只要给 `java.util.LinkedHashMap` 配置了规则，这里也会自动生效。
+##### 默认开箱即用
+框架默认对 `java.util.HashMap` 和 `java.util.LinkedHashMap` 的 `"password"` 和 `"creditCard"` 字段开启了脱敏。由于 `.kv()` 和方法入参记录底层均使用 `LinkedHashMap`，这些规则会自动覆盖到 Fluent API 和方法追踪中。
 
 #### 全局通配符脱敏（一劳永逸）
 在微服务场景中，DTO 可能多达上千个。本模块支持使用特殊的类名 `"*"` 来定义**全局脱敏规则**。
@@ -231,13 +247,13 @@ public class UserReq {
 ```java
 import com.team4u.log.support.TestLogHelper;
 
-// 1. 开启日志捕获
+// 开启日志捕获
 TestLogHelper helper = TestLogHelper.start();
 
 try {
     userService.register(new UserReq("周杰伦", "13800138000"));
     
-    // 2. 获取最近的一条日志并进行断言
+    // 获取最近的一条日志并进行断言
     LogEvent event = helper.lastEvent();
     Assert.assertEquals("RegisterUser", event.getAction());
     Assert.assertEquals("success", event.getStatus());
@@ -247,7 +263,7 @@ try {
     Assert.assertTrue(json.contains("周*伦"));
     
 } finally {
-    // 3. 停止捕获并重置环境
+    // 停止捕获并重置环境
     helper.stop();
 }
 ```
