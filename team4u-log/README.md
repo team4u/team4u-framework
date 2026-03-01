@@ -152,7 +152,7 @@ service.register(req);
 
 **优势：**
 *   **结构清晰**：日志从 `["val1", "val2"]` 变为 `{"paramName": "val1", "arg1": "val2"}`。
-*   **支持平铺参数脱敏**：即便入参不是 DTO 而是基础类型（如 `String mobile`），只要参数名命中脱敏规则，即可自动掩码。
+*   **主动脱敏保护**：即便入参不是 DTO 而是基础类型（如 `String mobile`），只要参数名命中脱敏规则，拦截器会在**序列化之前**主动调用 `FastMasker` 进行掩码，确保敏感信息在内存处理阶段即受到保护。
 
 **最佳实践：**
 建议在项目的 `pom.xml` 中开启 `-parameters` 编译参数，以获取真实的参数名而非 `arg0`：
@@ -183,17 +183,34 @@ service.register(req);
     *   级别 (`level`)：自动降级为 `WARN`。
 
 ### 高性能敏感数据脱敏
-引擎内置了基于 Jackson 序列化的极速脱敏机制，无需正则匹配。内置的脱敏类型包括：姓名、手机号、身份证、密码。
+引擎内置了基于 Jackson 序列化的极速脱敏机制，无需正则匹配。在本次架构升级后，脱敏系统已全面切换为基于 `MaskPolicy` 的插件化设计。
+
+#### 内置脱敏类型 (MaskType)
+系统预置了丰富的脱敏算法，常用的标识包括：
+
+| 标识符 (Key) | 说明 | 脱敏效果示例 |
+| :--- | :--- | :--- |
+| `NAME` | 姓名 | `周杰伦` -> `**伦` |
+| `MOBILE` | 手机号码 | `13812345678` -> `138*****678` |
+| `BANK_CARD_NO` | 银行卡号 | `6222...9011` -> `6222**********11` |
+| `ID_CARD_NO` | 身份证号 | `4401...1234` -> `44011***********34` |
+| `PASSWORD` | 密码 | `secret123` -> `******` |
+| `EMAIL` | 电子邮箱 | `fjay@gmail.com` -> `f****@gmail.com` |
+| `ADDRESS` | 地址 | `广东省广州市...` -> `广东省广州市****` |
+| `B1A1` / `B2A2` | 保留前N后N | `12345` (B1A1) -> `1***5` |
+| `PERCENT66` | 居中掩码66% | `1234567890` -> `1*******90` |
+| `HIDE` | 全部隐藏 | `anyValue` -> `*` |
+| `NONE` | 不脱敏 | `anyValue` -> `anyValue` |
 
 #### 注解脱敏（适用于可修改的 DTO）
 直接在字段上打上 `@Mask` 注解即可：
 ```java
 public class UserReq {
     @Mask(MaskType.NAME)
-    private String name;     // 周杰伦 -> 周*伦
+    private String name;
 
-    @Mask(MaskType.PHONE)
-    private String phone;    // 13812345678 -> 1385678
+    @Mask(MaskType.MOBILE)
+    private String phone;
 }
 ```
 
@@ -211,7 +228,7 @@ public class UserReq {
 {
   "maskRules": {
     "*": {
-      "mobile": "PHONE",
+      "mobile": "MOBILE",
       "appSecret": "PASSWORD"
     }
   }
@@ -232,12 +249,18 @@ public class UserReq {
 {
   "maskRules": {
     "*": {
-      "mobile": "PHONE",
+      "mobile": "MOBILE",
       "password": "PASSWORD"
     }
   }
 }
 ```
+
+#### 自定义脱敏扩展 (SPI)
+如果内置算法无法满足需求，您可以轻松扩展：
+1. 实现 `MaskPolicy` 接口。
+2. 在 `META-INF/services/com.team4u.log.mask.MaskPolicy` 中注册实现类。
+3. 或者直接调用 `FastMasker.register(new MyPolicy())` 进行编程式注册。
 ## 单元测试与日志验证
 
 得益于结构化的设计，本模块具有极佳的可测试性。框架内置了 `TestLogHelper` 工具类，您可以在单元测试中轻松捕获并断言日志内容。
@@ -306,8 +329,8 @@ public class ThirdPartySmsClient {
   },
   "maskRules": {
     "*": {
-      "mobile": "PHONE",         // 入参如果有同名字段，自动脱敏
-      "appSecret": "PASSWORD"    // 凭证脱敏为 
+      "mobile": "MOBILE",         // 入参如果有同名字段，自动脱敏
+      "appSecret": "PASSWORD"    // 凭证脱敏
     }
   }
 }
@@ -340,11 +363,11 @@ safeClient.send("13812345678", "sk_live_123abc", "您的验证码是 9527");
   "status": "success",
   "durationMs": 12,
   "payload": {
-    "req": [
-      "1385678",    // <-- 手机号被自动脱敏
-      "",         // <-- 凭证被自动脱敏
-      "您的验证码是 9527"
-    ],
+    "req": {
+      "mobile": "138*****678",    // <-- 手机号被自动脱敏
+      "appSecret": "******",      // <-- 凭证被自动脱敏
+      "content": "您的验证码是 9527"
+    },
     "resp": {
       "status": "OK"
     }
@@ -437,11 +460,11 @@ LogContext.addContributor((event, context) -> {
 {
   "maskRules": {
     "com.demo.ThirdPartyUser": {
-      "mobile": "PHONE"
+      "mobile": "MOBILE"
     },
     "java.util.HashMap": {
-      "mobile": "PHONE",
-      "creditCard": "DYNAMIC"
+      "mobile": "MOBILE",
+      "creditCard": "BANK_CARD_NO"
     }
   },
   "proxyRules": {

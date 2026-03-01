@@ -1,6 +1,7 @@
 package com.team4u.log.core;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.team4u.framework.policy.core.OrderedPolicyChain;
 import com.team4u.framework.policy.engine.PolicyPipeline;
@@ -14,6 +15,8 @@ import com.team4u.log.pipeline.LogInterceptor;
 import com.team4u.log.pipeline.interceptor.MdcEnrichInterceptor;
 import com.team4u.log.pipeline.interceptor.RateLimitInterceptor;
 import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor;
+import lombok.Getter;
+import lombok.Setter;
 
 /**
  * 日志核心引擎
@@ -28,21 +31,27 @@ public class LogEngine {
     /**
      * ObjectMapper 非 final，允许在重置时清空序列化器缓存
      */
-    private ObjectMapper objectMapper;
+    private volatile ObjectMapper objectMapper;
 
     /**
      * 全局日志序列化最大长度阈值
      */
+    @Setter
+    @Getter
     private volatile int maxLogLength = 5000;
 
     /**
      * 单个字符串字段的最大长度（防止单个大报文/文件撑爆内存）
      */
+    @Setter
+    @Getter
     private volatile int maxStringLength = 2000;
 
     /**
      * 日志追加器适配器
      */
+    @Setter
+    @Getter
     private LogAppender appender = new Slf4jLogAppender();
 
     private LogEngine() {
@@ -65,6 +74,7 @@ public class LogEngine {
 
     private ObjectMapper createObjectMapper() {
         ObjectMapper mapper = new ObjectMapper();
+        mapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
         SimpleModule module = new SimpleModule();
 
         // 1. 注册全局字符串截断器 (防大文本)
@@ -78,30 +88,6 @@ public class LogEngine {
 
         mapper.registerModule(module);
         return mapper;
-    }
-
-    public LogAppender getAppender() {
-        return appender;
-    }
-
-    public void setAppender(LogAppender appender) {
-        this.appender = appender;
-    }
-
-    public int getMaxLogLength() {
-        return maxLogLength;
-    }
-
-    public void setMaxLogLength(int maxLogLength) {
-        this.maxLogLength = maxLogLength;
-    }
-
-    public int getMaxStringLength() {
-        return maxStringLength;
-    }
-
-    public void setMaxStringLength(int maxStringLength) {
-        this.maxStringLength = maxStringLength;
     }
 
     /**
@@ -126,7 +112,7 @@ public class LogEngine {
      */
     public void processAndOutput(LogEvent event) {
         // 1. 执行动态染色、MDC 注入及限流逻辑
-        boolean passed = pipeline.executeChain(event, (interceptor, evt) -> interceptor.handle(evt));
+        boolean passed = pipeline.executeChain(event, LogInterceptor::handle);
 
         // 如果被拦截器抑制或处理链中断，则终止处理
         if (!passed || event.isSuppressed()) {
@@ -156,7 +142,9 @@ public class LogEngine {
             }
             return rawJson;
         } catch (Exception e) {
-            return "{\"error\": \"Serialization failed\", \"reason\": \"" + e.getMessage() + "\"}";
+            return String.format("{\"error\": \"Serialization failed\", \"action\": \"%s\", \"reason\": \"%s\"}",
+                    event.getAction() != null ? event.getAction() : "",
+                    e.getMessage());
         }
     }
 }

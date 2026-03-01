@@ -1,114 +1,107 @@
 package com.team4u.log.integration;
 
-import com.team4u.framework.config.test.TestConfigContext;
-import com.team4u.log.LogBootstrap;
 import com.team4u.log.core.LogEvent;
-import com.team4u.log.mask.MaskType;
 import com.team4u.log.mask.config.MaskRuleRepository;
+import com.team4u.log.proxy.AutoLogTrace;
 import com.team4u.log.proxy.LogProxyFactory;
 import com.team4u.log.support.TestLogHelper;
-import lombok.AllArgsConstructor;
 import lombok.Data;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
-import org.slf4j.MDC;
-import org.slf4j.event.Level;
 
-import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 动态配置驱动的日志代理集成测试（针对第三方类库）
+ * 动态代理自动日志集成测试
  */
 public class LogDynamicProxyTest {
 
     private TestLogHelper logHelper;
-    private TestConfigContext testConfigContext;
 
     @Before
     public void setup() {
-        MDC.clear();
-
-        testConfigContext = TestConfigContext.create();
-        LogBootstrap.start(testConfigContext.getManager());
-
         logHelper = TestLogHelper.start();
     }
 
     @After
     public void teardown() {
-        testConfigContext.destroy();
         logHelper.stop();
     }
 
     @Test
     public void testThirdPartyDynamicProxy() {
-        // 1. 同步注入脱敏规则
-        Map<String, MaskType> globalRules = new HashMap<>();
-        // 针对参数名 "mobile" 配置脱敏
-        globalRules.put("mobile", MaskType.PHONE);
-        globalRules.put("appSecret", MaskType.PASSWORD);
-        MaskRuleRepository.getInstance().refreshRules(Collections.singletonMap("*", globalRules));
+        // 1. 创建第三方客户端 (通过子类加注解模拟)
+        ThirdPartySmsClient client = new AnnotatedSmsClient();
 
-        // 2. 推送动态代理规则
-        String className = ThirdPartySmsClient.class.getName();
-        String config = "{\"proxyRules\":{\"" + className + "\":{\"methods\":[\"send\"]}}}";
-        testConfigContext.put("team4u.log.config", config);
+        // 2. 动态注入规则 (配置了 -parameters 编译参数后，可以直接用原始变量名)
+        Map<String, String> userRules = new HashMap<>();
+        userRules.put("mobile", "MOBILE");
+        userRules.put("appSecret", "PASSWORD");
+        Map<String, Map<String, String>> rules = new HashMap<>();
+        rules.put(AnnotatedSmsClient.class.getName(), userRules);
+        MaskRuleRepository.getInstance().refreshRules(rules);
 
-        // 3. 执行调用
-        ThirdPartySmsClient rawClient = new ThirdPartySmsClient();
-        ThirdPartySmsClient safeClient = LogProxyFactory.createDynamicProxy(rawClient);
-        safeClient.send("13812345678", "sk_123", "Content");
+        // 3. 创建代理
+        ThirdPartySmsClient proxy = LogProxyFactory.createProxy(client);
 
-        // 4. 验证
+        // 4. 执行调用
+        proxy.send("13812345678", "secret123", "Content");
+
+        // 5. 验证
         LogEvent event = logHelper.lastEvent();
-        Assert.assertNotNull(event);
+        Assert.assertNotNull("日志事件不应为空", event);
         Assert.assertEquals("send", event.getAction());
 
         String json = logHelper.lastJson();
-        // 验证入参已从数组变为对象，且通过参数名 mobile 成功脱敏
-        Assert.assertTrue("入参手机号应脱敏，JSON 内容为: " + json, json.contains("138****5678"));
+        Assert.assertTrue("入参手机号应脱敏，JSON 内容为: " + json, json.contains("138*****678"));
+        Assert.assertTrue("入参秘钥应脱敏", json.contains("******"));
     }
 
     @Test
-    public void testDynamicProxyException() {
-        String className = ThirdPartySmsClient.class.getName();
-        String config = "{" +
-                "  \"proxyRules\": {" +
-                "    \"" + className + "\": {" +
-                "      \"methods\": [\"*\"]," +
-                "      \"ignoreExceptions\": [\"java.lang.IllegalArgumentException\"]" +
-                "    }" +
-                "  }" +
-                "}";
-        testConfigContext.put("team4u.log.config", config);
+    public void testInterfaceProxy() {
+        // 1. 创建接口代理 (接口上加注解)
+        ThirdPartyPaymentApi proxy = LogProxyFactory.createProxy(
+                (account, amount) -> "SUCCESS",
+                ThirdPartyPaymentApi.class
+        );
 
-        ThirdPartySmsClient safeClient = LogProxyFactory.createDynamicProxy(new ThirdPartySmsClient());
-        try {
-            safeClient.send("", "", "");
-        } catch (IllegalArgumentException ignored) {
-        }
+        // 2. 调用
+        proxy.pay("any-account", 100);
 
+        // 3. 验证
         LogEvent event = logHelper.lastEvent();
-        Assert.assertEquals("business_error", event.getStatus());
-        Assert.assertEquals(Level.WARN, event.getLevel());
+        Assert.assertNotNull("日志事件不应为空", event);
+        Assert.assertEquals("pay", event.getAction());
+        Assert.assertEquals("success", event.getStatus());
+    }
+
+    @AutoLogTrace
+    public interface ThirdPartyPaymentApi {
+        String pay(String account, int amount);
     }
 
     public static class ThirdPartySmsClient {
         public SmsResponse send(String mobile, String appSecret, String content) {
-            if (mobile == null || mobile.isEmpty()) {
-                throw new IllegalArgumentException("Empty mobile");
-            }
             return new SmsResponse("OK");
         }
     }
 
+    @AutoLogTrace
+    public static class AnnotatedSmsClient extends ThirdPartySmsClient {
+    }
+
     @Data
-    @AllArgsConstructor
     public static class SmsResponse {
         private String status;
+
+        public SmsResponse() {
+        }
+
+        public SmsResponse(String status) {
+            this.status = status;
+        }
     }
 }

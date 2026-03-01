@@ -64,8 +64,13 @@ public class RateLimitInterceptor implements LogInterceptor {
 
         AtomicInteger count = errorCounter.get(signature, false);
         if (count == null) {
-            count = new AtomicInteger(0);
-            errorCounter.put(signature, count);
+            synchronized (errorCounter) {
+                count = errorCounter.get(signature, false);
+                if (count == null) {
+                    count = new AtomicInteger(0);
+                    errorCounter.put(signature, count);
+                }
+            }
         }
 
         int currentCount = count.incrementAndGet();

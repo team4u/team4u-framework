@@ -1,6 +1,5 @@
 package com.team4u.log.config;
 
-import com.team4u.log.mask.MaskType;
 import lombok.Data;
 import org.slf4j.event.Level;
 
@@ -14,9 +13,9 @@ import java.util.Map;
 public class LogDynamicConfig {
 
     /**
-     * 掩码规则：ClassName -> (FieldName -> MaskType)
+     * 掩码规则：ClassName -> (FieldName -> MaskPolicyKey)
      */
-    private Map<String, Map<String, MaskType>> maskRules;
+    private Map<String, Map<String, String>> maskRules;
 
     /**
      * 免侵入代理规则：ClassName -> ProxyRule

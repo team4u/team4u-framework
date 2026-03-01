@@ -13,7 +13,6 @@ import com.fasterxml.jackson.databind.type.MapType;
 import com.team4u.log.core.LogEngine;
 import com.team4u.log.mask.FastMasker;
 import com.team4u.log.mask.Mask;
-import com.team4u.log.mask.MaskType;
 import com.team4u.log.mask.config.MaskRuleRepository;
 
 import java.io.IOException;
@@ -38,13 +37,13 @@ public class DynamicMaskSerializerModifier extends BeanSerializerModifier {
             // 1. 优先使用注解配置
             Mask maskAnnotation = writer.getAnnotation(Mask.class);
             if (maskAnnotation != null) {
-                writer.assignSerializer(new MaskStringSerializer(maskAnnotation.value()));
+                writer.assignSerializer(new MaskStringSerializer(maskAnnotation.value().name()));
                 continue;
             }
 
             // 2. 使用外部规则库配置
             // 规则仅在构建序列化器时执行，提升性能
-            MaskType externalRule = MaskRuleRepository.getInstance().findRule(className, fieldName);
+            String externalRule = MaskRuleRepository.getInstance().findRule(className, fieldName);
             if (externalRule != null) {
                 writer.assignSerializer(new MaskStringSerializer(externalRule));
             }
@@ -68,9 +67,9 @@ public class DynamicMaskSerializerModifier extends BeanSerializerModifier {
      * 脱敏专用字符串序列化器
      */
     private static class MaskStringSerializer extends StdSerializer<Object> {
-        private final MaskType maskType;
+        private final String maskType;
 
-        public MaskStringSerializer(MaskType maskType) {
+        public MaskStringSerializer(String maskType) {
             super(Object.class);
             this.maskType = maskType;
         }

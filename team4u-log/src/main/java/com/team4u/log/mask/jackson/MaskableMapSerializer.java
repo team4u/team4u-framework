@@ -7,7 +7,6 @@ import com.fasterxml.jackson.databind.ser.ContextualSerializer;
 import com.fasterxml.jackson.databind.ser.std.MapSerializer;
 import com.team4u.log.core.LogEngine;
 import com.team4u.log.mask.FastMasker;
-import com.team4u.log.mask.MaskType;
 import com.team4u.log.mask.config.MaskRuleRepository;
 
 import java.io.IOException;
@@ -46,7 +45,7 @@ public class MaskableMapSerializer extends JsonSerializer<Map<?, ?>> implements 
             // 如果值为字符串，尝试匹配动态规则执行脱敏
             if (val instanceof String && key instanceof String) {
                 String strKey = (String) key;
-                MaskType maskType = MaskRuleRepository.getInstance().findRule(mapClassName, strKey);
+                String maskType = MaskRuleRepository.getInstance().findRule(mapClassName, strKey);
 
                 String strVal = (String) val;
                 if (maskType != null) {

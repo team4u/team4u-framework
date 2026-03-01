@@ -1,7 +1,5 @@
 package com.team4u.log.mask.config;
 
-import com.team4u.log.mask.MaskType;
-
 import java.util.HashMap;
 import java.util.Map;
 
@@ -14,9 +12,9 @@ public class MaskRuleRepository {
     private static final MaskRuleRepository INSTANCE = new MaskRuleRepository();
 
     /**
-     * 规则缓存：ClassName -> (FieldName -> MaskType)
+     * 规则缓存：ClassName -> (FieldName -> MaskPolicyKey)
      */
-    private volatile Map<String, Map<String, MaskType>> ruleCache = new HashMap<>();
+    private volatile Map<String, Map<String, String>> ruleCache = new HashMap<>();
 
     private MaskRuleRepository() {
         reset();
@@ -30,15 +28,15 @@ public class MaskRuleRepository {
      * 初始化默认规则
      */
     public void reset() {
-        Map<String, Map<String, MaskType>> initialRules = new HashMap<>();
+        Map<String, Map<String, String>> initialRules = new HashMap<>();
 
-        Map<String, MaskType> userRules = new HashMap<>();
-        userRules.put("mobile", MaskType.PHONE);
+        Map<String, String> userRules = new HashMap<>();
+        userRules.put("mobile", "PHONE");
         initialRules.put("com.demo.ThirdPartyUser", userRules);
 
-        Map<String, MaskType> mapRules = new HashMap<>();
-        mapRules.put("password", MaskType.PASSWORD);
-        mapRules.put("creditCard", MaskType.DYNAMIC);
+        Map<String, String> mapRules = new HashMap<>();
+        mapRules.put("password", "PASSWORD");
+        mapRules.put("creditCard", "DYNAMIC_CARD"); // 演示自定义野马策略名
         initialRules.put("java.util.HashMap", mapRules);
         initialRules.put("java.util.LinkedHashMap", mapRules);
 
@@ -50,17 +48,17 @@ public class MaskRuleRepository {
      *
      * @param className 类名
      * @param fieldName 字段名
-     * @return 匹配到的规则，若无则返回 null
+     * @return 匹配到的规则 Key，若无则返回 null
      */
-    public MaskType findRule(String className, String fieldName) {
+    public String findRule(String className, String fieldName) {
         // 1. 优先尝试：精确匹配具体的类名 (优先级最高，允许特殊类覆盖全局规则)
-        Map<String, MaskType> classRules = ruleCache.get(className);
+        Map<String, String> classRules = ruleCache.get(className);
         if (classRules != null && classRules.containsKey(fieldName)) {
             return classRules.get(fieldName);
         }
 
         // 2. 兜底尝试：全局字段匹配 (只要配置了 "*" 的规则)
-        Map<String, MaskType> globalRules = ruleCache.get("*");
+        Map<String, String> globalRules = ruleCache.get("*");
         if (globalRules != null && globalRules.containsKey(fieldName)) {
             return globalRules.get(fieldName);
         }
@@ -74,7 +72,7 @@ public class MaskRuleRepository {
      * @param className 类名
      * @return 规则 Map
      */
-    public Map<String, MaskType> getClassRules(String className) {
+    public Map<String, String> getClassRules(String className) {
         return ruleCache.get(className);
     }
 
@@ -83,7 +81,7 @@ public class MaskRuleRepository {
      *
      * @param newRules 新规则对
      */
-    public void refreshRules(Map<String, Map<String, MaskType>> newRules) {
+    public void refreshRules(Map<String, Map<String, String>> newRules) {
         this.ruleCache = newRules;
     }
 }

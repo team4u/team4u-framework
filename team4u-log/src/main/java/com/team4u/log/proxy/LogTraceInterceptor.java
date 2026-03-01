@@ -3,6 +3,8 @@ package com.team4u.log.proxy;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
 import com.team4u.log.Loggers;
+import com.team4u.log.mask.FastMasker;
+import com.team4u.log.mask.config.MaskRuleRepository;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -30,8 +32,8 @@ public class LogTraceInterceptor implements MethodInterceptor {
         long start = System.currentTimeMillis();
         String action = config.action().isEmpty() ? method.getName() : config.action();
         Object[] args = invocation.getArguments();
-        // 将参数转换为命名的 Map，以便触发 Jackson 字段脱敏
-        Map<String, Object> namedArgs = buildNamedArguments(method, args);
+        // 将参数转换为命名的 Map，并执行主动脱敏
+        Map<String, Object> namedArgs = buildNamedArguments(invocation, method, args);
 
         try {
             Object result = invocation.proceed();
@@ -55,8 +57,9 @@ public class LogTraceInterceptor implements MethodInterceptor {
             return result;
 
         } catch (Throwable e) {
-            if (e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null) {
-                e = e.getCause();
+            Throwable throwable = e;
+            if (throwable instanceof java.lang.reflect.InvocationTargetException && throwable.getCause() != null) {
+                throwable = throwable.getCause();
             }
             long cost = System.currentTimeMillis() - start;
 
@@ -65,48 +68,86 @@ public class LogTraceInterceptor implements MethodInterceptor {
                     .duration(cost)
                     .kvs(namedArgs);
 
-            if (isIgnoredException(e, config.ignoreExceptions())) {
+            if (isIgnoredException(throwable, config.ignoreExceptions())) {
                 loggers.atWarn()
                         .status("business_error")
-                        .kv("errMsg", e.getMessage());
+                        .kv("errMsg", throwable.getMessage());
             } else {
-                loggers.failed(e);
+                loggers.failed(throwable);
             }
 
             loggers.log();
-            throw e;
+            throw throwable;
         }
     }
 
-    private Map<String, Object> buildNamedArguments(Method method, Object[] args) {
+    private Map<String, Object> buildNamedArguments(MethodInvocation invocation, Method method, Object[] args) {
         Map<String, Object> namedArgs = new LinkedHashMap<>();
         if (args == null || args.length == 0) {
             return namedArgs;
         }
 
-        // 尝试获取原始方法以确保能拿到参数名（代理子类可能丢失此信息）
-        Method originalMethod = method;
-        try {
-            originalMethod = method.getDeclaringClass().getDeclaredMethod(method.getName(), method.getParameterTypes());
-        } catch (NoSuchMethodException ignored) {
-        }
+        Class<?> targetClass = getTargetClass(invocation, method);
+        Parameter[] parameters = getParameters(targetClass, method);
 
-        Parameter[] parameters = originalMethod.getParameters();
         for (int i = 0; i < args.length; i++) {
-            // 获取参数名
-            String paramName = (i < parameters.length) ? parameters[i].getName() : "arg" + i;
-            namedArgs.put(paramName, args[i]);
+            Parameter parameter = (parameters != null && i < parameters.length) ? parameters[i] : null;
+            // 只有当 parameter 不为 null 且参数名为真实名称（即保留了编译参数）时，才使用它；否则回退到 argX
+            String paramName = (parameter != null && parameter.isNamePresent()) ? parameter.getName() : "arg" + i;
+            Object value = args[i];
+
+            // 主动触发脱敏
+            if (value instanceof String) {
+                String maskType = MaskRuleRepository.getInstance().findRule(targetClass.getName(), paramName);
+                if (maskType != null) {
+                    value = FastMasker.mask((String) value, maskType);
+                }
+            }
+
+            namedArgs.put(paramName, value);
         }
         return namedArgs;
     }
 
+    private Class<?> getTargetClass(MethodInvocation invocation, Method method) {
+        Object proxy = invocation.getProxy();
+        if (proxy == null) {
+            return method.getDeclaringClass();
+        }
+
+        Class<?> proxyClass = proxy.getClass();
+        if (proxyClass.getName().contains("ByteBuddy") || proxyClass.getName().contains("$$")) {
+            return proxyClass.getSuperclass();
+        }
+
+        return proxyClass;
+    }
+
+    private Parameter[] getParameters(Class<?> targetClass, Method method) {
+        // 优先从原始目标类中查找方法并获取参数名
+        try {
+            Method targetMethod = targetClass.getDeclaredMethod(method.getName(), method.getParameterTypes());
+            Parameter[] parameters = targetMethod.getParameters();
+            if (parameters.length > 0 && parameters[0].isNamePresent()) {
+                return parameters;
+            }
+        } catch (NoSuchMethodException ignored) {
+        }
+
+        // 如果目标类没拿到，尝试直接使用传入的 method (ByteBuddy 代理有时会保留父类参数名)
+        Parameter[] parameters = method.getParameters();
+        if (parameters.length > 0 && parameters[0].isNamePresent()) {
+            return parameters;
+        }
+
+        return null;
+    }
+
     private AutoLogTrace getAnnotation(MethodInvocation invocation, Method method) {
-        // 1. 直接从方法获取
         AutoLogTrace config = method.getAnnotation(AutoLogTrace.class);
         if (config != null) return config;
 
-        // 2. 尝试从目标类的同名方法获取
-        Class<?> targetClass = invocation.getProxy().getClass().getSuperclass();
+        Class<?> targetClass = getTargetClass(invocation, method);
         if (targetClass != null && targetClass != Object.class) {
             try {
                 Method originalMethod = targetClass.getDeclaredMethod(method.getName(), method.getParameterTypes());
@@ -115,12 +156,10 @@ public class LogTraceInterceptor implements MethodInterceptor {
             } catch (NoSuchMethodException ignored) {
             }
 
-            // 3. 从目标类级别获取
             config = targetClass.getAnnotation(AutoLogTrace.class);
             if (config != null) return config;
         }
 
-        // 4. 从当前方法声明类获取
         return method.getDeclaringClass().getAnnotation(AutoLogTrace.class);
     }
 

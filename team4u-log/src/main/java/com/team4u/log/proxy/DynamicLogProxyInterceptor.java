@@ -6,11 +6,12 @@ import com.team4u.log.Loggers;
 import com.team4u.log.config.LogConfigManager;
 import com.team4u.log.config.LogDynamicConfig;
 import com.team4u.log.mask.FastMasker;
-import com.team4u.log.mask.MaskType;
 import com.team4u.log.mask.config.MaskRuleRepository;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.UndeclaredThrowableException;
 import java.util.List;
 
 /**
@@ -23,8 +24,17 @@ public class DynamicLogProxyInterceptor implements MethodInterceptor {
     @Override
     public Object invoke(MethodInvocation invocation) throws Throwable {
         Method method = invocation.getMethod();
-        // ByteBuddy 生成的类的父类即原始类
-        Class<?> targetClass = invocation.getProxy().getClass().getSuperclass();
+        Class<?> proxyClass = invocation.getProxy().getClass();
+        Class<?> targetClass;
+
+        if (java.lang.reflect.Proxy.isProxyClass(proxyClass)) {
+            // JDK dynamic proxy
+            targetClass = method.getDeclaringClass();
+        } else {
+            // ByteBuddy proxy
+            targetClass = proxyClass.getSuperclass();
+        }
+
         if (targetClass == null || targetClass == Object.class) {
             targetClass = method.getDeclaringClass();
         }
@@ -70,8 +80,11 @@ public class DynamicLogProxyInterceptor implements MethodInterceptor {
             return result;
 
         } catch (Throwable e) {
-            if (e instanceof java.lang.reflect.InvocationTargetException && e.getCause() != null) {
-                e = e.getCause();
+            Throwable throwable = e;
+            if (throwable instanceof InvocationTargetException && throwable.getCause() != null) {
+                throwable = throwable.getCause();
+            } else if (throwable instanceof UndeclaredThrowableException && throwable.getCause() != null) {
+                throwable = throwable.getCause();
             }
             long cost = System.currentTimeMillis() - start;
 
@@ -82,16 +95,16 @@ public class DynamicLogProxyInterceptor implements MethodInterceptor {
                     .duration(cost)
                     .kv("req", maskedArgs);
 
-            if (isIgnoredException(e, rule.getIgnoreExceptions())) {
+            if (isIgnoredException(throwable, rule.getIgnoreExceptions())) {
                 loggers.atWarn()
                         .status("business_error")
-                        .kv("errMsg", e.getMessage());
+                        .kv("errMsg", throwable.getMessage());
             } else {
-                loggers.failed(e);
+                loggers.failed(throwable);
             }
 
             loggers.log();
-            throw e;
+            throw throwable;
         }
     }
 
@@ -111,7 +124,7 @@ public class DynamicLogProxyInterceptor implements MethodInterceptor {
             Object arg = args[i];
             if (arg instanceof String && i < parameters.length) {
                 String paramName = parameters[i].getName();
-                MaskType maskType = MaskRuleRepository.getInstance()
+                String maskType = MaskRuleRepository.getInstance()
                         .findRule(className, paramName);
                 if (maskType != null) {
                     maskedArgs[i] = FastMasker.mask((String) arg, maskType);
