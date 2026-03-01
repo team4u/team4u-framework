@@ -16,12 +16,13 @@ public class PolicyPipelineTest {
     @Test
     @SuppressWarnings("unchecked")
     public void testExecuteChainGoThrough() {
-        OrderedPolicyChain<String, ContextPolicy<String>> engine = new OrderedPolicyChain<>((Class) ContextPolicy.class);
+        OrderedPolicyChain<String, ContextPolicy<String>> engine = new OrderedPolicyChain<>(
+                (Class) ContextPolicy.class);
         // 新增两组普通策略对象，使用不同的子类避免被当成同类覆盖
         engine.register(new DummyPolicyA("A"));
         engine.register(new DummyPolicyB("B"));
 
-        PolicyPipeline<String> pipeline = new PolicyPipeline<>(engine);
+        PolicyPipeline<String, ContextPolicy<String>> pipeline = new PolicyPipeline<>(engine);
 
         List<String> logs = new ArrayList<>();
 
@@ -39,12 +40,13 @@ public class PolicyPipelineTest {
     @Test
     @SuppressWarnings("unchecked")
     public void testExecuteChainInterrupt() {
-        OrderedPolicyChain<String, ContextPolicy<String>> engine = new OrderedPolicyChain<>((Class) ContextPolicy.class);
+        OrderedPolicyChain<String, ContextPolicy<String>> engine = new OrderedPolicyChain<>(
+                (Class) ContextPolicy.class);
         // 通过 priority() 让它按顺序排列 B, A (因 priority 默认是 NORMAL, 修改来控制顺序)
         engine.register(new DummyPolicyB("B", 2));
         engine.register(new DummyPolicyA("A", 1));
 
-        PolicyPipeline<String> pipeline = new PolicyPipeline<>(engine);
+        PolicyPipeline<String, ContextPolicy<String>> pipeline = new PolicyPipeline<>(engine);
 
         List<String> logs = new ArrayList<>();
 
