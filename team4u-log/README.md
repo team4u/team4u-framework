@@ -74,7 +74,8 @@ Loggers.of(OrderService.class)
 | `duration(long ms)` | 设置执行耗时。 |
 | `success()` | 快捷方法：状态置为 `success`，级别设为 `INFO`。 |
 | `failed(Throwable e)` | 快捷方法：状态置为 `failed`，绑定异常，级别设为 `ERROR`。 |
-| `atWarn() / atError()` | 手动指定日志输出级别。 |
+| `level(Level level)` | 通用方法：直接设置日志级别。 |
+| `atTrace() / atDebug() / atInfo() / atWarn() / atError()` | 手动指定日志输出级别。 |
 | `status(String status)` | 手动指定业务状态（如 `processing`）。 |
 | `fork()` | **派生日志器**。基于当前状态拷贝出一个独立的副本。常用于定义日志模板。 |
 | `log()` | 终结方法，将事件提交给日志引擎的流水线进行拦截与输出。 |

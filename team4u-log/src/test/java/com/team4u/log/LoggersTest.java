@@ -1,12 +1,16 @@
 package com.team4u.log;
 
+import com.team4u.log.config.LogDynamicConfig.DyeingRule;
 import com.team4u.log.core.LogEvent;
+import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor;
 import com.team4u.log.support.TestLogHelper;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.event.Level;
+
+import java.util.Collections;
 
 /**
  * 结构化日志 Fluent API 单元测试
@@ -23,6 +27,7 @@ public class LoggersTest {
     @After
     public void teardown() {
         logHelper.stop();
+        TargetedDyeingInterceptor.getInstance().reset();
     }
 
     @Test
@@ -65,7 +70,22 @@ public class LoggersTest {
 
     @Test
     public void testLevelShortcuts() {
+        // 激活染色规则以绕过 SLF4J 级别检查
+        DyeingRule rule = new DyeingRule();
+        rule.setId("test");
+        rule.setCondition("true");
+        TargetedDyeingInterceptor.getInstance().refreshRules(Collections.singletonList(rule));
+
         Loggers loggers = Loggers.of(this.getClass());
+
+        loggers.atTrace().log();
+        Assert.assertEquals(Level.TRACE, logHelper.lastEvent().getLevel());
+
+        loggers.atDebug().log();
+        Assert.assertEquals(Level.DEBUG, logHelper.lastEvent().getLevel());
+
+        loggers.atInfo().log();
+        Assert.assertEquals(Level.INFO, logHelper.lastEvent().getLevel());
 
         loggers.atWarn().log();
         Assert.assertEquals(Level.WARN, logHelper.lastEvent().getLevel());

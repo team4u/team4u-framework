@@ -117,6 +117,33 @@ public class Loggers {
     }
 
     /**
+     * 设置日志级别为 TRACE
+     *
+     * @return 当前实例
+     */
+    public Loggers atTrace() {
+        return level(Level.TRACE);
+    }
+
+    /**
+     * 设置日志级别为 DEBUG
+     *
+     * @return 当前实例
+     */
+    public Loggers atDebug() {
+        return level(Level.DEBUG);
+    }
+
+    /**
+     * 设置日志级别为 INFO
+     *
+     * @return 当前实例
+     */
+    public Loggers atInfo() {
+        return level(Level.INFO);
+    }
+
+    /**
      * 设置日志级别为 WARN
      *
      * @return 当前实例
