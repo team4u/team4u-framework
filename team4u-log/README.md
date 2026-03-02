@@ -31,10 +31,26 @@
 ```java
 import com.team4u.log.LogBootstrap;
 import com.team4u.framework.config.core.ConfigManager;
+import com.team4u.framework.criterion.Criteria;
 
-// 在应用启动时执行，传入全局配置管理器实例
-LogBootstrap.start(globalConfigManager);
+// 1) 全部使用默认全局实例（推荐开箱即用）
+LogBootstrap.global().start();
+
+// 2) 仅覆盖配置管理器，其余保持默认
+LogBootstrap.global()
+        .configManager(globalConfigManager)
+        .start();
+
+// 3) 同时覆盖 Criteria（用于业务方注入自定义规则引擎实例）
+LogBootstrap.global()
+        .configManager(globalConfigManager)
+        .criteria(customCriteria)
+        .start();
 ```
+
+> 说明：
+> - `configManager(...)` 未设置时默认使用 `ConfigManager.global()`。
+> - `criteria(...)` 未设置时默认使用 `Criteria.global()`。
 
 ### 基础日志打印
 使用 `Loggers` 提供的 Fluent API 记录业务日志：

@@ -27,6 +27,8 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
 
     private volatile List<DyeingRule> activeRules = new ArrayList<>();
 
+    private volatile Criteria criteria = Criteria.global();
+
     private TargetedDyeingInterceptor() {
         reset();
     }
@@ -43,8 +45,13 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
     @Override
     public void reset() {
         this.activeRules = new ArrayList<>();
+        this.criteria = Criteria.global();
         // 同步重置全局日志上下文
         LogContext.reset();
+    }
+
+    public void setCriteria(Criteria criteria) {
+        this.criteria = criteria == null ? Criteria.global() : criteria;
     }
 
     /**
@@ -67,9 +74,10 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
         this.activeRules = rules;
 
         // 预编译表达式，提升首次匹配性能
+        Criteria activeCriteria = this.criteria;
         for (DyeingRule rule : rules) {
             try {
-                Criteria.global().compileExpression(rule.getCondition());
+                activeCriteria.compileExpression(rule.getCondition());
             } catch (Exception e) {
                 log.error("TargetedDyeingInterceptor|refreshRules|error|ruleId={}|msg={}", rule.getId(), e.getMessage());
             }
@@ -94,9 +102,10 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
         MatchContext matchContext = MatchContext.of(ctxMap);
 
         // 逐条匹配规则
+        Criteria activeCriteria = this.criteria;
         for (DyeingRule rule : rules) {
             try {
-                if (Criteria.global().matches(rule.getCondition(), matchContext)) {
+                if (activeCriteria.matches(rule.getCondition(), matchContext)) {
                     // 命中染色规则，调整日志级别
                     event.setLevel(rule.getTargetLevel());
                     // 在 Payload 中标记命中，方便追溯

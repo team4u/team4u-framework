@@ -1,6 +1,7 @@
 package com.team4u.log.core;
 
 import com.team4u.log.pipeline.LogInterceptor;
+import com.team4u.log.pipeline.LogInterceptorManager;
 import com.team4u.log.pipeline.interceptor.MdcEnrichInterceptor;
 import com.team4u.log.pipeline.interceptor.RateLimitInterceptor;
 import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor;

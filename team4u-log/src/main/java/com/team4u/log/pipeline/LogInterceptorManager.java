@@ -1,9 +1,9 @@
-package com.team4u.log.core;
+package com.team4u.log.pipeline;
 
 import com.team4u.framework.policy.core.OrderedPolicyChain;
 import com.team4u.framework.policy.engine.PolicyPipeline;
 import com.team4u.framework.policy.util.PolicyScanner;
-import com.team4u.log.pipeline.LogInterceptor;
+import com.team4u.log.core.LogEvent;
 import com.team4u.log.pipeline.interceptor.MdcEnrichInterceptor;
 import com.team4u.log.pipeline.interceptor.RateLimitInterceptor;
 import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor;

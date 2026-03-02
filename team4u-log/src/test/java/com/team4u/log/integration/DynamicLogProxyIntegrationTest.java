@@ -27,7 +27,7 @@ public class DynamicLogProxyIntegrationTest {
         logHelper = TestLogHelper.start();
         configContext = TestConfigContext.create();
         // 初始化日志系统，对接测试配置上下文
-        LogBootstrap.start(configContext.getManager());
+        LogBootstrap.global().configManager(configContext.getManager()).start();
     }
 
     @After
