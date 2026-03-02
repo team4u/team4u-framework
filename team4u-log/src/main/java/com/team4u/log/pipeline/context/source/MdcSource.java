@@ -37,6 +37,6 @@ public class MdcSource implements LogContextSource {
 
     @Override
     public int priority() {
-        return -90; // 与旧版的 FullMdcContributor 保持一致
+        return -90; // 低优先级，通常低于元数据和内部属性
     }
 }
