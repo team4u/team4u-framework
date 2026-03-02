@@ -352,7 +352,8 @@ public class ThirdPartySmsClient {
   "proxyRules": {
     "com.thirdparty.ThirdPartySmsClient": {
       "methods": ["send", "queryBalance"],  // 指定要自动打印日志的方法名（支持 "*" 全拦截）
-      "slowThreshold": 500                  // 超过 500ms 自动标记为慢日志 (WARN)
+      "slowThreshold": 500,                 // 超过 500ms 自动标记为慢日志 (WARN)
+      "ignoreExceptions": ["com.thirdparty.BusinessException"] // 业务异常降级为 WARN (需填入全限定类名)
     }
   },
   "maskRules": {
@@ -498,7 +499,8 @@ LogContext.addContributor((event, context) -> {
   "proxyRules": {
     "com.thirdparty.ThirdPartySmsClient": {
       "methods": ["*"],
-      "slowThreshold": 200
+      "slowThreshold": 200,
+      "ignoreExceptions": ["com.thirdparty.BusinessException"]
     }
   },
   "dyeingRules": [
