@@ -22,6 +22,7 @@ public class LogMaskingTest {
     @Before
     public void setup() {
         logHelper = TestLogHelper.start();
+        MaskRuleRepository.getInstance().refreshRules(new HashMap<>());
     }
 
     @After
@@ -30,7 +31,14 @@ public class LogMaskingTest {
     }
 
     @Test
-    public void testMapMaskingWithDefaultRules() {
+    public void testMapMasking() {
+        // 手动设置规则
+        Map<String, String> mapRules = new HashMap<>();
+        mapRules.put("password", "PASSWORD");
+        Map<String, Map<String, String>> rules = new HashMap<>();
+        rules.put("java.util.HashMap", mapRules);
+        MaskRuleRepository.getInstance().refreshRules(rules);
+
         Map<String, Object> data = new HashMap<>();
         data.put("password", "secret123");
         data.put("creditCard", "1234-5678");
@@ -39,8 +47,7 @@ public class LogMaskingTest {
 
         String json = logHelper.lastJson();
         Assert.assertTrue("密码应脱敏", json.contains("\"password\":\"******\""));
-        // 验证默认规则中的 DYNAMIC_CARD 占位（因为测试环境没注册该策略，默认返回原值）
-        Assert.assertTrue("信用卡应包含原值", json.contains("\"creditCard\":\"1234-5678\""));
+        Assert.assertTrue("信用卡不应脱敏", json.contains("\"creditCard\":\"1234-5678\""));
     }
 
     @Test

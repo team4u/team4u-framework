@@ -17,14 +17,23 @@ public class MaskRuleRepositoryTest {
     @Before
     public void setup() {
         repository = MaskRuleRepository.getInstance();
-        repository.reset();
+        repository.refreshRules(new HashMap<>());
     }
 
     @Test
     public void testPreciseMatch() {
-        // 验证预置的默认规则
-        Assert.assertEquals("PASSWORD", repository.findRule("java.util.HashMap", "password"));
-        Assert.assertEquals("DYNAMIC_CARD", repository.findRule("java.util.HashMap", "creditCard"));
+        // 1. 设置特定类规则
+        Map<String, String> userRules = new HashMap<>();
+        userRules.put("mobile", "PHONE");
+
+        Map<String, Map<String, String>> rules = new HashMap<>();
+        rules.put("com.demo.User", userRules);
+        repository.refreshRules(rules);
+
+        // 2. 验证精确匹配
+        Assert.assertEquals("PHONE", repository.findRule("com.demo.User", "mobile"));
+        Assert.assertNull(repository.findRule("com.demo.User", "unknownField"));
+        Assert.assertNull(repository.findRule("OtherClass", "mobile"));
     }
 
     @Test
@@ -62,16 +71,5 @@ public class MaskRuleRepositoryTest {
         Assert.assertEquals("IDCARD", repository.findRule("com.demo.User", "mobile"));
         // 4. 验证其它类仍走全局
         Assert.assertEquals("PHONE", repository.findRule("com.other.User", "mobile"));
-    }
-
-    @Test
-    public void testReset() {
-        // 1. 修改规则
-        repository.refreshRules(new HashMap<>());
-        Assert.assertNull(repository.findRule("java.util.HashMap", "password"));
-
-        // 2. 重置
-        repository.reset();
-        Assert.assertEquals("PASSWORD", repository.findRule("java.util.HashMap", "password"));
     }
 }

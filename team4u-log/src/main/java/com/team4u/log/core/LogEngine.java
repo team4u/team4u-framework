@@ -12,6 +12,8 @@ import com.team4u.log.mask.jackson.TruncatingStringSerializer;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.HashMap;
+
 /**
  * 日志核心引擎
  * <p>
@@ -104,7 +106,7 @@ public class LogEngine {
         this.maxStringLength = 2000;
         this.appender = new Slf4jLogAppender();
         this.interceptorManager.reset();
-        MaskRuleRepository.getInstance().reset();
+        MaskRuleRepository.getInstance().refreshRules(new HashMap<>());
         // 重置 ObjectMapper 以清空序列化器缓存
         this.objectMapper = createObjectMapper();
     }

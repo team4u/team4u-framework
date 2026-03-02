@@ -93,21 +93,4 @@ public class MaskUtils {
         }
         return "*";
     }
-
-    /**
-     * 邮箱脱敏 (保留第一个字符和 @ 符号之后的域名)
-     *
-     * @param value 原始邮箱字符串
-     * @return 脱敏后的邮箱字符串
-     */
-    public static String maskEmail(String value) {
-        if (value == null || !value.contains("@")) {
-            return value;
-        }
-        int index = value.indexOf("@");
-        if (index <= 1) {
-            return "*" + value.substring(index);
-        }
-        return value.charAt(0) + "****" + value.substring(index);
-    }
 }

@@ -17,7 +17,6 @@ public class MaskRuleRepository {
     private volatile Map<String, Map<String, String>> ruleCache = new HashMap<>();
 
     private MaskRuleRepository() {
-        reset();
     }
 
     /**
@@ -27,25 +26,6 @@ public class MaskRuleRepository {
      */
     public static MaskRuleRepository getInstance() {
         return INSTANCE;
-    }
-
-    /**
-     * 初始化默认规则
-     */
-    public void reset() {
-        Map<String, Map<String, String>> initialRules = new HashMap<>();
-
-        Map<String, String> userRules = new HashMap<>();
-        userRules.put("mobile", "PHONE");
-        initialRules.put("com.demo.ThirdPartyUser", userRules);
-
-        Map<String, String> mapRules = new HashMap<>();
-        mapRules.put("password", "PASSWORD");
-        mapRules.put("creditCard", "DYNAMIC_CARD"); // 演示自定义野马策略名
-        initialRules.put("java.util.HashMap", mapRules);
-        initialRules.put("java.util.LinkedHashMap", mapRules);
-
-        this.ruleCache = initialRules;
     }
 
     /**
