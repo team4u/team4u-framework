@@ -77,8 +77,6 @@ public class LogInterceptorManager {
      * 重置所有拦截器至初始状态
      */
     public void reset() {
-        MdcEnrichInterceptor.getInstance().reset();
-        TargetedDyeingInterceptor.getInstance().reset();
-        RateLimitInterceptor.getInstance().reset();
+        chain.getPolicies().forEach(LogInterceptor::reset);
     }
 }

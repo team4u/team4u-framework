@@ -40,6 +40,7 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
         return INSTANCE;
     }
 
+    @Override
     public void reset() {
         this.activeRules = new ArrayList<>();
         // 同步重置全局日志上下文

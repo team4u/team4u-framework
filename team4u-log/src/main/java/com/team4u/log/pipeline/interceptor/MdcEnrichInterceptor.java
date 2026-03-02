@@ -42,6 +42,7 @@ public class MdcEnrichInterceptor implements LogInterceptor {
         }
     }
 
+    @Override
     public void reset() {
         this.traceIdKey = "traceId";
     }

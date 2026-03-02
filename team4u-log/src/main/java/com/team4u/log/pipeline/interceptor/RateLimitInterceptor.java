@@ -37,6 +37,7 @@ public class RateLimitInterceptor implements LogInterceptor {
         return INSTANCE;
     }
 
+    @Override
     public void reset() {
         errorCounter.clear();
         errorLimitPerSecond = 10;

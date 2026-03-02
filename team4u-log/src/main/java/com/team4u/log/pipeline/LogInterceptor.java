@@ -18,6 +18,12 @@ public interface LogInterceptor extends ContextPolicy<LogEvent> {
      */
     boolean handle(LogEvent event);
 
+    /**
+     * 重置拦截器状态
+     */
+    default void reset() {
+    }
+
     @Override
     default boolean supports(LogEvent event) {
         // 默认处理所有日志事件
