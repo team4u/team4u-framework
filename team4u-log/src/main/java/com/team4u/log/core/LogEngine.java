@@ -3,6 +3,7 @@ package com.team4u.log.core;
 import com.team4u.log.appender.LogAppender;
 import com.team4u.log.appender.Slf4jLogAppender;
 import com.team4u.log.mask.config.MaskRuleRepository;
+import com.team4u.log.mask.jackson.JacksonLogSerializer;
 import lombok.Getter;
 import lombok.Setter;
 

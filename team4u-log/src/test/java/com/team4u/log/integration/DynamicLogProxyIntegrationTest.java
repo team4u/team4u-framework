@@ -69,7 +69,7 @@ public class DynamicLogProxyIntegrationTest {
             Assert.assertNotNull(event);
             Assert.assertEquals(Level.WARN, event.getLevel());
             Assert.assertEquals("business_error", event.getStatus());
-            
+
             // 同时验证动态脱敏是否生效
             String json = logHelper.lastJson();
             Assert.assertTrue("手机号应被脱敏", json.contains("138*****678"));

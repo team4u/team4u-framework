@@ -16,13 +16,6 @@ public interface LogSerializer {
     String serialize(LogEvent event);
 
     /**
-     * 设置全局日志序列化最大长度阈值
-     *
-     * @param maxLogLength 最大长度
-     */
-    void setMaxLogLength(int maxLogLength);
-
-    /**
      * 获取全局日志序列化最大长度阈值
      *
      * @return 最大长度
@@ -30,11 +23,11 @@ public interface LogSerializer {
     int getMaxLogLength();
 
     /**
-     * 设置单个字符串字段的最大长度
+     * 设置全局日志序列化最大长度阈值
      *
-     * @param maxStringLength 最大长度
+     * @param maxLogLength 最大长度
      */
-    void setMaxStringLength(int maxStringLength);
+    void setMaxLogLength(int maxLogLength);
 
     /**
      * 获取单个字符串字段的最大长度
@@ -42,6 +35,13 @@ public interface LogSerializer {
      * @return 最大长度
      */
     int getMaxStringLength();
+
+    /**
+     * 设置单个字符串字段的最大长度
+     *
+     * @param maxStringLength 最大长度
+     */
+    void setMaxStringLength(int maxStringLength);
 
     /**
      * 重置序列化器状态及缓存

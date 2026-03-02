@@ -58,10 +58,10 @@ public class TargetedDyeingInterceptorTest {
 
     @Test
     public void testDyeingByFullMdc() {
-        // 1. 配置规则：验证全量 MDC 注入（使用 mdc. 前缀）
+        // 1. 配置规则：验证全量 MDC 注入（直接使用原始 key）
         LogDynamicConfig.DyeingRule rule = new LogDynamicConfig.DyeingRule();
         rule.setId("rule-full-mdc");
-        rule.setCondition("mdc.traceId == 'T123' && mdc.cluster == 'gray'");
+        rule.setCondition("traceId == 'T123' && cluster == 'gray'");
         rule.setTargetLevel(Level.TRACE);
         interceptor.refreshRules(Collections.singletonList(rule));
 

@@ -1,11 +1,10 @@
-package com.team4u.log.core;
+package com.team4u.log.mask.jackson;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.module.SimpleModule;
-import com.team4u.log.mask.jackson.ByteArrayLogSerializer;
-import com.team4u.log.mask.jackson.DynamicMaskSerializerModifier;
-import com.team4u.log.mask.jackson.TruncatingStringSerializer;
+import com.team4u.log.core.LogEvent;
+import com.team4u.log.core.LogSerializer;
 import lombok.Getter;
 import lombok.Setter;
 

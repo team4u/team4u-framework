@@ -24,7 +24,6 @@ public class LogContextCollectorTest {
     }
 
     @Test
-    @SuppressWarnings("unchecked")
     public void testCollectMdc() {
         MDC.put("traceId", "T1");
         MDC.put("X-User-Id", "U1");
@@ -35,15 +34,9 @@ public class LogContextCollectorTest {
         // 基础元数据
         Assert.assertEquals("A1", context.get("action"));
 
-        // 验证高性能 MDC 访问 (mdc.key)
-        Assert.assertEquals("T1", context.get("mdc.traceId"));
-        Assert.assertEquals("U1", context.get("mdc.X-User-Id"));
-
-        // 验证兼容模式嵌套 MDC 访问 (mdc)
-        Map<String, String> mdc = (Map<String, String>) context.get("mdc");
-        Assert.assertNotNull(mdc);
-        Assert.assertEquals("T1", mdc.get("traceId"));
-        Assert.assertEquals("U1", mdc.get("X-User-Id"));
+        // 验证高性能 MDC 访问（直接使用原始 key）
+        Assert.assertEquals("T1", context.get("traceId"));
+        Assert.assertEquals("U1", context.get("X-User-Id"));
     }
 
     @Test

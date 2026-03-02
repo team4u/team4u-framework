@@ -50,12 +50,12 @@ public class LogInterceptorManagerTest {
     private static class MockInterceptor implements LogInterceptor {
         private int state = 0;
 
-        public void setState(int state) {
-            this.state = state;
-        }
-
         public int getState() {
             return state;
+        }
+
+        public void setState(int state) {
+            this.state = state;
         }
 
         @Override

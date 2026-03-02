@@ -48,6 +48,10 @@ public class LogEvent {
      * 业务数据载荷
      */
     private Map<String, Object> payload = new LinkedHashMap<>();
+    /**
+     * 是否被抑制（例如因限流而不输出）
+     */
+    private boolean suppressed = false;
 
     /**
      * 添加业务数据 KV 属性（便捷方法）
@@ -79,11 +83,6 @@ public class LogEvent {
         }
         return this;
     }
-
-    /**
-     * 是否被抑制（例如因限流而不输出）
-     */
-    private boolean suppressed = false;
 
     /**
      * 派生当前日志事件状态，生成一个新的独立实例。
