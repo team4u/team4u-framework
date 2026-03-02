@@ -13,7 +13,7 @@ import java.util.Map;
 public class LogDynamicConfig {
 
     /**
-     * 掩码规则：ClassName -> (FieldName -> MaskPolicyKey)
+     * 脱敏规则：ClassName -> (FieldName -> MaskPolicyKey)
      */
     private Map<String, Map<String, String>> maskRules;
 
@@ -21,48 +21,74 @@ public class LogDynamicConfig {
      * 免侵入代理规则：ClassName -> ProxyRule
      */
     private Map<String, ProxyRule> proxyRules;
+
     /**
      * 动态染色规则列表
      */
     private List<DyeingRule> dyeingRules;
+
     /**
      * 限流及长度限制配置
      */
     private FinOpsConfig finOpsConfig;
 
+    /**
+     * 代理规则配置
+     */
     @Data
     public static class ProxyRule {
         /**
          * 允许拦截的方法名列表，配置 ["*"] 代表拦截所有 public 方法
          */
         private List<String> methods;
+
         /**
          * 慢日志阈值（毫秒）
          */
         private long slowThreshold = -1;
+
         /**
          * 需被视为业务异常而被降级打印的异常类名列表
          */
         private List<String> ignoreExceptions;
     }
 
+    /**
+     * 染色规则配置
+     */
     @Data
     public static class DyeingRule {
+        /**
+         * 规则 ID
+         */
         private String id;
-        private String condition; // 表达式（基于 team4u-criterion）
+
+        /**
+         * 匹配条件表达式（基于 team4u-criterion）
+         */
+        private String condition;
+
+        /**
+         * 命中规则后的目标日志级别
+         */
         private Level targetLevel;
     }
 
+    /**
+     * 成本与性能（FinOps）相关配置
+     */
     @Data
     public static class FinOpsConfig {
         /**
-         * 整体日志最大长度（兜底保护）
+         * 整体日志最大长度（单位：字符，兜底保护）
          */
         private int maxLogLength = 5000;
+
         /**
          * 单个字符串字段的最大长度（防止单个大报文/文件撑爆内存）
          */
         private int maxStringLength = 2000;
+
         /**
          * 每秒错误日志限流阈值
          */

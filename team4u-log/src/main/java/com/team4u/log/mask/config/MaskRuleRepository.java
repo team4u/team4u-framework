@@ -20,6 +20,11 @@ public class MaskRuleRepository {
         reset();
     }
 
+    /**
+     * 获取规则仓库单例实例
+     *
+     * @return MaskRuleRepository 实例
+     */
     public static MaskRuleRepository getInstance() {
         return INSTANCE;
     }

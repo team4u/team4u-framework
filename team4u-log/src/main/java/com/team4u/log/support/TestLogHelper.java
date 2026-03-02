@@ -47,6 +47,8 @@ public class TestLogHelper {
 
     /**
      * 获取最近的一条日志
+     *
+     * @return 最近的日志事件，若无则返回 null
      */
     public LogEvent lastEvent() {
         return memoryAppender.lastEvent();
@@ -54,6 +56,8 @@ public class TestLogHelper {
 
     /**
      * 获取捕获到的所有日志
+     *
+     * @return 日志事件列表
      */
     public List<LogEvent> allEvents() {
         return memoryAppender.getEvents();
@@ -61,6 +65,8 @@ public class TestLogHelper {
 
     /**
      * 将最后一条日志序列化为 JSON 字符串
+     *
+     * @return JSON 字符串，若无日志则返回空字符串
      */
     public String lastJson() {
         LogEvent event = lastEvent();

@@ -31,6 +31,11 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
         reset();
     }
 
+    /**
+     * 获取定向染色拦截器单例实例
+     *
+     * @return TargetedDyeingInterceptor 实例
+     */
     public static TargetedDyeingInterceptor getInstance() {
         return INSTANCE;
     }

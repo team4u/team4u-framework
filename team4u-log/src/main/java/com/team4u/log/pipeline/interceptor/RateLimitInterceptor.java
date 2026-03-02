@@ -28,6 +28,11 @@ public class RateLimitInterceptor implements LogInterceptor {
         reset();
     }
 
+    /**
+     * 获取限流拦截器单例实例
+     *
+     * @return RateLimitInterceptor 实例
+     */
     public static RateLimitInterceptor getInstance() {
         return INSTANCE;
     }

@@ -3,18 +3,12 @@ package com.team4u.log.core;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.module.SimpleModule;
-import com.team4u.framework.policy.core.OrderedPolicyChain;
-import com.team4u.framework.policy.engine.PolicyPipeline;
 import com.team4u.log.appender.LogAppender;
 import com.team4u.log.appender.Slf4jLogAppender;
 import com.team4u.log.mask.config.MaskRuleRepository;
 import com.team4u.log.mask.jackson.ByteArrayLogSerializer;
 import com.team4u.log.mask.jackson.DynamicMaskSerializerModifier;
 import com.team4u.log.mask.jackson.TruncatingStringSerializer;
-import com.team4u.log.pipeline.LogInterceptor;
-import com.team4u.log.pipeline.interceptor.MdcEnrichInterceptor;
-import com.team4u.log.pipeline.interceptor.RateLimitInterceptor;
-import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -27,7 +21,11 @@ public class LogEngine {
 
     private static final LogEngine INSTANCE = new LogEngine();
 
-    private final PolicyPipeline<LogEvent, LogInterceptor> pipeline;
+    /**
+     * 拦截器管理器
+     */
+    private final LogInterceptorManager interceptorManager;
+
     /**
      * ObjectMapper 非 final，允许在重置时清空序列化器缓存
      */
@@ -55,21 +53,29 @@ public class LogEngine {
     private LogAppender appender = new Slf4jLogAppender();
 
     private LogEngine() {
-        // 1. 初始化拦截器链
-        // 显式注册单例拦截器，确保与 LogConfigManager 的动态变更同步
-        OrderedPolicyChain<LogEvent, LogInterceptor> chain = new OrderedPolicyChain<>(LogInterceptor.class);
-        chain.register(MdcEnrichInterceptor.getInstance());
-        chain.register(TargetedDyeingInterceptor.getInstance());
-        chain.register(RateLimitInterceptor.getInstance());
-
-        this.pipeline = new PolicyPipeline<>(chain);
+        // 1. 初始化拦截器管理器
+        this.interceptorManager = new LogInterceptorManager();
 
         // 2. 初始化 Jackson 序列化器
         this.objectMapper = createObjectMapper();
     }
 
+    /**
+     * 获取日志引擎单例实例
+     *
+     * @return LogEngine 实例
+     */
     public static LogEngine getInstance() {
         return INSTANCE;
+    }
+
+    /**
+     * 获取拦截器管理器
+     *
+     * @return 拦截器管理器实例
+     */
+    public LogInterceptorManager getInterceptorManager() {
+        return interceptorManager;
     }
 
     private ObjectMapper createObjectMapper() {
@@ -97,9 +103,7 @@ public class LogEngine {
         this.maxLogLength = 5000;
         this.maxStringLength = 2000;
         this.appender = new Slf4jLogAppender();
-        MdcEnrichInterceptor.getInstance().reset();
-        TargetedDyeingInterceptor.getInstance().reset();
-        RateLimitInterceptor.getInstance().reset();
+        this.interceptorManager.reset();
         MaskRuleRepository.getInstance().reset();
         // 重置 ObjectMapper 以清空序列化器缓存
         this.objectMapper = createObjectMapper();
@@ -112,7 +116,7 @@ public class LogEngine {
      */
     public void processAndOutput(LogEvent event) {
         // 1. 执行动态染色、MDC 注入及限流逻辑
-        boolean passed = pipeline.executeChain(event, LogInterceptor::handle);
+        boolean passed = interceptorManager.execute(event);
 
         // 如果被拦截器抑制或处理链中断，则终止处理
         if (!passed || event.isSuppressed()) {

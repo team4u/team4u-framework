@@ -22,6 +22,11 @@ public class MdcEnrichInterceptor implements LogInterceptor {
     private MdcEnrichInterceptor() {
     }
 
+    /**
+     * 获取链路 ID 填充拦截器单例实例
+     *
+     * @return MdcEnrichInterceptor 实例
+     */
     public static MdcEnrichInterceptor getInstance() {
         return INSTANCE;
     }

@@ -31,6 +31,11 @@ public class LogConfigManager {
     private LogConfigManager() {
     }
 
+    /**
+     * 获取配置管理器单例实例
+     *
+     * @return LogConfigManager 实例
+     */
     public static LogConfigManager getInstance() {
         return INSTANCE;
     }

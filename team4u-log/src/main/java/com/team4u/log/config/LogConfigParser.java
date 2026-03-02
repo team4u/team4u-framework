@@ -6,6 +6,8 @@ import com.team4u.framework.base.config.StringConfigParser;
 
 /**
  * 日志模块动态配置解析器
+ * <p>
+ * 用于将配置中心下发的 JSON 文本解析为 {@link LogDynamicConfig} 对象。
  */
 public class LogConfigParser implements StringConfigParser<LogDynamicConfig> {
 

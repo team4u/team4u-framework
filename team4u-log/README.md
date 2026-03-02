@@ -79,14 +79,35 @@ Loggers.of(OrderService.class)
 | `status(String status)` | 手动指定业务状态（如 `processing`）。 |
 | `fork()` | **派生日志器**。基于当前状态拷贝出一个独立的副本。常用于定义日志模板。 |
 | `log()` | 终结方法，将事件提交给日志引擎的流水线进行拦截与输出。 |
+### 拦截器管理 (LogInterceptorManager)
+日志处理流水线由 `LogInterceptorManager` 统一管理。它负责内置拦截器的初始化、自定义拦截器的注册以及执行链的调度。
 
-*注意：默认情况下，MDC 中的 `traceId` 键值会被 `MdcEnrichInterceptor` 拦截器自动提取并放入最外层结构中。若需自定义键名（如 `requestId`），可以通过以下方式设置：*
+#### 内置拦截器
+默认情况下，系统会自动注册以下拦截器：
+1.  **MdcEnrichInterceptor** (优先级: HIGH)：从 MDC 中提取 `traceId`。
+2.  **TargetedDyeingInterceptor** (优先级: NORMAL)：执行动态染色规则。
+3.  **RateLimitInterceptor** (优先级: LOW)：执行异常日志限流。
 
+#### 自定义拦截器注册
+您可以通过以下几种方式扩展日志处理逻辑：
+
+**1. 编程式注册：**
 ```java
-// 自定义从 MDC 中提取的键名为 "requestId"
+LogEngine.getInstance()
+         .getInterceptorManager()
+         .register(new MyCustomInterceptor());
+```
+
+**2. SPI 自动发现：**
+在 `META-INF/services/com.team4u.log.pipeline.LogInterceptor` 文件中填入实现类的全限定名，系统启动时会自动加载并按 `priority()` 排序。
+
+#### 常用拦截器配置
+*   **自定义从 MDC 中提取的键名**：
+```java
 MdcEnrichInterceptor.getInstance().setTraceIdKey("requestId");
 ```
 
+---
 #### 日志器派生 (Template Logger / fork)
 为了减少重复代码（如每个方法都要手动 `.kv("module", "Trade")`），您可以预定义一个**模板日志器**，在具体业务点通过 `fork()` 派生出独立实例。派生实例会继承模板的所有 KV 和配置，且后续的修改**互不污染**。
 
@@ -548,8 +569,15 @@ LogEngine.getInstance().setAppender(new LogAppender() {
 
 当调用 `log()` 方法时，日志事件 (`LogEvent`) 将经历如下流水线处理：
 
-*   MdcEnrichInterceptor (最高优先级)：从 SLF4J MDC 中提取链路 ID（默认键名为 `traceId`，可配置）并注入到日志事件中。
-*   TargetedDyeingInterceptor (普通优先级)：判断条件，如果命中则修改 Level 提权/降权。
-*   RateLimitInterceptor (低优先级)：针对携带 Exception 的日志进行签名（action+ExceptionClass），计算 1 秒内频次，超限则中断流水线。
-*   序列化与脱敏：由 `LogEngine` 调用定制后的 `ObjectMapper` 进行 JSON 化。脱敏修饰器 (`DynamicMaskSerializerModifier`) 会在此时拦截注解和配置，执行 `FastMasker` 极速脱敏。
-*   输出 (Appender)：校验长度是否超过 `maxLogLength` 并截断，最后交给 `Slf4jLogAppender` 打印输出。
+1.  **拦截器流水线**：由 `LogInterceptorManager` 调度。
+    *   **MdcEnrichInterceptor**：提取链路追踪 ID。
+    *   **TargetedDyeingInterceptor**：执行靶向染色（提权/降权）。
+    *   **RateLimitInterceptor**：异常日志风暴限流保护。
+    *   **自定义拦截器**：按优先级执行用户扩展逻辑。
+2.  **序列化与脱敏**：由 `LogEngine` 调用定制后的 `ObjectMapper` 进行 JSON 化。
+    *   **字符串截断**：单个字段超长截断（`maxStringLength`）。
+    *   **字节数组防御**：拦截 `byte[]` 输出。
+    *   **动态脱敏**：执行 `FastMasker` 极速脱敏。
+3.  **最终输出**：由 `LogAppender` 执行。
+    *   **整条日志截断**：JSON 整体超长截断（`maxLogLength`）。
+    *   **落地输出**：默认通过 SLF4J 打印。
