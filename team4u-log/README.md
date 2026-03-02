@@ -209,8 +209,6 @@ service.register(req);
 | `action` | String | `""` | 业务动作标识。若不填，则**自动取当前方法名**。 |
 | `slowThreshold` | long | `-1` | 慢日志阈值(ms)。超过此值时，日志级别自动提升为 `WARN`。 |
 | `ignoreExceptions` | Class[] | `{}` | 忽略的异常列表。命中时日志级别降为 `WARN`（用于过滤业务类异常）。 |
-| `reqLimit` | int | `2000` | 入参最大打印长度，超长会被截断。 |
-| `respLimit` | int | `2000` | 出参最大打印长度。 |
 
 #### 参数名捕获与脱敏技巧
 本模块支持自动捕获方法的**参数名称**（如 `req`、`mobile`），并以 Map 结构记录在日志的 `req` 字段中。

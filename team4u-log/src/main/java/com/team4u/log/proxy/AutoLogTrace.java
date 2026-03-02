@@ -20,16 +20,6 @@ public @interface AutoLogTrace {
     String action() default "";
 
     /**
-     * 入参最大打印长度，防止大报文占用过多资源
-     */
-    int reqLimit() default 2000;
-
-    /**
-     * 出参最大打印长度
-     */
-    int respLimit() default 2000;
-
-    /**
      * 慢日志阈值（毫秒）。超过此值时，成功日志级别提升为 WARN
      */
     long slowThreshold() default -1;
