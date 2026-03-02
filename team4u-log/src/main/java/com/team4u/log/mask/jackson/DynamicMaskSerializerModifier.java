@@ -10,7 +10,7 @@ import com.fasterxml.jackson.databind.ser.BeanSerializerModifier;
 import com.fasterxml.jackson.databind.ser.std.MapSerializer;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.fasterxml.jackson.databind.type.MapType;
-import com.team4u.log.core.LogEngine;
+import com.team4u.log.core.LogSerializer;
 import com.team4u.log.mask.FastMasker;
 import com.team4u.log.mask.Mask;
 import com.team4u.log.mask.config.MaskRuleRepository;
@@ -25,6 +25,12 @@ import java.util.List;
  */
 public class DynamicMaskSerializerModifier extends BeanSerializerModifier {
 
+    private final LogSerializer serializer;
+
+    public DynamicMaskSerializerModifier(LogSerializer serializer) {
+        this.serializer = serializer;
+    }
+
     @Override
     public List<BeanPropertyWriter> changeProperties(SerializationConfig config,
                                                      BeanDescription beanDesc,
@@ -37,7 +43,7 @@ public class DynamicMaskSerializerModifier extends BeanSerializerModifier {
             // 1. 优先使用注解配置
             Mask maskAnnotation = writer.getAnnotation(Mask.class);
             if (maskAnnotation != null) {
-                writer.assignSerializer(new MaskStringSerializer(maskAnnotation.value().name()));
+                writer.assignSerializer(new MaskStringSerializer(serializer, maskAnnotation.value().name()));
                 continue;
             }
 
@@ -45,7 +51,7 @@ public class DynamicMaskSerializerModifier extends BeanSerializerModifier {
             // 规则仅在构建序列化器时执行，提升性能
             String externalRule = MaskRuleRepository.getInstance().findRule(className, fieldName);
             if (externalRule != null) {
-                writer.assignSerializer(new MaskStringSerializer(externalRule));
+                writer.assignSerializer(new MaskStringSerializer(serializer, externalRule));
             }
         }
         return beanProperties;
@@ -58,7 +64,7 @@ public class DynamicMaskSerializerModifier extends BeanSerializerModifier {
                                                  JsonSerializer<?> serializer) {
         // 针对 Map 类型的特殊处理，实现无侵入脱敏
         if (serializer instanceof MapSerializer) {
-            return new MaskableMapSerializer((MapSerializer) serializer, beanDesc.getBeanClass().getName());
+            return new MaskableMapSerializer(this.serializer, (MapSerializer) serializer, beanDesc.getBeanClass().getName());
         }
         return serializer;
     }
@@ -67,10 +73,12 @@ public class DynamicMaskSerializerModifier extends BeanSerializerModifier {
      * 脱敏专用字符串序列化器
      */
     private static class MaskStringSerializer extends StdSerializer<Object> {
+        private final LogSerializer serializer;
         private final String maskType;
 
-        public MaskStringSerializer(String maskType) {
+        public MaskStringSerializer(LogSerializer serializer, String maskType) {
             super(Object.class);
+            this.serializer = serializer;
             this.maskType = maskType;
         }
 
@@ -85,7 +93,7 @@ public class DynamicMaskSerializerModifier extends BeanSerializerModifier {
             String masked = FastMasker.mask(value.toString(), maskType);
 
             // 应用长度截断
-            int maxLength = LogEngine.getInstance().getMaxStringLength();
+            int maxLength = serializer.getMaxStringLength();
             if (maxLength > 0 && masked.length() > maxLength) {
                 gen.writeString(masked.substring(0, maxLength) + "... [Truncated len:" + masked.length() + "]");
             } else {

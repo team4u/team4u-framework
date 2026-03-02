@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.ser.ContextualSerializer;
 import com.fasterxml.jackson.databind.ser.std.MapSerializer;
-import com.team4u.log.core.LogEngine;
+import com.team4u.log.core.LogSerializer;
 import com.team4u.log.mask.FastMasker;
 import com.team4u.log.mask.config.MaskRuleRepository;
 
@@ -19,10 +19,12 @@ import java.util.Map;
  */
 public class MaskableMapSerializer extends JsonSerializer<Map<?, ?>> implements ContextualSerializer {
 
+    private final LogSerializer serializer;
     private final MapSerializer delegate;
     private final String mapClassName;
 
-    public MaskableMapSerializer(MapSerializer delegate, String mapClassName) {
+    public MaskableMapSerializer(LogSerializer serializer, MapSerializer delegate, String mapClassName) {
+        this.serializer = serializer;
         this.delegate = delegate;
         this.mapClassName = mapClassName;
     }
@@ -53,7 +55,7 @@ public class MaskableMapSerializer extends JsonSerializer<Map<?, ?>> implements 
                 }
 
                 // 应用长度截断
-                int maxLength = LogEngine.getInstance().getMaxStringLength();
+                int maxLength = serializer.getMaxStringLength();
                 if (maxLength > 0 && strVal.length() > maxLength) {
                     gen.writeString(strVal.substring(0, maxLength) + "... [Truncated len:" + strVal.length() + "]");
                 } else {
