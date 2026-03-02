@@ -474,12 +474,16 @@ try {
 }
 ```
 
-#### 高级扩展：自定义贡献者
-如果内置的维度不足以满足需求，可以通过实现 `LogContextContributor` 并注册或通过 SPI 自动发现来扩展：
+#### 高级扩展：自定义寻值源 (Pull 模型)
+如果内置的维度不足以满足需求，可以通过实现 `LogContextSource` 并注册或通过 SPI 自动发现来扩展。相比于旧版的 Push 模型，Pull 模型按需加载，性能更高。
 
 ```java
-LogContext.addContributor((event, context) -> {
-    context.put("custom_key", "custom_value");
+// 注册自定义寻值源
+LogContext.addSource((event, key) -> {
+    if ("custom_key".equals(key)) {
+        return "custom_value"; // 只有在规则引擎用到 "custom_key" 时才会执行此逻辑
+    }
+    return null;
 });
 ```
 *效果：一旦条件匹配（利用 `team4u-criterion` 表达式引擎），日志级别将被自动篡改，并在 Payload 中打上标记 `"dyeingRuleMatched": "vip_user_debug"`。*

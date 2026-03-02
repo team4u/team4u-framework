@@ -1,7 +1,7 @@
 package com.team4u.log;
 
 import com.team4u.log.pipeline.context.LogContextCollector;
-import com.team4u.log.pipeline.context.LogContextContributor;
+import com.team4u.log.pipeline.context.LogContextSource;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -9,14 +9,17 @@ import java.util.Map;
 /**
  * 全局日志上下文工具类
  * <p>
- * 提供静态方法用于设置全局属性、当前线程局部属性或注册自定义上下文贡献者。
+ * 提供静态方法用于设置全局属性、当前线程局部属性或注册自定义上下文寻值源。
+ * 核心逻辑由 {@link LogContextCollector} 负责，已重构为高性能的 Pull（拉）模型。
+ *
+ * @author team4u
  */
 public class LogContext {
 
     private static final LogContextCollector COLLECTOR = new LogContextCollector();
 
     /**
-     * 线程局部上下文存储
+     * 线程局部上下文存储 (ThreadLocal)
      */
     private static final ThreadLocal<Map<String, Object>> THREAD_CONTEXT = ThreadLocal.withInitial(HashMap::new);
 
@@ -37,6 +40,15 @@ public class LogContext {
      */
     public static void setGlobals(Map<String, Object> attributes) {
         COLLECTOR.setGlobals(attributes);
+    }
+
+    /**
+     * 获取不可变的全局属性副本
+     *
+     * @return 全局属性 Map
+     */
+    public static Map<String, Object> getGlobalAttributes() {
+        return COLLECTOR.getGlobalAttributes();
     }
 
     /**
@@ -67,12 +79,12 @@ public class LogContext {
     }
 
     /**
-     * 注册新的上下文贡献者
+     * 注册新的上下文寻值源 (Pull 模型)
      *
-     * @param contributor 贡献者实现
+     * @param source 寻值源实现
      */
-    public static void addContributor(LogContextContributor contributor) {
-        COLLECTOR.addContributor(contributor);
+    public static void addSource(LogContextSource source) {
+        COLLECTOR.addSource(source);
     }
 
     /**

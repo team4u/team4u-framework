@@ -78,7 +78,7 @@ public class TargetedDyeingInterceptorTest {
     }
 
     @Test
-    public void testDyeingByCustomContributor() {
+    public void testDyeingByCustomSource() {
         // 1. 配置规则：引用自定义注入的变量
         LogDynamicConfig.DyeingRule rule = new LogDynamicConfig.DyeingRule();
         rule.setId("rule-custom");
@@ -86,8 +86,8 @@ public class TargetedDyeingInterceptorTest {
         rule.setTargetLevel(Level.DEBUG);
         interceptor.refreshRules(Collections.singletonList(rule));
 
-        // 2. 注册自定义贡献者 (使用全局静态入口)
-        LogContext.addContributor((event, context) -> context.put("customAttr", "V1"));
+        // 2. 注册自定义寻值源 (使用全局静态入口)
+        LogContext.addSource((event, key) -> "customAttr".equals(key) ? "V1" : null);
 
         LogEvent event = new LogEvent().setAction("Test").setLevel(Level.INFO);
         interceptor.handle(event);

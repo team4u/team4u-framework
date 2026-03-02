@@ -9,6 +9,11 @@ import org.slf4j.MDC;
 
 import java.util.Map;
 
+/**
+ * 日志上下文收集器单元测试 (Pull 模型)
+ *
+ * @author team4u
+ */
 public class LogContextCollectorTest {
 
     @Before
@@ -27,9 +32,14 @@ public class LogContextCollectorTest {
         LogEvent event = new LogEvent().setAction("A1");
         Map<String, Object> context = LogContext.getCollector().collect(event);
 
+        // 基础元数据
         Assert.assertEquals("A1", context.get("action"));
 
-        // 验证嵌套 MDC
+        // 验证高性能 MDC 访问 (mdc.key)
+        Assert.assertEquals("T1", context.get("mdc.traceId"));
+        Assert.assertEquals("U1", context.get("mdc.X-User-Id"));
+
+        // 验证兼容模式嵌套 MDC 访问 (mdc)
         Map<String, String> mdc = (Map<String, String>) context.get("mdc");
         Assert.assertNotNull(mdc);
         Assert.assertEquals("T1", mdc.get("traceId"));
@@ -76,12 +86,26 @@ public class LogContextCollectorTest {
     }
 
     @Test
-    public void testCustomContributor() {
-        LogContext.addContributor((event, context) -> context.put("ext", "V1"));
+    public void testCustomSource() {
+        // 注册自定义寻值源
+        LogContext.addSource((event, key) -> "ext_key".equals(key) ? "V1" : null);
 
         LogEvent event = new LogEvent();
         Map<String, Object> context = LogContext.getCollector().collect(event);
 
-        Assert.assertEquals("V1", context.get("ext"));
+        Assert.assertEquals("V1", context.get("ext_key"));
+        Assert.assertNull(context.get("other_key"));
+    }
+
+    @Test
+    public void testPayloadPriority() {
+        LogContext.setGlobal("k1", "global");
+        LogContext.setCurrent("k1", "thread");
+
+        // Payload 优先级最高
+        LogEvent event = new LogEvent().kv("k1", "payload");
+        Map<String, Object> context = LogContext.getCollector().collect(event);
+
+        Assert.assertEquals("payload", context.get("k1"));
     }
 }

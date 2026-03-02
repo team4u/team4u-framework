@@ -50,6 +50,37 @@ public class LogEvent {
     private Map<String, Object> payload = new LinkedHashMap<>();
 
     /**
+     * 添加业务数据 KV 属性（便捷方法）
+     *
+     * @param key   属性键
+     * @param value 属性值
+     * @return 当前实例，支持链式调用
+     */
+    public LogEvent kv(String key, Object value) {
+        if (payload == null) {
+            payload = new LinkedHashMap<>();
+        }
+        payload.put(key, value);
+        return this;
+    }
+
+    /**
+     * 批量添加业务数据属性
+     *
+     * @param kvs 属性 Map
+     * @return 当前实例，支持链式调用
+     */
+    public LogEvent kvs(Map<String, Object> kvs) {
+        if (kvs != null) {
+            if (payload == null) {
+                payload = new LinkedHashMap<>();
+            }
+            payload.putAll(kvs);
+        }
+        return this;
+    }
+
+    /**
      * 是否被抑制（例如因限流而不输出）
      */
     private boolean suppressed = false;
