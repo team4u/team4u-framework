@@ -8,6 +8,7 @@ import com.team4u.framework.base.util.TextTemplate;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
 import com.team4u.framework.router.RoutingManager;
+import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.proxy.annotation.RouteContext;
 import com.team4u.framework.router.proxy.annotation.Routed;
 import lombok.Data;
@@ -17,6 +18,8 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 声明式路由方法拦截器
@@ -27,6 +30,8 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author jay.wu
  */
 public class RoutedMethodInterceptor implements MethodInterceptor {
+
+    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{([^}]+)}");
 
     /**
      * 方法元数据缓存，确保 O(1) 的超高性能
@@ -73,25 +78,36 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
         }
 
         if (routed == null) {
-            return new RouteMetadata(false, null, -1);
+            return new RouteMetadata(false, null, -1, 0, null);
         }
 
+        String routerIdPattern = routed.routerId();
+
         // 预解析模板
-        TextTemplate template = new TextTemplate(routed.routerId());
+        TextTemplate template = new TextTemplate(routerIdPattern);
 
         // 寻找哪个参数被标记了 @RouteContext
         int contextIndex = -1;
+        int routeContextCount = 0;
         Annotation[][] parameterAnnotations = method.getParameterAnnotations();
         for (int i = 0; i < parameterAnnotations.length; i++) {
             for (Annotation ann : parameterAnnotations[i]) {
                 if (ann instanceof RouteContext) {
+                    routeContextCount++;
                     contextIndex = i;
                     break;
                 }
             }
         }
 
-        return new RouteMetadata(true, template, contextIndex);
+        if (routeContextCount > 1) {
+            throw RouteConfigException.validationError(
+                    "Multiple @RouteContext parameters found in method: " + method);
+        }
+
+        int placeholderCount = countPlaceholders(routerIdPattern);
+
+        return new RouteMetadata(true, template, contextIndex, placeholderCount, routerIdPattern);
     }
 
     @Override
@@ -109,14 +125,21 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
         // 提取路由上下文
         Object context = extractContext(invocation.getArguments(), metadata.getContextParamIndex());
 
+        boolean simpleContext = context != null && ClassUtil.isSimpleValueType(context.getClass());
+        if (simpleContext && metadata.getPlaceholderCount() > 1) {
+            throw RouteConfigException.validationError(
+                    "Simple @RouteContext only supports one placeholder in routerId pattern: "
+                            + metadata.getRouterIdPattern());
+        }
+
         // 解析真实的路由 ID：通过 Lambda 桥接 BeanUtil 和 TextTemplate
         String routerId = metadata.getTemplate().render(prop -> {
             if (context == null) {
                 return null;
             }
 
-            // 如果是简单类型或 String，直接返回其字符串形式
-            if (ClassUtil.isSimpleValueType(context.getClass())) {
+            // 如果是简单类型或 String，仅允许单占位符模板
+            if (simpleContext) {
                 return String.valueOf(context);
             }
 
@@ -138,6 +161,18 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
             // 剥离反射包装的异常，抛出业务真实异常
             throw e.getTargetException();
         }
+    }
+
+    private static int countPlaceholders(String pattern) {
+        if (pattern == null || pattern.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        Matcher matcher = PLACEHOLDER_PATTERN.matcher(pattern);
+        while (matcher.find()) {
+            count++;
+        }
+        return count;
     }
 
     /**
@@ -163,5 +198,7 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
         private final boolean routed;
         private final TextTemplate template;
         private final int contextParamIndex;
+        private final int placeholderCount;
+        private final String routerIdPattern;
     }
 }

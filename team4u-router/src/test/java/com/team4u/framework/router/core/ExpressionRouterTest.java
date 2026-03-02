@@ -183,4 +183,16 @@ public class ExpressionRouterTest {
         Assert.assertTrue(policy.getExtProperty("multiMatch", false));
         Assert.assertEquals("value", policy.getExtProperty("other", "default"));
     }
+
+    @Test
+    public void testGetExtPropertyWithNullDefaultValue() {
+        RoutePolicy policy = new RoutePolicy();
+        policy.getExt().put("threshold", "10");
+        policy.getExt().put("name", "router-a");
+
+        Assert.assertEquals(Integer.valueOf(10), policy.getExtProperty("threshold", Integer.class, null));
+        Assert.assertEquals("router-a", policy.getExtProperty("name", String.class, null));
+        Assert.assertNull(policy.getExtProperty("missing", String.class, null));
+        Assert.assertEquals("10", policy.getExtProperty("threshold", (String) null));
+    }
 }

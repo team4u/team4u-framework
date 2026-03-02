@@ -124,4 +124,16 @@ public class WeightRouterTest {
             Assert.assertEquals("A", router.route("user_" + i).getValue());
         }
     }
+
+    /**
+     * 测试负权重会触发配置校验异常
+     */
+    @Test(expected = RouteConfigException.class)
+    public void testNegativeWeight() {
+        RoutePolicy policy = new RoutePolicy();
+        policy.setRules(Arrays.asList(
+                new RouteRule("100", "A"),
+                new RouteRule("-1", "B")));
+        new WeightRouter(policy);
+    }
 }

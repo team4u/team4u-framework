@@ -215,7 +215,7 @@ public class RoutingManager {
      */
     public <T> RouteTrace<T> trace(String routerId, Object request) {
         Router router = getRouter(routerId);
-        return router != null ? router.trace(request) : emptyTrace();
+        return doTrace(routerId, router, request);
     }
 
     /**
@@ -258,6 +258,28 @@ public class RoutingManager {
     }
 
     /**
+     * 统一路由追踪逻辑，追踪结果基于拦截器链的真实执行结果
+     */
+    private <T> RouteTrace<T> doTrace(String routerId, Router router, Object request) {
+        List<RouteInterceptor> interceptors = interceptorRegistry.getPolicies();
+        if (interceptors == null || interceptors.isEmpty()) {
+            return router != null ? router.trace(request) : emptyTrace();
+        }
+
+        long start = System.currentTimeMillis();
+        RouteTrace<T> trace = new RouteTrace<>();
+        trace.setResult(doRoute(routerId, router, request, null));
+        trace.setCostMs(System.currentTimeMillis() - start);
+        if (router != null) {
+            String routerName = router.getClass().getSimpleName();
+            trace.setRouterType(routerName.endsWith("Router")
+                    ? routerName.substring(0, routerName.length() - "Router".length()).toLowerCase()
+                    : routerName.toLowerCase());
+        }
+        return trace;
+    }
+
+    /**
      * 执行路由并返回诊断轨迹（针对原始配置）
      *
      * @param rawConfig 配置字符串
@@ -267,7 +289,7 @@ public class RoutingManager {
      */
     public <T> RouteTrace<T> traceByConfig(String rawConfig, Object request) {
         Router router = getRouterByConfig(rawConfig);
-        return router != null ? router.trace(request) : emptyTrace();
+        return doTrace("raw-config", router, request);
     }
 
     /**
@@ -303,7 +325,7 @@ public class RoutingManager {
      */
     public <T> RouteTrace<T> traceByPolicy(RoutePolicy policy, Object request) {
         Router router = getRouter(policy);
-        return router != null ? router.trace(request) : emptyTrace();
+        return doTrace(policy != null ? policy.getId() : null, router, request);
     }
 
     /**

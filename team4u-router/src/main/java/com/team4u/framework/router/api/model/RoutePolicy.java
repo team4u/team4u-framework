@@ -51,6 +51,21 @@ public class RoutePolicy {
      */
     @SuppressWarnings("unchecked")
     public <T> T getExtProperty(String key, T defaultValue) {
+        Class<T> type = defaultValue != null ? (Class<T>) defaultValue.getClass() : null;
+        return getExtProperty(key, type, defaultValue);
+    }
+
+    /**
+     * 获取扩展属性值
+     *
+     * @param key          属性名
+     * @param type         目标类型
+     * @param defaultValue 默认值
+     * @param <T>          泛型类型
+     * @return 属性值或默认值
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T getExtProperty(String key, Class<T> type, T defaultValue) {
         if (ext == null || !ext.containsKey(key)) {
             return defaultValue;
         }
@@ -58,6 +73,9 @@ public class RoutePolicy {
         if (value == null) {
             return defaultValue;
         }
-        return (T) Convert.convert(defaultValue.getClass(), value);
+        if (type == null) {
+            return (T) value;
+        }
+        return Convert.convert(type, value);
     }
 }

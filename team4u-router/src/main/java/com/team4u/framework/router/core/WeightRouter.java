@@ -54,6 +54,11 @@ public class WeightRouter extends AbstractRouter {
                         "WeightRouter condition must be an integer, but got: " + rule.getCondition());
             }
             int weight = Integer.parseInt(rule.getCondition());
+            if (weight < 0) {
+                throw RouteConfigException.validationError(
+                        policy.getId(),
+                        "WeightRouter weight must be >= 0, but got: " + weight);
+            }
             if (weight > 0) {
                 totalWeight += weight;
                 // 将累加后的总权重作为 Key

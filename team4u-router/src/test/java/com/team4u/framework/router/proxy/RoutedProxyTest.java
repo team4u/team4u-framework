@@ -3,6 +3,7 @@ package com.team4u.framework.router.proxy;
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.config.test.TestConfigContext;
 import com.team4u.framework.router.RoutingManager;
+import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.exception.RouteNotFoundException;
 import com.team4u.framework.router.proxy.annotation.RouteContext;
 import com.team4u.framework.router.proxy.annotation.Routed;
@@ -103,6 +104,18 @@ public class RoutedProxyTest {
         Assert.assertEquals("A", proxy.sayHello("abc"));
     }
 
+    @Test(expected = RouteConfigException.class)
+    public void testSimpleContextWithMultiplePlaceholdersShouldFail() {
+        MultiPlaceholderSimpleTypeService proxy = RoutedProxyFactory.createProxy(MultiPlaceholderSimpleTypeService.class, routingManager);
+        proxy.sayHello("CN");
+    }
+
+    @Test(expected = RouteConfigException.class)
+    public void testMultipleRouteContextShouldFail() {
+        MultipleRouteContextService proxy = RoutedProxyFactory.createProxy(MultipleRouteContextService.class, routingManager);
+        proxy.route("A", "B");
+    }
+
     @Routed(routerId = "test_proxy_router")
     public interface TestService {
         String sayHello(@RouteContext String request);
@@ -122,6 +135,16 @@ public class RoutedProxyTest {
     @Routed(routerId = "user_${userId}")
     public interface UserTypeService {
         String sayHello(@RouteContext String userId);
+    }
+
+    @Routed(routerId = "biz.${region}.${tenant}.router")
+    public interface MultiPlaceholderSimpleTypeService {
+        String sayHello(@RouteContext String value);
+    }
+
+    @Routed(routerId = "router")
+    public interface MultipleRouteContextService {
+        String route(@RouteContext String a, @RouteContext String b);
     }
 
     public static class ServiceA implements TestService, SimpleTypeService, UserTypeService {

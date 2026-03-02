@@ -1,6 +1,9 @@
 package com.team4u.framework.router;
 
+import com.team4u.framework.router.api.interceptor.RouteInterceptor;
+import com.team4u.framework.router.api.interceptor.RouteInvocation;
 import com.team4u.framework.router.api.model.RoutePolicy;
+import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.model.RouteRule;
 import com.team4u.framework.router.api.trace.RouteTrace;
 import com.team4u.framework.router.api.trace.RuleTrace;
@@ -103,6 +106,44 @@ public class RouteTraceTest {
         RouteTrace<Object> trace = routingManager.trace("not_exist", new Object());
         Assert.assertFalse(trace.getResult().isMatch());
         Assert.assertNull(trace.getResult().getValue());
+        Assert.assertTrue(trace.getSteps().isEmpty());
+    }
+
+    @Test
+    public void testTraceShouldApplyInterceptorRequestMutation() {
+        RoutingManager routingManager = RoutingManager.builder()
+                .addInterceptor(new RouteInterceptor() {
+                    @Override
+                    public <T> RouteResult<T> intercept(RouteInvocation<T> invocation) {
+                        invocation.setRequest("A");
+                        return invocation.proceed();
+                    }
+                })
+                .build();
+
+        String config = "{\"type\":\"map\",\"rules\":[{\"condition\":\"A\",\"value\":\"ValueA\"}]}";
+        RouteTrace<String> trace = routingManager.traceByConfig(config, "B");
+
+        Assert.assertTrue(trace.getResult().isMatch());
+        Assert.assertEquals("ValueA", trace.getResult().getValue());
+    }
+
+    @Test
+    public void testTraceShouldApplyInterceptorShortCircuit() {
+        RoutingManager routingManager = RoutingManager.builder()
+                .addInterceptor(new RouteInterceptor() {
+                    @Override
+                    public <T> RouteResult<T> intercept(RouteInvocation<T> invocation) {
+                        return RouteResult.matched((T) "short", "hit");
+                    }
+                })
+                .build();
+
+        String config = "{\"type\":\"map\",\"rules\":[{\"condition\":\"A\",\"value\":\"ValueA\"}]}";
+        RouteTrace<String> trace = routingManager.traceByConfig(config, "B");
+
+        Assert.assertTrue(trace.getResult().isMatch());
+        Assert.assertEquals("short", trace.getResult().getValue());
         Assert.assertTrue(trace.getSteps().isEmpty());
     }
 }
