@@ -3,6 +3,8 @@ package com.team4u.log.pipeline.context.source;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.pipeline.context.LogContextSource;
 
+import java.util.Map;
+
 /**
  * 业务载荷寻值源
  * <p>
@@ -19,11 +21,8 @@ public class PayloadSource implements LogContextSource {
             return event.getPayload();
         }
 
-        if (event.getPayload() != null && event.getPayload().containsKey(key)) {
-            return event.getPayload().get(key);
-        }
-
-        return null;
+        Map<String, Object> payload = event.getPayload();
+        return payload != null ? payload.get(key) : null;
     }
 
     @Override
