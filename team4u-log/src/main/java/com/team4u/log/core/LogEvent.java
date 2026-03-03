@@ -54,6 +54,30 @@ public class LogEvent {
     private boolean suppressed = false;
 
     /**
+     * 获取业务数据属性
+     *
+     * @param key 属性键
+     * @return 属性值，如果 payload 为空或键不存在则返回 null
+     */
+    public Object get(String key) {
+        return payload != null ? payload.get(key) : null;
+    }
+
+    /**
+     * 获取业务数据属性（带默认值）
+     *
+     * @param key          属性键
+     * @param defaultValue 默认值
+     * @param <T>          属性类型
+     * @return 属性值，如果 payload 为空或键不存在则返回默认值
+     */
+    @SuppressWarnings("unchecked")
+    public <T> T get(String key, T defaultValue) {
+        Object value = get(key);
+        return value != null ? (T) value : defaultValue;
+    }
+
+    /**
      * 添加业务数据 KV 属性（便捷方法）
      *
      * @param key   属性键

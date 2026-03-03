@@ -21,8 +21,7 @@ public class PayloadSource implements LogContextSource {
             return event.getPayload();
         }
 
-        Map<String, Object> payload = event.getPayload();
-        return payload != null ? payload.get(key) : null;
+        return event.get(key);
     }
 
     @Override
