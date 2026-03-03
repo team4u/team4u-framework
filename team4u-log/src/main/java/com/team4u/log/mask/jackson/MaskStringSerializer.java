@@ -3,7 +3,6 @@ package com.team4u.log.mask.jackson;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
-import com.team4u.log.config.LogConfigManager;
 import com.team4u.log.mask.FastMasker;
 
 import java.io.IOException;
@@ -30,8 +29,7 @@ public class MaskStringSerializer extends StdSerializer<Object> {
         String masked = FastMasker.mask(value.toString(), maskType);
 
         // 应用长度截断
-        int maxLength = LogConfigManager.getInstance().getCurrentConfig()
-                .getFinOpsConfig().getMaxStringLength();
+        int maxLength = JacksonSerializationContext.resolveMaxStringLength(provider);
 
         if (maxLength > 0 && masked.length() > maxLength) {
             gen.writeString(masked.substring(0, maxLength) + "... [Truncated len:" + masked.length() + "]");

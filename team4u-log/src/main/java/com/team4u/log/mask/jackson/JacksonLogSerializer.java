@@ -4,6 +4,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.team4u.log.config.LogConfigManager;
+import com.team4u.log.config.LogDynamicConfig;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.core.LogSerializer;
 
@@ -39,12 +40,14 @@ public class JacksonLogSerializer implements LogSerializer {
     @Override
     public String serialize(LogEvent event) {
         try {
-            // 执行脱敏序列化
-            String rawJson = objectMapper.writeValueAsString(event);
+            LogDynamicConfig configSnapshot = LogConfigManager.getInstance().getCurrentConfig();
 
-            // 获取实时配置中的最大日志长度
-            int maxLogLength = LogConfigManager.getInstance().getCurrentConfig()
-                    .getFinOpsConfig().getMaxLogLength();
+            // 执行脱敏序列化
+            String rawJson = objectMapper.writer()
+                    .withAttribute(JacksonSerializationContext.ATTR_LOG_CONFIG_SNAPSHOT, configSnapshot)
+                    .writeValueAsString(event);
+
+            int maxLogLength = JacksonSerializationContext.resolveMaxLogLength(configSnapshot);
 
             // 根据配置的体积阈值截断超长日志
             if (rawJson.length() > maxLogLength) {

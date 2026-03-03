@@ -1,13 +1,20 @@
 package com.team4u.log.core;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.team4u.log.config.LogConfigManager;
 import com.team4u.log.config.LogDynamicConfig;
+import com.team4u.log.mask.jackson.JacksonLogSerializer;
+import com.team4u.log.mask.jackson.JacksonSerializationContext;
+import com.team4u.log.mask.jackson.TruncatingStringSerializer;
 import com.team4u.log.support.TestLogHelper;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.event.Level;
+
+import java.util.Collections;
 
 /**
  * 日志核心引擎单元测试
@@ -99,6 +106,65 @@ public class LogEngineTest {
         String json = engine.toJson(event);
         Assert.assertEquals(20 + "... [Truncated at 20]".length(), json.length());
         Assert.assertTrue(json.endsWith("... [Truncated at 20]"));
+    }
+
+    @Test
+    public void testAttributeSnapshotTakesPrecedence() throws Exception {
+        LogDynamicConfig globalConfig = new LogDynamicConfig();
+        LogDynamicConfig.FinOpsConfig globalFinOps = new LogDynamicConfig.FinOpsConfig();
+        globalFinOps.setMaxStringLength(50);
+        globalConfig.setFinOpsConfig(globalFinOps);
+        LogConfigManager.getInstance().setCurrentConfig(globalConfig);
+
+        LogDynamicConfig snapshot = new LogDynamicConfig();
+        LogDynamicConfig.FinOpsConfig snapshotFinOps = new LogDynamicConfig.FinOpsConfig();
+        snapshotFinOps.setMaxStringLength(5);
+        snapshot.setFinOpsConfig(snapshotFinOps);
+
+        ObjectMapper mapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+        module.addSerializer(String.class, new TruncatingStringSerializer(new JacksonLogSerializer()));
+        mapper.registerModule(module);
+
+        String json = mapper.writer()
+                .withAttribute(JacksonSerializationContext.ATTR_LOG_CONFIG_SNAPSHOT, snapshot)
+                .writeValueAsString(Collections.singletonMap("k", "123456789"));
+
+        Assert.assertTrue(json.contains("\"k\":\"12345... [Truncated len:9]\""));
+    }
+
+    @Test
+    public void testFallbackToGlobalConfigWhenAttributeMissing() throws Exception {
+        LogDynamicConfig globalConfig = new LogDynamicConfig();
+        LogDynamicConfig.FinOpsConfig globalFinOps = new LogDynamicConfig.FinOpsConfig();
+        globalFinOps.setMaxStringLength(6);
+        globalConfig.setFinOpsConfig(globalFinOps);
+        LogConfigManager.getInstance().setCurrentConfig(globalConfig);
+
+        ObjectMapper mapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+        module.addSerializer(String.class, new TruncatingStringSerializer(new JacksonLogSerializer()));
+        mapper.registerModule(module);
+
+        String json = mapper.writeValueAsString(Collections.singletonMap("k", "123456789"));
+
+        Assert.assertTrue(json.contains("\"k\":\"123456... [Truncated len:9]\""));
+    }
+
+    @Test
+    public void testDefaultFallbackWhenSnapshotAndFinOpsAreNull() throws Exception {
+        LogConfigManager.getInstance().setCurrentConfig(null);
+
+        ObjectMapper mapper = new ObjectMapper();
+        SimpleModule module = new SimpleModule();
+        module.addSerializer(String.class, new TruncatingStringSerializer(new JacksonLogSerializer()));
+        mapper.registerModule(module);
+
+        String longText = String.join("", Collections.nCopies(2100, "a"));
+        String json = mapper.writeValueAsString(Collections.singletonMap("k", longText));
+
+        Assert.assertTrue(json.contains("... [Truncated len:2100]"));
+        Assert.assertTrue(json.contains("\"k\":\"" + String.join("", Collections.nCopies(2000, "a"))));
     }
 
     @Test

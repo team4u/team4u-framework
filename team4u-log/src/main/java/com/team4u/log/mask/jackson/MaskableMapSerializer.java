@@ -6,7 +6,6 @@ import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.ser.ContextualSerializer;
 import com.fasterxml.jackson.databind.ser.std.MapSerializer;
-import com.team4u.log.config.LogConfigManager;
 import com.team4u.log.mask.FastMasker;
 import com.team4u.log.mask.config.MaskRuleRepository;
 
@@ -35,9 +34,7 @@ public class MaskableMapSerializer extends JsonSerializer<Map<?, ?>> implements 
 
         gen.writeStartObject();
 
-        // 获取当前实时最大字符串长度
-        int maxLength = LogConfigManager.getInstance().getCurrentConfig()
-                .getFinOpsConfig().getMaxStringLength();
+        int maxLength = JacksonSerializationContext.resolveMaxStringLength(provider);
 
         for (Map.Entry<?, ?> entry : value.entrySet()) {
             Object key = entry.getKey();

@@ -111,6 +111,11 @@ public class LoggersTest {
         // 模拟染色规则存在的场景
         // 这个测试验证 Loggers.log() 中的性能保护逻辑是否正确处理染色
         // 详细逻辑在 FinalReviewFixTest 中已覆盖集成，此处侧重 Fluent API 交互
+        DyeingRule rule = new DyeingRule();
+        rule.setId("bypass");
+        rule.setCondition("true");
+        refreshRules(Collections.singletonList(rule));
+
         Loggers.of(this.getClass()).action("Test").log();
         Assert.assertEquals(1, logHelper.allEvents().size());
     }

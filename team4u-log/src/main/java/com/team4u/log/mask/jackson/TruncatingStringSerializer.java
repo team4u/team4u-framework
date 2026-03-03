@@ -3,7 +3,6 @@ package com.team4u.log.mask.jackson;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
-import com.team4u.log.config.LogConfigManager;
 
 import java.io.IOException;
 
@@ -25,9 +24,7 @@ public class TruncatingStringSerializer extends StdSerializer<String> {
             return;
         }
 
-        // 获取当前实时最大字符串长度
-        int maxLength = LogConfigManager.getInstance().getCurrentConfig()
-                .getFinOpsConfig().getMaxStringLength();
+        int maxLength = JacksonSerializationContext.resolveMaxStringLength(provider);
 
         if (maxLength > 0 && value.length() > maxLength) {
             // 直接在写入前截断，避免 Jackson 分配巨大的缓冲区

@@ -36,7 +36,7 @@ public class LogConfigReloadTest {
     @Test
     public void testDynamicMaskReload() throws Exception {
         // 1. 无规则时明文
-        Loggers.of(this.getClass()).put("mobile", "13800000000").log();
+        Loggers.of(this.getClass()).put("mobile", "13800000000").atInfo().log();
         Assert.assertTrue(logHelper.lastJson().contains("13800000000"));
 
         // 2. 推送热重载规则
@@ -45,7 +45,7 @@ public class LogConfigReloadTest {
         Thread.sleep(50);
 
         // 3. 验证生效
-        Loggers.of(this.getClass()).put("mobile", "13800000000").log();
+        Loggers.of(this.getClass()).put("mobile", "13800000000").atInfo().log();
         Assert.assertTrue("配置热推后应脱敏, JSON 内容为: " + logHelper.lastJson(), logHelper.lastJson().contains("138*****000"));
     }
 
