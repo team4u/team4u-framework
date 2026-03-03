@@ -72,7 +72,7 @@ public class LogEvent {
      * @return 属性值，如果 payload 为空或键不存在则返回默认值
      */
     @SuppressWarnings("unchecked")
-    public <T> T get(String key, T defaultValue) {
+    public <T> T getOrDefault(String key, T defaultValue) {
         Object value = get(key);
         return value != null ? (T) value : defaultValue;
     }
@@ -84,7 +84,7 @@ public class LogEvent {
      * @param value 属性值
      * @return 当前实例，支持链式调用
      */
-    public LogEvent kv(String key, Object value) {
+    public LogEvent put(String key, Object value) {
         if (payload == null) {
             payload = new LinkedHashMap<>();
         }
@@ -98,12 +98,12 @@ public class LogEvent {
      * @param kvs 属性 Map
      * @return 当前实例，支持链式调用
      */
-    public LogEvent kvs(Map<String, Object> kvs) {
-        if (kvs != null) {
+    public LogEvent putAll(Map<String, Object> entries) {
+        if (entries != null) {
             if (payload == null) {
                 payload = new LinkedHashMap<>();
             }
-            payload.putAll(kvs);
+            payload.putAll(entries);
         }
         return this;
     }
@@ -112,12 +112,12 @@ public class LogEvent {
      * 派生当前日志事件状态，生成一个新的独立实例。
      * <p>
      * 常用于将当前 LogEvent 作为模板（Template），
-     * 预置公共的 KV 属性或动作，在具体使用时 fork 出来，避免状态污染。
+     * 预置公共的 KV 属性或动作，在具体使用时 derive 出来，避免状态污染。
      * 特别说明：payload (KV 映射) 会进行浅拷贝（创建新的 Map）。
      *
      * @return 派生的 LogEvent 实例
      */
-    public LogEvent fork() {
+    public LogEvent derive() {
         LogEvent copy = new LogEvent();
         copy.setLoggerName(this.loggerName);
         copy.setLevel(this.level);

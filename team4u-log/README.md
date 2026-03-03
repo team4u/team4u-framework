@@ -65,8 +65,8 @@ UserReq user = new UserReq("周杰伦", "13800138000");
 Loggers.of(OrderService.class)
        .action("CreateOrder")        // 业务动作
        .duration(120)                // 耗时(ms)
-       .kv("orderId", "ORD-12345")   // 附加 K-V 载荷
-       .kv("user", user)
+       .put("orderId", "ORD-12345")   // 附加 K-V 载荷
+       .put("user", user)
        .success()                    // 标记为成功 (默认 INFO 级别)
        .log();                       // 提交输出
 ```
@@ -93,7 +93,7 @@ Loggers.of(OrderService.class)
 | `level(Level level)` | 通用方法：直接设置日志级别。 |
 | `atTrace() / atDebug() / atInfo() / atWarn() / atError()` | 手动指定日志输出级别。 |
 | `status(String status)` | 手动指定业务状态（如 `processing`）。 |
-| `fork()` | **派生日志器**。基于当前状态拷贝出一个独立的副本。常用于定义日志模板。 |
+| `derive()` | **派生日志器**。基于当前状态拷贝出一个独立的副本。常用于定义日志模板。 |
 | `log()` | 终结方法，将事件提交给日志引擎的流水线进行拦截与输出。 |
 ### 拦截器管理 (LogInterceptorManager)
 日志处理流水线由 `LogInterceptorManager` 统一管理。它负责内置拦截器的初始化、自定义拦截器的注册以及执行链的调度。
@@ -125,20 +125,20 @@ MdcEnrichInterceptor.getInstance().setTraceIdKey("requestId");
 
 ---
 #### 日志器派生 (Template Logger / fork)
-为了减少重复代码（如每个方法都要手动 `.kv("module", "Trade")`），您可以预定义一个**模板日志器**，在具体业务点通过 `fork()` 派生出独立实例。派生实例会继承模板的所有 KV 和配置，且后续的修改**互不污染**。
+为了减少重复代码（如每个方法都要手动 `.put("module", "Trade")`），您可以预定义一个**模板日志器**，在具体业务点通过 `derive()` 派生出独立实例。派生实例会继承模板的所有 KV 和配置，且后续的修改**互不污染**。
 
 ```java
 public class OrderService {
     // 1. 定义模板：预置公共 KV
     private static final Loggers BASE_LOG = Loggers.of(OrderService.class)
-            .kv("module", "OrderCenter")
-            .kv("version", "v2.0");
+            .put("module", "OrderCenter")
+            .put("version", "v2.0");
 
     public void createOrder(String id) {
         // 2. 派生副本使用：副本上的 action/kv 不会影响 BASE_LOG 模板
-        BASE_LOG.fork()
+        BASE_LOG.derive()
                 .action("CreateOrder")
-                .kv("orderId", id)
+                .put("orderId", id)
                 .success()
                 .log();
     }
@@ -299,7 +299,7 @@ public class UserReq {
 ```
 
 ##### 默认开箱即用
-框架默认对 `java.util.HashMap` 和 `java.util.LinkedHashMap` 的 `"password"` 和 `"creditCard"` 字段开启了脱敏。由于 `.kv()` 和方法入参记录底层均使用 `LinkedHashMap`，这些规则会自动覆盖到 Fluent API 和方法追踪中。
+框架默认对 `java.util.HashMap` 和 `java.util.LinkedHashMap` 的 `"password"` 和 `"creditCard"` 字段开启了脱敏。由于 `.put()` 和方法入参记录底层均使用 `LinkedHashMap`，这些规则会自动覆盖到 Fluent API 和方法追踪中。
 
 #### 全局通配符脱敏（一劳永逸）
 在微服务场景中，DTO 可能多达上千个。本模块支持使用特殊的类名 `"*"` 来定义**全局脱敏规则**。

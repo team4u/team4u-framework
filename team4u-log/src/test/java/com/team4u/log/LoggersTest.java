@@ -37,7 +37,7 @@ public class LoggersTest {
                 .status("processing")
                 .duration(50)
                 .level(Level.DEBUG)
-                .kv("key1", "val1")
+                .put("key1", "val1")
                 .log();
 
         LogEvent event = logHelper.lastEvent();
@@ -110,13 +110,13 @@ public class LoggersTest {
     public void testFork() {
         // 1. 定义模板日志器
         Loggers baseLog = Loggers.of(LoggersTest.class)
-                .kv("module", "TestModule")
-                .kv("version", "1.0");
+                .put("module", "TestModule")
+                .put("version", "1.0");
 
         // 2. 第一次派生并记录日志
-        baseLog.fork()
+        baseLog.derive()
                 .action("Action1")
-                .kv("user", "Alice")
+                .put("user", "Alice")
                 .success()
                 .log();
 
@@ -127,9 +127,9 @@ public class LoggersTest {
         Assert.assertEquals("TestModule", event1.getPayload().get("module"));
 
         // 3. 第二次派生并记录日志
-        baseLog.fork()
+        baseLog.derive()
                 .action("Action2")
-                .kv("orderId", "ORDER_123")
+                .put("orderId", "ORDER_123")
                 .success()
                 .log();
 

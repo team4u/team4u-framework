@@ -1,5 +1,6 @@
 package com.team4u.log.core;
 
+import com.team4u.log.config.LogDynamicConfig.DyeingRule;
 import com.team4u.log.pipeline.LogInterceptor;
 import com.team4u.log.pipeline.LogInterceptorManager;
 import com.team4u.log.pipeline.interceptor.MdcEnrichInterceptor;
@@ -22,7 +23,9 @@ public class LogInterceptorManagerTest {
         // 1. 修改拦截器状态
         MdcEnrichInterceptor.getInstance().setTraceIdKey("customTraceId");
         RateLimitInterceptor.getInstance().updateLimit(50);
-        TargetedDyeingInterceptor.getInstance().refreshRules(Collections.singletonList(new com.team4u.log.config.LogDynamicConfig.DyeingRule()));
+        DyeingRule activeRule = new DyeingRule();
+        activeRule.setCondition("true");
+        TargetedDyeingInterceptor.getInstance().refreshRules(Collections.singletonList(activeRule));
 
         // 2. 验证状态已修改
         Assert.assertTrue(TargetedDyeingInterceptor.getInstance().hasActiveRules());

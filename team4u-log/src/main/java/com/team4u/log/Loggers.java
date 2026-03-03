@@ -43,12 +43,12 @@ public class Loggers {
      * 派生当前日志器状态，生成一个新的独立实例。
      * <p>
      * 常用于将当前 Loggers 作为模板（Template），
-     * 预置公共的 KV 属性或动作，在具体使用时 fork 出来，避免状态污染。
+     * 预置公共的 KV 属性或动作，在具体使用时 derive 出来，避免状态污染。
      *
      * @return 派生的 Loggers 实例
      */
-    public Loggers fork() {
-        return new Loggers(this.slf4jLogger, this.event.fork());
+    public Loggers derive() {
+        return new Loggers(this.slf4jLogger, this.event.derive());
     }
 
     public LogEvent getEvent() {
@@ -179,7 +179,7 @@ public class Loggers {
      * @param value 值
      * @return 当前实例
      */
-    public Loggers kv(String key, Object value) {
+    public Loggers put(String key, Object value) {
         this.event.getPayload().put(key, value);
         return this;
     }
@@ -190,7 +190,7 @@ public class Loggers {
      * @param map K-V 集合
      * @return 当前实例
      */
-    public Loggers kvs(Map<String, Object> map) {
+    public Loggers putAll(Map<String, Object> map) {
         if (map != null) {
             this.event.getPayload().putAll(map);
         }

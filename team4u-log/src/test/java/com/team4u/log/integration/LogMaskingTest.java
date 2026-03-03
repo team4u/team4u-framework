@@ -43,7 +43,7 @@ public class LogMaskingTest {
         data.put("password", "secret123");
         data.put("creditCard", "1234-5678");
 
-        Loggers.of(this.getClass()).kv("data", data).log();
+        Loggers.of(this.getClass()).put("data", data).log();
 
         String json = logHelper.lastJson();
         Assert.assertTrue("密码应脱敏", json.contains("\"password\":\"******\""));
@@ -61,7 +61,7 @@ public class LogMaskingTest {
         rules.put(ThirdPartyUser.class.getName(), userRules);
         MaskRuleRepository.getInstance().refreshRules(rules);
 
-        Loggers.of(this.getClass()).kv("user", user).log();
+        Loggers.of(this.getClass()).put("user", user).log();
 
         String json = logHelper.lastJson();
         Assert.assertTrue("第三方 DTO 手机号应脱敏", json.contains("138*****000"));
@@ -79,7 +79,7 @@ public class LogMaskingTest {
         Map<String, Object> data = new HashMap<>();
         data.put("anyPhone", "13911112222");
 
-        Loggers.of(this.getClass()).kv("data", data).log();
+        Loggers.of(this.getClass()).put("data", data).log();
 
         String json = logHelper.lastJson();
         Assert.assertTrue("通配符匹配手机号应脱敏", json.contains("139*****222"));

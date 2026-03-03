@@ -55,7 +55,7 @@ public class LogContextCollectorTest {
         MDC.put("k1", "mdc");
 
         // Payload 优先级最高
-        LogEvent event = new LogEvent().kv("k1", "payload");
+        LogEvent event = new LogEvent().put("k1", "payload");
         Map<String, Object> context = LogContext.getCollector().collect(event);
 
         Assert.assertEquals("payload", context.get("k1"));
@@ -64,7 +64,7 @@ public class LogContextCollectorTest {
     @Test
     @SuppressWarnings("unchecked")
     public void testGetWholePayload() {
-        LogEvent event = new LogEvent().kv("k1", "v1").kv("k2", "v2");
+        LogEvent event = new LogEvent().put("k1", "v1").put("k2", "v2");
         Map<String, Object> context = LogContext.getCollector().collect(event);
 
         // 验证通过 "payload" 键获取完整的 Map

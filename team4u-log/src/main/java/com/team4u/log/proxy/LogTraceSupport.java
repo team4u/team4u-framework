@@ -48,14 +48,14 @@ public class LogTraceSupport {
             Loggers loggers = Loggers.of(options.getTargetClass())
                     .action(options.getAction())
                     .duration(cost)
-                    .kvs(namedArgs)
-                    .kv("resp", result);
+                    .putAll(namedArgs)
+                    .put("resp", result);
 
             // 判定慢日志状态
             if (options.getSlowThreshold() > 0 && cost > options.getSlowThreshold()) {
                 loggers.atWarn()
                         .status("slow_success")
-                        .kv("slowThreshold", options.getSlowThreshold());
+                        .put("slowThreshold", options.getSlowThreshold());
             } else {
                 loggers.success();
             }
@@ -70,13 +70,13 @@ public class LogTraceSupport {
             Loggers loggers = Loggers.of(options.getTargetClass())
                     .action(options.getAction())
                     .duration(cost)
-                    .kvs(namedArgs);
+                    .putAll(namedArgs);
 
             // 判定是否为需降级的业务异常
             if (isIgnoredException(throwable, options)) {
                 loggers.atWarn()
                         .status("business_error")
-                        .kv("errMsg", throwable.getMessage());
+                        .put("errMsg", throwable.getMessage());
             } else {
                 loggers.failed(throwable);
             }
