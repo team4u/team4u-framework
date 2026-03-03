@@ -1,5 +1,7 @@
 package com.team4u.log.integration;
 
+import com.team4u.log.config.LogConfigManager;
+import com.team4u.log.config.LogDynamicConfig;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.mask.config.MaskRuleRepository;
 import com.team4u.log.proxy.AutoLogTrace;
@@ -24,6 +26,15 @@ public class LogDynamicProxyTest {
     @Before
     public void setup() {
         logHelper = TestLogHelper.start();
+        // 确保单例已注册
+        LogConfigManager.getInstance().addListener(MaskRuleRepository.getInstance());
+        LogConfigManager.getInstance().setCurrentConfig(new LogDynamicConfig());
+    }
+
+    private void refreshRules(Map<String, Map<String, String>> rules) {
+        LogDynamicConfig config = new LogDynamicConfig();
+        config.setMaskRules(rules);
+        LogConfigManager.getInstance().setCurrentConfig(config);
     }
 
     @After
@@ -42,7 +53,7 @@ public class LogDynamicProxyTest {
         userRules.put("appSecret", "PASSWORD");
         Map<String, Map<String, String>> rules = new HashMap<>();
         rules.put(AnnotatedSmsClient.class.getName(), userRules);
-        MaskRuleRepository.getInstance().refreshRules(rules);
+        refreshRules(rules);
 
         // 3. 创建代理
         ThirdPartySmsClient proxy = LogProxyFactory.createProxy(client);
@@ -65,8 +76,7 @@ public class LogDynamicProxyTest {
         // 1. 创建接口代理 (接口上加注解)
         ThirdPartyPaymentApi proxy = LogProxyFactory.createProxy(
                 (account, amount) -> "SUCCESS",
-                ThirdPartyPaymentApi.class
-        );
+                ThirdPartyPaymentApi.class);
 
         // 2. 调用
         proxy.pay("any-account", 100);

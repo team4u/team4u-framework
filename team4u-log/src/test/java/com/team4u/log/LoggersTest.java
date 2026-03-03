@@ -1,5 +1,7 @@
 package com.team4u.log;
 
+import com.team4u.log.config.LogConfigManager;
+import com.team4u.log.config.LogDynamicConfig;
 import com.team4u.log.config.LogDynamicConfig.DyeingRule;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor;
@@ -11,6 +13,7 @@ import org.junit.Test;
 import org.slf4j.event.Level;
 
 import java.util.Collections;
+import java.util.List;
 
 /**
  * 结构化日志 Fluent API 单元测试
@@ -22,6 +25,15 @@ public class LoggersTest {
     @Before
     public void setup() {
         logHelper = TestLogHelper.start();
+        // 确保单例已注册
+        LogConfigManager.getInstance().addListener(TargetedDyeingInterceptor.getInstance());
+        LogConfigManager.getInstance().setCurrentConfig(new LogDynamicConfig());
+    }
+
+    private void refreshRules(List<DyeingRule> rules) {
+        LogDynamicConfig config = new LogDynamicConfig();
+        config.setDyeingRules(rules);
+        LogConfigManager.getInstance().setCurrentConfig(config);
     }
 
     @After
@@ -74,7 +86,7 @@ public class LoggersTest {
         DyeingRule rule = new DyeingRule();
         rule.setId("test");
         rule.setCondition("true");
-        TargetedDyeingInterceptor.getInstance().refreshRules(Collections.singletonList(rule));
+        refreshRules(Collections.singletonList(rule));
 
         Loggers loggers = Loggers.of(this.getClass());
 

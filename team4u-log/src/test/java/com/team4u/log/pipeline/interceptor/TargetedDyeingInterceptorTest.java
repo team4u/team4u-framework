@@ -1,6 +1,7 @@
 package com.team4u.log.pipeline.interceptor;
 
 import com.team4u.log.LogContext;
+import com.team4u.log.config.LogConfigManager;
 import com.team4u.log.config.LogDynamicConfig;
 import com.team4u.log.core.LogEvent;
 import org.junit.Assert;
@@ -10,6 +11,7 @@ import org.slf4j.MDC;
 import org.slf4j.event.Level;
 
 import java.util.Collections;
+import java.util.List;
 
 /**
  * 定向染色拦截器单元测试
@@ -23,6 +25,16 @@ public class TargetedDyeingInterceptorTest {
         interceptor = TargetedDyeingInterceptor.getInstance();
         interceptor.reset();
         MDC.clear();
+
+        // 确保单例已注册
+        LogConfigManager.getInstance().addListener(interceptor);
+        LogConfigManager.getInstance().setCurrentConfig(new LogDynamicConfig());
+    }
+
+    private void refreshRules(List<LogDynamicConfig.DyeingRule> rules) {
+        LogDynamicConfig config = new LogDynamicConfig();
+        config.setDyeingRules(rules);
+        LogConfigManager.getInstance().setCurrentConfig(config);
     }
 
     @Test
@@ -32,7 +44,7 @@ public class TargetedDyeingInterceptorTest {
         rule.setId("rule1");
         rule.setCondition("action == 'DyeMe'");
         rule.setTargetLevel(Level.DEBUG);
-        interceptor.refreshRules(Collections.singletonList(rule));
+        refreshRules(Collections.singletonList(rule));
 
         // 2. 执行染色
         LogEvent event = new LogEvent().setAction("DyeMe").setLevel(Level.INFO);
@@ -48,7 +60,7 @@ public class TargetedDyeingInterceptorTest {
         LogDynamicConfig.DyeingRule rule = new LogDynamicConfig.DyeingRule();
         rule.setCondition("action == 'Special'");
         rule.setTargetLevel(Level.WARN);
-        interceptor.refreshRules(Collections.singletonList(rule));
+        refreshRules(Collections.singletonList(rule));
 
         LogEvent event = new LogEvent().setAction("Normal").setLevel(Level.INFO);
         interceptor.handle(event);
@@ -63,7 +75,7 @@ public class TargetedDyeingInterceptorTest {
         rule.setId("rule-full-mdc");
         rule.setCondition("traceId == 'T123' && cluster == 'gray'");
         rule.setTargetLevel(Level.TRACE);
-        interceptor.refreshRules(Collections.singletonList(rule));
+        refreshRules(Collections.singletonList(rule));
 
         // 2. 模拟 MDC
         MDC.put("traceId", "T123");
@@ -84,7 +96,7 @@ public class TargetedDyeingInterceptorTest {
         rule.setId("rule-custom");
         rule.setCondition("customAttr == 'V1'");
         rule.setTargetLevel(Level.DEBUG);
-        interceptor.refreshRules(Collections.singletonList(rule));
+        refreshRules(Collections.singletonList(rule));
 
         // 2. 注册自定义寻值源 (使用全局静态入口)
         LogContext.addSource((event, key) -> "customAttr".equals(key) ? "V1" : null);
@@ -109,7 +121,7 @@ public class TargetedDyeingInterceptorTest {
         rule.setTargetLevel(Level.WARN);
 
         // 刷新规则不应抛出异常（安全隔离）
-        interceptor.refreshRules(Collections.singletonList(rule));
+        refreshRules(Collections.singletonList(rule));
 
         LogEvent event = new LogEvent().setAction("Any").setLevel(Level.INFO);
         interceptor.handle(event);

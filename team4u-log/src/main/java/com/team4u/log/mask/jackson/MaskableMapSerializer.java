@@ -1,11 +1,12 @@
 package com.team4u.log.mask.jackson;
 
 import com.fasterxml.jackson.core.JsonGenerator;
+import com.fasterxml.jackson.databind.BeanProperty;
 import com.fasterxml.jackson.databind.JsonSerializer;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.ser.ContextualSerializer;
 import com.fasterxml.jackson.databind.ser.std.MapSerializer;
-import com.team4u.log.core.LogSerializer;
+import com.team4u.log.config.LogConfigManager;
 import com.team4u.log.mask.FastMasker;
 import com.team4u.log.mask.config.MaskRuleRepository;
 
@@ -19,13 +20,9 @@ import java.util.Map;
  */
 public class MaskableMapSerializer extends JsonSerializer<Map<?, ?>> implements ContextualSerializer {
 
-    private final LogSerializer serializer;
-    private final MapSerializer delegate;
     private final String mapClassName;
 
-    public MaskableMapSerializer(LogSerializer serializer, MapSerializer delegate, String mapClassName) {
-        this.serializer = serializer;
-        this.delegate = delegate;
+    public MaskableMapSerializer(JacksonLogSerializer serializer, MapSerializer delegate, String mapClassName) {
         this.mapClassName = mapClassName;
     }
 
@@ -37,6 +34,10 @@ public class MaskableMapSerializer extends JsonSerializer<Map<?, ?>> implements 
         }
 
         gen.writeStartObject();
+
+        // 获取当前实时最大字符串长度
+        int maxLength = LogConfigManager.getInstance().getCurrentConfig()
+                .getFinOpsConfig().getMaxStringLength();
 
         for (Map.Entry<?, ?> entry : value.entrySet()) {
             Object key = entry.getKey();
@@ -55,7 +56,6 @@ public class MaskableMapSerializer extends JsonSerializer<Map<?, ?>> implements 
                 }
 
                 // 应用长度截断
-                int maxLength = serializer.getMaxStringLength();
                 if (maxLength > 0 && strVal.length() > maxLength) {
                     gen.writeString(strVal.substring(0, maxLength) + "... [Truncated len:" + strVal.length() + "]");
                 } else {
@@ -72,7 +72,7 @@ public class MaskableMapSerializer extends JsonSerializer<Map<?, ?>> implements 
 
     @Override
     public JsonSerializer<?> createContextual(SerializerProvider prov,
-                                              com.fasterxml.jackson.databind.BeanProperty property) {
+            BeanProperty property) {
         // 核心逻辑在 serialize 中，此处保持当前实例
         return this;
     }

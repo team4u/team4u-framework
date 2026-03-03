@@ -2,6 +2,7 @@ package com.team4u.log.pipeline.interceptor;
 
 import cn.hutool.cache.CacheUtil;
 import cn.hutool.cache.impl.TimedCache;
+import com.team4u.log.config.LogConfigManager;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.pipeline.LogInterceptor;
 import org.slf4j.LoggerFactory;
@@ -22,8 +23,6 @@ public class RateLimitInterceptor implements LogInterceptor {
      */
     private final TimedCache<String, AtomicInteger> errorCounter = CacheUtil.newTimedCache(1000);
 
-    private volatile int errorLimitPerSecond = 10;
-
     private RateLimitInterceptor() {
         reset();
     }
@@ -40,17 +39,7 @@ public class RateLimitInterceptor implements LogInterceptor {
     @Override
     public void reset() {
         errorCounter.clear();
-        errorLimitPerSecond = 10;
         errorCounter.schedulePrune(1000);
-    }
-
-    /**
-     * 动态更新限流阈值
-     *
-     * @param limit 每秒限制次数
-     */
-    public void updateLimit(int limit) {
-        this.errorLimitPerSecond = limit;
     }
 
     @Override
@@ -64,6 +53,10 @@ public class RateLimitInterceptor implements LogInterceptor {
         if (event.getException() == null) {
             return true;
         }
+
+        // 获取当前实时限流阈值
+        int errorLimitPerSecond = LogConfigManager.getInstance().getCurrentConfig()
+                .getFinOpsConfig().getErrorLimitPerSecond();
 
         // 生成特征索引：动作 + 异常类名
         String signature = event.getAction() + "|" + event.getException().getClass().getName();

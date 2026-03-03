@@ -1,5 +1,8 @@
 package com.team4u.log.mask.config;
 
+import com.team4u.log.config.LogConfigListener;
+import com.team4u.log.config.LogDynamicConfig;
+
 import java.util.HashMap;
 import java.util.Map;
 
@@ -8,7 +11,7 @@ import java.util.Map;
  * <p>
  * 维护第三方类或 Map 的脱敏规则，支持快速检索。
  */
-public class MaskRuleRepository {
+public class MaskRuleRepository implements LogConfigListener {
     private static final MaskRuleRepository INSTANCE = new MaskRuleRepository();
 
     /**
@@ -61,12 +64,8 @@ public class MaskRuleRepository {
         return ruleCache.get(className);
     }
 
-    /**
-     * 刷新脱敏规则
-     *
-     * @param newRules 新规则对
-     */
-    public void refreshRules(Map<String, Map<String, String>> newRules) {
-        this.ruleCache = newRules;
+    @Override
+    public void onConfigChanged(LogDynamicConfig newConfig) {
+        this.ruleCache = newConfig.getMaskRules();
     }
 }

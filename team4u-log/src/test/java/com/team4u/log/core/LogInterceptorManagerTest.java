@@ -1,10 +1,11 @@
 package com.team4u.log.core;
 
+import com.team4u.log.config.LogConfigManager;
+import com.team4u.log.config.LogDynamicConfig;
 import com.team4u.log.config.LogDynamicConfig.DyeingRule;
 import com.team4u.log.pipeline.LogInterceptor;
 import com.team4u.log.pipeline.LogInterceptorManager;
 import com.team4u.log.pipeline.interceptor.MdcEnrichInterceptor;
-import com.team4u.log.pipeline.interceptor.RateLimitInterceptor;
 import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor;
 import org.junit.Assert;
 import org.junit.Test;
@@ -20,20 +21,33 @@ public class LogInterceptorManagerTest {
     public void testReset() {
         LogInterceptorManager manager = new LogInterceptorManager();
 
-        // 1. 修改拦截器状态
-        MdcEnrichInterceptor.getInstance().setTraceIdKey("customTraceId");
-        RateLimitInterceptor.getInstance().updateLimit(50);
-        DyeingRule activeRule = new DyeingRule();
-        activeRule.setCondition("true");
-        TargetedDyeingInterceptor.getInstance().refreshRules(Collections.singletonList(activeRule));
+        // 1. 初始化监听器（模拟 Bootstrap 行为）
+        LogConfigManager.getInstance().addListener(TargetedDyeingInterceptor.getInstance());
 
-        // 2. 验证状态已修改
+        // 2. 修改拦截器状态
+        MdcEnrichInterceptor.getInstance().setTraceIdKey("customTraceId");
+
+        LogDynamicConfig config = new LogDynamicConfig();
+        LogDynamicConfig.FinOpsConfig finOpsConfig = new LogDynamicConfig.FinOpsConfig();
+        finOpsConfig.setErrorLimitPerSecond(50);
+        config.setFinOpsConfig(finOpsConfig);
+
+        DyeingRule activeRule = new DyeingRule();
+        activeRule.setId("test");
+        activeRule.setCondition("true");
+        config.setDyeingRules(Collections.singletonList(activeRule));
+
+        LogConfigManager.getInstance().setCurrentConfig(config);
+
+        // 3. 验证状态已修改
         Assert.assertTrue(TargetedDyeingInterceptor.getInstance().hasActiveRules());
 
-        // 3. 执行重置
+        // 4. 执行重置
         manager.reset();
+        // 同时也重置配置
+        LogConfigManager.getInstance().setCurrentConfig(new LogDynamicConfig());
 
-        // 4. 验证状态已恢复默认
+        // 5. 验证状态已恢复默认
         Assert.assertFalse(TargetedDyeingInterceptor.getInstance().hasActiveRules());
     }
 

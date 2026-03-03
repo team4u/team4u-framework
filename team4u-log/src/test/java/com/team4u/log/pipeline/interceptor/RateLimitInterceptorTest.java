@@ -1,5 +1,7 @@
 package com.team4u.log.pipeline.interceptor;
 
+import com.team4u.log.config.LogConfigManager;
+import com.team4u.log.config.LogDynamicConfig;
 import com.team4u.log.core.LogEvent;
 import org.junit.Assert;
 import org.junit.Before;
@@ -16,7 +18,16 @@ public class RateLimitInterceptorTest {
     public void setup() {
         interceptor = RateLimitInterceptor.getInstance();
         interceptor.reset();
-        interceptor.updateLimit(2); // 将阈值调低方便测试
+        // 将阈值调低方便测试
+        updateLimit(2);
+    }
+
+    private void updateLimit(int limit) {
+        LogDynamicConfig config = new LogDynamicConfig();
+        LogDynamicConfig.FinOpsConfig finOpsConfig = new LogDynamicConfig.FinOpsConfig();
+        finOpsConfig.setErrorLimitPerSecond(limit);
+        config.setFinOpsConfig(finOpsConfig);
+        LogConfigManager.getInstance().setCurrentConfig(config);
     }
 
     @Test
@@ -55,12 +66,12 @@ public class RateLimitInterceptorTest {
 
     @Test
     public void testResetAndThresholdUpdate() {
-        interceptor.updateLimit(1);
+        updateLimit(1);
         interceptor.handle(createErrorEvent("X", new RuntimeException()));
         Assert.assertFalse("第2条本应被拦截", interceptor.handle(createErrorEvent("X", new RuntimeException())));
 
         // 刷新限流并重置
-        interceptor.updateLimit(10);
+        updateLimit(10);
         interceptor.reset();
 
         Assert.assertTrue("重置后应恢复正常", interceptor.handle(createErrorEvent("X", new RuntimeException())));

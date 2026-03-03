@@ -4,6 +4,8 @@ import cn.hutool.log.Log;
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.criterion.MatchContext;
 import com.team4u.log.LogContext;
+import com.team4u.log.config.LogConfigListener;
+import com.team4u.log.config.LogDynamicConfig;
 import com.team4u.log.config.LogDynamicConfig.DyeingRule;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.pipeline.LogInterceptor;
@@ -19,7 +21,7 @@ import java.util.Map;
  * 支持根据规则动态调整日志级别，基于 team4u-criterion 进行高效匹配。
  * 通过 LogContext 全局收集上下文信息。
  */
-public class TargetedDyeingInterceptor implements LogInterceptor {
+public class TargetedDyeingInterceptor implements LogInterceptor, LogConfigListener {
 
     private static final Log log = Log.get();
 
@@ -58,19 +60,12 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
      * 判断当前是否存在有效的染色规则
      */
     public boolean hasActiveRules() {
-        return activeRules != null && !activeRules.isEmpty();
+        return !activeRules.isEmpty();
     }
 
-    /**
-     * 刷新染色规则
-     *
-     * @param rules 染色规则列表
-     */
-    public void refreshRules(List<DyeingRule> rules) {
-        if (rules == null || rules.isEmpty()) {
-            this.activeRules = new ArrayList<>();
-            return;
-        }
+    @Override
+    public void onConfigChanged(LogDynamicConfig newConfig) {
+        List<DyeingRule> rules = newConfig.getDyeingRules();
 
         List<DyeingRule> validRules = new ArrayList<>();
         Criteria activeCriteria = this.criteria;
@@ -84,7 +79,7 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
                 }
             } catch (Exception e) {
                 // 预热失败，打印错误日志，该规则将不会生效
-                log.error("TargetedDyeingInterceptor|refreshRules|error|ruleId={}|condition={}|msg={}",
+                log.error("TargetedDyeingInterceptor|onConfigChanged|error|ruleId={}|condition={}|msg={}",
                         rule.getId(), rule.getCondition(), e.getMessage());
             }
         }
@@ -101,7 +96,7 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
     @Override
     public boolean handle(LogEvent event) {
         List<DyeingRule> rules = activeRules;
-        if (rules == null || rules.isEmpty()) {
+        if (rules.isEmpty()) {
             return true;
         }
 

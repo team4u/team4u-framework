@@ -2,13 +2,10 @@ package com.team4u.log.core;
 
 import com.team4u.log.appender.LogAppender;
 import com.team4u.log.appender.Slf4jLogAppender;
-import com.team4u.log.mask.config.MaskRuleRepository;
 import com.team4u.log.mask.jackson.JacksonLogSerializer;
 import com.team4u.log.pipeline.LogInterceptorManager;
 import lombok.Getter;
 import lombok.Setter;
-
-import java.util.HashMap;
 
 /**
  * 日志核心引擎
@@ -63,48 +60,11 @@ public class LogEngine {
     }
 
     /**
-     * 获取全局日志序列化最大长度阈值
-     *
-     * @return 最大长度
-     */
-    public int getMaxLogLength() {
-        return serializer.getMaxLogLength();
-    }
-
-    /**
-     * 设置全局日志序列化最大长度阈值
-     *
-     * @param maxLogLength 最大长度
-     */
-    public void setMaxLogLength(int maxLogLength) {
-        serializer.setMaxLogLength(maxLogLength);
-    }
-
-    /**
-     * 获取单个字符串字段的最大长度
-     *
-     * @return 最大长度
-     */
-    public int getMaxStringLength() {
-        return serializer.getMaxStringLength();
-    }
-
-    /**
-     * 设置单个字符串字段的最大长度
-     *
-     * @param maxStringLength 最大长度
-     */
-    public void setMaxStringLength(int maxStringLength) {
-        serializer.setMaxStringLength(maxStringLength);
-    }
-
-    /**
      * 重置引擎配置及拦截器状态
      */
     public void reset() {
         this.appender = new Slf4jLogAppender();
         this.interceptorManager.reset();
-        MaskRuleRepository.getInstance().refreshRules(new HashMap<>());
         // 重置序列化器
         this.serializer.reset();
     }

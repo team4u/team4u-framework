@@ -3,6 +3,8 @@ package com.team4u.log.config;
 import lombok.Data;
 import org.slf4j.event.Level;
 
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -15,22 +17,22 @@ public class LogDynamicConfig {
     /**
      * 脱敏规则：ClassName -> (FieldName -> MaskPolicyKey)
      */
-    private Map<String, Map<String, String>> maskRules;
+    private Map<String, Map<String, String>> maskRules = new HashMap<>();
 
     /**
      * 免侵入代理规则：ClassName -> ProxyRule
      */
-    private Map<String, ProxyRule> proxyRules;
+    private Map<String, ProxyRule> proxyRules = new HashMap<>();
 
     /**
      * 动态染色规则列表
      */
-    private List<DyeingRule> dyeingRules;
+    private List<DyeingRule> dyeingRules = new ArrayList<>();
 
     /**
      * 限流及长度限制配置
      */
-    private FinOpsConfig finOpsConfig;
+    private FinOpsConfig finOpsConfig = new FinOpsConfig();
 
     /**
      * 代理规则配置

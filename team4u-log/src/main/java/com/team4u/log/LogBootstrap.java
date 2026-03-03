@@ -5,6 +5,7 @@ import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.log.config.LogConfigManager;
 import com.team4u.log.core.LogEngine;
+import com.team4u.log.mask.config.MaskRuleRepository;
 import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor;
 
 /**
@@ -41,13 +42,19 @@ public class LogBootstrap {
     }
 
     public void start() {
-        // 1. 初始化动态配置管理器
-        LogConfigManager.getInstance().init(configManager);
+        LogConfigManager logConfigManager = LogConfigManager.getInstance();
 
-        // 2. 注入可替换的条件匹配器
+        // 1. 注册需要预编译或维护复杂内部状态的监听器
+        logConfigManager.addListener(TargetedDyeingInterceptor.getInstance());
+        logConfigManager.addListener(MaskRuleRepository.getInstance());
+
+        // 2. 初始化动态配置管理器
+        logConfigManager.init(configManager);
+
+        // 3. 注入可替换的条件匹配器
         TargetedDyeingInterceptor.getInstance().setCriteria(criteria);
 
-        // 3. 初始化核心引擎
+        // 4. 初始化核心引擎
         LogEngine.getInstance();
 
         log.info("LogBootstrap|start|success|Dynamic Masking & Targeted Dyeing enabled.");
