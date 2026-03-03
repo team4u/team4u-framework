@@ -33,12 +33,7 @@ public class LogContextLookupMap extends AbstractMap<String, Object> {
 
         String key = (String) keyObj;
 
-        // 1. 优先从 LogEvent 自带的 Payload 中查找
-        if (event.getPayload() != null && event.getPayload().containsKey(key)) {
-            return event.getPayload().get(key);
-        }
-
-        // 2. 按优先级轮询各个寻值源，直到命中或找遍全部
+        // 轮询各个寻值源策略 (如 PayloadSource, BasicMetadataSource, MdcSource 等)
         for (LogContextSource source : sources) {
             Object value = source.getValue(event, key);
             if (value != null) {

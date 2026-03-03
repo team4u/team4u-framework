@@ -27,8 +27,6 @@ public class BasicMetadataSource implements LogContextSource {
                 return event.getStatus();
             case "durationMs":
                 return event.getDurationMs() >= 0 ? event.getDurationMs() : null;
-            case "payload":
-                return event.getPayload();
             default:
                 return null;
         }

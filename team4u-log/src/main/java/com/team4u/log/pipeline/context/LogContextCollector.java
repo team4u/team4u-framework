@@ -4,12 +4,10 @@ import com.team4u.framework.policy.core.OrderedPolicyChain;
 import com.team4u.framework.policy.util.PolicyScanner;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.pipeline.context.source.BasicMetadataSource;
-import com.team4u.log.pipeline.context.source.InternalAttributesSource;
 import com.team4u.log.pipeline.context.source.MdcSource;
+import com.team4u.log.pipeline.context.source.PayloadSource;
 
-import java.util.Collections;
 import java.util.Map;
-import java.util.concurrent.ConcurrentHashMap;
 
 /**
  * 日志上下文收集器
@@ -48,13 +46,16 @@ public class LogContextCollector {
     public void reset() {
         chain.unregisterAll();
 
-        // 1. 注册内置：基础信息寻值源
+        // 1. 注册内置：业务载荷寻值源 (优先级最高)
+        chain.register(new PayloadSource());
+
+        // 2. 注册内置：基础信息寻值源
         chain.register(new BasicMetadataSource());
 
-        // 2. 注册内置：MDC 寻值源 (支持高性能按 Key 查找)
+        // 3. 注册内置：MDC 寻值源 (支持高性能按 Key 查找)
         chain.register(new MdcSource());
 
-        // 3. 自动发现：从 Java SPI (META-INF/services) 加载外部寻值源
+        // 4. 自动发现：从 Java SPI (META-INF/services) 加载外部寻值源
         PolicyScanner.registerFromServiceLoader(chain);
     }
 
