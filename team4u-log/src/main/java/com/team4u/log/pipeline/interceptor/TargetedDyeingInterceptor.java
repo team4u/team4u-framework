@@ -67,21 +67,30 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
      * @param rules 染色规则列表
      */
     public void refreshRules(List<DyeingRule> rules) {
-        if (rules == null) {
+        if (rules == null || rules.isEmpty()) {
             this.activeRules = new ArrayList<>();
             return;
         }
-        this.activeRules = rules;
 
-        // 预编译表达式，提升首次匹配性能
+        List<DyeingRule> validRules = new ArrayList<>();
         Criteria activeCriteria = this.criteria;
+
+        // 1. 预编译表达式，提升首次匹配性能，并过滤掉语法错误的规则
         for (DyeingRule rule : rules) {
             try {
-                activeCriteria.compileExpression(rule.getCondition());
+                if (rule.getCondition() != null && !rule.getCondition().trim().isEmpty()) {
+                    activeCriteria.compileExpression(rule.getCondition());
+                    validRules.add(rule);
+                }
             } catch (Exception e) {
-                log.error("TargetedDyeingInterceptor|refreshRules|error|ruleId={}|msg={}", rule.getId(), e.getMessage());
+                // 预热失败，打印错误日志，该规则将不会生效
+                log.error("TargetedDyeingInterceptor|refreshRules|error|ruleId={}|condition={}|msg={}",
+                        rule.getId(), rule.getCondition(), e.getMessage());
             }
         }
+
+        // 2. 只有预热完成后，才统一赋值给活跃规则列表，确保原子性切换
+        this.activeRules = validRules;
     }
 
     @Override
