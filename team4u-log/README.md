@@ -448,7 +448,7 @@ safeClient.send("13812345678", "sk_live_123abc", "您的验证码是 9527");
   - 直接访问：可以直接使用 Key 名（如 `orderId == 'ORD001'`），引擎会自动从 Payload 中检索。
   - 整体访问：使用 `payload` 关键字访问完整的业务数据 Map（如 `payload:size > 5` 判断字段数量）。
 - MDC 属性 (MDC)：SLF4J MDC 中的全量属性（如 `traceId`）。
-- 基础元数据 (Metadata)：自动注入的 `action`, `level`, `logger`, `thread`, `status`, `durationMs` 等。
+- 基础元数据 (Metadata)：自动注入的 `meta_action`, `meta_level`, `meta_logger`, `meta_thread`, `meta_status`, `meta_durationMs` 等。
 
 #### 开发 API 使用
 由于系统已全面重构为高性能的 Pull 模型，除了标准 SLF4J 的 MDC 外，你还可以通过注册自定义寻值源来扩展业务属性。
@@ -466,7 +466,7 @@ safeClient.send("13812345678", "sk_live_123abc", "您的验证码是 9527");
     },
     {
       "id": "payload_check",
-      "condition": "payload:size > 0 && action == 'PAYMENT'",
+      "condition": "payload:size > 0 && meta_action == 'PAYMENT'",
       "targetLevel": "TRACE"
     }
   ]
@@ -530,7 +530,7 @@ LogContext.addSource((event, key) -> {
   "dyeingRules": [
     {
       "id": "trace_to_info",
-      "condition": "action == 'CreateOrder'",
+      "condition": "meta_action == 'CreateOrder'",
       "targetLevel": "INFO"
     }
   ],

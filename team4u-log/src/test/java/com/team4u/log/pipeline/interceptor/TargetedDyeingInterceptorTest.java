@@ -42,7 +42,7 @@ public class TargetedDyeingInterceptorTest {
         // 1. 配置规则：action 为 'DyeMe' 则染色为 DEBUG
         LogDynamicConfig.DyeingRule rule = new LogDynamicConfig.DyeingRule();
         rule.setId("rule1");
-        rule.setCondition("action == 'DyeMe'");
+        rule.setCondition("meta_action == 'DyeMe'");
         rule.setTargetLevel(Level.DEBUG);
         refreshRules(Collections.singletonList(rule));
 
@@ -58,7 +58,7 @@ public class TargetedDyeingInterceptorTest {
     @Test
     public void testNoMatch() {
         LogDynamicConfig.DyeingRule rule = new LogDynamicConfig.DyeingRule();
-        rule.setCondition("action == 'Special'");
+        rule.setCondition("meta_action == 'Special'");
         rule.setTargetLevel(Level.WARN);
         refreshRules(Collections.singletonList(rule));
 

@@ -30,12 +30,27 @@ public class LogContextCollectorTest {
         LogEvent event = new LogEvent().setAction("A1");
         Map<String, Object> context = LogContext.getCollector().collect(event);
 
-        // 基础元数据
-        Assert.assertEquals("A1", context.get("action"));
+        // 基础元数据仅支持前缀 key
+        Assert.assertNull(context.get("action"));
+        Assert.assertEquals("A1", context.get("meta_action"));
 
         // 验证高性能 MDC 访问（直接使用原始 key）
         Assert.assertEquals("T1", context.get("traceId"));
         Assert.assertEquals("U1", context.get("X-User-Id"));
+    }
+
+    @Test
+    public void testMetadataPrefixAvoidConflict() {
+        LogEvent event = new LogEvent()
+                .setAction("A1")
+                .put("action", "payload-action");
+
+        Map<String, Object> context = LogContext.getCollector().collect(event);
+
+        // 无前缀时优先命中 Payload
+        Assert.assertEquals("payload-action", context.get("action"));
+        // 使用前缀可稳定拿到元数据
+        Assert.assertEquals("A1", context.get("meta_action"));
     }
 
     @Test

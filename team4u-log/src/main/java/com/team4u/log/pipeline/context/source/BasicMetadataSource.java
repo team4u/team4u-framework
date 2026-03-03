@@ -12,20 +12,26 @@ import com.team4u.log.pipeline.context.LogContextSource;
  */
 public class BasicMetadataSource implements LogContextSource {
 
+    private static final String PREFIX = "meta_";
+
     @Override
     public Object getValue(LogEvent event, String key) {
+        if (key == null) {
+            return null;
+        }
+
         switch (key) {
-            case "action":
+            case PREFIX + "action":
                 return event.getAction();
-            case "level":
+            case PREFIX + "level":
                 return event.getLevel() != null ? event.getLevel().name() : null;
-            case "logger":
+            case PREFIX + "logger":
                 return event.getLoggerName();
-            case "thread":
+            case PREFIX + "thread":
                 return Thread.currentThread().getName();
-            case "status":
+            case PREFIX + "status":
                 return event.getStatus();
-            case "durationMs":
+            case PREFIX + "durationMs":
                 return event.getDurationMs() >= 0 ? event.getDurationMs() : null;
             default:
                 return null;
