@@ -24,11 +24,6 @@ import java.util.concurrent.ConcurrentHashMap;
 public class LogContextCollector {
 
     /**
-     * 全局静态属性 Map（如 appName, env 等）
-     */
-    private final Map<String, Object> globalAttributes = new ConcurrentHashMap<>();
-
-    /**
      * 有序策略链，负责寻值源的管理、排序及条件匹配
      */
     private final OrderedPolicyChain<LogEvent, LogContextSource> chain =
@@ -36,40 +31,6 @@ public class LogContextCollector {
 
     public LogContextCollector() {
         reset();
-    }
-
-    /**
-     * 设置全局属性
-     *
-     * @param key   属性键
-     * @param value 属性值
-     */
-    public void setGlobal(String key, Object value) {
-        if (value == null) {
-            globalAttributes.remove(key);
-        } else {
-            globalAttributes.put(key, value);
-        }
-    }
-
-    /**
-     * 批量设置全局属性
-     *
-     * @param attributes 属性 Map
-     */
-    public void setGlobals(Map<String, Object> attributes) {
-        if (attributes != null) {
-            globalAttributes.putAll(attributes);
-        }
-    }
-
-    /**
-     * 获取不可变的全局属性副本
-     *
-     * @return 全局属性 Map
-     */
-    public Map<String, Object> getGlobalAttributes() {
-        return Collections.unmodifiableMap(globalAttributes);
     }
 
     /**
@@ -85,19 +46,15 @@ public class LogContextCollector {
      * 重置收集器，清空所有自定义属性和寻值源，恢复内置状态
      */
     public void reset() {
-        globalAttributes.clear();
         chain.unregisterAll();
 
-        // 1. 注册内置：内部属性寻值源 (包含 ThreadLocal 和 Global)
-        chain.register(new InternalAttributesSource());
-
-        // 2. 注册内置：基础信息寻值源
+        // 1. 注册内置：基础信息寻值源
         chain.register(new BasicMetadataSource());
 
-        // 3. 注册内置：MDC 寻值源 (支持高性能按 Key 查找)
+        // 2. 注册内置：MDC 寻值源 (支持高性能按 Key 查找)
         chain.register(new MdcSource());
 
-        // 4. 自动发现：从 Java SPI (META-INF/services) 加载外部寻值源
+        // 3. 自动发现：从 Java SPI (META-INF/services) 加载外部寻值源
         PolicyScanner.registerFromServiceLoader(chain);
     }
 

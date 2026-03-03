@@ -445,28 +445,13 @@ safeClient.send("13812345678", "sk_live_123abc", "您的验证码是 9527");
 #### 多维匹配上下文
 染色规则支持从以下多个维度提取变量进行匹配（优先级从高到低）：
 - **业务载荷 (Payload)**：日志方法中传入的 Map 参数。
-- **当前线程上下文 (Current)**：通过 `LogContext.setCurrent` 注入的临时属性。
-- **MDC 属性 (MDC)**：SLF4J MDC 中的全量属性（需加 `mdc.` 前缀）。
-- **基础元数据 (Metadata)**：自动注入的 `action`, `level`, `logger`, `thread` 等。
-- **全局静态上下文 (Global)**：通过 `LogContext.setGlobal` 注入的应用级属性。
+  - **直接访问**：可以直接使用 Key 名（如 `orderId == 'ORD001'`），引擎会自动从 Payload 中检索。
+  - **整体访问**：使用 `payload` 关键字访问完整的业务数据 Map（如 `payload:size > 5` 判断字段数量）。
+- **MDC 属性 (MDC)**：SLF4J MDC 中的全量属性（需加 `mdc.` 前缀，如 `mdc.traceId`）。
+- **基础元数据 (Metadata)**：自动注入的 `action`, `level`, `logger`, `thread`, `status`, `durationMs` 等。
 
 #### 开发 API 使用
-开发者可以随时向上下文中注入额外信息以辅助染色判定：
-
-```java
-// 设置应用全局属性（如环境、机房）
-LogContext.setGlobal("env", "prod");
-LogContext.setGlobal("region", "cn-hangzhou");
-
-// 设置当前线程属性（如单次请求的业务对象）
-// 🚨 注意：必须在请求结束时调用 clearCurrent()
-try {
-    LogContext.setCurrent("order", currentOrder);
-    // 执行业务逻辑...
-} finally {
-    LogContext.clearCurrent();
-}
-```
+由于系统已全面重构为高性能的 Pull 模型，除了标准 SLF4J 的 MDC 外，你还可以通过注册自定义寻值源来扩展业务属性。
 
 #### 动态配置示例
 在配置中心的 JSON 配置中编写规则：
@@ -476,12 +461,12 @@ try {
   "dyeingRules": [
     {
       "id": "vip_order_debug",
-      "condition": "order.amount > 1000 && env == 'prod'",
+      "condition": "orderAmount > 1000 && env == 'prod'",
       "targetLevel": "DEBUG"
     },
     {
-      "id": "trace_staining",
-      "condition": "mdc.traceId == 'T12345' || mdc.userId == 'U888'",
+      "id": "payload_check",
+      "condition": "payload:size > 0 && action == 'PAYMENT'",
       "targetLevel": "TRACE"
     }
   ]

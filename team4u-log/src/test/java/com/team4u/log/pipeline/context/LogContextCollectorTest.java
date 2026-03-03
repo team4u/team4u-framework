@@ -19,7 +19,6 @@ public class LogContextCollectorTest {
     @Before
     public void setup() {
         LogContext.reset();
-        LogContext.clearCurrent(); // 确保测试之间线程上下文隔离
         MDC.clear();
     }
 
@@ -40,45 +39,6 @@ public class LogContextCollectorTest {
     }
 
     @Test
-    public void testGlobalAttributes() {
-        LogContext.setGlobal("env", "prod");
-        LogContext.setGlobal("region", "cn-hangzhou");
-
-        LogEvent event = new LogEvent();
-        Map<String, Object> context = LogContext.getCollector().collect(event);
-
-        Assert.assertEquals("prod", context.get("env"));
-        Assert.assertEquals("cn-hangzhou", context.get("region"));
-    }
-
-    @Test
-    public void testCurrentAttributes() {
-        LogContext.setCurrent("requestId", "R100");
-        LogContext.setCurrent("tempAttr", "T1");
-
-        LogEvent event = new LogEvent();
-        Map<String, Object> context = LogContext.getCollector().collect(event);
-
-        Assert.assertEquals("R100", context.get("requestId"));
-        Assert.assertEquals("T1", context.get("tempAttr"));
-
-        LogContext.clearCurrent();
-        context = LogContext.getCollector().collect(event);
-        Assert.assertNull(context.get("requestId"));
-    }
-
-    @Test
-    public void testCurrentOverrideGlobal() {
-        LogContext.setGlobal("env", "prod");
-        LogContext.setCurrent("env", "test"); // 当前线程覆盖全局
-
-        LogEvent event = new LogEvent();
-        Map<String, Object> context = LogContext.getCollector().collect(event);
-
-        Assert.assertEquals("test", context.get("env"));
-    }
-
-    @Test
     public void testCustomSource() {
         // 注册自定义寻值源
         LogContext.addSource((event, key) -> "ext_key".equals(key) ? "V1" : null);
@@ -92,13 +52,25 @@ public class LogContextCollectorTest {
 
     @Test
     public void testPayloadPriority() {
-        LogContext.setGlobal("k1", "global");
-        LogContext.setCurrent("k1", "thread");
+        MDC.put("k1", "mdc");
 
         // Payload 优先级最高
         LogEvent event = new LogEvent().kv("k1", "payload");
         Map<String, Object> context = LogContext.getCollector().collect(event);
 
         Assert.assertEquals("payload", context.get("k1"));
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void testGetWholePayload() {
+        LogEvent event = new LogEvent().kv("k1", "v1").kv("k2", "v2");
+        Map<String, Object> context = LogContext.getCollector().collect(event);
+
+        // 验证通过 "payload" 键获取完整的 Map
+        Map<String, Object> payload = (Map<String, Object>) context.get("payload");
+        Assert.assertNotNull(payload);
+        Assert.assertEquals("v1", payload.get("k1"));
+        Assert.assertEquals("v2", payload.get("k2"));
     }
 }
