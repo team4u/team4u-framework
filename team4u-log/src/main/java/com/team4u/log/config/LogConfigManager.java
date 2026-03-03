@@ -3,6 +3,7 @@ package com.team4u.log.config;
 import cn.hutool.log.Log;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
+import lombok.Getter;
 
 import java.util.List;
 import java.util.concurrent.CopyOnWriteArrayList;
@@ -24,15 +25,14 @@ public class LogConfigManager {
     private final LogConfigParser parser = new LogConfigParser();
 
     /**
-     * 配置驱动注册表
-     */
-    private ConfigDrivenRegistry<LogDynamicConfig> registry;
-
-    /**
      * 监听器列表
      */
     private final List<LogConfigListener> listeners = new CopyOnWriteArrayList<>();
 
+    /**
+     * 获取当前最实时的配置快照
+     */
+    @Getter
     private volatile LogDynamicConfig currentConfig = new LogDynamicConfig();
 
     private LogConfigManager() {
@@ -63,10 +63,12 @@ public class LogConfigManager {
     /**
      * 初始化配置管理器
      *
-     * @param globalConfigManager 全局配置管理器
+     * @param configManager 配置管理器
      */
-    public void init(ConfigManager globalConfigManager) {
-        this.registry = new ConfigDrivenRegistry<>(globalConfigManager, "team4u.log", json -> {
+    public void init(ConfigManager configManager) {
+        // 触发监听器通知，解耦硬编码的分发逻辑
+        // 打印错误日志，避免单条监听器异常中断整体配置刷新
+        ConfigDrivenRegistry<LogDynamicConfig> registry = new ConfigDrivenRegistry<>(configManager, "team4u.log", json -> {
             LogDynamicConfig config = parser.parse(json);
             if (config == null) {
                 config = new LogDynamicConfig();
@@ -86,7 +88,7 @@ public class LogConfigManager {
         });
 
         // 首次加载配置
-        this.registry.get(CONFIG_KEY);
+        registry.get(CONFIG_KEY);
     }
 
     /**
@@ -108,14 +110,5 @@ public class LogConfigManager {
                 Log.get().error("LogConfigManager|setCurrentConfig|error|msg={}", e.getMessage());
             }
         }
-    }
-
-    /**
-     * 获取当前最实时的配置快照
-     *
-     * @return LogDynamicConfig 实例
-     */
-    public LogDynamicConfig getCurrentConfig() {
-        return currentConfig;
     }
 }

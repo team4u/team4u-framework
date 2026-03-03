@@ -3,6 +3,7 @@ package com.team4u.framework.config.core.support;
 import cn.hutool.log.Log;
 import cn.hutool.log.LogFactory;
 import com.team4u.framework.config.core.ConfigManager;
+import lombok.Getter;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -20,7 +21,9 @@ public class ConfigDrivenRegistry<T> {
 
     private static final Log log = LogFactory.get();
 
+    @Getter
     private final ConfigManager configManager;
+    @Getter
     private final String keyPrefix;
     private final Function<String, T> instanceFactory;
 

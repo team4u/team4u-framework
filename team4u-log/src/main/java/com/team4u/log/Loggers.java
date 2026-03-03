@@ -203,7 +203,7 @@ public class Loggers {
     public void log() {
         // 性能保护：若无有效染色规则且日志级别未达到输出标准，则忽略该日志
         if (!TargetedDyeingInterceptor.getInstance().hasActiveRules()
-                && event.getLevel() != null && !isLevelEnabled(event.getLevel())) {
+                && !isLevelEnabled(event.getLevel())) {
             return;
         }
 
@@ -218,6 +218,10 @@ public class Loggers {
      * @return 是否启用
      */
     private boolean isLevelEnabled(Level level) {
+        if (level == null) {
+            return false;
+        }
+
         switch (level) {
             case INFO:
                 return slf4jLogger.isInfoEnabled();

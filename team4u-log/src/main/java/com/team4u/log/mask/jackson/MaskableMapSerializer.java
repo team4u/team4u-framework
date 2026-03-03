@@ -72,7 +72,7 @@ public class MaskableMapSerializer extends JsonSerializer<Map<?, ?>> implements 
 
     @Override
     public JsonSerializer<?> createContextual(SerializerProvider prov,
-            BeanProperty property) {
+                                              BeanProperty property) {
         // 核心逻辑在 serialize 中，此处保持当前实例
         return this;
     }
