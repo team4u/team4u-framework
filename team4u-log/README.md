@@ -86,7 +86,8 @@ Loggers.of(OrderService.class)
 | :-------------------------------------------------------- | :----------------------------------------------------------------- |
 | `of(Class<?> clazz)`                                      | 创建指定类的 Logger 构建器。                                       |
 | `action(String action)`                                   | 设置业务动作名称（必填推荐）。                                     |
-| `kv(String key, Object val)`                              | 存入业务载荷，支持任意复杂对象，最终会被序列化进 `payload` 字段。  |
+| `put(String key, Object value)`                           | 存入业务载荷，支持任意复杂对象，最终会被序列化进 `payload` 字段。  |
+| `putAll(Map<String, Object> map)`                         | 批量存入业务载荷。                                                 |
 | `duration(long ms)`                                       | 设置执行耗时。                                                     |
 | `success()`                                               | 快捷方法：状态置为 `success`，级别设为 `INFO`。                    |
 | `failed(Throwable e)`                                     | 快捷方法：状态置为 `failed`，绑定异常，级别设为 `ERROR`。          |
@@ -124,7 +125,7 @@ MdcEnrichInterceptor.getInstance().setTraceIdKey("requestId");
 ```
 
 ---
-#### 日志器派生 (Template Logger / fork)
+#### 日志器派生 (Template Logger)
 为了减少重复代码（如每个方法都要手动 `.put("module", "Trade")`），您可以预定义一个模板日志器，在具体业务点通过 `derive()` 派生出独立实例。派生实例会继承模板的所有 KV 和配置，且后续的修改互不污染。
 
 ```java
@@ -135,7 +136,7 @@ public class OrderService {
             .put("version", "v2.0");
 
     public void createOrder(String id) {
-        // 2. 派生副本使用：副本上的 action/kv 不会影响 BASE_LOG 模板
+        // 2. 派生副本使用：副本上的 action/put 不会影响 BASE_LOG 模板
         BASE_LOG.derive()
                 .action("CreateOrder")
                 .put("orderId", id)
@@ -156,7 +157,7 @@ public class OrderService {
 | `action`            | String | 业务动作标识（如 `CreateOrder`、`RegisterUser`）。                              |
 | `status`            | String | 业务状态：`success`, `failed`, `processing`, `slow_success`, `business_error`。 |
 | `durationMs`        | Long   | 执行耗时（毫秒），未记录时默认为 `-1`。                                         |
-| `payload`           | Object | 业务载荷，包含通过 `kv()` 传入的动态业务数据、脱敏后的 DTO 等。                 |
+| `payload`           | Object | 业务载荷，包含通过 `put()` / `putAll()` 传入的动态业务数据、脱敏后的 DTO 等。   |
 | `dyeingRuleMatched` | String | 仅在命中染色规则时出现，记录命中的规则 ID，方便追溯提权原因。                   |
 
 

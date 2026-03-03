@@ -121,10 +121,10 @@ public class LoggersTest {
     }
 
     /**
-     * 测试 fork 功能，确保派生出的日志器与原日志器状态隔离
+     * 测试 derive 功能，确保派生出的日志器与原日志器状态隔离
      */
     @Test
-    public void testFork() {
+    public void testDerive() {
         // 1. 定义模板日志器
         Loggers baseLog = Loggers.of(LoggersTest.class)
                 .put("module", "TestModule")
