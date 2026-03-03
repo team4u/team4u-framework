@@ -82,50 +82,50 @@ Loggers.of(OrderService.class)
 ### 链式日志构建 API (Fluent API)
 `Loggers` 类是进行手动日志记录的核心入口。
 
-| 方法 | 说明 |
-| :--- | :--- |
-| `of(Class<?> clazz)` | 创建指定类的 Logger 构建器。 |
-| `action(String action)` | 设置业务动作名称（必填推荐）。 |
-| `kv(String key, Object val)` | 存入业务载荷，支持任意复杂对象，最终会被序列化进 `payload` 字段。 |
-| `duration(long ms)` | 设置执行耗时。 |
-| `success()` | 快捷方法：状态置为 `success`，级别设为 `INFO`。 |
-| `failed(Throwable e)` | 快捷方法：状态置为 `failed`，绑定异常，级别设为 `ERROR`。 |
-| `level(Level level)` | 通用方法：直接设置日志级别。 |
-| `atTrace() / atDebug() / atInfo() / atWarn() / atError()` | 手动指定日志输出级别。 |
-| `status(String status)` | 手动指定业务状态（如 `processing`）。 |
-| `derive()` | **派生日志器**。基于当前状态拷贝出一个独立的副本。常用于定义日志模板。 |
-| `log()` | 终结方法，将事件提交给日志引擎的流水线进行拦截与输出。 |
+| 方法                                                      | 说明                                                               |
+| :-------------------------------------------------------- | :----------------------------------------------------------------- |
+| `of(Class<?> clazz)`                                      | 创建指定类的 Logger 构建器。                                       |
+| `action(String action)`                                   | 设置业务动作名称（必填推荐）。                                     |
+| `kv(String key, Object val)`                              | 存入业务载荷，支持任意复杂对象，最终会被序列化进 `payload` 字段。  |
+| `duration(long ms)`                                       | 设置执行耗时。                                                     |
+| `success()`                                               | 快捷方法：状态置为 `success`，级别设为 `INFO`。                    |
+| `failed(Throwable e)`                                     | 快捷方法：状态置为 `failed`，绑定异常，级别设为 `ERROR`。          |
+| `level(Level level)`                                      | 通用方法：直接设置日志级别。                                       |
+| `atTrace() / atDebug() / atInfo() / atWarn() / atError()` | 手动指定日志输出级别。                                             |
+| `status(String status)`                                   | 手动指定业务状态（如 `processing`）。                              |
+| `derive()`                                                | 派生日志器。基于当前状态拷贝出一个独立的副本。常用于定义日志模板。 |
+| `log()`                                                   | 终结方法，将事件提交给日志引擎的流水线进行拦截与输出。             |
 ### 拦截器管理 (LogInterceptorManager)
 日志处理流水线由 `LogInterceptorManager` 统一管理。它负责内置拦截器的初始化、自定义拦截器的注册以及执行链的调度。
 
 #### 内置拦截器
 默认情况下，系统会自动注册以下拦截器：
-1.  **MdcEnrichInterceptor** (优先级: HIGH)：从 MDC 中提取 `traceId`。
-2.  **TargetedDyeingInterceptor** (优先级: NORMAL)：执行动态染色规则。
-3.  **RateLimitInterceptor** (优先级: LOW)：执行异常日志限流。
+1.  MdcEnrichInterceptor (优先级: HIGH)：从 MDC 中提取 `traceId`。
+2.  TargetedDyeingInterceptor (优先级: NORMAL)：执行动态染色规则。
+3.  RateLimitInterceptor (优先级: LOW)：执行异常日志限流。
 
 #### 自定义拦截器注册
 您可以通过以下几种方式扩展日志处理逻辑：
 
-**1. 编程式注册：**
+1. 编程式注册：
 ```java
 LogEngine.getInstance()
          .getInterceptorManager()
          .register(new MyCustomInterceptor());
 ```
 
-**2. SPI 自动发现：**
+2. SPI 自动发现：
 在 `META-INF/services/com.team4u.log.pipeline.LogInterceptor` 文件中填入实现类的全限定名，系统启动时会自动加载并按 `priority()` 排序。
 
 #### 常用拦截器配置
-*   **自定义从 MDC 中提取的键名**：
+*   自定义从 MDC 中提取的键名：
 ```java
 MdcEnrichInterceptor.getInstance().setTraceIdKey("requestId");
 ```
 
 ---
 #### 日志器派生 (Template Logger / fork)
-为了减少重复代码（如每个方法都要手动 `.put("module", "Trade")`），您可以预定义一个**模板日志器**，在具体业务点通过 `derive()` 派生出独立实例。派生实例会继承模板的所有 KV 和配置，且后续的修改**互不污染**。
+为了减少重复代码（如每个方法都要手动 `.put("module", "Trade")`），您可以预定义一个模板日志器，在具体业务点通过 `derive()` 派生出独立实例。派生实例会继承模板的所有 KV 和配置，且后续的修改互不污染。
 
 ```java
 public class OrderService {
@@ -148,16 +148,16 @@ public class OrderService {
 #### 日志标准字段说明
 采用结构化日志后，为了方便接入 ELK 或类似系统，下表列出了 `LogEvent` 序列化后的核心字段及其含义：
 
-| 字段名 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| `loggerName` | String | 日志触发的类名。 |
-| `level` | String | 日志级别（INFO/WARN/ERROR/DEBUG/TRACE）。 |
-| `traceId` | String | 链路追踪 ID（由拦截器从 MDC 自动提取）。 |
-| `action` | String | 业务动作标识（如 `CreateOrder`、`RegisterUser`）。 |
-| `status` | String | 业务状态：`success`, `failed`, `processing`, `slow_success`, `business_error`。 |
-| `durationMs` | Long | 执行耗时（毫秒），未记录时默认为 `-1`。 |
-| `payload` | Object | 业务载荷，包含通过 `kv()` 传入的动态业务数据、脱敏后的 DTO 等。 |
-| `dyeingRuleMatched` | String | 仅在命中染色规则时出现，记录命中的规则 ID，方便追溯提权原因。 |
+| 字段名              | 类型   | 说明                                                                            |
+| :------------------ | :----- | :------------------------------------------------------------------------------ |
+| `loggerName`        | String | 日志触发的类名。                                                                |
+| `level`             | String | 日志级别（INFO/WARN/ERROR/DEBUG/TRACE）。                                       |
+| `traceId`           | String | 链路追踪 ID（由拦截器从 MDC 自动提取）。                                        |
+| `action`            | String | 业务动作标识（如 `CreateOrder`、`RegisterUser`）。                              |
+| `status`            | String | 业务状态：`success`, `failed`, `processing`, `slow_success`, `business_error`。 |
+| `durationMs`        | Long   | 执行耗时（毫秒），未记录时默认为 `-1`。                                         |
+| `payload`           | Object | 业务载荷，包含通过 `kv()` 传入的动态业务数据、脱敏后的 DTO 等。                 |
+| `dyeingRuleMatched` | String | 仅在命中染色规则时出现，记录命中的规则 ID，方便追溯提权原因。                   |
 
 
 
@@ -204,20 +204,20 @@ service.register(req);
 ```
 
 #### 配置项说明
-| 属性 | 类型 | 默认值 | 说明 |
-| :--- | :--- | :--- | :--- |
-| `action` | String | `""` | 业务动作标识。若不填，则**自动取当前方法名**。 |
-| `slowThreshold` | long | `-1` | 慢日志阈值(ms)。超过此值时，日志级别自动提升为 `WARN`。 |
-| `ignoreExceptions` | Class[] | `{}` | 忽略的异常列表。命中时日志级别降为 `WARN`（用于过滤业务类异常）。 |
+| 属性               | 类型    | 默认值 | 说明                                                              |
+| :----------------- | :------ | :----- | :---------------------------------------------------------------- |
+| `action`           | String  | `""`   | 业务动作标识。若不填，则自动取当前方法名。                        |
+| `slowThreshold`    | long    | `-1`   | 慢日志阈值(ms)。超过此值时，日志级别自动提升为 `WARN`。           |
+| `ignoreExceptions` | Class[] | `{}`   | 忽略的异常列表。命中时日志级别降为 `WARN`（用于过滤业务类异常）。 |
 
 #### 参数名捕获与脱敏技巧
-本模块支持自动捕获方法的**参数名称**（如 `req`、`mobile`），并以 Map 结构记录在日志的 `req` 字段中。
+本模块支持自动捕获方法的参数名称（如 `req`、`mobile`），并以 Map 结构记录在日志的 `req` 字段中。
 
-**优势：**
-*   **结构清晰**：日志从 `["val1", "val2"]` 变为 `{"paramName": "val1", "arg1": "val2"}`。
-*   **主动脱敏保护**：即便入参不是 DTO 而是基础类型（如 `String mobile`），只要参数名命中脱敏规则，拦截器会在**序列化之前**主动调用 `FastMasker` 进行掩码，确保敏感信息在内存处理阶段即受到保护。
+优势：
+*   结构清晰：日志从 `["val1", "val2"]` 变为 `{"paramName": "val1", "arg1": "val2"}`。
+*   主动脱敏保护：即便入参不是 DTO 而是基础类型（如 `String mobile`），只要参数名命中脱敏规则，拦截器会在序列化之前主动调用 `FastMasker` 进行掩码，确保敏感信息在内存处理阶段即受到保护。
 
-**最佳实践：**
+最佳实践：
 建议在项目的 `pom.xml` 中开启 `-parameters` 编译参数，以获取真实的参数名而非 `arg0`：
 ```xml
 <plugin>
@@ -251,19 +251,19 @@ service.register(req);
 #### 内置脱敏类型 (MaskType)
 系统预置了丰富的脱敏算法，常用的标识包括：
 
-| 标识符 (Key) | 说明 | 脱敏效果示例 |
-| :--- | :--- | :--- |
-| `NAME` | 姓名 | `周杰伦` -> `**伦` |
-| `MOBILE` | 手机号码 | `13812345678` -> `138*****678` |
-| `BANK_CARD_NO` | 银行卡号 | `6222...9011` -> `6222**********11` |
-| `ID_CARD_NO` | 身份证号 | `4401...1234` -> `44011***********34` |
-| `PASSWORD` | 密码 | `secret123` -> `******` |
-| `EMAIL` | 电子邮箱 | `fjay@gmail.com` -> `f****@gmail.com` |
-| `ADDRESS` | 地址 | `广东省广州市...` -> `广东省广州市****` |
-| `B1A1` / `B2A2` | 保留前N后N | `12345` (B1A1) -> `1***5` |
-| `PERCENT66` | 居中掩码66% | `1234567890` -> `1*******90` |
-| `HIDE` | 全部隐藏 | `anyValue` -> `*` |
-| `NONE` | 不脱敏 | `anyValue` -> `anyValue` |
+| 标识符 (Key)    | 说明        | 脱敏效果示例                        |
+| :-------------- | :---------- | :---------------------------------- |
+| `NAME`          | 姓名        | `周杰伦` -> `伦`                    |
+| `MOBILE`        | 手机号码    | `13812345678` -> `138*678`          |
+| `BANK_CARD_NO`  | 银行卡号    | `6222...9011` -> `622211`           |
+| `ID_CARD_NO`    | 身份证号    | `4401...1234` -> `44011*34`         |
+| `PASSWORD`      | 密码        | `secret123` -> ``                   |
+| `EMAIL`         | 电子邮箱    | `fjay@gmail.com` -> `f@gmail.com`   |
+| `ADDRESS`       | 地址        | `广东省广州市...` -> `广东省广州市` |
+| `B1A1` / `B2A2` | 保留前N后N  | `12345` (B1A1) -> `1*5`             |
+| `PERCENT66`     | 居中掩码66% | `1234567890` -> `1*90`              |
+| `HIDE`          | 全部隐藏    | `anyValue` -> `*`                   |
+| `NONE`          | 不脱敏      | `anyValue` -> `anyValue`            |
 
 #### 注解脱敏（适用于可修改的 DTO）
 直接在字段上打上 `@Mask` 注解即可：
@@ -282,9 +282,9 @@ public class UserReq {
 当无法通过 `@Mask` 注解标记源码时（例如使用 `Map` 存放数据，或调用外部 jar 包中的方法），可以通过配置中心下发脱敏规则。
 
 ##### 基于名称的精确匹配
-系统会根据对象的**全限定类名**（或通配符 `"*"`）和**字段名/Map Key/方法参数名**去匹配规则。
+系统会根据对象的全限定类名（或通配符 `"*"`）和字段名/Map Key/方法参数名去匹配规则。
 
-**脱敏方法参数示例：**
+脱敏方法参数示例：
 若方法定义为 `send(String mobile, String appSecret)`，开启 `-parameters` 后，可通过以下配置脱敏：
 
 ```json
@@ -302,10 +302,10 @@ public class UserReq {
 框架默认对 `java.util.HashMap` 和 `java.util.LinkedHashMap` 的 `"password"` 和 `"creditCard"` 字段开启了脱敏。由于 `.put()` 和方法入参记录底层均使用 `LinkedHashMap`，这些规则会自动覆盖到 Fluent API 和方法追踪中。
 
 #### 全局通配符脱敏（一劳永逸）
-在微服务场景中，DTO 可能多达上千个。本模块支持使用特殊的类名 `"*"` 来定义**全局脱敏规则**。
+在微服务场景中，DTO 可能多达上千个。本模块支持使用特殊的类名 `"*"` 来定义全局脱敏规则。
 
-*   **匹配优先级**：优先进行“类名精确匹配”；若未命中，则回退到 `"*"` 进行“全局字段匹配”。
-*   **治理效果**：只要配置了通配符规则，全系统内（包括所有 DTO、第三方类、任意类型的 Map）只要字段名匹配，就会自动触发脱敏。
+*   匹配优先级：优先进行“类名精确匹配”；若未命中，则回退到 `"*"` 进行“全局字段匹配”。
+*   治理效果：只要配置了通配符规则，全系统内（包括所有 DTO、第三方类、任意类型的 Map）只要字段名匹配，就会自动触发脱敏。
 
 动态配置示例：
 ```json
@@ -428,8 +428,8 @@ safeClient.send("13812345678", "sk_live_123abc", "您的验证码是 9527");
   "durationMs": 12,
   "payload": {
     "req": {
-      "mobile": "138*****678",    // <-- 手机号被自动脱敏
-      "appSecret": "******",      // <-- 凭证被自动脱敏
+      "mobile": "138*678",    // <-- 手机号被自动脱敏
+      "appSecret": "",      // <-- 凭证被自动脱敏
       "content": "您的验证码是 9527"
     },
     "resp": {
@@ -444,11 +444,11 @@ safeClient.send("13812345678", "sk_live_123abc", "您的验证码是 9527");
 
 #### 多维匹配上下文
 染色规则支持从以下多个维度提取变量进行匹配（优先级从高到低）：
-- **业务载荷 (Payload)**：日志方法中传入的 Map 参数。
-  - **直接访问**：可以直接使用 Key 名（如 `orderId == 'ORD001'`），引擎会自动从 Payload 中检索。
-  - **整体访问**：使用 `payload` 关键字访问完整的业务数据 Map（如 `payload:size > 5` 判断字段数量）。
-- **MDC 属性 (MDC)**：SLF4J MDC 中的全量属性（需加 `mdc.` 前缀，如 `mdc.traceId`）。
-- **基础元数据 (Metadata)**：自动注入的 `action`, `level`, `logger`, `thread`, `status`, `durationMs` 等。
+- 业务载荷 (Payload)：日志方法中传入的 Map 参数。
+  - 直接访问：可以直接使用 Key 名（如 `orderId == 'ORD001'`），引擎会自动从 Payload 中检索。
+  - 整体访问：使用 `payload` 关键字访问完整的业务数据 Map（如 `payload:size > 5` 判断字段数量）。
+- MDC 属性 (MDC)：SLF4J MDC 中的全量属性（如 `traceId`）。
+- 基础元数据 (Metadata)：自动注入的 `action`, `level`, `logger`, `thread`, `status`, `durationMs` 等。
 
 #### 开发 API 使用
 由于系统已全面重构为高性能的 Pull 模型，除了标准 SLF4J 的 MDC 外，你还可以通过注册自定义寻值源来扩展业务属性。
@@ -547,7 +547,7 @@ LogContext.addSource((event, key) -> {
 ## 自定义扩展与底层配置注意事项
 
 ### MDC 全量上下文支持
-特别指出，在执行“动态染色”匹配时，框架会自动提取当前线程所有的 MDC 变量。这些变量会以 `mdc.` 为前缀暴露给规则引擎（例如 `mdc.traceId`, `mdc.orderId`, `mdc.userId`）。如果开发者在网关层统一塞入关键的流量标识（如 `userId`, `tenantId` 等），配合染色规则即可大幅提升排障效率。
+特别指出，在执行“动态染色”匹配时，框架会自动提取当前线程所有的 MDC 变量。这些变量会直接暴露给规则引擎（例如 `traceId`, `orderId`, `userId`）。如果开发者在网关层统一塞入关键的流量标识（如 `userId`, `tenantId` 等），配合染色规则即可大幅提升排障效率。
 
 ### 自定义 Appender
 框架允许越过 SLF4J，直接将结构化对象推送到远程系统（如直接发送至 Kafka/Elasticsearch）。
@@ -572,15 +572,15 @@ LogEngine.getInstance().setAppender(new LogAppender() {
 
 当调用 `log()` 方法时，日志事件 (`LogEvent`) 将经历如下流水线处理：
 
-1.  **拦截器流水线**：由 `LogInterceptorManager` 调度。
-    *   **MdcEnrichInterceptor**：提取链路追踪 ID。
-    *   **TargetedDyeingInterceptor**：执行靶向染色（提权/降权）。
-    *   **RateLimitInterceptor**：异常日志风暴限流保护。
-    *   **自定义拦截器**：按优先级执行用户扩展逻辑。
-2.  **序列化与脱敏**：由 `LogEngine` 调用定制后的 `ObjectMapper` 进行 JSON 化。
-    *   **字符串截断**：单个字段超长截断（`maxStringLength`）。
-    *   **字节数组防御**：拦截 `byte[]` 输出。
-    *   **动态脱敏**：执行 `FastMasker` 极速脱敏。
-3.  **最终输出**：由 `LogAppender` 执行。
-    *   **整条日志截断**：JSON 整体超长截断（`maxLogLength`）。
-    *   **落地输出**：默认通过 SLF4J 打印。
+1.  拦截器流水线：由 `LogInterceptorManager` 调度。
+    *   MdcEnrichInterceptor：提取链路追踪 ID。
+    *   TargetedDyeingInterceptor：执行靶向染色（提权/降权）。
+    *   RateLimitInterceptor：异常日志风暴限流保护。
+    *   自定义拦截器：按优先级执行用户扩展逻辑。
+2.  序列化与脱敏：由 `LogEngine` 调用定制后的 `ObjectMapper` 进行 JSON 化。
+    *   字符串截断：单个字段超长截断（`maxStringLength`）。
+    *   字节数组防御：拦截 `byte[]` 输出。
+    *   动态脱敏：执行 `FastMasker` 极速脱敏。
+3.  最终输出：由 `LogAppender` 执行。
+    *   整条日志截断：JSON 整体超长截断（`maxLogLength`）。
+    *   落地输出：默认通过 SLF4J 打印。
