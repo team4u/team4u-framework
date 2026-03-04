@@ -1,5 +1,6 @@
 package com.team4u.log.integration;
 
+import cn.hutool.core.util.ReflectUtil;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.mask.config.MaskRuleRepository;
 import com.team4u.log.proxy.AutoLogTrace;
@@ -11,7 +12,6 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import cn.hutool.core.util.ReflectUtil;
 import java.util.HashMap;
 import java.util.Map;
 

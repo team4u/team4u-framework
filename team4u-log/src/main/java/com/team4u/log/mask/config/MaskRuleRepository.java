@@ -1,7 +1,7 @@
 package com.team4u.log.mask.config;
 
-import cn.hutool.json.JSONUtil;
 import cn.hutool.core.lang.TypeReference;
+import cn.hutool.json.JSONUtil;
 import cn.hutool.log.Log;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
@@ -10,7 +10,7 @@ import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 脱敏规则仓库 (组件自治)
+ * 脱敏规则仓库
  * <p>
  * 维护第三方类或 Map 的脱敏规则，支持快速检索。
  */
@@ -89,10 +89,7 @@ public class MaskRuleRepository {
         // 2. 兜底尝试：全局字段匹配 (只要配置了 "*" 的规则)
         Map<String, String> globalRules = ruleCache.get("*");
         if (globalRules != null) {
-            String globalRule = globalRules.get(fieldName);
-            if (globalRule != null) {
-                return globalRule;
-            }
+            return globalRules.get(fieldName);
         }
 
         return null;

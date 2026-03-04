@@ -7,7 +7,7 @@ import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import lombok.Data;
 
 /**
- * 成本与性能（FinOps）配置仓库 (组件自治)
+ * 成本与性能（FinOps）配置仓库
  * <p>
  * 统一管理限流阈值、最大日志截断长度等 FinOps 相关配置。
  */

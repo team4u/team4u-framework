@@ -1,8 +1,9 @@
 package com.team4u.log;
 
-import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor.DyeingRule;
+import cn.hutool.core.util.ReflectUtil;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor;
+import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor.DyeingRule;
 import com.team4u.log.support.TestLogHelper;
 import org.junit.After;
 import org.junit.Assert;
@@ -10,7 +11,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.event.Level;
 
-import cn.hutool.core.util.ReflectUtil;
 import java.util.Collections;
 import java.util.List;
 

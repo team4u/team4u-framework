@@ -18,7 +18,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 定向染色拦截器 (组件自治)
+ * 定向染色拦截器
  * <p>
  * 支持根据规则动态调整日志级别，基于 team4u-criterion 进行高效匹配。
  * 通过 LogContext 全局收集上下文信息。

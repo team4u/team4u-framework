@@ -12,7 +12,7 @@ import java.util.List;
 import java.util.Map;
 
 /**
- * 代理规则仓库 (组件自治)
+ * 代理规则仓库
  * <p>
  * 维护第三方类库的动态代理日志规则
  */
@@ -50,11 +50,9 @@ public class ProxyRuleRepository {
                 // 解析 JSON: 手动遍历解决某些 Hutool 版本泛型解析丢失的问题
                 JSONObject jsonObj = JSONUtil.parseObj(json);
                 Map<String, ProxyRule> rules = new HashMap<>();
-                if (jsonObj != null) {
-                    for (Map.Entry<String, Object> entry : jsonObj.entrySet()) {
-                        JSONObject ruleObj = (JSONObject) entry.getValue();
-                        rules.put(entry.getKey(), JSONUtil.toBean(ruleObj, ProxyRule.class));
-                    }
+                for (Map.Entry<String, Object> entry : jsonObj.entrySet()) {
+                    JSONObject ruleObj = (JSONObject) entry.getValue();
+                    rules.put(entry.getKey(), JSONUtil.toBean(ruleObj, ProxyRule.class));
                 }
 
                 // 原子替换缓存
@@ -72,7 +70,7 @@ public class ProxyRuleRepository {
 
     /**
      * 获取指定类的代理规则
-     * 
+     *
      * @param className 类名
      * @return 代理规则
      */

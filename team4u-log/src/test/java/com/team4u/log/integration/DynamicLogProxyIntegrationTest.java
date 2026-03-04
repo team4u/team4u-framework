@@ -5,7 +5,6 @@ import com.team4u.log.LogBootstrap;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor;
 import com.team4u.log.proxy.LogProxyFactory;
-import com.team4u.log.proxy.ProxyRuleRepository;
 import com.team4u.log.support.TestLogHelper;
 import org.junit.After;
 import org.junit.Assert;

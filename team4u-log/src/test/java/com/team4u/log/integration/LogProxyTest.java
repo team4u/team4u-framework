@@ -115,7 +115,7 @@ public class LogProxyTest {
             return "SUCCESS";
         }
 
-        @AutoLogTrace(ignoreExceptions = { RuntimeException.class })
+        @AutoLogTrace(ignoreExceptions = {RuntimeException.class})
         public void throwBusinessException() {
             throw new RuntimeException("业务异常");
         }

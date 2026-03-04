@@ -1,15 +1,15 @@
 package com.team4u.log.core;
 
+import cn.hutool.core.util.ReflectUtil;
 import com.team4u.log.config.FinOpsConfigRepository;
-import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor.DyeingRule;
 import com.team4u.log.pipeline.LogInterceptor;
 import com.team4u.log.pipeline.LogInterceptorManager;
 import com.team4u.log.pipeline.interceptor.MdcEnrichInterceptor;
 import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor;
+import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor.DyeingRule;
 import org.junit.Assert;
 import org.junit.Test;
 
-import cn.hutool.core.util.ReflectUtil;
 import java.util.Collections;
 
 /**
