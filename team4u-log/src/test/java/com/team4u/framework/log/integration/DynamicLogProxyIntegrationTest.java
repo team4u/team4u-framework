@@ -100,6 +100,46 @@ public class DynamicLogProxyIntegrationTest {
         Assert.assertEquals("slow_success", event.getStatus());
     }
 
+    @Test
+    public void testProxyRuleInvalidConfigKeepOldRules() throws InterruptedException {
+        String className = ThirdPartyService.class.getName();
+        String validConfig = "{" +
+                "  \"" + className + "\": {" +
+                "    \"methods\": [\"send\"]," +
+                "    \"ignoreExceptions\": [\"java.lang.RuntimeException\"]" +
+                "  }" +
+                "}";
+
+        configContext.put("team4u.log.proxy", validConfig);
+        Thread.sleep(50);
+
+        ThirdPartyService service = LogProxyFactory.createDynamicProxy(new ThirdPartyService());
+
+        try {
+            service.send("13812345678", "before-bad-config");
+        } catch (Exception ignored) {
+            LogEvent before = logHelper.lastEvent();
+            Assert.assertNotNull(before);
+            Assert.assertEquals(Level.WARN, before.getLevel());
+            Assert.assertEquals("business_error", before.getStatus());
+        }
+
+        logHelper.clear();
+
+        // 推送非法 JSON，验证热更新失败时保留上一版规则
+        configContext.put("team4u.log.proxy", "{");
+        Thread.sleep(50);
+
+        try {
+            service.send("13812345678", "after-bad-config");
+        } catch (Exception ignored) {
+            LogEvent after = logHelper.lastEvent();
+            Assert.assertNotNull(after);
+            Assert.assertEquals(Level.WARN, after.getLevel());
+            Assert.assertEquals("business_error", after.getStatus());
+        }
+    }
+
     /**
      * 模拟第三方类库（无任何日志注解）
      */

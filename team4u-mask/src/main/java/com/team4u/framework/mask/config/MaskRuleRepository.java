@@ -22,7 +22,7 @@ public class MaskRuleRepository {
     private static final String CONFIG_KEY = "team4u.mask.rules";
 
     /**
-     * 规则缓存：ClassName -> (FieldName -> MaskPolicyKey)
+     * 手动注入规则缓存（主要用于测试场景）
      */
     private volatile Map<String, Map<String, String>> ruleCache = new HashMap<>();
 
@@ -49,19 +49,15 @@ public class MaskRuleRepository {
                 if (json == null || json.trim().isEmpty()) {
                     return new HashMap<>();
                 }
-                // 解析 JSON
                 Map<String, Map<String, String>> rules = JSONUtil.toBean(
                         json,
                         new TypeReference<Map<String, Map<String, String>>>() {
                         },
                         false);
-                // 原子性替换缓存
-                this.ruleCache = rules != null ? rules : new HashMap<>();
-                return this.ruleCache;
+                return rules != null ? rules : new HashMap<>();
             } catch (Exception e) {
                 log.error("MaskRuleRepository|parseConfig|error|msg={}", e.getMessage());
-                // 解析失败时，保留之前的 ruleCache，或者返回空的 HashMap
-                return this.ruleCache;
+                throw new IllegalArgumentException("Invalid mask rule config", e);
             }
         });
 
@@ -100,8 +96,10 @@ public class MaskRuleRepository {
      * @return 匹配到的规则 Key，若无则返回 null
      */
     public String findRule(String className, String fieldName) {
+        Map<String, Map<String, String>> rules = currentRules();
+
         // 精确匹配具体的类名（优先级最高，允许特殊类覆盖全局规则）
-        Map<String, String> classRules = ruleCache.get(className);
+        Map<String, String> classRules = rules.get(className);
         if (classRules != null) {
             String classRule = classRules.get(fieldName);
             if (classRule != null) {
@@ -110,7 +108,7 @@ public class MaskRuleRepository {
         }
 
         // 兜底匹配：全局通配符规则（配置了 "*" 的字段）
-        Map<String, String> globalRules = ruleCache.get("*");
+        Map<String, String> globalRules = rules.get("*");
         if (globalRules != null) {
             return globalRules.get(fieldName);
         }
@@ -125,6 +123,16 @@ public class MaskRuleRepository {
      * @return 规则 Map
      */
     public Map<String, String> getClassRules(String className) {
-        return ruleCache.get(className);
+        return currentRules().get(className);
+    }
+
+    private Map<String, Map<String, String>> currentRules() {
+        if (registry != null) {
+            Map<String, Map<String, String>> rules = registry.get(CONFIG_KEY);
+            if (rules != null) {
+                return rules;
+            }
+        }
+        return ruleCache;
     }
 }

@@ -23,9 +23,6 @@ public class ProxyRuleRepository {
     // 配置中心的 Key
     private static final String CONFIG_KEY = "team4u.log.proxy";
 
-    // 规则缓存：ClassName -> ProxyRule
-    private volatile Map<String, ProxyRule> ruleCache = new HashMap<>();
-
     private ConfigDrivenRegistry<Map<String, ProxyRule>> registry;
 
     private ProxyRuleRepository() {
@@ -48,19 +45,14 @@ public class ProxyRuleRepository {
                     return new HashMap<>();
                 }
 
-                Map<String, ProxyRule> rules = JSONUtil.toBean(
+                return JSONUtil.toBean(
                         JSONUtil.parseObj(json),
                         new TypeReference<Map<String, ProxyRule>>() {
                         },
                         false);
-
-                // 原子替换缓存
-                this.ruleCache = rules;
-                return this.ruleCache;
             } catch (Exception e) {
                 log.error("ProxyRuleRepository|parseConfig|error|msg={}", e.getMessage());
-                // 解析失败时保留上次正常配置
-                return this.ruleCache;
+                throw new IllegalArgumentException("Invalid proxy rule config", e);
             }
         });
         // 触发首次拉取
@@ -74,7 +66,6 @@ public class ProxyRuleRepository {
      * 确保下次 init() 时从干净状态重新初始化。
      */
     public void reset() {
-        this.ruleCache = new HashMap<>();
         if (this.registry != null) {
             this.registry.destroy();
             this.registry = null;
@@ -88,15 +79,11 @@ public class ProxyRuleRepository {
      * @return 代理规则
      */
     public ProxyRule getRule(String className) {
-        // 确保注册表已初始化缓存（处理首次加载或热重载场景）
-        if (registry != null) {
-            Map<String, ProxyRule> rules = registry.get(CONFIG_KEY);
-            if (rules != null) {
-                // 从注册表返回最新的规则映射
-                return rules.get(className);
-            }
+        if (registry == null) {
+            return null;
         }
-        return ruleCache.get(className);
+        Map<String, ProxyRule> rules = registry.get(CONFIG_KEY);
+        return rules == null ? null : rules.get(className);
     }
 
     /**
