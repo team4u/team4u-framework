@@ -33,7 +33,7 @@ public class FinOpsConfigRepository {
      * 组件自治：自己初始化自己的配置监听
      */
     public void init(ConfigManager configManager) {
-        this.registry = new ConfigDrivenRegistry<>(configManager, "team4u.log", json -> {
+        this.registry = new ConfigDrivenRegistry<>(configManager, CONFIG_KEY, json -> {
             try {
                 if (json == null || json.trim().isEmpty()) {
                     return new FinOpsConfig();

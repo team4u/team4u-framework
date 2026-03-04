@@ -525,23 +525,24 @@ public void process() {
 
 ### 使用示例
 
-假设你需要管理一组动态路由：
+假设你需要管理一组动态路由，或者一个组件的自治配置：
 
 ```java
-// 1. 初始化注册表，监听 "router." 前缀
+// 1. 初始化注册表，监听特定前缀
+// 支持精准匹配 keyPrefix 自身（如 "router"）及其下属所有配置（如 "router.order"）
 ConfigDrivenRegistry<Router> routerRegistry = new ConfigDrivenRegistry<>(
         ConfigManager.global(),
-        "router.",
+        "router", 
         json -> {
             // 工厂函数：将原始 JSON 转换为 Router 实例
             RoutePolicy policy = JSONUtil.toBean(json, RoutePolicy.class);
-            return createRouter(policy);
+            return buildRouter(policy);
         }
 );
 
 // 2. 获取实例（O(1) 性能，支持热更新）
-// 访问 "router.order_route" 配置对应的 Router 实例
-Router router = routerRegistry.get("router.order_route");
+// 若配置键为 "router"，则返回该配置对应的实例
+Router router = routerRegistry.get("router");
 ```
 
 ---

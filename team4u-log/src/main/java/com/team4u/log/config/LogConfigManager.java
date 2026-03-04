@@ -68,24 +68,25 @@ public class LogConfigManager {
     public void init(ConfigManager configManager) {
         // 触发监听器通知，解耦硬编码的分发逻辑
         // 打印错误日志，避免单条监听器异常中断整体配置刷新
-        ConfigDrivenRegistry<LogDynamicConfig> registry = new ConfigDrivenRegistry<>(configManager, "team4u.log", json -> {
-            LogDynamicConfig config = parser.parse(json);
-            if (config == null) {
-                config = new LogDynamicConfig();
-            }
-            this.currentConfig = config;
+        ConfigDrivenRegistry<LogDynamicConfig> registry = new ConfigDrivenRegistry<>(configManager, CONFIG_KEY,
+                json -> {
+                    LogDynamicConfig config = parser.parse(json);
+                    if (config == null) {
+                        config = new LogDynamicConfig();
+                    }
+                    this.currentConfig = config;
 
-            // 触发监听器通知，解耦硬编码的分发逻辑
-            for (LogConfigListener listener : listeners) {
-                try {
-                    listener.onConfigChanged(config);
-                } catch (Exception e) {
-                    // 打印错误日志，避免单条监听器异常中断整体配置刷新
-                    Log.get().error("LogConfigManager|notifyListener|error|msg={}", e.getMessage());
-                }
-            }
-            return config;
-        });
+                    // 触发监听器通知，解耦硬编码的分发逻辑
+                    for (LogConfigListener listener : listeners) {
+                        try {
+                            listener.onConfigChanged(config);
+                        } catch (Exception e) {
+                            // 打印错误日志，避免单条监听器异常中断整体配置刷新
+                            Log.get().error("LogConfigManager|notifyListener|error|msg={}", e.getMessage());
+                        }
+                    }
+                    return config;
+                });
 
         // 首次加载配置
         registry.get(CONFIG_KEY);

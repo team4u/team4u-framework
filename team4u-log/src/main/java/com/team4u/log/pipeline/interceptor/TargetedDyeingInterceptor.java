@@ -51,7 +51,7 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
     }
 
     public void init(ConfigManager configManager) {
-        this.registry = new ConfigDrivenRegistry<>(configManager, "team4u.log", json -> {
+        this.registry = new ConfigDrivenRegistry<>(configManager, CONFIG_KEY, json -> {
             try {
                 if (json == null || json.trim().isEmpty()) {
                     this.activeRules = new ArrayList<>();

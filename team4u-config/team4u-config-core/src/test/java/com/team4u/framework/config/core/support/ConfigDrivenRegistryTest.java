@@ -52,6 +52,22 @@ public class ConfigDrivenRegistryTest {
     }
 
     @Test
+    public void testPrefixWithoutDotMatchSelf() {
+        // 模拟 FinOpsConfigRepository 场景，前缀就是 CONFIG_KEY
+        String configKey = "team4u.log.finops";
+        ConfigDrivenRegistry<String> registry = new ConfigDrivenRegistry<>(
+                configManager, configKey, String::toUpperCase);
+
+        configSource.putAndRefresh(configKey, "v1");
+        // 初次加载
+        Assert.assertEquals("V1", registry.get(configKey));
+
+        // 更新配置：验证此时前缀自身作为 key 也能触发热重载
+        configSource.putAndRefresh(configKey, "v2");
+        Assert.assertEquals("V2", registry.get(configKey));
+    }
+
+    @Test
     public void testSafeSwap() {
         ConfigDrivenRegistry<String> registry = new ConfigDrivenRegistry<>(
                 configManager, "test.", val -> {

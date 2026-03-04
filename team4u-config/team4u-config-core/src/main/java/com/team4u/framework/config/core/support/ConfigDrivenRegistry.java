@@ -37,10 +37,10 @@ public class ConfigDrivenRegistry<T> {
      */
     public ConfigDrivenRegistry(ConfigManager configManager, String keyPrefix, Function<String, T> instanceFactory) {
         this.configManager = configManager;
-        this.keyPrefix = keyPrefix.endsWith(".") ? keyPrefix : keyPrefix + ".";
+        this.keyPrefix = keyPrefix;
         this.instanceFactory = instanceFactory;
 
-        // 注册变更监听器
+        // 注册变更监听器：使用 * 后缀实现前缀匹配，涵盖 keyPrefix 自身及其子配置项
         this.configManager.addChangeListener(this.keyPrefix + "*", this::onConfigChanged);
     }
 
