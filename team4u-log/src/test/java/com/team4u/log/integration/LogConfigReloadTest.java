@@ -40,8 +40,8 @@ public class LogConfigReloadTest {
         Assert.assertTrue(logHelper.lastJson().contains("13800000000"));
 
         // 2. 推送热重载规则
-        String config = "{\"maskRules\":{\"java.util.LinkedHashMap\":{\"mobile\":\"MOBILE\"}}}";
-        testConfigContext.put("team4u.log.config", config);
+        String config = "{\"java.util.LinkedHashMap\":{\"mobile\":\"MOBILE\"}}";
+        testConfigContext.put("team4u.log.mask", config);
         Thread.sleep(50);
 
         // 3. 验证生效
@@ -51,13 +51,13 @@ public class LogConfigReloadTest {
 
     @Test
     public void testDynamicDyeingAndFinOpsReload() throws Exception {
-        String config = "{" +
-                "  \"dyeingRules\": [" +
-                "    { \"id\": \"dye1\", \"condition\": \"meta_action == 'Pay'\", \"targetLevel\": \"DEBUG\" }" +
-                "  ]," +
-                "  \"finOpsConfig\": { \"maxLogLength\": 50, \"errorLimitPerSecond\": 5 }" +
-                "}";
-        testConfigContext.put("team4u.log.config", config);
+        String dyeingConfig = "[" +
+                "  { \"id\": \"dye1\", \"condition\": \"meta_action == 'Pay'\", \"targetLevel\": \"DEBUG\" }" +
+                "]";
+        testConfigContext.put("team4u.log.dyeing", dyeingConfig);
+
+        String finOpsConfig = "{ \"maxLogLength\": 50, \"errorLimitPerSecond\": 5 }";
+        testConfigContext.put("team4u.log.finops", finOpsConfig);
         Thread.sleep(50);
 
         Loggers.of(this.getClass()).action("Pay").success().log();
@@ -73,8 +73,8 @@ public class LogConfigReloadTest {
     public void testDyeingEvenIfLevelDisabled() throws Exception {
         // 验证：即使原始级别被禁用（如 TRACE），命中了染色规则将其提权到 INFO，日志也应输出
         // 这种集成场景确保了 Loggers 和 Interceptor 的正确协作
-        String config = "{\"dyeingRules\":[{\"id\":\"d1\",\"condition\":\"meta_action=='Dye'\",\"targetLevel\":\"INFO\"}]}";
-        testConfigContext.put("team4u.log.config", config);
+        String config = "[{\"id\":\"d1\",\"condition\":\"meta_action=='Dye'\",\"targetLevel\":\"INFO\"}]";
+        testConfigContext.put("team4u.log.dyeing", config);
         Thread.sleep(50);
 
         // 故意用一个通常被禁用的级别 TRACE

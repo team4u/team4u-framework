@@ -2,8 +2,8 @@ package com.team4u.log.core;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
-import com.team4u.log.config.LogConfigManager;
-import com.team4u.log.config.LogDynamicConfig;
+import com.team4u.log.config.FinOpsConfigRepository;
+import com.team4u.log.config.FinOpsConfigRepository.FinOpsConfig;
 import com.team4u.log.mask.jackson.JacksonLogSerializer;
 import com.team4u.log.mask.jackson.JacksonSerializationContext;
 import com.team4u.log.mask.jackson.TruncatingStringSerializer;
@@ -23,18 +23,23 @@ public class LogEngineTest {
 
     private LogEngine engine;
     private TestLogHelper logHelper;
+    private FinOpsConfig defaultFinOpsConfig;
 
     @Before
     public void setup() {
         logHelper = TestLogHelper.start();
         engine = LogEngine.getInstance();
-        // 每次测试前重置配置为默认值，避免干扰
-        LogConfigManager.getInstance().setCurrentConfig(new LogDynamicConfig());
+        // 保存默认配置并在测试结束后恢复，如果需要
+        defaultFinOpsConfig = FinOpsConfigRepository.getInstance().get();
+        FinOpsConfigRepository.getInstance().get().setMaxStringLength(2000);
+        FinOpsConfigRepository.getInstance().get().setMaxLogLength(5000);
     }
 
     @After
     public void teardown() {
         logHelper.stop();
+        FinOpsConfigRepository.getInstance().get().setMaxStringLength(defaultFinOpsConfig.getMaxStringLength());
+        FinOpsConfigRepository.getInstance().get().setMaxLogLength(defaultFinOpsConfig.getMaxLogLength());
     }
 
     @Test
@@ -53,11 +58,7 @@ public class LogEngineTest {
 
     @Test
     public void testStringTruncation() {
-        LogDynamicConfig config = new LogDynamicConfig();
-        LogDynamicConfig.FinOpsConfig finOpsConfig = new LogDynamicConfig.FinOpsConfig();
-        finOpsConfig.setMaxStringLength(10);
-        config.setFinOpsConfig(finOpsConfig);
-        LogConfigManager.getInstance().setCurrentConfig(config);
+        FinOpsConfigRepository.getInstance().get().setMaxStringLength(10);
 
         LogEvent event = new LogEvent().setAction("TestTruncation");
         event.getPayload().put("longString", "0123456789ABCDEF");
@@ -69,11 +70,7 @@ public class LogEngineTest {
 
     @Test
     public void testBeanStringTruncation() {
-        LogDynamicConfig config = new LogDynamicConfig();
-        LogDynamicConfig.FinOpsConfig finOpsConfig = new LogDynamicConfig.FinOpsConfig();
-        finOpsConfig.setMaxStringLength(10);
-        config.setFinOpsConfig(finOpsConfig);
-        LogConfigManager.getInstance().setCurrentConfig(config);
+        FinOpsConfigRepository.getInstance().get().setMaxStringLength(10);
 
         LogEvent event = new LogEvent().setAction("VeryLongActionName");
 
@@ -95,11 +92,7 @@ public class LogEngineTest {
 
     @Test
     public void testLogTruncation() {
-        LogDynamicConfig config = new LogDynamicConfig();
-        LogDynamicConfig.FinOpsConfig finOpsConfig = new LogDynamicConfig.FinOpsConfig();
-        finOpsConfig.setMaxLogLength(20);
-        config.setFinOpsConfig(finOpsConfig);
-        LogConfigManager.getInstance().setCurrentConfig(config);
+        FinOpsConfigRepository.getInstance().get().setMaxLogLength(20);
 
         LogEvent event = new LogEvent().setAction("VeryLongActionNameThatWillBeTruncated");
 
@@ -110,16 +103,10 @@ public class LogEngineTest {
 
     @Test
     public void testAttributeSnapshotTakesPrecedence() throws Exception {
-        LogDynamicConfig globalConfig = new LogDynamicConfig();
-        LogDynamicConfig.FinOpsConfig globalFinOps = new LogDynamicConfig.FinOpsConfig();
-        globalFinOps.setMaxStringLength(50);
-        globalConfig.setFinOpsConfig(globalFinOps);
-        LogConfigManager.getInstance().setCurrentConfig(globalConfig);
+        FinOpsConfigRepository.getInstance().get().setMaxStringLength(50);
 
-        LogDynamicConfig snapshot = new LogDynamicConfig();
-        LogDynamicConfig.FinOpsConfig snapshotFinOps = new LogDynamicConfig.FinOpsConfig();
-        snapshotFinOps.setMaxStringLength(5);
-        snapshot.setFinOpsConfig(snapshotFinOps);
+        FinOpsConfig snapshot = new FinOpsConfig();
+        snapshot.setMaxStringLength(5);
 
         ObjectMapper mapper = new ObjectMapper();
         SimpleModule module = new SimpleModule();
@@ -127,7 +114,7 @@ public class LogEngineTest {
         mapper.registerModule(module);
 
         String json = mapper.writer()
-                .withAttribute(JacksonSerializationContext.ATTR_LOG_CONFIG_SNAPSHOT, snapshot)
+                .withAttribute(JacksonSerializationContext.ATTR_FINOPS_CONFIG_SNAPSHOT, snapshot)
                 .writeValueAsString(Collections.singletonMap("k", "123456789"));
 
         Assert.assertTrue(json.contains("\"k\":\"12345... [Truncated len:9]\""));
@@ -135,11 +122,7 @@ public class LogEngineTest {
 
     @Test
     public void testFallbackToGlobalConfigWhenAttributeMissing() throws Exception {
-        LogDynamicConfig globalConfig = new LogDynamicConfig();
-        LogDynamicConfig.FinOpsConfig globalFinOps = new LogDynamicConfig.FinOpsConfig();
-        globalFinOps.setMaxStringLength(6);
-        globalConfig.setFinOpsConfig(globalFinOps);
-        LogConfigManager.getInstance().setCurrentConfig(globalConfig);
+        FinOpsConfigRepository.getInstance().get().setMaxStringLength(6);
 
         ObjectMapper mapper = new ObjectMapper();
         SimpleModule module = new SimpleModule();
@@ -153,7 +136,8 @@ public class LogEngineTest {
 
     @Test
     public void testDefaultFallbackWhenSnapshotAndFinOpsAreNull() throws Exception {
-        LogConfigManager.getInstance().setCurrentConfig(null);
+        // LogConfigManager 被删除，因此无法为 null。我们可以重置长度来测试默认行为或边界情况
+        FinOpsConfigRepository.getInstance().get().setMaxStringLength(2000);
 
         ObjectMapper mapper = new ObjectMapper();
         SimpleModule module = new SimpleModule();
@@ -204,20 +188,14 @@ public class LogEngineTest {
 
     @Test
     public void testReset() {
-        LogDynamicConfig config = new LogDynamicConfig();
-        LogDynamicConfig.FinOpsConfig finOpsConfig = new LogDynamicConfig.FinOpsConfig();
-        finOpsConfig.setMaxLogLength(100);
-        finOpsConfig.setMaxStringLength(100);
-        config.setFinOpsConfig(finOpsConfig);
-        LogConfigManager.getInstance().setCurrentConfig(config);
+        FinOpsConfigRepository.getInstance().get().setMaxLogLength(100);
+        FinOpsConfigRepository.getInstance().get().setMaxStringLength(100);
 
         engine.reset();
 
-        // 验证序列化器被重置（可以通过验证当前配置拉取是否正常来间接验证）
         LogEvent event = new LogEvent().setAction("TestReset");
         event.getPayload().put("long", "01234567890123456789");
-        // reset 后虽然没有显式重置 LogConfigManager (因为它是单例且由 ConfigManager 驱动)
-        // 但我们可以验证 engine.reset() 至少清空了拦截器状态
-        Assert.assertEquals(100, LogConfigManager.getInstance().getCurrentConfig().getFinOpsConfig().getMaxLogLength());
+
+        Assert.assertEquals(100, FinOpsConfigRepository.getInstance().get().getMaxLogLength());
     }
 }

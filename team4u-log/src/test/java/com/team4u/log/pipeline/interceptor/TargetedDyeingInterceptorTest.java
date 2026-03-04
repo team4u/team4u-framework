@@ -1,9 +1,9 @@
 package com.team4u.log.pipeline.interceptor;
 
+import cn.hutool.core.util.ReflectUtil;
 import com.team4u.log.LogContext;
-import com.team4u.log.config.LogConfigManager;
-import com.team4u.log.config.LogDynamicConfig;
 import com.team4u.log.core.LogEvent;
+import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor.DyeingRule;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -25,22 +25,17 @@ public class TargetedDyeingInterceptorTest {
         interceptor = TargetedDyeingInterceptor.getInstance();
         interceptor.reset();
         MDC.clear();
-
-        // 确保单例已注册
-        LogConfigManager.getInstance().addListener(interceptor);
-        LogConfigManager.getInstance().setCurrentConfig(new LogDynamicConfig());
     }
 
-    private void refreshRules(List<LogDynamicConfig.DyeingRule> rules) {
-        LogDynamicConfig config = new LogDynamicConfig();
-        config.setDyeingRules(rules);
-        LogConfigManager.getInstance().setCurrentConfig(config);
+    private void refreshRules(List<DyeingRule> rules) {
+        // 对于单元测试，直接使用 Hutool 反射替换由 Registry 自我管理的缓存变量
+        ReflectUtil.setFieldValue(interceptor, "activeRules", rules);
     }
 
     @Test
     public void testDyeingByAction() {
         // 1. 配置规则：action 为 'DyeMe' 则染色为 DEBUG
-        LogDynamicConfig.DyeingRule rule = new LogDynamicConfig.DyeingRule();
+        DyeingRule rule = new DyeingRule();
         rule.setId("rule1");
         rule.setCondition("meta_action == 'DyeMe'");
         rule.setTargetLevel(Level.DEBUG);
@@ -57,7 +52,7 @@ public class TargetedDyeingInterceptorTest {
 
     @Test
     public void testNoMatch() {
-        LogDynamicConfig.DyeingRule rule = new LogDynamicConfig.DyeingRule();
+        DyeingRule rule = new DyeingRule();
         rule.setCondition("meta_action == 'Special'");
         rule.setTargetLevel(Level.WARN);
         refreshRules(Collections.singletonList(rule));
@@ -71,7 +66,7 @@ public class TargetedDyeingInterceptorTest {
     @Test
     public void testDyeingByFullMdc() {
         // 1. 配置规则：验证全量 MDC 注入（直接使用原始 key）
-        LogDynamicConfig.DyeingRule rule = new LogDynamicConfig.DyeingRule();
+        DyeingRule rule = new DyeingRule();
         rule.setId("rule-full-mdc");
         rule.setCondition("traceId == 'T123' && cluster == 'gray'");
         rule.setTargetLevel(Level.TRACE);
@@ -92,7 +87,7 @@ public class TargetedDyeingInterceptorTest {
     @Test
     public void testDyeingByCustomSource() {
         // 1. 配置规则：引用自定义注入的变量
-        LogDynamicConfig.DyeingRule rule = new LogDynamicConfig.DyeingRule();
+        DyeingRule rule = new DyeingRule();
         rule.setId("rule-custom");
         rule.setCondition("customAttr == 'V1'");
         rule.setTargetLevel(Level.DEBUG);
@@ -115,7 +110,7 @@ public class TargetedDyeingInterceptorTest {
 
     @Test
     public void testInvalidExpression() {
-        LogDynamicConfig.DyeingRule rule = new LogDynamicConfig.DyeingRule();
+        DyeingRule rule = new DyeingRule();
         rule.setId("invalid");
         rule.setCondition("!!! invalid syntax !!!");
         rule.setTargetLevel(Level.WARN);

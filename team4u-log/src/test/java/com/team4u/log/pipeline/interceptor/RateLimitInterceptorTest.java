@@ -1,7 +1,6 @@
 package com.team4u.log.pipeline.interceptor;
 
-import com.team4u.log.config.LogConfigManager;
-import com.team4u.log.config.LogDynamicConfig;
+import com.team4u.log.config.FinOpsConfigRepository;
 import com.team4u.log.core.LogEvent;
 import org.junit.Assert;
 import org.junit.Before;
@@ -23,11 +22,7 @@ public class RateLimitInterceptorTest {
     }
 
     private void updateLimit(int limit) {
-        LogDynamicConfig config = new LogDynamicConfig();
-        LogDynamicConfig.FinOpsConfig finOpsConfig = new LogDynamicConfig.FinOpsConfig();
-        finOpsConfig.setErrorLimitPerSecond(limit);
-        config.setFinOpsConfig(finOpsConfig);
-        LogConfigManager.getInstance().setCurrentConfig(config);
+        FinOpsConfigRepository.getInstance().get().setErrorLimitPerSecond(limit);
     }
 
     @Test

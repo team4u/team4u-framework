@@ -1,35 +1,41 @@
 package com.team4u.log.pipeline.interceptor;
 
+import cn.hutool.json.JSONUtil;
 import cn.hutool.log.Log;
+import com.team4u.framework.config.core.ConfigManager;
+import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.criterion.MatchContext;
 import com.team4u.log.LogContext;
-import com.team4u.log.config.LogConfigListener;
-import com.team4u.log.config.LogDynamicConfig;
-import com.team4u.log.config.LogDynamicConfig.DyeingRule;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.pipeline.LogInterceptor;
 import com.team4u.log.pipeline.context.LogContextCollector;
+import lombok.Data;
+import org.slf4j.event.Level;
 
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 
 /**
- * 定向染色拦截器
+ * 定向染色拦截器 (组件自治)
  * <p>
  * 支持根据规则动态调整日志级别，基于 team4u-criterion 进行高效匹配。
  * 通过 LogContext 全局收集上下文信息。
  */
-public class TargetedDyeingInterceptor implements LogInterceptor, LogConfigListener {
+public class TargetedDyeingInterceptor implements LogInterceptor {
 
     private static final Log log = Log.get();
 
     private static final TargetedDyeingInterceptor INSTANCE = new TargetedDyeingInterceptor();
+    private static final String CONFIG_KEY = "team4u.log.dyeing";
 
     private volatile List<DyeingRule> activeRules = new ArrayList<>();
 
     private volatile Criteria criteria = Criteria.global();
+
+    // 自我管理的 Registry
+    private ConfigDrivenRegistry<List<DyeingRule>> registry;
 
     private TargetedDyeingInterceptor() {
         reset();
@@ -42,6 +48,43 @@ public class TargetedDyeingInterceptor implements LogInterceptor, LogConfigListe
      */
     public static TargetedDyeingInterceptor getInstance() {
         return INSTANCE;
+    }
+
+    public void init(ConfigManager configManager) {
+        this.registry = new ConfigDrivenRegistry<>(configManager, "team4u.log", json -> {
+            try {
+                if (json == null || json.trim().isEmpty()) {
+                    this.activeRules = new ArrayList<>();
+                    return this.activeRules;
+                }
+
+                List<DyeingRule> parsedRules = JSONUtil.toList(json, DyeingRule.class);
+                List<DyeingRule> validRules = new ArrayList<>();
+                Criteria activeCriteria = this.criteria;
+
+                // 预编译表达式，提升首次匹配性能，并过滤掉语法错误的规则
+                for (DyeingRule rule : parsedRules) {
+                    try {
+                        if (rule.getCondition() != null && !rule.getCondition().trim().isEmpty()) {
+                            activeCriteria.compileExpression(rule.getCondition());
+                            validRules.add(rule);
+                        }
+                    } catch (Exception e) {
+                        // 预热失败，打印错误日志，该规则将不会生效
+                        log.error("TargetedDyeingInterceptor|onConfigChanged|error|ruleId={}|condition={}|msg={}",
+                                rule.getId(), rule.getCondition(), e.getMessage());
+                    }
+                }
+
+                this.activeRules = validRules;
+                return this.activeRules;
+            } catch (Exception e) {
+                log.error("TargetedDyeingInterceptor|parseConfig|error|msg={}", e.getMessage());
+                return this.activeRules;
+            }
+        });
+
+        this.registry.get(CONFIG_KEY);
     }
 
     @Override
@@ -61,31 +104,6 @@ public class TargetedDyeingInterceptor implements LogInterceptor, LogConfigListe
      */
     public boolean hasActiveRules() {
         return !activeRules.isEmpty();
-    }
-
-    @Override
-    public void onConfigChanged(LogDynamicConfig newConfig) {
-        List<DyeingRule> rules = newConfig.getDyeingRules();
-
-        List<DyeingRule> validRules = new ArrayList<>();
-        Criteria activeCriteria = this.criteria;
-
-        // 1. 预编译表达式，提升首次匹配性能，并过滤掉语法错误的规则
-        for (DyeingRule rule : rules) {
-            try {
-                if (rule.getCondition() != null && !rule.getCondition().trim().isEmpty()) {
-                    activeCriteria.compileExpression(rule.getCondition());
-                    validRules.add(rule);
-                }
-            } catch (Exception e) {
-                // 预热失败，打印错误日志，该规则将不会生效
-                log.error("TargetedDyeingInterceptor|onConfigChanged|error|ruleId={}|condition={}|msg={}",
-                        rule.getId(), rule.getCondition(), e.getMessage());
-            }
-        }
-
-        // 2. 只有预热完成后，才统一赋值给活跃规则列表，确保原子性切换
-        this.activeRules = validRules;
     }
 
     @Override
@@ -123,5 +141,26 @@ public class TargetedDyeingInterceptor implements LogInterceptor, LogConfigListe
         }
 
         return true;
+    }
+
+    /**
+     * 染色规则配置
+     */
+    @Data
+    public static class DyeingRule {
+        /**
+         * 规则 ID
+         */
+        private String id;
+
+        /**
+         * 匹配条件表达式（基于 team4u-criterion）
+         */
+        private String condition;
+
+        /**
+         * 命中规则后的目标日志级别
+         */
+        private Level targetLevel;
     }
 }

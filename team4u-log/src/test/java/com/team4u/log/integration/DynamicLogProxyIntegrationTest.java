@@ -5,6 +5,7 @@ import com.team4u.log.LogBootstrap;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor;
 import com.team4u.log.proxy.LogProxyFactory;
+import com.team4u.log.proxy.ProxyRuleRepository;
 import com.team4u.log.support.TestLogHelper;
 import org.junit.After;
 import org.junit.Assert;
@@ -38,24 +39,26 @@ public class DynamicLogProxyIntegrationTest {
     }
 
     @Test
-    public void testDynamicIgnoreExceptions() {
+    public void testDynamicIgnoreExceptions() throws InterruptedException {
         // 1. 准备：为第三方类配置动态拦截规则，并将 RuntimeException 设为忽略异常（业务降级）
         String className = ThirdPartyService.class.getName();
-        String configJson = "{" +
-                "  \"proxyRules\": {" +
-                "    \"" + className + "\": {" +
-                "      \"methods\": [\"send\"]," +
-                "      \"ignoreExceptions\": [\"java.lang.RuntimeException\"]" +
-                "    }" +
-                "  }," +
-                "  \"maskRules\": {" +
-                "    \"*\": {" +
-                "      \"mobile\": \"MOBILE\"" +
-                "    }" +
+        String proxyConfig = "{" +
+                "  \"" + className + "\": {" +
+                "    \"methods\": [\"send\"]," +
+                "    \"ignoreExceptions\": [\"java.lang.RuntimeException\"]" +
                 "  }" +
                 "}";
 
-        configContext.put("team4u.log.config", configJson);
+        configContext.put("team4u.log.proxy", proxyConfig);
+
+        String maskConfig = "{" +
+                "  \"*\": {" +
+                "    \"mobile\": \"MOBILE\"" +
+                "  }" +
+                "}";
+
+        configContext.put("team4u.log.mask", maskConfig);
+        Thread.sleep(50);
 
         // 2. 创建动态代理（该类没有任何 @AutoLogTrace 注解）
         ThirdPartyService service = LogProxyFactory.createDynamicProxy(new ThirdPartyService());
@@ -63,7 +66,7 @@ public class DynamicLogProxyIntegrationTest {
         // 3. 执行：触发异常
         try {
             service.send("13812345678", "Hello");
-        } catch (RuntimeException e) {
+        } catch (Exception e) {
             // 4. 断言：验证日志级别是否降级为 WARN (由 ignoreExceptions 驱动)
             LogEvent event = logHelper.lastEvent();
             Assert.assertNotNull(event);
@@ -79,21 +82,21 @@ public class DynamicLogProxyIntegrationTest {
     @Test
     public void testDynamicSlowLog() throws InterruptedException {
         String className = ThirdPartyService.class.getName();
-        String configJson = "{" +
-                "  \"proxyRules\": {" +
-                "    \"" + className + "\": {" +
-                "      \"methods\": [\"*\"]," +
-                "      \"slowThreshold\": 50" +
-                "    }" +
+        String proxyConfig = "{" +
+                "  \"" + className + "\": {" +
+                "    \"methods\": [\"*\"]," +
+                "    \"slowThreshold\": 50" +
                 "  }" +
                 "}";
 
-        configContext.put("team4u.log.config", configJson);
+        configContext.put("team4u.log.proxy", proxyConfig);
+        Thread.sleep(50);
 
         ThirdPartyService service = LogProxyFactory.createDynamicProxy(new ThirdPartyService());
         service.slowMethod();
 
         LogEvent event = logHelper.lastEvent();
+        Assert.assertNotNull(event);
         Assert.assertEquals(Level.WARN, event.getLevel());
         Assert.assertEquals("slow_success", event.getStatus());
     }

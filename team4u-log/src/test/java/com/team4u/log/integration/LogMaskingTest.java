@@ -1,8 +1,6 @@
 package com.team4u.log.integration;
 
 import com.team4u.log.Loggers;
-import com.team4u.log.config.LogConfigManager;
-import com.team4u.log.config.LogDynamicConfig;
 import com.team4u.log.mask.config.MaskRuleRepository;
 import com.team4u.log.support.TestLogHelper;
 import lombok.Data;
@@ -11,6 +9,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import cn.hutool.core.util.ReflectUtil;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -24,15 +23,12 @@ public class LogMaskingTest {
     @Before
     public void setup() {
         logHelper = TestLogHelper.start();
-        // 确保单例已注册
-        LogConfigManager.getInstance().addListener(MaskRuleRepository.getInstance());
-        LogConfigManager.getInstance().setCurrentConfig(new LogDynamicConfig());
+        // 清理缓存
+        ReflectUtil.setFieldValue(MaskRuleRepository.getInstance(), "ruleCache", new HashMap<>());
     }
 
     private void refreshRules(Map<String, Map<String, String>> rules) {
-        LogDynamicConfig config = new LogDynamicConfig();
-        config.setMaskRules(rules);
-        LogConfigManager.getInstance().setCurrentConfig(config);
+        ReflectUtil.setFieldValue(MaskRuleRepository.getInstance(), "ruleCache", rules);
     }
 
     @After

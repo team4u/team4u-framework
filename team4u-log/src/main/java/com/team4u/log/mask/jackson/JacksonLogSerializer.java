@@ -3,8 +3,8 @@ package com.team4u.log.mask.jackson;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.module.SimpleModule;
-import com.team4u.log.config.LogConfigManager;
-import com.team4u.log.config.LogDynamicConfig;
+import com.team4u.log.config.FinOpsConfigRepository;
+import com.team4u.log.config.FinOpsConfigRepository.FinOpsConfig;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.core.LogSerializer;
 
@@ -40,11 +40,11 @@ public class JacksonLogSerializer implements LogSerializer {
     @Override
     public String serialize(LogEvent event) {
         try {
-            LogDynamicConfig configSnapshot = LogConfigManager.getInstance().getCurrentConfig();
+            FinOpsConfig configSnapshot = FinOpsConfigRepository.getInstance().get();
 
             // 执行脱敏序列化
             String rawJson = objectMapper.writer()
-                    .withAttribute(JacksonSerializationContext.ATTR_LOG_CONFIG_SNAPSHOT, configSnapshot)
+                    .withAttribute(JacksonSerializationContext.ATTR_FINOPS_CONFIG_SNAPSHOT, configSnapshot)
                     .writeValueAsString(event);
 
             int maxLogLength = JacksonSerializationContext.resolveMaxLogLength(configSnapshot);

@@ -1,7 +1,6 @@
 package com.team4u.log.mask.config;
 
-import com.team4u.log.config.LogConfigManager;
-import com.team4u.log.config.LogDynamicConfig;
+import cn.hutool.core.util.ReflectUtil;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -19,15 +18,11 @@ public class MaskRuleRepositoryTest {
     @Before
     public void setup() {
         repository = MaskRuleRepository.getInstance();
-        // 确保已注册
-        LogConfigManager.getInstance().addListener(repository);
-        LogConfigManager.getInstance().setCurrentConfig(new LogDynamicConfig());
     }
 
     private void refreshRules(Map<String, Map<String, String>> rules) {
-        LogDynamicConfig config = new LogDynamicConfig();
-        config.setMaskRules(rules);
-        LogConfigManager.getInstance().setCurrentConfig(config);
+        // 对于单元测试，直接使用 Hutool 反射替换由 Registry 自我管理的缓存变量
+        ReflectUtil.setFieldValue(repository, "ruleCache", rules);
     }
 
     @Test

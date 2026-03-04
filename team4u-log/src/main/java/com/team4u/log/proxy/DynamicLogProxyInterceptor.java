@@ -2,8 +2,7 @@ package com.team4u.log.proxy;
 
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
-import com.team4u.log.config.LogConfigManager;
-import com.team4u.log.config.LogDynamicConfig;
+import com.team4u.log.proxy.ProxyRuleRepository.ProxyRule;
 
 import java.lang.reflect.Method;
 import java.util.List;
@@ -11,7 +10,7 @@ import java.util.List;
 /**
  * 动态配置驱动的日志代理拦截器 (专为第三方类库设计)
  * <p>
- * 无需在源码中添加注解，通过 {@link LogDynamicConfig#getProxyRules()} 动态控制拦截行为。
+ * 无需在源码中添加注解，通过动态控制拦截行为。
  */
 public class DynamicLogProxyInterceptor implements MethodInterceptor {
 
@@ -23,12 +22,8 @@ public class DynamicLogProxyInterceptor implements MethodInterceptor {
         String className = targetClass.getName();
         String methodName = method.getName();
 
-        // 1. 从全局配置中心获取该类的动态代理规则
-        LogDynamicConfig config = LogConfigManager.getInstance().getCurrentConfig();
-        LogDynamicConfig.ProxyRule rule = null;
-        if (config != null && config.getProxyRules() != null) {
-            rule = config.getProxyRules().get(className);
-        }
+        // 1. 从组件自治仓库获取该类的动态代理规则
+        ProxyRule rule = ProxyRuleRepository.getInstance().getRule(className);
 
         // 2. 如果没有配置规则，或者当前方法不在拦截名单中，直接放行，零性能损耗
         if (rule == null || !isMethodMatched(methodName, rule.getMethods())) {

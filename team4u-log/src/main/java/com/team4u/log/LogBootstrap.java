@@ -3,10 +3,11 @@ package com.team4u.log;
 import cn.hutool.log.Log;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.criterion.Criteria;
-import com.team4u.log.config.LogConfigManager;
+import com.team4u.log.config.FinOpsConfigRepository;
 import com.team4u.log.core.LogEngine;
 import com.team4u.log.mask.config.MaskRuleRepository;
 import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor;
+import com.team4u.log.proxy.ProxyRuleRepository;
 
 /**
  * 日志模块引导类
@@ -42,21 +43,18 @@ public class LogBootstrap {
     }
 
     public void start() {
-        LogConfigManager logConfigManager = LogConfigManager.getInstance();
-
-        // 1. 注册需要预编译或维护复杂内部状态的监听器
-        logConfigManager.addListener(TargetedDyeingInterceptor.getInstance());
-        logConfigManager.addListener(MaskRuleRepository.getInstance());
-
-        // 2. 初始化动态配置管理器
-        logConfigManager.init(configManager);
-
-        // 3. 注入可替换的条件匹配器
+        // 1. 设置 Criteria 依赖
         TargetedDyeingInterceptor.getInstance().setCriteria(criteria);
 
-        // 4. 初始化核心引擎
+        // 2. 将 ConfigManager 下发，让各个领域组件完成自我配置加载
+        MaskRuleRepository.getInstance().init(configManager);
+        TargetedDyeingInterceptor.getInstance().init(configManager);
+        FinOpsConfigRepository.getInstance().init(configManager);
+        ProxyRuleRepository.getInstance().init(configManager);
+
+        // 3. 初始化核心引擎
         LogEngine.getInstance();
 
-        log.info("LogBootstrap|start|success|Dynamic Masking & Targeted Dyeing enabled.");
+        log.info("LogBootstrap|start|success|Domain-Driven Config enabled.");
     }
 }

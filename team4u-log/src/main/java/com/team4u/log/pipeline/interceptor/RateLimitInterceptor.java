@@ -2,7 +2,7 @@ package com.team4u.log.pipeline.interceptor;
 
 import cn.hutool.cache.CacheUtil;
 import cn.hutool.cache.impl.TimedCache;
-import com.team4u.log.config.LogConfigManager;
+import com.team4u.log.config.FinOpsConfigRepository;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.pipeline.LogInterceptor;
 import org.slf4j.LoggerFactory;
@@ -55,8 +55,7 @@ public class RateLimitInterceptor implements LogInterceptor {
         }
 
         // 获取当前实时限流阈值
-        int errorLimitPerSecond = LogConfigManager.getInstance().getCurrentConfig()
-                .getFinOpsConfig().getErrorLimitPerSecond();
+        int errorLimitPerSecond = FinOpsConfigRepository.getInstance().get().getErrorLimitPerSecond();
 
         // 生成特征索引：动作 + 异常类名
         String signature = event.getAction() + "|" + event.getException().getClass().getName();

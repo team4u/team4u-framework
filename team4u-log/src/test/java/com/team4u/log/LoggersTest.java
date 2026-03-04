@@ -1,8 +1,6 @@
 package com.team4u.log;
 
-import com.team4u.log.config.LogConfigManager;
-import com.team4u.log.config.LogDynamicConfig;
-import com.team4u.log.config.LogDynamicConfig.DyeingRule;
+import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor.DyeingRule;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor;
 import com.team4u.log.support.TestLogHelper;
@@ -12,6 +10,7 @@ import org.junit.Before;
 import org.junit.Test;
 import org.slf4j.event.Level;
 
+import cn.hutool.core.util.ReflectUtil;
 import java.util.Collections;
 import java.util.List;
 
@@ -25,15 +24,11 @@ public class LoggersTest {
     @Before
     public void setup() {
         logHelper = TestLogHelper.start();
-        // 确保单例已注册
-        LogConfigManager.getInstance().addListener(TargetedDyeingInterceptor.getInstance());
-        LogConfigManager.getInstance().setCurrentConfig(new LogDynamicConfig());
+        TargetedDyeingInterceptor.getInstance().reset();
     }
 
     private void refreshRules(List<DyeingRule> rules) {
-        LogDynamicConfig config = new LogDynamicConfig();
-        config.setDyeingRules(rules);
-        LogConfigManager.getInstance().setCurrentConfig(config);
+        ReflectUtil.setFieldValue(TargetedDyeingInterceptor.getInstance(), "activeRules", rules);
     }
 
     @After
