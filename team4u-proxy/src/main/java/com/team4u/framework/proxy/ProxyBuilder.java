@@ -158,7 +158,7 @@ public final class ProxyBuilder<T> {
         Class<?>[] interfacesArray = this.additionalInterfaces.toArray(new Class<?>[0]);
 
         // 4. 生成代理类并返回实例
-        return engine.createProxy(this.primaryType, interfacesArray, finalInterceptors);
+        return engine.createProxy(this.primaryType, interfacesArray, this.delegateObject, finalInterceptors);
     }
 
     /**
@@ -193,7 +193,8 @@ public final class ProxyBuilder<T> {
 
         // 校验 delegate 存在性
         if (this.delegateObject == null && !this.enableHotswap) {
-            throw new ProxyException("A delegate object must be provided using withDelegate() unless 'asEmptyObject()' is enabled.");
+            throw new ProxyException(
+                    "A delegate object must be provided using withDelegate() unless 'asEmptyObject()' is enabled.");
         }
 
         // 尾部收口拦截器：处理委托逻辑

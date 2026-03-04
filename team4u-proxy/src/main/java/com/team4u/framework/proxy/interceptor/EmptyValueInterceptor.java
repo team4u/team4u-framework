@@ -61,12 +61,17 @@ public class EmptyValueInterceptor implements MethodInterceptor {
     }
 
     private Object resolveSafeEmptyValue(Class<?> type) {
-        if (type == String.class) return "";
-        if (type == Optional.class) return Optional.empty();
+        if (type == String.class)
+            return "";
+        if (type == Optional.class)
+            return Optional.empty();
 
-        if (List.class.isAssignableFrom(type)) return Collections.emptyList();
-        if (Set.class.isAssignableFrom(type)) return Collections.emptySet();
-        if (Map.class.isAssignableFrom(type)) return Collections.emptyMap();
+        if (List.class.isAssignableFrom(type))
+            return Collections.emptyList();
+        if (Set.class.isAssignableFrom(type))
+            return Collections.emptySet();
+        if (Map.class.isAssignableFrom(type))
+            return Collections.emptyMap();
 
         if (type.isArray()) {
             return Array.newInstance(type.getComponentType(), 0);
@@ -74,8 +79,10 @@ public class EmptyValueInterceptor implements MethodInterceptor {
 
         // 基础数据类型默认值已在 ReflectiveMethodInvocation 中作为最后屏障处理，但这里做双重保险亦可
         if (type.isPrimitive()) {
-            if (type == boolean.class) return false;
-            if (type == char.class) return '\0';
+            if (type == boolean.class)
+                return false;
+            if (type == char.class)
+                return '\0';
             return 0; // 适配 byte, short, int, long, float, double
         }
 
@@ -88,8 +95,7 @@ public class EmptyValueInterceptor implements MethodInterceptor {
             return null;
         }
 
-        return EMPTY_INSTANCE_CACHE.computeIfAbsent(type, t ->
-                proxyEngine.createProxy(t, new Class<?>[0], Collections.singletonList(new EmptyValueInterceptor(t, proxyEngine)))
-        );
+        return EMPTY_INSTANCE_CACHE.computeIfAbsent(type, t -> proxyEngine.createProxy(t, new Class<?>[0], null,
+                Collections.singletonList(new EmptyValueInterceptor(t, proxyEngine))));
     }
 }

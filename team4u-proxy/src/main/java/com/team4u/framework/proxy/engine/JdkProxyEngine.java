@@ -10,7 +10,9 @@ import java.util.stream.Stream;
 
 /**
  * 基于 JDK 原生反射的动态代理引擎
- * <p>适用场景：目标类型全部为接口</p>
+ * <p>
+ * 适用场景：目标类型全部为接口
+ * </p>
  *
  * @author jay.wu
  */
@@ -32,7 +34,8 @@ public class JdkProxyEngine implements ProxyEngine {
 
     @Override
     @SuppressWarnings("unchecked")
-    public <T> T createProxy(Class<T> primaryType, Class<?>[] interfaces, List<MethodInterceptor> interceptors) {
+    public <T> T createProxy(Class<T> primaryType, Class<?>[] interfaces, Object target,
+                             List<MethodInterceptor> interceptors) {
         // 合并主接口和附加接口
         Class<?>[] allInterfaces = Stream.concat(Stream.of(primaryType), Arrays.stream(interfaces))
                 .distinct()
@@ -47,7 +50,6 @@ public class JdkProxyEngine implements ProxyEngine {
         return (T) Proxy.newProxyInstance(
                 classLoader,
                 allInterfaces,
-                new ProxyInvocationHandler(interceptors)
-        );
+                new ProxyInvocationHandler(target, interceptors));
     }
 }

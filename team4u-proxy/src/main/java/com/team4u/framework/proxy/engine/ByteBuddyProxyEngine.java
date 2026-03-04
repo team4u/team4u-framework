@@ -14,7 +14,9 @@ import java.util.List;
 
 /**
  * 基于 ByteBuddy 的高性能字节码代理引擎
- * <p>适用场景：目标类型中包含普通 Class (非 final 类)</p>
+ * <p>
+ * 适用场景：目标类型中包含普通 Class (非 final 类)
+ * </p>
  *
  * @author jay.wu
  */
@@ -36,7 +38,8 @@ public class ByteBuddyProxyEngine implements ProxyEngine {
 
     @Override
     @SuppressWarnings("unchecked")
-    public <T> T createProxy(Class<T> primaryType, Class<?>[] interfaces, List<MethodInterceptor> interceptors) {
+    public <T> T createProxy(Class<T> primaryType, Class<?>[] interfaces, Object target,
+                             List<MethodInterceptor> interceptors) {
         try {
             ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
             if (classLoader == null) {
@@ -51,7 +54,7 @@ public class ByteBuddyProxyEngine implements ProxyEngine {
                     // 拦截所有方法，但必须排除 finalize() 方法以防止内存泄漏 (GC 异常)
                     .method(ElementMatchers.any().and(ElementMatchers.not(ElementMatchers.isFinalizer())))
                     // 使用适配器，将拦截委托给统一的 JdkInvocationHandler 逻辑
-                    .intercept(InvocationHandlerAdapter.of(new ProxyInvocationHandler(interceptors)))
+                    .intercept(InvocationHandlerAdapter.of(new ProxyInvocationHandler(target, interceptors)))
                     // 生成并加载字节码
                     .make()
                     .load(classLoader)

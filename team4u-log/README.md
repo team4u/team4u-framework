@@ -2,7 +2,7 @@
 
 ## 模块简介
 
-`team4u-log` 是 Team4u 框架下的高性能、结构化、动态化日志治理模块。它不仅提供了链式的日志打印 API，还内置了自动日志追踪代理、极速敏感数据脱敏、动态靶向染色以及防雪崩限流保护等企业级特性。
+`team4u-log` 是 Team4u 框架下的高性能、结构化、动态化日志治理模块。它不仅提供了链式的日志打印 API，还集成了自动日志追踪代理、`team4u-mask` 极速脱敏能力、动态靶向染色以及防雪崩限流保护等企业级特性。
 
 模块底层基于策略流水线设计，无缝对接 Jackson 序列化与 SLF4J 门面，并支持通过配置中心（team4u-config）进行规则的实时热重载。
 
@@ -29,7 +29,7 @@
 ### 模块自举（初始化启动）
 为了启用动态脱敏、动态染色等高级功能，需在应用启动阶段进行模块初始化：
 ```java
-import fcom.team4u.framework.log.LogBootstrap;
+import com.team4u.framework.log.LogBootstrap;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.criterion.Criteria;
 
@@ -55,7 +55,7 @@ LogBootstrap.global()
 ### 基础日志打印
 使用 `Loggers` 提供的 Fluent API 记录业务日志：
 ```java
-import fcom.team4u.framework.log.Loggers;
+import com.team4u.framework.log.Loggers;
 import org.slf4j.MDC;
 
 MDC.put("traceId", "tid-998877"); // 模块会自动提取 traceId
@@ -72,7 +72,7 @@ Loggers.of(OrderService.class)
 ```
 输出结果示例:
 ```json
-{"loggerName":"com.demo.OrderService","level":"INFO","traceId":"tid-998877","action":"CreateOrder","status":"success","durationMs":120,"payload":{"orderId":"ORD-12345","user":{"name":"周*伦","phone":"1388000"}},"suppressed":false}
+{"loggerName":"com.demo.OrderService","level":"INFO","traceId":"tid-998877","action":"CreateOrder","status":"success","durationMs":120,"payload":{"orderId":"ORD-12345","user":{"name":"**伦","phone":"138*****000"}},"suppressed":false}
 ```
 
 
@@ -116,7 +116,7 @@ LogEngine.getInstance()
 ```
 
 2. SPI 自动发现：
-在 `META-INF/services/fcom.team4u.framework.log.pipeline.LogInterceptor` 文件中填入实现类的全限定名，系统启动时会自动加载并按 `priority()` 排序。
+在 `META-INF/services/com.team4u.framework.log.pipeline.LogInterceptor` 文件中填入实现类的全限定名，系统启动时会自动加载并按 `priority()` 排序。
 
 #### 常用拦截器配置
 *   自定义从 MDC 中提取的键名：
@@ -247,80 +247,50 @@ service.register(req);
     *   级别 (`level`)：自动降级为 `WARN`。
 
 ### 高性能敏感数据脱敏
-引擎内置了基于 Jackson 序列化的极速脱敏机制，无需正则匹配。在本次架构升级后，脱敏系统已全面切换为基于 `MaskPolicy` 的插件化设计。
+`team4u-log` 不再内置脱敏实现，而是在日志序列化与代理链路中集成 `team4u-mask` 能力。
 
-#### 内置脱敏类型 (MaskType)
-系统预置了丰富的脱敏算法，常用的标识包括：
+> 完整脱敏能力（算法清单、注解、SPI、规则仓库）请参考 [`team4u-mask/README.md`](../team4u-mask/README.md)。本章仅说明在日志场景如何接入。
 
-| 标识符 (Key)    | 说明        | 脱敏效果示例                        |
-| :-------------- | :---------- | :---------------------------------- |
-| `NAME`          | 姓名        | `周杰伦` -> `伦`                    |
-| `MOBILE`        | 手机号码    | `13812345678` -> `138*678`          |
-| `BANK_CARD_NO`  | 银行卡号    | `6222...9011` -> `622211`           |
-| `ID_CARD_NO`    | 身份证号    | `4401...1234` -> `44011*34`         |
-| `PASSWORD`      | 密码        | `secret123` -> ``                   |
-| `EMAIL`         | 电子邮箱    | `fjay@gmail.com` -> `f@gmail.com`   |
-| `ADDRESS`       | 地址        | `广东省广州市...` -> `广东省广州市` |
-| `B1A1` / `B2A2` | 保留前N后N  | `12345` (B1A1) -> `1*5`             |
-| `PERCENT66`     | 居中掩码66% | `1234567890` -> `1*90`              |
-| `HIDE`          | 全部隐藏    | `anyValue` -> `*`                   |
-| `NONE`          | 不脱敏      | `anyValue` -> `anyValue`            |
+#### 在日志模块中的接入方式
 
-#### 注解脱敏（适用于可修改的 DTO）
-直接在字段上打上 `@Mask` 注解即可：
-```java
-public class UserReq {
-    @Mask(MaskType.NAME)
-    private String name;
+1. **对象字段脱敏（序列化阶段）**
+   在 DTO 字段上使用 `@Mask`，日志序列化时自动生效。
 
-    @Mask(MaskType.MOBILE)
-    private String phone;
-}
-```
+   ```java
+   public class UserReq {
+       @Mask(MaskType.NAME)
+       private String name;
 
-#### 外部动态脱敏（Map、参数名或第三方 DTO）
+       @Mask(MaskType.MOBILE)
+       private String phone;
+   }
+   ```
 
-当无法通过 `@Mask` 注解标记源码时（例如使用 `Map` 存放数据，或调用外部 jar 包中的方法），可以通过配置中心下发脱敏规则。
+2. **动态规则脱敏（配置驱动）**
+   通过配置中心下发 `team4u.mask.rules`，覆盖 Map Key、方法参数名、第三方 DTO 字段等场景：
 
-##### 基于名称的精确匹配
-系统会根据对象的全限定类名（或通配符 `"*"`）和字段名/Map Key/方法参数名去匹配规则。
+   ```json
+   {
+     "*": {
+       "mobile": "MOBILE",
+       "appSecret": "PASSWORD"
+     },
+     "com.demo.PaymentReq": {
+       "bankCardNo": "BANK_CARD_NO"
+     }
+   }
+   ```
 
-脱敏方法参数示例：
-若方法定义为 `send(String mobile, String appSecret)`，开启 `-parameters` 后，可通过以下配置脱敏：
+#### 规则与优先级（日志视角）
 
-```json
-{
-  "*": {
-    "mobile": "MOBILE",
-    "appSecret": "PASSWORD"
-  }
-}
-```
+- 字段序列化时：`@Mask` **优先**于外部规则。
+- 外部规则匹配顺序：**类名精确匹配** > **`*` 全局通配符**。
+- 未命中规则时保持原值（建议显式配置关键字段）。
 
-##### 默认开箱即用
-框架默认对 `java.util.HashMap` 和 `java.util.LinkedHashMap` 的 `"password"` 和 `"creditCard"` 字段开启了脱敏。由于 `.put()` 和方法入参记录底层均使用 `LinkedHashMap`，这些规则会自动覆盖到 Fluent API 和方法追踪中。
+#### 启动建议
 
-#### 全局通配符脱敏（一劳永逸）
-在微服务场景中，DTO 可能多达上千个。本模块支持使用特殊的类名 `"*"` 来定义全局脱敏规则。
-
-*   匹配优先级：优先进行“类名精确匹配”；若未命中，则回退到 `"*"` 进行“全局字段匹配”。
-*   治理效果：只要配置了通配符规则，全系统内（包括所有 DTO、第三方类、任意类型的 Map）只要字段名匹配，就会自动触发脱敏。
-
-动态配置示例：
-```json
-{
-  "*": {
-    "mobile": "MOBILE",
-    "password": "PASSWORD"
-  }
-}
-```
-
-#### 自定义脱敏扩展 (SPI)
-如果内置算法无法满足需求，您可以轻松扩展：
-1. 实现 `MaskPolicy` 接口。
-2. 在 `META-INF/services/com.team4u.framework.mask.MaskPolicy` 中注册实现类。
-3. 或者直接调用 `FastMasker.register(new MyPolicy())` 进行编程式注册。
+- 使用 `LogBootstrap.global().start()` 时，日志模块会自动联动初始化 `MaskBootstrap`。
+- 若你依赖方法参数名进行脱敏（如 `String mobile`），建议开启编译参数 `-parameters`，避免参数名退化为 `arg0/arg1`。
 ## 单元测试与日志验证
 
 得益于结构化的设计，本模块具有极佳的可测试性。框架内置了 `TestLogHelper` 工具类，您可以在单元测试中轻松捕获并断言日志内容。
@@ -328,7 +298,7 @@ public class UserReq {
 以下是单元测试中的推荐做法：
 
 ```java
-import fcom.team4u.framework.log.support.TestLogHelper;
+import com.team4u.framework.log.support.TestLogHelper;
 
 // 开启日志捕获
 TestLogHelper helper = TestLogHelper.start();
@@ -343,7 +313,7 @@ try {
     
     // 验证脱敏后的 JSON 输出是否符合预期
     String json = helper.lastJson();
-    Assert.assertTrue(json.contains("周*伦"));
+    Assert.assertTrue(json.contains("**伦"));
     
 } finally {
     // 停止捕获并重置环境
@@ -428,8 +398,8 @@ safeClient.send("13812345678", "sk_live_123abc", "您的验证码是 9527");
   "durationMs": 12,
   "payload": {
     "req": {
-      "mobile": "138*678",    // <-- 手机号被自动脱敏
-      "appSecret": "",      // <-- 凭证被自动脱敏
+      "mobile": "138*****678",    // <-- 手机号被自动脱敏
+      "appSecret": "******",      // <-- 凭证被自动脱敏
       "content": "您的验证码是 9527"
     },
     "resp": {

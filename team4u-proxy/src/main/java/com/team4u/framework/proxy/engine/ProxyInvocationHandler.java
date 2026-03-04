@@ -16,6 +16,7 @@ import java.util.List;
 @RequiredArgsConstructor
 public class ProxyInvocationHandler implements InvocationHandler {
 
+    private final Object target;
     private final List<MethodInterceptor> interceptors;
 
     @Override
@@ -24,7 +25,8 @@ public class ProxyInvocationHandler implements InvocationHandler {
         Object[] safeArgs = args == null ? new Object[0] : args;
 
         // 每次方法调用都必须实例化一个新的 Invocation 上下文，因为其中包含基于索引的状态游标
-        ReflectiveMethodInvocation invocation = new ReflectiveMethodInvocation(proxy, method, safeArgs, interceptors);
+        ReflectiveMethodInvocation invocation = new ReflectiveMethodInvocation(proxy, target, method, safeArgs,
+                interceptors);
 
         // 推进职责链
         return invocation.proceed();

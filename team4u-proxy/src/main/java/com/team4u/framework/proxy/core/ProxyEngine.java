@@ -22,9 +22,10 @@ public interface ProxyEngine {
      *
      * @param primaryType  主代理类型（可以是 Class 也可以是 Interface）
      * @param interfaces   代理对象需要额外实现的接口列表
+     * @param target       被代理的目标对象
      * @param interceptors 绑定的拦截器链
      * @param <T>          代理类型泛型
      * @return 代理对象实例
      */
-    <T> T createProxy(Class<T> primaryType, Class<?>[] interfaces, List<MethodInterceptor> interceptors);
+    <T> T createProxy(Class<T> primaryType, Class<?>[] interfaces, Object target, List<MethodInterceptor> interceptors);
 }

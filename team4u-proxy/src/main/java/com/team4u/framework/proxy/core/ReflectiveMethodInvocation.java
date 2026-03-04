@@ -21,6 +21,9 @@ public class ReflectiveMethodInvocation implements MethodInvocation {
     private final Object proxy;
 
     @Getter
+    private final Object target;
+
+    @Getter
     private final Method method;
 
     @Getter
@@ -42,7 +45,12 @@ public class ReflectiveMethodInvocation implements MethodInvocation {
 
         // 获取下一个拦截器并执行
         MethodInterceptor interceptor = this.interceptors.get(++this.currentInterceptorIndex);
-        return interceptor.invoke(this);
+        try {
+            return interceptor.invoke(this);
+        } finally {
+            // 无论成功或失败都回退游标，使得上层的重试拦截器能再次调用 proceed() 重新执行下游拦截器链
+            this.currentInterceptorIndex--;
+        }
     }
 
     /**
@@ -54,7 +62,8 @@ public class ReflectiveMethodInvocation implements MethodInvocation {
 
         // 兜底处理基础 Object 方法
         if ("toString".equals(methodName) && paramCount == 0) {
-            return "Proxy[" + method.getDeclaringClass().getSimpleName() + "]@" + Integer.toHexString(System.identityHashCode(proxy));
+            return "Proxy[" + method.getDeclaringClass().getSimpleName() + "]@"
+                    + Integer.toHexString(System.identityHashCode(proxy));
         }
         if ("hashCode".equals(methodName) && paramCount == 0) {
             return System.identityHashCode(proxy);
@@ -74,15 +83,24 @@ public class ReflectiveMethodInvocation implements MethodInvocation {
      * 获取基础数据类型的安全默认值
      */
     private Object getDefaultValue(Class<?> type) {
-        if (!type.isPrimitive()) return null;
-        if (type == boolean.class) return false;
-        if (type == int.class) return 0;
-        if (type == long.class) return 0L;
-        if (type == double.class) return 0.0d;
-        if (type == float.class) return 0.0f;
-        if (type == short.class) return (short) 0;
-        if (type == byte.class) return (byte) 0;
-        if (type == char.class) return '\0';
+        if (!type.isPrimitive())
+            return null;
+        if (type == boolean.class)
+            return false;
+        if (type == int.class)
+            return 0;
+        if (type == long.class)
+            return 0L;
+        if (type == double.class)
+            return 0.0d;
+        if (type == float.class)
+            return 0.0f;
+        if (type == short.class)
+            return (short) 0;
+        if (type == byte.class)
+            return (byte) 0;
+        if (type == char.class)
+            return '\0';
         return null;
     }
 }

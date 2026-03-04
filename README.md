@@ -30,6 +30,7 @@ Team4u Framework 是一个专为构建高性能、高可扩展性 Java 应用而
 | [**team4u-config**](./team4u-config/README.md) | 强类型配置管理 | 动态配置重载、多源配置聚合、热部署 |
 | [**team4u-policy**](./team4u-policy/README.md) | 策略与责任链模式 | 支付渠道路由、风控拦截流、优惠计算 |
 | [**team4u-log**](./team4u-log/README.md) | 结构化动态日志治理 | 自动化日志追踪、极速数据脱敏、热重载治理 |
+| [**team4u-mask**](./team4u-mask/README.md) | 数据脱敏治理模块 | 字段脱敏、动态规则、Jackson 无侵入敏感信息保护 |
 | [**team4u-router**](./team4u-router/README.md) | 声明式业务路由 | 业务分流、灰度控制、实验版本路由 |
 | [**team4u-message**](./team4u-message/README.md) | 统一消息抽象框架 | 进程内事件总线、跨网络 MQ (Kafka/RocketMQ) 抽象 |
 | [**team4u-base**](./team4u-base/README.md) | 基础公共工具类 | 框架内部公用辅助方法 |

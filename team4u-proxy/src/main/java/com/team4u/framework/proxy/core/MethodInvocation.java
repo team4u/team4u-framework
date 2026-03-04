@@ -15,6 +15,11 @@ public interface MethodInvocation {
     Object getProxy();
 
     /**
+     * 获取被代理的目标对象
+     */
+    Object getTarget();
+
+    /**
      * 获取当前被拦截执行的方法
      */
     Method getMethod();
