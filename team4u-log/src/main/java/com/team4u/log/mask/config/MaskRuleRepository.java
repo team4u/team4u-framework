@@ -41,14 +41,20 @@ public class MaskRuleRepository implements LogConfigListener {
     public String findRule(String className, String fieldName) {
         // 1. 优先尝试：精确匹配具体的类名 (优先级最高，允许特殊类覆盖全局规则)
         Map<String, String> classRules = ruleCache.get(className);
-        if (classRules != null && classRules.containsKey(fieldName)) {
-            return classRules.get(fieldName);
+        if (classRules != null) {
+            String classRule = classRules.get(fieldName);
+            if (classRule != null) {
+                return classRule;
+            }
         }
 
         // 2. 兜底尝试：全局字段匹配 (只要配置了 "*" 的规则)
         Map<String, String> globalRules = ruleCache.get("*");
-        if (globalRules != null && globalRules.containsKey(fieldName)) {
-            return globalRules.get(fieldName);
+        if (globalRules != null) {
+            String globalRule = globalRules.get(fieldName);
+            if (globalRule != null) {
+                return globalRule;
+            }
         }
 
         return null;
