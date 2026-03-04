@@ -22,6 +22,7 @@ public class LogEngine {
     /**
      * 拦截器管理器
      */
+    @Getter
     private final LogInterceptorManager interceptorManager;
 
     /**
@@ -51,15 +52,6 @@ public class LogEngine {
      */
     public static LogEngine getInstance() {
         return INSTANCE;
-    }
-
-    /**
-     * 获取拦截器管理器
-     *
-     * @return 拦截器管理器实例
-     */
-    public LogInterceptorManager getInterceptorManager() {
-        return interceptorManager;
     }
 
     /**

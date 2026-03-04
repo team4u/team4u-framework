@@ -22,8 +22,4 @@ public class MaskConfig {
      * （默认不限制，除非宿主环境要求截断）
      */
     private int maxStringLength = -1;
-
-    // 未来可以轻松扩展，例如：
-    // private boolean disableMasking = false;
-    // private char maskSymbol = '*';
 }

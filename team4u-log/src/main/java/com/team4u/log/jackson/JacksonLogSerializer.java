@@ -40,11 +40,11 @@ public class JacksonLogSerializer implements LogSerializer {
     @Override
     public String serialize(LogEvent event) {
         try {
-            FinOpsConfig configSnapshot = FinOpsConfigRepository.getInstance().get();
+            FinOpsConfig finOpsConfig = FinOpsConfigRepository.getInstance().get();
 
             // 领域映射：把 Log 层的成本阈值，映射为 Mask 层的上下文限制
             MaskConfig maskConfig = new MaskConfig()
-                    .setMaxStringLength(configSnapshot != null ? configSnapshot.getMaxStringLength() : 2000);
+                    .setMaxStringLength(finOpsConfig.getMaxStringLength());
 
             // 执行序列化，精准下发配置
             String rawJson = objectMapper.writer()
@@ -52,7 +52,7 @@ public class JacksonLogSerializer implements LogSerializer {
                     .writeValueAsString(event);
 
             // 获取最大日志长度限制
-            int maxLogLength = configSnapshot != null ? configSnapshot.getMaxLogLength() : 5000;
+            int maxLogLength = finOpsConfig.getMaxLogLength();
 
             // 根据配置的体积阈值截断超长日志
             if (rawJson.length() > maxLogLength) {
