@@ -4,9 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.team4u.log.config.FinOpsConfigRepository;
 import com.team4u.log.config.FinOpsConfigRepository.FinOpsConfig;
-import com.team4u.log.mask.jackson.JacksonLogSerializer;
-import com.team4u.log.mask.jackson.JacksonSerializationContext;
-import com.team4u.log.mask.jackson.TruncatingStringSerializer;
+import com.team4u.log.jackson.JacksonLogSerializer;
+import com.team4u.mask.jackson.JacksonSerializationContext;
+import com.team4u.log.jackson.TruncatingStringSerializer;
 import com.team4u.log.support.TestLogHelper;
 import org.junit.After;
 import org.junit.Assert;
@@ -157,9 +157,6 @@ public class LogEngineTest {
         class Circular {
             final Circular self = this;
 
-            public Circular getSelf() {
-                return self;
-            }
         }
 
         LogEvent event = new LogEvent().setAction("Error");

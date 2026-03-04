@@ -5,9 +5,9 @@ import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.log.config.FinOpsConfigRepository;
 import com.team4u.log.core.LogEngine;
-import com.team4u.log.mask.config.MaskRuleRepository;
 import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor;
 import com.team4u.log.proxy.ProxyRuleRepository;
+import com.team4u.mask.MaskBootstrap;
 
 /**
  * 日志模块引导类
@@ -47,7 +47,7 @@ public class LogBootstrap {
         TargetedDyeingInterceptor.getInstance().setCriteria(criteria);
 
         // 2. 将 ConfigManager 下发，让各个领域组件完成自我配置加载
-        MaskRuleRepository.getInstance().init(configManager);
+        MaskBootstrap.global().start(configManager);
         TargetedDyeingInterceptor.getInstance().init(configManager);
         FinOpsConfigRepository.getInstance().init(configManager);
         ProxyRuleRepository.getInstance().init(configManager);

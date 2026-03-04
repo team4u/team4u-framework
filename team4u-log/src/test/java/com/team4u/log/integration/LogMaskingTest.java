@@ -1,7 +1,7 @@
 package com.team4u.log.integration;
 
 import com.team4u.log.Loggers;
-import com.team4u.log.mask.config.MaskRuleRepository;
+import com.team4u.mask.config.MaskRuleRepository;
 import com.team4u.log.support.TestLogHelper;
 import lombok.Data;
 import org.junit.After;

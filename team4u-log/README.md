@@ -290,11 +290,9 @@ public class UserReq {
 
 ```json
 {
-  "maskRules": {
-    "*": {
-      "mobile": "MOBILE",
-      "appSecret": "PASSWORD"
-    }
+  "*": {
+    "mobile": "MOBILE",
+    "appSecret": "PASSWORD"
   }
 }
 ```
@@ -311,11 +309,9 @@ public class UserReq {
 动态配置示例：
 ```json
 {
-  "maskRules": {
-    "*": {
-      "mobile": "MOBILE",
-      "password": "PASSWORD"
-    }
+  "*": {
+    "mobile": "MOBILE",
+    "password": "PASSWORD"
   }
 }
 ```
@@ -323,7 +319,7 @@ public class UserReq {
 #### 自定义脱敏扩展 (SPI)
 如果内置算法无法满足需求，您可以轻松扩展：
 1. 实现 `MaskPolicy` 接口。
-2. 在 `META-INF/services/com.team4u.log.mask.MaskPolicy` 中注册实现类。
+2. 在 `META-INF/services/com.team4u.mask.MaskPolicy` 中注册实现类。
 3. 或者直接调用 `FastMasker.register(new MyPolicy())` 进行编程式注册。
 ## 单元测试与日志验证
 
@@ -355,9 +351,9 @@ try {
 }
 ```
 
-## 高阶特性
-
-本模块所有的动态治理功能都通过 `team4u-config` 进行热重载，配置键为：`team4u.log.config`。
+### 配置动态热重载
+ 
+本模块所有的动态治理功能都通过 `team4u-config` 进行热重载，不同维度的规则拥有独立的配置键。
 
 ### 第三方实例的无侵入动态代理追踪
 
@@ -379,24 +375,27 @@ public class ThirdPartySmsClient {
 }
 ```
 
-#### 2. 配置驱动规则 (配置中心)
-
-我们不需要写任何 AOP 代码，只需向配置中心（`team4u.log.config`）推送动态规则：
-
+我们不需要写任何 AOP 代码，只需向配置中心推送动态规则：
+ 
+**1) 代理规则 (Key: `team4u.log.proxy`)：**
+ 
 ```json
 {
-  "proxyRules": {
-    "com.thirdparty.ThirdPartySmsClient": {
-      "methods": ["send", "queryBalance"],  // 指定要自动打印日志的方法名（支持 "*" 全拦截）
-      "slowThreshold": 500,                 // 超过 500ms 自动标记为慢日志 (WARN)
-      "ignoreExceptions": ["com.thirdparty.BusinessException"] // 业务异常降级为 WARN (需填入全限定类名)
-    }
-  },
-  "maskRules": {
-    "*": {
-      "mobile": "MOBILE",         // 入参如果有同名字段，自动脱敏
-      "appSecret": "PASSWORD"    // 凭证脱敏
-    }
+  "com.thirdparty.ThirdPartySmsClient": {
+    "methods": ["send", "queryBalance"],  // 指定要自动打印日志的方法名（支持 "*" 全拦截）
+    "slowThreshold": 500,                 // 超过 500ms 自动标记为慢日志 (WARN)
+    "ignoreExceptions": ["com.thirdparty.BusinessException"] // 业务异常降级为 WARN (需填入全限定类名)
+  }
+}
+```
+ 
+**2) 全局脱敏规则 (Key: `team4u.mask.rules`)：**
+ 
+```json
+{
+  "*": {
+    "mobile": "MOBILE",         // 入参如果有同名字段，自动脱敏
+    "appSecret": "PASSWORD"    // 凭证脱敏
   }
 }
 ```
@@ -455,23 +454,21 @@ safeClient.send("13812345678", "sk_live_123abc", "您的验证码是 9527");
 由于系统已全面重构为高性能的 Pull 模型，除了标准 SLF4J 的 MDC 外，你还可以通过注册自定义寻值源来扩展业务属性。
 
 #### 动态配置示例
-在配置中心的 JSON 配置中编写规则：
-
+在配置中心对应的 Key (`team4u.log.dyeing`) 中编写规则：
+ 
 ```json
-{
-  "dyeingRules": [
-    {
-      "id": "vip_order_debug",
-      "condition": "orderAmount > 1000 && env == 'prod'",
-      "targetLevel": "DEBUG"
-    },
-    {
-      "id": "payload_check",
-      "condition": "payload:size > 0 && meta_action == 'PAYMENT'",
-      "targetLevel": "TRACE"
-    }
-  ]
-}
+[
+  {
+    "id": "vip_order_debug",
+    "condition": "orderAmount > 1000 && env == 'prod'",
+    "targetLevel": "DEBUG"
+  },
+  {
+    "id": "payload_check",
+    "condition": "payload:size > 0 && meta_action == 'PAYMENT'",
+    "targetLevel": "TRACE"
+  }
+]
 ```
 
 #### 高级扩展：自定义寻值源 (Pull 模型)
@@ -496,52 +493,25 @@ LogContext.addSource((event, key) -> {
 *   字节数组防御：为了防止将大文件（`byte[]`）序列化为巨大的 Base64 字符串，系统会拦截所有 `byte[]` 类型的输出，统一替换为大小提示（如 `[byte[] size: 1024 bytes]`）。
 *   日志级截断（Log-Level）：单条 JSON 日志序列化后的字符串整体默认最大长度为 `maxLogLength`（默认 5000）。超过部分将被截断并追加 `... [Truncated at 5000]`。
 
-动态调整阈值：
+动态调整阈值 (Key: `team4u.log.finops`)：
 ```json
 {
-  "finOpsConfig": {
-    "maxLogLength": 5000,
-    "maxStringLength": 2000,
-    "errorLimitPerSecond": 10
-  }
+  "maxLogLength": 5000,
+  "maxStringLength": 2000,
+  "errorLimitPerSecond": 10
 }
 ```
 
-### 配置中心动态热重载
-完整的 `team4u.log.config` JSON 配置示例，当你向配置中心推送此 JSON 时，系统会自动热生效所有策略：
-
-```json
-{
-  "maskRules": {
-    "com.demo.ThirdPartyUser": {
-      "mobile": "MOBILE"
-    },
-    "java.util.HashMap": {
-      "mobile": "MOBILE",
-      "creditCard": "BANK_CARD_NO"
-    }
-  },
-  "proxyRules": {
-    "com.thirdparty.ThirdPartySmsClient": {
-      "methods": ["*"],
-      "slowThreshold": 200,
-      "ignoreExceptions": ["com.thirdparty.BusinessException"]
-    }
-  },
-  "dyeingRules": [
-    {
-      "id": "trace_to_info",
-      "condition": "meta_action == 'CreateOrder'",
-      "targetLevel": "INFO"
-    }
-  ],
-  "finOpsConfig": {
-    "maxLogLength": 5000,
-    "maxStringLength": 2000,
-    "errorLimitPerSecond": 10
-  }
-}
-```
+### 配置中心 Key 汇总
+ 
+当你向配置中心推送以下 JSON 时，系统会自动热生效：
+ 
+| 功能名称     | 配置键 (Key)        | 内容结构示例                                                 |
+| :----------- | :------------------ | :----------------------------------------------------------- |
+| **脱敏规则** | `team4u.mask.rules` | `{"*": {"mobile": "MOBILE"}}`                                |
+| **代理追踪** | `team4u.log.proxy`  | `{"com.a.B": {"methods": ["*"]}}`                            |
+| **条件染色** | `team4u.log.dyeing` | `[{"id": "d1", "condition": "...", "targetLevel": "DEBUG"}]` |
+| **成本保护** | `team4u.log.finops` | `{"maxLogLength": 5000, "errorLimitPerSecond": 10}`          |
 
 
 

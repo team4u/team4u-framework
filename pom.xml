@@ -19,6 +19,7 @@
         <module>team4u-message</module>
         <module>team4u-router</module>
         <module>team4u-translator</module>
+        <module>team4u-mask</module>
         <module>team4u-log</module>
     </modules>
 

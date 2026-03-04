@@ -41,7 +41,7 @@ public class LogConfigReloadTest {
 
         // 2. 推送热重载规则
         String config = "{\"java.util.LinkedHashMap\":{\"mobile\":\"MOBILE\"}}";
-        testConfigContext.put("team4u.log.mask", config);
+        testConfigContext.put("team4u.mask.rules", config);
         Thread.sleep(50);
 
         // 3. 验证生效

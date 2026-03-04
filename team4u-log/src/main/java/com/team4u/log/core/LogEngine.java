@@ -3,10 +3,10 @@ package com.team4u.log.core;
 import com.team4u.log.appender.LogAppender;
 import com.team4u.log.appender.Slf4jLogAppender;
 import com.team4u.log.config.FinOpsConfigRepository;
-import com.team4u.log.mask.config.MaskRuleRepository;
-import com.team4u.log.mask.jackson.JacksonLogSerializer;
+import com.team4u.log.jackson.JacksonLogSerializer;
 import com.team4u.log.pipeline.LogInterceptorManager;
 import com.team4u.log.proxy.ProxyRuleRepository;
+import com.team4u.mask.MaskBootstrap;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -74,7 +74,7 @@ public class LogEngine {
         // 拦截器链清空
         this.interceptorManager.reset();
         // 各配置驱动仓库归零，释放旧 ConfigManager 的监听
-        MaskRuleRepository.getInstance().reset();
+        MaskBootstrap.global().stop();
         ProxyRuleRepository.getInstance().reset();
         FinOpsConfigRepository.getInstance().reset();
         // 重建 ObjectMapper，清空 Jackson 的 BeanSerializer 缓存

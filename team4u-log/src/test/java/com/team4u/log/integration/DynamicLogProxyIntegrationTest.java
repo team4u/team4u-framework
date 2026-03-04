@@ -56,7 +56,7 @@ public class DynamicLogProxyIntegrationTest {
                 "  }" +
                 "}";
 
-        configContext.put("team4u.log.mask", maskConfig);
+        configContext.put("team4u.mask.rules", maskConfig);
         Thread.sleep(50);
 
         // 2. 创建动态代理（该类没有任何 @AutoLogTrace 注解）
