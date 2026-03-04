@@ -29,7 +29,7 @@
 ### 模块自举（初始化启动）
 为了启用动态脱敏、动态染色等高级功能，需在应用启动阶段进行模块初始化：
 ```java
-import com.team4u.log.LogBootstrap;
+import fcom.team4u.framework.log.LogBootstrap;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.criterion.Criteria;
 
@@ -55,7 +55,7 @@ LogBootstrap.global()
 ### 基础日志打印
 使用 `Loggers` 提供的 Fluent API 记录业务日志：
 ```java
-import com.team4u.log.Loggers;
+import fcom.team4u.framework.log.Loggers;
 import org.slf4j.MDC;
 
 MDC.put("traceId", "tid-998877"); // 模块会自动提取 traceId
@@ -116,7 +116,7 @@ LogEngine.getInstance()
 ```
 
 2. SPI 自动发现：
-在 `META-INF/services/com.team4u.log.pipeline.LogInterceptor` 文件中填入实现类的全限定名，系统启动时会自动加载并按 `priority()` 排序。
+在 `META-INF/services/fcom.team4u.framework.log.pipeline.LogInterceptor` 文件中填入实现类的全限定名，系统启动时会自动加载并按 `priority()` 排序。
 
 #### 常用拦截器配置
 *   自定义从 MDC 中提取的键名：
@@ -328,7 +328,7 @@ public class UserReq {
 以下是单元测试中的推荐做法：
 
 ```java
-import com.team4u.log.support.TestLogHelper;
+import fcom.team4u.framework.log.support.TestLogHelper;
 
 // 开启日志捕获
 TestLogHelper helper = TestLogHelper.start();
