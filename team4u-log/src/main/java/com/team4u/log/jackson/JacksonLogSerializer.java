@@ -7,8 +7,8 @@ import com.team4u.log.config.FinOpsConfigRepository;
 import com.team4u.log.config.FinOpsConfigRepository.FinOpsConfig;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.core.LogSerializer;
-import com.team4u.mask.jackson.JacksonMaskModule;
-import com.team4u.mask.jackson.MaskConfig;
+import com.team4u.framework.mask.jackson.JacksonMaskModule;
+import com.team4u.framework.mask.jackson.MaskConfig;
 
 /**
  * 基于 Jackson 的日志序列化器
@@ -31,7 +31,7 @@ public class JacksonLogSerializer implements LogSerializer {
         logModule.addSerializer(byte[].class, new ByteArrayLogSerializer());
         mapper.registerModule(logModule);
 
-        // 2. 注册通用的脱敏模块 (引入自 team4u-mask)
+        // 2. 注册通用的脱敏模块
         mapper.registerModule(new JacksonMaskModule());
 
         return mapper;

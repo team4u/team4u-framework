@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.team4u.log.config.FinOpsConfigRepository;
 import com.team4u.log.config.FinOpsConfigRepository.FinOpsConfig;
 import com.team4u.log.jackson.JacksonLogSerializer;
-import com.team4u.mask.jackson.MaskConfig;
+import com.team4u.framework.mask.jackson.MaskConfig;
 import com.team4u.log.jackson.TruncatingStringSerializer;
 import com.team4u.log.support.TestLogHelper;
 import org.junit.After;

@@ -319,7 +319,7 @@ public class UserReq {
 #### 自定义脱敏扩展 (SPI)
 如果内置算法无法满足需求，您可以轻松扩展：
 1. 实现 `MaskPolicy` 接口。
-2. 在 `META-INF/services/com.team4u.mask.MaskPolicy` 中注册实现类。
+2. 在 `META-INF/services/com.team4u.framework.mask.MaskPolicy` 中注册实现类。
 3. 或者直接调用 `FastMasker.register(new MyPolicy())` 进行编程式注册。
 ## 单元测试与日志验证
 

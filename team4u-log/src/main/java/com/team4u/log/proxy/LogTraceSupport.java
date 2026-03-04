@@ -2,8 +2,8 @@ package com.team4u.log.proxy;
 
 import com.team4u.framework.proxy.core.MethodInvocation;
 import com.team4u.log.Loggers;
-import com.team4u.mask.FastMasker;
-import com.team4u.mask.config.MaskRuleRepository;
+import com.team4u.framework.mask.FastMasker;
+import com.team4u.framework.mask.config.MaskRuleRepository;
 import lombok.Builder;
 import lombok.Data;
 

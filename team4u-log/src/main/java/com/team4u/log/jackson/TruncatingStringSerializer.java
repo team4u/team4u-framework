@@ -3,8 +3,8 @@ package com.team4u.log.jackson;
 import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
-import com.team4u.mask.jackson.JacksonSerializationContext;
-import com.team4u.mask.jackson.MaskConfig;
+import com.team4u.framework.mask.jackson.JacksonSerializationContext;
+import com.team4u.framework.mask.jackson.MaskConfig;
 
 import java.io.IOException;
 

@@ -7,7 +7,7 @@ import com.team4u.log.config.FinOpsConfigRepository;
 import com.team4u.log.core.LogEngine;
 import com.team4u.log.pipeline.interceptor.TargetedDyeingInterceptor;
 import com.team4u.log.proxy.ProxyRuleRepository;
-import com.team4u.mask.MaskBootstrap;
+import com.team4u.framework.mask.MaskBootstrap;
 
 /**
  * 日志模块引导类

@@ -6,7 +6,7 @@ import com.team4u.log.config.FinOpsConfigRepository;
 import com.team4u.log.jackson.JacksonLogSerializer;
 import com.team4u.log.pipeline.LogInterceptorManager;
 import com.team4u.log.proxy.ProxyRuleRepository;
-import com.team4u.mask.MaskBootstrap;
+import com.team4u.framework.mask.MaskBootstrap;
 import lombok.Getter;
 import lombok.Setter;
 

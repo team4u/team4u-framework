@@ -1,8 +1,8 @@
 package com.team4u.log.integration;
 
 import com.team4u.log.core.LogEvent;
-import com.team4u.mask.Mask;
-import com.team4u.mask.MaskType;
+import com.team4u.framework.mask.Mask;
+import com.team4u.framework.mask.MaskType;
 import com.team4u.log.proxy.AutoLogTrace;
 import com.team4u.log.proxy.LogProxyFactory;
 import com.team4u.log.support.TestLogHelper;
