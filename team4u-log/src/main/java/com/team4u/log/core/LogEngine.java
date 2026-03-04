@@ -2,8 +2,11 @@ package com.team4u.log.core;
 
 import com.team4u.log.appender.LogAppender;
 import com.team4u.log.appender.Slf4jLogAppender;
+import com.team4u.log.config.FinOpsConfigRepository;
+import com.team4u.log.mask.config.MaskRuleRepository;
 import com.team4u.log.mask.jackson.JacksonLogSerializer;
 import com.team4u.log.pipeline.LogInterceptorManager;
+import com.team4u.log.proxy.ProxyRuleRepository;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -60,12 +63,21 @@ public class LogEngine {
     }
 
     /**
-     * 重置引擎配置及拦截器状态
+     * 重置引擎及所有子组件状态，用于测试隔离
+     * <p>
+     * 统一复位：追加器、拦截器链、各配置仓库及序列化器。
+     * 调用后整个日志系统恢复到初始空白状态，下次可重新 init。
      */
     public void reset() {
+        // 追加器恢复默认
         this.appender = new Slf4jLogAppender();
+        // 拦截器链清空
         this.interceptorManager.reset();
-        // 重置序列化器
+        // 各配置驱动仓库归零，释放旧 ConfigManager 的监听
+        MaskRuleRepository.getInstance().reset();
+        ProxyRuleRepository.getInstance().reset();
+        FinOpsConfigRepository.getInstance().reset();
+        // 重建 ObjectMapper，清空 Jackson 的 BeanSerializer 缓存
         this.serializer.reset();
     }
 

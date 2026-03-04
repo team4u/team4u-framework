@@ -1,6 +1,5 @@
 package com.team4u.log.integration;
 
-import cn.hutool.core.util.ReflectUtil;
 import com.team4u.log.Loggers;
 import com.team4u.log.mask.config.MaskRuleRepository;
 import com.team4u.log.support.TestLogHelper;
@@ -22,13 +21,14 @@ public class LogMaskingTest {
 
     @Before
     public void setup() {
+        // TestLogHelper.start() 之前，上一个测试的 teardown() 已通过
+        // logHelper.stop() → LogEngine.reset() 将所有子组件归零，这里无需额外清理
         logHelper = TestLogHelper.start();
-        // 清理缓存
-        ReflectUtil.setFieldValue(MaskRuleRepository.getInstance(), "ruleCache", new HashMap<>());
     }
 
     private void refreshRules(Map<String, Map<String, String>> rules) {
-        ReflectUtil.setFieldValue(MaskRuleRepository.getInstance(), "ruleCache", rules);
+        // 直接设置规则缓存，无需通过反射
+        MaskRuleRepository.getInstance().setRuleCache(rules);
     }
 
     @After

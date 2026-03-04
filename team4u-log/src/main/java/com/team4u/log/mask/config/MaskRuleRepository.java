@@ -70,6 +70,29 @@ public class MaskRuleRepository {
     }
 
     /**
+     * 重置仓库状态（用于测试环境隔离）
+     * <p>
+     * 清空规则缓存并释放与 ConfigManager 的监听关系，
+     * 确保下次 init() 时从干净状态重新初始化。
+     */
+    public void reset() {
+        this.ruleCache = new HashMap<>();
+        if (this.registry != null) {
+            this.registry.destroy();
+            this.registry = null;
+        }
+    }
+
+    /**
+     * 直接注入规则缓存（测试专用，避免反射操作）
+     *
+     * @param rules className -> (fieldName -> maskPolicyKey)
+     */
+    public void setRuleCache(Map<String, Map<String, String>> rules) {
+        this.ruleCache = rules != null ? rules : new HashMap<>();
+    }
+
+    /**
      * 检索脱敏规则
      *
      * @param className 类名
@@ -77,7 +100,7 @@ public class MaskRuleRepository {
      * @return 匹配到的规则 Key，若无则返回 null
      */
     public String findRule(String className, String fieldName) {
-        // 1. 优先尝试：精确匹配具体的类名 (优先级最高，允许特殊类覆盖全局规则)
+        // 精确匹配具体的类名（优先级最高，允许特殊类覆盖全局规则）
         Map<String, String> classRules = ruleCache.get(className);
         if (classRules != null) {
             String classRule = classRules.get(fieldName);
@@ -86,7 +109,7 @@ public class MaskRuleRepository {
             }
         }
 
-        // 2. 兜底尝试：全局字段匹配 (只要配置了 "*" 的规则)
+        // 兜底匹配：全局通配符规则（配置了 "*" 的字段）
         Map<String, String> globalRules = ruleCache.get("*");
         if (globalRules != null) {
             return globalRules.get(fieldName);

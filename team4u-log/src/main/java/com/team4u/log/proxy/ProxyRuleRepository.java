@@ -1,6 +1,6 @@
 package com.team4u.log.proxy;
 
-import cn.hutool.json.JSONObject;
+import cn.hutool.core.lang.TypeReference;
 import cn.hutool.json.JSONUtil;
 import cn.hutool.log.Log;
 import com.team4u.framework.config.core.ConfigManager;
@@ -47,13 +47,12 @@ public class ProxyRuleRepository {
                 if (json == null || json.trim().isEmpty()) {
                     return new HashMap<>();
                 }
-                // 解析 JSON: 手动遍历解决某些 Hutool 版本泛型解析丢失的问题
-                JSONObject jsonObj = JSONUtil.parseObj(json);
-                Map<String, ProxyRule> rules = new HashMap<>();
-                for (Map.Entry<String, Object> entry : jsonObj.entrySet()) {
-                    JSONObject ruleObj = (JSONObject) entry.getValue();
-                    rules.put(entry.getKey(), JSONUtil.toBean(ruleObj, ProxyRule.class));
-                }
+
+                Map<String, ProxyRule> rules = JSONUtil.toBean(
+                        JSONUtil.parseObj(json),
+                        new TypeReference<Map<String, ProxyRule>>() {
+                        },
+                        false);
 
                 // 原子替换缓存
                 this.ruleCache = rules;
@@ -66,6 +65,20 @@ public class ProxyRuleRepository {
         });
         // 触发首次拉取
         this.registry.get(CONFIG_KEY);
+    }
+
+    /**
+     * 重置仓库状态（用于测试环境隔离）
+     * <p>
+     * 清空规则缓存并释放与 ConfigManager 的监听关系，
+     * 确保下次 init() 时从干净状态重新初始化。
+     */
+    public void reset() {
+        this.ruleCache = new HashMap<>();
+        if (this.registry != null) {
+            this.registry.destroy();
+            this.registry = null;
+        }
     }
 
     /**

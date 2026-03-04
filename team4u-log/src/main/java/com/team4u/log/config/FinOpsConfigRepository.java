@@ -50,6 +50,21 @@ public class FinOpsConfigRepository {
     }
 
     /**
+     * 重置仓库状态（用于测试环境隔离）
+     * <p>
+     * 若存在 registry（通过 ConfigManager 初始化），则释放监听并恢复默认配置；
+     * 若 registry 为 null，说明 config 是直接手动设置的，保留不变。
+     */
+    public void reset() {
+        if (this.registry != null) {
+            this.registry.destroy();
+            this.registry = null;
+            // 释放配置中心后恢复默认值，避免残留动态配置影响后续测试
+            this.config = new FinOpsConfig();
+        }
+    }
+
+    /**
      * 获取当前的 FinOps 配置
      */
     public FinOpsConfig get() {

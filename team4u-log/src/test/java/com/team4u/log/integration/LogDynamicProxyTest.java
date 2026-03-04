@@ -1,6 +1,5 @@
 package com.team4u.log.integration;
 
-import cn.hutool.core.util.ReflectUtil;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.mask.config.MaskRuleRepository;
 import com.team4u.log.proxy.AutoLogTrace;
@@ -24,13 +23,12 @@ public class LogDynamicProxyTest {
 
     @Before
     public void setup() {
+        // 上一个测试的 teardown() 已通过 LogEngine.reset() 将所有子组件归零
         logHelper = TestLogHelper.start();
-        // 清理缓存
-        ReflectUtil.setFieldValue(MaskRuleRepository.getInstance(), "ruleCache", new HashMap<>());
     }
 
     private void refreshRules(Map<String, Map<String, String>> rules) {
-        ReflectUtil.setFieldValue(MaskRuleRepository.getInstance(), "ruleCache", rules);
+        MaskRuleRepository.getInstance().setRuleCache(rules);
     }
 
     @After
