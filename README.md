@@ -26,6 +26,7 @@ Team4u Framework 是一个专为构建高性能、高可扩展性 Java 应用而
 | :--- | :--- | :--- |
 | [**team4u-bean**](./team4u-bean/README.md) | 轻量级 Bean 容器 | 独立 SDK 开发、单例管理、Spring 容器桥接 |
 | [**team4u-proxy**](./team4u-proxy/README.md) | 动态代理与 AOP | 方法拦截、热交换 (HotSwap)、空对象安全防御 |
+| [**team4u-retry**](./team4u-retry/README.md) | 统一重试治理模块 | 同步/异步重试、注解重试、动态策略、持久化降级 |
 | [**team4u-criterion**](./team4u-criterion/README.md) | 逻辑表达式引擎 | 营销圈选、风控规则、动态配置过滤 |
 | [**team4u-config**](./team4u-config/README.md) | 强类型配置管理 | 动态配置重载、多源配置聚合、热部署 |
 | [**team4u-policy**](./team4u-policy/README.md) | 策略与责任链模式 | 支付渠道路由、风控拦截流、优惠计算 |
