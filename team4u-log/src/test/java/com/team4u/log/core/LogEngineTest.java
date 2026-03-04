@@ -136,7 +136,7 @@ public class LogEngineTest {
 
     @Test
     public void testDefaultFallbackWhenSnapshotAndFinOpsAreNull() throws Exception {
-        // LogConfigManager 被删除，因此无法为 null。我们可以重置长度来测试默认行为或边界情况
+        // 验证全局 FinOps 配置的默认截断行为
         FinOpsConfigRepository.getInstance().get().setMaxStringLength(2000);
 
         ObjectMapper mapper = new ObjectMapper();

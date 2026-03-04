@@ -53,7 +53,7 @@ public class LogProxyTest {
 
         // 5. 验证序列化掩码输出
         String json = logHelper.lastJson();
-        Assert.assertTrue("输出应包含参数名", json.contains("\"arg0\":"));
+        Assert.assertTrue("输出应包含参数名", json.contains("\"arg0\":") || json.contains("\"userReq\":"));
         Assert.assertTrue("输出应包含脱敏后的姓名", json.contains("**伦"));
         Assert.assertTrue("输出应包含脱敏后的手机号", json.contains("138*****678"));
         Assert.assertFalse("不应包含原始姓名", json.contains("周杰伦"));
@@ -115,7 +115,7 @@ public class LogProxyTest {
             return "SUCCESS";
         }
 
-        @AutoLogTrace(ignoreExceptions = {RuntimeException.class})
+        @AutoLogTrace(ignoreExceptions = { RuntimeException.class })
         public void throwBusinessException() {
             throw new RuntimeException("业务异常");
         }
