@@ -5,7 +5,7 @@ import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.team4u.log.config.FinOpsConfigRepository;
 import com.team4u.log.config.FinOpsConfigRepository.FinOpsConfig;
 import com.team4u.log.jackson.JacksonLogSerializer;
-import com.team4u.mask.jackson.JacksonSerializationContext;
+import com.team4u.mask.jackson.MaskConfig;
 import com.team4u.log.jackson.TruncatingStringSerializer;
 import com.team4u.log.support.TestLogHelper;
 import org.junit.After;
@@ -113,8 +113,10 @@ public class LogEngineTest {
         module.addSerializer(String.class, new TruncatingStringSerializer(new JacksonLogSerializer()));
         mapper.registerModule(module);
 
+        MaskConfig maskConfig = new MaskConfig().setMaxStringLength(5);
+
         String json = mapper.writer()
-                .withAttribute(JacksonSerializationContext.ATTR_FINOPS_CONFIG_SNAPSHOT, snapshot)
+                .withAttribute(MaskConfig.ATTR_KEY, maskConfig)
                 .writeValueAsString(Collections.singletonMap("k", "123456789"));
 
         Assert.assertTrue(json.contains("\"k\":\"12345... [Truncated len:9]\""));
@@ -157,6 +159,11 @@ public class LogEngineTest {
         class Circular {
             final Circular self = this;
 
+            // Jackson 默认无法对没有 getter 的私有静态内部类的方法引用进行序列化，
+            // 或者我们可以抛出一个异常
+            public Object getError() {
+                throw new RuntimeException("Forced serialization error");
+            }
         }
 
         LogEvent event = new LogEvent().setAction("Error");

@@ -29,7 +29,8 @@ public class MaskStringSerializer extends StdSerializer<Object> {
         String masked = FastMasker.mask(value.toString(), maskType);
 
         // 应用长度截断 (从序列化上下文中获取最大长度)
-        int maxLength = JacksonSerializationContext.resolveMaxStringLength(provider);
+        MaskConfig config = JacksonSerializationContext.getConfig(provider);
+        int maxLength = config.getMaxStringLength();
 
         if (maxLength > 0 && masked.length() > maxLength) {
             gen.writeString(masked.substring(0, maxLength) + "... [Truncated len:" + masked.length() + "]");

@@ -34,7 +34,8 @@ public class MaskableMapSerializer extends JsonSerializer<Map<?, ?>> implements 
 
         gen.writeStartObject();
 
-        int maxLength = JacksonSerializationContext.resolveMaxStringLength(provider);
+        MaskConfig config = JacksonSerializationContext.getConfig(provider);
+        int maxLength = config.getMaxStringLength();
 
         for (Map.Entry<?, ?> entry : value.entrySet()) {
             Object key = entry.getKey();

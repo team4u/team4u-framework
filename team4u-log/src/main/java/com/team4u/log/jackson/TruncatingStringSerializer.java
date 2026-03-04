@@ -4,6 +4,7 @@ import com.fasterxml.jackson.core.JsonGenerator;
 import com.fasterxml.jackson.databind.SerializerProvider;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.team4u.mask.jackson.JacksonSerializationContext;
+import com.team4u.mask.jackson.MaskConfig;
 
 import java.io.IOException;
 
@@ -25,12 +26,13 @@ public class TruncatingStringSerializer extends StdSerializer<String> {
             return;
         }
 
-        // 优先从上下文解析，如果没有上下文，回退到日志模块的全局配置
-        int maxLength;
-        Object attribute = provider.getAttribute(JacksonSerializationContext.ATTR_FINOPS_CONFIG_SNAPSHOT);
-        if (attribute != null) {
-            maxLength = JacksonSerializationContext.resolveMaxStringLength(provider);
-        } else {
+        // 1. 核心改进：通过 Mask 模块的上下文工具获取 MaskConfig 对象
+        // 这样即便字段不脱敏，也能拿到 LogEngine 序列化时注入的特定阈值
+        MaskConfig maskConfig = JacksonSerializationContext.getConfig(provider);
+        int maxLength = maskConfig.getMaxStringLength();
+
+        // 2. 兜底逻辑：如果上下文中没有配置（比如单独调用了 ObjectMapper），则回退到 Log 模块的全局配置
+        if (maxLength <= 0) {
             maxLength = com.team4u.log.config.FinOpsConfigRepository.getInstance().get().getMaxStringLength();
         }
 

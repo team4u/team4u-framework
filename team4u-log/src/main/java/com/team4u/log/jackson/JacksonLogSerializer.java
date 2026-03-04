@@ -8,7 +8,7 @@ import com.team4u.log.config.FinOpsConfigRepository.FinOpsConfig;
 import com.team4u.log.core.LogEvent;
 import com.team4u.log.core.LogSerializer;
 import com.team4u.mask.jackson.JacksonMaskModule;
-import com.team4u.mask.jackson.JacksonSerializationContext;
+import com.team4u.mask.jackson.MaskConfig;
 
 /**
  * 基于 Jackson 的日志序列化器
@@ -42,12 +42,16 @@ public class JacksonLogSerializer implements LogSerializer {
         try {
             FinOpsConfig configSnapshot = FinOpsConfigRepository.getInstance().get();
 
-            // 执行脱敏序列化
+            // 领域映射：把 Log 层的成本阈值，映射为 Mask 层的上下文限制
+            MaskConfig maskConfig = new MaskConfig()
+                    .setMaxStringLength(configSnapshot != null ? configSnapshot.getMaxStringLength() : 2000);
+
+            // 执行序列化，精准下发配置
             String rawJson = objectMapper.writer()
-                    .withAttribute(JacksonSerializationContext.ATTR_FINOPS_CONFIG_SNAPSHOT, configSnapshot)
+                    .withAttribute(MaskConfig.ATTR_KEY, maskConfig)
                     .writeValueAsString(event);
 
-            // 获取最大日志长度限制（防全量大报文落地导致磁盘 IO 激增）
+            // 获取最大日志长度限制
             int maxLogLength = configSnapshot != null ? configSnapshot.getMaxLogLength() : 5000;
 
             // 根据配置的体积阈值截断超长日志
