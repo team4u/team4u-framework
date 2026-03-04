@@ -110,7 +110,7 @@ public class LogEngineTest {
 
         ObjectMapper mapper = new ObjectMapper();
         SimpleModule module = new SimpleModule();
-        module.addSerializer(String.class, new TruncatingStringSerializer(new JacksonLogSerializer()));
+        module.addSerializer(String.class, new TruncatingStringSerializer());
         mapper.registerModule(module);
 
         MaskConfig maskConfig = new MaskConfig().setMaxStringLength(5);
@@ -128,7 +128,7 @@ public class LogEngineTest {
 
         ObjectMapper mapper = new ObjectMapper();
         SimpleModule module = new SimpleModule();
-        module.addSerializer(String.class, new TruncatingStringSerializer(new JacksonLogSerializer()));
+        module.addSerializer(String.class, new TruncatingStringSerializer());
         mapper.registerModule(module);
 
         String json = mapper.writeValueAsString(Collections.singletonMap("k", "123456789"));
@@ -143,7 +143,7 @@ public class LogEngineTest {
 
         ObjectMapper mapper = new ObjectMapper();
         SimpleModule module = new SimpleModule();
-        module.addSerializer(String.class, new TruncatingStringSerializer(new JacksonLogSerializer()));
+        module.addSerializer(String.class, new TruncatingStringSerializer());
         mapper.registerModule(module);
 
         String longText = String.join("", Collections.nCopies(2100, "a"));

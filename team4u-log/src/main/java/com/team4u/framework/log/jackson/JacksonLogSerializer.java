@@ -27,7 +27,7 @@ public class JacksonLogSerializer implements LogSerializer {
 
         // 1. 注册日志特有的防超长截断拦截器
         SimpleModule logModule = new SimpleModule();
-        logModule.addSerializer(String.class, new TruncatingStringSerializer(this));
+        logModule.addSerializer(String.class, new TruncatingStringSerializer());
         logModule.addSerializer(byte[].class, new ByteArrayLogSerializer());
         mapper.registerModule(logModule);
 

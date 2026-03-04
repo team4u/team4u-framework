@@ -16,7 +16,7 @@ import java.io.IOException;
  */
 public class TruncatingStringSerializer extends StdSerializer<String> {
 
-    public TruncatingStringSerializer(JacksonLogSerializer serializer) {
+    public TruncatingStringSerializer() {
         super(String.class);
     }
 
@@ -27,8 +27,6 @@ public class TruncatingStringSerializer extends StdSerializer<String> {
             return;
         }
 
-        // 1. 核心改进：通过 Mask 模块的上下文工具获取 MaskConfig 对象
-        // 这样即便字段不脱敏，也能拿到 LogEngine 序列化时注入的特定阈值
         MaskConfig maskConfig = JacksonSerializationContext.getConfig(provider);
         int maxLength = maskConfig.getMaxStringLength();
 
