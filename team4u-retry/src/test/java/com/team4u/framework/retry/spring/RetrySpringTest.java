@@ -80,24 +80,6 @@ public class RetrySpringTest {
         private final UserService userService = new UserService();
 
         @Bean
-        public RetryBackend mockBackend() {
-            return new RetryBackend() {
-                @Override
-                public String saveIntent(String taskType, String payload) {
-                    return "id";
-                }
-
-                @Override
-                public void completeIntent(String intentId) {
-                }
-
-                @Override
-                public void submitForDelay(String intentId, String taskType, String payload, long delay) {
-                }
-            };
-        }
-
-        @Bean
         public OrderService orderServiceImpl() {
             return orderServiceImpl;
         }

@@ -13,10 +13,21 @@ import com.team4u.framework.retry.RetryBackend;
 public class RetryProxyFactory {
 
     /**
+     * 为指定对象创建重试代理 (仅使用内存重试)
+     *
+     * @param target 目标对象
+     * @param <T>    对象类型
+     * @return 代理对象
+     */
+    public static <T> T createProxy(T target) {
+        return createProxy(target, null);
+    }
+
+    /**
      * 为指定对象创建重试代理
      *
      * @param target  目标对象
-     * @param backend 重试后端
+     * @param backend 重试后端 (若仅需内存重试可传 null)
      * @param <T>     对象类型
      * @return 代理对象
      */

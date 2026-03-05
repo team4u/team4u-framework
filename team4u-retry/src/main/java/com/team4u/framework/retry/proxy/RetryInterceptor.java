@@ -19,6 +19,8 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.stream.Collectors;
 
+import java.util.function.Supplier;
+
 /**
  * 基于 team4u-proxy 的自动重试拦截器
  * <p>
@@ -39,7 +41,11 @@ public class RetryInterceptor implements MethodInterceptor {
             }
     );
 
-    private RetryBackend backend;
+    private Supplier<RetryBackend> backendSupplier;
+
+    public RetryInterceptor(RetryBackend backend) {
+        this.backendSupplier = () -> backend;
+    }
 
     @Override
     public Object invoke(MethodInvocation invocation) throws Throwable {
@@ -59,7 +65,7 @@ public class RetryInterceptor implements MethodInterceptor {
 
         Retryer retryer = Retryer.builder()
                 .policy(policy)
-                .backend(backend)
+                .backend(getBackend())
                 .durability(durability)
                 .build();
 
@@ -103,6 +109,10 @@ public class RetryInterceptor implements MethodInterceptor {
                 throw new RuntimeException(t);
             }
         }
+    }
+
+    private RetryBackend getBackend() {
+        return backendSupplier != null ? backendSupplier.get() : null;
     }
 
     private RetryTaskSnapshot buildSnapshot(MethodInvocation invocation) {

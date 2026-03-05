@@ -48,7 +48,7 @@ public class RetryAnnotationBeanPostProcessor implements BeanPostProcessor, Bean
             }
 
             return builder.delegate(bean)
-                    .intercept(new RetryInterceptor(getRetryBackend()))
+                    .intercept(new RetryInterceptor(this::getRetryBackend))
                     .build();
         }
 
@@ -89,9 +89,6 @@ public class RetryAnnotationBeanPostProcessor implements BeanPostProcessor, Bean
             retryBackend = BeanManager.getInstance().getBean(RetryBackend.class);
         }
 
-        if (retryBackend == null) {
-            throw new IllegalStateException("未找到 RetryBackend 实现，请确保已注册相关 Bean。");
-        }
         return retryBackend;
     }
 
