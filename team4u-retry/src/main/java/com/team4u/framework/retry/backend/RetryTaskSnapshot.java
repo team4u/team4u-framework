@@ -2,6 +2,7 @@ package com.team4u.framework.retry.backend;
 
 import cn.hutool.json.JSONUtil;
 import lombok.Getter;
+import lombok.NoArgsConstructor;
 import lombok.Setter;
 
 import java.util.List;
@@ -9,13 +10,35 @@ import java.util.List;
 /**
  * 重试任务快照
  * <p>
- * 包含了跨节点还原方法调用所需的所有元数据。
+ * 包含了跨节点还原方法调用所需的所有元数据以及重试进度状态。
  *
  * @author jay.wu
  */
 @Getter
 @Setter
+@NoArgsConstructor
 public class RetryTaskSnapshot {
+    /**
+     * 任务全局唯一 ID，用于幂等去重
+     */
+    private String taskId;
+    /**
+     * 任务类型标识（Policy Key）
+     */
+    private String taskType;
+    /**
+     * 已执行尝试次数
+     */
+    private int executedAttempts;
+    /**
+     * 总尝试上限（-1 表示无限）
+     */
+    private int maxAttempts;
+    /**
+     * 任务首次创建时间戳
+     */
+    private long createdAt = System.currentTimeMillis();
+
     /**
      * Bean 标识符（对应 BeanManager 中的名称或类全限定名）
      */
@@ -32,13 +55,16 @@ public class RetryTaskSnapshot {
      * 参数 JSON 序列化后的字符串列表
      */
     private List<String> argJsonValues;
-    /**
-     * 全局累计尝试次数
-     */
-    private int globalAttempt;
 
     /**
-     * 转换为 JSON 字符串用于持久化存储
+     * 从 JSON 字符串还原快照对象
+     */
+    public static RetryTaskSnapshot fromJson(String json) {
+        return JSONUtil.toBean(json, RetryTaskSnapshot.class);
+    }
+
+    /**
+     * 转换为 JSON 字符串用于持久化存储或消息传输
      */
     public String toJson() {
         return JSONUtil.toJsonStr(this);

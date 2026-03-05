@@ -67,7 +67,7 @@ public class RetryDelegate {
         if (isAsync) {
             return retryer.executeAsync(
                     policyKey,
-                    () -> buildSnapshot(method, target, args).toJson(),
+                    executedAttempts -> buildSnapshot(method, target, args, policyKey, policy, executedAttempts).toJson(),
                     () -> {
                         try {
                             @SuppressWarnings("unchecked")
@@ -84,7 +84,7 @@ public class RetryDelegate {
             try {
                 return retryer.execute(
                         policyKey,
-                        () -> buildSnapshot(method, target, args).toJson(),
+                        executedAttempts -> buildSnapshot(method, target, args, policyKey, policy, executedAttempts).toJson(),
                         proceedTask);
             } catch (Exception | Error e) {
                 throw e;
@@ -94,8 +94,17 @@ public class RetryDelegate {
         }
     }
 
-    private RetryTaskSnapshot buildSnapshot(Method method, Object target, Object[] args) {
+    private RetryTaskSnapshot buildSnapshot(Method method,
+                                            Object target,
+                                            Object[] args,
+                                            String policyKey,
+                                            RetryPolicy policy,
+                                            int executedAttempts) {
         RetryTaskSnapshot snapshot = new RetryTaskSnapshot();
+        snapshot.setTaskType(policyKey);
+        snapshot.setExecutedAttempts(executedAttempts);
+        snapshot.setMaxAttempts(policy.getTotalAttempts());
+
         snapshot.setBeanName(target.getClass().getName());
         snapshot.setMethodName(method.getName());
         snapshot.setArgTypes(Arrays.stream(method.getParameterTypes())
@@ -108,6 +117,10 @@ public class RetryDelegate {
             argJsonValues.add(serializer.serialize(parameters[i], args[i]));
         }
         snapshot.setArgJsonValues(argJsonValues);
+
+        // 生成任务 ID：基于任务关键信息（不包含已执行次数和创建时间）计算 hash，确保同一个业务意图在重试过程中 ID 稳定
+        String idBase = policyKey + "|" + snapshot.getBeanName() + "|" + snapshot.getMethodName() + "|" + snapshot.getArgJsonValues();
+        snapshot.setTaskId("rtry-" + cn.hutool.crypto.digest.DigestUtil.md5Hex(idBase));
 
         return snapshot;
     }

@@ -68,13 +68,13 @@ public class Retryer {
      * @param taskType 任务类型 (用于宕机后，Worker 知道由谁来恢复执行)
      * @param task     当前内存中实际要执行的任务逻辑
      */
-    public <T> T execute(String taskType, Supplier<String> payloadSupplier, Callable<T> task) throws Exception {
+    public <T> T execute(String taskType, java.util.function.IntFunction<String> payloadBuilder, Callable<T> task) throws Exception {
         String intentId = null;
         String payload = null;
 
         if (durability == RetryDurability.STRONG_CONSISTENCY && backend != null) {
             try {
-                payload = payloadSupplier.get();
+                payload = payloadBuilder.apply(0);
                 intentId = backend.saveIntent(taskType, payload);
                 if (intentId == null || intentId.isEmpty()) {
                     throw new IllegalStateException("STRONG_CONSISTENCY requires non-null intentId from backend.saveIntent()");
@@ -98,9 +98,8 @@ public class Retryer {
             if (backend != null && durability != RetryDurability.MEMORY_ONLY && shouldFallbackToBackend()) {
                 try {
                     long nextDelay = policy.getDelayMillis(getNextAttemptAfterInMemory());
-                    if (payload == null) {
-                        payload = payloadSupplier.get();
-                    }
+                    payload = payloadBuilder.apply(inMemoryAttempts);
+
                     String submitIntentId = ensureIntentIdForBackend(intentId, taskType, payload);
                     backend.submitForDelay(submitIntentId, taskType, payload, nextDelay);
                     throw new RetryExhaustedException("内存重试耗尽，已转入分布式后台队列", ex);
@@ -213,15 +212,15 @@ public class Retryer {
      */
     public <T> CompletableFuture<T> executeAsync(
             String taskType,
-            Supplier<String> payloadSupplier,
-            Supplier<CompletableFuture<T>> asyncTask,
+            java.util.function.IntFunction<String> payloadBuilder,
+            java.util.function.Supplier<CompletableFuture<T>> asyncTask,
             ScheduledExecutorService scheduler) {
         String intentId;
         String payload = null;
         // 执行前预写日志 (WAL)，防止宕机
         if (durability == RetryDurability.STRONG_CONSISTENCY && backend != null) {
             try {
-                payload = payloadSupplier.get();
+                payload = payloadBuilder.apply(0);
                 intentId = backend.saveIntent(taskType, payload);
                 if (intentId == null || intentId.isEmpty()) {
                     throw new IllegalStateException("STRONG_CONSISTENCY requires non-null intentId from backend.saveIntent()");
@@ -234,13 +233,13 @@ public class Retryer {
         }
 
         CompletableFuture<T> promise = new CompletableFuture<>();
-        attemptAsync(taskType, payloadSupplier, payload, intentId, asyncTask, scheduler, promise, 1);
+        attemptAsync(taskType, payloadBuilder, payload, intentId, asyncTask, scheduler, promise, 1);
         return promise;
     }
 
     private <T> void attemptAsync(
-            String taskType, Supplier<String> payloadSupplier, String payload, String intentId,
-            Supplier<CompletableFuture<T>> asyncTask,
+            String taskType, java.util.function.IntFunction<String> payloadBuilder, String payload, String intentId,
+            java.util.function.Supplier<CompletableFuture<T>> asyncTask,
             ScheduledExecutorService scheduler,
             CompletableFuture<T> promise,
             int attempt) {
@@ -253,12 +252,12 @@ public class Retryer {
                 if (ex == null) {
                     handleAsyncSuccess(intentId, promise, result);
                 } else {
-                    handleAsyncFailure(taskType, payloadSupplier, payload, intentId, asyncTask, scheduler, promise,
+                    handleAsyncFailure(taskType, payloadBuilder, payload, intentId, asyncTask, scheduler, promise,
                             attempt, ex);
                 }
             });
         } catch (Throwable ex) {
-            handleAsyncFailure(taskType, payloadSupplier, payload, intentId, asyncTask, scheduler, promise, attempt,
+            handleAsyncFailure(taskType, payloadBuilder, payload, intentId, asyncTask, scheduler, promise, attempt,
                     ex);
         }
     }
@@ -272,8 +271,8 @@ public class Retryer {
     }
 
     private <T> void handleAsyncFailure(
-            String taskType, Supplier<String> payloadSupplier, String payload, String intentId,
-            Supplier<CompletableFuture<T>> asyncTask,
+            String taskType, java.util.function.IntFunction<String> payloadBuilder, String payload, String intentId,
+            java.util.function.Supplier<CompletableFuture<T>> asyncTask,
             ScheduledExecutorService scheduler,
             CompletableFuture<T> promise,
             int attempt,
@@ -289,9 +288,9 @@ public class Retryer {
             long delay = policy.getDelayMillis(attempt);
             try {
                 scheduler.schedule(
-                        () -> attemptAsync(taskType, payloadSupplier, payload, intentId, asyncTask, scheduler, promise,
+                        () -> attemptAsync(taskType, payloadBuilder, payload, intentId, asyncTask, scheduler, promise,
                                 attempt + 1),
-                        delay, TimeUnit.MILLISECONDS);
+                        delay, java.util.concurrent.TimeUnit.MILLISECONDS);
             } catch (Exception e) {
                 // 如果调度失败（如线程池关闭），必须完成 promise 以免调用方挂起
                 promise.completeExceptionally(e);
@@ -302,7 +301,7 @@ public class Retryer {
                 try {
                     long nextDelay = policy.getDelayMillis(getNextAttemptAfterInMemory());
 
-                    String finalPayload = payload != null ? payload : payloadSupplier.get();
+                    String finalPayload = payloadBuilder.apply(attempt);
                     String submitIntentId = ensureIntentIdForBackend(intentId, taskType, finalPayload);
                     backend.submitForDelay(submitIntentId, taskType, finalPayload, nextDelay);
 

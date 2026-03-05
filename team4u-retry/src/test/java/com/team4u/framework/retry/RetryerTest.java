@@ -81,7 +81,7 @@ public class RetryerTest {
             return future;
         };
 
-        CompletableFuture<String> resultFuture = retryer.executeAsync("test-task", () -> "{}", asyncTask, scheduler);
+        CompletableFuture<String> resultFuture = retryer.executeAsync("test-task", executedAttempts -> "{}", asyncTask, scheduler);
 
         // 等待异步结果
         String result = resultFuture.get(1, TimeUnit.SECONDS);
@@ -111,7 +111,7 @@ public class RetryerTest {
             return future;
         };
 
-        CompletableFuture<String> resultFuture = retryer.executeAsync("test-task", () -> "{}", asyncTask, scheduler);
+        CompletableFuture<String> resultFuture = retryer.executeAsync("test-task", executedAttempts -> "{}", asyncTask, scheduler);
 
         try {
             resultFuture.get(1, TimeUnit.SECONDS);
@@ -159,7 +159,7 @@ public class RetryerTest {
                 .build();
 
         try {
-            retryer.execute("task", () -> "{}", () -> {
+            retryer.execute("task", executedAttempts -> "{}", () -> {
                 callCount.incrementAndGet();
                 throw new RuntimeException("always fail");
             });
@@ -214,7 +214,7 @@ public class RetryerTest {
                 .build();
 
         // [4] 执行成功逻辑
-        String result = retryer.execute("test-task", () -> "{}", () -> "success");
+        String result = retryer.execute("test-task", executedAttempts -> "{}", () -> "success");
 
         // [5] 验证结果和清理线程池
         Assert.assertEquals("success", result);
@@ -258,7 +258,7 @@ public class RetryerTest {
 
         // [4] 执行异步任务
         CompletableFuture<String> future = retryer.executeAsync(
-                "task", () -> "{}",
+                "task", executedAttempts -> "{}",
                 () -> CompletableFuture.completedFuture("async success"),
                 scheduler);
 
@@ -301,7 +301,7 @@ public class RetryerTest {
 
         // 第一次执行并失败，触发降级
         try {
-            retryer.execute(taskType, () -> payload, () -> { throw new RuntimeException("fail"); });
+            retryer.execute(taskType, executedAttempts -> payload, () -> { throw new RuntimeException("fail"); });
         } catch (Exception ignored) {}
 
         String id1 = lastIntentId.get();
@@ -310,7 +310,7 @@ public class RetryerTest {
 
         // 第二次执行（相同 taskType 和 payload），生成的 id 应相同
         try {
-            retryer.execute(taskType, () -> payload, () -> { throw new RuntimeException("fail"); });
+            retryer.execute(taskType, executedAttempts -> payload, () -> { throw new RuntimeException("fail"); });
         } catch (Exception ignored) {}
 
         String id2 = lastIntentId.get();
@@ -318,7 +318,7 @@ public class RetryerTest {
 
         // 不同 payload 应生成不同 id
         try {
-            retryer.execute(taskType, () -> "{\"id\":2}", () -> { throw new RuntimeException("fail"); });
+            retryer.execute(taskType, executedAttempts -> "{\"id\":2}", () -> { throw new RuntimeException("fail"); });
         } catch (Exception ignored) {}
 
         String id3 = lastIntentId.get();
@@ -343,6 +343,6 @@ public class RetryerTest {
                 .durability(RetryDurability.STRONG_CONSISTENCY)
                 .build();
 
-        retryer.execute("task", () -> "{}", () -> "success");
+        retryer.execute("task", executedAttempts -> "{}", () -> "success");
     }
 }
