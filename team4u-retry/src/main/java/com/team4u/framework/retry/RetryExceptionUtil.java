@@ -36,7 +36,7 @@ public class RetryExceptionUtil {
         // 使用 IdentityHashMap 防止异常对象重写 hashCode/equals 导致的判断失真
         Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
 
-        while (cause != null && depth < MAX_UNWRAP_DEPTH && seen.add(cause)) {
+        while (depth < MAX_UNWRAP_DEPTH && seen.add(cause)) {
             if (isWrapper(cause)) {
                 Throwable nextCause = cause.getCause();
                 if (nextCause != null) {

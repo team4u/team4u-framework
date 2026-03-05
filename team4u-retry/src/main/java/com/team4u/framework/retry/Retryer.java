@@ -134,6 +134,7 @@ public class Retryer {
                 long delay = policy.getDelayMillis(attempt);
                 if (delay > 0) {
                     try {
+                        //noinspection BusyWait
                         Thread.sleep(delay);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();

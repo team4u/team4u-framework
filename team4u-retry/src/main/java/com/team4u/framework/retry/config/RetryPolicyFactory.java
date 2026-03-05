@@ -16,7 +16,6 @@ public class RetryPolicyFactory {
 
     private static final Log log = LogFactory.get();
 
-    @SuppressWarnings("unchecked")
     public static RetryPolicy create(String jsonConfig) {
         RetryPolicyConfig config = JSONUtil.toBean(jsonConfig, RetryPolicyConfig.class);
         RetryPolicy.Builder builder = RetryPolicy.builder()
