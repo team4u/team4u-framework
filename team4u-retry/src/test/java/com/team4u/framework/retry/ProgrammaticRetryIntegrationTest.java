@@ -17,8 +17,8 @@ public class ProgrammaticRetryIntegrationTest {
 
     private MockRetryBackend backend;
     private Retryer retryer;
-    private String taskType = "test.task";
-    private String payload = "{\"id\":1}";
+    private final String taskType = "test.task";
+    private final String payload = "{\"id\":1}";
 
     @Before
     public void setUp() {

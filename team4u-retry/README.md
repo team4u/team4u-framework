@@ -22,21 +22,21 @@
 
 `team4u-retry` 是 Team4u Framework 的统一重试治理模块，提供：
 
-1. **同步重试**：对 `Callable` 任务进行阻塞式重试。
-2. **异步重试**：基于 `CompletableFuture` + `ScheduledExecutorService` 的非阻塞重试。
-3. **注解重试**：通过 `@Retryable` + `team4u-proxy` 动态代理实现无侵入重试。
-4. **动态策略**：通过配置中心热更新 `retry.policy.*` 策略。
-5. **持久化降级**：内存重试耗尽后可降级到后端队列，支持恢复执行。
+1. 同步重试：对 `Callable` 任务进行阻塞式重试。
+2. 异步重试：基于 `CompletableFuture` + `ScheduledExecutorService` 的非阻塞重试。
+3. 注解重试：通过 `@Retryable` + `team4u-proxy` 动态代理实现无侵入重试。
+4. 动态策略：通过配置中心热更新 `retry.policy.*` 策略。
+5. 持久化降级：内存重试耗尽后可降级到后端队列，支持恢复执行。
 
 模块同时支持异常白名单/黑名单、多种退避算法、Criterion 表达式条件重试和异常解包（代理/异步包装异常自动剥离）。
 
 ### 核心优势
 
-- **统一执行引擎**：`Retryer` 同时覆盖同步/异步调用模型。
-- **策略驱动**：`RetryPolicy` 不可变，线程安全，易复用。
-- **动态可调**：支持配置中心热更新重试参数，不必重启服务。
-- **可靠性分级**：按业务重要性选择 `MEMORY_ONLY` / `MEMORY_FALLBACK` / `STRONG_CONSISTENCY`。
-- **低侵入集成**：可直接编程式调用，也可注解接入代理链。
+- 统一执行引擎：`Retryer` 同时覆盖同步/异步调用模型。
+- 策略驱动：`RetryPolicy` 不可变，线程安全，易复用。
+- 动态可调：支持配置中心热更新重试参数，不必重启服务。
+- 可靠性分级：按业务重要性选择 `MEMORY_ONLY` / `MEMORY_FALLBACK` / `STRONG_CONSISTENCY`。
+- 低侵入集成：可直接编程式调用，也可注解接入代理链。
 
 ---
 
@@ -227,11 +227,11 @@ PayService proxy = ProxyBuilder.forClass(PayService.class)
 
 ### 次数语义（重点）
 
-- 默认只需配置 `totalAttempts`，表示**全局总次数上限**。
+- 默认只需配置 `totalAttempts`，表示全局总次数上限。
 - `inMemoryAttempts` 为高级可选参数；不配置时自动推导：
   - `MEMORY_ONLY`：`inMemoryAttempts = totalAttempts`
   - `MEMORY_FALLBACK/STRONG_CONSISTENCY`：`inMemoryAttempts = min(2, totalAttempts)`
-- 无论 durability 如何选择，**总尝试次数不会超过 `totalAttempts`**。
+- 无论 durability 如何选择，总尝试次数不会超过 `totalAttempts`。
 
 ### 2) 后端能力接口（RetryBackend）
 
