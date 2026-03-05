@@ -12,17 +12,17 @@ import static org.junit.Assert.assertTrue;
 public class RetryPolicyTest {
 
     @Test
-    public void testMaxAttempts() {
-        // 测试最大重试次数限制
+    public void testTotalAttempts() {
+        // 测试全局总尝试次数限制
         RetryPolicy policy = RetryPolicy.builder()
-                .maxAttempts(3)
+                .totalAttempts(3)
                 .build();
 
         RuntimeException ex = new RuntimeException("test");
 
-        Assert.assertTrue("第1次应该可以重试", policy.canRetry(1, ex));
-        Assert.assertTrue("第2次应该可以重试", policy.canRetry(2, ex));
-        Assert.assertFalse("第3次应该拒绝重试（因为已经达到最大次数）", policy.canRetry(3, ex));
+        Assert.assertTrue("第1次失败后允许继续", policy.canRetry(1, ex));
+        Assert.assertTrue("第2次失败后允许继续", policy.canRetry(2, ex));
+        Assert.assertFalse("第3次失败后拒绝继续（达到总上限）", policy.canRetry(3, ex));
     }
 
     @Test
@@ -40,9 +40,19 @@ public class RetryPolicyTest {
     }
 
     @Test
+    public void testInMemoryAttemptsValidation() {
+        try {
+            RetryPolicy.builder().totalAttempts(3).inMemoryAttempts(4).build();
+            Assert.fail("预期抛出 IllegalArgumentException");
+        } catch (IllegalArgumentException e) {
+            Assert.assertTrue(e.getMessage().contains("inMemoryAttempts"));
+        }
+    }
+
+    @Test
     public void testConditionExpression() {
         RetryPolicy policy = RetryPolicy.builder()
-                .maxAttempts(3)
+                .totalAttempts(3)
                 .condition("attempt <= 2 && message contains 'timeout'")
                 .build();
 

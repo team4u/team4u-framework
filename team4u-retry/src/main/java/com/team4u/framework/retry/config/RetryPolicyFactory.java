@@ -20,8 +20,12 @@ public class RetryPolicyFactory {
     public static RetryPolicy create(String jsonConfig) {
         RetryPolicyConfig config = JSONUtil.toBean(jsonConfig, RetryPolicyConfig.class);
         RetryPolicy.Builder builder = RetryPolicy.builder()
-                .maxAttempts(config.getMaxAttempts())
+                .totalAttempts(config.getTotalAttempts())
                 .condition(config.getCondition());
+
+        if (config.getInMemoryAttempts() != null) {
+            builder.inMemoryAttempts(config.getInMemoryAttempts());
+        }
 
         // 解析 Backoff
         String type = config.getBackoffType() == null ? "fixed" : config.getBackoffType().toLowerCase();

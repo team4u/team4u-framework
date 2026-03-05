@@ -35,7 +35,10 @@ public class RetryDurabilityTest {
 
             @Override
             public RetryPolicy getPolicy() {
-                return RetryPolicy.builder().maxAttempts(1).build();
+                return RetryPolicy.builder()
+                        .totalAttempts(3)
+                        .inMemoryAttempts(1)
+                        .build();
             }
         });
 
@@ -50,8 +53,11 @@ public class RetryDurabilityTest {
     public void testMemoryOnly() {
         try {
             service.memoryOnly();
-        } catch (Exception e) {
-            // ignore
+            Assert.fail("预期抛出原始异常");
+        } catch (com.team4u.framework.retry.RetryExhaustedException e) {
+            Assert.fail("MEMORY_ONLY 不应抛出 RetryExhaustedException");
+        } catch (RuntimeException e) {
+            Assert.assertEquals("fail", e.getMessage());
         }
         Assert.assertEquals(0, mockBackend.saveCount.get());
         Assert.assertEquals(0, mockBackend.submitCount.get());
@@ -91,6 +97,7 @@ public class RetryDurabilityTest {
         Assert.assertEquals(1, mockBackend.saveCount.get());
         Assert.assertEquals(1, mockBackend.submitCount.get());
         Assert.assertEquals("intent-1", mockBackend.lastSubmitIntentId.get());
+        Assert.assertEquals(1000, mockBackend.lastDelayMs.get());
     }
 
     public interface TestService {
@@ -133,6 +140,7 @@ public class RetryDurabilityTest {
         AtomicReference<String> lastIntentId = new AtomicReference<>();
         AtomicReference<String> completedIntentId = new AtomicReference<>();
         AtomicReference<String> lastSubmitIntentId = new AtomicReference<>();
+        AtomicInteger lastDelayMs = new AtomicInteger();
         CountDownLatch completeLatch = new CountDownLatch(1);
 
         @Override
@@ -152,6 +160,7 @@ public class RetryDurabilityTest {
         public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
             submitCount.incrementAndGet();
             lastSubmitIntentId.set(intentId);
+            lastDelayMs.set((int) delayMs);
         }
     }
 }

@@ -13,14 +13,18 @@ import java.util.function.Supplier;
  */
 public class Retryer {
 
+    private static final int DEFAULT_IN_MEMORY_ATTEMPTS_FOR_PERSISTENCE = 2;
+
     private final RetryPolicy policy;
     private final RetryBackend backend;
     private final RetryDurability durability;
+    private final int inMemoryAttempts;
 
     private Retryer(Builder builder) {
         this.policy = builder.policy;
         this.backend = builder.backend;
         this.durability = builder.durability != null ? builder.durability : RetryDurability.MEMORY_ONLY;
+        this.inMemoryAttempts = resolveInMemoryAttempts(policy, this.durability);
     }
 
     /**
@@ -86,8 +90,8 @@ public class Retryer {
                 throw (Error) ex;
             }
             // 4. 内存重试彻底耗尽，降级到后端存储
-            if (backend != null && durability != RetryDurability.MEMORY_ONLY) {
-                long nextDelay = policy.getDelayMillis(policy.getMaxAttempts() + 1);
+            if (backend != null && durability != RetryDurability.MEMORY_ONLY && shouldFallbackToBackend()) {
+                long nextDelay = policy.getDelayMillis(getNextAttemptAfterInMemory());
 
                 // 将任务正式转入后台延迟队列
                 backend.submitForDelay(intentId, taskType, payload, nextDelay);
@@ -115,7 +119,7 @@ public class Retryer {
                     throw (Error) ex;
                 }
                 Throwable cause = RetryExceptionUtil.unwrap(ex);
-                if (!policy.canRetry(attempt, cause)) {
+                if (!canRetryInMemory(attempt, cause)) {
                     if (cause instanceof Exception) {
                         throw (Exception) cause;
                     }
@@ -129,6 +133,34 @@ public class Retryer {
                 attempt++;
             }
         }
+    }
+
+    private boolean canRetryInMemory(int attempt, Throwable cause) {
+        if (!policy.canRetry(attempt, cause)) {
+            return false;
+        }
+        return attempt < inMemoryAttempts;
+    }
+
+    private int getNextAttemptAfterInMemory() {
+        return Math.min(inMemoryAttempts + 1, policy.getTotalAttempts() == -1 ? inMemoryAttempts + 1 : policy.getTotalAttempts());
+    }
+
+    private int resolveInMemoryAttempts(RetryPolicy policy, RetryDurability durability) {
+        if (policy.getInMemoryAttempts() != null) {
+            return policy.getInMemoryAttempts();
+        }
+        if (policy.getTotalAttempts() == -1) {
+            return durability == RetryDurability.MEMORY_ONLY ? Integer.MAX_VALUE : DEFAULT_IN_MEMORY_ATTEMPTS_FOR_PERSISTENCE;
+        }
+        if (durability == RetryDurability.MEMORY_ONLY) {
+            return policy.getTotalAttempts();
+        }
+        return Math.min(DEFAULT_IN_MEMORY_ATTEMPTS_FOR_PERSISTENCE, policy.getTotalAttempts());
+    }
+
+    private boolean shouldFallbackToBackend() {
+        return policy.getTotalAttempts() == -1 || inMemoryAttempts < policy.getTotalAttempts();
     }
 
     /**
@@ -210,7 +242,7 @@ public class Retryer {
 
         Throwable cause = RetryExceptionUtil.unwrap(ex);
 
-        if (policy.canRetry(attempt, cause)) {
+        if (canRetryInMemory(attempt, cause)) {
             long delay = policy.getDelayMillis(attempt);
             scheduler.schedule(() ->
                             attemptAsync(taskType, payload, intentId, asyncTask, scheduler, promise, attempt + 1),
@@ -218,8 +250,8 @@ public class Retryer {
             );
         } else {
             // 内存重试彻底耗尽，降级到后端存储
-            if (backend != null && durability != RetryDurability.MEMORY_ONLY) {
-                long nextDelay = policy.getDelayMillis(policy.getMaxAttempts() + 1);
+            if (backend != null && durability != RetryDurability.MEMORY_ONLY && shouldFallbackToBackend()) {
+                long nextDelay = policy.getDelayMillis(getNextAttemptAfterInMemory());
                 backend.submitForDelay(intentId, taskType, payload, nextDelay);
                 promise.completeExceptionally(new RetryExhaustedException("内存重试耗尽，已转入分布式后台队列", cause));
             } else {

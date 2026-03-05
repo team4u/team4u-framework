@@ -18,7 +18,7 @@ public class PersistentFallbackTest {
 
     @Test
     public void testFallbackToBackend() throws Throwable {
-        // 1. 设置静态策略：最大尝试 1 次（即不重试，直接失败）
+        // 1. 设置静态策略：全局最多 3 次，前台仅 1 次，随后交给后端
         String policyId = "fallback-test";
         RetryPolicyRegistry.global().register(new NamedRetryPolicy() {
             @Override
@@ -28,7 +28,7 @@ public class PersistentFallbackTest {
 
             @Override
             public RetryPolicy getPolicy() {
-                return RetryPolicy.builder().maxAttempts(1).build();
+                return RetryPolicy.builder().totalAttempts(3).inMemoryAttempts(1).build();
             }
         });
 
@@ -50,6 +50,7 @@ public class PersistentFallbackTest {
                 Assert.assertEquals(policyId, queueName);
                 Assert.assertTrue("Context snippet should contain method name", contextJson.contains("doSomething"));
                 Assert.assertTrue("Context snippet should contain arg value", contextJson.contains("test-arg"));
+                Assert.assertEquals(1000, delayMs);
             }
         };
 

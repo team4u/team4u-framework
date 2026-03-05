@@ -8,7 +8,7 @@ import com.team4u.framework.retry.RetryPolicy;
  * 动态配置驱动的重试策略注册表
  * <p>
  * 监听配置中心中前缀为 "retry.policy." 的配置变更。
- * 例如配置：retry.policy.pay-notify = {"maxAttempts": 5, "backoffType": "exponentialJitter", ...}
+ * 例如配置：retry.policy.pay-notify = {"totalAttempts": 5, "backoffType": "exponentialJitter", ...}
  *
  * @author jay.wu
  */

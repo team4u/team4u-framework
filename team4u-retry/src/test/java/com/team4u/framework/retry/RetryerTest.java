@@ -24,7 +24,7 @@ public class RetryerTest {
     public void testSyncExecuteSuccessAfterRetries() throws Exception {
         // 测试同步执行：失败若干次后成功
         RetryPolicy policy = RetryPolicy.builder()
-                .maxAttempts(3)
+                .totalAttempts(3)
                 .backoff(Backoff.fixed(10)) // 为了测试速度，使用很小的延迟
                 .build();
 
@@ -44,10 +44,10 @@ public class RetryerTest {
     }
 
     @Test(expected = RuntimeException.class)
-    public void testSyncExecuteExceedMaxAttempts() throws Exception {
-        // 测试同步执行：超过最大重试次数抛出异常
+    public void testSyncExecuteExceedTotalAttempts() throws Exception {
+        // 测试同步执行：超过全局总尝试次数抛出异常
         RetryPolicy policy = RetryPolicy.builder()
-                .maxAttempts(3)
+                .totalAttempts(3)
                 .backoff(Backoff.fixed(5))
                 .build();
 
@@ -63,7 +63,7 @@ public class RetryerTest {
     public void testAsyncExecuteSuccessAfterRetries() throws Exception {
         // 测试异步执行：失败若干次后成功
         RetryPolicy policy = RetryPolicy.builder()
-                .maxAttempts(3)
+                .totalAttempts(3)
                 .backoff(Backoff.fixed(10))
                 .build();
 
@@ -93,10 +93,10 @@ public class RetryerTest {
     }
 
     @Test
-    public void testAsyncExecuteExceedMaxAttempts() throws Exception {
-        // 测试异步执行：超过最大重试次数失败
+    public void testAsyncExecuteExceedTotalAttempts() throws Exception {
+        // 测试异步执行：超过全局总尝试次数失败
         RetryPolicy policy = RetryPolicy.builder()
-                .maxAttempts(2)
+                .totalAttempts(2)
                 .backoff(Backoff.fixed(5))
                 .build();
 
@@ -123,7 +123,56 @@ public class RetryerTest {
         }
 
         Assert.assertEquals("应当执行了2次", 2, counter.get());
+    }
 
-        scheduler.shutdown();
+    @Test
+    public void testPersistentDurabilityDefaultInMemoryAttempts() {
+        RetryPolicy policy = RetryPolicy.builder()
+                .totalAttempts(5)
+                .build();
+
+        AtomicInteger submitCount = new AtomicInteger(0);
+        AtomicInteger callCount = new AtomicInteger(0);
+        AtomicInteger delayMs = new AtomicInteger(0);
+
+        RetryBackend backend = new RetryBackend() {
+            @Override
+            public String saveIntent(String taskType, String payload) {
+                return null;
+            }
+
+            @Override
+            public void completeIntent(String intentId) {
+            }
+
+            @Override
+            public void submitForDelay(String intentId, String taskType, String payload, long delay) {
+                submitCount.incrementAndGet();
+                delayMs.set((int) delay);
+            }
+        };
+
+        Retryer retryer = Retryer.builder()
+                .policy(policy)
+                .backend(backend)
+                .durability(RetryDurability.MEMORY_FALLBACK)
+                .build();
+
+        try {
+            retryer.execute("task", "{}", () -> {
+                callCount.incrementAndGet();
+                throw new RuntimeException("always fail");
+            });
+            Assert.fail("预期抛出 RetryExhaustedException");
+        } catch (RetryExhaustedException ex) {
+            // expected
+        } catch (Exception e) {
+            Assert.fail("预期抛出 RetryExhaustedException");
+        }
+
+        Assert.assertEquals("持久化模式默认前台只尝试2次", 2, callCount.get());
+        Assert.assertEquals("应提交一次到后端", 1, submitCount.get());
+        Assert.assertEquals("后端下一次应为第3次尝试对应延迟", 1000, delayMs.get());
+
     }
 }

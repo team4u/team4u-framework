@@ -24,7 +24,7 @@ public class ProgrammaticRetryIntegrationTest {
     public void setUp() {
         backend = new MockRetryBackend();
         retryer = Retryer.builder()
-                .policy(RetryPolicy.builder().maxAttempts(3).build())
+                .policy(RetryPolicy.builder().totalAttempts(3).build())
                 .backend(backend)
                 .durability(RetryDurability.STRONG_CONSISTENCY)
                 .build();
@@ -63,8 +63,8 @@ public class ProgrammaticRetryIntegrationTest {
             Assert.assertTrue(e.getMessage().contains("内存重试耗尽"));
         }
 
-        // 验证执行了 3 次内存重试
-        Assert.assertEquals(3, callCount.get());
+        // STRONG_CONSISTENCY 下未显式配置 inMemoryAttempts，默认前台内存预算为 2 次
+        Assert.assertEquals(2, callCount.get());
         // 验证任务已提交到延迟队列
         Assert.assertEquals(1, backend.delayedIntents.size());
         Assert.assertEquals(taskType, backend.delayedIntents.get(0).taskType);

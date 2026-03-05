@@ -60,7 +60,7 @@ import com.team4u.framework.retry.Retryer;
 import com.team4u.framework.retry.backoff.Backoff;
 
 RetryPolicy policy = RetryPolicy.builder()
-        .maxAttempts(3)
+        .totalAttempts(3)
         .backoff(Backoff.fixed(200))
         .build();
 
@@ -80,8 +80,9 @@ String result = retryer.execute(() -> {
 
 `RetryPolicy` 支持以下维度：
 
-- `maxAttempts(int)`：最大尝试次数（包含首次调用）。
-- `infiniteAttempts()`：无限重试（`maxAttempts=-1`）。
+- `totalAttempts(int)`：全局总尝试次数（内存 + 后端总和，包含首次调用）。
+- `inMemoryAttempts(int)`：前台内存尝试预算（可选，高级参数）。
+- `infiniteAttempts()`：无限重试（`totalAttempts=-1`）。
 - `backoff(Backoff)`：延迟计算策略。
 - `retryOn(...)`：仅匹配这些异常及其子类时才重试。
 - `abortOn(...)`：匹配这些异常及其子类时立刻终止重试。
@@ -113,7 +114,7 @@ String result = retryer.execute(() -> {
 
 ```java
 RetryPolicy policy = RetryPolicy.builder()
-        .maxAttempts(3)
+        .totalAttempts(3)
         .backoff(Backoff.exponential(100, 2.0, 2000))
         .retryOn(java.io.IOException.class)
         .abortOn(IllegalArgumentException.class)
@@ -131,7 +132,7 @@ String data = retryer.execute(() -> remoteCall());
 ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
 
 RetryPolicy policy = RetryPolicy.builder()
-        .maxAttempts(3)
+        .totalAttempts(3)
         .backoff(Backoff.fixed(100))
         .build();
 
@@ -188,7 +189,8 @@ PayService proxy = ProxyBuilder.forClass(PayService.class)
 
 ```json
 {
-  "maxAttempts": 5,
+  "totalAttempts": 5,
+  "inMemoryAttempts": 2,
   "backoffType": "exponentialJitter",
   "initialDelay": 200,
   "multiplier": 2.0,
@@ -203,7 +205,8 @@ PayService proxy = ProxyBuilder.forClass(PayService.class)
 
 | 字段 | 说明 |
 | :--- | :--- |
-| `maxAttempts` | 最大尝试次数（含首次） |
+| `totalAttempts` | 全局总尝试次数（内存 + 后端总和，含首次） |
+| `inMemoryAttempts` | 前台内存尝试次数预算（可选，不填自动推导） |
 | `backoffType` | `fixed` / `increment` / `exponential` / `exponentialJitter` |
 | `initialDelay` | 初始延迟（毫秒） |
 | `multiplier` | 递增步长（increment）或倍率（exponential） |
@@ -219,8 +222,16 @@ PayService proxy = ProxyBuilder.forClass(PayService.class)
 ### 1) 可靠性级别（RetryDurability）
 
 - `MEMORY_ONLY`：仅内存重试，性能最高，宕机可能丢任务。
-- `MEMORY_FALLBACK`：内存重试耗尽后提交后端延迟队列。
+- `MEMORY_FALLBACK`：前台内存预算耗尽且仍有全局剩余额度时，提交后端延迟队列。
 - `STRONG_CONSISTENCY`：执行前先写入重试意图（WAL），成功后再完成清理，避免任务丢失。
+
+### 次数语义（重点）
+
+- 默认只需配置 `totalAttempts`，表示**全局总次数上限**。
+- `inMemoryAttempts` 为高级可选参数；不配置时自动推导：
+  - `MEMORY_ONLY`：`inMemoryAttempts = totalAttempts`
+  - `MEMORY_FALLBACK/STRONG_CONSISTENCY`：`inMemoryAttempts = min(2, totalAttempts)`
+- 无论 durability 如何选择，**总尝试次数不会超过 `totalAttempts`**。
 
 ### 2) 后端能力接口（RetryBackend）
 

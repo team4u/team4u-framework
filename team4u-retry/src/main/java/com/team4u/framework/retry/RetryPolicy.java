@@ -17,14 +17,19 @@ import java.util.Set;
  */
 @Getter
 public class RetryPolicy {
-    private final int maxAttempts;
+    private final int totalAttempts;
+    /**
+     * 仅控制前台内存重试预算；为空表示自动推导
+     */
+    private final Integer inMemoryAttempts;
     private final Backoff backoff;
     private final Set<Class<? extends Throwable>> retryOnExceptions;
     private final Set<Class<? extends Throwable>> abortOnExceptions;
     private final String conditionExpression;
 
     private RetryPolicy(Builder builder) {
-        this.maxAttempts = builder.maxAttempts;
+        this.totalAttempts = builder.totalAttempts;
+        this.inMemoryAttempts = builder.inMemoryAttempts;
         this.backoff = builder.backoff;
         this.retryOnExceptions = builder.retryOnExceptions;
         this.abortOnExceptions = builder.abortOnExceptions;
@@ -48,7 +53,7 @@ public class RetryPolicy {
      * @return 如果满足所有条件允许重试返回true，否则返回false
      */
     public boolean canRetry(int currentAttempt, Throwable ex) {
-        if (currentAttempt >= maxAttempts && maxAttempts != -1) {
+        if (currentAttempt >= totalAttempts && totalAttempts != -1) {
             return false;
         }
 
@@ -64,7 +69,7 @@ public class RetryPolicy {
 
         // 集成 team4u-criterion 进行高阶条件过滤，例如校验特定错误信息或组合重试策略
         if (conditionExpression != null && !conditionExpression.isEmpty()) {
-            RetryContext contextData = new RetryContext(currentAttempt, maxAttempts, cause);
+            RetryContext contextData = new RetryContext(currentAttempt, totalAttempts, cause);
             MatchContext ctx = MatchContext.of(contextData);
             return Criteria.global().matches(conditionExpression, ctx);
         }
@@ -105,13 +110,15 @@ public class RetryPolicy {
     @Getter
     public static class RetryContext {
         private final int attempt;
+        private final int totalAttempts;
         private final int maxAttempts;
         private final Throwable cause;
         private final String message;
 
-        public RetryContext(int attempt, int maxAttempts, Throwable cause) {
+        public RetryContext(int attempt, int totalAttempts, Throwable cause) {
             this.attempt = attempt;
-            this.maxAttempts = maxAttempts;
+            this.totalAttempts = totalAttempts;
+            this.maxAttempts = totalAttempts;
             this.cause = cause;
             this.message = cause != null ? cause.getMessage() : null;
         }
@@ -123,18 +130,30 @@ public class RetryPolicy {
     public static class Builder {
         private final Set<Class<? extends Throwable>> retryOnExceptions = new HashSet<>();
         private final Set<Class<? extends Throwable>> abortOnExceptions = new HashSet<>();
-        private int maxAttempts = 3;
+        private int totalAttempts = 3;
+        private Integer inMemoryAttempts;
         private Backoff backoff = Backoff.fixed(1000);
         private String conditionExpression;
 
         /**
-         * 设置最大尝试次数
+         * 设置全局最大尝试次数（内存 + 后端总和，包含首次）
          *
-         * @param maxAttempts 最大尝试次数，包含首次请求
+         * @param totalAttempts 全局最大尝试次数，包含首次请求
          * @return 构建器自身
          */
-        public Builder maxAttempts(int maxAttempts) {
-            this.maxAttempts = maxAttempts;
+        public Builder totalAttempts(int totalAttempts) {
+            this.totalAttempts = totalAttempts;
+            return this;
+        }
+
+        /**
+         * 设置前台内存尝试次数预算（可选，不设置则自动推导）
+         *
+         * @param inMemoryAttempts 前台内存最大尝试次数，包含首次请求
+         * @return 构建器自身
+         */
+        public Builder inMemoryAttempts(int inMemoryAttempts) {
+            this.inMemoryAttempts = inMemoryAttempts;
             return this;
         }
 
@@ -144,7 +163,7 @@ public class RetryPolicy {
          * @return 构建器自身
          */
         public Builder infiniteAttempts() {
-            this.maxAttempts = -1;
+            this.totalAttempts = -1;
             return this;
         }
 
@@ -201,6 +220,15 @@ public class RetryPolicy {
          * @return 配置好的重试策略
          */
         public RetryPolicy build() {
+            if (totalAttempts == 0 || totalAttempts < -1) {
+                throw new IllegalArgumentException("totalAttempts 必须大于 0 或者为 -1（无限重试）");
+            }
+            if (inMemoryAttempts != null && inMemoryAttempts <= 0) {
+                throw new IllegalArgumentException("inMemoryAttempts 必须大于 0");
+            }
+            if (totalAttempts != -1 && inMemoryAttempts != null && inMemoryAttempts > totalAttempts) {
+                throw new IllegalArgumentException("inMemoryAttempts 不能大于 totalAttempts");
+            }
             return new RetryPolicy(this);
         }
     }

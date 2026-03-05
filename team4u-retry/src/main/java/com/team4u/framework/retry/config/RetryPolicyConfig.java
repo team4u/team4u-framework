@@ -14,9 +14,13 @@ import java.util.List;
 @Setter
 public class RetryPolicyConfig {
     /**
-     * 最大尝试次数
+     * 全局最大尝试次数（内存 + 后端总和，包含首次）
      */
-    private int maxAttempts = 3;
+    private int totalAttempts = 3;
+    /**
+     * 前台内存尝试次数预算（可选）
+     */
+    private Integer inMemoryAttempts;
     /**
      * 退避类型：fixed, increment, exponential, exponentialJitter
      */
