@@ -54,33 +54,36 @@ public class RetryInterceptor implements MethodInterceptor {
                 .durability(durability)
                 .build();
 
-        String snapshotJson = buildSnapshot(invocation).toJson();
-
         if (isAsync) {
             return retryer.executeAsync(
-                    policyKey, snapshotJson,
+                    policyKey,
+                    () -> buildSnapshot(invocation).toJson(),
                     () -> {
                         try {
-                            return (CompletableFuture<Object>) invocation.proceed();
+                            @SuppressWarnings("unchecked")
+                            CompletableFuture<Object> cf = (CompletableFuture<Object>) invocation.proceed();
+                            return cf;
                         } catch (Throwable e) {
                             CompletableFuture<Object> fail = new CompletableFuture<>();
                             fail.completeExceptionally(e);
                             return fail;
                         }
                     },
-                    getScheduler()
-            );
+                    getScheduler());
         } else {
-            return retryer.execute(policyKey, snapshotJson, () -> {
-                try {
-                    return invocation.proceed();
-                } catch (Throwable t) {
-                    if (t instanceof Exception) {
-                        throw (Exception) t;
-                    }
-                    throw new RuntimeException(t);
-                }
-            });
+            return retryer.execute(
+                    policyKey,
+                    () -> buildSnapshot(invocation).toJson(),
+                    () -> {
+                        try {
+                            return invocation.proceed();
+                        } catch (Throwable t) {
+                            if (t instanceof Exception) {
+                                throw (Exception) t;
+                            }
+                            throw new RuntimeException(t);
+                        }
+                    });
         }
     }
 
@@ -105,4 +108,3 @@ public class RetryInterceptor implements MethodInterceptor {
     }
 
 }
-

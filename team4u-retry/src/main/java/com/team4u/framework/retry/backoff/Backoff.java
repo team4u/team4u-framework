@@ -71,8 +71,10 @@ public interface Backoff {
      */
     static Backoff exponentialJitter(long initialDelayMillis, double multiplier, long maxDelayMillis) {
         return attempt -> {
-            long maxCalculatedDelay = exponential(initialDelayMillis, multiplier, maxDelayMillis).calculateMillis(attempt);
-            return ThreadLocalRandom.current().nextLong(initialDelayMillis, maxCalculatedDelay + 1);
+            long maxCalculatedDelay = exponential(initialDelayMillis, multiplier, maxDelayMillis)
+                    .calculateMillis(attempt);
+            long maxBound = Math.max(initialDelayMillis, maxCalculatedDelay) + 1;
+            return ThreadLocalRandom.current().nextLong(initialDelayMillis, maxBound);
         };
     }
 

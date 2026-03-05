@@ -52,4 +52,12 @@ public class BackoffTest {
             Assert.assertTrue("Delay should be <= " + (maxExpected + 1), delay <= maxExpected + 1);
         }
     }
+
+    @Test
+    public void testExponentialJitterBoundary() {
+        // 测试初始延迟大于最大延迟的情况，确保不会抛出异常
+        Backoff jitterBackoff = Backoff.exponentialJitter(1000, 2.0, 500);
+        long delay = jitterBackoff.calculateMillis(1);
+        Assert.assertTrue("Delay should be at least initialDelayMillis", delay >= 1000);
+    }
 }

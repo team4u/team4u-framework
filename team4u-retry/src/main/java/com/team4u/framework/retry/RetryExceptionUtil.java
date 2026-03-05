@@ -13,6 +13,11 @@ import java.util.concurrent.ExecutionException;
 public class RetryExceptionUtil {
 
     /**
+     * 最大剥离深度，防止异常链循环引用导致的死循环
+     */
+    private static final int MAX_UNWRAP_DEPTH = 10;
+
+    /**
      * 解包各种代理框架和异步框架产生的包装异常，提取根因
      *
      * @param ex 原始异常
@@ -20,13 +25,16 @@ public class RetryExceptionUtil {
      */
     public static Throwable unwrap(Throwable ex) {
         Throwable cause = ex;
-        while (cause != null) {
+        int depth = 0;
+        while (cause != null && depth < MAX_UNWRAP_DEPTH) {
             if (cause instanceof CompletionException ||
                     cause instanceof ExecutionException ||
                     cause instanceof InvocationTargetException ||
                     cause instanceof UndeclaredThrowableException) {
-                if (cause.getCause() != null) {
-                    cause = cause.getCause();
+                Throwable nextCause = cause.getCause();
+                if (nextCause != null) {
+                    cause = nextCause;
+                    depth++;
                 } else {
                     break;
                 }

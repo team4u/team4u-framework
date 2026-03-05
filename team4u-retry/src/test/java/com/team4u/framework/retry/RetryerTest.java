@@ -81,7 +81,7 @@ public class RetryerTest {
             return future;
         };
 
-        CompletableFuture<String> resultFuture = retryer.executeAsync("test-task", "{}", asyncTask, scheduler);
+        CompletableFuture<String> resultFuture = retryer.executeAsync("test-task", () -> "{}", asyncTask, scheduler);
 
         // 等待异步结果
         String result = resultFuture.get(1, TimeUnit.SECONDS);
@@ -111,7 +111,7 @@ public class RetryerTest {
             return future;
         };
 
-        CompletableFuture<String> resultFuture = retryer.executeAsync("test-task", "{}", asyncTask, scheduler);
+        CompletableFuture<String> resultFuture = retryer.executeAsync("test-task", () -> "{}", asyncTask, scheduler);
 
         try {
             resultFuture.get(1, TimeUnit.SECONDS);
@@ -159,7 +159,7 @@ public class RetryerTest {
                 .build();
 
         try {
-            retryer.execute("task", "{}", () -> {
+            retryer.execute("task", () -> "{}", () -> {
                 callCount.incrementAndGet();
                 throw new RuntimeException("always fail");
             });
@@ -174,5 +174,99 @@ public class RetryerTest {
         Assert.assertEquals("应提交一次到后端", 1, submitCount.get());
         Assert.assertEquals("后端下一次应为第3次尝试对应延迟", 1000, delayMs.get());
 
+    }
+
+    @Test
+    public void testSyncCleanupWithCustomExecutor() throws Exception {
+        // [1] 定义策略和自定义线程池
+        RetryPolicy policy = RetryPolicy.builder().build();
+        CountDownLatch latch = new CountDownLatch(1);
+        ExecutorService customExecutor = Executors.newSingleThreadExecutor();
+
+        // [2] 模拟后端
+        RetryBackend backend = new RetryBackend() {
+            @Override
+            public String saveIntent(String taskType, String payload) {
+                return "intent-123";
+            }
+
+            @Override
+            public void completeIntent(String intentId) {
+                // 模拟 IO 耗时
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException ignored) {
+                }
+                latch.countDown();
+            }
+
+            @Override
+            public void submitForDelay(String intentId, String taskType, String payload, long delay) {
+            }
+        };
+
+        // [3] 构建 Retryer
+        Retryer retryer = Retryer.builder()
+                .policy(policy)
+                .backend(backend)
+                .durability(RetryDurability.STRONG_CONSISTENCY)
+                .cleanupExecutor(customExecutor)
+                .build();
+
+        // [4] 执行成功逻辑
+        String result = retryer.execute("test-task", () -> "{}", () -> "success");
+
+        // [5] 验证结果和清理线程池
+        Assert.assertEquals("success", result);
+        Assert.assertTrue("应当在自定义线程池中异步完成了清理", latch.await(1, TimeUnit.SECONDS));
+
+        customExecutor.shutdown();
+    }
+
+    @Test
+    public void testAsyncCleanupWithCustomExecutor() throws Exception {
+        // [1] 定义策略、调度器和自定义线程池
+        RetryPolicy policy = RetryPolicy.builder().build();
+        ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(1);
+        ExecutorService customExecutor = Executors.newSingleThreadExecutor();
+        CountDownLatch latch = new CountDownLatch(1);
+
+        // [2] 模拟后端
+        RetryBackend backend = new RetryBackend() {
+            @Override
+            public String saveIntent(String taskType, String payload) {
+                return "intent-async-123";
+            }
+
+            @Override
+            public void completeIntent(String intentId) {
+                latch.countDown();
+            }
+
+            @Override
+            public void submitForDelay(String intentId, String taskType, String payload, long delay) {
+            }
+        };
+
+        // [3] 构建 Retryer
+        Retryer retryer = Retryer.builder()
+                .policy(policy)
+                .backend(backend)
+                .durability(RetryDurability.STRONG_CONSISTENCY)
+                .cleanupExecutor(customExecutor)
+                .build();
+
+        // [4] 执行异步任务
+        CompletableFuture<String> future = retryer.executeAsync(
+                "task", () -> "{}",
+                () -> CompletableFuture.completedFuture("async success"),
+                scheduler);
+
+        // [5] 验证
+        Assert.assertEquals("async success", future.get(1, TimeUnit.SECONDS));
+        Assert.assertTrue("异步任务成功后应当在自定义线程池中完成清理", latch.await(1, TimeUnit.SECONDS));
+
+        scheduler.shutdown();
+        customExecutor.shutdown();
     }
 }

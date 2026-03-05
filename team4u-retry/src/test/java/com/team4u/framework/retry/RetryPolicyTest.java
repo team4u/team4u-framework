@@ -112,4 +112,24 @@ public class RetryPolicyTest {
         // 如果提取原因成功，那么这里应该匹配到 IllegalArgumentException，由于abortOn策略返回false
         Assert.assertFalse("应当能剥离出真实的异常并触发阻断", policy.canRetry(1, wrappedEx));
     }
+
+    @Test
+    public void testImmutability() {
+        RetryPolicy.Builder builder = RetryPolicy.builder()
+                .retryOn(java.io.IOException.class);
+        RetryPolicy policy = builder.build();
+
+        // 修改 Builder 不应影响已生成的 Policy
+        builder.retryOn(RuntimeException.class);
+
+        Assert.assertTrue("Policy 集合应保持不变", policy.getRetryOnExceptions().contains(java.io.IOException.class));
+        Assert.assertFalse("Policy 集合不应包含后续添加的异常", policy.getRetryOnExceptions().contains(RuntimeException.class));
+
+        // 尝试直接修改 Policy 的集合应抛出异常
+        try {
+            policy.getRetryOnExceptions().add(IllegalArgumentException.class);
+            Assert.fail("应抛出 UnsupportedOperationException");
+        } catch (UnsupportedOperationException ignored) {
+        }
+    }
 }

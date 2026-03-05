@@ -6,6 +6,7 @@ import com.team4u.framework.retry.backoff.Backoff;
 import lombok.Getter;
 
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashSet;
 import java.util.Set;
 
@@ -31,8 +32,8 @@ public class RetryPolicy {
         this.totalAttempts = builder.totalAttempts;
         this.inMemoryAttempts = builder.inMemoryAttempts;
         this.backoff = builder.backoff;
-        this.retryOnExceptions = builder.retryOnExceptions;
-        this.abortOnExceptions = builder.abortOnExceptions;
+        this.retryOnExceptions = Collections.unmodifiableSet(new HashSet<>(builder.retryOnExceptions));
+        this.abortOnExceptions = Collections.unmodifiableSet(new HashSet<>(builder.abortOnExceptions));
         this.conditionExpression = builder.conditionExpression;
     }
 
@@ -98,7 +99,8 @@ public class RetryPolicy {
      * 剥离外层包装，提取真正的异常原因
      * <p>
      * 例如在异步操作中，真正的异常经常被包装在 CompletionException 中，
-     * 在代理层则可能被包装在 UndeclaredThrowableException、InvocationTargetException 或 ExecutionException 中。
+     * 在代理层则可能被包装在 UndeclaredThrowableException、InvocationTargetException 或
+     * ExecutionException 中。
      */
     private Throwable extractCause(Throwable ex) {
         return RetryExceptionUtil.unwrap(ex);
@@ -111,14 +113,12 @@ public class RetryPolicy {
     public static class RetryContext {
         private final int attempt;
         private final int totalAttempts;
-        private final int maxAttempts;
         private final Throwable cause;
         private final String message;
 
         public RetryContext(int attempt, int totalAttempts, Throwable cause) {
             this.attempt = attempt;
             this.totalAttempts = totalAttempts;
-            this.maxAttempts = totalAttempts;
             this.cause = cause;
             this.message = cause != null ? cause.getMessage() : null;
         }

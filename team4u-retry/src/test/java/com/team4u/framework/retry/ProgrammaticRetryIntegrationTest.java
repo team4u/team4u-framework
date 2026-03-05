@@ -34,7 +34,7 @@ public class ProgrammaticRetryIntegrationTest {
     public void testExecuteSuccessWithWAL() throws Exception {
         AtomicInteger callCount = new AtomicInteger();
 
-        String result = retryer.execute(taskType, payload, () -> {
+        String result = retryer.execute(taskType, () -> payload, () -> {
             callCount.incrementAndGet();
             return "success";
         });
@@ -54,7 +54,7 @@ public class ProgrammaticRetryIntegrationTest {
         AtomicInteger callCount = new AtomicInteger();
 
         try {
-            retryer.execute(taskType, payload, () -> {
+            retryer.execute(taskType, () -> payload, () -> {
                 callCount.incrementAndGet();
                 throw new RuntimeException("fail");
             });
