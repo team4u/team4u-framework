@@ -62,6 +62,41 @@ public final class ProxyBuilder<T> {
     }
 
     /**
+     * 静态工厂入口：为现有对象创建代理（自动推导类型并设置委托）
+     *
+     * @param delegate 委托对象
+     * @param <T>      泛型类型
+     * @return 构建器实例
+     */
+    public static <T> ProxyBuilder<T> forObject(T delegate) {
+        if (delegate == null) {
+            throw new IllegalArgumentException("Delegate object cannot be null");
+        }
+        // 注意：此处默认推导的是实现类类型，若需指定接口请使用 forClass()
+        @SuppressWarnings("unchecked")
+        Class<T> type = (Class<T>) delegate.getClass();
+        return new ProxyBuilder<>(type).delegate(delegate);
+    }
+
+    /**
+     * 极简快捷入口：一步到位生成带拦截器的代理对象
+     *
+     * @param delegate     委托对象
+     * @param interceptors 拦截器列表
+     * @param <T>          对象类型
+     * @return 代理对象实例
+     */
+    public static <T> T proxy(T delegate, MethodInterceptor... interceptors) {
+        ProxyBuilder<T> builder = forObject(delegate);
+        if (interceptors != null) {
+            for (MethodInterceptor i : interceptors) {
+                builder.intercept(i);
+            }
+        }
+        return builder.build();
+    }
+
+    /**
      * 添加代理类需要额外实现的接口
      *
      * @param interfaces 接口列表
@@ -91,6 +126,15 @@ public final class ProxyBuilder<T> {
     }
 
     /**
+     * 设定委托对象的简写方法
+     *
+     * @see #withDelegate(Object)
+     */
+    public ProxyBuilder<T> delegate(Object delegate) {
+        return withDelegate(delegate);
+    }
+
+    /**
      * 添加自定义的底层方法拦截器。
      * 执行顺序与添加顺序一致（先进先出）。
      *
@@ -102,6 +146,15 @@ public final class ProxyBuilder<T> {
             this.interceptors.add(interceptor);
         }
         return this;
+    }
+
+    /**
+     * 添加拦截器的简写方法
+     *
+     * @see #addInterceptor(MethodInterceptor)
+     */
+    public ProxyBuilder<T> intercept(MethodInterceptor interceptor) {
+        return addInterceptor(interceptor);
     }
 
     /**

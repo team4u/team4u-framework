@@ -128,13 +128,6 @@ CompletableFuture<String> future = retryer.executeAsync(
 
 > 说明：并非所有包装异常都会被剥离。例如普通 `RuntimeException(new BizException(...))` 不在自动解包范围内。
 
-### 4) 内存预算自动推导
-
-当 `inMemoryAttempts` 未配置时，按 durability 推导：
-
-- `MEMORY_ONLY`：`inMemoryAttempts = totalAttempts`
-- `MEMORY_FALLBACK / STRONG_CONSISTENCY`：`inMemoryAttempts = min(2, totalAttempts)`
-
 ---
 
 ## 编程式重试
@@ -186,15 +179,64 @@ public interface PayService {
 
 ### 2) 接入拦截器
 
+#### 方式一：使用 RetryProxyFactory (推荐)
+
 ```java
-PayService proxy = ProxyBuilder.forClass(PayService.class)
-        .withDelegate(new PayServiceImpl())
-        .addInterceptor(new RetryInterceptor(retryBackend))
+PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), retryBackend);
+```
+
+#### 方式二：使用 ProxyBuilder 极简 API
+
+```java
+PayService proxy = ProxyBuilder.proxy(new PayServiceImpl(), new RetryInterceptor(retryBackend));
+```
+
+#### 方式三：使用流式 API (灵活配置)
+
+```java
+PayService proxy = ProxyBuilder.forObject(new PayServiceImpl())
+        .intercept(new RetryInterceptor(retryBackend))
         .build();
 ```
 
 - 拦截器内部采用全局单例 `SCHEDULER`，具备线程安全初始化和防资源泄漏设计。
 - **参数序列化容错**：若参数中包含不可序列化对象，系统会记录错误摘要而非阻断主业务流程。
+
+### 3) Spring 自动代理 (零编程接入)
+
+在 Spring 环境下，你可以开启自动扫描功能，系统会自动为所有标记了 `@Retryable` 的 Bean 生成代理。
+
+#### 开启功能
+
+```java
+@Configuration
+@EnableRetry // 开启重试自动代理扫描
+public class RetryConfig {
+
+    @Bean
+    public RetryBackend retryBackend() {
+        // 注册重试后端实现
+        return new MemoryRetryBackend();
+    }
+}
+```
+
+#### 使用方式
+
+```java
+@Service
+public class PayServiceImpl implements PayService {
+
+    @Override
+    @Retryable("pay-policy") // 直接标注注解即可，无需手动创建代理
+    public String notifyPay(String orderId) {
+        // ... 业务逻辑
+    }
+}
+```
+
+- **实现原理**：通过 `BeanPostProcessor` 拦截 Bean 初始化，利用 `team4u-proxy` 自动织入。
+- **兼容性**：支持 Spring 容器内的 Bean，同时支持通过 `BeanManager` 获取重试后端。
 
 ---
 
@@ -210,6 +252,29 @@ PayService proxy = ProxyBuilder.forClass(PayService.class)
 
 - 实现 `RetryBackend` 存储接口。
 - 注册 `RecoveryHandler` 按 `taskType` 路由恢复逻辑。
+
+### 3) MEMORY_FALLBACK 次数计算（重点）
+
+设：
+
+- `T = totalAttempts`（全局总尝试次数，**包含首次**）
+- `M = inMemoryAttempts`（前台内存尝试预算，**包含首次**）
+
+则：
+
+1. 前台最多执行 `M` 次。
+2. 仅当 `T == -1`（无限）或 `M < T` 时，内存耗尽后才会转后台。
+3. 有限重试（`T != -1`）时，后台可用剩余次数为 `T - M`。
+4. 未显式配置 `M` 时：
+   - `MEMORY_FALLBACK` 默认 `M = min(2, T)`
+   - 若 `T = -1`，默认 `M = 2`
+5. 转后台时的首次延迟，按“下一次尝试编号”计算，即 `policy.getDelayMillis(M + 1)`（有限场景会受 `T` 上限约束）。
+
+示例：
+
+- `T=5, M=2`：前台 2 次，后台最多 3 次。
+- `T=2, M=2`：前台 2 次，不会转后台。
+- `T=-1, M=2`：前台 2 次后可持续转后台（由后台系统策略决定最终上限）。
 
 ---
 

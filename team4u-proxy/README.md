@@ -53,9 +53,9 @@ public interface UserService {
 // 2. 真实实现
 UserService target = name -> "Hello, " + name;
 
-// 3. 构建代理
+// 3. 构建代理 (使用 forClass 指定接口，使用 delegate 设置委托)
 UserService proxy = ProxyBuilder.forClass(UserService.class)
-    .withDelegate(target)
+    .delegate(target)
     .build();
 
 System.out.println(proxy.sayHello("World")); // 输出: Hello, World
@@ -63,16 +63,22 @@ System.out.println(proxy.sayHello("World")); // 输出: Hello, World
 
 ### 进阶用法：类代理（非接口）
 
-得益于 ByteBuddy 引擎，你可以直接为普通类创建代理，而无需定义接口。
+得益于类型自动推导，你可以使用 `forObject` 快速为普通类创建代理。
 
 ```java
 public class OrderService {
     public void process(String id) { ... }
 }
 
-OrderService proxy = ProxyBuilder.forClass(OrderService.class)
-    .withDelegate(new OrderService())
-    .build();
+OrderService proxy = ProxyBuilder.forObject(new OrderService()).build();
+```
+
+### 极简用法：一键生成代理
+
+如果你只需要挂载拦截器，可以使用静态快捷方法：
+
+```java
+UserService proxy = ProxyBuilder.proxy(new UserServiceImpl(), new MyInterceptor());
 ```
 
 ---
@@ -94,7 +100,7 @@ public class RawUserProcessor {
 
 // 代理依然能将其方法映射到 UserService 接口上
 UserService proxy = ProxyBuilder.forClass(UserService.class)
-    .withDelegate(new RawUserProcessor())
+    .delegate(new RawUserProcessor())
     .build();
 ```
 
@@ -102,8 +108,7 @@ UserService proxy = ProxyBuilder.forClass(UserService.class)
 通过 `Tracker` 接口，你可以轻松实现日志记录、耗时统计或异常审计。
 
 ```java
-UserService proxy = ProxyBuilder.forClass(UserService.class)
-    .withDelegate(target)
+UserService proxy = ProxyBuilder.forObject(target)
     .withTracker(new Tracker() {
         @Override
         public void before(Object proxy, Method method, Object[] args) {
@@ -114,12 +119,13 @@ UserService proxy = ProxyBuilder.forClass(UserService.class)
     .build();
 ```
 
+
 ### 动态热交换 (HotSwap)
 允许在应用运行期间，线程安全地替换底层的目标对象。
 
 ```java
 UserService proxy = ProxyBuilder.forClass(UserService.class)
-    .withDelegate(v1Instance)
+    .delegate(v1Instance)
     .enableHotswap() // 开启热交换能力
     .build();
 
@@ -180,7 +186,7 @@ String url = safeProxy.getDb().getUrl();
 
 ## 扩展性
 
-你可以通过实现 `MethodInterceptor` 接口来开发自己的拦截器，并通过 `addInterceptor()` 注入到职责链中，实现诸如权限校验、缓存拦截等自定义功能。
+你可以通过实现 `MethodInterceptor` 接口来开发自己的拦截器，并通过 `intercept()` 注入到职责链中，实现诸如权限校验、缓存拦截等自定义功能。
 
 ```java
 public class MyAuthInterceptor implements MethodInterceptor {

@@ -69,6 +69,7 @@ public class RetryInterceptor implements MethodInterceptor {
                     () -> buildSnapshot(invocation).toJson(),
                     () -> {
                         try {
+                            // 此处必须调用 invocation.proceed() 推进拦截器链
                             @SuppressWarnings("unchecked")
                             CompletableFuture<Object> cf = (CompletableFuture<Object>) invocation.proceed();
                             return cf;
@@ -80,19 +81,27 @@ public class RetryInterceptor implements MethodInterceptor {
                     },
                     SCHEDULER);
         } else {
-            return retryer.execute(
-                    policyKey,
-                    () -> buildSnapshot(invocation).toJson(),
-                    () -> {
-                        try {
-                            return invocation.proceed();
-                        } catch (Throwable t) {
-                            if (t instanceof Exception) {
-                                throw (Exception) t;
+            // 注意：retryer.execute 内部会调用 task.call()，
+            // 而 task.call() 应当是 invocation.proceed() 以便让后续拦截器链（如果有）继续执行
+            try {
+                return retryer.execute(
+                        policyKey,
+                        () -> buildSnapshot(invocation).toJson(),
+                        () -> {
+                            try {
+                                return invocation.proceed();
+                            } catch (Exception e) {
+                                throw e;
+                            } catch (Throwable t) {
+                                throw new RuntimeException(t);
                             }
-                            throw new RuntimeException(t);
                         }
-                    });
+                );
+            } catch (Exception e) {
+                throw e;
+            } catch (Throwable t) {
+                throw new RuntimeException(t);
+            }
         }
     }
 
