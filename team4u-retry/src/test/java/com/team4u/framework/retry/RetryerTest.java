@@ -25,7 +25,7 @@ public class RetryerTest {
     public void testSyncExecuteSuccessAfterRetries() throws Exception {
         // 测试同步执行：失败若干次后成功
         RetryPolicy policy = RetryPolicy.builder()
-                .totalAttempts(3)
+                .maxAttempts(3)
                 .backoff(Backoff.fixed(10)) // 为了测试速度，使用很小的延迟
                 .build();
 
@@ -48,7 +48,7 @@ public class RetryerTest {
     public void testSyncExecuteExceedTotalAttempts() throws Exception {
         // 测试同步执行：超过全局总尝试次数抛出异常
         RetryPolicy policy = RetryPolicy.builder()
-                .totalAttempts(3)
+                .maxAttempts(3)
                 .backoff(Backoff.fixed(5))
                 .build();
 
@@ -64,7 +64,7 @@ public class RetryerTest {
     public void testAsyncExecuteSuccessAfterRetries() throws Exception {
         // 测试异步执行：失败若干次后成功
         RetryPolicy policy = RetryPolicy.builder()
-                .totalAttempts(3)
+                .maxAttempts(3)
                 .backoff(Backoff.fixed(10))
                 .build();
 
@@ -97,7 +97,7 @@ public class RetryerTest {
     public void testAsyncExecuteExceedTotalAttempts() throws Exception {
         // 测试异步执行：超过全局总尝试次数失败
         RetryPolicy policy = RetryPolicy.builder()
-                .totalAttempts(2)
+                .maxAttempts(2)
                 .backoff(Backoff.fixed(5))
                 .build();
 
@@ -129,7 +129,7 @@ public class RetryerTest {
     @Test
     public void testPersistentDurabilityDefaultInMemoryAttempts() {
         RetryPolicy policy = RetryPolicy.builder()
-                .totalAttempts(5)
+                .maxAttempts(5)
                 .build();
 
         AtomicInteger submitCount = new AtomicInteger(0);
@@ -274,7 +274,7 @@ public class RetryerTest {
     @Test
     public void testDeterministicIntentId() {
         RetryPolicy policy = RetryPolicy.builder()
-                .totalAttempts(2)
+                .maxAttempts(2)
                 .inMemoryAttempts(1)
                 .build();
 
@@ -370,7 +370,7 @@ public class RetryerTest {
     @Test
     public void testInterruptedDuringBackoffShouldNotFallbackToBackend() throws Exception {
         RetryPolicy policy = RetryPolicy.builder()
-                .totalAttempts(3)
+                .maxAttempts(3)
                 .backoff(Backoff.fixed(5000))
                 .build();
 

@@ -28,7 +28,7 @@ public class PersistentFallbackTest {
 
             @Override
             public RetryPolicy getPolicy() {
-                return RetryPolicy.builder().totalAttempts(3).inMemoryAttempts(1).build();
+                return RetryPolicy.builder().maxAttempts(3).inMemoryAttempts(1).build();
             }
         });
 

@@ -53,7 +53,7 @@ import com.team4u.framework.retry.Retryer;
 import com.team4u.framework.retry.backoff.Backoff;
 
 RetryPolicy policy = RetryPolicy.builder()
-        .totalAttempts(3)
+        .maxAttempts(3)
         .backoff(Backoff.fixed(200))
         .build();
 
@@ -73,7 +73,7 @@ import java.util.concurrent.*;
 ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
 
 RetryPolicy policy = RetryPolicy.builder()
-        .totalAttempts(3)
+        .maxAttempts(3)
         .backoff(Backoff.fixed(100))
         .build();
 
@@ -95,17 +95,17 @@ CompletableFuture<String> future = retryer.executeAsync(
 
 `RetryPolicy` 是不可变对象（线程安全），可通过 Builder 组合以下能力：
 
-- `totalAttempts(int)`：全局总尝试次数（**包含首次调用**，内存 + 后端总和）。
+- `maxAttempts(int)`：全局总尝试次数（**包含首次调用**，内存 + 后端总和）。
 - `inMemoryAttempts(int)`：前台内存尝试预算（可选高级参数）。
-- `infiniteAttempts()`：无限重试（`totalAttempts = -1`）。
+- `infiniteAttempts()`：无限重试（`maxAttempts = -1`）。
 - `backoff(Backoff)`：延迟计算策略。
 - `retryOn(...)`：仅匹配这些异常及其子类时允许重试。
 - `abortOn(...)`：匹配这些异常及其子类时立刻终止重试。
-- `condition(String)`：Criterion 表达式条件重试（基于 `attempt/totalAttempts/cause/message`）。
+- `condition(String)`：Criterion 表达式条件重试（基于 `attempt/maxAttempts/cause/message`）。
 
 #### 判定顺序（`canRetry`）
 
-1. 次数上限判定：`currentAttempt >= totalAttempts`（且非无限）直接不可重试。
+1. 次数上限判定：`currentAttempt >= maxAttempts`（且非无限）直接不可重试。
 2. 异常解包（见下文）。
 3. `abortOn` 命中则不可重试。
 4. 若配置了 `retryOn` 且未命中，则不可重试。
@@ -257,7 +257,7 @@ public class RetryConfig { ... }
 
 设：
 
-- `T = totalAttempts`（全局总尝试次数，**包含首次**）
+- `T = maxAttempts`（全局总尝试次数，**包含首次**）
 - `M = inMemoryAttempts`（前台内存尝试预算，**包含首次**）
 
 则：
@@ -280,7 +280,7 @@ public class RetryConfig { ... }
 
 ## 关键边界与注意事项
 
-1. **`totalAttempts` 包含首次调用**。
+1. **`maxAttempts` 包含首次调用**。
 2. **`Error` 永远不会重试**（同步/异步均直接抛出）。
 3. **线程中断响应**：同步重试遵循 `InterruptedException`，检测到中断会立即恢复中断状态并终止重试链。
 4. **异步清理语义**：`STRONG_CONSISTENCY` 下的意图清理是异步的，不保证在业务返回前完成。

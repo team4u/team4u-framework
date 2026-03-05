@@ -15,7 +15,7 @@ public class DepthOptimizationTest {
     public void testErrorShouldNotRetry() throws Exception {
         AtomicInteger count = new AtomicInteger(0);
         Retryer retryer = Retryer.with(RetryPolicy.builder()
-                .totalAttempts(3)
+                .maxAttempts(3)
                 .build());
 
         retryer.execute(() -> {
@@ -32,7 +32,7 @@ public class DepthOptimizationTest {
         AtomicInteger count = new AtomicInteger(0);
         // 配置仅对 BizException 重试
         Retryer retryer = Retryer.with(RetryPolicy.builder()
-                .totalAttempts(2)
+                .maxAttempts(2)
                 .retryOn(BizException.class)
                 .build());
 

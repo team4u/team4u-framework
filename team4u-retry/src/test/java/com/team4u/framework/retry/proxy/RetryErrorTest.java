@@ -26,7 +26,7 @@ public class RetryErrorTest {
             @Override
             public RetryPolicy getPolicy() {
                 return RetryPolicy.builder()
-                        .totalAttempts(3)
+                        .maxAttempts(3)
                         .build();
             }
         });

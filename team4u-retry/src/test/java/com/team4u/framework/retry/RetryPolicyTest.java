@@ -15,7 +15,7 @@ public class RetryPolicyTest {
     public void testTotalAttempts() {
         // 测试全局总尝试次数限制
         RetryPolicy policy = RetryPolicy.builder()
-                .totalAttempts(3)
+                .maxAttempts(3)
                 .build();
 
         RuntimeException ex = new RuntimeException("test");
@@ -42,7 +42,7 @@ public class RetryPolicyTest {
     @Test
     public void testInMemoryAttemptsValidation() {
         try {
-            RetryPolicy.builder().totalAttempts(3).inMemoryAttempts(4).build();
+            RetryPolicy.builder().maxAttempts(3).inMemoryAttempts(4).build();
             Assert.fail("预期抛出 IllegalArgumentException");
         } catch (IllegalArgumentException e) {
             Assert.assertTrue(e.getMessage().contains("inMemoryAttempts"));
@@ -52,7 +52,7 @@ public class RetryPolicyTest {
     @Test
     public void testConditionExpression() {
         RetryPolicy policy = RetryPolicy.builder()
-                .totalAttempts(3)
+                .maxAttempts(3)
                 .condition("attempt <= 2 && message contains 'timeout'")
                 .build();
 

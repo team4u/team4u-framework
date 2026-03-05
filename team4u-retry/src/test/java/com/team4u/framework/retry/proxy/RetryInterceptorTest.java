@@ -28,7 +28,7 @@ public class RetryInterceptorTest {
             @Override
             public RetryPolicy getPolicy() {
                 return RetryPolicy.builder()
-                        .totalAttempts(4)
+                        .maxAttempts(4)
                         .backoff(Backoff.fixed(5))
                         // 强大的动态表达式过滤，仅当 message 包含 timeout，且是前 3 次尝试内才能重试
                         .condition("message contains 'timeout' && attempt < 4")

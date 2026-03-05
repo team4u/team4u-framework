@@ -16,7 +16,7 @@ public class RetryPolicyConfig {
     /**
      * 全局最大尝试次数（内存 + 后端总和，包含首次）
      */
-    private int totalAttempts = 3;
+    private int maxAttempts = 3;
     /**
      * 前台内存尝试次数预算（可选）
      */
@@ -49,4 +49,5 @@ public class RetryPolicyConfig {
      * 高级重试条件表达式 (team4u-criterion)
      */
     private String condition;
+
 }

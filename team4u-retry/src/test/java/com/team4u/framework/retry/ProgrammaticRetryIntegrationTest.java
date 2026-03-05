@@ -29,7 +29,7 @@ public class ProgrammaticRetryIntegrationTest {
 
         backend = new MockRetryBackend();
         retryer = Retryer.builder()
-                .policy(RetryPolicy.builder().totalAttempts(3).build())
+                .policy(RetryPolicy.builder().maxAttempts(3).build())
                 .backend(backend)
                 .durability(RetryDurability.STRONG_CONSISTENCY)
                 .build();

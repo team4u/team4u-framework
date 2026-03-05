@@ -60,7 +60,7 @@ public class PoisonDataTest {
     public void testMemoryFallbackGracefulFailure() throws Exception {
         Retryer retryer = Retryer.builder()
                 .policy(RetryPolicy.builder()
-                        .totalAttempts(3)
+                        .maxAttempts(3)
                         .inMemoryAttempts(1) // 强制 1 次内存尝试后降级
                         .build())
                 .backend(mockBackend)
@@ -130,7 +130,7 @@ public class PoisonDataTest {
     public void testAsyncMemoryFallbackGracefulFailure() throws Exception {
         Retryer retryer = Retryer.builder()
                 .policy(RetryPolicy.builder()
-                        .totalAttempts(3)
+                        .maxAttempts(3)
                         .inMemoryAttempts(1)
                         .build())
                 .backend(mockBackend)

@@ -167,7 +167,7 @@ public class Retryer {
      */
     private int getNextAttemptAfterInMemory() {
         return Math.min(inMemoryAttempts + 1,
-                policy.getTotalAttempts() == -1 ? inMemoryAttempts + 1 : policy.getTotalAttempts());
+                policy.getMaxAttempts() == -1 ? inMemoryAttempts + 1 : policy.getMaxAttempts());
     }
 
     /**
@@ -181,14 +181,14 @@ public class Retryer {
         if (policy.getInMemoryAttempts() != null) {
             return policy.getInMemoryAttempts();
         }
-        if (policy.getTotalAttempts() == -1) {
+        if (policy.getMaxAttempts() == -1) {
             return durability == RetryDurability.MEMORY_ONLY ? Integer.MAX_VALUE
                     : DEFAULT_IN_MEMORY_ATTEMPTS_FOR_PERSISTENCE;
         }
         if (durability == RetryDurability.MEMORY_ONLY) {
-            return policy.getTotalAttempts();
+            return policy.getMaxAttempts();
         }
-        return Math.min(DEFAULT_IN_MEMORY_ATTEMPTS_FOR_PERSISTENCE, policy.getTotalAttempts());
+        return Math.min(DEFAULT_IN_MEMORY_ATTEMPTS_FOR_PERSISTENCE, policy.getMaxAttempts());
     }
 
     /**
@@ -197,7 +197,7 @@ public class Retryer {
      * @return true 表示允许降级
      */
     private boolean shouldFallbackToBackend() {
-        return policy.getTotalAttempts() == -1 || inMemoryAttempts < policy.getTotalAttempts();
+        return policy.getMaxAttempts() == -1 || inMemoryAttempts < policy.getMaxAttempts();
     }
 
     /**

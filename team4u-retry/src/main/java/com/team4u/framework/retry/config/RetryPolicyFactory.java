@@ -19,7 +19,7 @@ public class RetryPolicyFactory {
     public static RetryPolicy create(String jsonConfig) {
         RetryPolicyConfig config = JSONUtil.toBean(jsonConfig, RetryPolicyConfig.class);
         RetryPolicy.Builder builder = RetryPolicy.builder()
-                .totalAttempts(config.getTotalAttempts())
+                .maxAttempts(config.getMaxAttempts())
                 .condition(config.getCondition());
 
         if (config.getInMemoryAttempts() != null) {

@@ -36,7 +36,7 @@ public class RetryDurabilityTest {
             @Override
             public RetryPolicy getPolicy() {
                 return RetryPolicy.builder()
-                        .totalAttempts(3)
+                        .maxAttempts(3)
                         .inMemoryAttempts(1)
                         .build();
             }

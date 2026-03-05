@@ -103,7 +103,7 @@ public class RetryDelegate {
         RetryTaskSnapshot snapshot = new RetryTaskSnapshot();
         snapshot.setTaskType(policyKey);
         snapshot.setExecutedAttempts(executedAttempts);
-        snapshot.setMaxAttempts(policy.getTotalAttempts());
+        snapshot.setMaxAttempts(policy.getMaxAttempts());
 
         snapshot.setBeanName(target.getClass().getName());
         snapshot.setMethodName(method.getName());

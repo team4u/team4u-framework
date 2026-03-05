@@ -36,7 +36,7 @@ public class RetrySpringTest {
             @Override
             public RetryPolicy getPolicy() {
                 return RetryPolicy.builder()
-                        .totalAttempts(3)
+                        .maxAttempts(3)
                         .backoff(Backoff.fixed(1))
                         .build();
             }
