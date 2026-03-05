@@ -86,7 +86,7 @@ public class RetryDelegate {
                         policyKey,
                         () -> buildSnapshot(method, target, args).toJson(),
                         proceedTask);
-            } catch (Exception e) {
+            } catch (Exception | Error e) {
                 throw e;
             } catch (Throwable t) {
                 throw new RuntimeException(t);

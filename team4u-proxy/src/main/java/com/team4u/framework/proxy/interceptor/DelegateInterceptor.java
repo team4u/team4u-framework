@@ -5,6 +5,7 @@ import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
 import com.team4u.framework.proxy.core.ProxyException;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
@@ -42,13 +43,19 @@ public class DelegateInterceptor implements MethodInterceptor {
         try {
             // 使用 ReflectUtil 统一执行，处理 accessible
             return ReflectUtil.invoke(currentDelegate, targetMethod, invocation.getArguments());
-        } catch (Exception e) {
-            // 剥离反射包裹的异常
-            Throwable cause = e.getCause();
-            if (cause != null) {
-                throw cause;
+        } catch (Throwable e) {
+            // 递归剥离反射包装异常 (InvocationTargetException) 或工具类包装异常 (RuntimeException)
+            Throwable cause = e;
+            while (cause.getCause() != null &&
+                    (cause instanceof InvocationTargetException
+                            || cause.getClass().getName().contains("InvocationTargetRuntimeException")
+                            || cause.getClass().getName().contains("UtilException"))) {
+                cause = cause.getCause();
+                if (cause instanceof InvocationTargetException) {
+                    cause = ((InvocationTargetException) cause).getTargetException();
+                }
             }
-            throw new ProxyException("Failed to invoke method on delegate: " + targetMethod.getName(), e);
+            throw cause;
         }
     }
 

@@ -27,6 +27,15 @@ public class RetryInterceptor implements MethodInterceptor {
     @Override
     public Object invoke(MethodInvocation invocation) throws Throwable {
         Retryable retryable = invocation.getMethod().getAnnotation(Retryable.class);
+        if (retryable == null && invocation.getTarget() != null) {
+            // 尝试从实现类的同签名方法上查找
+            try {
+                retryable = invocation.getTarget().getClass()
+                        .getMethod(invocation.getMethod().getName(), invocation.getMethod().getParameterTypes())
+                        .getAnnotation(Retryable.class);
+            } catch (NoSuchMethodException ignored) {
+            }
+        }
         return delegate.executeWithRetry(
                 invocation.getMethod(),
                 invocation.getTarget(),
@@ -35,7 +44,7 @@ public class RetryInterceptor implements MethodInterceptor {
                 () -> {
                     try {
                         return invocation.proceed();
-                    } catch (Exception e) {
+                    } catch (Exception | Error e) {
                         throw e;
                     } catch (Throwable t) {
                         throw new RuntimeException(t);

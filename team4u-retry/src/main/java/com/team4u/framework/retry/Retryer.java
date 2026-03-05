@@ -110,6 +110,9 @@ public class Retryer {
             if (cause instanceof Exception) {
                 throw (Exception) cause;
             }
+            if (cause instanceof Error) {
+                throw (Error) cause;
+            }
             throw new RuntimeException(cause);
         }
     }
@@ -130,6 +133,9 @@ public class Retryer {
                 if (!canRetryInMemory(attempt, cause)) {
                     if (cause instanceof Exception) {
                         throw (Exception) cause;
+                    }
+                    if (cause instanceof Error) {
+                        throw (Error) cause;
                     }
                     throw new RuntimeException(cause);
                 }
