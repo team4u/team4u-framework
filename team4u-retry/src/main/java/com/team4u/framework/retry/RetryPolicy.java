@@ -120,7 +120,7 @@ public class RetryPolicy {
             this.attempt = attempt;
             this.totalAttempts = totalAttempts;
             this.cause = cause;
-            this.message = cause != null ? cause.getMessage() : null;
+            this.message = (cause != null && cause.getMessage() != null) ? cause.getMessage() : "";
         }
     }
 

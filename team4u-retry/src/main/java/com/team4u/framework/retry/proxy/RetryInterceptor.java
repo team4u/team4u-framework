@@ -29,7 +29,16 @@ import java.util.stream.Collectors;
 @AllArgsConstructor
 public class RetryInterceptor implements MethodInterceptor {
 
-    private static ScheduledExecutorService scheduler;
+    private static final ScheduledExecutorService SCHEDULER = Executors.newScheduledThreadPool(
+            Runtime.getRuntime().availableProcessors(),
+            r -> {
+                Thread thread = new Thread(r);
+                thread.setName("retry-interceptor-scheduler-" + thread.hashCode());
+                thread.setDaemon(true);
+                return thread;
+            }
+    );
+
     private RetryBackend backend;
 
     @Override
@@ -69,7 +78,7 @@ public class RetryInterceptor implements MethodInterceptor {
                             return fail;
                         }
                     },
-                    getScheduler());
+                    SCHEDULER);
         } else {
             return retryer.execute(
                     policyKey,
@@ -95,16 +104,14 @@ public class RetryInterceptor implements MethodInterceptor {
                 .map(Class::getName)
                 .collect(Collectors.toList()));
         snapshot.setArgJsonValues(Arrays.stream(invocation.getArguments())
-                .map(JSONUtil::toJsonStr)
+                .map(arg -> {
+                    try {
+                        return JSONUtil.toJsonStr(arg);
+                    } catch (Exception e) {
+                        return "Serialization failed: " + e.getMessage();
+                    }
+                })
                 .collect(Collectors.toList()));
         return snapshot;
     }
-
-    private synchronized ScheduledExecutorService getScheduler() {
-        if (scheduler == null) {
-            scheduler = Executors.newScheduledThreadPool(Runtime.getRuntime().availableProcessors());
-        }
-        return scheduler;
-    }
-
 }

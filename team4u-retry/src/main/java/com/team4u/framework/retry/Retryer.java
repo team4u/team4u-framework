@@ -1,6 +1,7 @@
 package com.team4u.framework.retry;
 
 import java.util.concurrent.*;
+import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 /**
@@ -12,13 +13,15 @@ public class Retryer {
 
     private static final int DEFAULT_IN_MEMORY_ATTEMPTS_FOR_PERSISTENCE = 2;
 
+    private static final AtomicInteger THREAD_COUNTER = new AtomicInteger();
+
     private static final Executor CLEANUP_EXECUTOR = new ThreadPoolExecutor(
             1, Runtime.getRuntime().availableProcessors(),
             60L, TimeUnit.SECONDS,
             new LinkedBlockingQueue<>(1000),
             r -> {
                 Thread thread = new Thread(r);
-                thread.setName("retry-cleanup-pool-" + thread.hashCode());
+                thread.setName("retry-cleanup-pool-" + THREAD_COUNTER.incrementAndGet());
                 thread.setDaemon(true);
                 return thread;
             },
@@ -116,6 +119,9 @@ public class Retryer {
         while (true) {
             try {
                 return task.call();
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw e;
             } catch (Throwable ex) {
                 if (ex instanceof Error) {
                     throw (Error) ex;
@@ -248,10 +254,15 @@ public class Retryer {
 
         if (canRetryInMemory(attempt, cause)) {
             long delay = policy.getDelayMillis(attempt);
-            scheduler.schedule(
-                    () -> attemptAsync(taskType, payloadSupplier, payload, intentId, asyncTask, scheduler, promise,
-                            attempt + 1),
-                    delay, TimeUnit.MILLISECONDS);
+            try {
+                scheduler.schedule(
+                        () -> attemptAsync(taskType, payloadSupplier, payload, intentId, asyncTask, scheduler, promise,
+                                attempt + 1),
+                        delay, TimeUnit.MILLISECONDS);
+            } catch (Exception e) {
+                // 如果调度失败（如线程池关闭），必须完成 promise 以免调用方挂起
+                promise.completeExceptionally(e);
+            }
         } else {
             // 内存重试彻底耗尽，降级到后端存储
             if (backend != null && durability != RetryDurability.MEMORY_ONLY && shouldFallbackToBackend()) {
