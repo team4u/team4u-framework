@@ -219,8 +219,24 @@ public class PayServiceImpl implements PayService {
 }
 ```
 
-- **实现原理**：通过 `BeanPostProcessor` 拦截 Bean 初始化，利用 `team4u-proxy` 自动织入。
-- **兼容性**：支持 Spring 容器内的 Bean，同时支持通过 `BeanManager` 获取重试后端。
+#### AOP 代理模式说明
+
+本框架遵循 Spring 的标准 AOP 机制，不再硬编码强制使用 CGLIB。代理模式完全由您的 Spring 环境决定：
+
+- **Spring Boot 2.x+**：默认强制使用 CGLIB 代理（`spring.aop.proxy-target-class=true`）。
+- **标准 Spring 项目**：默认优先使用 JDK 动态代理（若目标类实现了接口）。
+
+若需显式自定义代理行为（例如在非 Spring Boot 环境下强制使用 CGLIB 以支持无接口类的重试），请在您的配置类上添加如下注解：
+
+```java
+@Configuration
+@EnableRetry
+@EnableAspectJAutoProxy(proxyTargetClass = true) // 显式开启并强制 CGLIB
+public class RetryConfig { ... }
+```
+
+- **实现原理**：通过注册标准的 `Advisor`，利用 Spring AOP 基础设施自动织入。
+- **兼容性**：完美兼容 Spring 事务（`@Transactional`）等其他切面。建议通过 `@Order` 调整优先级（默认为 `LOWEST_PRECEDENCE - 1`，通常在事务之外重试）。
 
 ---
 

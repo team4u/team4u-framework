@@ -4,7 +4,6 @@ import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.retry.RetryBackend;
 import com.team4u.framework.retry.proxy.Retryable;
 import org.springframework.aop.Pointcut;
-import org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator;
 import org.springframework.aop.support.AbstractBeanFactoryPointcutAdvisor;
 import org.springframework.aop.support.annotation.AnnotationMatchingPointcut;
 import org.springframework.beans.BeansException;
@@ -17,13 +16,6 @@ import org.springframework.context.annotation.Configuration;
  */
 @Configuration
 public class RetrySpringConfiguration {
-
-    @Bean
-    public DefaultAdvisorAutoProxyCreator defaultAdvisorAutoProxyCreator() {
-        DefaultAdvisorAutoProxyCreator creator = new DefaultAdvisorAutoProxyCreator();
-        creator.setProxyTargetClass(true);
-        return creator;
-    }
 
     @Bean
     public RetryAdvisor retryAdvisor(BeanFactory beanFactory) {

@@ -8,6 +8,7 @@ import com.team4u.framework.retry.proxy.Retryable;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -76,6 +77,17 @@ public class RetrySpringTest {
     @Configuration
     @EnableRetry
     public static class TestConfig {
+
+        /**
+         * 显式注册代理创建器，模拟调用方（如 Spring Boot）的环境。
+         * 这比在框架配置中硬编码更具灵活性。
+         */
+        @Bean
+        public DefaultAdvisorAutoProxyCreator defaultAdvisorAutoProxyCreator() {
+            DefaultAdvisorAutoProxyCreator creator = new DefaultAdvisorAutoProxyCreator();
+            creator.setProxyTargetClass(true);
+            return creator;
+        }
 
         private final OrderServiceImpl orderService = new OrderServiceImpl();
         private final UserService userService = new UserService();
