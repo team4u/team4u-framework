@@ -15,16 +15,18 @@ public class RetryExecutorManager {
 
     private static final Log log = LogFactory.get();
     private static final RetryExecutorManager INSTANCE = new RetryExecutorManager();
+    private static final String DAEMON_PROPERTY = "team4u.retry.executors.daemon";
 
     private volatile ScheduledExecutorService globalScheduler;
     private volatile ExecutorService globalCleanupExecutor;
     private volatile boolean isShutdown = false;
 
     private RetryExecutorManager() {
-        // 1. 异步重试调度器：不使用守护线程，以支持在 JVM 退出前完成必要的任务
+        boolean daemon = isDaemonExecutors();
+        // 1. 异步重试调度器：默认非守护线程，可通过系统参数切换为守护线程
         this.globalScheduler = Executors.newScheduledThreadPool(
                 Math.max(2, Runtime.getRuntime().availableProcessors()),
-                new NamedThreadFactory("retry-scheduler-", false));
+                new NamedThreadFactory("retry-scheduler-", daemon));
 
         // 2. 意图清理线程池：使用 DiscardPolicy 保护调用方不被阻塞
         // WAL 模式下，清理失败的任务会由后续的恢复机制处理
@@ -32,7 +34,7 @@ public class RetryExecutorManager {
                 2, Math.max(4, Runtime.getRuntime().availableProcessors()),
                 60L, TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(2000),
-                new NamedThreadFactory("retry-cleanup-", false),
+                new NamedThreadFactory("retry-cleanup-", daemon),
                 (r, executor) -> {
                     // 降级策略：丢弃并记录告警，防止阻塞调用线程（如 Netty IO 线程）
                     log.warn("Retry cleanup task rejected! Queue is full. Relying on background recovery.");
@@ -62,14 +64,15 @@ public class RetryExecutorManager {
         if (!isShutdown) {
             return;
         }
+        boolean daemon = isDaemonExecutors();
         this.globalScheduler = Executors.newScheduledThreadPool(
                 Math.max(2, Runtime.getRuntime().availableProcessors()),
-                new NamedThreadFactory("retry-scheduler-", false));
+                new NamedThreadFactory("retry-scheduler-", daemon));
         this.globalCleanupExecutor = new ThreadPoolExecutor(
                 2, Math.max(4, Runtime.getRuntime().availableProcessors()),
                 60L, TimeUnit.SECONDS,
                 new LinkedBlockingQueue<>(2000),
-                new NamedThreadFactory("retry-cleanup-", false),
+                new NamedThreadFactory("retry-cleanup-", daemon),
                 (r, executor) -> {
                     log.warn("Retry cleanup task rejected! Queue is full. Relying on background recovery.");
                 });
@@ -132,6 +135,10 @@ public class RetryExecutorManager {
             globalCleanupExecutor.shutdownNow();
             Thread.currentThread().interrupt();
         }
+    }
+
+    private boolean isDaemonExecutors() {
+        return Boolean.parseBoolean(System.getProperty(DAEMON_PROPERTY, "false"));
     }
 
     /**

@@ -61,12 +61,14 @@ public class RetryDelegate {
                         .map(NamedRetryPolicy::getPolicy)
                         .orElseThrow(() -> new IllegalArgumentException("Retry policy not found. Key: " + policyKey)));
 
-        RetryDurability durability = RetryDurability.valueOf(retryable.durability().name());
+        RetryDurability durability = retryable.durability();
+        RetryBackend backend = backendSupplier != null ? backendSupplier.get() : null;
+        validateBackendIfNeeded(method, policyKey, durability, backend);
         boolean isAsync = CompletableFuture.class.isAssignableFrom(method.getReturnType());
 
         Retryer retryer = Retryer.builder()
                 .policy(policy)
-                .backend(backendSupplier != null ? backendSupplier.get() : null)
+                .backend(backend)
                 .durability(durability)
                 .build();
 
@@ -102,6 +104,16 @@ public class RetryDelegate {
         }
     }
 
+    private void validateBackendIfNeeded(Method method, String policyKey, RetryDurability durability, RetryBackend backend) {
+        if (durability == RetryDurability.MEMORY_ONLY || backend != null) {
+            return;
+        }
+        String methodSignature = method != null ? method.toGenericString() : "<unknown-method>";
+        throw new IllegalStateException(
+                "Retry backend is required when durability is [" + durability + "], but none was provided. " +
+                        "method=" + methodSignature + ", policyKey=" + policyKey);
+    }
+
     private RetryTaskSnapshot buildSnapshot(Method method,
                                             Object target,
                                             Object[] args,
@@ -113,16 +125,18 @@ public class RetryDelegate {
         snapshot.setExecutedAttempts(executedAttempts);
         snapshot.setMaxAttempts(policy.getMaxAttempts());
 
-        snapshot.setBeanName(target.getClass().getName());
+        snapshot.setBeanName(target != null ? target.getClass().getName() : method.getDeclaringClass().getName());
         snapshot.setMethodName(method.getName());
         snapshot.setArgTypes(Arrays.stream(method.getParameterTypes())
                 .map(Class::getName)
                 .collect(Collectors.toList()));
 
+        Object[] safeArgs = args != null ? args : new Object[0];
         Parameter[] parameters = method.getParameters();
         List<String> argJsonValues = new ArrayList<>();
         for (int i = 0; i < parameters.length; i++) {
-            argJsonValues.add(serializer.serialize(parameters[i], args[i]));
+            Object argValue = i < safeArgs.length ? safeArgs[i] : null;
+            argJsonValues.add(serializer.serialize(parameters[i], argValue));
         }
         snapshot.setArgJsonValues(argJsonValues);
 

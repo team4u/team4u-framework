@@ -112,6 +112,9 @@ CompletableFuture<String> future = retryer.executeAsync(
 5. 若配置了 `condition`，则以表达式结果为准（内置 `message` 防空保护）。
 6. 其余情况可重试。
 
+`getDelayMillis(currentAttempt)` 的 `currentAttempt` 语义为“当前失败对应的尝试序号”。
+例如第 N 次执行失败后，下一次执行前等待 `getDelayMillis(N)`。
+
 ### 2) Backoff（退避算法）
 
 - `Backoff.fixed(delay)`：固定间隔。
@@ -184,7 +187,8 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), retryBack
 ```
 
 - 拦截器内部采用全局单例 `SCHEDULER`，具备线程安全初始化和防资源泄漏设计。
-- **参数序列化容错**：若参数中包含不可序列化对象，系统会记录错误摘要而非阻断主业务流程。
+- **Backend 要求**：当 `durability` 不是 `MEMORY_ONLY` 时必须提供 `RetryBackend`，否则会抛出带有方法签名和策略 key 的
+  `IllegalStateException`。
 
 ### 3) Spring 自动代理 (零编程接入)
 
@@ -236,7 +240,8 @@ public class RetryConfig { ... }
 ```
 
 - **实现原理**：通过注册标准的 `Advisor`，利用 Spring AOP 基础设施自动织入。
-- **兼容性**：完美兼容 Spring 事务（`@Transactional`）等其他切面。建议通过 `@Order` 调整优先级（默认为 `LOWEST_PRECEDENCE - 1`，通常在事务之外重试）。
+- **兼容性**：完美兼容 Spring 事务（`@Transactional`）等其他切面。建议通过 `@Order` 调整优先级（默认为
+  `LOWEST_PRECEDENCE - 1`，通常在事务之外重试）。
 
 ---
 
@@ -266,8 +271,8 @@ public class RetryConfig { ... }
 2. 仅当 `T == -1`（无限）或 `M < T` 时，内存耗尽后才会转后台。
 3. 有限重试（`T != -1`）时，后台可用剩余次数为 `T - M`。
 4. 未显式配置 `M` 时：
-   - `MEMORY_FALLBACK` 默认 `M = min(2, T)`
-   - 若 `T = -1`，默认 `M = 2`
+    - `MEMORY_FALLBACK` 默认 `M = min(2, T)`
+    - 若 `T = -1`，默认 `M = 2`
 5. 转后台时的首次延迟，按“下一次尝试编号”计算，即 `policy.getDelayMillis(M + 1)`（有限场景会受 `T` 上限约束）。
 
 示例：
@@ -286,6 +291,8 @@ public class RetryConfig { ... }
 4. **异步清理语义**：`STRONG_CONSISTENCY` 下的意图清理是异步的，不保证在业务返回前完成。
 5. **策略热更新**：通过 `DynamicRetryPolicyRegistry` 实现，策略变更即时生效。
 6. **解包深度**：默认为 10 层，足以覆盖绝大多数中间件和代理框架嵌套。
+7. **线程池退出行为**：`RetryExecutorManager` 默认使用非 daemon 线程。非 Spring 场景建议在应用关闭时显式调用
+   `RetryExecutorManager.global().shutdown()`；如需 daemon 线程可设置系统参数 `-Dteam4u.retry.executors.daemon=true`。
 
 ---
 

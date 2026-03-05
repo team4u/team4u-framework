@@ -84,7 +84,8 @@ public class RetryPolicy {
     /**
      * 获取下次重试前需要等待的时间
      *
-     * @param currentAttempt 当前已尝试次数
+     * @param currentAttempt 当前失败对应的尝试序号（从 1 开始）
+     *                       例如第 N 次执行失败后，调用 getDelayMillis(N) 计算下一次前的等待时间
      * @return 等待时间的毫秒数
      */
     public long getDelayMillis(int currentAttempt) {
