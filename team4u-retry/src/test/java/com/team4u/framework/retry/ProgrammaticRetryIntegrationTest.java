@@ -1,5 +1,6 @@
 package com.team4u.framework.retry;
 
+import com.team4u.framework.retry.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import org.junit.Assert;
@@ -22,6 +23,10 @@ public class ProgrammaticRetryIntegrationTest {
 
     @Before
     public void setUp() {
+        // 确保每次测试前线程池均处于可用状态，
+        // 防止 Spring 上下文关闭后静态单例被永久关闭
+        RetryExecutorManager.global().reset();
+
         backend = new MockRetryBackend();
         retryer = Retryer.builder()
                 .policy(RetryPolicy.builder().totalAttempts(3).build())

@@ -1,7 +1,10 @@
 package com.team4u.framework.retry;
 
+import com.team4u.framework.retry.exception.RetrySerializationException;
+
+import com.team4u.framework.retry.concurrent.RetryExecutorManager;
+
 import java.util.concurrent.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Supplier;
 
 /**
@@ -12,20 +15,6 @@ import java.util.function.Supplier;
 public class Retryer {
 
     private static final int DEFAULT_IN_MEMORY_ATTEMPTS_FOR_PERSISTENCE = 2;
-
-    private static final AtomicInteger THREAD_COUNTER = new AtomicInteger();
-
-    private static final Executor CLEANUP_EXECUTOR = new ThreadPoolExecutor(
-            1, Runtime.getRuntime().availableProcessors(),
-            60L, TimeUnit.SECONDS,
-            new LinkedBlockingQueue<>(1000),
-            r -> {
-                Thread thread = new Thread(r);
-                thread.setName("retry-cleanup-pool-" + THREAD_COUNTER.incrementAndGet());
-                thread.setDaemon(true);
-                return thread;
-            },
-            new ThreadPoolExecutor.CallerRunsPolicy());
 
     private final RetryPolicy policy;
     private final RetryBackend backend;
@@ -38,7 +27,8 @@ public class Retryer {
         this.backend = builder.backend;
         this.durability = builder.durability != null ? builder.durability : RetryDurability.MEMORY_ONLY;
         this.inMemoryAttempts = resolveInMemoryAttempts(policy, this.durability);
-        this.cleanupExecutor = builder.cleanupExecutor != null ? builder.cleanupExecutor : CLEANUP_EXECUTOR;
+        this.cleanupExecutor = builder.cleanupExecutor != null ? builder.cleanupExecutor
+                : RetryExecutorManager.global().getCleanupExecutor();
     }
 
     /**
@@ -83,8 +73,12 @@ public class Retryer {
         String payload = null;
 
         if (durability == RetryDurability.STRONG_CONSISTENCY && backend != null) {
-            payload = payloadSupplier.get();
-            intentId = backend.saveIntent(taskType, payload);
+            try {
+                payload = payloadSupplier.get();
+                intentId = backend.saveIntent(taskType, payload);
+            } catch (RetrySerializationException e) {
+                throw new IllegalStateException("强一致性级别要求参数必须可序列化，但序列化失败", e);
+            }
         }
 
         try {
@@ -99,12 +93,19 @@ public class Retryer {
                 throw (Error) ex;
             }
             if (backend != null && durability != RetryDurability.MEMORY_ONLY && shouldFallbackToBackend()) {
-                long nextDelay = policy.getDelayMillis(getNextAttemptAfterInMemory());
-                if (payload == null) {
-                    payload = payloadSupplier.get();
+                try {
+                    long nextDelay = policy.getDelayMillis(getNextAttemptAfterInMemory());
+                    if (payload == null) {
+                        payload = payloadSupplier.get();
+                    }
+                    backend.submitForDelay(intentId, taskType, payload, nextDelay);
+                    throw new RetryExhaustedException("内存重试耗尽，已转入分布式后台队列", ex);
+                } catch (RetrySerializationException serializationEx) {
+                    // 降级时发现无法序列化，放弃入队，避免毒药数据
+                    RetryExhaustedException finalEx = new RetryExhaustedException("内存重试耗尽，且参数序列化失败导致无法转入后台队列", ex);
+                    finalEx.addSuppressed(serializationEx);
+                    throw finalEx;
                 }
-                backend.submitForDelay(intentId, taskType, payload, nextDelay);
-                throw new RetryExhaustedException("内存重试耗尽，已转入分布式后台队列", ex);
             }
             Throwable cause = RetryExceptionUtil.unwrap(ex);
             if (cause instanceof Exception) {
@@ -194,8 +195,12 @@ public class Retryer {
         String payload = null;
         // 执行前预写日志 (WAL)，防止宕机
         if (durability == RetryDurability.STRONG_CONSISTENCY && backend != null) {
-            payload = payloadSupplier.get();
-            intentId = backend.saveIntent(taskType, payload);
+            try {
+                payload = payloadSupplier.get();
+                intentId = backend.saveIntent(taskType, payload);
+            } catch (RetrySerializationException e) {
+                throw new IllegalStateException("强一致性级别要求参数必须可序列化，但序列化失败", e);
+            }
         } else {
             intentId = null;
         }
@@ -266,12 +271,19 @@ public class Retryer {
         } else {
             // 内存重试彻底耗尽，降级到后端存储
             if (backend != null && durability != RetryDurability.MEMORY_ONLY && shouldFallbackToBackend()) {
-                long nextDelay = policy.getDelayMillis(getNextAttemptAfterInMemory());
+                try {
+                    long nextDelay = policy.getDelayMillis(getNextAttemptAfterInMemory());
 
-                String finalPayload = payload != null ? payload : payloadSupplier.get();
-                backend.submitForDelay(intentId, taskType, finalPayload, nextDelay);
+                    String finalPayload = payload != null ? payload : payloadSupplier.get();
+                    backend.submitForDelay(intentId, taskType, finalPayload, nextDelay);
 
-                promise.completeExceptionally(new RetryExhaustedException("内存重试耗尽，已转入分布式后台队列", cause));
+                    promise.completeExceptionally(new RetryExhaustedException("内存重试耗尽，已转入分布式后台队列", cause));
+                } catch (RetrySerializationException serializationEx) {
+                    // 降级时发现无法序列化，放弃入队，避免毒药数据
+                    RetryExhaustedException finalEx = new RetryExhaustedException("内存重试耗尽，且参数序列化失败导致无法转入后台队列", cause);
+                    finalEx.addSuppressed(serializationEx);
+                    promise.completeExceptionally(finalEx);
+                }
             } else {
                 promise.completeExceptionally(cause);
             }
