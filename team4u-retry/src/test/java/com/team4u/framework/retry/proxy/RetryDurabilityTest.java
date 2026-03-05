@@ -73,6 +73,8 @@ public class RetryDurabilityTest {
         }
         Assert.assertEquals(0, mockBackend.saveCount.get());
         Assert.assertEquals(1, mockBackend.submitCount.get());
+        Assert.assertNotNull("MEMORY_FALLBACK 降级入队 intentId 不应为 null", mockBackend.lastSubmitIntentId.get());
+        Assert.assertTrue(mockBackend.lastSubmitIntentId.get().startsWith("rtryh-"));
     }
 
     @Test

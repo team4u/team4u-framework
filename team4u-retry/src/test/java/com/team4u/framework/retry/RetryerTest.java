@@ -269,4 +269,80 @@ public class RetryerTest {
         scheduler.shutdown();
         customExecutor.shutdown();
     }
+
+    @Test
+    public void testDeterministicIntentId() {
+        RetryPolicy policy = RetryPolicy.builder()
+                .totalAttempts(2)
+                .inMemoryAttempts(1)
+                .build();
+
+        java.util.concurrent.atomic.AtomicReference<String> lastIntentId = new java.util.concurrent.atomic.AtomicReference<>();
+
+        RetryBackend backend = new RetryBackend() {
+            @Override
+            public String saveIntent(String queueName, String contextJson) { return null; }
+            @Override
+            public void completeIntent(String intentId) {}
+            @Override
+            public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
+                lastIntentId.set(intentId);
+            }
+        };
+
+        Retryer retryer = Retryer.builder()
+                .policy(policy)
+                .backend(backend)
+                .durability(RetryDurability.MEMORY_FALLBACK)
+                .build();
+
+        String taskType = "test-task";
+        String payload = "{\"id\":1}";
+
+        // 第一次执行并失败，触发降级
+        try {
+            retryer.execute(taskType, () -> payload, () -> { throw new RuntimeException("fail"); });
+        } catch (Exception ignored) {}
+
+        String id1 = lastIntentId.get();
+        Assert.assertNotNull(id1);
+        Assert.assertTrue(id1.startsWith("rtryh-test-task-"));
+
+        // 第二次执行（相同 taskType 和 payload），生成的 id 应相同
+        try {
+            retryer.execute(taskType, () -> payload, () -> { throw new RuntimeException("fail"); });
+        } catch (Exception ignored) {}
+
+        String id2 = lastIntentId.get();
+        Assert.assertEquals("相同 payload 应生成相同的 intentId", id1, id2);
+
+        // 不同 payload 应生成不同 id
+        try {
+            retryer.execute(taskType, () -> "{\"id\":2}", () -> { throw new RuntimeException("fail"); });
+        } catch (Exception ignored) {}
+
+        String id3 = lastIntentId.get();
+        Assert.assertNotEquals("不同 payload 应生成不同的 intentId", id1, id3);
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void testStrongConsistencyFailFastWhenSaveIntentReturnsNull() throws Exception {
+        RetryPolicy policy = RetryPolicy.builder().build();
+        RetryBackend backend = new RetryBackend() {
+            @Override
+            public String saveIntent(String queueName, String contextJson) { return null; }
+            @Override
+            public void completeIntent(String intentId) {}
+            @Override
+            public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {}
+        };
+
+        Retryer retryer = Retryer.builder()
+                .policy(policy)
+                .backend(backend)
+                .durability(RetryDurability.STRONG_CONSISTENCY)
+                .build();
+
+        retryer.execute("task", () -> "{}", () -> "success");
+    }
 }

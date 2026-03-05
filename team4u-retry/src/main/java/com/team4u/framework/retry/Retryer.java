@@ -2,6 +2,7 @@ package com.team4u.framework.retry;
 
 import com.team4u.framework.retry.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.exception.RetrySerializationException;
+import cn.hutool.crypto.digest.DigestUtil;
 
 import java.util.concurrent.*;
 import java.util.function.Supplier;
@@ -75,6 +76,9 @@ public class Retryer {
             try {
                 payload = payloadSupplier.get();
                 intentId = backend.saveIntent(taskType, payload);
+                if (intentId == null || intentId.isEmpty()) {
+                    throw new IllegalStateException("STRONG_CONSISTENCY requires non-null intentId from backend.saveIntent()");
+                }
             } catch (RetrySerializationException e) {
                 throw new IllegalStateException("强一致性级别要求参数必须可序列化，但序列化失败", e);
             }
@@ -97,7 +101,8 @@ public class Retryer {
                     if (payload == null) {
                         payload = payloadSupplier.get();
                     }
-                    backend.submitForDelay(intentId, taskType, payload, nextDelay);
+                    String submitIntentId = ensureIntentIdForBackend(intentId, taskType, payload);
+                    backend.submitForDelay(submitIntentId, taskType, payload, nextDelay);
                     throw new RetryExhaustedException("内存重试耗尽，已转入分布式后台队列", ex);
                 } catch (RetrySerializationException serializationEx) {
                     // 降级时发现无法序列化，放弃入队，避免毒药数据
@@ -179,6 +184,20 @@ public class Retryer {
         return policy.getTotalAttempts() == -1 || inMemoryAttempts < policy.getTotalAttempts();
     }
 
+    private String ensureIntentIdForBackend(String intentId, String taskType, String payload) {
+        if (intentId != null && !intentId.isEmpty()) {
+            return intentId;
+        }
+        // payload 可能很长，hash 全量即可；最终只取前 32 个 hex 做短 id
+        String base = taskType + "\n" + (payload == null ? "" : payload);
+        String sha256 = DigestUtil.sha256Hex(base);
+
+        // taskType 里可能有 '.' '/' 等，建议做轻量 sanitize，避免日志/存储不友好
+        String safeTaskType = taskType == null ? "unknown" : taskType.replaceAll("[^a-zA-Z0-9_-]", "_");
+
+        return "rtryh-" + safeTaskType + "-" + sha256.substring(0, 32);
+    }
+
     /**
      * 非阻塞式的异步重试执行方法
      * <p>
@@ -204,6 +223,9 @@ public class Retryer {
             try {
                 payload = payloadSupplier.get();
                 intentId = backend.saveIntent(taskType, payload);
+                if (intentId == null || intentId.isEmpty()) {
+                    throw new IllegalStateException("STRONG_CONSISTENCY requires non-null intentId from backend.saveIntent()");
+                }
             } catch (RetrySerializationException e) {
                 throw new IllegalStateException("强一致性级别要求参数必须可序列化，但序列化失败", e);
             }
@@ -281,7 +303,8 @@ public class Retryer {
                     long nextDelay = policy.getDelayMillis(getNextAttemptAfterInMemory());
 
                     String finalPayload = payload != null ? payload : payloadSupplier.get();
-                    backend.submitForDelay(intentId, taskType, finalPayload, nextDelay);
+                    String submitIntentId = ensureIntentIdForBackend(intentId, taskType, finalPayload);
+                    backend.submitForDelay(submitIntentId, taskType, finalPayload, nextDelay);
 
                     promise.completeExceptionally(new RetryExhaustedException("内存重试耗尽，已转入分布式后台队列", cause));
                 } catch (RetrySerializationException serializationEx) {
