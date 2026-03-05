@@ -5,8 +5,10 @@ import com.team4u.framework.retry.proxy.RetryDelegate;
 import com.team4u.framework.retry.proxy.Retryable;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
+import org.springframework.aop.support.AopUtils;
 import org.springframework.core.annotation.AnnotationUtils;
 
+import java.lang.reflect.Method;
 import java.util.function.Supplier;
 
 /**
@@ -23,15 +25,25 @@ public class SpringRetryInterceptor implements MethodInterceptor {
 
     @Override
     public Object invoke(MethodInvocation invocation) throws Throwable {
-        // 兼容 Spring 的注解查找（支持找类上或接口上的注解）
-        Retryable retryable = AnnotationUtils.findAnnotation(invocation.getMethod(), Retryable.class);
-        if (retryable == null && invocation.getThis() != null) {
-            retryable = AnnotationUtils.findAnnotation(invocation.getThis().getClass(), Retryable.class);
+        Method method = invocation.getMethod();
+        Object target = invocation.getThis();
+        Method specificMethod = method;
+        if (target != null) {
+            specificMethod = AopUtils.getMostSpecificMethod(method, target.getClass());
+        }
+
+        // 兼容 Spring 的注解查找（接口方法、实现类方法、类注解）
+        Retryable retryable = AnnotationUtils.findAnnotation(method, Retryable.class);
+        if (retryable == null && specificMethod != method) {
+            retryable = AnnotationUtils.findAnnotation(specificMethod, Retryable.class);
+        }
+        if (retryable == null && target != null) {
+            retryable = AnnotationUtils.findAnnotation(target.getClass(), Retryable.class);
         }
 
         return delegate.executeWithRetry(
-                invocation.getMethod(),
-                invocation.getThis(),
+                specificMethod,
+                target,
                 invocation.getArguments(),
                 retryable,
                 () -> {

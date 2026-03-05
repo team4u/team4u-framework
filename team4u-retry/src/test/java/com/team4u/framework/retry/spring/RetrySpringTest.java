@@ -69,14 +69,34 @@ public class RetrySpringTest {
         }
     }
 
+    @Test
+    public void testSpringJdkProxyShouldFindAnnotationOnImplementationMethod() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(JdkProxyConfig.class)) {
+            JdkProxyConfig config = context.getBean(JdkProxyConfig.class);
+            ImplAnnotatedService service = context.getBean(ImplAnnotatedService.class);
+
+            Assert.assertNotSame(ImplAnnotatedServiceImpl.class, service.getClass());
+            String result = service.call("B200");
+            Assert.assertEquals("impl_B200", result);
+            Assert.assertEquals(3, config.implAnnotatedService.count.get());
+        }
+    }
+
     public interface OrderService {
         @Retryable("test-policy")
         String doRetry(String id);
     }
 
+    public interface ImplAnnotatedService {
+        String call(String id);
+    }
+
     @Configuration
     @EnableRetry
     public static class TestConfig {
+
+        private final OrderServiceImpl orderService = new OrderServiceImpl();
+        private final UserService userService = new UserService();
 
         /**
          * 显式注册代理创建器，模拟调用方（如 Spring Boot）的环境。
@@ -88,9 +108,6 @@ public class RetrySpringTest {
             creator.setProxyTargetClass(true);
             return creator;
         }
-
-        private final OrderServiceImpl orderService = new OrderServiceImpl();
-        private final UserService userService = new UserService();
 
         @Bean
         public OrderService orderService() {
@@ -128,6 +145,38 @@ public class RetrySpringTest {
                 throw new RuntimeException("fail");
             }
             return "hello_" + name;
+        }
+    }
+
+    public static class ImplAnnotatedServiceImpl implements ImplAnnotatedService {
+        public AtomicInteger count = new AtomicInteger();
+
+        @Override
+        @Retryable("test-policy")
+        public String call(String id) {
+            if (count.incrementAndGet() < 3) {
+                throw new RuntimeException("fail");
+            }
+            return "impl_" + id;
+        }
+    }
+
+    @Configuration
+    @EnableRetry
+    public static class JdkProxyConfig {
+
+        private final ImplAnnotatedServiceImpl implAnnotatedService = new ImplAnnotatedServiceImpl();
+
+        @Bean
+        public DefaultAdvisorAutoProxyCreator defaultAdvisorAutoProxyCreator() {
+            DefaultAdvisorAutoProxyCreator creator = new DefaultAdvisorAutoProxyCreator();
+            creator.setProxyTargetClass(false);
+            return creator;
+        }
+
+        @Bean
+        public ImplAnnotatedService implAnnotatedService() {
+            return implAnnotatedService;
         }
     }
 }

@@ -6,6 +6,7 @@ import org.junit.Test;
 
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 public class RetryerTest {
@@ -281,9 +282,14 @@ public class RetryerTest {
 
         RetryBackend backend = new RetryBackend() {
             @Override
-            public String saveIntent(String queueName, String contextJson) { return null; }
+            public String saveIntent(String queueName, String contextJson) {
+                return null;
+            }
+
             @Override
-            public void completeIntent(String intentId) {}
+            public void completeIntent(String intentId) {
+            }
+
             @Override
             public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
                 lastIntentId.set(intentId);
@@ -301,8 +307,11 @@ public class RetryerTest {
 
         // 第一次执行并失败，触发降级
         try {
-            retryer.execute(taskType, executedAttempts -> payload, () -> { throw new RuntimeException("fail"); });
-        } catch (Exception ignored) {}
+            retryer.execute(taskType, executedAttempts -> payload, () -> {
+                throw new RuntimeException("fail");
+            });
+        } catch (Exception ignored) {
+        }
 
         String id1 = lastIntentId.get();
         Assert.assertNotNull(id1);
@@ -310,16 +319,22 @@ public class RetryerTest {
 
         // 第二次执行（相同 taskType 和 payload），生成的 id 应相同
         try {
-            retryer.execute(taskType, executedAttempts -> payload, () -> { throw new RuntimeException("fail"); });
-        } catch (Exception ignored) {}
+            retryer.execute(taskType, executedAttempts -> payload, () -> {
+                throw new RuntimeException("fail");
+            });
+        } catch (Exception ignored) {
+        }
 
         String id2 = lastIntentId.get();
         Assert.assertEquals("相同 payload 应生成相同的 intentId", id1, id2);
 
         // 不同 payload 应生成不同 id
         try {
-            retryer.execute(taskType, executedAttempts -> "{\"id\":2}", () -> { throw new RuntimeException("fail"); });
-        } catch (Exception ignored) {}
+            retryer.execute(taskType, executedAttempts -> "{\"id\":2}", () -> {
+                throw new RuntimeException("fail");
+            });
+        } catch (Exception ignored) {
+        }
 
         String id3 = lastIntentId.get();
         Assert.assertNotEquals("不同 payload 应生成不同的 intentId", id1, id3);
@@ -330,11 +345,17 @@ public class RetryerTest {
         RetryPolicy policy = RetryPolicy.builder().build();
         RetryBackend backend = new RetryBackend() {
             @Override
-            public String saveIntent(String queueName, String contextJson) { return null; }
+            public String saveIntent(String queueName, String contextJson) {
+                return null;
+            }
+
             @Override
-            public void completeIntent(String intentId) {}
+            public void completeIntent(String intentId) {
+            }
+
             @Override
-            public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {}
+            public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
+            }
         };
 
         Retryer retryer = Retryer.builder()
@@ -344,5 +365,58 @@ public class RetryerTest {
                 .build();
 
         retryer.execute("task", executedAttempts -> "{}", () -> "success");
+    }
+
+    @Test
+    public void testInterruptedDuringBackoffShouldNotFallbackToBackend() throws Exception {
+        RetryPolicy policy = RetryPolicy.builder()
+                .totalAttempts(3)
+                .backoff(Backoff.fixed(5000))
+                .build();
+
+        AtomicInteger submitCount = new AtomicInteger(0);
+        CountDownLatch firstAttemptStarted = new CountDownLatch(1);
+        AtomicReference<Throwable> thrown = new AtomicReference<>();
+
+        RetryBackend backend = new RetryBackend() {
+            @Override
+            public String saveIntent(String taskType, String payload) {
+                return null;
+            }
+
+            @Override
+            public void completeIntent(String intentId) {
+            }
+
+            @Override
+            public void submitForDelay(String intentId, String taskType, String payload, long delay) {
+                submitCount.incrementAndGet();
+            }
+        };
+
+        Retryer retryer = Retryer.builder()
+                .policy(policy)
+                .backend(backend)
+                .durability(RetryDurability.MEMORY_FALLBACK)
+                .build();
+
+        Thread worker = new Thread(() -> {
+            try {
+                retryer.execute("task", executedAttempts -> "{}", () -> {
+                    firstAttemptStarted.countDown();
+                    throw new RuntimeException("fail");
+                });
+            } catch (Throwable e) {
+                thrown.set(e);
+            }
+        });
+        worker.start();
+
+        Assert.assertTrue("应当进入首次尝试", firstAttemptStarted.await(1, TimeUnit.SECONDS));
+        worker.interrupt();
+        worker.join(1500);
+
+        Assert.assertTrue("应抛出 InterruptedException", thrown.get() instanceof InterruptedException);
+        Assert.assertEquals("中断不应触发后端降级", 0, submitCount.get());
     }
 }
