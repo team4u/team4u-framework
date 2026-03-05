@@ -17,8 +17,8 @@ import java.util.function.Supplier;
 @AllArgsConstructor
 public class RetryInterceptor implements MethodInterceptor {
 
-    private Supplier<RetryBackend> backendSupplier;
     private final RetryDelegate delegate = new RetryDelegate();
+    private Supplier<RetryBackend> backendSupplier;
 
     public RetryInterceptor(RetryBackend backend) {
         this.backendSupplier = () -> backend;

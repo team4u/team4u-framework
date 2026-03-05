@@ -50,13 +50,13 @@ public class RetryExceptionUtilTest {
             super(message, null);
         }
 
-        public void setCause(Throwable cause) {
-            this.cause = cause;
-        }
-
         @Override
         public synchronized Throwable getCause() {
             return cause;
+        }
+
+        public void setCause(Throwable cause) {
+            this.cause = cause;
         }
     }
 }

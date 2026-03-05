@@ -1,8 +1,7 @@
 package com.team4u.framework.retry;
 
-import com.team4u.framework.retry.exception.RetrySerializationException;
-
 import com.team4u.framework.retry.concurrent.RetryExecutorManager;
+import com.team4u.framework.retry.exception.RetrySerializationException;
 
 import java.util.concurrent.*;
 import java.util.function.Supplier;
@@ -188,7 +187,8 @@ public class Retryer {
      * @return 表示整个带有重试能力的异步任务抽象票据
      */
     public <T> CompletableFuture<T> executeAsync(
-            String taskType, Supplier<String> payloadSupplier,
+            String taskType,
+            Supplier<String> payloadSupplier,
             Supplier<CompletableFuture<T>> asyncTask,
             ScheduledExecutorService scheduler) {
         String intentId;

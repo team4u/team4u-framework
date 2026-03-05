@@ -16,10 +16,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class ProgrammaticRetryIntegrationTest {
 
-    private MockRetryBackend backend;
-    private Retryer retryer;
     private final String taskType = "test.task";
     private final String payload = "{\"id\":1}";
+    private MockRetryBackend backend;
+    private Retryer retryer;
 
     @Before
     public void setUp() {

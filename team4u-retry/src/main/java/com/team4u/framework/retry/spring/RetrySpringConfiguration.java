@@ -4,11 +4,9 @@ import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.retry.RetryBackend;
 import com.team4u.framework.retry.proxy.Retryable;
 import org.springframework.aop.Pointcut;
+import org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator;
 import org.springframework.aop.support.AbstractBeanFactoryPointcutAdvisor;
 import org.springframework.aop.support.annotation.AnnotationMatchingPointcut;
-import org.springframework.beans.BeansException;
-import org.springframework.beans.factory.BeanFactory;
-import org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactory;
 import org.springframework.context.annotation.Bean;
@@ -37,6 +35,14 @@ public class RetrySpringConfiguration {
         return advisor;
     }
 
+    private RetryBackend getRetryBackend(BeanFactory beanFactory) {
+        try {
+            return beanFactory.getBean(RetryBackend.class);
+        } catch (BeansException e) {
+            return BeanManager.getInstance().getBean(RetryBackend.class);
+        }
+    }
+
     /**
      * 自定义 Advisor，使用 Spring 的切点匹配
      */
@@ -45,14 +51,6 @@ public class RetrySpringConfiguration {
         public Pointcut getPointcut() {
             // 匹配类上或方法上的 @Retryable 注解
             return new AnnotationMatchingPointcut(null, Retryable.class, true);
-        }
-    }
-
-    private RetryBackend getRetryBackend(BeanFactory beanFactory) {
-        try {
-            return beanFactory.getBean(RetryBackend.class);
-        } catch (BeansException e) {
-            return BeanManager.getInstance().getBean(RetryBackend.class);
         }
     }
 }

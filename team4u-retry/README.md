@@ -179,24 +179,8 @@ public interface PayService {
 
 ### 2) 接入拦截器
 
-#### 方式一：使用 RetryProxyFactory (推荐)
-
 ```java
 PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), retryBackend);
-```
-
-#### 方式二：使用 ProxyBuilder 极简 API
-
-```java
-PayService proxy = ProxyBuilder.proxy(new PayServiceImpl(), new RetryInterceptor(retryBackend));
-```
-
-#### 方式三：使用流式 API (灵活配置)
-
-```java
-PayService proxy = ProxyBuilder.forObject(new PayServiceImpl())
-        .intercept(new RetryInterceptor(retryBackend))
-        .build();
 ```
 
 - 拦截器内部采用全局单例 `SCHEDULER`，具备线程安全初始化和防资源泄漏设计。

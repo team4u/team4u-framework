@@ -1,6 +1,5 @@
 package com.team4u.framework.retry.spring;
 
-import com.team4u.framework.retry.RetryBackend;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.backoff.Backoff;
 import com.team4u.framework.retry.proxy.NamedRetryPolicy;
@@ -45,8 +44,7 @@ public class RetrySpringTest {
 
     @Test
     public void testSpringAutoProxy() {
-        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(TestConfig.class);
-        try {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(TestConfig.class)) {
             TestConfig config = context.getBean(TestConfig.class);
 
             // 1. 验证接口代理 (OrderService)
@@ -57,7 +55,7 @@ public class RetrySpringTest {
             String result = orderService.doRetry("A100");
             Assert.assertEquals("ok_A100", result);
             // 策略是 3 次尝试，前 2 次抛异常，第 3 次成功，所以总数应该是 3
-            Assert.assertEquals(3, config.orderServiceImpl.count.get());
+            Assert.assertEquals(3, config.orderService.count.get());
 
             // 2. 验证类代理 (UserService)
             UserService userService = context.getBean(UserService.class);
@@ -67,32 +65,30 @@ public class RetrySpringTest {
             Assert.assertEquals("hello_world", userResult);
             Assert.assertEquals(3, config.userService.count.get());
 
-        } finally {
-            context.close();
-        }
-    }
-
-    @Configuration
-    @EnableRetry
-    public static class TestConfig {
-
-        private final OrderServiceImpl orderServiceImpl = new OrderServiceImpl();
-        private final UserService userService = new UserService();
-
-        @Bean
-        public OrderService orderServiceImpl() {
-            return orderServiceImpl;
-        }
-
-        @Bean
-        public UserService userService() {
-            return userService;
         }
     }
 
     public interface OrderService {
         @Retryable("test-policy")
         String doRetry(String id);
+    }
+
+    @Configuration
+    @EnableRetry
+    public static class TestConfig {
+
+        private final OrderServiceImpl orderService = new OrderServiceImpl();
+        private final UserService userService = new UserService();
+
+        @Bean
+        public OrderService orderService() {
+            return orderService;
+        }
+
+        @Bean
+        public UserService userService() {
+            return userService;
+        }
     }
 
     public static class OrderServiceImpl implements OrderService {

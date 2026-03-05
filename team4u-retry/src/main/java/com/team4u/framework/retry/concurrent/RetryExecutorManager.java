@@ -43,6 +43,15 @@ public class RetryExecutorManager {
     }
 
     /**
+     * 获取全局静态实例
+     *
+     * @return 线程池管理器单例
+     */
+    public static RetryExecutorManager global() {
+        return INSTANCE;
+    }
+
+    /**
      * 重建内部线程池，使管理器从 shutdown 状态恢复为可用状态。
      * <p>
      * 该方法主要用于测试场景：当 Spring 上下文关闭触发 shutdown 后，
@@ -66,15 +75,6 @@ public class RetryExecutorManager {
                 });
         isShutdown = false;
         log.info("team4u-retry executors reset and ready.");
-    }
-
-    /**
-     * 获取全局静态实例
-     *
-     * @return 线程池管理器单例
-     */
-    public static RetryExecutorManager global() {
-        return INSTANCE;
     }
 
     /**
