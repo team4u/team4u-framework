@@ -1,10 +1,13 @@
 package com.team4u.framework.retry.proxy;
 
+import cn.hutool.crypto.digest.DigestUtil;
 import com.team4u.framework.retry.RetryBackend;
 import com.team4u.framework.retry.RetryDurability;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.Retryer;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
+import com.team4u.framework.retry.backend.serialize.HutoolRetryTaskSnapshotSerializer;
+import com.team4u.framework.retry.backend.serialize.RetryTaskSnapshotSerializer;
 import com.team4u.framework.retry.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.config.DynamicRetryPolicyRegistry;
 import com.team4u.framework.retry.proxy.serialize.HutoolRetryContextSerializer;
@@ -24,12 +27,15 @@ import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
 /**
- * 重试执行核心委托类，供不同代理框架（Spring AOP / team4u-proxy）复用
+ * 重试执行核心委托类，供不同代理框架复用
  */
 public class RetryDelegate {
 
     @Setter
     private RetryContextSerializer serializer = HutoolRetryContextSerializer.INSTANCE;
+
+    @Setter
+    private RetryTaskSnapshotSerializer snapshotSerializer = HutoolRetryTaskSnapshotSerializer.INSTANCE;
 
     @Setter
     private ScheduledExecutorService scheduler;
@@ -53,7 +59,7 @@ public class RetryDelegate {
         RetryPolicy policy = Optional.ofNullable(DynamicRetryPolicyRegistry.getPolicy(policyKey))
                 .orElseGet(() -> RetryPolicyRegistry.global().get(policyKey)
                         .map(NamedRetryPolicy::getPolicy)
-                        .orElseThrow(() -> new IllegalArgumentException("未找到重试策略，Key: " + policyKey)));
+                        .orElseThrow(() -> new IllegalArgumentException("Retry policy not found. Key: " + policyKey)));
 
         RetryDurability durability = RetryDurability.valueOf(retryable.durability().name());
         boolean isAsync = CompletableFuture.class.isAssignableFrom(method.getReturnType());
@@ -67,7 +73,8 @@ public class RetryDelegate {
         if (isAsync) {
             return retryer.executeAsync(
                     policyKey,
-                    executedAttempts -> buildSnapshot(method, target, args, policyKey, policy, executedAttempts).toJson(),
+                    executedAttempts -> snapshotSerializer.serialize(
+                            buildSnapshot(method, target, args, policyKey, policy, executedAttempts)),
                     () -> {
                         try {
                             @SuppressWarnings("unchecked")
@@ -84,7 +91,8 @@ public class RetryDelegate {
             try {
                 return retryer.execute(
                         policyKey,
-                        executedAttempts -> buildSnapshot(method, target, args, policyKey, policy, executedAttempts).toJson(),
+                        executedAttempts -> snapshotSerializer.serialize(
+                                buildSnapshot(method, target, args, policyKey, policy, executedAttempts)),
                         proceedTask);
             } catch (Exception | Error e) {
                 throw e;
@@ -119,8 +127,11 @@ public class RetryDelegate {
         snapshot.setArgJsonValues(argJsonValues);
 
         // 生成任务 ID：基于任务关键信息（不包含已执行次数和创建时间）计算 hash，确保同一个业务意图在重试过程中 ID 稳定
-        String idBase = policyKey + "|" + snapshot.getBeanName() + "|" + snapshot.getMethodName() + "|" + snapshot.getArgJsonValues();
-        snapshot.setTaskId("rtry-" + cn.hutool.crypto.digest.DigestUtil.md5Hex(idBase));
+        String idBase = policyKey +
+                "|" + snapshot.getBeanName() +
+                "|" + snapshot.getMethodName() +
+                "|" + snapshot.getArgJsonValues();
+        snapshot.setTaskId("retry-" + DigestUtil.md5Hex(idBase));
 
         return snapshot;
     }

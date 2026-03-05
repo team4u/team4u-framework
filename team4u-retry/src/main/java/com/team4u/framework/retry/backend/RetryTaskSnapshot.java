@@ -1,6 +1,5 @@
 package com.team4u.framework.retry.backend;
 
-import cn.hutool.json.JSONUtil;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
 import lombok.Setter;
@@ -56,17 +55,4 @@ public class RetryTaskSnapshot {
      */
     private List<String> argJsonValues;
 
-    /**
-     * 从 JSON 字符串还原快照对象
-     */
-    public static RetryTaskSnapshot fromJson(String json) {
-        return JSONUtil.toBean(json, RetryTaskSnapshot.class);
-    }
-
-    /**
-     * 转换为 JSON 字符串用于持久化存储或消息传输
-     */
-    public String toJson() {
-        return JSONUtil.toJsonStr(this);
-    }
 }

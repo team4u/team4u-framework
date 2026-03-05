@@ -48,7 +48,7 @@ public class PoisonDataTest {
             }, () -> "ok");
             Assert.fail("预期抛出 IllegalStateException");
         } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("强一致性级别要求参数必须可序列化"));
+            Assert.assertTrue(e.getMessage().contains("STRONG_CONSISTENCY requires serializable arguments"));
             Assert.assertTrue(e.getCause() instanceof RetrySerializationException);
         }
     }
@@ -75,7 +75,8 @@ public class PoisonDataTest {
             });
             Assert.fail("预期抛出 RetryExhaustedException");
         } catch (RetryExhaustedException e) {
-            Assert.assertTrue("错误消息应当包含序列化失败提示", e.getMessage().contains("参数序列化失败导致无法转入后台队列"));
+            Assert.assertTrue("Error message should indicate serialization failure",
+                    e.getMessage().contains("argument serialization failed"));
             Assert.assertEquals("business failed", e.getCause().getMessage());
             Assert.assertEquals(1, e.getSuppressed().length);
             Assert.assertTrue(e.getSuppressed()[0] instanceof RetrySerializationException);
@@ -119,7 +120,7 @@ public class PoisonDataTest {
             }, () -> CompletableFuture.completedFuture("ok"), Executors.newSingleThreadScheduledExecutor());
             Assert.fail("预期抛出 IllegalStateException");
         } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("强一致性级别要求参数必须可序列化"));
+            Assert.assertTrue(e.getMessage().contains("STRONG_CONSISTENCY requires serializable arguments"));
         }
     }
 
@@ -151,7 +152,7 @@ public class PoisonDataTest {
         } catch (ExecutionException e) {
             Throwable cause = e.getCause();
             Assert.assertTrue(cause instanceof RetryExhaustedException);
-            Assert.assertTrue(cause.getMessage().contains("参数序列化失败导致无法转入后台队列"));
+            Assert.assertTrue(cause.getMessage().contains("argument serialization failed"));
             Assert.assertEquals(1, cause.getSuppressed().length);
         }
     }

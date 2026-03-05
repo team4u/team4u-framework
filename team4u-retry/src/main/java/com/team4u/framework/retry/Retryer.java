@@ -97,7 +97,9 @@ public class Retryer {
                     throw enqueueToBackend(intentContext.intentId, taskType, payloadBuilder, inMemoryAttempts, ex);
                 } catch (RetrySerializationException serializationEx) {
                     // 降级时发现无法序列化，放弃入队，避免毒药数据
-                    RetryExhaustedException finalEx = new RetryExhaustedException("内存重试耗尽，且参数序列化失败导致无法转入后台队列", ex);
+                    RetryExhaustedException finalEx = new RetryExhaustedException(
+                            "In-memory retries exhausted, and argument serialization failed so task cannot be enqueued to backend.",
+                            ex);
                     finalEx.addSuppressed(serializationEx);
                     throw finalEx;
                 }
@@ -349,7 +351,9 @@ public class Retryer {
                     promise.completeExceptionally(enqueueToBackend(intentId, taskType, payloadBuilder, attempt, cause));
                 } catch (RetrySerializationException serializationEx) {
                     // 降级时发现无法序列化，放弃入队，避免毒药数据
-                    RetryExhaustedException finalEx = new RetryExhaustedException("内存重试耗尽，且参数序列化失败导致无法转入后台队列", cause);
+                    RetryExhaustedException finalEx = new RetryExhaustedException(
+                            "In-memory retries exhausted, and argument serialization failed so task cannot be enqueued to backend.",
+                            cause);
                     finalEx.addSuppressed(serializationEx);
                     promise.completeExceptionally(finalEx);
                 }
@@ -379,7 +383,8 @@ public class Retryer {
             }
             return new IntentContext(intentId);
         } catch (RetrySerializationException e) {
-            throw new IllegalStateException("强一致性级别要求参数必须可序列化，但序列化失败", e);
+            throw new IllegalStateException(
+                    "STRONG_CONSISTENCY requires serializable arguments, but serialization failed.", e);
         }
     }
 
@@ -405,7 +410,7 @@ public class Retryer {
         String payload = payloadBuilder.apply(payloadAttempt);
         String submitIntentId = ensureIntentIdForBackend(intentId, taskType, payload);
         backend.submitForDelay(submitIntentId, taskType, payload, nextDelay);
-        return new RetryExhaustedException("内存重试耗尽，已转入分布式后台队列", cause);
+        return new RetryExhaustedException("In-memory retries exhausted; task has been handed over to backend queue.", cause);
     }
 
     /**
@@ -542,10 +547,11 @@ public class Retryer {
          */
         public Retryer build() {
             if (policy == null) {
-                throw new IllegalStateException("RetryPolicy 不能为空");
+                throw new IllegalStateException("RetryPolicy must not be null");
             }
             if (durability != null && durability != RetryDurability.MEMORY_ONLY && backend == null) {
-                throw new IllegalStateException("配置了持久化重试级别 [" + durability + "]，但未提供 RetryBackend 实现！");
+                throw new IllegalStateException(
+                        "RetryBackend is required when durability is set to [" + durability + "]");
             }
             return new Retryer(this);
         }

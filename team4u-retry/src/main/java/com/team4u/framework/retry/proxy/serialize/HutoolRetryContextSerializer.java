@@ -29,7 +29,8 @@ public class HutoolRetryContextSerializer implements RetryContextSerializer {
             return JSONUtil.toJsonStr(arg);
         } catch (Exception e) {
             throw new RetrySerializationException(
-                    "参数序列化失败，类型: " + arg.getClass().getName() + "，异常信息: " + e.getMessage(), e);
+                    "Failed to serialize retry argument. Type: " + arg.getClass().getName()
+                            + ", error: " + e.getMessage(), e);
         }
     }
 }

@@ -65,7 +65,7 @@ public class ProgrammaticRetryIntegrationTest {
             });
             Assert.fail("应该抛出 RetryExhaustedException");
         } catch (RetryExhaustedException e) {
-            Assert.assertTrue(e.getMessage().contains("内存重试耗尽"));
+            Assert.assertTrue(e.getMessage().contains("In-memory retries exhausted"));
         }
 
         // STRONG_CONSISTENCY 下未显式配置 inMemoryAttempts，默认前台内存预算为 2 次

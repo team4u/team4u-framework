@@ -19,7 +19,7 @@ import java.util.Set;
 @Getter
 public class RetryPolicy {
     /**
-     * 全局最大尝试次数（包含首次）。
+     * 全局最大尝试次数（包含首次,-1 表示无限）
      */
     private final int maxAttempts;
     /**
@@ -92,15 +92,6 @@ public class RetryPolicy {
     }
 
     /**
-     * 获取全局最大尝试次数（统一术语）。
-     *
-     * @return 全局最大尝试次数（-1 表示无限）
-     */
-    public int getMaxAttempts() {
-        return maxAttempts;
-    }
-
-    /**
      * 检查当前异常类型是否匹配指定的异常集合
      */
     private boolean matches(Throwable ex, Set<Class<? extends Throwable>> classes) {
@@ -124,6 +115,9 @@ public class RetryPolicy {
     @Getter
     public static class RetryContext {
         private final int attempt;
+        /**
+         * 全局最大尝试次数（-1 表示无限）
+         */
         private final int maxAttempts;
         private final Throwable cause;
         private final String message;
@@ -135,14 +129,6 @@ public class RetryPolicy {
             this.message = (cause != null && cause.getMessage() != null) ? cause.getMessage() : "";
         }
 
-        /**
-         * 获取全局最大尝试次数（统一术语）。
-         *
-         * @return 全局最大尝试次数（-1 表示无限）
-         */
-        public int getMaxAttempts() {
-            return maxAttempts;
-        }
     }
 
     /**
@@ -242,13 +228,13 @@ public class RetryPolicy {
          */
         public RetryPolicy build() {
             if (maxAttempts == 0 || maxAttempts < -1) {
-                throw new IllegalArgumentException("maxAttempts 必须大于 0 或者为 -1（无限重试）");
+                throw new IllegalArgumentException("maxAttempts must be greater than 0 or -1 (infinite retries)");
             }
             if (inMemoryAttempts != null && inMemoryAttempts <= 0) {
-                throw new IllegalArgumentException("inMemoryAttempts 必须大于 0");
+                throw new IllegalArgumentException("inMemoryAttempts must be greater than 0");
             }
             if (maxAttempts != -1 && inMemoryAttempts != null && inMemoryAttempts > maxAttempts) {
-                throw new IllegalArgumentException("inMemoryAttempts 不能大于 maxAttempts");
+                throw new IllegalArgumentException("inMemoryAttempts must not be greater than maxAttempts");
             }
             return new RetryPolicy(this);
         }

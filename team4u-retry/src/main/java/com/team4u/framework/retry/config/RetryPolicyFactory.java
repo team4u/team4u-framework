@@ -73,7 +73,8 @@ public class RetryPolicyFactory {
                 }
             }
         } catch (Exception e) {
-            log.error("加载重试策略异常类失败, className: {}, 请检查配置中心拼写!", className, e);
+            log.error("Failed to load retry policy exception class. className: {}. Please check config spelling.",
+                    className, e);
         }
     }
 }
