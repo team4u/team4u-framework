@@ -4,18 +4,28 @@ import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.retry.RetryBackend;
 import com.team4u.framework.retry.proxy.Retryable;
 import org.springframework.aop.Pointcut;
+import org.springframework.aop.config.AopConfigUtils;
+import org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator;
 import org.springframework.aop.support.AbstractBeanFactoryPointcutAdvisor;
 import org.springframework.aop.support.annotation.AnnotationMatchingPointcut;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Role;
 
 /**
  * Spring 配置类，用于无缝接入重试功能
  */
 @Configuration
 public class RetrySpringConfiguration {
+
+    @Bean(name = AopConfigUtils.AUTO_PROXY_CREATOR_BEAN_NAME)
+    @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
+    public static DefaultAdvisorAutoProxyCreator retryAutoProxyCreator() {
+        return new DefaultAdvisorAutoProxyCreator();
+    }
 
     @Bean
     public RetryAdvisor retryAdvisor(BeanFactory beanFactory) {

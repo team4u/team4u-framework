@@ -16,10 +16,7 @@ import lombok.Setter;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
-import java.util.ArrayList;
-import java.util.Arrays;
-import java.util.List;
-import java.util.Optional;
+import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
@@ -66,6 +63,7 @@ public class RetryDelegate {
         RetryBackend backend = backendSupplier != null ? backendSupplier.get() : null;
         validateBackendIfNeeded(method, policyKey, durability, backend);
         boolean isAsync = CompletableFuture.class.isAssignableFrom(method.getReturnType());
+        RetryTaskSnapshot frozenSnapshot = buildFrozenSnapshot(method, target, args, taskType, policy);
 
         Retryer retryer = Retryer.builder()
                 .policy(policy)
@@ -77,7 +75,7 @@ public class RetryDelegate {
             return retryer.executeAsync(
                     taskType,
                     executedAttempts -> snapshotSerializer.serialize(
-                            buildSnapshot(method, target, args, taskType, policy, executedAttempts)),
+                            copySnapshotForAttempt(frozenSnapshot, executedAttempts)),
                     () -> {
                         try {
                             @SuppressWarnings("unchecked")
@@ -95,7 +93,7 @@ public class RetryDelegate {
                 return retryer.execute(
                         taskType,
                         executedAttempts -> snapshotSerializer.serialize(
-                                buildSnapshot(method, target, args, taskType, policy, executedAttempts)),
+                                copySnapshotForAttempt(frozenSnapshot, executedAttempts)),
                         proceedTask);
             } catch (Exception | Error e) {
                 throw e;
@@ -116,22 +114,20 @@ public class RetryDelegate {
                         "method=" + methodSignature + ", policyKey=" + policyKey);
     }
 
-    private RetryTaskSnapshot buildSnapshot(Method method,
-                                            Object target,
-                                            Object[] args,
-                                            String taskType,
-                                            RetryPolicy policy,
-                                            int executedAttempts) {
+    private RetryTaskSnapshot buildFrozenSnapshot(Method method,
+                                                  Object target,
+                                                  Object[] args,
+                                                  String taskType,
+                                                  RetryPolicy policy) {
         RetryTaskSnapshot snapshot = new RetryTaskSnapshot();
         snapshot.setTaskType(taskType);
-        snapshot.setExecutedAttempts(executedAttempts);
         snapshot.setMaxAttempts(policy.getMaxAttempts());
 
-        snapshot.setBeanName(method.getDeclaringClass().getName());
+        snapshot.setBeanName(resolveBeanName(method, target));
         snapshot.setMethodName(method.getName());
         snapshot.setArgTypes(Arrays.stream(method.getParameterTypes())
                 .map(Class::getName)
-                .collect(Collectors.toList()));
+                .collect(Collectors.collectingAndThen(Collectors.toList(), Collections::unmodifiableList)));
 
         Object[] safeArgs = args != null ? args : new Object[0];
         Parameter[] parameters = method.getParameters();
@@ -140,7 +136,7 @@ public class RetryDelegate {
             Object argValue = i < safeArgs.length ? safeArgs[i] : null;
             argJsonValues.add(serializer.serialize(parameters[i], argValue));
         }
-        snapshot.setArgJsonValues(argJsonValues);
+        snapshot.setArgJsonValues(Collections.unmodifiableList(argJsonValues));
 
         // 生成任务 ID：基于任务关键信息（不包含已执行次数和创建时间）计算 hash，确保同一个业务意图在重试过程中 ID 稳定
         String idBase = taskType +
@@ -150,5 +146,31 @@ public class RetryDelegate {
         snapshot.setTaskId("retry-" + DigestUtil.md5Hex(idBase));
 
         return snapshot;
+    }
+
+    private RetryTaskSnapshot copySnapshotForAttempt(RetryTaskSnapshot frozenSnapshot, int executedAttempts) {
+        RetryTaskSnapshot snapshot = new RetryTaskSnapshot();
+        snapshot.setTaskId(frozenSnapshot.getTaskId());
+        snapshot.setTaskType(frozenSnapshot.getTaskType());
+        snapshot.setExecutedAttempts(executedAttempts);
+        snapshot.setMaxAttempts(frozenSnapshot.getMaxAttempts());
+        snapshot.setCreatedAt(frozenSnapshot.getCreatedAt());
+        snapshot.setBeanName(frozenSnapshot.getBeanName());
+        snapshot.setMethodName(frozenSnapshot.getMethodName());
+        snapshot.setArgTypes(frozenSnapshot.getArgTypes());
+        snapshot.setArgJsonValues(frozenSnapshot.getArgJsonValues());
+        return snapshot;
+    }
+
+    private String resolveBeanName(Method method, Object target) {
+        if (target == null) {
+            return method.getDeclaringClass().getName();
+        }
+        Class<?> targetClass = target.getClass();
+        if (targetClass.getName().contains("$$") && targetClass.getSuperclass() != null
+                && targetClass.getSuperclass() != Object.class) {
+            targetClass = targetClass.getSuperclass();
+        }
+        return targetClass.getName();
     }
 }

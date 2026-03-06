@@ -36,6 +36,9 @@ public class RetryInterceptor implements MethodInterceptor {
             } catch (NoSuchMethodException ignored) {
             }
         }
+        if (retryable == null && invocation.getTarget() != null) {
+            retryable = invocation.getTarget().getClass().getAnnotation(Retryable.class);
+        }
         return delegate.executeWithRetry(
                 invocation.getMethod(),
                 invocation.getTarget(),

@@ -175,7 +175,7 @@ CompletableFuture<String> future = retryer.executeAsync(
 
 ```java
 public interface PayService {
-    @Retryable(value = "pay-notify", durability = RetryDurability.MEMORY_FALLBACK)
+    @Retryable(policy = "pay-notify", durability = RetryDurability.MEMORY_FALLBACK)
     String notifyPay(String orderId);
 }
 ```
@@ -251,7 +251,7 @@ public class RetryConfig { ... }
 
 - `MEMORY_ONLY`：极速，不防宕机。
 - `MEMORY_FALLBACK`：内存优先，耗尽后持久化，防内存堆积。
-- `STRONG_CONSISTENCY`：执行前预写日志（WAL），成功后异步清理（`retry-cleanup-pool`），确保任务不丢失。
+- `AT_LEAST_ONCE_DURABLE`：执行前预写日志（WAL），成功后异步清理（`retry-cleanup-pool`），确保任务不丢失。
 
 ### 2) 后端接口与恢复
 
@@ -288,7 +288,7 @@ public class RetryConfig { ... }
 1. **`maxAttempts` 包含首次调用**。
 2. **`Error` 永远不会重试**（同步/异步均直接抛出）。
 3. **线程中断响应**：同步重试遵循 `InterruptedException`，检测到中断会立即恢复中断状态并终止重试链。
-4. **异步清理语义**：`STRONG_CONSISTENCY` 下的意图清理是异步的，不保证在业务返回前完成。
+4. **异步清理语义**：`AT_LEAST_ONCE_DURABLE` 下的意图清理是异步的，不保证在业务返回前完成。
 5. **策略热更新**：通过 `DynamicRetryPolicyRegistry` 实现，策略变更即时生效。
 6. **解包深度**：默认为 10 层，足以覆盖绝大多数中间件和代理框架嵌套。
 7. **线程池退出行为**：`RetryExecutorManager` 默认使用非 daemon 线程。非 Spring 场景建议在应用关闭时显式调用
@@ -309,7 +309,7 @@ graph TD
     E --> B
     D -->|否| F{durability}
     F -->|MEMORY_ONLY| G[抛原始异常]
-    F -->|MEMORY_FALLBACK/STRONG_CONSISTENCY| H[RetryBackend.submitForDelay]
+    F -->|MEMORY_FALLBACK/AT_LEAST_ONCE_DURABLE| H[RetryBackend.submitForDelay]
     H --> I[抛 RetryExhaustedException]
     I --> J[后台 Worker]
     J --> K[RecoveryHandlerRegistry 路由恢复]

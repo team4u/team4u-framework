@@ -67,6 +67,11 @@ public class Retryer {
      * @throws Exception 如果由于满足策略的重试尝试最终均告失败，则将最后抛出的异常抛给调用方
      */
     public <T> T execute(Callable<T> task) throws Exception {
+        if (durability != RetryDurability.MEMORY_ONLY) {
+            throw new IllegalStateException(
+                    "Retryer.execute(Callable) supports MEMORY_ONLY only. Use execute(taskType, payloadBuilder, task) " +
+                            "or executeAsync(...) when durability is [" + durability + "].");
+        }
         int attempt = 1;
         while (true) {
             try {

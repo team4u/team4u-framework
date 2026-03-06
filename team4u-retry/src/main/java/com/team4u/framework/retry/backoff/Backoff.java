@@ -73,8 +73,10 @@ public interface Backoff {
         return attempt -> {
             long maxCalculatedDelay = exponential(initialDelayMillis, multiplier, maxDelayMillis)
                     .calculateMillis(attempt);
-            long maxBound = Math.max(initialDelayMillis, maxCalculatedDelay) + 1;
-            return ThreadLocalRandom.current().nextLong(initialDelayMillis, maxBound);
+            if (maxCalculatedDelay <= initialDelayMillis) {
+                return maxCalculatedDelay;
+            }
+            return ThreadLocalRandom.current().nextLong(initialDelayMillis, maxCalculatedDelay + 1);
         };
     }
 

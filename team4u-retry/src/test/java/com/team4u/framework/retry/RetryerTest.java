@@ -449,4 +449,42 @@ public class RetryerTest {
         Assert.assertTrue("应抛出 InterruptedException", thrown.get() instanceof InterruptedException);
         Assert.assertEquals("中断不应触发后端降级", 0, submitCount.get());
     }
+
+    @Test
+    public void testSimpleExecuteFailFastForDurableModes() {
+        RetryPolicy policy = RetryPolicy.builder().maxAttempts(2).build();
+        RetryBackend backend = new RetryBackend() {
+            @Override
+            public String saveIntent(String taskType, String payload) {
+                return "intent";
+            }
+
+            @Override
+            public void completeIntent(String intentId) {
+            }
+
+            @Override
+            public void markTerminalFailure(String intentId, Throwable cause) {
+            }
+
+            @Override
+            public void submitForDelay(String intentId, String taskType, String payload, long delayMs) {
+            }
+        };
+
+        Retryer retryer = Retryer.builder()
+                .policy(policy)
+                .backend(backend)
+                .durability(RetryDurability.MEMORY_FALLBACK)
+                .build();
+
+        try {
+            retryer.execute(() -> "ok");
+            Assert.fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+            Assert.assertTrue(expected.getMessage().contains("MEMORY_ONLY"));
+        } catch (Exception e) {
+            Assert.fail("expected IllegalStateException");
+        }
+    }
 }

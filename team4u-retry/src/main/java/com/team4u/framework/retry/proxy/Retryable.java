@@ -9,7 +9,7 @@ import java.lang.annotation.*;
  * <p>
  * 结合 team4u-proxy 使用，无缝切入自动重试。
  */
-@Target({ElementType.METHOD})
+@Target({ElementType.METHOD, ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 @Documented
