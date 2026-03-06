@@ -6,6 +6,8 @@ import com.team4u.framework.retry.RetryDurability;
 import com.team4u.framework.retry.RetryExhaustedException;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.backoff.Backoff;
+import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
+import com.team4u.framework.retry.recovery.RetryTaskTypes;
 import com.team4u.framework.retry.proxy.serialize.RetryIgnore;
 import org.junit.Assert;
 import org.junit.Before;
@@ -20,6 +22,7 @@ public class RetryInterceptorTest {
     @Before
     public void setup() {
         RetryPolicyRegistry.global().unregisterAll();
+        RecoveryHandlerRegistry.global().unregisterAll();
         RetryPolicyRegistry.global().register(new NamedRetryPolicy() {
             @Override
             public String key() {
@@ -119,6 +122,15 @@ public class RetryInterceptorTest {
         Assert.assertNotNull(backend.submittedPayload);
         Assert.assertTrue(backend.submittedPayload.contains("visible"));
         Assert.assertFalse(backend.submittedPayload.contains("top-secret"));
+    }
+
+    @Test
+    public void testRetryProxyFactoryCanRegisterDefaultRecoveryHandler() {
+        Assert.assertFalse(RecoveryHandlerRegistry.global().get(RetryTaskTypes.DEFAULT_PROXY_RECOVERY).isPresent());
+
+        RetryProxyFactory.registerDefaultRecoveryHandler();
+
+        Assert.assertTrue(RecoveryHandlerRegistry.global().get(RetryTaskTypes.DEFAULT_PROXY_RECOVERY).isPresent());
     }
 
     public interface OrderService {

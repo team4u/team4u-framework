@@ -5,6 +5,8 @@ import com.team4u.framework.retry.backoff.Backoff;
 import com.team4u.framework.retry.proxy.NamedRetryPolicy;
 import com.team4u.framework.retry.proxy.RetryPolicyRegistry;
 import com.team4u.framework.retry.proxy.Retryable;
+import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
+import com.team4u.framework.retry.recovery.RetryTaskTypes;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -20,6 +22,7 @@ public class RetrySpringTest {
     @Before
     public void setup() {
         RetryPolicyRegistry.global().unregisterAll();
+        RecoveryHandlerRegistry.global().unregisterAll();
         RetryPolicyRegistry.global().register(new NamedRetryPolicy() {
             @Override
             public String key() {
@@ -67,6 +70,13 @@ public class RetrySpringTest {
             Assert.assertNotSame(ImplAnnotatedServiceImpl.class, service.getClass());
             Assert.assertEquals("impl_B200", service.call("B200"));
             Assert.assertEquals(3, config.implAnnotatedService.count.get());
+        }
+    }
+
+    @Test
+    public void testEnableRetryShouldAutoRegisterDefaultRecoveryHandler() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(TestConfig.class)) {
+            Assert.assertTrue(RecoveryHandlerRegistry.global().get(RetryTaskTypes.DEFAULT_PROXY_RECOVERY).isPresent());
         }
     }
 

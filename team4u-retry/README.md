@@ -297,13 +297,42 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), retryBack
 - `taskType`：任务类型，供后端恢复时路由
 - `durability`：可靠性级别，默认 `MEMORY_ONLY`
 
-当 `durability != MEMORY_ONLY` 时，注解式接入不会直接把“原始方法调用现场”丢给后端，而是会先把方法信息和参数快照序列化成一份任务快照，再交给 `RetryBackend`。这意味着：
+关于 `taskType`，还需要补充一个注解模式下的默认约定：
+
+- 如果 `@Retryable(taskType = "...")` 显式声明了 `taskType`，始终优先使用显式值
+- 如果 `taskType` 为空且 `durability != MEMORY_ONLY`，框架会自动落到默认 Proxy 恢复任务类型 `RetryTaskTypes.DEFAULT_PROXY_RECOVERY`
+- 如果 `durability == MEMORY_ONLY`，不会进入后端恢复链路，因此也不会使用默认恢复任务类型
+
+这个默认 key 是框架保留值，适合配合通用快照恢复器使用；业务侧如果需要自定义路由，仍建议显式声明自己的 `taskType`。
+
+当 `durability != MEMORY_ONLY` 时，注解式接入不会直接把“原始方法调用现场”丢给后端，而是会先把方法信息和参数快照序列化成一份 `RetryTaskSnapshot`，再交给 `RetryBackend`。这意味着：
 
 - `taskType` 决定后端如何路由任务
 - `payload` 不一定是你手写的业务 JSON；在注解场景下，它通常是一份框架生成的快照
 - 如果你希望后端 Worker 能自动恢复执行，就需要约定好它如何识别并消费这份快照
+- 快照里除了参数 JSON，还会包含 `beanName`、`methodName`、`argTypes`、`taskId`、`createdAt`、`executedAttempts`、`maxAttempts` 等恢复所需元数据
 
 换句话说，编程式接入更适合“我自己定义 payload 结构”；注解式接入更适合“我接受框架托管方法调用快照”。
+
+### 注解快照的生成时机
+
+这次版本里，注解式持久化快照的构建语义更明确了：
+
+- `MEMORY_ONLY`：不会序列化方法参数，也不会构建快照
+- `MEMORY_FALLBACK`：只有当前台内存重试耗尽、真正要移交后端时，才会延迟构建一次快照
+- `AT_LEAST_ONCE_DURABLE`：会在执行前就冻结一份快照，用于 `saveIntent(...)`
+
+这样做的目的，是避免 `MEMORY_FALLBACK` 在本地就能成功时产生不必要的序列化开销，同时保证 `AT_LEAST_ONCE_DURABLE` 模式下“先记账、后执行”的语义成立。
+
+### 注解快照的冻结语义
+
+一旦框架构建出 `RetryTaskSnapshot`，其中用于恢复的关键内容会保持稳定：
+
+- 参数值会按构建快照时的状态被冻结，不会受到业务方法后续修改入参对象的影响
+- 同一个业务意图在整个重试生命周期内会复用同一个 `taskId`
+- 同一份快照在预写 intent 和后续移交后端时会保持一致的 `createdAt`
+
+这意味着后端看到的是一份稳定的恢复材料，而不是被运行时继续修改过的调用现场。
 
 ### 什么时候需要提供 `RetryBackend`
 
@@ -385,6 +414,20 @@ public class PayServiceImpl {
 - 如果你同时使用 `@Transactional`、日志、监控等其他 Advisor，最终生效顺序仍取决于 Spring AOP 的代理链顺序
 
 如果你的业务依赖“自调用也要重试”，建议把待重试逻辑拆到独立 Bean，或者改用编程式接入。
+
+### 默认恢复处理器注册
+
+对于注解式持久化降级，框架提供了一套默认 Proxy 恢复链路：
+
+- Spring 场景下，开启 `@EnableRetry` 后，默认恢复处理器会自动注册
+- 非 Spring Proxy 场景下，可以显式调用 `RetryProxyFactory.registerDefaultRecoveryHandler()`
+- 也可以直接调用 `RecoveryHandlerRegistry.ensureDefaultProxyRecoveryHandlerRegistered()`
+
+示例：
+
+```java
+RetryProxyFactory.registerDefaultRecoveryHandler();
+```
 
 如果你在非 Spring Boot 环境里需要强制类代理，可以显式开启：
 
@@ -471,9 +514,79 @@ RecoveryHandlerRegistry.global().register(new RecoveryHandler() {
 这里有两个常见接入模型：
 
 - 编程式接入：`payload` 是你自己定义的业务快照，`RecoveryHandler` 负责反序列化并补偿执行
-- 注解式接入：`payload` 往往是框架生成的方法调用快照，后端可以选择自己解析，也可以封装一层统一恢复器再按快照内容反射调用
+- 注解式接入：`payload` 往往是框架生成的方法调用快照，后端可以选择自己解析，也可以直接使用框架提供的通用恢复器 `SnapshotRecoveryHandler`
 
 无论采用哪种模型，Worker 都应把“恢复失败后的再次重试 / 死信 / 告警”纳入自己的责任范围，而不是假定框架会在进程外继续自动兜底。
+
+### 通用快照恢复器：`SnapshotRecoveryHandler`
+
+如果你的后端消费的是注解式接入生成的 `RetryTaskSnapshot`，可以直接注册通用恢复器，而不必每个任务类型都手写一套反序列化逻辑：
+
+```java
+RecoveryHandlerRegistry.global().register(new SnapshotRecoveryHandler("pay-notify"));
+```
+
+对于默认 Proxy 恢复链路，框架还保留了一个默认任务类型：
+
+```java
+RetryTaskTypes.DEFAULT_PROXY_RECOVERY
+// team4u.retry.proxy.default-recovery
+```
+
+规则如下：
+
+- 如果 `@Retryable(taskType = "...")` 显式声明了 `taskType`，仍然优先使用显式值
+- 如果 `taskType` 为空且 `durability != MEMORY_ONLY`，框架自动使用 `DEFAULT_PROXY_RECOVERY`
+- 如果 `durability == MEMORY_ONLY`，不会走后端恢复，仍保持本地语义
+
+它的恢复流程可以概括为：
+
+1. 反序列化 `RetryTaskSnapshot`
+2. 根据 `beanName` 从 `BeanManager` 查找 Bean（查不到时再尝试按类名解析）
+3. 根据 `methodName + argTypes` 反射定位目标方法
+4. 按 `argJsonValues` 恢复参数
+5. 调用目标方法执行业务恢复
+
+对简单类型（如 `String`、基本类型及其包装类），框架会做直接转换；对复杂对象，则按 JSON 反序列化恢复。
+
+其中 Bean 的解析顺序可以理解为：
+
+1. `BeanManager.getBean(String)`
+2. 如果 `beanName` 像类名，再尝试 `Class.forName(beanName)`
+3. `BeanManager.getBean(Class)`
+
+因此，注解模式下默认快照中的 `beanName` 需要能被 `BeanManager` 解析到。
+
+### Worker 如何调用恢复器
+
+后端消费任务时，通常只需要按 `taskType` 找到对应的 `RecoveryHandler`，然后把 `payload` 交给它：
+
+```java
+public class RetryRecoveryWorker {
+
+    public void handle(String taskType, String payload) throws Exception {
+        RecoveryHandler handler = RecoveryHandlerRegistry.global()
+                .get(taskType)
+                .orElseThrow(() -> new IllegalStateException("RecoveryHandler not found. taskType=" + taskType));
+
+        handler.recover(payload);
+    }
+}
+```
+
+如果你走的是默认 Proxy 快照恢复链路，那么 Worker 本身通常不需要知道目标方法签名，只需要正确路由 `taskType + payload` 即可。
+
+### 恢复阶段为什么不会再次进入重试代理
+
+`SnapshotRecoveryHandler` 在执行恢复逻辑时，会通过 `RecoveryExecutionContext` 为当前线程打上“恢复中”标记。代理层发现当前线程处于恢复态后，会直接执行目标方法，而不会再次进入整条重试链路。
+
+这样做是为了避免后端 Worker 恢复任务时再次触发：
+
+- 重复 `saveIntent(...)`
+- 再次 `submitForDelay(...)`
+- 恢复执行套娃式重新代理
+
+因此，后端恢复调用可以被理解为“拿着已保存好的快照直接补偿执行”，而不是“重新从前台入口完整走一遍重试托管流程”。
 
 ### `MEMORY_FALLBACK` 的次数语义
 
@@ -726,6 +839,7 @@ retryer.execute(
 - `submitForDelay(...)` 最好接消息队列或延迟队列，而不是只放内存
 - `markTerminalFailure(...)` 建议落库并进入死信/告警链路
 - Worker 执行恢复逻辑时，业务本身要具备幂等性
+- 如果你使用注解式快照恢复，建议把 `beanName + methodName + argTypes` 视为恢复协议的一部分，避免随意改签名导致旧任务无法恢复
 
 ---
 
@@ -898,7 +1012,22 @@ public String notifyPay(String orderId) {
 
 注解式接入默认会序列化方法参数；不需要恢复的参数可以用 `@RetryIgnore` 跳过，但一旦跳过，就不能再指望恢复阶段拿到它。
 
-### 6. 非 Spring 场景注意线程池关闭
+另外，注解式恢复默认依赖方法签名和参数类型精确匹配：
+
+- `argTypes` 与 `argJsonValues` 数量必须一致
+- 恢复时必须还能定位到同名方法
+- `beanName` 必须仍然能从 `BeanManager` 解析到目标 Bean，或能回退到可加载的类名
+
+### 6. 后端恢复执行不会再次自动托管重试
+
+通用快照恢复器会显式跳过代理层的重试管线，避免恢复过程重复写 intent 或重复入队。
+
+这也意味着：
+
+- 后端 Worker 执行的是一次“恢复调用”，不是重新走一遍完整前台重试流程
+- 如果恢复失败，后续是否再次重试、是否死信、是否告警，应由你的后端消费系统负责
+
+### 7. 非 Spring 场景注意线程池关闭
 
 模块内部会使用全局执行器。应用关闭时建议显式调用：
 
@@ -955,8 +1084,3 @@ graph TD
 - 对 IO 异常、超时类故障用重试，对参数错误、幂等冲突这类业务异常慎用
 - 高并发场景优先用指数退避加抖动，避免雪崩式重试
 - 若启用持久化降级，先明确你的 `payload` 序列化协议和 Worker 恢复模型
-
-如果你要继续补充文档，推荐下一步增加两类内容：
-
-- 一个完整的 `RetryBackend` 示例实现
-- 一个 Spring Boot 场景下的端到端示例
