@@ -1,9 +1,9 @@
 package com.team4u.framework.retry.recovery;
 
 /**
- * 恢复执行上下文。
+ * 恢复执行上下文
  * <p>
- * 用于标记当前线程是否处于后端恢复执行阶段，避免代理重复进入重试链路。
+ * 用于标识当前线程是否处于后端任务恢复执行阶段，防止代理逻辑重复触发重试。
  */
 public final class RecoveryExecutionContext {
 
@@ -13,33 +13,33 @@ public final class RecoveryExecutionContext {
     }
 
     /**
-     * 标记当前线程进入恢复态。
+     * 进入恢复状态
      */
     public static void enter() {
         RECOVERING.set(Boolean.TRUE);
     }
 
     /**
-     * 清理当前线程恢复态标记。
+     * 退出恢复状态，清理线程上下文
      */
     public static void exit() {
         RECOVERING.remove();
     }
 
     /**
-     * 当前线程是否处于恢复执行阶段。
+     * 检查当前线程是否处于恢复执行阶段
      *
-     * @return true 表示是恢复态
+     * @return 为 true 表示处于恢复状态
      */
     public static boolean isRecovering() {
         return Boolean.TRUE.equals(RECOVERING.get());
     }
 
     /**
-     * 在恢复态中执行任务，并在结束后自动清理线程标记。
+     * 在恢复上下文中执行指定动作，并在完成后自动清理状态
      *
-     * @param action 目标动作
-     * @throws Exception 执行异常
+     * @param action 待执行的任务
+     * @throws Exception 执行过程中的异常
      */
     public static void run(CheckedRunnable action) throws Exception {
         enter();
@@ -50,6 +50,9 @@ public final class RecoveryExecutionContext {
         }
     }
 
+    /**
+     * 支持抛出受检异常的可执行接口
+     */
     @FunctionalInterface
     public interface CheckedRunnable {
         void run() throws Exception;

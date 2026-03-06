@@ -4,14 +4,16 @@ import com.team4u.framework.policy.api.KeyedPolicy;
 import com.team4u.framework.retry.RetryPolicy;
 
 /**
- * 带有名称标识的重试策略接口，用于支撑基于键值的策略仓库注册与获取。
+ * 命名重试策略接口
+ * <p>
+ * 支持基于键值的策略注册与获取。
  */
 public interface NamedRetryPolicy extends KeyedPolicy<String> {
 
     /**
-     * 返回基础的重试策略实例
+     * 获取基础重试策略
      *
-     * @return 实际的 RetryPolicy 实例
+     * @return 重试策略实例
      */
     RetryPolicy getPolicy();
 }

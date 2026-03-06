@@ -11,17 +11,19 @@ import java.util.concurrent.ExecutionException;
 /**
  * 重试异常工具类
  *
- * @author jay.wu
+ * 提供异常链分析与根因提取功能。
  */
 public class RetryExceptionUtil {
 
     /**
-     * 最大剥离深度，防止异常链过深导致的性能问题
+     * 最大剥离深度，防止无限递归或过深的异常链影响性能
      */
     private static final int MAX_UNWRAP_DEPTH = 10;
 
     /**
-     * 解包各种代理框架和异步框架产生的包装异常，提取根因
+     * 剥离包装异常，提取原始业务根因
+     *
+     * 递归解析异步框架、代理机制产生的包装类，直到发现核心异常或达到深度限制。
      *
      * @param ex 原始异常
      * @return 剥离后的核心异常
@@ -33,7 +35,7 @@ public class RetryExceptionUtil {
 
         Throwable cause = ex;
         int depth = 0;
-        // 使用 IdentityHashMap 防止异常对象重写 hashCode/equals 导致的判断失真
+        // 使用 IdentityHashMap 记录已处理异常，防止因循环引用导致的死循环
         Set<Throwable> seen = Collections.newSetFromMap(new IdentityHashMap<>());
 
         while (depth < MAX_UNWRAP_DEPTH && seen.add(cause)) {
@@ -52,6 +54,9 @@ public class RetryExceptionUtil {
         return cause;
     }
 
+    /**
+     * 判断指定异常是否为已知的包装类型
+     */
     private static boolean isWrapper(Throwable cause) {
         return cause instanceof CompletionException ||
                 cause instanceof ExecutionException ||
@@ -59,3 +64,4 @@ public class RetryExceptionUtil {
                 cause instanceof UndeclaredThrowableException;
     }
 }
+

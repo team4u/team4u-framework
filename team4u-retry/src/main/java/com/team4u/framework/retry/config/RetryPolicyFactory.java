@@ -8,7 +8,9 @@ import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.backoff.Backoff;
 
 /**
- * 重试策略工厂，用于将配置模型转换为不可变的策略实例
+ * 重试策略工厂
+ * <p>
+ * 将配置模型转换为重试策略实例。
  *
  * @author jay.wu
  */
@@ -16,6 +18,12 @@ public class RetryPolicyFactory {
 
     private static final Log log = LogFactory.get();
 
+    /**
+     * 从 JSON 配置创建重试策略
+     *
+     * @param jsonConfig JSON 格式配置
+     * @return 重试策略实例
+     */
     public static RetryPolicy create(String jsonConfig) {
         RetryPolicyConfig config = JSONUtil.toBean(jsonConfig, RetryPolicyConfig.class);
         RetryPolicy.Builder builder = RetryPolicy.builder()
@@ -26,7 +34,6 @@ public class RetryPolicyFactory {
             builder.inMemoryAttempts(config.getInMemoryAttempts());
         }
 
-        // 解析 Backoff
         String type = config.getBackoffType() == null ? "fixed" : config.getBackoffType().toLowerCase();
         switch (type) {
             case "increment":
@@ -44,14 +51,12 @@ public class RetryPolicyFactory {
                 break;
         }
 
-        // 解析需要重试的异常类
         if (config.getRetryOnExceptions() != null) {
             for (String className : config.getRetryOnExceptions()) {
                 addExceptionToBuilder(builder, className, true);
             }
         }
 
-        // 解析需要终止重试的异常类
         if (config.getAbortOnExceptions() != null) {
             for (String className : config.getAbortOnExceptions()) {
                 addExceptionToBuilder(builder, className, false);

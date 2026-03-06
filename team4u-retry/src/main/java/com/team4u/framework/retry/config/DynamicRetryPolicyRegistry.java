@@ -7,10 +7,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 /**
- * 动态配置驱动的重试策略注册表
+ * 动态配置重试策略注册表
  * <p>
- * 监听配置中心中前缀为 "retry.policy." 的配置变更。
- * 例如配置：retry.policy.pay-notify = {"maxAttempts": 5, "backoffType": "exponentialJitter", ...}
+ * 基于配置中心前缀为 "retry.policy." 的配置进行动态更新。
  *
  * @author jay.wu
  */
@@ -19,7 +18,7 @@ public class DynamicRetryPolicyRegistry {
     private static final String DEFAULT_PREFIX = "retry.policy.";
 
     /**
-     * 当前注册表实例
+     * 注册表实例
      */
     @Getter
     @Setter
@@ -30,7 +29,7 @@ public class DynamicRetryPolicyRegistry {
     );
 
     /**
-     * 【仅供测试使用】将注册表重置为默认配置驱动状态
+     * 重置注册表，仅用于测试
      */
     public static void reset() {
         registry = new ConfigDrivenRegistry<>(
@@ -41,10 +40,10 @@ public class DynamicRetryPolicyRegistry {
     }
 
     /**
-     * 根据策略 ID 获取最新的重试策略映射
+     * 根据策略标识获取重试策略
      *
-     * @param policyId 策略 ID（不含前缀）
-     * @return 最新的 RetryPolicy 实例，如果配置不存在则返回 null
+     * @param policyId 策略标识（不含前缀）
+     * @return 重试策略实例，若不存在则返回 null
      */
     public static RetryPolicy getPolicy(String policyId) {
         return registry.get(DEFAULT_PREFIX + policyId);

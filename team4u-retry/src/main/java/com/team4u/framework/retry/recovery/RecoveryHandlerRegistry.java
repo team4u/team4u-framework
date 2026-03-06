@@ -15,16 +15,16 @@ public class RecoveryHandlerRegistry extends KeyedPolicyRegistry<String, Recover
     }
 
     /**
-     * 获取全局单例实例
+     * 获取全局注册表单例
      *
-     * @return 注册表实例
+     * @return 注册表单例实例
      */
     public static RecoveryHandlerRegistry global() {
         return INSTANCE;
     }
 
     /**
-     * 幂等注册默认的注解快照恢复处理器。
+     * 幂等注册默认的注解快照恢复处理器
      */
     public void registerDefaultProxyRecoveryHandler() {
         if (get(RetryTaskTypes.DEFAULT_PROXY_RECOVERY).isPresent()) {
@@ -39,7 +39,7 @@ public class RecoveryHandlerRegistry extends KeyedPolicyRegistry<String, Recover
     }
 
     /**
-     * 便捷静态入口，供 Spring 和 Proxy 场景复用。
+     * 确保默认的注解快照恢复处理器已注册
      */
     public static void ensureDefaultProxyRecoveryHandlerRegistered() {
         global().registerDefaultProxyRecoveryHandler();

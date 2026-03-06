@@ -6,7 +6,7 @@ import com.team4u.framework.retry.exception.RetrySerializationException;
 import java.lang.reflect.Parameter;
 
 /**
- * 基于 Hutool JSONUtil 的默认重试上下文序列化器
+ * 基于 Hutool JSONUtil 实现的重试上下文序列化器
  *
  * @author antigravity
  */
@@ -20,7 +20,7 @@ public class HutoolRetryContextSerializer implements RetryContextSerializer {
             return null;
         }
 
-        // 检查是否标记了 @RetryIgnore
+        // 检查参数是否标记了 @RetryIgnore 注解
         if (parameter != null && parameter.isAnnotationPresent(RetryIgnore.class)) {
             return null;
         }
@@ -29,8 +29,8 @@ public class HutoolRetryContextSerializer implements RetryContextSerializer {
             return JSONUtil.toJsonStr(arg);
         } catch (Exception e) {
             throw new RetrySerializationException(
-                    "Failed to serialize retry argument. Type: " + arg.getClass().getName()
-                            + ", error: " + e.getMessage(), e);
+                    "重试参数序列化失败。类型: " + arg.getClass().getName()
+                            + ", 错误信息: " + e.getMessage(), e);
         }
     }
 }

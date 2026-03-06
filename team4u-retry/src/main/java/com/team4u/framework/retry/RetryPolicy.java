@@ -12,18 +12,18 @@ import java.util.Set;
 
 /**
  * 重试策略配置
- * <p>
- * 这是一个不可变类，确保配置项在多线程环境下的绝对安全性。
- * 建议通过 {@link Builder} 来构建其实例。
+ *
+ * 不可变类，用于定义任务重试的核心规则。
+ * 推荐使用 {@link Builder} 进行构建。
  */
 @Getter
 public class RetryPolicy {
     /**
-     * 全局最大尝试次数（包含首次,-1 表示无限）
+     * 最大尝试次数，包含首次请求（-1 表示无限制）
      */
     private final int maxAttempts;
     /**
-     * 仅控制前台内存重试预算；为空表示自动推导
+     * 内存重试配额（可选，未设置时将自动推导）
      */
     private final Integer inMemoryAttempts;
     private final Backoff backoff;
@@ -41,7 +41,7 @@ public class RetryPolicy {
     }
 
     /**
-     * 创建一个构建器，用于配置重试策略
+     * 创建重试策略构建器
      *
      * @return 构建器实例
      */
@@ -50,11 +50,11 @@ public class RetryPolicy {
     }
 
     /**
-     * 判断当前情况是否允许继续重试
+     * 检查是否允许继续进行下一次尝试
      *
-     * @param currentAttempt 当前已尝试次数
-     * @param ex             执行过程中抛出的异常
-     * @return 如果满足所有条件允许重试返回true，否则返回false
+     * @param currentAttempt 当前尝试次数
+     * @param ex             当前发生的异常
+     * @return 是否满足重试条件
      */
     public boolean canRetry(int currentAttempt, Throwable ex) {
         if (currentAttempt >= maxAttempts && maxAttempts != -1) {
@@ -71,7 +71,7 @@ public class RetryPolicy {
             return false;
         }
 
-        // 集成 team4u-criterion 进行高阶条件过滤，例如校验特定错误信息或组合重试策略
+        // 使用集成表达式引擎进行高级条件判定（如异常信息内容匹配等）
         if (conditionExpression != null && !conditionExpression.isEmpty()) {
             RetryContext contextData = new RetryContext(currentAttempt, getMaxAttempts(), cause);
             MatchContext ctx = MatchContext.of(contextData);
@@ -82,42 +82,37 @@ public class RetryPolicy {
     }
 
     /**
-     * 获取下次重试前需要等待的时间
+     * 计算下次尝试前的等待时间
      *
-     * @param currentAttempt 当前失败对应的尝试序号（从 1 开始）
-     *                       例如第 N 次执行失败后，调用 getDelayMillis(N) 计算下一次前的等待时间
-     * @return 等待时间的毫秒数
+     * @param currentAttempt 当前完成的尝试次数（从 1 开始）
+     * @return 延迟等待毫秒数
      */
     public long getDelayMillis(int currentAttempt) {
         return backoff.calculateMillis(currentAttempt);
     }
 
     /**
-     * 检查当前异常类型是否匹配指定的异常集合
+     * 校验异常类型是否命中指定集合
      */
     private boolean matches(Throwable ex, Set<Class<? extends Throwable>> classes) {
         return classes.stream().anyMatch(clazz -> clazz.isAssignableFrom(ex.getClass()));
     }
 
     /**
-     * 剥离外层包装，提取真正的异常原因
-     * <p>
-     * 例如在异步操作中，真正的异常经常被包装在 CompletionException 中，
-     * 在代理层则可能被包装在 UndeclaredThrowableException、InvocationTargetException 或
-     * ExecutionException 中。
+     * 提取根因异常，剥离各层包装（如异步包装异常等）
      */
     private Throwable extractCause(Throwable ex) {
         return RetryExceptionUtil.unwrap(ex);
     }
 
     /**
-     * 重试上下文，用于承载每次尝试的变量抛给表达式引擎
+     * 重试运行上下文，用于承载策略判定所需的变量
      */
     @Getter
     public static class RetryContext {
         private final int attempt;
         /**
-         * 全局最大尝试次数（-1 表示无限）
+         * 全局最大尝试次数（-1 表示无限制）
          */
         private final int maxAttempts;
         private final Throwable cause;
@@ -133,7 +128,7 @@ public class RetryPolicy {
     }
 
     /**
-     * RetryPolicy 的构建器
+     * RetryPolicy 构建器
      */
     public static class Builder {
         private final Set<Class<? extends Throwable>> retryOnExceptions = new HashSet<>();
@@ -144,9 +139,9 @@ public class RetryPolicy {
         private String conditionExpression;
 
         /**
-         * 设置全局最大尝试次数（内存 + 后端总和，包含首次）。
+         * 设置最大尝试次数（包含首次请求）
          *
-         * @param maxAttempts 全局最大尝试次数，包含首次请求
+         * @param maxAttempts 最大次数
          * @return 构建器自身
          */
         public Builder maxAttempts(int maxAttempts) {
@@ -155,9 +150,9 @@ public class RetryPolicy {
         }
 
         /**
-         * 设置前台内存尝试次数预算（可选，不设置则自动推导）
+         * 设置内存重试尝试次数
          *
-         * @param inMemoryAttempts 前台内存最大尝试次数，包含首次请求
+         * @param inMemoryAttempts 内存尝试配额
          * @return 构建器自身
          */
         public Builder inMemoryAttempts(int inMemoryAttempts) {
@@ -166,7 +161,7 @@ public class RetryPolicy {
         }
 
         /**
-         * 设置为无限次重试
+         * 设置为无限尝试模式
          *
          * @return 构建器自身
          */
@@ -178,7 +173,7 @@ public class RetryPolicy {
         /**
          * 设置退避策略
          *
-         * @param backoff 基于不同模式计算延迟时间的策略对象
+         * @param backoff 退避计算规则
          * @return 构建器自身
          */
         public Builder backoff(Backoff backoff) {
@@ -187,9 +182,9 @@ public class RetryPolicy {
         }
 
         /**
-         * 声明允许触发重试的异常类型
+         * 指定允许触发重试的异常类型
          *
-         * @param exceptions 遇到这些异常及其子类时允许重试
+         * @param exceptions 触发异常集合
          * @return 构建器自身
          */
         @SafeVarargs
@@ -199,9 +194,9 @@ public class RetryPolicy {
         }
 
         /**
-         * 声明会终止重试的异常类型
+         * 指定直接终止重试的异常类型
          *
-         * @param exceptions 遇到这些异常及其子类时，不再尝试重试，立刻中断
+         * @param exceptions 终止异常集合
          * @return 构建器自身
          */
         @SafeVarargs
@@ -211,10 +206,10 @@ public class RetryPolicy {
         }
 
         /**
-         * 引入 Criterion 表达式控制高级策略
+         * 设置高级策略判定表达式
          * 示例: .condition("message contains 'timeout' && $attempt < 3")
          *
-         * @param expression Criterion 能够解析的判断表达式
+         * @param expression 逻辑表达式
          * @return 构建器自身
          */
         public Builder condition(String expression) {
@@ -223,9 +218,9 @@ public class RetryPolicy {
         }
 
         /**
-         * 构建出不可变的 RetryPolicy 实例
+         * 构造 RetryPolicy 实例
          *
-         * @return 配置好的重试策略
+         * @return 重试策略实例
          */
         public RetryPolicy build() {
             if (maxAttempts == 0 || maxAttempts < -1) {

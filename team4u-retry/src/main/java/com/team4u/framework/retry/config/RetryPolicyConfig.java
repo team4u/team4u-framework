@@ -6,7 +6,7 @@ import lombok.Setter;
 import java.util.List;
 
 /**
- * 映射配置中心的重试策略定义
+ * 重试策略配置定义
  *
  * @author jay.wu
  */
@@ -14,11 +14,11 @@ import java.util.List;
 @Setter
 public class RetryPolicyConfig {
     /**
-     * 全局最大尝试次数（内存 + 后端总和，包含首次）
+     * 最大尝试次数（包含首次执行）
      */
     private int maxAttempts = 3;
     /**
-     * 前台内存尝试次数预算（可选）
+     * 内存阶段尝试次数
      */
     private Integer inMemoryAttempts;
     /**
@@ -30,7 +30,7 @@ public class RetryPolicyConfig {
      */
     private long initialDelay = 1000;
     /**
-     * 步进值或乘数
+     * 乘数或步进值
      */
     private double multiplier = 2.0;
     /**
@@ -38,15 +38,15 @@ public class RetryPolicyConfig {
      */
     private long maxDelay = 30000;
     /**
-     * 允许重试的异常类列表
+     * 触发重试的异常列表
      */
     private List<String> retryOnExceptions;
     /**
-     * 终止重试的异常类列表
+     * 终止重试的异常列表
      */
     private List<String> abortOnExceptions;
     /**
-     * 高级重试条件表达式 (team4u-criterion)
+     * 重试条件表达式
      */
     private String condition;
 
