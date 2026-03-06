@@ -9,7 +9,7 @@
 
 - 同步重试：阻塞式执行 `Callable`
 - 异步重试：基于 `CompletableFuture + ScheduledExecutorService`
-- 注解重试：通过 `@Retryable` 接入
+- 注解式重试：通过 `@Retryable` 接入
 - Spring 自动代理：通过 `@EnableRetry` 自动织入
 - 持久化降级：内存重试耗尽后移交后端队列
 - 动态策略：支持从配置中心动态加载 `retry.policy.*`
@@ -26,7 +26,7 @@
 - [Spring 自动代理](#spring-自动代理)
 - [持久化降级与恢复](#持久化降级与恢复)
 - [动态策略与配置中心](#动态策略与配置中心)
-- [完整示例：自定义 RetryBackend](#完整示例自定义-retrybackend)
+- [完整示例：使用内置 Backend + Worker](#完整示例使用内置-backend--worker)
 - [完整示例：Spring Boot 接入](#完整示例spring-boot-接入)
 - [关键边界与注意事项](#关键边界与注意事项)
 - [实现结构](#实现结构)
@@ -46,7 +46,7 @@
 ### 一句话决策
 
 - 只需要本地重试：用 `Retryer.with(policy).execute(...)`
-- 需要“内存失败后丢到后端队列”：用 `Retryer.builder()` 并配置 `RetryBackend`
+- 需要“内存失败后移交到后端队列”：用 `Retryer.builder()` 并配置 `RetryBackend`
 - 已经在 Spring 里：优先用 `@EnableRetry`
 
 ---
@@ -115,7 +115,7 @@ CompletableFuture<String> future = retryer.executeAsync(
 - 纯内存异步重试不需要 `taskType` 和 `payloadBuilder`
 - 只有当你需要失败后移交后端继续恢复时，才需要使用带 `taskType/payloadBuilder` 的那个 `executeAsync(...)` 重载
 
-### 最小示例：注解重试
+### 最小示例：注解式重试
 
 ```java
 public interface PayService {
@@ -319,7 +319,7 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), retryBack
 这次版本里，注解式持久化快照的构建语义更明确了：
 
 - `MEMORY_ONLY`：不会序列化方法参数，也不会构建快照
-- `MEMORY_FALLBACK`：只有当前台内存重试耗尽、真正要移交后端时，才会延迟构建一次快照
+- `MEMORY_FALLBACK`：只有当前进程内的内存重试耗尽、真正要移交后端时，才会延迟构建一次快照
 - `AT_LEAST_ONCE_DURABLE`：会在执行前就冻结一份快照，用于 `saveIntent(...)`
 
 这样做的目的，是避免 `MEMORY_FALLBACK` 在本地就能成功时产生不必要的序列化开销，同时保证 `AT_LEAST_ONCE_DURABLE` 模式下“先记账、后执行”的语义成立。
@@ -413,7 +413,7 @@ public class PayServiceImpl {
 - `final` 类 / `final` 方法不适合依赖类代理增强
 - 如果你同时使用 `@Transactional`、日志、监控等其他 Advisor，最终生效顺序仍取决于 Spring AOP 的代理链顺序
 
-如果你的业务依赖“自调用也要重试”，建议把待重试逻辑拆到独立 Bean，或者改用编程式接入。
+如果你的业务要求“自调用也能触发重试”，建议把待重试逻辑拆到独立 Bean，或者改用编程式接入。
 
 ### 默认恢复处理器注册
 
@@ -464,7 +464,7 @@ public class RetryConfig {
 - `payload` 回答“后端要拿什么数据来恢复这次任务”
 - `intent` 回答“系统是否已经正式记下这次任务，并开始对它负责”
 
-所以，`payload` 更像恢复材料，`intent` 更像任务台账，`intentId` 则是这本台账上的主键。
+所以，`payload` 更像恢复材料，`intent` 更像任务台账，`intentId` 则是该意图记录的唯一标识。
 
 ### `RetryBackend` 职责
 
@@ -479,9 +479,19 @@ public interface RetryBackend {
 }
 ```
 
+框架也提供了两套最小可用实现，适合快速验证完整链路：
+
+- `InMemoryRetryBackend`：单进程内存版，适合单测、本地开发、demo
+- `LocalFileRetryBackend`：单机文件版，默认可落到 `backend-retry.txt`
+
+如果你希望直接用框架内置 Worker 消费它们，还可以配合：
+
+- `WorkerReadableRetryBackend`：在 `RetryBackend` 之上补充阻塞式 `take()`
+- `RetryWorker`：按 `taskType` 路由到 `RecoveryHandler`
+
 语义上可以理解为：
 
-- `saveIntent(...)`：预写日志 / 预留执行意图
+- `saveIntent(...)`：预写日志 / 记录执行意图
 - `completeIntent(...)`：任务成功后清理 intent
 - `markTerminalFailure(...)`：彻底失败，标记为终态
 - `submitForDelay(...)`：把任务送入延迟队列
@@ -576,6 +586,17 @@ public class RetryRecoveryWorker {
 
 如果你走的是默认 Proxy 快照恢复链路，那么 Worker 本身通常不需要知道目标方法签名，只需要正确路由 `taskType + payload` 即可。
 
+如果你直接使用框架内置 Worker，调用方式就是：
+
+```java
+import com.team4u.framework.retry.worker.InMemoryRetryBackend;
+import com.team4u.framework.retry.worker.RetryWorker;
+
+InMemoryRetryBackend backend = new InMemoryRetryBackend();
+RetryWorker worker = new RetryWorker(backend);
+worker.start("retry-worker");
+```
+
 ### 恢复阶段为什么不会再次进入重试代理
 
 `SnapshotRecoveryHandler` 在执行恢复逻辑时，会通过 `RecoveryExecutionContext` 为当前线程打上“恢复中”标记。代理层发现当前线程处于恢复态后，会直接执行目标方法，而不会再次进入整条重试链路。
@@ -584,9 +605,9 @@ public class RetryRecoveryWorker {
 
 - 重复 `saveIntent(...)`
 - 再次 `submitForDelay(...)`
-- 恢复执行套娃式重新代理
+- 恢复执行再次进入代理链
 
-因此，后端恢复调用可以被理解为“拿着已保存好的快照直接补偿执行”，而不是“重新从前台入口完整走一遍重试托管流程”。
+因此，后端恢复调用可以被理解为“拿着已保存好的快照直接补偿执行”，而不是“重新从调用侧入口完整走一遍重试托管流程”。
 
 ### `MEMORY_FALLBACK` 的次数语义
 
@@ -597,14 +618,14 @@ public class RetryRecoveryWorker {
 
 则：
 
-- 前台最多执行 `M` 次
+- 当前进程内最多执行 `M` 次
 - 只有 `M < T`，或者 `T == -1` 时，才会降级到后端
 - 有限重试场景下，后端剩余次数为 `T - M`
 
 默认值：
 
 - `MEMORY_ONLY`：默认全部在内存中完成
-- `MEMORY_FALLBACK` / `AT_LEAST_ONCE_DURABLE`：如果未显式配置 `inMemoryAttempts`，默认前台尝试 2 次
+- `MEMORY_FALLBACK` / `AT_LEAST_ONCE_DURABLE`：如果未显式配置 `inMemoryAttempts`，默认当前进程内尝试 2 次
 
 ---
 
@@ -652,97 +673,9 @@ RetryPolicy policy = DynamicRetryPolicyRegistry.getPolicy("pay-notify");
 
 ---
 
-## 完整示例：自定义 `RetryBackend`
+## 完整示例：使用内置 Backend + Worker
 
-下面这个例子不是生产实现，但足够帮助开发者理解接口职责，以及如何把 `team4u-retry` 接到自己的队列系统上。
-
-### 一个最小内存版后端
-
-```java
-import com.team4u.framework.retry.RetryBackend;
-
-import java.util.Map;
-import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.DelayQueue;
-import java.util.concurrent.Delayed;
-import java.util.concurrent.TimeUnit;
-
-public class InMemoryRetryBackend implements RetryBackend {
-
-    private final Map<String, IntentRecord> intents = new ConcurrentHashMap<>();
-    private final DelayQueue<DelayedTask> queue = new DelayQueue<>();
-
-    @Override
-    public String saveIntent(String taskType, String payload) {
-        String intentId = "intent-" + System.nanoTime();
-        intents.put(intentId, new IntentRecord(intentId, taskType, payload, "PENDING"));
-        return intentId;
-    }
-
-    @Override
-    public void completeIntent(String intentId) {
-        intents.remove(intentId);
-    }
-
-    @Override
-    public void markTerminalFailure(String intentId, Throwable cause) {
-        IntentRecord old = intents.get(intentId);
-        if (old != null) {
-            intents.put(intentId, new IntentRecord(old.intentId, old.taskType, old.payload, "TERMINAL"));
-        }
-    }
-
-    @Override
-    public void submitForDelay(String intentId, String taskType, String payload, long delay) {
-        intents.putIfAbsent(intentId, new IntentRecord(intentId, taskType, payload, "QUEUED"));
-        queue.offer(new DelayedTask(intentId, taskType, payload, delay));
-    }
-
-    public DelayedTask take() throws InterruptedException {
-        return queue.take();
-    }
-
-    public static final class IntentRecord {
-        public final String intentId;
-        public final String taskType;
-        public final String payload;
-        public final String status;
-
-        public IntentRecord(String intentId, String taskType, String payload, String status) {
-            this.intentId = intentId;
-            this.taskType = taskType;
-            this.payload = payload;
-            this.status = status;
-        }
-    }
-
-    public static final class DelayedTask implements Delayed {
-        public final String intentId;
-        public final String taskType;
-        public final String payload;
-        private final long executeAtNanos;
-
-        public DelayedTask(String intentId, String taskType, String payload, long delayMillis) {
-            this.intentId = Objects.requireNonNull(intentId);
-            this.taskType = Objects.requireNonNull(taskType);
-            this.payload = payload;
-            this.executeAtNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(delayMillis);
-        }
-
-        @Override
-        public long getDelay(TimeUnit unit) {
-            long remaining = executeAtNanos - System.nanoTime();
-            return unit.convert(remaining, TimeUnit.NANOSECONDS);
-        }
-
-        @Override
-        public int compareTo(Delayed other) {
-            return Long.compare(getDelay(TimeUnit.NANOSECONDS), other.getDelay(TimeUnit.NANOSECONDS));
-        }
-    }
-}
-```
+下面这个例子使用框架内置的 `InMemoryRetryBackend + RetryWorker`，是最小可运行方案。生产环境仍然可以按你的存储和调度系统自定义 `RetryBackend`。
 
 ### 对应的恢复器
 
@@ -765,51 +698,23 @@ public class PayNotifyRecoveryHandler implements RecoveryHandler {
 }
 ```
 
-### Worker 如何消费后端任务
-
-```java
-import com.team4u.framework.retry.recovery.RecoveryHandler;
-import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
-
-public class RetryWorker implements Runnable {
-
-    private final InMemoryRetryBackend backend;
-
-    public RetryWorker(InMemoryRetryBackend backend) {
-        this.backend = backend;
-    }
-
-    @Override
-    public void run() {
-        while (!Thread.currentThread().isInterrupted()) {
-            try {
-                InMemoryRetryBackend.DelayedTask task = backend.take();
-                RecoveryHandler handler = RecoveryHandlerRegistry.global()
-                        .get(task.taskType)
-                        .orElseThrow(() -> new IllegalStateException("No RecoveryHandler for " + task.taskType));
-                handler.recover(task.payload);
-                backend.completeIntent(task.intentId);
-            } catch (InterruptedException e) {
-                Thread.currentThread().interrupt();
-                break;
-            } catch (Exception e) {
-                // 生产环境里建议记录日志、做死信或重新入队，不要简单吞掉
-                e.printStackTrace();
-            }
-        }
-    }
-}
-```
-
 ### 怎么把它串起来
 
 ```java
+import com.team4u.framework.retry.RetryDurability;
+import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.Retryer;
+import com.team4u.framework.retry.backoff.Backoff;
+import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
+import com.team4u.framework.retry.worker.InMemoryRetryBackend;
+import com.team4u.framework.retry.worker.RetryWorker;
+
 InMemoryRetryBackend backend = new InMemoryRetryBackend();
 
 RecoveryHandlerRegistry.global().register(new PayNotifyRecoveryHandler());
 
-Thread worker = new Thread(new RetryWorker(backend), "retry-worker");
-worker.start();
+RetryWorker worker = new RetryWorker(backend);
+worker.start("retry-worker");
 
 RetryPolicy policy = RetryPolicy.builder()
         .maxAttempts(5)
@@ -832,11 +737,23 @@ retryer.execute(
 );
 ```
 
+如果你希望在本地验证“进程重启后仍能恢复”，可以切换到文件版 backend：
+
+```java
+import java.nio.file.Paths;
+import com.team4u.framework.retry.worker.LocalFileRetryBackend;
+import com.team4u.framework.retry.worker.RetryWorker;
+
+LocalFileRetryBackend backend = new LocalFileRetryBackend(Paths.get("backend-retry.txt"));
+RetryWorker worker = new RetryWorker(backend);
+worker.start("file-retry-worker");
+```
+
 ### 生产实现建议
 
 - `intentId` 不要用临时值，建议用业务幂等键或稳定哈希
 - `payload` 要有明确版本号，避免后续字段变更导致恢复失败
-- `submitForDelay(...)` 最好接消息队列或延迟队列，而不是只放内存
+- `submitForDelay(...)` 最好接消息队列或延迟队列，而不是只放内存；内置 `InMemoryRetryBackend` / `LocalFileRetryBackend` 更适合测试、开发和演示场景
 - `markTerminalFailure(...)` 建议落库并进入死信/告警链路
 - Worker 执行恢复逻辑时，业务本身要具备幂等性
 - 如果你使用注解式快照恢复，建议把 `beanName + methodName + argTypes` 视为恢复协议的一部分，避免随意改签名导致旧任务无法恢复
@@ -953,6 +870,7 @@ public class DemoRunner implements CommandLineRunner {
 
 ```java
 import com.team4u.framework.retry.RetryBackend;
+import com.team4u.framework.retry.worker.InMemoryRetryBackend;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -975,7 +893,22 @@ public String notifyPay(String orderId) {
 }
 ```
 
-此时要再配一套后端 Worker 和 `RecoveryHandler`，否则任务虽然能入队，但不会有人恢复执行。
+此时还需要再配一套后端 Worker 和 `RecoveryHandler`，否则任务虽然能入队，但不会被恢复处理。
+
+例如：
+
+```java
+import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
+import com.team4u.framework.retry.worker.InMemoryRetryBackend;
+import com.team4u.framework.retry.worker.RetryWorker;
+import org.springframework.context.annotation.Bean;
+
+@Bean(initMethod = "start", destroyMethod = "shutdown")
+public RetryWorker retryWorker(InMemoryRetryBackend backend) {
+    RecoveryHandlerRegistry.ensureDefaultProxyRecoveryHandlerRegistered();
+    return new RetryWorker(backend);
+}
+```
 
 ---
 
@@ -1024,7 +957,7 @@ public String notifyPay(String orderId) {
 
 这也意味着：
 
-- 后端 Worker 执行的是一次“恢复调用”，不是重新走一遍完整前台重试流程
+- 后端 Worker 执行的是一次“恢复调用”，不是重新走一遍完整的调用侧重试流程
 - 如果恢复失败，后续是否再次重试、是否死信、是否告警，应由你的后端消费系统负责
 
 ### 7. 非 Spring 场景注意线程池关闭
@@ -1041,7 +974,7 @@ RetryExecutorManager.global().shutdown();
 -Dteam4u.retry.executors.daemon=true
 ```
 
-### 7. Spring 场景仍受 AOP 代理边界约束
+### 8. Spring 场景仍受 AOP 代理边界约束
 
 `@EnableRetry` 并不会改变 Spring AOP 的基本规则。自调用、`final` 方法、以及多个 Advisor 的链路顺序，都应按标准 Spring 代理模型理解和验证。
 
@@ -1080,7 +1013,7 @@ graph TD
 
 ## 给开发者的建议
 
-- 默认从编程式接入开始，先把策略和语义跑通，再抽到注解
+- 默认从编程式接入开始，先验证策略配置和执行语义，再抽象到注解式接入
 - 对 IO 异常、超时类故障用重试，对参数错误、幂等冲突这类业务异常慎用
 - 高并发场景优先用指数退避加抖动，避免雪崩式重试
 - 若启用持久化降级，先明确你的 `payload` 序列化协议和 Worker 恢复模型
