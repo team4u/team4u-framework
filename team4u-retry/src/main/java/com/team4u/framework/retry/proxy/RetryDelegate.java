@@ -1,10 +1,7 @@
 package com.team4u.framework.retry.proxy;
 
 import cn.hutool.crypto.digest.DigestUtil;
-import com.team4u.framework.retry.RetryBackend;
-import com.team4u.framework.retry.RetryDurability;
-import com.team4u.framework.retry.RetryPolicy;
-import com.team4u.framework.retry.Retryer;
+import com.team4u.framework.retry.*;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.backend.serialize.HutoolRetryTaskSnapshotSerializer;
 import com.team4u.framework.retry.backend.serialize.RetryTaskSnapshotSerializer;
@@ -21,7 +18,6 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.atomic.AtomicReference;
-import java.util.function.IntFunction;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -65,7 +61,7 @@ public class RetryDelegate {
         RetryBackend backend = backendSupplier != null ? backendSupplier.get() : null;
         validateBackendIfNeeded(method, policyKey, durability, backend);
         boolean isAsync = CompletableFuture.class.isAssignableFrom(method.getReturnType());
-        IntFunction<String> payloadBuilder = createPayloadBuilder(method, target, args, taskType, policy, durability);
+        RetryPayloadBuilder payloadBuilder = createPayloadBuilder(method, target, args, taskType, policy, durability);
 
         Retryer retryer = Retryer.builder()
                 .policy(policy)
@@ -74,6 +70,21 @@ public class RetryDelegate {
                 .build();
 
         if (isAsync) {
+            if (durability == RetryDurability.MEMORY_ONLY) {
+                return retryer.executeAsync(
+                        () -> {
+                            try {
+                                @SuppressWarnings("unchecked")
+                                CompletableFuture<Object> cf = (CompletableFuture<Object>) proceedTask.call();
+                                return cf;
+                            } catch (Throwable e) {
+                                CompletableFuture<Object> fail = new CompletableFuture<>();
+                                fail.completeExceptionally(e);
+                                return fail;
+                            }
+                        },
+                        scheduler != null ? scheduler : RetryExecutorManager.global().getScheduler());
+            }
             return retryer.executeAsync(
                     taskType,
                     payloadBuilder,
@@ -123,14 +134,14 @@ public class RetryDelegate {
                         "method=" + methodSignature + ", policyKey=" + policyKey);
     }
 
-    private IntFunction<String> createPayloadBuilder(Method method,
+    private RetryPayloadBuilder createPayloadBuilder(Method method,
                                                      Object target,
                                                      Object[] args,
                                                      String taskType,
                                                      RetryPolicy policy,
                                                      RetryDurability durability) {
         if (durability == RetryDurability.MEMORY_ONLY) {
-            return attempt -> {
+            return context -> {
                 throw new IllegalStateException("Payload builder must not be used for MEMORY_ONLY retry methods.");
             };
         }
@@ -143,8 +154,8 @@ public class RetryDelegate {
             snapshotSupplier = memoizeSnapshot(() -> buildFrozenSnapshot(method, target, args, taskType, policy));
         }
 
-        return executedAttempts -> snapshotSerializer.serialize(
-                copySnapshotForAttempt(snapshotSupplier.get(), executedAttempts));
+        return context -> snapshotSerializer.serialize(
+                copySnapshotForAttempt(snapshotSupplier.get(), context.getExecutedAttempts()));
     }
 
     private Supplier<RetryTaskSnapshot> memoizeSnapshot(Supplier<RetryTaskSnapshot> snapshotBuilder) {

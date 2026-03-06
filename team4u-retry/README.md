@@ -104,12 +104,16 @@ RetryPolicy policy = RetryPolicy.builder()
 Retryer retryer = Retryer.with(policy);
 
 CompletableFuture<String> future = retryer.executeAsync(
-        "order.query",
-        attempt -> "{\"orderId\":\"A1001\"}",
         this::asyncRemoteCall,
         scheduler
 );
 ```
+
+说明：
+
+- 这个写法在 `Retryer.with(policy)` 下仍然是 `MEMORY_ONLY`
+- 纯内存异步重试不需要 `taskType` 和 `payloadBuilder`
+- 只有当你需要失败后移交后端继续恢复时，才需要使用带 `taskType/payloadBuilder` 的那个 `executeAsync(...)` 重载
 
 ### 最小示例：注解重试
 
@@ -202,10 +206,30 @@ Retryer retryer = Retryer.builder()
 
 String result = retryer.execute(
         "pay-notify",
-        attempt -> "{\"orderId\":\"A1001\"}",
+        context -> "{\"orderId\":\"A1001\"}",
         this::doBusiness
 );
 ```
+
+这里的三个参数可以这样理解：
+
+- `taskType`：告诉后端“这是什么任务”
+- `payloadBuilder`：告诉后端“恢复这个任务需要什么快照数据”
+- `task`：当前进程里此刻真正要执行的业务逻辑
+
+所以 `payloadBuilder` 不是“业务方法入参构造器”，而是“任务恢复快照构造器”。
+比如支付通知失败后要交给后端继续重试，`payload` 至少要能让后端知道是哪一个订单：
+
+```java
+context -> "{\"orderId\":\"A1001\"}"
+```
+
+如果没有这份 `payload`，后端最多只知道“有个 `pay-notify` 任务失败了”，但不知道该恢复哪一单，也就无法继续执行。
+
+其中 `context` 提供显式语义：
+
+- `context.getPhase()`：当前是 `PREPARE_INTENT` 还是 `HANDOFF_TO_BACKEND`
+- `context.getExecutedAttempts()`：预写阶段固定为 `0`，降级入队阶段表示已执行过的尝试次数
 
 当内存重试耗尽但策略仍允许继续重试时：
 
@@ -218,10 +242,28 @@ String result = retryer.execute(
 ```java
 CompletableFuture<String> future = retryer.executeAsync(
         "pay-notify",
-        attempt -> "{\"orderId\":\"A1001\"}",
+        context -> "{\"orderId\":\"A1001\"}",
         this::asyncRemoteCall,
         scheduler
 );
+```
+
+大多数场景下你不需要区分 `context.getPhase()`，直接返回同一份 payload 即可：
+
+```java
+context -> "{\"orderId\":\"A1001\"}"
+```
+
+只有当“预写 intent 的快照”和“真正入队给后端恢复的快照”需要不同内容时，才建议按 phase 分支：
+
+```java
+context -> {
+    if (context.getPhase() == RetryPayloadContext.Phase.PREPARE_INTENT) {
+        return "{\"orderId\":\"A1001\",\"stage\":\"intent\"}";
+    }
+    return "{\"orderId\":\"A1001\",\"stage\":\"handoff\",\"executedAttempts\":"
+            + context.getExecutedAttempts() + "}";
+}
 ```
 
 特点：
@@ -255,9 +297,27 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), retryBack
 - `taskType`：任务类型，供后端恢复时路由
 - `durability`：可靠性级别，默认 `MEMORY_ONLY`
 
+当 `durability != MEMORY_ONLY` 时，注解式接入不会直接把“原始方法调用现场”丢给后端，而是会先把方法信息和参数快照序列化成一份任务快照，再交给 `RetryBackend`。这意味着：
+
+- `taskType` 决定后端如何路由任务
+- `payload` 不一定是你手写的业务 JSON；在注解场景下，它通常是一份框架生成的快照
+- 如果你希望后端 Worker 能自动恢复执行，就需要约定好它如何识别并消费这份快照
+
+换句话说，编程式接入更适合“我自己定义 payload 结构”；注解式接入更适合“我接受框架托管方法调用快照”。
+
 ### 什么时候需要提供 `RetryBackend`
 
 当 `durability != MEMORY_ONLY` 时，必须提供 `RetryBackend`。否则会抛出 `IllegalStateException`。
+
+### 参数序列化约束
+
+只要涉及后端降级，参数就必须能够被序列化为 payload。默认实现使用 JSON 序列化方法参数，因此第一次接入时建议优先关注这几类对象：
+
+- Web 请求对象、流、线程上下文、本地连接等不可安全重建的参数
+- 过大对象或带循环引用的对象
+- 恢复阶段并不需要的辅助参数
+
+对于第三类参数，可以使用 `@RetryIgnore` 显式跳过序列化；但要注意，凡是被忽略的参数，后端恢复时就不应该再依赖它。
 
 ---
 
@@ -295,6 +355,8 @@ RetryPolicyRegistry.global().register(new NamedRetryPolicy() {
 });
 ```
 
+如果同一个 `policy` 同时存在“静态注册”和“动态配置”，运行期会优先使用动态配置中心中的最新值；静态注册更适合作为默认值或本地开发兜底。
+
 ### 在 Bean 上使用
 
 ```java
@@ -315,6 +377,14 @@ public class PayServiceImpl {
 - 有接口时，通常可走 JDK 动态代理
 - 无接口时，通常需要 CGLIB
 - 在 Spring Boot 2.x+ 中，一般默认就是 CGLIB
+
+因此也应按标准 Spring AOP 边界来理解它：
+
+- 同一个 Bean 内部的自调用通常不会经过代理，因此不会触发重试
+- `final` 类 / `final` 方法不适合依赖类代理增强
+- 如果你同时使用 `@Transactional`、日志、监控等其他 Advisor，最终生效顺序仍取决于 Spring AOP 的代理链顺序
+
+如果你的业务依赖“自调用也要重试”，建议把待重试逻辑拆到独立 Bean，或者改用编程式接入。
 
 如果你在非 Spring Boot 环境里需要强制类代理，可以显式开启：
 
@@ -338,6 +408,21 @@ public class RetryConfig {
 - `MEMORY_FALLBACK`：先内存重试，耗尽后移交后端
 - `AT_LEAST_ONCE_DURABLE`：执行前先写 intent，保证至少一次持久化
 
+这里的“至少一次”强调的是“任务意图至少被可靠记录一次”，不是“业务只会被执行一次”。如果业务成功返回后，异步清理 intent 失败，后端仍有可能再次看到该任务并尝试恢复，所以业务补偿逻辑必须天然支持幂等。
+
+这里有三个容易混淆的概念，可以先区分开：
+
+- `payload`：恢复这次任务所需要的快照数据
+- `intent`：这次任务已经被系统正式记录和托管过的一条意图记录
+- `intentId`：这条意图记录的唯一标识
+
+可以把它理解成：
+
+- `payload` 回答“后端要拿什么数据来恢复这次任务”
+- `intent` 回答“系统是否已经正式记下这次任务，并开始对它负责”
+
+所以，`payload` 更像恢复材料，`intent` 更像任务台账，`intentId` 则是这本台账上的主键。
+
 ### `RetryBackend` 职责
 
 你需要实现 `RetryBackend` 来承接后端持久化与调度：
@@ -358,6 +443,13 @@ public interface RetryBackend {
 - `markTerminalFailure(...)`：彻底失败，标记为终态
 - `submitForDelay(...)`：把任务送入延迟队列
 
+此外，第一次实现 `RetryBackend` 时，通常还要明确这几个约束：
+
+- `delay` 是“从现在开始再延迟多久”，不是绝对执行时间
+- `submitForDelay(...)` 收到的 payload 应被视为一次可独立恢复的任务快照，后端应原样保存
+- 如果后端 Worker 恢复失败，后续如何重试、死信、告警，由你的后端系统负责，不由当前进程继续托管
+- `intentId` 最好是稳定可追踪的主键，而不是只适用于 demo 的临时值
+
 ### 恢复执行
 
 后端 Worker 取出任务后，按 `taskType` 路由到对应的恢复器：
@@ -375,6 +467,13 @@ RecoveryHandlerRegistry.global().register(new RecoveryHandler() {
     }
 });
 ```
+
+这里有两个常见接入模型：
+
+- 编程式接入：`payload` 是你自己定义的业务快照，`RecoveryHandler` 负责反序列化并补偿执行
+- 注解式接入：`payload` 往往是框架生成的方法调用快照，后端可以选择自己解析，也可以封装一层统一恢复器再按快照内容反射调用
+
+无论采用哪种模型，Worker 都应把“恢复失败后的再次重试 / 死信 / 告警”纳入自己的责任范围，而不是假定框架会在进程外继续自动兜底。
 
 ### `MEMORY_FALLBACK` 的次数语义
 
@@ -406,11 +505,31 @@ RecoveryHandlerRegistry.global().register(new RecoveryHandler() {
 retry.policy.pay-notify={"maxAttempts":5,"backoffType":"exponentialJitter"}
 ```
 
+一个更完整的示意：
+
+```properties
+retry.policy.pay-notify={
+  "maxAttempts": 5,
+  "inMemoryAttempts": 2,
+  "backoffType": "exponentialJitter",
+  "initialDelay": 200,
+  "multiplier": 2.0,
+  "maxDelay": 5000
+}
+```
+
 使用：
 
 ```java
 RetryPolicy policy = DynamicRetryPolicyRegistry.getPolicy("pay-notify");
 ```
+
+约定上需要注意：
+
+- key 不带前缀，调用时传 `pay-notify`，底层会查找 `retry.policy.pay-notify`
+- 动态策略查不到时，注解式接入会回退到 `RetryPolicyRegistry` 中的静态注册
+- 动态配置更适合做线上调参；静态注册更适合提供默认策略和本地兜底
+- 如果配置内容非法，应在接入配置中心时尽早校验，避免把错误配置带到运行期
 
 适合：
 
@@ -593,7 +712,7 @@ Retryer retryer = Retryer.builder()
 
 retryer.execute(
         "pay-notify",
-        attempt -> "{\"orderId\":\"A1001\"}",
+        context -> "{\"orderId\":\"A1001\"}",
         () -> {
             throw new RuntimeException("downstream timeout");
         }
@@ -771,9 +890,13 @@ public String notifyPay(String orderId) {
 
 在 `AT_LEAST_ONCE_DURABLE` 模式下，`completeIntent(...)` 使用异步清理执行器，不保证一定在业务返回前完成。
 
+这意味着“业务成功”与“intent 已删除”之间存在短暂窗口。如果你的后端会扫描未清理 intent，请把恢复逻辑设计成幂等操作。
+
 ### 5. 开启持久化前先确认参数可序列化
 
 尤其是 `AT_LEAST_ONCE_DURABLE`。如果参数无法序列化，框架无法把任务安全移交到后端。
+
+注解式接入默认会序列化方法参数；不需要恢复的参数可以用 `@RetryIgnore` 跳过，但一旦跳过，就不能再指望恢复阶段拿到它。
 
 ### 6. 非 Spring 场景注意线程池关闭
 
@@ -788,6 +911,10 @@ RetryExecutorManager.global().shutdown();
 ```text
 -Dteam4u.retry.executors.daemon=true
 ```
+
+### 7. Spring 场景仍受 AOP 代理边界约束
+
+`@EnableRetry` 并不会改变 Spring AOP 的基本规则。自调用、`final` 方法、以及多个 Advisor 的链路顺序，都应按标准 Spring 代理模型理解和验证。
 
 ---
 

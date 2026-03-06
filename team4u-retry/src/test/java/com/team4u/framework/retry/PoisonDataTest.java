@@ -48,7 +48,7 @@ public class PoisonDataTest {
                 .build();
 
         try {
-            retryer.execute("task", executedAttempts -> {
+            retryer.execute("task", context -> {
                 throw new RetrySerializationException("serialization failed");
             }, () -> "ok");
             Assert.fail("预期抛出 IllegalStateException");
@@ -73,7 +73,7 @@ public class PoisonDataTest {
                 .build();
 
         try {
-            retryer.execute("task", executedAttempts -> {
+            retryer.execute("task", context -> {
                 throw new RetrySerializationException("serialization failed");
             }, () -> {
                 throw new RuntimeException("business failed");
@@ -99,7 +99,7 @@ public class PoisonDataTest {
                 .build();
 
         AtomicBoolean supplierCalled = new AtomicBoolean(false);
-        String result = retryer.execute("task", executedAttempts -> {
+        String result = retryer.execute("task", context -> {
             supplierCalled.set(true);
             return "{}";
         }, () -> "ok");
@@ -120,7 +120,7 @@ public class PoisonDataTest {
                 .build();
 
         try {
-            retryer.executeAsync("task", executedAttempts -> {
+            retryer.executeAsync("task", context -> {
                 throw new RetrySerializationException("serialization failed");
             }, () -> CompletableFuture.completedFuture("ok"), Executors.newSingleThreadScheduledExecutor());
             Assert.fail("预期抛出 IllegalStateException");
@@ -143,7 +143,7 @@ public class PoisonDataTest {
                 .durability(RetryDurability.MEMORY_FALLBACK)
                 .build();
 
-        CompletableFuture<String> future = retryer.executeAsync("task", executedAttempts -> {
+        CompletableFuture<String> future = retryer.executeAsync("task", context -> {
             throw new RetrySerializationException("serialization failed");
         }, () -> {
             CompletableFuture<String> f = new CompletableFuture<>();

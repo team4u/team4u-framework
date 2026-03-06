@@ -39,7 +39,7 @@ public class ProgrammaticRetryIntegrationTest {
     public void testExecuteSuccessWithWAL() throws Exception {
         AtomicInteger callCount = new AtomicInteger();
 
-        String result = retryer.execute(taskType, executedAttempts -> payload, () -> {
+        String result = retryer.execute(taskType, context -> payload, () -> {
             callCount.incrementAndGet();
             return "success";
         });
@@ -59,7 +59,7 @@ public class ProgrammaticRetryIntegrationTest {
         AtomicInteger callCount = new AtomicInteger();
 
         try {
-            retryer.execute(taskType, executedAttempts -> payload, () -> {
+            retryer.execute(taskType, context -> payload, () -> {
                 callCount.incrementAndGet();
                 throw new RuntimeException("fail");
             });

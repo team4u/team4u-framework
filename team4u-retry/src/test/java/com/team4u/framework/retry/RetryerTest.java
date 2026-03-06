@@ -82,7 +82,7 @@ public class RetryerTest {
             return future;
         };
 
-        CompletableFuture<String> resultFuture = retryer.executeAsync("test-task", executedAttempts -> "{}", asyncTask, scheduler);
+        CompletableFuture<String> resultFuture = retryer.executeAsync(asyncTask, scheduler);
 
         // 等待异步结果
         String result = resultFuture.get(1, TimeUnit.SECONDS);
@@ -112,7 +112,7 @@ public class RetryerTest {
             return future;
         };
 
-        CompletableFuture<String> resultFuture = retryer.executeAsync("test-task", executedAttempts -> "{}", asyncTask, scheduler);
+        CompletableFuture<String> resultFuture = retryer.executeAsync(asyncTask, scheduler);
 
         try {
             resultFuture.get(1, TimeUnit.SECONDS);
@@ -165,7 +165,7 @@ public class RetryerTest {
                 .build();
 
         try {
-            retryer.execute("task", executedAttempts -> "{}", () -> {
+            retryer.execute("task", context -> "{}", () -> {
                 callCount.incrementAndGet();
                 throw new RuntimeException("always fail");
             });
@@ -180,6 +180,69 @@ public class RetryerTest {
         Assert.assertEquals("应提交一次到后端", 1, submitCount.get());
         Assert.assertEquals("后端下一次应为第3次尝试对应延迟", 1000, delayMs.get());
 
+    }
+
+    @Test
+    public void testPayloadBuilderReceivesExplicitContext() {
+        RetryPolicy policy = RetryPolicy.builder()
+                .maxAttempts(2)
+                .inMemoryAttempts(1)
+                .build();
+
+        AtomicReference<RetryPayloadContext> prepareContext = new AtomicReference<>();
+        AtomicReference<RetryPayloadContext> handoffContext = new AtomicReference<>();
+
+        RetryBackend backend = new RetryBackend() {
+            @Override
+            public String saveIntent(String taskType, String payload) {
+                return "intent";
+            }
+
+            @Override
+            public void completeIntent(String intentId) {
+            }
+
+
+            @Override
+            public void markTerminalFailure(String intentId, Throwable cause) {
+            }
+
+            @Override
+            public void submitForDelay(String intentId, String taskType, String payload, long delay) {
+            }
+        };
+
+        Retryer retryer = Retryer.builder()
+                .policy(policy)
+                .backend(backend)
+                .durability(RetryDurability.AT_LEAST_ONCE_DURABLE)
+                .build();
+
+        try {
+            retryer.execute("task", context -> {
+                if (context.getPhase() == RetryPayloadContext.Phase.PREPARE_INTENT) {
+                    prepareContext.set(context);
+                } else {
+                    handoffContext.set(context);
+                }
+                return "{}";
+            }, () -> {
+                throw new RuntimeException("fail");
+            });
+            Assert.fail("expected RetryExhaustedException");
+        } catch (RetryExhaustedException expected) {
+            // expected
+        } catch (Exception e) {
+            Assert.fail("expected RetryExhaustedException");
+        }
+
+        Assert.assertNotNull(prepareContext.get());
+        Assert.assertEquals(RetryPayloadContext.Phase.PREPARE_INTENT, prepareContext.get().getPhase());
+        Assert.assertEquals(0, prepareContext.get().getExecutedAttempts());
+
+        Assert.assertNotNull(handoffContext.get());
+        Assert.assertEquals(RetryPayloadContext.Phase.HANDOFF_TO_BACKEND, handoffContext.get().getPhase());
+        Assert.assertEquals(1, handoffContext.get().getExecutedAttempts());
     }
 
     @Test
@@ -225,7 +288,7 @@ public class RetryerTest {
                 .build();
 
         // [4] 执行成功逻辑
-        String result = retryer.execute("test-task", executedAttempts -> "{}", () -> "success");
+        String result = retryer.execute("test-task", context -> "{}", () -> "success");
 
         // [5] 验证结果和清理线程池
         Assert.assertEquals("success", result);
@@ -274,7 +337,7 @@ public class RetryerTest {
 
         // [4] 执行异步任务
         CompletableFuture<String> future = retryer.executeAsync(
-                "task", executedAttempts -> "{}",
+                "task", context -> "{}",
                 () -> CompletableFuture.completedFuture("async success"),
                 scheduler);
 
@@ -327,7 +390,7 @@ public class RetryerTest {
 
         // 第一次执行并失败，触发降级
         try {
-            retryer.execute(taskType, executedAttempts -> payload, () -> {
+            retryer.execute(taskType, context -> payload, () -> {
                 throw new RuntimeException("fail");
             });
         } catch (Exception ignored) {
@@ -339,7 +402,7 @@ public class RetryerTest {
 
         // 第二次执行（相同 taskType 和 payload），生成的 id 应相同
         try {
-            retryer.execute(taskType, executedAttempts -> payload, () -> {
+            retryer.execute(taskType, context -> payload, () -> {
                 throw new RuntimeException("fail");
             });
         } catch (Exception ignored) {
@@ -350,7 +413,7 @@ public class RetryerTest {
 
         // 不同 payload 应生成不同 id
         try {
-            retryer.execute(taskType, executedAttempts -> "{\"id\":2}", () -> {
+            retryer.execute(taskType, context -> "{\"id\":2}", () -> {
                 throw new RuntimeException("fail");
             });
         } catch (Exception ignored) {
@@ -389,7 +452,7 @@ public class RetryerTest {
                 .durability(RetryDurability.AT_LEAST_ONCE_DURABLE)
                 .build();
 
-        retryer.execute("task", executedAttempts -> "{}", () -> "success");
+        retryer.execute("task", context -> "{}", () -> "success");
     }
 
     @Test
@@ -432,7 +495,7 @@ public class RetryerTest {
 
         Thread worker = new Thread(() -> {
             try {
-                retryer.execute("task", executedAttempts -> "{}", () -> {
+                retryer.execute("task", context -> "{}", () -> {
                     firstAttemptStarted.countDown();
                     throw new RuntimeException("fail");
                 });
@@ -485,6 +548,45 @@ public class RetryerTest {
             Assert.assertTrue(expected.getMessage().contains("MEMORY_ONLY"));
         } catch (Exception e) {
             Assert.fail("expected IllegalStateException");
+        }
+    }
+
+    @Test
+    public void testSimpleAsyncExecuteFailFastForDurableModes() {
+        RetryPolicy policy = RetryPolicy.builder().maxAttempts(2).build();
+        RetryBackend backend = new RetryBackend() {
+            @Override
+            public String saveIntent(String taskType, String payload) {
+                return "intent";
+            }
+
+            @Override
+            public void completeIntent(String intentId) {
+            }
+
+            @Override
+            public void markTerminalFailure(String intentId, Throwable cause) {
+            }
+
+            @Override
+            public void submitForDelay(String intentId, String taskType, String payload, long delayMs) {
+            }
+        };
+
+        Retryer retryer = Retryer.builder()
+                .policy(policy)
+                .backend(backend)
+                .durability(RetryDurability.MEMORY_FALLBACK)
+                .build();
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+
+        try {
+            retryer.executeAsync(() -> CompletableFuture.completedFuture("ok"), scheduler);
+            Assert.fail("expected IllegalStateException");
+        } catch (IllegalStateException expected) {
+            Assert.assertTrue(expected.getMessage().contains("MEMORY_ONLY"));
+        } finally {
+            scheduler.shutdown();
         }
     }
 }
