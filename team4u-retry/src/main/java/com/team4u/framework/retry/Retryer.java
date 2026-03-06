@@ -8,7 +8,6 @@ import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.function.IntFunction;
 
 /**
  * 统一重试执行引擎
@@ -70,7 +69,7 @@ public class Retryer {
         if (durability != RetryDurability.MEMORY_ONLY) {
             throw new IllegalStateException(
                     "Retryer.execute(Callable) supports MEMORY_ONLY only. Use execute(taskType, payloadBuilder, task) " +
-                            "or executeAsync(...) when durability is [" + durability + "].");
+                            "or executeAsync(taskType, payloadBuilder, ...) when durability is [" + durability + "].");
         }
         int attempt = 1;
         while (true) {
@@ -102,16 +101,38 @@ public class Retryer {
     }
 
     /**
+     * 纯内存异步重试入口。
+     *
+     * @param asyncTask 异步任务提供器
+     * @param scheduler 调度器
+     * @param <T>       返回值类型
+     * @return 带重试能力的异步结果
+     */
+    public <T> CompletableFuture<T> executeAsync(
+            java.util.function.Supplier<CompletableFuture<T>> asyncTask,
+            ScheduledExecutorService scheduler) {
+        if (durability != RetryDurability.MEMORY_ONLY) {
+            throw new IllegalStateException(
+                    "Retryer.executeAsync(asyncTask, scheduler) supports MEMORY_ONLY only. " +
+                            "Use executeAsync(taskType, payloadBuilder, ...) when durability is [" + durability + "].");
+        }
+
+        CompletableFuture<T> promise = new CompletableFuture<>();
+        attemptAsync(null, null, null, asyncTask, scheduler, promise, 1);
+        return promise;
+    }
+
+    /**
      * 纯编程式强一致性执行入口
      *
      * @param taskType       任务类型 (用于宕机后，Worker 知道由谁来恢复执行)
-     * @param payloadBuilder 任务快照构建器，参数为尝试次数
+     * @param payloadBuilder 任务快照构建器，参数包含构建阶段和已执行尝试次数
      * @param task           当前内存中实际要执行的任务逻辑
      * @param <T>            返回值类型
      * @return 执行成功后的结果
      * @throws Exception 业务异常或重试最终失败异常
      */
-    public <T> T execute(String taskType, IntFunction<String> payloadBuilder, Callable<T> task) throws Exception {
+    public <T> T execute(String taskType, RetryPayloadBuilder payloadBuilder, Callable<T> task) throws Exception {
         IntentContext intentContext = prepareIntent(taskType, payloadBuilder);
         int attempt = 1;
         while (true) {
@@ -267,7 +288,7 @@ public class Retryer {
      */
     public <T> CompletableFuture<T> executeAsync(
             String taskType,
-            IntFunction<String> payloadBuilder,
+            RetryPayloadBuilder payloadBuilder,
             java.util.function.Supplier<CompletableFuture<T>> asyncTask,
             ScheduledExecutorService scheduler) {
         IntentContext intentContext = prepareIntent(taskType, payloadBuilder);
@@ -290,7 +311,7 @@ public class Retryer {
      * @param <T>            返回值类型
      */
     private <T> void attemptAsync(
-            String taskType, IntFunction<String> payloadBuilder, String intentId,
+            String taskType, RetryPayloadBuilder payloadBuilder, String intentId,
             java.util.function.Supplier<CompletableFuture<T>> asyncTask,
             ScheduledExecutorService scheduler,
             CompletableFuture<T> promise,
@@ -343,7 +364,7 @@ public class Retryer {
      * @param <T>            返回值类型
      */
     private <T> void handleAsyncFailure(
-            String taskType, IntFunction<String> payloadBuilder, String intentId,
+            String taskType, RetryPayloadBuilder payloadBuilder, String intentId,
             java.util.function.Supplier<CompletableFuture<T>> asyncTask,
             ScheduledExecutorService scheduler,
             CompletableFuture<T> promise,
@@ -401,13 +422,12 @@ public class Retryer {
      * @param payloadBuilder 任务快照构建器
      * @return intent 上下文
      */
-    private IntentContext prepareIntent(String taskType, IntFunction<String> payloadBuilder) {
+    private IntentContext prepareIntent(String taskType, RetryPayloadBuilder payloadBuilder) {
         if (durability != RetryDurability.AT_LEAST_ONCE_DURABLE || backend == null) {
             return new IntentContext(null);
         }
         try {
-            // attempt=0 约定为“执行前快照”，用于 WAL 预写
-            String payload = payloadBuilder.apply(0);
+            String payload = payloadBuilder.build(RetryPayloadContext.prepareIntent());
             String intentId = backend.saveIntent(taskType, payload);
             if (intentId == null || intentId.isEmpty()) {
                 throw new IllegalStateException(
@@ -433,13 +453,13 @@ public class Retryer {
      */
     private RetryExhaustedException enqueueToBackend(
             String intentId, String taskType,
-            IntFunction<String> payloadBuilder,
+            RetryPayloadBuilder payloadBuilder,
             int payloadAttempt, Throwable cause)
             throws RetrySerializationException {
         // 下一次尝试由后端 worker 执行，延迟按“内存阶段之后的首次尝试”计算
         long nextDelay = policy.getDelayMillis(getNextAttemptAfterInMemory());
         // payloadAttempt 由调用方传入：同步为 inMemoryAttempts，异步为当前 attempt
-        String payload = payloadBuilder.apply(payloadAttempt);
+        String payload = payloadBuilder.build(RetryPayloadContext.handoffToBackend(payloadAttempt));
         String submitIntentId = ensureIntentIdForBackend(intentId, taskType, payload);
         backend.submitForDelay(submitIntentId, taskType, payload, nextDelay);
         return new RetryExhaustedException("In-memory retries exhausted; task has been handed over to backend queue.",
