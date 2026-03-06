@@ -2,7 +2,7 @@ package com.team4u.framework.retry;
 
 /**
  * 重试任务快照构建器
- *
+ * <p>
  * 用于在任务进入持久化存储前，将当前执行上下文转换为快照字符串。
  */
 @FunctionalInterface

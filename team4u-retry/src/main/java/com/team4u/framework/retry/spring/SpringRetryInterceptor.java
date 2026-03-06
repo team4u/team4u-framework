@@ -30,7 +30,7 @@ public class SpringRetryInterceptor implements MethodInterceptor {
         Method method = invocation.getMethod();
         Object target = invocation.getThis();
         Method specificMethod = method;
-        
+
         // 解析目标对象上具体实现的方法
         if (target != null) {
             specificMethod = AopUtils.getMostSpecificMethod(method, target.getClass());

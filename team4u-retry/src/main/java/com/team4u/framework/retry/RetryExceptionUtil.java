@@ -10,7 +10,7 @@ import java.util.concurrent.ExecutionException;
 
 /**
  * 重试异常工具类
- *
+ * <p>
  * 提供异常链分析与根因提取功能。
  */
 public class RetryExceptionUtil {
@@ -22,7 +22,7 @@ public class RetryExceptionUtil {
 
     /**
      * 剥离包装异常，提取原始业务根因
-     *
+     * <p>
      * 递归解析异步框架、代理机制产生的包装类，直到发现核心异常或达到深度限制。
      *
      * @param ex 原始异常

@@ -4,7 +4,7 @@ import java.util.concurrent.ThreadLocalRandom;
 
 /**
  * 重试退避策略
- *
+ * <p>
  * 用于计算任务重试前的等待延迟。
  */
 @FunctionalInterface
@@ -22,7 +22,7 @@ public interface Backoff {
 
     /**
      * 线性增量退避策略
-     *
+     * <p>
      * 延迟时长随重试次数线性增长。
      * 公式：initialDelay + (attempt - 1) * step
      *
@@ -36,7 +36,7 @@ public interface Backoff {
 
     /**
      * 指数退避策略
-     *
+     * <p>
      * 延迟时长随重试次数呈指数级增长，直至达到最大限制。
      * 公式：min(initialDelay * multiplier^(attempt - 1), maxDelay)
      *
@@ -54,7 +54,7 @@ public interface Backoff {
 
     /**
      * 带随机抖动的指数退避策略
-     *
+     * <p>
      * 在指数退避基础上引入随机因子，有效分散系统瞬时产生的高并发重试请求，
      * 缓解集群雪崩效应。
      *

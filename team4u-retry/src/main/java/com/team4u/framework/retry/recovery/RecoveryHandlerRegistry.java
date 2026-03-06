@@ -24,6 +24,13 @@ public class RecoveryHandlerRegistry extends KeyedPolicyRegistry<String, Recover
     }
 
     /**
+     * 确保默认的注解快照恢复处理器已注册
+     */
+    public static void ensureDefaultProxyRecoveryHandlerRegistered() {
+        global().registerDefaultProxyRecoveryHandler();
+    }
+
+    /**
      * 幂等注册默认的注解快照恢复处理器
      */
     public void registerDefaultProxyRecoveryHandler() {
@@ -36,12 +43,5 @@ public class RecoveryHandlerRegistry extends KeyedPolicyRegistry<String, Recover
             }
             register(new SnapshotRecoveryHandler(RetryTaskTypes.DEFAULT_PROXY_RECOVERY));
         }
-    }
-
-    /**
-     * 确保默认的注解快照恢复处理器已注册
-     */
-    public static void ensureDefaultProxyRecoveryHandlerRegistered() {
-        global().registerDefaultProxyRecoveryHandler();
     }
 }
