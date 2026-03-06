@@ -26,18 +26,6 @@ public class Retryer {
     private final Executor cleanupExecutor;
 
     /**
-     * 决定下一次重试阶段的类型
-     */
-    public enum RetryDecisionType {
-        /** 在内存中继续重试 */
-        RETRY_IN_MEMORY,
-        /** 转移到后端队列进行重试 */
-        HANDOFF_TO_BACKEND,
-        /** 策略明确终止或者次数已经完全耗尽，不再重试 */
-        FAIL_TERMINAL
-    }
-
-    /**
      * 通过建造者创建重试执行器实例。
      *
      * @param builder 配置建造者
@@ -384,8 +372,7 @@ public class Retryer {
                 promise.completeExceptionally(enqueueToBackend(intentId, taskType, payloadBuilder, attempt, cause));
             } catch (RetrySerializationException serializationEx) {
                 if (intentId != null) {
-                    String finalIntentId = intentId;
-                    CompletableFuture.runAsync(() -> backend.markTerminalFailure(finalIntentId, cause),
+                    CompletableFuture.runAsync(() -> backend.markTerminalFailure(intentId, cause),
                             cleanupExecutor);
                 }
                 RetryExhaustedException finalEx = new RetryExhaustedException(
@@ -396,8 +383,7 @@ public class Retryer {
             }
         } else {
             if (intentId != null) {
-                String finalIntentId = intentId;
-                CompletableFuture.runAsync(() -> backend.markTerminalFailure(finalIntentId, cause), cleanupExecutor);
+                CompletableFuture.runAsync(() -> backend.markTerminalFailure(intentId, cause), cleanupExecutor);
             }
             promise.completeExceptionally(cause);
         }
@@ -502,6 +488,24 @@ public class Retryer {
             Thread.currentThread().interrupt();
         }
         return cause;
+    }
+
+    /**
+     * 决定下一次重试阶段的类型
+     */
+    public enum RetryDecisionType {
+        /**
+         * 在内存中继续重试
+         */
+        RETRY_IN_MEMORY,
+        /**
+         * 转移到后端队列进行重试
+         */
+        HANDOFF_TO_BACKEND,
+        /**
+         * 策略明确终止或者次数已经完全耗尽，不再重试
+         */
+        FAIL_TERMINAL
     }
 
     /**

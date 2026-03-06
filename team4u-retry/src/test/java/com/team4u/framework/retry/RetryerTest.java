@@ -147,8 +147,9 @@ public class RetryerTest {
             }
 
 
-              @Override
-              public void markTerminalFailure(String intentId, Throwable cause) {}
+            @Override
+            public void markTerminalFailure(String intentId, Throwable cause) {
+            }
 
             @Override
             public void submitForDelay(String intentId, String taskType, String payload, long delay) {
@@ -206,8 +207,9 @@ public class RetryerTest {
             }
 
 
-              @Override
-              public void markTerminalFailure(String intentId, Throwable cause) {}
+            @Override
+            public void markTerminalFailure(String intentId, Throwable cause) {
+            }
 
             @Override
             public void submitForDelay(String intentId, String taskType, String payload, long delay) {
@@ -253,8 +255,9 @@ public class RetryerTest {
             }
 
 
-              @Override
-              public void markTerminalFailure(String intentId, Throwable cause) {}
+            @Override
+            public void markTerminalFailure(String intentId, Throwable cause) {
+            }
 
             @Override
             public void submitForDelay(String intentId, String taskType, String payload, long delay) {
@@ -303,8 +306,9 @@ public class RetryerTest {
             }
 
 
-              @Override
-              public void markTerminalFailure(String intentId, Throwable cause) {}
+            @Override
+            public void markTerminalFailure(String intentId, Throwable cause) {
+            }
 
             @Override
             public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
@@ -370,8 +374,9 @@ public class RetryerTest {
             }
 
 
-              @Override
-              public void markTerminalFailure(String intentId, Throwable cause) {}
+            @Override
+            public void markTerminalFailure(String intentId, Throwable cause) {
+            }
 
             @Override
             public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
@@ -409,8 +414,9 @@ public class RetryerTest {
             }
 
 
-              @Override
-              public void markTerminalFailure(String intentId, Throwable cause) {}
+            @Override
+            public void markTerminalFailure(String intentId, Throwable cause) {
+            }
 
             @Override
             public void submitForDelay(String intentId, String taskType, String payload, long delay) {

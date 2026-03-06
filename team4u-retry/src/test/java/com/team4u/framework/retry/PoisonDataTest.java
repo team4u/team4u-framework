@@ -27,8 +27,9 @@ public class PoisonDataTest {
         }
 
 
-          @Override
-          public void markTerminalFailure(String intentId, Throwable cause) {}
+        @Override
+        public void markTerminalFailure(String intentId, Throwable cause) {
+        }
 
         @Override
         public void submitForDelay(String intentId, String taskType, String payload, long delay) {

@@ -106,7 +106,7 @@ public class RetryDelegate {
     }
 
     private void validateBackendIfNeeded(Method method, String policyKey, RetryDurability durability,
-            RetryBackend backend) {
+                                         RetryBackend backend) {
         if (durability == RetryDurability.MEMORY_ONLY || backend != null) {
             return;
         }
@@ -117,11 +117,11 @@ public class RetryDelegate {
     }
 
     private RetryTaskSnapshot buildSnapshot(Method method,
-            Object target,
-            Object[] args,
-            String taskType,
-            RetryPolicy policy,
-            int executedAttempts) {
+                                            Object target,
+                                            Object[] args,
+                                            String taskType,
+                                            RetryPolicy policy,
+                                            int executedAttempts) {
         RetryTaskSnapshot snapshot = new RetryTaskSnapshot();
         snapshot.setTaskType(taskType);
         snapshot.setExecutedAttempts(executedAttempts);
