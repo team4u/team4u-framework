@@ -136,7 +136,7 @@ public class RetryerTest {
         AtomicInteger callCount = new AtomicInteger(0);
         AtomicInteger delayMs = new AtomicInteger(0);
 
-        RetryBackend backend = new RetryBackend() {
+        TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
             public String saveIntent(String taskType, String payload) {
                 return null;
@@ -192,7 +192,7 @@ public class RetryerTest {
         AtomicReference<RetryPayloadContext> prepareContext = new AtomicReference<>();
         AtomicReference<RetryPayloadContext> handoffContext = new AtomicReference<>();
 
-        RetryBackend backend = new RetryBackend() {
+        TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
             public String saveIntent(String taskType, String payload) {
                 return "intent";
@@ -253,7 +253,7 @@ public class RetryerTest {
         ExecutorService customExecutor = Executors.newSingleThreadExecutor();
 
         // [2] 模拟后端
-        RetryBackend backend = new RetryBackend() {
+        TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
             public String saveIntent(String taskType, String payload) {
                 return "intent-123";
@@ -306,7 +306,7 @@ public class RetryerTest {
         CountDownLatch latch = new CountDownLatch(1);
 
         // [2] 模拟后端
-        RetryBackend backend = new RetryBackend() {
+        TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
             public String saveIntent(String taskType, String payload) {
                 return "intent-async-123";
@@ -350,7 +350,7 @@ public class RetryerTest {
     }
 
     @Test
-    public void testDeterministicIntentId() {
+    public void testBackendHandoffPublishesTaskIds() {
         RetryPolicy policy = RetryPolicy.builder()
                 .maxAttempts(2)
                 .inMemoryAttempts(1)
@@ -358,7 +358,7 @@ public class RetryerTest {
 
         java.util.concurrent.atomic.AtomicReference<String> lastIntentId = new java.util.concurrent.atomic.AtomicReference<>();
 
-        RetryBackend backend = new RetryBackend() {
+        TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
             public String saveIntent(String queueName, String contextJson) {
                 return null;
@@ -398,9 +398,9 @@ public class RetryerTest {
 
         String id1 = lastIntentId.get();
         Assert.assertNotNull(id1);
-        Assert.assertTrue(id1.startsWith("rtryh-test-task-"));
+        Assert.assertTrue(id1.startsWith("lease-test-"));
 
-        // 第二次执行（相同 taskType 和 payload），生成的 id 应相同
+        // 第二次执行（相同 taskType 和 payload）仍应成功发布到后端
         try {
             retryer.execute(taskType, context -> payload, () -> {
                 throw new RuntimeException("fail");
@@ -409,7 +409,8 @@ public class RetryerTest {
         }
 
         String id2 = lastIntentId.get();
-        Assert.assertEquals("相同 payload 应生成相同的 intentId", id1, id2);
+        Assert.assertNotNull(id2);
+        Assert.assertNotEquals("Lease backend 生成的 taskId 不要求稳定复用", id1, id2);
 
         // 不同 payload 应生成不同 id
         try {
@@ -420,13 +421,13 @@ public class RetryerTest {
         }
 
         String id3 = lastIntentId.get();
-        Assert.assertNotEquals("不同 payload 应生成不同的 intentId", id1, id3);
+        Assert.assertNotNull(id3);
     }
 
     @Test(expected = IllegalStateException.class)
     public void testStrongConsistencyFailFastWhenSaveIntentReturnsNull() throws Exception {
         RetryPolicy policy = RetryPolicy.builder().build();
-        RetryBackend backend = new RetryBackend() {
+        TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
             public String saveIntent(String queueName, String contextJson) {
                 return null;
@@ -466,7 +467,7 @@ public class RetryerTest {
         CountDownLatch firstAttemptStarted = new CountDownLatch(1);
         AtomicReference<Throwable> thrown = new AtomicReference<>();
 
-        RetryBackend backend = new RetryBackend() {
+        TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
             public String saveIntent(String taskType, String payload) {
                 return null;
@@ -516,7 +517,7 @@ public class RetryerTest {
     @Test
     public void testSimpleExecuteFailFastForDurableModes() {
         RetryPolicy policy = RetryPolicy.builder().maxAttempts(2).build();
-        RetryBackend backend = new RetryBackend() {
+        TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
             public String saveIntent(String taskType, String payload) {
                 return "intent";
@@ -554,7 +555,7 @@ public class RetryerTest {
     @Test
     public void testSimpleAsyncExecuteFailFastForDurableModes() {
         RetryPolicy policy = RetryPolicy.builder().maxAttempts(2).build();
-        RetryBackend backend = new RetryBackend() {
+        TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
             public String saveIntent(String taskType, String payload) {
                 return "intent";

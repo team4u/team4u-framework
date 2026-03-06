@@ -1,9 +1,9 @@
 package com.team4u.framework.retry.proxy;
 
 import com.team4u.framework.proxy.ProxyBuilder;
-import com.team4u.framework.retry.RetryBackend;
 import com.team4u.framework.retry.RetryDurability;
 import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.TestLeaseBackend;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -74,18 +74,18 @@ public class RetryDurabilityTest {
         Assert.assertEquals(0, mockBackend.saveCount.get());
         Assert.assertEquals(1, mockBackend.submitCount.get());
         Assert.assertNotNull("MEMORY_FALLBACK 降级入队 intentId 不应为 null", mockBackend.lastSubmitIntentId.get());
-        Assert.assertTrue(mockBackend.lastSubmitIntentId.get().startsWith("rtryh-"));
+        Assert.assertEquals(1000, mockBackend.lastDelayMs.get());
     }
 
     @Test
     public void testStrongConsistencySuccess() throws InterruptedException {
         service.strongConsistencySuccess();
         Assert.assertEquals(1, mockBackend.saveCount.get());
-        Assert.assertEquals("intent-1", mockBackend.lastIntentId.get());
+        Assert.assertNotNull(mockBackend.lastIntentId.get());
 
-        // completeIntent 是异步调用的
+        // cancel 是异步调用的
         Assert.assertTrue(mockBackend.completeLatch.await(1, TimeUnit.SECONDS));
-        Assert.assertEquals("intent-1", mockBackend.completedIntentId.get());
+        Assert.assertEquals(mockBackend.lastIntentId.get(), mockBackend.completedIntentId.get());
     }
 
     @Test
@@ -98,7 +98,9 @@ public class RetryDurabilityTest {
         }
         Assert.assertEquals(1, mockBackend.saveCount.get());
         Assert.assertEquals(1, mockBackend.submitCount.get());
-        Assert.assertEquals("intent-1", mockBackend.lastSubmitIntentId.get());
+        Assert.assertEquals(mockBackend.lastIntentId.get(), mockBackend.completedIntentId.get());
+        Assert.assertNotNull(mockBackend.lastSubmitIntentId.get());
+        Assert.assertNotEquals(mockBackend.lastIntentId.get(), mockBackend.lastSubmitIntentId.get());
         Assert.assertEquals(1000, mockBackend.lastDelayMs.get());
     }
 
@@ -136,7 +138,7 @@ public class RetryDurabilityTest {
         }
     }
 
-    private static class MockBackend implements RetryBackend {
+    private static class MockBackend extends TestLeaseBackend {
         AtomicInteger saveCount = new AtomicInteger();
         AtomicInteger submitCount = new AtomicInteger();
         AtomicReference<String> lastIntentId = new AtomicReference<>();

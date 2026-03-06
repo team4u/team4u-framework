@@ -21,6 +21,7 @@
         <module>team4u-translator</module>
         <module>team4u-mask</module>
         <module>team4u-log</module>
+        <module>team4u-lease</module>
         <module>team4u-retry</module>
     </modules>
 

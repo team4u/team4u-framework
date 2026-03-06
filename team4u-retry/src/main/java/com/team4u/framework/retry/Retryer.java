@@ -1,6 +1,7 @@
 package com.team4u.framework.retry;
 
 import cn.hutool.crypto.digest.DigestUtil;
+import com.team4u.framework.lease.LeaseBackend;
 import com.team4u.framework.retry.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.exception.RetrySerializationException;
 
@@ -17,11 +18,27 @@ import java.util.concurrent.ScheduledExecutorService;
 public class Retryer {
 
     private static final int DEFAULT_IN_MEMORY_ATTEMPTS_FOR_PERSISTENCE = 2;
+    private static final long PREPARED_INTENT_DELAY_MILLIS = 3650L * 24L * 60L * 60L * 1000L;
 
+    /**
+     * 重试策略，定义重试次数、延迟等规则
+     */
     private final RetryPolicy policy;
-    private final RetryBackend backend;
+    /**
+     * 重试持久化后端（当前接入了 LeaseBackend 实现分布式任务保障）
+     */
+    private final LeaseBackend backend;
+    /**
+     * 持久化级别配置
+     */
     private final RetryDurability durability;
+    /**
+     * 允许在内存中进行重试的最大尝试次数
+     */
     private final int inMemoryAttempts;
+    /**
+     * 用于执行清理任务（如取消后端任务）的线程池
+     */
     private final Executor cleanupExecutor;
 
     /**
@@ -70,7 +87,8 @@ public class Retryer {
     public <T> T execute(Callable<T> task) throws Exception {
         if (durability != RetryDurability.MEMORY_ONLY) {
             throw new IllegalStateException(
-                    "Retryer.execute(Callable) supports MEMORY_ONLY only. Use execute(taskType, payloadBuilder, task) " +
+                    "Retryer.execute(Callable) supports MEMORY_ONLY only. Use execute(taskType, payloadBuilder, task) "
+                            +
                             "or executeAsync(taskType, payloadBuilder, ...) when durability is [" + durability + "].");
         }
         int attempt = 1;
@@ -142,7 +160,7 @@ public class Retryer {
                 T result = task.call();
                 if (intentContext.intentId != null) {
                     String finalIntentId = intentContext.intentId;
-                    CompletableFuture.runAsync(() -> backend.completeIntent(finalIntentId), cleanupExecutor);
+                    CompletableFuture.runAsync(() -> backend.cancel(finalIntentId), cleanupExecutor);
                 }
                 return result;
             } catch (Throwable ex) {
@@ -152,7 +170,7 @@ public class Retryer {
                 if (decision == RetryDecisionType.FAIL_TERMINAL) {
                     if (intentContext.intentId != null) {
                         String finalIntentId = intentContext.intentId;
-                        CompletableFuture.runAsync(() -> backend.markTerminalFailure(finalIntentId, cause),
+                        CompletableFuture.runAsync(() -> backend.cancel(finalIntentId),
                                 cleanupExecutor);
                     }
                     if (cause instanceof Exception) {
@@ -165,7 +183,7 @@ public class Retryer {
                     } catch (RetrySerializationException serializationEx) {
                         if (intentContext.intentId != null) {
                             String finalIntentId = intentContext.intentId;
-                            CompletableFuture.runAsync(() -> backend.markTerminalFailure(finalIntentId, cause),
+                            CompletableFuture.runAsync(() -> backend.cancel(finalIntentId),
                                     cleanupExecutor);
                         }
                         RetryExhaustedException finalEx = new RetryExhaustedException(
@@ -252,28 +270,6 @@ public class Retryer {
     }
 
     /**
-     * 确保提供后端提交所需的标识 ID
-     * <p>
-     * 优先复用已有 ID，否则基于任务类型及载荷生成稳定标识。
-     *
-     * @param intentId 原始 ID
-     * @param taskType 任务类型
-     * @param payload  任务快照载荷
-     * @return 后端标识 ID
-     */
-    private String ensureIntentIdForBackend(String intentId, String taskType, String payload) {
-        if (intentId != null && !intentId.isEmpty()) {
-            return intentId;
-        }
-
-        String base = taskType + "\n" + (payload == null ? "" : payload);
-        String sha256 = DigestUtil.sha256Hex(base);
-        String safeTaskType = taskType == null ? "unknown" : taskType.replaceAll("[^a-zA-Z0-9_-]", "_");
-
-        return "rtryh-" + safeTaskType + "-" + sha256.substring(0, 32);
-    }
-
-    /**
      * 非阻塞异步重试入口
      * <p>
      * 通过调度器延迟任务执行，避免阻塞工作线程。
@@ -343,7 +339,7 @@ public class Retryer {
      */
     private <T> void handleAsyncSuccess(String intentId, CompletableFuture<T> promise, T result) {
         if (intentId != null) {
-            CompletableFuture.runAsync(() -> backend.completeIntent(intentId), cleanupExecutor);
+            CompletableFuture.runAsync(() -> backend.cancel(intentId), cleanupExecutor);
         }
         promise.complete(result);
     }
@@ -391,7 +387,7 @@ public class Retryer {
                 promise.completeExceptionally(enqueueToBackend(intentId, taskType, payloadBuilder, attempt, cause));
             } catch (RetrySerializationException serializationEx) {
                 if (intentId != null) {
-                    CompletableFuture.runAsync(() -> backend.markTerminalFailure(intentId, cause),
+                    CompletableFuture.runAsync(() -> backend.cancel(intentId),
                             cleanupExecutor);
                 }
                 RetryExhaustedException finalEx = new RetryExhaustedException(
@@ -402,7 +398,7 @@ public class Retryer {
             }
         } else {
             if (intentId != null) {
-                CompletableFuture.runAsync(() -> backend.markTerminalFailure(intentId, cause), cleanupExecutor);
+                CompletableFuture.runAsync(() -> backend.cancel(intentId), cleanupExecutor);
             }
             promise.completeExceptionally(cause);
         }
@@ -421,10 +417,10 @@ public class Retryer {
         }
         try {
             String payload = payloadBuilder.build(RetryPayloadContext.prepareIntent());
-            String intentId = backend.saveIntent(taskType, payload);
+            String intentId = backend.publish(taskType, payload, PREPARED_INTENT_DELAY_MILLIS);
             if (intentId == null || intentId.isEmpty()) {
                 throw new IllegalStateException(
-                        "AT_LEAST_ONCE_DURABLE requires non-null intentId from backend.saveIntent()");
+                        "AT_LEAST_ONCE_DURABLE requires non-null taskId from backend.publish()");
             }
             return new IntentContext(intentId);
         } catch (RetrySerializationException e) {
@@ -451,8 +447,10 @@ public class Retryer {
             throws RetrySerializationException {
         long nextDelay = policy.getDelayMillis(getNextAttemptAfterInMemory());
         String payload = payloadBuilder.build(RetryPayloadContext.handoffToBackend(payloadAttempt));
-        String submitIntentId = ensureIntentIdForBackend(intentId, taskType, payload);
-        backend.submitForDelay(submitIntentId, taskType, payload, nextDelay);
+        if (intentId != null) {
+            backend.cancel(intentId);
+        }
+        backend.publish(taskType, payload, nextDelay);
         return new RetryExhaustedException("In-memory retries exhausted; task has been handed over to backend queue.",
                 cause);
     }
@@ -538,7 +536,7 @@ public class Retryer {
      */
     public static class Builder {
         private RetryPolicy policy;
-        private RetryBackend backend;
+        private LeaseBackend backend;
         private RetryDurability durability;
         private Executor cleanupExecutor;
 
@@ -554,12 +552,14 @@ public class Retryer {
         }
 
         /**
-         * 设置后端实现
+         * 设置重试持久化后端实现
+         * <p>
+         * 当持久化级别不为 MEMORY_ONLY 时，必须提供此后端用于任务落库与恢复。
          *
-         * @param backend 后端实例
+         * @param backend 后端实例（集成自 team4u-lease）
          * @return 当前建造者
          */
-        public Builder backend(RetryBackend backend) {
+        public Builder backend(LeaseBackend backend) {
             this.backend = backend;
             return this;
         }
@@ -597,7 +597,7 @@ public class Retryer {
             }
             if (durability != null && durability != RetryDurability.MEMORY_ONLY && backend == null) {
                 throw new IllegalStateException(
-                        "RetryBackend is required when durability is set to [" + durability + "]");
+                        "LeaseBackend is required when durability is set to [" + durability + "]");
             }
             return new Retryer(this);
         }

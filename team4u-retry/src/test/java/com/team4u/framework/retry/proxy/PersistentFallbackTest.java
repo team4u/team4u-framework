@@ -1,9 +1,9 @@
 package com.team4u.framework.retry.proxy;
 
 import com.team4u.framework.proxy.ProxyBuilder;
-import com.team4u.framework.retry.RetryBackend;
 import com.team4u.framework.retry.RetryDurability;
 import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.TestLeaseBackend;
 import com.team4u.framework.retry.recovery.RetryTaskTypes;
 import org.junit.Assert;
 import org.junit.Test;
@@ -35,7 +35,7 @@ public class PersistentFallbackTest {
 
         // 2. 模拟 Backend
         AtomicInteger submitCount = new AtomicInteger(0);
-        RetryBackend mockBackend = new RetryBackend() {
+        TestLeaseBackend mockBackend = new TestLeaseBackend() {
             @Override
             public String saveIntent(String queueName, String contextJson) {
                 return null;

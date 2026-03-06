@@ -2,9 +2,9 @@ package com.team4u.framework.retry.recovery;
 
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.proxy.ProxyBuilder;
-import com.team4u.framework.retry.RetryBackend;
 import com.team4u.framework.retry.RetryDurability;
 import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.TestLeaseBackend;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.backend.serialize.HutoolRetryTaskSnapshotSerializer;
 import com.team4u.framework.retry.proxy.NamedRetryPolicy;
@@ -94,7 +94,7 @@ public class SnapshotRecoveryHandlerTest {
         }
     }
 
-    private static class CountingBackend implements RetryBackend {
+    private static class CountingBackend extends TestLeaseBackend {
         private final AtomicInteger saveCount = new AtomicInteger();
         private final AtomicInteger submitCount = new AtomicInteger();
 

@@ -18,7 +18,7 @@ public class ProgrammaticRetryIntegrationTest {
 
     private final String taskType = "test.task";
     private final String payload = "{\"id\":1}";
-    private MockRetryBackend backend;
+    private MockLeaseBackend backend;
     private Retryer retryer;
 
     @Before
@@ -27,7 +27,7 @@ public class ProgrammaticRetryIntegrationTest {
         // 防止 Spring 上下文关闭后静态单例被永久关闭
         RetryExecutorManager.global().reset();
 
-        backend = new MockRetryBackend();
+        backend = new MockLeaseBackend();
         retryer = Retryer.builder()
                 .policy(RetryPolicy.builder().maxAttempts(3).build())
                 .backend(backend)
@@ -109,7 +109,7 @@ public class ProgrammaticRetryIntegrationTest {
     /**
      * 模拟后端实现
      */
-    private static class MockRetryBackend implements RetryBackend {
+    private static class MockLeaseBackend extends TestLeaseBackend {
         List<Intent> savedIntents = new ArrayList<>();
         List<String> completedIntents = new ArrayList<>();
         List<Intent> delayedIntents = new ArrayList<>();

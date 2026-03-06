@@ -1,8 +1,8 @@
 package com.team4u.framework.retry.proxy;
 
+import com.team4u.framework.lease.LeaseBackend;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
-import com.team4u.framework.retry.RetryBackend;
 import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
 
@@ -17,9 +17,9 @@ import java.util.function.Supplier;
 public class RetryInterceptor implements MethodInterceptor {
 
     private final RetryDelegate delegate = new RetryDelegate();
-    private Supplier<RetryBackend> backendSupplier;
+    private Supplier<LeaseBackend> backendSupplier;
 
-    public RetryInterceptor(RetryBackend backend) {
+    public RetryInterceptor(LeaseBackend backend) {
         this.backendSupplier = () -> backend;
     }
 
