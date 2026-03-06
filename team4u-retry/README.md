@@ -216,7 +216,7 @@ public class RetryConfig {
 public class PayServiceImpl implements PayService {
 
     @Override
-    @Retryable("pay-policy") // 直接标注注解即可，无需手动创建代理
+    @Retryable(policy = "pay-policy") // 直接标注注解即可，无需手动创建代理
     public String notifyPay(String orderId) {
         // ... 业务逻辑
     }
@@ -242,6 +242,21 @@ public class RetryConfig { ... }
 - **实现原理**：通过注册标准的 `Advisor`，利用 Spring AOP 基础设施自动织入。
 - **兼容性**：完美兼容 Spring 事务（`@Transactional`）等其他切面。建议通过 `@Order` 调整优先级（默认为
   `LOWEST_PRECEDENCE - 1`，通常在事务之外重试）。
+
+---
+
+## 动态策略与配置中心
+
+`team4u-retry` 提供了 `DynamicRetryPolicyRegistry`，用于按策略名读取并热更新 `RetryPolicy`。
+
+- 典型配置前缀：`retry.policy.<policyKey>.*`
+- 常见字段：
+    - `maxAttempts`
+    - `inMemoryAttempts`
+    - `backoff.type`（`fixed` / `increment` / `exponential` / `exponentialJitter`）
+    - `backoff.initialDelay` / `backoff.step` / `backoff.multiplier` / `backoff.maxDelay`
+
+建议把业务策略（例如 `pay-notify`、`order-query`）与代码解耦，通过配置中心管理策略参数，实现线上无重启调优。
 
 ---
 
