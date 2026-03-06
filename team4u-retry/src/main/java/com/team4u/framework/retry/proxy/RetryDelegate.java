@@ -49,11 +49,11 @@ public class RetryDelegate {
     /**
      * 执行带重试逻辑的任务
      *
-     * @param method      当前调用的方法
-     * @param target      目标业务对象
-     * @param args        方法调用参数
-     * @param retryable   重试注解配置
-     * @param proceedTask 原始任务执行逻辑
+     * @param method          当前调用的方法
+     * @param target          目标业务对象
+     * @param args            方法调用参数
+     * @param retryable       重试注解配置
+     * @param proceedTask     原始任务执行逻辑
      * @param backendSupplier 重试后端提供者
      * @return 任务执行结果
      * @throws Throwable 执行过程中的异常
@@ -74,7 +74,7 @@ public class RetryDelegate {
         String policyKey = retryable.policy();
         RetryDurability durability = retryable.durability();
         String taskType = resolveTaskType(method, retryable, durability);
-        
+
         // 获取重试策略，优先从动态注册表获取
         RetryPolicy policy = Optional.ofNullable(DynamicRetryPolicyRegistry.getPolicy(policyKey))
                 .orElseGet(() -> RetryPolicyRegistry.global().get(policyKey)
@@ -83,7 +83,7 @@ public class RetryDelegate {
 
         RetryBackend backend = backendSupplier != null ? backendSupplier.get() : null;
         validateBackendIfNeeded(method, policyKey, durability, backend);
-        
+
         boolean isAsync = CompletableFuture.class.isAssignableFrom(method.getReturnType());
         RetryPayloadBuilder payloadBuilder = createPayloadBuilder(method, target, args, taskType, policy, durability);
 

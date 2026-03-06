@@ -2,7 +2,7 @@ package com.team4u.framework.retry;
 
 /**
  * 重试快照构建上下文
- *
+ * <p>
  * 承载在构建任务快照时的阶段性信息。
  */
 public final class RetryPayloadContext {
