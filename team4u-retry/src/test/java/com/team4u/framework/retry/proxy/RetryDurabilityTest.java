@@ -109,10 +109,10 @@ public class RetryDurabilityTest {
         @Retryable(durability = RetryDurability.MEMORY_FALLBACK)
         void memoryFallback();
 
-        @Retryable(durability = RetryDurability.STRONG_CONSISTENCY)
+        @Retryable(durability = RetryDurability.AT_LEAST_ONCE_DURABLE)
         void strongConsistencySuccess();
 
-        @Retryable(durability = RetryDurability.STRONG_CONSISTENCY)
+        @Retryable(durability = RetryDurability.AT_LEAST_ONCE_DURABLE)
         void strongConsistencyFailure();
     }
 
@@ -157,6 +157,10 @@ public class RetryDurabilityTest {
             completedIntentId.set(intentId);
             completeLatch.countDown();
         }
+
+
+          @Override
+          public void markTerminalFailure(String intentId, Throwable cause) {}
 
         @Override
         public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {

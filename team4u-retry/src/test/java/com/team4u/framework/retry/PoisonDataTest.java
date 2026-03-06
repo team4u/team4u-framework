@@ -26,20 +26,24 @@ public class PoisonDataTest {
         public void completeIntent(String intentId) {
         }
 
+
+          @Override
+          public void markTerminalFailure(String intentId, Throwable cause) {}
+
         @Override
         public void submitForDelay(String intentId, String taskType, String payload, long delay) {
         }
     };
 
     /**
-     * 验证 STRONG_CONSISTENCY 模式下的快速失败
+     * 验证 AT_LEAST_ONCE_DURABLE 模式下的快速失败
      */
     @Test
     public void testStrongConsistencyFailFast() throws Exception {
         Retryer retryer = Retryer.builder()
                 .policy(RetryPolicy.builder().build())
                 .backend(mockBackend)
-                .durability(RetryDurability.STRONG_CONSISTENCY)
+                .durability(RetryDurability.AT_LEAST_ONCE_DURABLE)
                 .build();
 
         try {
@@ -48,7 +52,7 @@ public class PoisonDataTest {
             }, () -> "ok");
             Assert.fail("预期抛出 IllegalStateException");
         } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("STRONG_CONSISTENCY requires serializable arguments"));
+            Assert.assertTrue(e.getMessage().contains("AT_LEAST_ONCE_DURABLE requires serializable arguments"));
             Assert.assertTrue(e.getCause() instanceof RetrySerializationException);
         }
     }
@@ -111,7 +115,7 @@ public class PoisonDataTest {
         Retryer retryer = Retryer.builder()
                 .policy(RetryPolicy.builder().build())
                 .backend(mockBackend)
-                .durability(RetryDurability.STRONG_CONSISTENCY)
+                .durability(RetryDurability.AT_LEAST_ONCE_DURABLE)
                 .build();
 
         try {
@@ -120,7 +124,7 @@ public class PoisonDataTest {
             }, () -> CompletableFuture.completedFuture("ok"), Executors.newSingleThreadScheduledExecutor());
             Assert.fail("预期抛出 IllegalStateException");
         } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("STRONG_CONSISTENCY requires serializable arguments"));
+            Assert.assertTrue(e.getMessage().contains("AT_LEAST_ONCE_DURABLE requires serializable arguments"));
         }
     }
 

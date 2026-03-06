@@ -146,6 +146,10 @@ public class RetryerTest {
             public void completeIntent(String intentId) {
             }
 
+
+              @Override
+              public void markTerminalFailure(String intentId, Throwable cause) {}
+
             @Override
             public void submitForDelay(String intentId, String taskType, String payload, long delay) {
                 submitCount.incrementAndGet();
@@ -201,6 +205,10 @@ public class RetryerTest {
                 latch.countDown();
             }
 
+
+              @Override
+              public void markTerminalFailure(String intentId, Throwable cause) {}
+
             @Override
             public void submitForDelay(String intentId, String taskType, String payload, long delay) {
             }
@@ -210,7 +218,7 @@ public class RetryerTest {
         Retryer retryer = Retryer.builder()
                 .policy(policy)
                 .backend(backend)
-                .durability(RetryDurability.STRONG_CONSISTENCY)
+                .durability(RetryDurability.AT_LEAST_ONCE_DURABLE)
                 .cleanupExecutor(customExecutor)
                 .build();
 
@@ -244,6 +252,10 @@ public class RetryerTest {
                 latch.countDown();
             }
 
+
+              @Override
+              public void markTerminalFailure(String intentId, Throwable cause) {}
+
             @Override
             public void submitForDelay(String intentId, String taskType, String payload, long delay) {
             }
@@ -253,7 +265,7 @@ public class RetryerTest {
         Retryer retryer = Retryer.builder()
                 .policy(policy)
                 .backend(backend)
-                .durability(RetryDurability.STRONG_CONSISTENCY)
+                .durability(RetryDurability.AT_LEAST_ONCE_DURABLE)
                 .cleanupExecutor(customExecutor)
                 .build();
 
@@ -289,6 +301,10 @@ public class RetryerTest {
             @Override
             public void completeIntent(String intentId) {
             }
+
+
+              @Override
+              public void markTerminalFailure(String intentId, Throwable cause) {}
 
             @Override
             public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
@@ -353,6 +369,10 @@ public class RetryerTest {
             public void completeIntent(String intentId) {
             }
 
+
+              @Override
+              public void markTerminalFailure(String intentId, Throwable cause) {}
+
             @Override
             public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
             }
@@ -361,7 +381,7 @@ public class RetryerTest {
         Retryer retryer = Retryer.builder()
                 .policy(policy)
                 .backend(backend)
-                .durability(RetryDurability.STRONG_CONSISTENCY)
+                .durability(RetryDurability.AT_LEAST_ONCE_DURABLE)
                 .build();
 
         retryer.execute("task", executedAttempts -> "{}", () -> "success");
@@ -387,6 +407,10 @@ public class RetryerTest {
             @Override
             public void completeIntent(String intentId) {
             }
+
+
+              @Override
+              public void markTerminalFailure(String intentId, Throwable cause) {}
 
             @Override
             public void submitForDelay(String intentId, String taskType, String payload, long delay) {

@@ -22,6 +22,15 @@ public interface RetryBackend {
     void completeIntent(String intentId);
 
     /**
+     * 标记重试意图为终态失败
+     * (因不可重试异常或达到最大重试次数导致彻底放弃，不再恢复)
+     *
+     * @param intentId 意图标识 ID
+     * @param cause    导致终态失败的原因
+     */
+    void markTerminalFailure(String intentId, Throwable cause);
+
+    /**
      * 将任务转入延迟重试队列
      *
      * @param intentId 意图标识 ID

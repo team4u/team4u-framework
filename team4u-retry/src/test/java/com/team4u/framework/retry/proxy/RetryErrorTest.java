@@ -38,7 +38,7 @@ public class RetryErrorTest {
 
         ErrorService errorService = new ErrorService() {
             @Override
-            @Retryable("error-policy")
+            @Retryable(policy = "error-policy")
             public String throwError() {
                 executeCount.incrementAndGet();
                 throw new OutOfMemoryError("Fake OOM");

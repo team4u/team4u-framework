@@ -55,7 +55,7 @@ public class DepthOptimizationTest {
     public void testFailFastWhenBackendMissing() {
         Retryer.builder()
                 .policy(RetryPolicy.builder().build())
-                .durability(RetryDurability.STRONG_CONSISTENCY)
+                .durability(RetryDurability.AT_LEAST_ONCE_DURABLE)
                 .backend(null) // 故意不提供后端
                 .build();
     }

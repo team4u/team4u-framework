@@ -83,7 +83,7 @@ public class RetrySpringTest {
     }
 
     public interface OrderService {
-        @Retryable("test-policy")
+        @Retryable(policy = "test-policy")
         String doRetry(String id);
     }
 
@@ -139,7 +139,7 @@ public class RetrySpringTest {
     public static class UserService {
         public AtomicInteger count = new AtomicInteger();
 
-        @Retryable("test-policy")
+        @Retryable(policy = "test-policy")
         public String hello(String name) {
             if (count.incrementAndGet() < 3) {
                 throw new RuntimeException("fail");
@@ -152,7 +152,7 @@ public class RetrySpringTest {
         public AtomicInteger count = new AtomicInteger();
 
         @Override
-        @Retryable("test-policy")
+        @Retryable(policy = "test-policy")
         public String call(String id) {
             if (count.incrementAndGet() < 3) {
                 throw new RuntimeException("fail");

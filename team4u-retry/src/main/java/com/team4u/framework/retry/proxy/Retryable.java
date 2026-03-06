@@ -9,7 +9,7 @@ import java.lang.annotation.*;
  * <p>
  * 结合 team4u-proxy 使用，无缝切入自动重试。
  */
-@Target({ElementType.METHOD})
+@Target({ ElementType.METHOD })
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 @Documented
@@ -18,13 +18,19 @@ public @interface Retryable {
     /**
      * @return 重试策略对应的标识 Key
      */
-    String value() default "default";
+    String policy() default "default";
+
+    /**
+     * @return 业务任务类型 (用于宕机后，Worker 知道由谁来恢复)
+     *         默认为空，此时解析器将使用方法名作为兜底任务类型。
+     */
+    String taskType() default "";
 
     /**
      * @return 重试可靠性级别
-     * <p>
-     * 注意：若设置为 {@link RetryDurability#STRONG_CONSISTENCY}，框架会对入参进行序列化持久化。
-     * 对于高频且参数载荷巨大的接口，这可能导致显著的 CPU 和内存开销。建议仅在参数精简且业务极其关键的场景下开启。
+     *         <p>
+     *         注意：若设置为 {@link RetryDurability#AT_LEAST_ONCE_DURABLE}，框架会对入参进行序列化持久化。
+     *         对于高频且参数载荷巨大的接口，这可能导致显著的 CPU 和内存开销。建议仅在参数精简且业务极其关键的场景下开启。
      */
     RetryDurability durability() default RetryDurability.MEMORY_ONLY;
 }

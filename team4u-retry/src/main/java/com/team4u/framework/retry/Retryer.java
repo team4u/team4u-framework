@@ -26,6 +26,18 @@ public class Retryer {
     private final Executor cleanupExecutor;
 
     /**
+     * 决定下一次重试阶段的类型
+     */
+    public enum RetryDecisionType {
+        /** 在内存中继续重试 */
+        RETRY_IN_MEMORY,
+        /** 转移到后端队列进行重试 */
+        HANDOFF_TO_BACKEND,
+        /** 策略明确终止或者次数已经完全耗尽，不再重试 */
+        FAIL_TERMINAL
+    }
+
+    /**
      * 通过建造者创建重试执行器实例。
      *
      * @param builder 配置建造者
@@ -67,7 +79,33 @@ public class Retryer {
      * @throws Exception 如果由于满足策略的重试尝试最终均告失败，则将最后抛出的异常抛给调用方
      */
     public <T> T execute(Callable<T> task) throws Exception {
-        return executeInMemory(task);
+        int attempt = 1;
+        while (true) {
+            try {
+                return task.call();
+            } catch (Throwable ex) {
+                Throwable cause = normalizeSyncFailure(ex);
+                RetryDecisionType decision = evaluateDecision(attempt, cause);
+                if (decision == RetryDecisionType.FAIL_TERMINAL || decision == RetryDecisionType.HANDOFF_TO_BACKEND) {
+                    if (cause instanceof Exception) {
+                        throw (Exception) cause;
+                    }
+                    throw new RuntimeException(cause);
+                }
+
+                long delay = policy.getDelayMillis(attempt);
+                if (delay > 0) {
+                    try {
+                        // noinspection BusyWait
+                        Thread.sleep(delay);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                        throw e;
+                    }
+                }
+                attempt++;
+            }
+        }
     }
 
     /**
@@ -82,61 +120,50 @@ public class Retryer {
      */
     public <T> T execute(String taskType, IntFunction<String> payloadBuilder, Callable<T> task) throws Exception {
         IntentContext intentContext = prepareIntent(taskType, payloadBuilder);
-
-        try {
-            T result = executeInMemory(task);
-            if (intentContext.intentId != null) {
-                String finalIntentId = intentContext.intentId;
-                CompletableFuture.runAsync(() -> backend.completeIntent(finalIntentId), cleanupExecutor);
-            }
-            return result;
-        } catch (Throwable ex) {
-            Throwable cause = normalizeSyncFailure(ex);
-            if (backend != null && durability != RetryDurability.MEMORY_ONLY && shouldFallbackToBackend()) {
-                try {
-                    throw enqueueToBackend(intentContext.intentId, taskType, payloadBuilder, inMemoryAttempts, ex);
-                } catch (RetrySerializationException serializationEx) {
-                    // 降级时发现无法序列化，放弃入队，避免毒药数据
-                    RetryExhaustedException finalEx = new RetryExhaustedException(
-                            "In-memory retries exhausted, and argument serialization failed so task cannot be enqueued to backend.",
-                            ex);
-                    finalEx.addSuppressed(serializationEx);
-                    throw finalEx;
-                }
-            }
-            if (cause instanceof Exception) {
-                throw (Exception) cause;
-            }
-            throw new RuntimeException(cause);
-        }
-    }
-
-    /**
-     * 仅在内存中执行同步重试逻辑（阻塞当前线程）。
-     *
-     * @param task 任务逻辑
-     * @param <T>  返回值类型
-     * @return 执行结果
-     * @throws Exception 中断异常或业务异常
-     */
-    private <T> T executeInMemory(Callable<T> task) throws Exception {
         int attempt = 1;
         while (true) {
             try {
-                return task.call();
+                T result = task.call();
+                if (intentContext.intentId != null) {
+                    String finalIntentId = intentContext.intentId;
+                    CompletableFuture.runAsync(() -> backend.completeIntent(finalIntentId), cleanupExecutor);
+                }
+                return result;
             } catch (Throwable ex) {
                 Throwable cause = normalizeSyncFailure(ex);
-                if (!canRetryInMemory(attempt, cause)) {
+                RetryDecisionType decision = evaluateDecision(attempt, cause);
+
+                if (decision == RetryDecisionType.FAIL_TERMINAL) {
+                    if (intentContext.intentId != null) {
+                        String finalIntentId = intentContext.intentId;
+                        CompletableFuture.runAsync(() -> backend.markTerminalFailure(finalIntentId, cause),
+                                cleanupExecutor);
+                    }
                     if (cause instanceof Exception) {
                         throw (Exception) cause;
                     }
                     throw new RuntimeException(cause);
+                } else if (decision == RetryDecisionType.HANDOFF_TO_BACKEND) {
+                    try {
+                        throw enqueueToBackend(intentContext.intentId, taskType, payloadBuilder, attempt, cause);
+                    } catch (RetrySerializationException serializationEx) {
+                        if (intentContext.intentId != null) {
+                            String finalIntentId = intentContext.intentId;
+                            CompletableFuture.runAsync(() -> backend.markTerminalFailure(finalIntentId, cause),
+                                    cleanupExecutor);
+                        }
+                        RetryExhaustedException finalEx = new RetryExhaustedException(
+                                "In-memory retries exhausted, and argument serialization failed so task cannot be enqueued to backend.",
+                                cause);
+                        finalEx.addSuppressed(serializationEx);
+                        throw finalEx;
+                    }
                 }
 
                 long delay = policy.getDelayMillis(attempt);
                 if (delay > 0) {
                     try {
-                        //noinspection BusyWait
+                        // noinspection BusyWait
                         Thread.sleep(delay);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
@@ -149,17 +176,23 @@ public class Retryer {
     }
 
     /**
-     * 判断当前尝试是否可在内存阶段继续重试。
+     * 评估当前尝试失败后，下一步的重试决策。
      *
      * @param attempt 当前尝试次数（从 1 开始）
      * @param cause   失败原因
-     * @return true 表示继续内存重试；false 表示停止内存重试
+     * @return 重试决策类型
      */
-    private boolean canRetryInMemory(int attempt, Throwable cause) {
+    private RetryDecisionType evaluateDecision(int attempt, Throwable cause) {
         if (!policy.canRetry(attempt, cause)) {
-            return false;
+            return RetryDecisionType.FAIL_TERMINAL;
         }
-        return attempt < inMemoryAttempts;
+        if (attempt < inMemoryAttempts) {
+            return RetryDecisionType.RETRY_IN_MEMORY;
+        }
+        if (backend != null && durability != RetryDurability.MEMORY_ONLY && shouldFallbackToBackend()) {
+            return RetryDecisionType.HANDOFF_TO_BACKEND;
+        }
+        return RetryDecisionType.FAIL_TERMINAL;
     }
 
     /**
@@ -333,7 +366,9 @@ public class Retryer {
             return;
         }
 
-        if (canRetryInMemory(attempt, cause)) {
+        RetryDecisionType decision = evaluateDecision(attempt, cause);
+
+        if (decision == RetryDecisionType.RETRY_IN_MEMORY) {
             long delay = policy.getDelayMillis(attempt);
             try {
                 scheduler.schedule(
@@ -344,22 +379,27 @@ public class Retryer {
                 // 如果调度失败（如线程池关闭），必须完成 promise 以免调用方挂起
                 promise.completeExceptionally(e);
             }
-        } else {
-            // 内存重试彻底耗尽，降级到后端存储
-            if (backend != null && durability != RetryDurability.MEMORY_ONLY && shouldFallbackToBackend()) {
-                try {
-                    promise.completeExceptionally(enqueueToBackend(intentId, taskType, payloadBuilder, attempt, cause));
-                } catch (RetrySerializationException serializationEx) {
-                    // 降级时发现无法序列化，放弃入队，避免毒药数据
-                    RetryExhaustedException finalEx = new RetryExhaustedException(
-                            "In-memory retries exhausted, and argument serialization failed so task cannot be enqueued to backend.",
-                            cause);
-                    finalEx.addSuppressed(serializationEx);
-                    promise.completeExceptionally(finalEx);
+        } else if (decision == RetryDecisionType.HANDOFF_TO_BACKEND) {
+            try {
+                promise.completeExceptionally(enqueueToBackend(intentId, taskType, payloadBuilder, attempt, cause));
+            } catch (RetrySerializationException serializationEx) {
+                if (intentId != null) {
+                    String finalIntentId = intentId;
+                    CompletableFuture.runAsync(() -> backend.markTerminalFailure(finalIntentId, cause),
+                            cleanupExecutor);
                 }
-            } else {
-                promise.completeExceptionally(cause);
+                RetryExhaustedException finalEx = new RetryExhaustedException(
+                        "In-memory retries exhausted, and argument serialization failed so task cannot be enqueued to backend.",
+                        cause);
+                finalEx.addSuppressed(serializationEx);
+                promise.completeExceptionally(finalEx);
             }
+        } else {
+            if (intentId != null) {
+                String finalIntentId = intentId;
+                CompletableFuture.runAsync(() -> backend.markTerminalFailure(finalIntentId, cause), cleanupExecutor);
+            }
+            promise.completeExceptionally(cause);
         }
     }
 
@@ -371,7 +411,7 @@ public class Retryer {
      * @return intent 上下文
      */
     private IntentContext prepareIntent(String taskType, IntFunction<String> payloadBuilder) {
-        if (durability != RetryDurability.STRONG_CONSISTENCY || backend == null) {
+        if (durability != RetryDurability.AT_LEAST_ONCE_DURABLE || backend == null) {
             return new IntentContext(null);
         }
         try {
@@ -379,12 +419,13 @@ public class Retryer {
             String payload = payloadBuilder.apply(0);
             String intentId = backend.saveIntent(taskType, payload);
             if (intentId == null || intentId.isEmpty()) {
-                throw new IllegalStateException("STRONG_CONSISTENCY requires non-null intentId from backend.saveIntent()");
+                throw new IllegalStateException(
+                        "AT_LEAST_ONCE_DURABLE requires non-null intentId from backend.saveIntent()");
             }
             return new IntentContext(intentId);
         } catch (RetrySerializationException e) {
             throw new IllegalStateException(
-                    "STRONG_CONSISTENCY requires serializable arguments, but serialization failed.", e);
+                    "AT_LEAST_ONCE_DURABLE requires serializable arguments, but serialization failed.", e);
         }
     }
 
@@ -410,7 +451,8 @@ public class Retryer {
         String payload = payloadBuilder.apply(payloadAttempt);
         String submitIntentId = ensureIntentIdForBackend(intentId, taskType, payload);
         backend.submitForDelay(submitIntentId, taskType, payload, nextDelay);
-        return new RetryExhaustedException("In-memory retries exhausted; task has been handed over to backend queue.", cause);
+        return new RetryExhaustedException("In-memory retries exhausted; task has been handed over to backend queue.",
+                cause);
     }
 
     /**

@@ -31,7 +31,7 @@ public class ProgrammaticRetryIntegrationTest {
         retryer = Retryer.builder()
                 .policy(RetryPolicy.builder().maxAttempts(3).build())
                 .backend(backend)
-                .durability(RetryDurability.STRONG_CONSISTENCY)
+                .durability(RetryDurability.AT_LEAST_ONCE_DURABLE)
                 .build();
     }
 
@@ -68,7 +68,7 @@ public class ProgrammaticRetryIntegrationTest {
             Assert.assertTrue(e.getMessage().contains("In-memory retries exhausted"));
         }
 
-        // STRONG_CONSISTENCY 下未显式配置 inMemoryAttempts，默认前台内存预算为 2 次
+        // AT_LEAST_ONCE_DURABLE 下未显式配置 inMemoryAttempts，默认前台内存预算为 2 次
         Assert.assertEquals(2, callCount.get());
         // 验证任务已提交到延迟队列
         Assert.assertEquals(1, backend.delayedIntents.size());
@@ -125,6 +125,10 @@ public class ProgrammaticRetryIntegrationTest {
         public void completeIntent(String intentId) {
             completedIntents.add(intentId);
         }
+
+
+          @Override
+          public void markTerminalFailure(String intentId, Throwable cause) {}
 
         @Override
         public void submitForDelay(String intentId, String taskType, String payload, long delay) {

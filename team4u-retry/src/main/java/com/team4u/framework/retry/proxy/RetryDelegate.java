@@ -55,7 +55,8 @@ public class RetryDelegate {
             return proceedTask.call();
         }
 
-        String policyKey = retryable.value();
+        String policyKey = retryable.policy();
+        String taskType = retryable.taskType().isEmpty() ? method.getName() : retryable.taskType();
         RetryPolicy policy = Optional.ofNullable(DynamicRetryPolicyRegistry.getPolicy(policyKey))
                 .orElseGet(() -> RetryPolicyRegistry.global().get(policyKey)
                         .map(NamedRetryPolicy::getPolicy)
@@ -74,9 +75,9 @@ public class RetryDelegate {
 
         if (isAsync) {
             return retryer.executeAsync(
-                    policyKey,
+                    taskType,
                     executedAttempts -> snapshotSerializer.serialize(
-                            buildSnapshot(method, target, args, policyKey, policy, executedAttempts)),
+                            buildSnapshot(method, target, args, taskType, policy, executedAttempts)),
                     () -> {
                         try {
                             @SuppressWarnings("unchecked")
@@ -92,9 +93,9 @@ public class RetryDelegate {
         } else {
             try {
                 return retryer.execute(
-                        policyKey,
+                        taskType,
                         executedAttempts -> snapshotSerializer.serialize(
-                                buildSnapshot(method, target, args, policyKey, policy, executedAttempts)),
+                                buildSnapshot(method, target, args, taskType, policy, executedAttempts)),
                         proceedTask);
             } catch (Exception | Error e) {
                 throw e;
@@ -104,7 +105,8 @@ public class RetryDelegate {
         }
     }
 
-    private void validateBackendIfNeeded(Method method, String policyKey, RetryDurability durability, RetryBackend backend) {
+    private void validateBackendIfNeeded(Method method, String policyKey, RetryDurability durability,
+            RetryBackend backend) {
         if (durability == RetryDurability.MEMORY_ONLY || backend != null) {
             return;
         }
@@ -115,17 +117,17 @@ public class RetryDelegate {
     }
 
     private RetryTaskSnapshot buildSnapshot(Method method,
-                                            Object target,
-                                            Object[] args,
-                                            String policyKey,
-                                            RetryPolicy policy,
-                                            int executedAttempts) {
+            Object target,
+            Object[] args,
+            String taskType,
+            RetryPolicy policy,
+            int executedAttempts) {
         RetryTaskSnapshot snapshot = new RetryTaskSnapshot();
-        snapshot.setTaskType(policyKey);
+        snapshot.setTaskType(taskType);
         snapshot.setExecutedAttempts(executedAttempts);
         snapshot.setMaxAttempts(policy.getMaxAttempts());
 
-        snapshot.setBeanName(target != null ? target.getClass().getName() : method.getDeclaringClass().getName());
+        snapshot.setBeanName(method.getDeclaringClass().getName());
         snapshot.setMethodName(method.getName());
         snapshot.setArgTypes(Arrays.stream(method.getParameterTypes())
                 .map(Class::getName)
@@ -141,7 +143,7 @@ public class RetryDelegate {
         snapshot.setArgJsonValues(argJsonValues);
 
         // 生成任务 ID：基于任务关键信息（不包含已执行次数和创建时间）计算 hash，确保同一个业务意图在重试过程中 ID 稳定
-        String idBase = policyKey +
+        String idBase = taskType +
                 "|" + snapshot.getBeanName() +
                 "|" + snapshot.getMethodName() +
                 "|" + snapshot.getArgJsonValues();

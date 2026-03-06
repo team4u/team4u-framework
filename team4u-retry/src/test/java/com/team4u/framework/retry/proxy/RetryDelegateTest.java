@@ -73,12 +73,12 @@ public class RetryDelegateTest {
     }
 
     public static class DelegateApi {
-        @Retryable(value = "delegate-test", durability = RetryDurability.STRONG_CONSISTENCY)
+        @Retryable(policy = "delegate-test", durability = RetryDurability.AT_LEAST_ONCE_DURABLE)
         public static String strongConsistency(String value) {
             return value;
         }
 
-        @Retryable(value = "delegate-test", durability = RetryDurability.MEMORY_FALLBACK)
+        @Retryable(policy = "delegate-test", durability = RetryDurability.MEMORY_FALLBACK)
         public String memoryFallback(String value) {
             return value;
         }
@@ -98,6 +98,10 @@ public class RetryDelegateTest {
         public void completeIntent(String intentId) {
             completeLatch.countDown();
         }
+
+
+          @Override
+          public void markTerminalFailure(String intentId, Throwable cause) {}
 
         @Override
         public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {

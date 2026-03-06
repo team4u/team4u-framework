@@ -89,13 +89,13 @@ public class RetryInterceptorTest {
 
     // 1. 定义业务接口
     public interface OrderService {
-        @Retryable("rpc-policy")
+        @Retryable(policy = "rpc-policy")
         String createOrderSync(String orderId) throws Exception;
 
-        @Retryable("rpc-policy")
+        @Retryable(policy = "rpc-policy")
         CompletableFuture<String> createOrderAsync(String orderId) throws Exception;
 
-        @Retryable("rpc-policy")
+        @Retryable(policy = "rpc-policy")
         String nonRetryException(String orderId) throws Exception;
     }
 

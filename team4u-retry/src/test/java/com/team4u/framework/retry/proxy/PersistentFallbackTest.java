@@ -45,9 +45,13 @@ public class PersistentFallbackTest {
             }
 
             @Override
+            public void markTerminalFailure(String intentId, Throwable cause) {
+            }
+
+            @Override
             public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
                 submitCount.incrementAndGet();
-                Assert.assertEquals(policyId, queueName);
+                Assert.assertEquals("doSomething", queueName);
                 Assert.assertTrue("Context snippet should contain method name", contextJson.contains("doSomething"));
                 Assert.assertTrue("Context snippet should contain arg value", contextJson.contains("test-arg"));
                 Assert.assertEquals(1000, delayMs);
@@ -74,7 +78,7 @@ public class PersistentFallbackTest {
     }
 
     public interface TestService {
-        @Retryable(value = "fallback-test", durability = RetryDurability.MEMORY_FALLBACK)
+        @Retryable(policy = "fallback-test", durability = RetryDurability.MEMORY_FALLBACK)
         void doSomething(String arg);
     }
 
