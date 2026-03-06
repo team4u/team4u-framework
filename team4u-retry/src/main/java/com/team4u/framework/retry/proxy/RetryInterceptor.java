@@ -6,12 +6,11 @@ import com.team4u.framework.retry.RetryBackend;
 import lombok.AllArgsConstructor;
 import lombok.NoArgsConstructor;
 
+import java.lang.reflect.Method;
 import java.util.function.Supplier;
 
 /**
- * 基于 team4u-proxy 的自动重试拦截器
- * <p>
- * 通过动态代理实现非侵入式的重试包装，由 {@link RetryDelegate} 统一处理核心逻辑。
+ * 基于 team4u-proxy 的自动重试拦截器。
  */
 @NoArgsConstructor
 @AllArgsConstructor
@@ -26,21 +25,25 @@ public class RetryInterceptor implements MethodInterceptor {
 
     @Override
     public Object invoke(MethodInvocation invocation) throws Throwable {
-        Retryable retryable = invocation.getMethod().getAnnotation(Retryable.class);
-        if (retryable == null && invocation.getTarget() != null) {
-            // 尝试从实现类的同签名方法上查找
+        Method interfaceMethod = invocation.getMethod();
+        Method effectiveMethod = interfaceMethod;
+        if (invocation.getTarget() != null) {
             try {
-                retryable = invocation.getTarget().getClass()
-                        .getMethod(invocation.getMethod().getName(), invocation.getMethod().getParameterTypes())
-                        .getAnnotation(Retryable.class);
+                effectiveMethod = invocation.getTarget().getClass()
+                        .getMethod(interfaceMethod.getName(), interfaceMethod.getParameterTypes());
             } catch (NoSuchMethodException ignored) {
+                effectiveMethod = interfaceMethod;
             }
+        }
+        Retryable retryable = interfaceMethod.getAnnotation(Retryable.class);
+        if (retryable == null && effectiveMethod != interfaceMethod) {
+            retryable = effectiveMethod.getAnnotation(Retryable.class);
         }
         if (retryable == null && invocation.getTarget() != null) {
             retryable = invocation.getTarget().getClass().getAnnotation(Retryable.class);
         }
         return delegate.executeWithRetry(
-                invocation.getMethod(),
+                effectiveMethod,
                 invocation.getTarget(),
                 invocation.getArguments(),
                 retryable,

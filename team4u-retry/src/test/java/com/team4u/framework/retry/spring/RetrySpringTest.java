@@ -15,16 +15,10 @@ import org.springframework.stereotype.Service;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
-/**
- * Spring 自动代理重试单元测试
- *
- * @author jay.wu
- */
 public class RetrySpringTest {
 
     @Before
     public void setup() {
-        // 清理全局策略，防止测试间干扰
         RetryPolicyRegistry.global().unregisterAll();
         RetryPolicyRegistry.global().register(new NamedRetryPolicy() {
             @Override
@@ -47,24 +41,20 @@ public class RetrySpringTest {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(TestConfig.class)) {
             TestConfig config = context.getBean(TestConfig.class);
 
-            // 1. 验证接口代理 (OrderService)
             OrderService orderService = context.getBean(OrderService.class);
-            // 确认拿到的是代理对象（简单判断非原始实现类）
             Assert.assertNotSame(OrderServiceImpl.class, orderService.getClass());
-
-            String result = orderService.doRetry("A100");
-            Assert.assertEquals("ok_A100", result);
-            // 策略是 3 次尝试，前 2 次抛异常，第 3 次成功，所以总数应该是 3
+            Assert.assertEquals("ok_A100", orderService.doRetry("A100"));
             Assert.assertEquals(3, config.orderService.count.get());
 
-            // 2. 验证类代理 (UserService)
             UserService userService = context.getBean(UserService.class);
             Assert.assertNotSame(UserService.class, userService.getClass());
-
-            String userResult = userService.hello("world");
-            Assert.assertEquals("hello_world", userResult);
+            Assert.assertEquals("hello_world", userService.hello("world"));
             Assert.assertEquals(3, config.userService.count.get());
 
+            ClassAnnotatedService classAnnotatedService = context.getBean(ClassAnnotatedService.class);
+            Assert.assertNotSame(ClassAnnotatedService.class, classAnnotatedService.getClass());
+            Assert.assertEquals("class_level_C300", classAnnotatedService.call("C300"));
+            Assert.assertEquals(3, config.classAnnotatedService.count.get());
         }
     }
 
@@ -75,8 +65,7 @@ public class RetrySpringTest {
             ImplAnnotatedService service = context.getBean(ImplAnnotatedService.class);
 
             Assert.assertNotSame(ImplAnnotatedServiceImpl.class, service.getClass());
-            String result = service.call("B200");
-            Assert.assertEquals("impl_B200", result);
+            Assert.assertEquals("impl_B200", service.call("B200"));
             Assert.assertEquals(3, config.implAnnotatedService.count.get());
         }
     }
@@ -93,14 +82,10 @@ public class RetrySpringTest {
     @Configuration
     @EnableRetry
     public static class TestConfig {
-
         private final OrderServiceImpl orderService = new OrderServiceImpl();
         private final UserService userService = new UserService();
+        private final ClassAnnotatedService classAnnotatedService = new ClassAnnotatedService();
 
-        /**
-         * 显式注册代理创建器，模拟调用方（如 Spring Boot）的环境。
-         * 这比在框架配置中硬编码更具灵活性。
-         */
         @Bean
         public OrderService orderService() {
             return orderService;
@@ -110,10 +95,15 @@ public class RetrySpringTest {
         public UserService userService() {
             return userService;
         }
+
+        @Bean
+        public ClassAnnotatedService classAnnotatedService() {
+            return classAnnotatedService;
+        }
     }
 
     public static class OrderServiceImpl implements OrderService {
-        public AtomicInteger count = new AtomicInteger();
+        private final AtomicInteger count = new AtomicInteger();
 
         @Override
         public String doRetry(String id) {
@@ -124,12 +114,9 @@ public class RetrySpringTest {
         }
     }
 
-    /**
-     * 测试普通类代理（无接口）
-     */
     @Service
     public static class UserService {
-        public AtomicInteger count = new AtomicInteger();
+        private final AtomicInteger count = new AtomicInteger();
 
         @Retryable(policy = "test-policy")
         public String hello(String name) {
@@ -140,8 +127,20 @@ public class RetrySpringTest {
         }
     }
 
+    @Retryable(policy = "test-policy")
+    public static class ClassAnnotatedService {
+        private final AtomicInteger count = new AtomicInteger();
+
+        public String call(String value) {
+            if (count.incrementAndGet() < 3) {
+                throw new RuntimeException("fail");
+            }
+            return "class_level_" + value;
+        }
+    }
+
     public static class ImplAnnotatedServiceImpl implements ImplAnnotatedService {
-        public AtomicInteger count = new AtomicInteger();
+        private final AtomicInteger count = new AtomicInteger();
 
         @Override
         @Retryable(policy = "test-policy")
@@ -156,7 +155,6 @@ public class RetrySpringTest {
     @Configuration
     @EnableRetry
     public static class JdkProxyConfig {
-
         private final ImplAnnotatedServiceImpl implAnnotatedService = new ImplAnnotatedServiceImpl();
 
         @Bean

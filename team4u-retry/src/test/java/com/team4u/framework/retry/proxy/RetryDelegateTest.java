@@ -14,6 +14,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class RetryDelegateTest {
@@ -65,7 +66,68 @@ public class RetryDelegateTest {
 
         Assert.assertEquals("ok", result);
         Assert.assertEquals(1, backend.saveCount.get());
-        Assert.assertTrue("成功后应异步完成 intent 清理", backend.completeLatch.await(1, TimeUnit.SECONDS));
+        Assert.assertTrue(backend.completeLatch.await(1, TimeUnit.SECONDS));
+    }
+
+    @Test
+    public void testMemoryOnlyDoesNotSerializeArguments() throws Throwable {
+        RetryDelegate delegate = new RetryDelegate();
+        AtomicInteger serializeCount = new AtomicInteger();
+        delegate.setSerializer((parameter, arg) -> {
+            serializeCount.incrementAndGet();
+            throw new AssertionError("MEMORY_ONLY should not serialize arguments");
+        });
+
+        Method method = DelegateApi.class.getDeclaredMethod("memoryOnly", Object.class);
+        Retryable retryable = method.getAnnotation(Retryable.class);
+
+        Object result = delegate.executeWithRetry(
+                method,
+                new DelegateApi(),
+                new Object[]{new Object()},
+                retryable,
+                () -> "ok",
+                null);
+
+        Assert.assertEquals("ok", result);
+        Assert.assertEquals(0, serializeCount.get());
+    }
+
+    @Test
+    public void testMemoryFallbackBuildsSnapshotOnlyWhenHandingOff() throws Throwable {
+        RetryDelegate delegate = new RetryDelegate();
+        AtomicBoolean proceeded = new AtomicBoolean(false);
+        AtomicInteger serializeCount = new AtomicInteger();
+        delegate.setSerializer((parameter, arg) -> {
+            Assert.assertTrue("serializer should run after business execution fails", proceeded.get());
+            serializeCount.incrementAndGet();
+            return JSONUtil.toJsonStr(String.valueOf(arg));
+        });
+
+        Method method = DelegateApi.class.getDeclaredMethod("memoryFallbackDeferred", Object.class);
+        Retryable retryable = method.getAnnotation(Retryable.class);
+        CapturingBackend backend = new CapturingBackend();
+
+        try {
+            delegate.executeWithRetry(
+                    method,
+                    new DelegateApi(),
+                    new Object[]{"payload"},
+                    retryable,
+                    () -> {
+                        proceeded.set(true);
+                        throw new RuntimeException("fail");
+                    },
+                    () -> backend);
+            Assert.fail("expected RetryExhaustedException");
+        } catch (RetryExhaustedException expected) {
+            // expected
+        }
+
+        Assert.assertTrue(proceeded.get());
+        Assert.assertEquals(1, serializeCount.get());
+        Assert.assertNotNull(backend.submittedPayload);
+        Assert.assertTrue(backend.submittedPayload.contains("payload"));
     }
 
     @Test
@@ -82,7 +144,7 @@ public class RetryDelegateTest {
                     retryable,
                     () -> "ok",
                     null);
-            Assert.fail("预期抛出 IllegalStateException");
+            Assert.fail("expected IllegalStateException");
         } catch (IllegalStateException ex) {
             Assert.assertTrue(ex.getMessage().contains("MEMORY_FALLBACK"));
             Assert.assertTrue(ex.getMessage().contains("delegate-test"));
@@ -141,7 +203,8 @@ public class RetryDelegateTest {
         Assert.assertEquals(
                 JSONUtil.parseObj(backend.savedPayload).getStr("taskId"),
                 JSONUtil.parseObj(backend.submittedPayload).getStr("taskId"));
-        Assert.assertEquals(DelegateContractImpl.class.getName(),
+        Assert.assertEquals(
+                DelegateContractImpl.class.getName(),
                 JSONUtil.parseObj(backend.savedPayload).getStr("beanName"));
     }
 
@@ -156,9 +219,19 @@ public class RetryDelegateTest {
             return value;
         }
 
+        @Retryable(policy = "delegate-test", durability = RetryDurability.MEMORY_ONLY)
+        public String memoryOnly(Object value) {
+            return String.valueOf(value);
+        }
+
         @Retryable(policy = "delegate-test", durability = RetryDurability.MEMORY_FALLBACK)
         public String memoryFallback(String value) {
             return value;
+        }
+
+        @Retryable(policy = "delegate-freeze", durability = RetryDurability.MEMORY_FALLBACK)
+        public String memoryFallbackDeferred(Object value) {
+            return String.valueOf(value);
         }
     }
 
@@ -170,8 +243,8 @@ public class RetryDelegateTest {
     }
 
     private static class MockBackend implements RetryBackend {
-        AtomicInteger saveCount = new AtomicInteger();
-        CountDownLatch completeLatch = new CountDownLatch(1);
+        private final AtomicInteger saveCount = new AtomicInteger();
+        private final CountDownLatch completeLatch = new CountDownLatch(1);
 
         @Override
         public String saveIntent(String queueName, String contextJson) {
@@ -183,7 +256,6 @@ public class RetryDelegateTest {
         public void completeIntent(String intentId) {
             completeLatch.countDown();
         }
-
 
         @Override
         public void markTerminalFailure(String intentId, Throwable cause) {

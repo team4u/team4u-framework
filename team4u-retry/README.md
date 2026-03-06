@@ -1,41 +1,59 @@
-[返回总目录](../README.md)
+# [返回总目录](../README.md)
 
-# 重试模块
+# team4u-retry
 
-[![JDK 8+](https://img.shields.io/badge/JDK-8+-green.svg)](https://openjdk.java.net/)
+[![JDK 8+](https://img.shields.io/badge/JDK-8+-green.svg)](https://openjdk.org/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+
+`team4u-retry` 是 Team4u Framework 的统一重试模块，提供：
+
+- 同步重试：阻塞式执行 `Callable`
+- 异步重试：基于 `CompletableFuture + ScheduledExecutorService`
+- 注解重试：通过 `@Retryable` 接入
+- Spring 自动代理：通过 `@EnableRetry` 自动织入
+- 持久化降级：内存重试耗尽后移交后端队列
+- 动态策略：支持从配置中心动态加载 `retry.policy.*`
+
+如果你只想尽快上手，先看“快速开始”和“怎么选接入方式”。
 
 ## 目录
 
-- [简介](#简介)
-- [快速入门](#快速入门)
-- [核心语义与模型](#核心语义与模型)
+- [怎么选接入方式](#怎么选接入方式)
+- [快速开始](#快速开始)
+- [核心概念](#核心概念)
 - [编程式重试](#编程式重试)
-- [注解式重试（结合 team4u-proxy）](#注解式重试结合-team4u-proxy)
+- [注解式重试](#注解式重试)
+- [Spring 自动代理](#spring-自动代理)
+- [持久化降级与恢复](#持久化降级与恢复)
 - [动态策略与配置中心](#动态策略与配置中心)
-- [持久化降级与恢复机制](#持久化降级与恢复机制)
+- [完整示例：自定义 RetryBackend](#完整示例自定义-retrybackend)
+- [完整示例：Spring Boot 接入](#完整示例spring-boot-接入)
 - [关键边界与注意事项](#关键边界与注意事项)
-- [架构与原理](#架构与原理)
+- [实现结构](#实现结构)
 
 ---
 
-## 简介
+## 怎么选接入方式
 
-`team4u-retry` 是 Team4u Framework 的统一重试治理模块，提供：
+| 场景 | 推荐方式 | 特点 |
+| --- | --- | --- |
+| 你在普通 Java 代码里重试一段逻辑 | `Retryer.execute(Callable)` | 最简单，适合纯内存重试 |
+| 你希望失败后可移交后端继续重试 | `Retryer.execute(taskType, payloadBuilder, task)` | 支持持久化降级 |
+| 你的业务本身是异步调用 | `Retryer.executeAsync(...)` | 非阻塞，不占用当前线程 sleep |
+| 你想零侵入地给服务方法加重试 | `@Retryable` + `RetryProxyFactory` | 不依赖 Spring |
+| 你在 Spring 项目里 | `@EnableRetry` + `@Retryable` | 自动代理，接入成本最低 |
 
-1. **同步重试**：对 `Callable` 任务进行阻塞式重试。
-2. **异步重试**：基于 `CompletableFuture + ScheduledExecutorService` 的真非阻塞重试。
-3. **注解重试**：通过 `@Retryable` + `team4u-proxy` 动态代理实现无侵入接入。
-4. **动态策略**：支持配置中心热更新 `retry.policy.*` 策略。
-5. **持久化降级**：内存重试耗尽后可降级到后端队列，支持恢复执行。
+### 一句话决策
 
-模块支持异常白名单/黑名单、多种退避算法、Criterion 条件表达式，以及常见包装异常解包。
+- 只需要本地重试：用 `Retryer.with(policy).execute(...)`
+- 需要“内存失败后丢到后端队列”：用 `Retryer.builder()` 并配置 `RetryBackend`
+- 已经在 Spring 里：优先用 `@EnableRetry`
 
 ---
 
-## 快速入门
+## 快速开始
 
-### 引入依赖
+### 依赖
 
 ```xml
 <dependency>
@@ -45,7 +63,7 @@
 </dependency>
 ```
 
-### 最小可用示例（同步）
+### 最小示例：同步重试
 
 ```java
 import com.team4u.framework.retry.RetryPolicy;
@@ -60,15 +78,21 @@ RetryPolicy policy = RetryPolicy.builder()
 Retryer retryer = Retryer.with(policy);
 
 String result = retryer.execute(() -> {
-    // 调用可能失败的下游
+    // 调用可能失败的下游服务
     return "ok";
 });
 ```
 
-### 最小可用示例（异步）
+### 最小示例：异步重试
 
 ```java
-import java.util.concurrent.*;
+import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.Retryer;
+import com.team4u.framework.retry.backoff.Backoff;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
 
 ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
 
@@ -80,62 +104,94 @@ RetryPolicy policy = RetryPolicy.builder()
 Retryer retryer = Retryer.with(policy);
 
 CompletableFuture<String> future = retryer.executeAsync(
-        "order.query",                       // taskType
-        () -> "{\"orderId\":\"A1001\"}", // payloadSupplier
-        () -> asyncRemoteCall(),              // Supplier<CompletableFuture<T>>
+        "order.query",
+        attempt -> "{\"orderId\":\"A1001\"}",
+        this::asyncRemoteCall,
         scheduler
 );
 ```
 
+### 最小示例：注解重试
+
+```java
+public interface PayService {
+    @Retryable(policy = "pay-notify")
+    String notifyPay(String orderId);
+}
+```
+
 ---
 
-## 核心语义与模型
+## 核心概念
 
-### 1) RetryPolicy（策略对象）
+### 1. `RetryPolicy`
 
-`RetryPolicy` 是不可变对象（线程安全），可通过 Builder 组合以下能力：
+`RetryPolicy` 是不可变对象，用来定义“是否继续重试”和“下一次等多久”。
 
-- `maxAttempts(int)`：全局总尝试次数（**包含首次调用**，内存 + 后端总和）。
-- `inMemoryAttempts(int)`：前台内存尝试预算（可选高级参数）。
-- `infiniteAttempts()`：无限重试（`maxAttempts = -1`）。
-- `backoff(Backoff)`：延迟计算策略。
-- `retryOn(...)`：仅匹配这些异常及其子类时允许重试。
-- `abortOn(...)`：匹配这些异常及其子类时立刻终止重试。
-- `condition(String)`：Criterion 表达式条件重试（基于 `attempt/maxAttempts/cause/message`）。
+常用配置：
 
-#### 判定顺序（`canRetry`）
+- `maxAttempts(int)`：总尝试次数，包含第一次调用
+- `inMemoryAttempts(int)`：仅控制内存阶段的尝试次数
+- `infiniteAttempts()`：无限重试，等价于 `maxAttempts = -1`
+- `backoff(Backoff)`：退避策略
+- `retryOn(...)`：只对这些异常重试
+- `abortOn(...)`：命中这些异常立即停止
+- `condition(String)`：基于 Criterion 表达式做更细粒度控制
 
-1. 次数上限判定：`currentAttempt >= maxAttempts`（且非无限）直接不可重试。
-2. 异常解包（见下文）。
-3. `abortOn` 命中则不可重试。
-4. 若配置了 `retryOn` 且未命中，则不可重试。
-5. 若配置了 `condition`，则以表达式结果为准（内置 `message` 防空保护）。
-6. 其余情况可重试。
+示例：
 
-`getDelayMillis(currentAttempt)` 的 `currentAttempt` 语义为“当前失败对应的尝试序号”。
-例如第 N 次执行失败后，下一次执行前等待 `getDelayMillis(N)`。
+```java
+RetryPolicy policy = RetryPolicy.builder()
+        .maxAttempts(5)
+        .retryOn(java.io.IOException.class)
+        .abortOn(IllegalArgumentException.class)
+        .backoff(Backoff.exponentialJitter(100, 2.0, 3000))
+        .condition("message contains 'timeout'")
+        .build();
+```
 
-### 2) Backoff（退避算法）
+### 2. `Backoff`
 
-- `Backoff.fixed(delay)`：固定间隔。
-- `Backoff.increment(initial, step)`：线性递增。
-- `Backoff.exponential(initial, multiplier, maxDelay)`：指数退避，上限截断。
-- `Backoff.exponentialJitter(initial, multiplier, maxDelay)`：指数 + 全抖动，打散惊群效应。
+内置退避算法：
 
-### 3) 异常解包语义（RetryExceptionUtil）
+- `Backoff.fixed(delay)`：固定间隔
+- `Backoff.increment(initial, step)`：线性递增
+- `Backoff.exponential(initial, multiplier, maxDelay)`：指数退避
+- `Backoff.exponentialJitter(initial, multiplier, maxDelay)`：指数退避 + 抖动
 
-自动剥离以下包装异常（最大深度 10，基于 `IdentityHashMap` 物理防死循环）：
+如果你面对高并发失败风暴，优先考虑 `exponentialJitter`，它能减少瞬时重试扎堆。
 
-- `CompletionException` / `ExecutionException`
-- `InvocationTargetException` / `UndeclaredThrowableException`
+### 3. 异常解包
 
-> 说明：并非所有包装异常都会被剥离。例如普通 `RuntimeException(new BizException(...))` 不在自动解包范围内。
+框架会自动解包常见包装异常，再做重试判断，包括：
+
+- `CompletionException`
+- `ExecutionException`
+- `InvocationTargetException`
+- `UndeclaredThrowableException`
+
+这意味着你在异步调用、代理调用下配置 `retryOn(...)` 时，通常仍然能命中真正的业务异常。
 
 ---
 
 ## 编程式重试
 
-### 1) 同步重试
+### 同步内存重试
+
+适合简单、快速、纯内存场景。
+
+```java
+Retryer retryer = Retryer.with(policy);
+
+String result = retryer.execute(() -> doBusiness());
+```
+
+注意：
+
+- 该入口只支持 `MEMORY_ONLY`
+- 如果你配置了持久化级别，不要调用这个重载
+
+### 支持后端降级的同步重试
 
 ```java
 Retryer retryer = Retryer.builder()
@@ -146,32 +202,39 @@ Retryer retryer = Retryer.builder()
 
 String result = retryer.execute(
         "pay-notify",
-        () -> "{\"orderId\":\"A1001\"}", // 延迟序列化 payload
-        () -> doBusiness()
+        attempt -> "{\"orderId\":\"A1001\"}",
+        this::doBusiness
 );
 ```
 
-- 若内存重试耗尽且仍有全局额度，会调用 `RetryBackend.submitForDelay(...)`。
-- 此时抛 `RetryExhaustedException`，表示任务已转入后台系统接管。
+当内存重试耗尽但策略仍允许继续重试时：
 
-### 2) 非阻塞异步重试
+- 框架会调用 `RetryBackend.submitForDelay(...)`
+- 当前线程会收到 `RetryExhaustedException`
+- 这个异常不表示任务彻底失败，而是表示任务已移交后端系统接管
+
+### 非阻塞异步重试
 
 ```java
 CompletableFuture<String> future = retryer.executeAsync(
         "pay-notify",
-        () -> "{\"orderId\":\"A1001\"}",
-        () -> asyncRemoteCall(),
+        attempt -> "{\"orderId\":\"A1001\"}",
+        this::asyncRemoteCall,
         scheduler
 );
 ```
 
-- 重试调度不阻塞当前线程。内置 `RejectedExecutionException` 保护，确保在调度器关闭等极端情况下 `future` 仍能正确完成异常回调。
+特点：
+
+- 不阻塞当前线程
+- 通过 `ScheduledExecutorService` 延迟下一次尝试
+- 调度器关闭等极端情况下，`future` 仍会正常异常完成，不会悬挂
 
 ---
 
-## 注解式重试（结合 team4u-proxy）
+## 注解式重试
 
-### 1) 使用方式
+### 基础用法
 
 ```java
 public interface PayService {
@@ -180,152 +243,593 @@ public interface PayService {
 }
 ```
 
-### 2) 接入拦截器
+然后通过代理工厂接入：
 
 ```java
 PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), retryBackend);
 ```
 
-- 拦截器内部采用全局单例 `SCHEDULER`，具备线程安全初始化和防资源泄漏设计。
-- **Backend 要求**：当 `durability` 不是 `MEMORY_ONLY` 时必须提供 `RetryBackend`，否则会抛出带有方法签名和策略 key 的
-  `IllegalStateException`。
+### `@Retryable` 参数说明
 
-### 3) Spring 自动代理 (零编程接入)
+- `policy`：策略名，默认是 `default`
+- `taskType`：任务类型，供后端恢复时路由
+- `durability`：可靠性级别，默认 `MEMORY_ONLY`
 
-在 Spring 环境下，你可以开启自动扫描功能，系统会自动为所有标记了 `@Retryable` 的 Bean 生成代理。
+### 什么时候需要提供 `RetryBackend`
 
-#### 开启功能
+当 `durability != MEMORY_ONLY` 时，必须提供 `RetryBackend`。否则会抛出 `IllegalStateException`。
 
-```java
-@Configuration
-@EnableRetry // 开启重试自动代理扫描
-public class RetryConfig {
+---
 
-    @Bean
-    public RetryBackend retryBackend() {
-        // 注册重试后端实现
-        return new MemoryRetryBackend();
-    }
-}
-```
+## Spring 自动代理
 
-#### 使用方式
+如果你在 Spring 环境中，推荐使用这个方式，接入最轻。
 
-```java
-@Service
-public class PayServiceImpl implements PayService {
-
-    @Override
-    @Retryable(policy = "pay-policy") // 直接标注注解即可，无需手动创建代理
-    public String notifyPay(String orderId) {
-        // ... 业务逻辑
-    }
-}
-```
-
-#### AOP 代理模式说明
-
-本框架遵循 Spring 的标准 AOP 机制，不再硬编码强制使用 CGLIB。代理模式完全由您的 Spring 环境决定：
-
-- **Spring Boot 2.x+**：默认强制使用 CGLIB 代理（`spring.aop.proxy-target-class=true`）。
-- **标准 Spring 项目**：默认优先使用 JDK 动态代理（若目标类实现了接口）。
-
-若需显式自定义代理行为（例如在非 Spring Boot 环境下强制使用 CGLIB 以支持无接口类的重试），请在您的配置类上添加如下注解：
+### 开启功能
 
 ```java
 @Configuration
 @EnableRetry
-@EnableAspectJAutoProxy(proxyTargetClass = true) // 显式开启并强制 CGLIB
-public class RetryConfig { ... }
+public class RetryConfig {
+}
 ```
 
-- **实现原理**：通过注册标准的 `Advisor`，利用 Spring AOP 基础设施自动织入。
-- **兼容性**：完美兼容 Spring 事务（`@Transactional`）等其他切面。建议通过 `@Order` 调整优先级（默认为
-  `LOWEST_PRECEDENCE - 1`，通常在事务之外重试）。
+### 注册策略
+
+框架会根据 `policy` 名称查找对应策略。你可以通过 `RetryPolicyRegistry` 注册：
+
+```java
+RetryPolicyRegistry.global().register(new NamedRetryPolicy() {
+    @Override
+    public String key() {
+        return "pay-policy";
+    }
+
+    @Override
+    public RetryPolicy getPolicy() {
+        return RetryPolicy.builder()
+                .maxAttempts(3)
+                .backoff(Backoff.fixed(100))
+                .build();
+    }
+});
+```
+
+### 在 Bean 上使用
+
+```java
+@Service
+public class PayServiceImpl {
+
+    @Retryable(policy = "pay-policy")
+    public String notifyPay(String orderId) {
+        return "ok_" + orderId;
+    }
+}
+```
+
+### 代理模式说明
+
+该模块遵循标准 Spring AOP 行为：
+
+- 有接口时，通常可走 JDK 动态代理
+- 无接口时，通常需要 CGLIB
+- 在 Spring Boot 2.x+ 中，一般默认就是 CGLIB
+
+如果你在非 Spring Boot 环境里需要强制类代理，可以显式开启：
+
+```java
+@Configuration
+@EnableRetry
+@EnableAspectJAutoProxy(proxyTargetClass = true)
+public class RetryConfig {
+}
+```
+
+---
+
+## 持久化降级与恢复
+
+### 可靠性级别
+
+`RetryDurability` 提供三种模式：
+
+- `MEMORY_ONLY`：只在当前进程内重试，最快，但不抗宕机
+- `MEMORY_FALLBACK`：先内存重试，耗尽后移交后端
+- `AT_LEAST_ONCE_DURABLE`：执行前先写 intent，保证至少一次持久化
+
+### `RetryBackend` 职责
+
+你需要实现 `RetryBackend` 来承接后端持久化与调度：
+
+```java
+public interface RetryBackend {
+    String saveIntent(String taskType, String payload);
+    void completeIntent(String intentId);
+    void markTerminalFailure(String intentId, Throwable cause);
+    void submitForDelay(String intentId, String taskType, String payload, long delay);
+}
+```
+
+语义上可以理解为：
+
+- `saveIntent(...)`：预写日志 / 预留执行意图
+- `completeIntent(...)`：任务成功后清理 intent
+- `markTerminalFailure(...)`：彻底失败，标记为终态
+- `submitForDelay(...)`：把任务送入延迟队列
+
+### 恢复执行
+
+后端 Worker 取出任务后，按 `taskType` 路由到对应的恢复器：
+
+```java
+RecoveryHandlerRegistry.global().register(new RecoveryHandler() {
+    @Override
+    public String key() {
+        return "pay-notify";
+    }
+
+    @Override
+    public void recover(String payload) {
+        // 从 payload 还原业务参数并继续执行
+    }
+});
+```
+
+### `MEMORY_FALLBACK` 的次数语义
+
+设：
+
+- `T = maxAttempts`，总尝试次数，包含第一次
+- `M = inMemoryAttempts`，内存阶段尝试次数，包含第一次
+
+则：
+
+- 前台最多执行 `M` 次
+- 只有 `M < T`，或者 `T == -1` 时，才会降级到后端
+- 有限重试场景下，后端剩余次数为 `T - M`
+
+默认值：
+
+- `MEMORY_ONLY`：默认全部在内存中完成
+- `MEMORY_FALLBACK` / `AT_LEAST_ONCE_DURABLE`：如果未显式配置 `inMemoryAttempts`，默认前台尝试 2 次
 
 ---
 
 ## 动态策略与配置中心
 
-`team4u-retry` 提供了 `DynamicRetryPolicyRegistry`，用于按策略名读取并热更新 `RetryPolicy`。
+`DynamicRetryPolicyRegistry` 会监听前缀为 `retry.policy.` 的配置项，并在运行期返回最新策略。
 
-- 典型配置前缀：`retry.policy.<policyKey>.*`
-- 常见字段：
-    - `maxAttempts`
-    - `inMemoryAttempts`
-    - `backoff.type`（`fixed` / `increment` / `exponential` / `exponentialJitter`）
-    - `backoff.initialDelay` / `backoff.step` / `backoff.multiplier` / `backoff.maxDelay`
+示意：
 
-建议把业务策略（例如 `pay-notify`、`order-query`）与代码解耦，通过配置中心管理策略参数，实现线上无重启调优。
+```properties
+retry.policy.pay-notify={"maxAttempts":5,"backoffType":"exponentialJitter"}
+```
+
+使用：
+
+```java
+RetryPolicy policy = DynamicRetryPolicyRegistry.getPolicy("pay-notify");
+```
+
+适合：
+
+- 不改代码动态调节重试次数
+- 针对不同任务类型配置不同策略
+- 线上快速收敛重试风暴
 
 ---
 
-## 持久化降级与恢复机制
+## 完整示例：自定义 `RetryBackend`
 
-### 1) 可靠性级别（RetryDurability）
+下面这个例子不是生产实现，但足够帮助开发者理解接口职责，以及如何把 `team4u-retry` 接到自己的队列系统上。
 
-- `MEMORY_ONLY`：极速，不防宕机。
-- `MEMORY_FALLBACK`：内存优先，耗尽后持久化，防内存堆积。
-- `AT_LEAST_ONCE_DURABLE`：执行前预写日志（WAL），成功后异步清理（`retry-cleanup-pool`），确保任务不丢失。
+### 一个最小内存版后端
 
-### 2) 后端接口与恢复
+```java
+import com.team4u.framework.retry.RetryBackend;
 
-- 实现 `RetryBackend` 存储接口。
-- 注册 `RecoveryHandler` 按 `taskType` 路由恢复逻辑。
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.DelayQueue;
+import java.util.concurrent.Delayed;
+import java.util.concurrent.TimeUnit;
 
-### 3) MEMORY_FALLBACK 次数计算（重点）
+public class InMemoryRetryBackend implements RetryBackend {
 
-设：
+    private final Map<String, IntentRecord> intents = new ConcurrentHashMap<>();
+    private final DelayQueue<DelayedTask> queue = new DelayQueue<>();
 
-- `T = maxAttempts`（全局总尝试次数，**包含首次**）
-- `M = inMemoryAttempts`（前台内存尝试预算，**包含首次**）
+    @Override
+    public String saveIntent(String taskType, String payload) {
+        String intentId = "intent-" + System.nanoTime();
+        intents.put(intentId, new IntentRecord(intentId, taskType, payload, "PENDING"));
+        return intentId;
+    }
 
-则：
+    @Override
+    public void completeIntent(String intentId) {
+        intents.remove(intentId);
+    }
 
-1. 前台最多执行 `M` 次。
-2. 仅当 `T == -1`（无限）或 `M < T` 时，内存耗尽后才会转后台。
-3. 有限重试（`T != -1`）时，后台可用剩余次数为 `T - M`。
-4. 未显式配置 `M` 时：
-    - `MEMORY_FALLBACK` 默认 `M = min(2, T)`
-    - 若 `T = -1`，默认 `M = 2`
-5. 转后台时的首次延迟，按“下一次尝试编号”计算，即 `policy.getDelayMillis(M + 1)`（有限场景会受 `T` 上限约束）。
+    @Override
+    public void markTerminalFailure(String intentId, Throwable cause) {
+        IntentRecord old = intents.get(intentId);
+        if (old != null) {
+            intents.put(intentId, new IntentRecord(old.intentId, old.taskType, old.payload, "TERMINAL"));
+        }
+    }
 
-示例：
+    @Override
+    public void submitForDelay(String intentId, String taskType, String payload, long delay) {
+        intents.putIfAbsent(intentId, new IntentRecord(intentId, taskType, payload, "QUEUED"));
+        queue.offer(new DelayedTask(intentId, taskType, payload, delay));
+    }
 
-- `T=5, M=2`：前台 2 次，后台最多 3 次。
-- `T=2, M=2`：前台 2 次，不会转后台。
-- `T=-1, M=2`：前台 2 次后可持续转后台（由后台系统策略决定最终上限）。
+    public DelayedTask take() throws InterruptedException {
+        return queue.take();
+    }
+
+    public static final class IntentRecord {
+        public final String intentId;
+        public final String taskType;
+        public final String payload;
+        public final String status;
+
+        public IntentRecord(String intentId, String taskType, String payload, String status) {
+            this.intentId = intentId;
+            this.taskType = taskType;
+            this.payload = payload;
+            this.status = status;
+        }
+    }
+
+    public static final class DelayedTask implements Delayed {
+        public final String intentId;
+        public final String taskType;
+        public final String payload;
+        private final long executeAtNanos;
+
+        public DelayedTask(String intentId, String taskType, String payload, long delayMillis) {
+            this.intentId = Objects.requireNonNull(intentId);
+            this.taskType = Objects.requireNonNull(taskType);
+            this.payload = payload;
+            this.executeAtNanos = System.nanoTime() + TimeUnit.MILLISECONDS.toNanos(delayMillis);
+        }
+
+        @Override
+        public long getDelay(TimeUnit unit) {
+            long remaining = executeAtNanos - System.nanoTime();
+            return unit.convert(remaining, TimeUnit.NANOSECONDS);
+        }
+
+        @Override
+        public int compareTo(Delayed other) {
+            return Long.compare(getDelay(TimeUnit.NANOSECONDS), other.getDelay(TimeUnit.NANOSECONDS));
+        }
+    }
+}
+```
+
+### 对应的恢复器
+
+```java
+import com.team4u.framework.retry.recovery.RecoveryHandler;
+
+public class PayNotifyRecoveryHandler implements RecoveryHandler {
+    @Override
+    public String key() {
+        return "pay-notify";
+    }
+
+    @Override
+    public void recover(String payload) {
+        // 这里通常要做两件事：
+        // 1. 反序列化 payload
+        // 2. 调用真正的业务补偿逻辑
+        System.out.println("recover payload = " + payload);
+    }
+}
+```
+
+### Worker 如何消费后端任务
+
+```java
+import com.team4u.framework.retry.recovery.RecoveryHandler;
+import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
+
+public class RetryWorker implements Runnable {
+
+    private final InMemoryRetryBackend backend;
+
+    public RetryWorker(InMemoryRetryBackend backend) {
+        this.backend = backend;
+    }
+
+    @Override
+    public void run() {
+        while (!Thread.currentThread().isInterrupted()) {
+            try {
+                InMemoryRetryBackend.DelayedTask task = backend.take();
+                RecoveryHandler handler = RecoveryHandlerRegistry.global()
+                        .get(task.taskType)
+                        .orElseThrow(() -> new IllegalStateException("No RecoveryHandler for " + task.taskType));
+                handler.recover(task.payload);
+                backend.completeIntent(task.intentId);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                break;
+            } catch (Exception e) {
+                // 生产环境里建议记录日志、做死信或重新入队，不要简单吞掉
+                e.printStackTrace();
+            }
+        }
+    }
+}
+```
+
+### 怎么把它串起来
+
+```java
+InMemoryRetryBackend backend = new InMemoryRetryBackend();
+
+RecoveryHandlerRegistry.global().register(new PayNotifyRecoveryHandler());
+
+Thread worker = new Thread(new RetryWorker(backend), "retry-worker");
+worker.start();
+
+RetryPolicy policy = RetryPolicy.builder()
+        .maxAttempts(5)
+        .inMemoryAttempts(2)
+        .backoff(Backoff.exponentialJitter(200, 2.0, 5000))
+        .build();
+
+Retryer retryer = Retryer.builder()
+        .policy(policy)
+        .backend(backend)
+        .durability(RetryDurability.MEMORY_FALLBACK)
+        .build();
+
+retryer.execute(
+        "pay-notify",
+        attempt -> "{\"orderId\":\"A1001\"}",
+        () -> {
+            throw new RuntimeException("downstream timeout");
+        }
+);
+```
+
+### 生产实现建议
+
+- `intentId` 不要用临时值，建议用业务幂等键或稳定哈希
+- `payload` 要有明确版本号，避免后续字段变更导致恢复失败
+- `submitForDelay(...)` 最好接消息队列或延迟队列，而不是只放内存
+- `markTerminalFailure(...)` 建议落库并进入死信/告警链路
+- Worker 执行恢复逻辑时，业务本身要具备幂等性
+
+---
+
+## 完整示例：Spring Boot 接入
+
+下面是一个接近真实项目的接入方式，目标是让一个 `@Retryable` 方法在 Spring 中自动生效。
+
+### 1. 注册策略
+
+```java
+import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.backoff.Backoff;
+import com.team4u.framework.retry.proxy.NamedRetryPolicy;
+import com.team4u.framework.retry.proxy.RetryPolicyRegistry;
+import org.springframework.context.annotation.Configuration;
+
+import jakarta.annotation.PostConstruct;
+
+@Configuration
+public class RetryPolicyConfig {
+
+    @PostConstruct
+    public void registerPolicies() {
+        RetryPolicyRegistry.global().register(new NamedRetryPolicy() {
+            @Override
+            public String key() {
+                return "pay-policy";
+            }
+
+            @Override
+            public RetryPolicy getPolicy() {
+                return RetryPolicy.builder()
+                        .maxAttempts(3)
+                        .backoff(Backoff.fixed(200))
+                        .build();
+            }
+        });
+    }
+}
+```
+
+如果你的项目是 JDK 8 / Spring 5 风格，把 `jakarta.annotation.PostConstruct` 换成 `javax.annotation.PostConstruct`。
+
+### 2. 开启自动代理
+
+```java
+import com.team4u.framework.retry.spring.EnableRetry;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+@EnableRetry
+public class RetryAutoConfiguration {
+}
+```
+
+### 3. 声明业务服务
+
+```java
+import com.team4u.framework.retry.proxy.Retryable;
+import org.springframework.stereotype.Service;
+
+import java.util.concurrent.atomic.AtomicInteger;
+
+@Service
+public class PayService {
+
+    private final AtomicInteger counter = new AtomicInteger();
+
+    @Retryable(policy = "pay-policy")
+    public String notifyPay(String orderId) {
+        if (counter.incrementAndGet() < 3) {
+            throw new RuntimeException("temporary failure");
+        }
+        return "ok_" + orderId;
+    }
+}
+```
+
+### 4. 调用效果
+
+```java
+import org.springframework.boot.CommandLineRunner;
+import org.springframework.stereotype.Component;
+
+@Component
+public class DemoRunner implements CommandLineRunner {
+
+    private final PayService payService;
+
+    public DemoRunner(PayService payService) {
+        this.payService = payService;
+    }
+
+    @Override
+    public void run(String... args) {
+        String result = payService.notifyPay("A1001");
+        System.out.println(result);
+    }
+}
+```
+
+执行结果预期：
+
+- 前两次抛出 `RuntimeException`
+- 第三次成功返回 `ok_A1001`
+- 整个重试过程由代理自动完成，业务调用方不需要自己写循环
+
+### 如果要接入持久化降级
+
+在 Spring 容器里额外提供一个 `RetryBackend` Bean 即可：
+
+```java
+import com.team4u.framework.retry.RetryBackend;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class RetryBackendConfig {
+
+    @Bean
+    public RetryBackend retryBackend() {
+        return new InMemoryRetryBackend();
+    }
+}
+```
+
+然后把业务方法改成：
+
+```java
+@Retryable(policy = "pay-policy", taskType = "pay-notify", durability = RetryDurability.MEMORY_FALLBACK)
+public String notifyPay(String orderId) {
+    // ...
+}
+```
+
+此时要再配一套后端 Worker 和 `RecoveryHandler`，否则任务虽然能入队，但不会有人恢复执行。
 
 ---
 
 ## 关键边界与注意事项
 
-1. **`maxAttempts` 包含首次调用**。
-2. **`Error` 永远不会重试**（同步/异步均直接抛出）。
-3. **线程中断响应**：同步重试遵循 `InterruptedException`，检测到中断会立即恢复中断状态并终止重试链。
-4. **异步清理语义**：`AT_LEAST_ONCE_DURABLE` 下的意图清理是异步的，不保证在业务返回前完成。
-5. **策略热更新**：通过 `DynamicRetryPolicyRegistry` 实现，策略变更即时生效。
-6. **解包深度**：默认为 10 层，足以覆盖绝大多数中间件和代理框架嵌套。
-7. **线程池退出行为**：`RetryExecutorManager` 默认使用非 daemon 线程。非 Spring 场景建议在应用关闭时显式调用
-   `RetryExecutorManager.global().shutdown()`；如需 daemon 线程可设置系统参数 `-Dteam4u.retry.executors.daemon=true`。
+### 1. `maxAttempts` 包含第一次调用
+
+这点最容易误解。
+
+- `maxAttempts(3)` 表示总共最多执行 3 次
+- 不是“失败后再重试 3 次”
+
+### 2. `Error` 永远不会重试
+
+无论同步还是异步，`Error` 都会直接透传。
+
+### 3. 中断会立即终止同步重试
+
+同步模式下遇到 `InterruptedException` 会：
+
+- 恢复线程中断标记
+- 立即抛出
+- 不再继续重试
+
+### 4. 异步清理不是强一致同步完成
+
+在 `AT_LEAST_ONCE_DURABLE` 模式下，`completeIntent(...)` 使用异步清理执行器，不保证一定在业务返回前完成。
+
+### 5. 开启持久化前先确认参数可序列化
+
+尤其是 `AT_LEAST_ONCE_DURABLE`。如果参数无法序列化，框架无法把任务安全移交到后端。
+
+### 6. 非 Spring 场景注意线程池关闭
+
+模块内部会使用全局执行器。应用关闭时建议显式调用：
+
+```java
+RetryExecutorManager.global().shutdown();
+```
+
+如需 daemon 线程，可设置：
+
+```text
+-Dteam4u.retry.executors.daemon=true
+```
 
 ---
 
-## 架构与原理
+## 实现结构
 
-### 时序图
+### 主要类
+
+- `Retryer`：统一执行入口
+- `RetryPolicy`：重试策略定义
+- `Backoff`：退避算法
+- `RetryBackend`：持久化后端接口
+- `RecoveryHandler` / `RecoveryHandlerRegistry`：恢复执行路由
+- `@Retryable`：注解式接入
+- `@EnableRetry`：Spring 自动代理开关
+
+### 执行流程
 
 ```mermaid
 graph TD
-    A[业务调用] --> B[RetryInterceptor/Retryer]
+    A[业务调用] --> B[Retryer 或 RetryInterceptor]
     B --> C[RetryPolicy.canRetry]
-    C --> D{允许重试?}
+    C --> D{还能重试?}
     D -->|是| E[Backoff 计算延迟]
     E --> B
     D -->|否| F{durability}
-    F -->|MEMORY_ONLY| G[抛原始异常]
-    F -->|MEMORY_FALLBACK/AT_LEAST_ONCE_DURABLE| H[RetryBackend.submitForDelay]
-    H --> I[抛 RetryExhaustedException]
-    I --> J[后台 Worker]
-    J --> K[RecoveryHandlerRegistry 路由恢复]
+    F -->|MEMORY_ONLY| G[抛出最终异常]
+    F -->|MEMORY_FALLBACK / AT_LEAST_ONCE_DURABLE| H[RetryBackend.submitForDelay]
+    H --> I[抛出 RetryExhaustedException]
+    I --> J[后端 Worker 恢复执行]
+    J --> K[RecoveryHandlerRegistry 路由]
 ```
+
+---
+
+## 给开发者的建议
+
+- 默认从编程式接入开始，先把策略和语义跑通，再抽到注解
+- 对 IO 异常、超时类故障用重试，对参数错误、幂等冲突这类业务异常慎用
+- 高并发场景优先用指数退避加抖动，避免雪崩式重试
+- 若启用持久化降级，先明确你的 `payload` 序列化协议和 Worker 恢复模型
+
+如果你要继续补充文档，推荐下一步增加两类内容：
+
+- 一个完整的 `RetryBackend` 示例实现
+- 一个 Spring Boot 场景下的端到端示例
