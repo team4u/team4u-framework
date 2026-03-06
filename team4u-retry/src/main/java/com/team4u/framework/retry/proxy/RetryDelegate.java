@@ -1,6 +1,7 @@
 package com.team4u.framework.retry.proxy;
 
 import cn.hutool.crypto.digest.DigestUtil;
+import com.team4u.framework.lease.LeaseBackend;
 import com.team4u.framework.retry.*;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.backend.serialize.HutoolRetryTaskSnapshotSerializer;
@@ -64,7 +65,7 @@ public class RetryDelegate {
             Object[] args,
             Retryable retryable,
             Callable<Object> proceedTask,
-            Supplier<RetryBackend> backendSupplier) throws Throwable {
+            Supplier<LeaseBackend> backendSupplier) throws Throwable {
 
         // 若未配置重试注解或当前处于恢复执行上下文中，则直接执行原始逻辑
         if (retryable == null || RecoveryExecutionContext.isRecovering()) {
@@ -81,7 +82,7 @@ public class RetryDelegate {
                         .map(NamedRetryPolicy::getPolicy)
                         .orElseThrow(() -> new IllegalArgumentException("未找到重试策略: " + policyKey)));
 
-        RetryBackend backend = backendSupplier != null ? backendSupplier.get() : null;
+        LeaseBackend backend = backendSupplier != null ? backendSupplier.get() : null;
         validateBackendIfNeeded(method, policyKey, durability, backend);
 
         boolean isAsync = CompletableFuture.class.isAssignableFrom(method.getReturnType());
@@ -154,7 +155,7 @@ public class RetryDelegate {
      * 校验重试后端配置
      */
     private void validateBackendIfNeeded(Method method, String policyKey, RetryDurability durability,
-                                         RetryBackend backend) {
+                                         LeaseBackend backend) {
         if (durability == RetryDurability.MEMORY_ONLY || backend != null) {
             return;
         }

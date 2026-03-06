@@ -1,7 +1,7 @@
 package com.team4u.framework.retry.proxy;
 
+import com.team4u.framework.lease.LeaseBackend;
 import com.team4u.framework.proxy.ProxyBuilder;
-import com.team4u.framework.retry.RetryBackend;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 
 /**
@@ -32,28 +32,28 @@ public class RetryProxyFactory {
     }
 
     /**
-     * 为指定对象创建重试代理
+     * 为目标对象创建重试代理
      *
-     * @param target  目标业务对象
-     * @param backend 重试后端，仅需内存重试时可传空
+     * @param target  原始业务对象
+     * @param backend 租约/重试后端实现（用于任务持久化）
      * @param <T>     业务类型
      * @return 代理对象
      */
     @SuppressWarnings("unchecked")
-    public static <T> T createProxy(T target, RetryBackend backend) {
+    public static <T> T createProxy(T target, LeaseBackend backend) {
         return createProxy(target, (Class<T>) target.getClass(), backend);
     }
 
     /**
-     * 为指定对象创建重试代理
+     * 为指定类别的目标对象创建重试代理
      *
-     * @param target      目标业务对象
-     * @param targetClass 代理类型（建议传入接口类型）
-     * @param backend     重试后端
+     * @param target      原始业务对象
+     * @param targetClass 目标对象的类定义（通常是接口）
+     * @param backend     租约/重试后端实现
      * @param <T>         业务类型
      * @return 代理对象
      */
-    public static <T> T createProxy(T target, Class<T> targetClass, RetryBackend backend) {
+    public static <T> T createProxy(T target, Class<T> targetClass, LeaseBackend backend) {
         return ProxyBuilder.forClass(targetClass)
                 .delegate(target)
                 .intercept(new RetryInterceptor(backend))

@@ -1,10 +1,10 @@
 package com.team4u.framework.retry.proxy;
 
 import cn.hutool.json.JSONUtil;
-import com.team4u.framework.retry.RetryBackend;
 import com.team4u.framework.retry.RetryDurability;
 import com.team4u.framework.retry.RetryExhaustedException;
 import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.TestLeaseBackend;
 import com.team4u.framework.retry.recovery.RecoveryExecutionContext;
 import com.team4u.framework.retry.recovery.RetryTaskTypes;
 import org.junit.Assert;
@@ -311,7 +311,7 @@ public class RetryDelegateTest {
         }
     }
 
-    private static class MockBackend implements RetryBackend {
+    private static class MockBackend extends TestLeaseBackend {
         private final AtomicInteger saveCount = new AtomicInteger();
         private final CountDownLatch completeLatch = new CountDownLatch(1);
 
@@ -335,7 +335,7 @@ public class RetryDelegateTest {
         }
     }
 
-    private static class CapturingBackend implements RetryBackend {
+    private static class CapturingBackend extends TestLeaseBackend {
         private String savedPayload;
         private String submittedPayload;
 

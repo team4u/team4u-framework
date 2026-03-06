@@ -26,7 +26,7 @@
 - [Spring 自动代理](#spring-自动代理)
 - [持久化降级与恢复](#持久化降级与恢复)
 - [动态策略与配置中心](#动态策略与配置中心)
-- [完整示例：使用内置 Backend + Worker](#完整示例使用内置-backend--worker)
+- [完整示例：使用内置 Lease Backend + Worker](#完整示例使用内置-lease-backend--worker)
 - [完整示例：Spring Boot 接入](#完整示例spring-boot-接入)
 - [关键边界与注意事项](#关键边界与注意事项)
 - [实现结构](#实现结构)
@@ -46,7 +46,7 @@
 ### 一句话决策
 
 - 只需要本地重试：用 `Retryer.with(policy).execute(...)`
-- 需要“内存失败后移交到后端队列”：用 `Retryer.builder()` 并配置 `RetryBackend`
+- 需要“内存失败后移交到后端队列”：用 `Retryer.builder()` 并配置 `LeaseBackend`
 - 已经在 Spring 里：优先用 `@EnableRetry`
 
 ---
@@ -233,7 +233,7 @@ context -> "{\"orderId\":\"A1001\"}"
 
 当内存重试耗尽但策略仍允许继续重试时：
 
-- 框架会调用 `RetryBackend.submitForDelay(...)`
+- 框架会调用 `LeaseBackend.publish(taskType, payload, delayMillis)`
 - 当前线程会收到 `RetryExhaustedException`
 - 这个异常不表示任务彻底失败，而是表示任务已移交后端系统接管
 
@@ -288,7 +288,7 @@ public interface PayService {
 然后通过代理工厂接入：
 
 ```java
-PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), retryBackend);
+PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), leaseBackend);
 ```
 
 ### `@Retryable` 参数说明
@@ -305,7 +305,7 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), retryBack
 
 这个默认 key 是框架保留值，适合配合通用快照恢复器使用；业务侧如果需要自定义路由，仍建议显式声明自己的 `taskType`。
 
-当 `durability != MEMORY_ONLY` 时，注解式接入不会直接把“原始方法调用现场”丢给后端，而是会先把方法信息和参数快照序列化成一份 `RetryTaskSnapshot`，再交给 `RetryBackend`。这意味着：
+当 `durability != MEMORY_ONLY` 时，注解式接入不会直接把“原始方法调用现场”丢给后端，而是会先把方法信息和参数快照序列化成一份 `RetryTaskSnapshot`，再交给 `LeaseBackend`。这意味着：
 
 - `taskType` 决定后端如何路由任务
 - `payload` 不一定是你手写的业务 JSON；在注解场景下，它通常是一份框架生成的快照
@@ -320,7 +320,7 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), retryBack
 
 - `MEMORY_ONLY`：不会序列化方法参数，也不会构建快照
 - `MEMORY_FALLBACK`：只有当前进程内的内存重试耗尽、真正要移交后端时，才会延迟构建一次快照
-- `AT_LEAST_ONCE_DURABLE`：会在执行前就冻结一份快照，用于 `saveIntent(...)`
+- `AT_LEAST_ONCE_DURABLE`：会在执行前就冻结一份快照，用于预写一条 prepared lease task
 
 这样做的目的，是避免 `MEMORY_FALLBACK` 在本地就能成功时产生不必要的序列化开销，同时保证 `AT_LEAST_ONCE_DURABLE` 模式下“先记账、后执行”的语义成立。
 
@@ -334,9 +334,9 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), retryBack
 
 这意味着后端看到的是一份稳定的恢复材料，而不是被运行时继续修改过的调用现场。
 
-### 什么时候需要提供 `RetryBackend`
+### 什么时候需要提供 `LeaseBackend`
 
-当 `durability != MEMORY_ONLY` 时，必须提供 `RetryBackend`。否则会抛出 `IllegalStateException`。
+当 `durability != MEMORY_ONLY` 时，必须提供 `LeaseBackend`。否则会抛出 `IllegalStateException`。
 
 ### 参数序列化约束
 
@@ -466,40 +466,41 @@ public class RetryConfig {
 
 所以，`payload` 更像恢复材料，`intent` 更像任务台账，`intentId` 则是该意图记录的唯一标识。
 
-### `RetryBackend` 职责
+### `LeaseBackend` 职责
 
-你需要实现 `RetryBackend` 来承接后端持久化与调度：
+你需要提供 `LeaseBackend` 来承接后端持久化、调度与恢复消费：
 
 ```java
-public interface RetryBackend {
-    String saveIntent(String taskType, String payload);
-    void completeIntent(String intentId);
-    void markTerminalFailure(String intentId, Throwable cause);
-    void submitForDelay(String intentId, String taskType, String payload, long delay);
+public interface LeaseBackend {
+    String publish(String taskType, String payload, long delayMillis);
+    void cancel(String taskId);
+    LeaseGrant acquire(String workerId, long leaseMillis, long waitTimeoutMillis) throws InterruptedException;
+    void ack(String taskId, String workerId, String leaseToken);
+    void retry(String taskId, String workerId, String leaseToken, long delayMillis, Throwable cause);
+    void fail(String taskId, String workerId, String leaseToken, Throwable cause);
+    void heartbeat(String taskId, String workerId, String leaseToken, long extendMillis);
 }
 ```
 
-框架也提供了两套最小可用实现，适合快速验证完整链路：
+当前仓库内置了一套最小可用实现，适合快速验证完整链路：
 
-- `InMemoryRetryBackend`：单进程内存版，适合单测、本地开发、demo
-- `LocalFileRetryBackend`：单机文件版，默认可落到 `backend-retry.txt`
+- `InMemoryLeaseBackend`：单进程内存版，适合单测、本地开发、demo
 
-如果你希望直接用框架内置 Worker 消费它们，还可以配合：
+如果你希望直接用框架内置 Worker 消费它，还可以配合：
 
-- `WorkerReadableRetryBackend`：在 `RetryBackend` 之上补充阻塞式 `take()`
-- `RetryWorker`：按 `taskType` 路由到 `RecoveryHandler`
+- `RetryLeaseWorker`：按 `taskType` 路由到 `RecoveryHandler`
 
-语义上可以理解为：
+`Retryer` 在这套模型里的语义可以理解为：
 
-- `saveIntent(...)`：预写日志 / 记录执行意图
-- `completeIntent(...)`：任务成功后清理 intent
-- `markTerminalFailure(...)`：彻底失败，标记为终态
-- `submitForDelay(...)`：把任务送入延迟队列
+- `publish(..., preparedDelay)`：预写一条长期不可见的 prepared task，用于 durable intent
+- `cancel(taskId)`：任务成功或终止后撤销 prepared task
+- `publish(..., nextDelay)`：把失败任务重新交给后端延迟恢复
+- `acquire/ack/retry/fail/heartbeat`：由 worker 侧消费与续租
 
-此外，第一次实现 `RetryBackend` 时，通常还要明确这几个约束：
+此外，第一次实现 `LeaseBackend` 时，通常还要明确这几个约束：
 
 - `delay` 是“从现在开始再延迟多久”，不是绝对执行时间
-- `submitForDelay(...)` 收到的 payload 应被视为一次可独立恢复的任务快照，后端应原样保存
+- `publish(..., delayMillis)` 收到的 payload 应被视为一次可独立恢复的任务快照，后端应原样保存
 - 如果后端 Worker 恢复失败，后续如何重试、死信、告警，由你的后端系统负责，不由当前进程继续托管
 - `intentId` 最好是稳定可追踪的主键，而不是只适用于 demo 的临时值
 
@@ -589,11 +590,11 @@ public class RetryRecoveryWorker {
 如果你直接使用框架内置 Worker，调用方式就是：
 
 ```java
-import com.team4u.framework.retry.worker.InMemoryRetryBackend;
-import com.team4u.framework.retry.worker.RetryWorker;
+import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
+import com.team4u.framework.retry.lease.RetryLeaseWorker;
 
-InMemoryRetryBackend backend = new InMemoryRetryBackend();
-RetryWorker worker = new RetryWorker(backend);
+InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
+RetryLeaseWorker worker = new RetryLeaseWorker(backend);
 worker.start("retry-worker");
 ```
 
@@ -603,8 +604,8 @@ worker.start("retry-worker");
 
 这样做是为了避免后端 Worker 恢复任务时再次触发：
 
-- 重复 `saveIntent(...)`
-- 再次 `submitForDelay(...)`
+- 重复预写 prepared task
+- 再次向后端 `publish(...)`
 - 恢复执行再次进入代理链
 
 因此，后端恢复调用可以被理解为“拿着已保存好的快照直接补偿执行”，而不是“重新从调用侧入口完整走一遍重试托管流程”。
@@ -673,9 +674,9 @@ RetryPolicy policy = DynamicRetryPolicyRegistry.getPolicy("pay-notify");
 
 ---
 
-## 完整示例：使用内置 Backend + Worker
+## 完整示例：使用内置 Lease Backend + Worker
 
-下面这个例子使用框架内置的 `InMemoryRetryBackend + RetryWorker`，是最小可运行方案。生产环境仍然可以按你的存储和调度系统自定义 `RetryBackend`。
+下面这个例子使用 `team4u-lease` 提供的 `InMemoryLeaseBackend + RetryLeaseWorker`，是最小可运行方案。生产环境仍然可以按你的存储和调度系统自定义 `LeaseBackend`。
 
 ### 对应的恢复器
 
@@ -705,15 +706,15 @@ import com.team4u.framework.retry.RetryDurability;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.Retryer;
 import com.team4u.framework.retry.backoff.Backoff;
+import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
-import com.team4u.framework.retry.worker.InMemoryRetryBackend;
-import com.team4u.framework.retry.worker.RetryWorker;
+import com.team4u.framework.retry.lease.RetryLeaseWorker;
 
-InMemoryRetryBackend backend = new InMemoryRetryBackend();
+InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
 
 RecoveryHandlerRegistry.global().register(new PayNotifyRecoveryHandler());
 
-RetryWorker worker = new RetryWorker(backend);
+RetryLeaseWorker worker = new RetryLeaseWorker(backend);
 worker.start("retry-worker");
 
 RetryPolicy policy = RetryPolicy.builder()
@@ -737,24 +738,12 @@ retryer.execute(
 );
 ```
 
-如果你希望在本地验证“进程重启后仍能恢复”，可以切换到文件版 backend：
-
-```java
-import java.nio.file.Paths;
-import com.team4u.framework.retry.worker.LocalFileRetryBackend;
-import com.team4u.framework.retry.worker.RetryWorker;
-
-LocalFileRetryBackend backend = new LocalFileRetryBackend(Paths.get("backend-retry.txt"));
-RetryWorker worker = new RetryWorker(backend);
-worker.start("file-retry-worker");
-```
-
 ### 生产实现建议
 
-- `intentId` 不要用临时值，建议用业务幂等键或稳定哈希
+- `taskId` 不要用临时值，建议用业务幂等键或稳定哈希
 - `payload` 要有明确版本号，避免后续字段变更导致恢复失败
-- `submitForDelay(...)` 最好接消息队列或延迟队列，而不是只放内存；内置 `InMemoryRetryBackend` / `LocalFileRetryBackend` 更适合测试、开发和演示场景
-- `markTerminalFailure(...)` 建议落库并进入死信/告警链路
+- `publish(..., delayMillis)` 最好接消息队列、数据库或 Redis 延迟结构，而不是只放内存；内置 `InMemoryLeaseBackend` 更适合测试、开发和演示场景
+- `fail(...)` 建议落库并进入死信/告警链路
 - Worker 执行恢复逻辑时，业务本身要具备幂等性
 - 如果你使用注解式快照恢复，建议把 `beanName + methodName + argTypes` 视为恢复协议的一部分，避免随意改签名导致旧任务无法恢复
 
@@ -866,20 +855,20 @@ public class DemoRunner implements CommandLineRunner {
 
 ### 如果要接入持久化降级
 
-在 Spring 容器里额外提供一个 `RetryBackend` Bean 即可：
+在 Spring 容器里额外提供一个 `LeaseBackend` Bean 即可：
 
 ```java
-import com.team4u.framework.retry.RetryBackend;
-import com.team4u.framework.retry.worker.InMemoryRetryBackend;
+import com.team4u.framework.lease.LeaseBackend;
+import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-public class RetryBackendConfig {
+public class LeaseBackendConfig {
 
     @Bean
-    public RetryBackend retryBackend() {
-        return new InMemoryRetryBackend();
+    public LeaseBackend leaseBackend() {
+        return new InMemoryLeaseBackend();
     }
 }
 ```
@@ -898,15 +887,15 @@ public String notifyPay(String orderId) {
 例如：
 
 ```java
+import com.team4u.framework.lease.LeaseBackend;
+import com.team4u.framework.retry.lease.RetryLeaseWorker;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
-import com.team4u.framework.retry.worker.InMemoryRetryBackend;
-import com.team4u.framework.retry.worker.RetryWorker;
 import org.springframework.context.annotation.Bean;
 
 @Bean(initMethod = "start", destroyMethod = "shutdown")
-public RetryWorker retryWorker(InMemoryRetryBackend backend) {
+public RetryLeaseWorker retryWorker(LeaseBackend backend) {
     RecoveryHandlerRegistry.ensureDefaultProxyRecoveryHandlerRegistered();
-    return new RetryWorker(backend);
+    return new RetryLeaseWorker(backend);
 }
 ```
 
@@ -935,7 +924,7 @@ public RetryWorker retryWorker(InMemoryRetryBackend backend) {
 
 ### 4. 异步清理不是强一致同步完成
 
-在 `AT_LEAST_ONCE_DURABLE` 模式下，`completeIntent(...)` 使用异步清理执行器，不保证一定在业务返回前完成。
+在 `AT_LEAST_ONCE_DURABLE` 模式下，prepared task 的 `cancel(...)` 使用异步清理执行器，不保证一定在业务返回前完成。
 
 这意味着“业务成功”与“intent 已删除”之间存在短暂窗口。如果你的后端会扫描未清理 intent，请把恢复逻辑设计成幂等操作。
 
@@ -987,7 +976,7 @@ RetryExecutorManager.global().shutdown();
 - `Retryer`：统一执行入口
 - `RetryPolicy`：重试策略定义
 - `Backoff`：退避算法
-- `RetryBackend`：持久化后端接口
+- `LeaseBackend`：持久化后端接口
 - `RecoveryHandler` / `RecoveryHandlerRegistry`：恢复执行路由
 - `@Retryable`：注解式接入
 - `@EnableRetry`：Spring 自动代理开关
@@ -1003,9 +992,9 @@ graph TD
     E --> B
     D -->|否| F{durability}
     F -->|MEMORY_ONLY| G[抛出最终异常]
-    F -->|MEMORY_FALLBACK / AT_LEAST_ONCE_DURABLE| H[RetryBackend.submitForDelay]
+    F -->|MEMORY_FALLBACK / AT_LEAST_ONCE_DURABLE| H[LeaseBackend.publish]
     H --> I[抛出 RetryExhaustedException]
-    I --> J[后端 Worker 恢复执行]
+    I --> J[RetryLeaseWorker 或 LeaseWorker 恢复执行]
     J --> K[RecoveryHandlerRegistry 路由]
 ```
 

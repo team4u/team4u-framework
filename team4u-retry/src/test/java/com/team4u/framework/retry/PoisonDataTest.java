@@ -16,7 +16,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
 
 public class PoisonDataTest {
 
-    private final RetryBackend mockBackend = new RetryBackend() {
+    private final TestLeaseBackend mockBackend = new TestLeaseBackend() {
         @Override
         public String saveIntent(String taskType, String payload) {
             return "intentId";

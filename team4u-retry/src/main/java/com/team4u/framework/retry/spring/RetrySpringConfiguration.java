@@ -1,7 +1,7 @@
 package com.team4u.framework.retry.spring;
 
 import com.team4u.framework.bean.BeanManager;
-import com.team4u.framework.retry.RetryBackend;
+import com.team4u.framework.lease.LeaseBackend;
 import com.team4u.framework.retry.proxy.Retryable;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import org.springframework.aop.Pointcut;
@@ -36,18 +36,23 @@ public class RetrySpringConfiguration {
 
     /**
      * 定义重试切面 Advisor，绑定 SpringRetryInterceptor 拦截器
+     *
+     * @param beanFactory Spring 容器工厂
+     * @return 重试通知器
      */
     @Bean
     public RetryAdvisor retryAdvisor(BeanFactory beanFactory) {
         RetryAdvisor advisor = new RetryAdvisor();
-        advisor.setAdvice(new SpringRetryInterceptor(() -> getRetryBackend(beanFactory)));
-        // 设定较低优先级，确保重试拦截器在外层执行
+        advisor.setAdvice(new SpringRetryInterceptor(() -> getLeaseBackend(beanFactory)));
+        // 设定较低优先级，确保重试拦截器在外层执行，允许在内层拦截器抛出异常时进行重试
         advisor.setOrder(org.springframework.core.Ordered.LOWEST_PRECEDENCE - 1);
         return advisor;
     }
 
     /**
-     * 注册默认恢复处理器
+     * 注册默认恢复处理器注册器
+     *
+     * @return 注册器实例
      */
     @Bean
     public DefaultRecoveryHandlerRegistrar defaultRecoveryHandlerRegistrar() {
@@ -57,11 +62,11 @@ public class RetrySpringConfiguration {
     /**
      * 解析重试后端实现，优先从 Spring 容器获取
      */
-    private RetryBackend getRetryBackend(BeanFactory beanFactory) {
+    private LeaseBackend getLeaseBackend(BeanFactory beanFactory) {
         try {
-            return beanFactory.getBean(RetryBackend.class);
+            return beanFactory.getBean(LeaseBackend.class);
         } catch (BeansException e) {
-            return BeanManager.getInstance().getBean(RetryBackend.class);
+            return BeanManager.getInstance().getBean(LeaseBackend.class);
         }
     }
 

@@ -1,10 +1,10 @@
 package com.team4u.framework.retry.proxy;
 
 import com.team4u.framework.proxy.ProxyBuilder;
-import com.team4u.framework.retry.RetryBackend;
 import com.team4u.framework.retry.RetryDurability;
 import com.team4u.framework.retry.RetryExhaustedException;
 import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.TestLeaseBackend;
 import com.team4u.framework.retry.backoff.Backoff;
 import com.team4u.framework.retry.proxy.serialize.RetryIgnore;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
@@ -187,7 +187,7 @@ public class RetryInterceptorTest {
         }
     }
 
-    private static class CapturingBackend implements RetryBackend {
+    private static class CapturingBackend extends TestLeaseBackend {
         private String submittedPayload;
 
         @Override

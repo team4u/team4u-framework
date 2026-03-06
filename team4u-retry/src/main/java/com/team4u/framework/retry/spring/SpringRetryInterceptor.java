@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.spring;
 
-import com.team4u.framework.retry.RetryBackend;
+import com.team4u.framework.lease.LeaseBackend;
 import com.team4u.framework.retry.proxy.RetryDelegate;
 import com.team4u.framework.retry.proxy.Retryable;
 import org.aopalliance.intercept.MethodInterceptor;
@@ -19,9 +19,9 @@ import java.util.function.Supplier;
 public class SpringRetryInterceptor implements MethodInterceptor {
 
     private final RetryDelegate delegate = new RetryDelegate();
-    private final Supplier<RetryBackend> backendSupplier;
+    private final Supplier<LeaseBackend> backendSupplier;
 
-    public SpringRetryInterceptor(Supplier<RetryBackend> backendSupplier) {
+    public SpringRetryInterceptor(Supplier<LeaseBackend> backendSupplier) {
         this.backendSupplier = backendSupplier;
     }
 
