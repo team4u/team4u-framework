@@ -4,6 +4,7 @@ import com.team4u.framework.proxy.ProxyBuilder;
 import com.team4u.framework.retry.RetryBackend;
 import com.team4u.framework.retry.RetryDurability;
 import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.recovery.RetryTaskTypes;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -51,7 +52,7 @@ public class PersistentFallbackTest {
             @Override
             public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
                 submitCount.incrementAndGet();
-                Assert.assertEquals("doSomething", queueName);
+                Assert.assertEquals(RetryTaskTypes.DEFAULT_PROXY_RECOVERY, queueName);
                 Assert.assertTrue("Context snippet should contain method name", contextJson.contains("doSomething"));
                 Assert.assertTrue("Context snippet should contain arg value", contextJson.contains("test-arg"));
                 Assert.assertEquals(1000, delayMs);
