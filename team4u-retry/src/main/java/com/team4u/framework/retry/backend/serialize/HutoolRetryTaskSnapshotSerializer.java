@@ -5,7 +5,7 @@ import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.exception.RetrySerializationException;
 
 /**
- * 基于 Hutool JSONUtil 的任务快照序列化器
+ * 基于 Hutool 的任务快照序列化器实现
  */
 public class HutoolRetryTaskSnapshotSerializer implements RetryTaskSnapshotSerializer {
 

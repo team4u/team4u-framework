@@ -12,7 +12,9 @@ import java.lang.reflect.Method;
 import java.util.function.Supplier;
 
 /**
- * Spring AOP 体系下的重试拦截器
+ * Spring AOP 体系下的重试拦截器实现
+ * <p>
+ * 通过代理模式拦截标注了 @Retryable 的方法调用，并委托给 RetryDelegate 执行重试逻辑。
  */
 public class SpringRetryInterceptor implements MethodInterceptor {
 
@@ -28,11 +30,13 @@ public class SpringRetryInterceptor implements MethodInterceptor {
         Method method = invocation.getMethod();
         Object target = invocation.getThis();
         Method specificMethod = method;
+        
+        // 解析目标对象上具体实现的方法
         if (target != null) {
             specificMethod = AopUtils.getMostSpecificMethod(method, target.getClass());
         }
 
-        // 兼容 Spring 的注解查找（接口方法、实现类方法、类注解）
+        // 查找 @Retryable 注解，兼容接口方法、实现类方法及类级定义
         Retryable retryable = AnnotationUtils.findAnnotation(method, Retryable.class);
         if (retryable == null && specificMethod != method) {
             retryable = AnnotationUtils.findAnnotation(specificMethod, Retryable.class);

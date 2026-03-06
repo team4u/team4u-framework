@@ -10,9 +10,9 @@ import java.util.concurrent.Executor;
 import java.util.concurrent.ScheduledExecutorService;
 
 /**
- * 统一重试执行引擎
+ * 重试执行引擎
  * <p>
- * 这是处理重试逻辑的核心组件，提供了同步和真非阻塞的异步重试机制。
+ * 提供同步和非阻塞异步重试机制，支持内存重试及后端持久化重试。
  */
 public class Retryer {
 
@@ -25,7 +25,7 @@ public class Retryer {
     private final Executor cleanupExecutor;
 
     /**
-     * 通过建造者创建重试执行器实例。
+     * 私有构造函数，通过建造者模式实例化
      *
      * @param builder 配置建造者
      */
@@ -39,7 +39,7 @@ public class Retryer {
     }
 
     /**
-     * 创建重试引擎建造者
+     * 获取建造者实例
      *
      * @return 建造者对象
      */
@@ -48,22 +48,24 @@ public class Retryer {
     }
 
     /**
-     * 根据指定的策略初始化一个重试引擎
+     * 根据策略初始化重试引擎
      *
-     * @param policy 包含各种重试参数的不可变策略
-     * @return 准备就绪的重试引擎
+     * @param policy 重试策略
+     * @return 重试引擎实例
      */
     public static Retryer with(RetryPolicy policy) {
         return builder().policy(policy).build();
     }
 
     /**
-     * 同步阻塞执行指定任务，并在出现异常时按照既定策略进行重试
+     * 同步执行重试任务
+     * <p>
+     * 仅支持内存模式。若重试次数耗尽，则抛出最后一次执行的异常。
      *
-     * @param task 需要执行的具体业务逻辑
-     * @param <T>  任务期望返回的数据类型
-     * @return 任务成功结束后的结果
-     * @throws Exception 如果由于满足策略的重试尝试最终均告失败，则将最后抛出的异常抛给调用方
+     * @param task 业务逻辑任务
+     * @param <T>  返回类型
+     * @return 执行结果
+     * @throws Exception 业务异常或重试失败异常
      */
     public <T> T execute(Callable<T> task) throws Exception {
         if (durability != RetryDurability.MEMORY_ONLY) {
@@ -101,12 +103,12 @@ public class Retryer {
     }
 
     /**
-     * 纯内存异步重试入口。
+     * 内存异步重试
      *
-     * @param asyncTask 异步任务提供器
+     * @param asyncTask 异步任务提供者
      * @param scheduler 调度器
-     * @param <T>       返回值类型
-     * @return 带重试能力的异步结果
+     * @param <T>       返回类型
+     * @return 异步结果
      */
     public <T> CompletableFuture<T> executeAsync(
             java.util.function.Supplier<CompletableFuture<T>> asyncTask,
@@ -123,14 +125,14 @@ public class Retryer {
     }
 
     /**
-     * 纯编程式强一致性执行入口
+     * 具备持久化保障的同步执行入口
      *
-     * @param taskType       任务类型 (用于宕机后，Worker 知道由谁来恢复执行)
-     * @param payloadBuilder 任务快照构建器，参数包含构建阶段和已执行尝试次数
-     * @param task           当前内存中实际要执行的任务逻辑
-     * @param <T>            返回值类型
-     * @return 执行成功后的结果
-     * @throws Exception 业务异常或重试最终失败异常
+     * @param taskType       任务类型，用于故障恢复后的处理器定位
+     * @param payloadBuilder 任务快照构建器
+     * @param task           执行逻辑
+     * @param <T>            返回类型
+     * @return 执行结果
+     * @throws Exception 业务异常或重试失败异常
      */
     public <T> T execute(String taskType, RetryPayloadBuilder payloadBuilder, Callable<T> task) throws Exception {
         IntentContext intentContext = prepareIntent(taskType, payloadBuilder);
@@ -190,9 +192,9 @@ public class Retryer {
     }
 
     /**
-     * 评估当前尝试失败后，下一步的重试决策。
+     * 评估重试决策
      *
-     * @param attempt 当前尝试次数（从 1 开始）
+     * @param attempt 当前尝试次数
      * @param cause   失败原因
      * @return 重试决策类型
      */
@@ -210,9 +212,9 @@ public class Retryer {
     }
 
     /**
-     * 计算内存阶段耗尽后，后端队列应使用的下一次尝试序号。
+     * 获取内存阶段结束后的下一次重试序号
      *
-     * @return 下一次尝试序号
+     * @return 尝试序号
      */
     private int getNextAttemptAfterInMemory() {
         return Math.min(inMemoryAttempts + 1,
@@ -220,11 +222,11 @@ public class Retryer {
     }
 
     /**
-     * 解析内存阶段最大尝试次数。
+     * 解析内存阶段最大尝试次数
      *
      * @param policy     重试策略
      * @param durability 持久化级别
-     * @return 内存阶段最大尝试次数
+     * @return 内存尝试次数
      */
     private int resolveInMemoryAttempts(RetryPolicy policy, RetryDurability durability) {
         if (policy.getInMemoryAttempts() != null) {
@@ -241,50 +243,47 @@ public class Retryer {
     }
 
     /**
-     * 判断内存重试耗尽后是否还应降级到后端继续重试。
+     * 判断是否允许降级至后端继续重试
      *
-     * @return true 表示允许降级
+     * @return 允许降级返回 true
      */
     private boolean shouldFallbackToBackend() {
         return policy.getMaxAttempts() == -1 || inMemoryAttempts < policy.getMaxAttempts();
     }
 
     /**
-     * 获取提交到后端队列使用的 intentId。
+     * 确保提供后端提交所需的标识 ID
      * <p>
-     * 若已有 intentId 则直接复用，否则基于 taskType + payload 生成稳定兜底 ID。
+     * 优先复用已有 ID，否则基于任务类型及载荷生成稳定标识。
      *
-     * @param intentId 原 intentId
+     * @param intentId 原始 ID
      * @param taskType 任务类型
-     * @param payload  任务快照
-     * @return 可用于后端提交的 intentId
+     * @param payload  任务快照载荷
+     * @return 后端标识 ID
      */
     private String ensureIntentIdForBackend(String intentId, String taskType, String payload) {
         if (intentId != null && !intentId.isEmpty()) {
             return intentId;
         }
-        // payload 可能很长，hash 全量即可；最终只取前 32 个 hex 做短 id
+
         String base = taskType + "\n" + (payload == null ? "" : payload);
         String sha256 = DigestUtil.sha256Hex(base);
-
-        // taskType 里可能有 '.' '/' 等，建议做轻量 sanitize，避免日志/存储不友好
         String safeTaskType = taskType == null ? "unknown" : taskType.replaceAll("[^a-zA-Z0-9_-]", "_");
 
         return "rtryh-" + safeTaskType + "-" + sha256.substring(0, 32);
     }
 
     /**
-     * 非阻塞式的异步重试执行方法
+     * 非阻塞异步重试入口
      * <p>
-     * 不会占用当前工作线程进行睡眠，而是将后续的重试任务转交给给定的调度器，
-     * 以实现极低的资源消耗和高并发执行能力。
+     * 通过调度器延迟任务执行，避免阻塞工作线程。
      *
      * @param taskType       任务类型
-     * @param payloadBuilder 任务快照数据
-     * @param asyncTask      提供异步执行逻辑对象的供应型接口
-     * @param scheduler      用于延迟安排重试执行的后台调度器
-     * @param <T>            预期的异步返回值类型
-     * @return 表示整个带有重试能力的异步任务抽象票据
+     * @param payloadBuilder 任务快照构建器
+     * @param asyncTask      异步任务供应器
+     * @param scheduler      调度器
+     * @param <T>            返回类型
+     * @return 异步结果凭据
      */
     public <T> CompletableFuture<T> executeAsync(
             String taskType,
@@ -299,16 +298,16 @@ public class Retryer {
     }
 
     /**
-     * 执行一次异步尝试并根据结果决定完成、重试或降级。
+     * 执行单次异步尝试并处理结果
      *
      * @param taskType       任务类型
      * @param payloadBuilder 任务快照构建器
      * @param intentId       意图 ID
      * @param asyncTask      异步任务供应器
      * @param scheduler      调度器
-     * @param promise        对外返回的结果承诺
+     * @param promise        异步结果凭据
      * @param attempt        当前尝试次数
-     * @param <T>            返回值类型
+     * @param <T>            返回类型
      */
     private <T> void attemptAsync(
             String taskType, RetryPayloadBuilder payloadBuilder, String intentId,
@@ -335,15 +334,14 @@ public class Retryer {
     }
 
     /**
-     * 处理异步执行成功路径。
+     * 处理异步执行成功场景
      *
      * @param intentId 意图 ID
-     * @param promise  对外结果承诺
-     * @param result   结果值
-     * @param <T>      返回值类型
+     * @param promise  异步结果凭据
+     * @param result   成功结果
+     * @param <T>      返回类型
      */
     private <T> void handleAsyncSuccess(String intentId, CompletableFuture<T> promise, T result) {
-        // 内存执行成功，异步清理预写日志
         if (intentId != null) {
             CompletableFuture.runAsync(() -> backend.completeIntent(intentId), cleanupExecutor);
         }
@@ -351,17 +349,17 @@ public class Retryer {
     }
 
     /**
-     * 处理异步执行失败路径，包括内存重试和后端降级。
+     * 处理异步执行失败场景
      *
      * @param taskType       任务类型
      * @param payloadBuilder 任务快照构建器
      * @param intentId       意图 ID
      * @param asyncTask      异步任务供应器
      * @param scheduler      调度器
-     * @param promise        对外结果承诺
+     * @param promise        异步结果凭据
      * @param attempt        当前尝试次数
-     * @param ex             原始异常
-     * @param <T>            返回值类型
+     * @param ex             执行异常
+     * @param <T>            返回类型
      */
     private <T> void handleAsyncFailure(
             String taskType, RetryPayloadBuilder payloadBuilder, String intentId,
@@ -371,11 +369,7 @@ public class Retryer {
             int attempt,
             Throwable ex) {
         Throwable cause = normalizeAsyncFailure(ex);
-        if (cause instanceof Error) {
-            promise.completeExceptionally(cause);
-            return;
-        }
-        if (cause instanceof InterruptedException) {
+        if (cause instanceof Error || cause instanceof InterruptedException) {
             promise.completeExceptionally(cause);
             return;
         }
@@ -390,7 +384,6 @@ public class Retryer {
                                 attempt + 1),
                         delay, java.util.concurrent.TimeUnit.MILLISECONDS);
             } catch (Exception e) {
-                // 如果调度失败（如线程池关闭），必须完成 promise 以免调用方挂起
                 promise.completeExceptionally(e);
             }
         } else if (decision == RetryDecisionType.HANDOFF_TO_BACKEND) {
@@ -416,11 +409,11 @@ public class Retryer {
     }
 
     /**
-     * 在强一致性模式下预写 intent；非强一致性模式直接返回空上下文。
+     * 预写意图日志
      *
      * @param taskType       任务类型
      * @param payloadBuilder 任务快照构建器
-     * @return intent 上下文
+     * @return 意图上下文
      */
     private IntentContext prepareIntent(String taskType, RetryPayloadBuilder payloadBuilder) {
         if (durability != RetryDurability.AT_LEAST_ONCE_DURABLE || backend == null) {
@@ -441,24 +434,22 @@ public class Retryer {
     }
 
     /**
-     * 将任务提交至后端延迟队列，并返回用于通知调用方的耗尽异常。
+     * 提交任务至后端持久化队列
      *
      * @param intentId       意图 ID
      * @param taskType       任务类型
      * @param payloadBuilder 任务快照构建器
-     * @param payloadAttempt 构建 payload 所用的尝试次数
+     * @param payloadAttempt 当前尝试序号
      * @param cause          原始失败原因
-     * @return 表示已降级入队的异常
-     * @throws RetrySerializationException 参数序列化失败时抛出
+     * @return 重试耗尽异常，标记降级成功
+     * @throws RetrySerializationException 序列化失败时抛出
      */
     private RetryExhaustedException enqueueToBackend(
             String intentId, String taskType,
             RetryPayloadBuilder payloadBuilder,
             int payloadAttempt, Throwable cause)
             throws RetrySerializationException {
-        // 下一次尝试由后端 worker 执行，延迟按“内存阶段之后的首次尝试”计算
         long nextDelay = policy.getDelayMillis(getNextAttemptAfterInMemory());
-        // payloadAttempt 由调用方传入：同步为 inMemoryAttempts，异步为当前 attempt
         String payload = payloadBuilder.build(RetryPayloadContext.handoffToBackend(payloadAttempt));
         String submitIntentId = ensureIntentIdForBackend(intentId, taskType, payload);
         backend.submitForDelay(submitIntentId, taskType, payload, nextDelay);
@@ -467,14 +458,13 @@ public class Retryer {
     }
 
     /**
-     * 归一化同步路径异常：透传 Error，中断恢复标记并抛出，其余返回 unwrap 后原因。
+     * 归一化同步异常
      *
      * @param ex 原始异常
-     * @return unwrap 后的失败原因
+     * @return 归一化后的异常原因
      * @throws InterruptedException 中断异常
      */
     private Throwable normalizeSyncFailure(Throwable ex) throws InterruptedException {
-        // 同步语义：中断必须立即恢复中断标记并向上抛出
         if (ex instanceof InterruptedException) {
             Thread.currentThread().interrupt();
             throw (InterruptedException) ex;
@@ -494,13 +484,12 @@ public class Retryer {
     }
 
     /**
-     * 归一化异步路径异常：透传 Error，中断恢复标记，其余返回 unwrap 后原因。
+     * 归一化异步异常
      *
      * @param ex 原始异常
      * @return 归一化后的异常
      */
     private Throwable normalizeAsyncFailure(Throwable ex) {
-        // 异步语义：归一化为 cause 并以 exceptionally 完成 promise，不直接抛出
         if (ex instanceof InterruptedException) {
             Thread.currentThread().interrupt();
             return ex;
@@ -516,34 +505,29 @@ public class Retryer {
     }
 
     /**
-     * 决定下一次重试阶段的类型
+     * 重试决策类型
      */
     public enum RetryDecisionType {
         /**
-         * 在内存中继续重试
+         * 内存重试
          */
         RETRY_IN_MEMORY,
         /**
-         * 转移到后端队列进行重试
+         * 降级至后端
          */
         HANDOFF_TO_BACKEND,
         /**
-         * 策略明确终止或者次数已经完全耗尽，不再重试
+         * 终止执行
          */
         FAIL_TERMINAL
     }
 
     /**
-     * intent 上下文，仅用于在线程内传递预写后的 intentId。
+     * 意图上下文，用于线程内传递意图标识
      */
     private static final class IntentContext {
         private final String intentId;
 
-        /**
-         * 创建 intent 上下文。
-         *
-         * @param intentId 意图 ID
-         */
         private IntentContext(String intentId) {
             this.intentId = intentId;
         }
@@ -559,9 +543,9 @@ public class Retryer {
         private Executor cleanupExecutor;
 
         /**
-         * 设置重试策略（必填）。
+         * 设置重试策略
          *
-         * @param policy 重试策略
+         * @param policy 策略实例
          * @return 当前建造者
          */
         public Builder policy(RetryPolicy policy) {
@@ -570,9 +554,9 @@ public class Retryer {
         }
 
         /**
-         * 设置持久化后端实现。
+         * 设置后端实现
          *
-         * @param backend 重试后端
+         * @param backend 后端实例
          * @return 当前建造者
          */
         public Builder backend(RetryBackend backend) {
@@ -581,9 +565,9 @@ public class Retryer {
         }
 
         /**
-         * 设置持久化级别。
+         * 设置持久化级别
          *
-         * @param durability 持久化级别
+         * @param durability 级别
          * @return 当前建造者
          */
         public Builder durability(RetryDurability durability) {
@@ -592,11 +576,9 @@ public class Retryer {
         }
 
         /**
-         * 设置用于异步清理 intent 的执行器。
-         * <p>
-         * 若未设置，将使用全局默认清理线程池。
+         * 设置清理任务执行器
          *
-         * @param cleanupExecutor 清理执行器
+         * @param cleanupExecutor 执行器
          * @return 当前建造者
          */
         public Builder cleanupExecutor(Executor cleanupExecutor) {
@@ -605,16 +587,9 @@ public class Retryer {
         }
 
         /**
-         * 构建 Retryer 实例。
-         * <p>
-         * 约束：
-         * <p>
-         * 1) {@link #policy(RetryPolicy)} 必须先设置；
-         * <p>
-         * 2) 当 durability 不是 {@code MEMORY_ONLY} 时，必须提供 {@link #backend(RetryBackend)}。
+         * 构建 Retryer 实例
          *
-         * @return 构建完成的 Retryer
-         * @throws IllegalStateException 当配置不满足约束时抛出
+         * @return 重试引擎实例
          */
         public Retryer build() {
             if (policy == null) {

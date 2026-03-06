@@ -10,7 +10,7 @@ import java.lang.reflect.Method;
 import java.util.function.Supplier;
 
 /**
- * 基于 team4u-proxy 的自动重试拦截器。
+ * 基于 team4u-proxy 实现的自动重试拦截器
  */
 @NoArgsConstructor
 @AllArgsConstructor
@@ -27,6 +27,8 @@ public class RetryInterceptor implements MethodInterceptor {
     public Object invoke(MethodInvocation invocation) throws Throwable {
         Method interfaceMethod = invocation.getMethod();
         Method effectiveMethod = interfaceMethod;
+
+        // 优先从目标实现类中获取方法，以获取实现类上的注解配置
         if (invocation.getTarget() != null) {
             try {
                 effectiveMethod = invocation.getTarget().getClass()
@@ -35,6 +37,8 @@ public class RetryInterceptor implements MethodInterceptor {
                 effectiveMethod = interfaceMethod;
             }
         }
+
+        // 依次从方法（接口或实现类）、目标类查找 Retryable 注解
         Retryable retryable = interfaceMethod.getAnnotation(Retryable.class);
         if (retryable == null && effectiveMethod != interfaceMethod) {
             retryable = effectiveMethod.getAnnotation(Retryable.class);
@@ -42,6 +46,7 @@ public class RetryInterceptor implements MethodInterceptor {
         if (retryable == null && invocation.getTarget() != null) {
             retryable = invocation.getTarget().getClass().getAnnotation(Retryable.class);
         }
+
         return delegate.executeWithRetry(
                 effectiveMethod,
                 invocation.getTarget(),

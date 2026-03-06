@@ -13,12 +13,17 @@ import java.lang.reflect.Method;
 import java.util.List;
 
 /**
- * 基于 RetryTaskSnapshot 的通用恢复处理器。
+ * 基于重试任务快照的通用恢复处理器
+ * <p>
+ * 通过反序列化任务快照中的方法签名和参数，结合 BeanManager 定位目标对象并重新触发逻辑。
  */
 public class SnapshotRecoveryHandler implements RecoveryHandler {
 
     private final String key;
 
+    /**
+     * 快照序列化器，用于将存储的字符串转换为任务快照对象
+     */
     @Setter
     private RetryTaskSnapshotSerializer snapshotSerializer = HutoolRetryTaskSnapshotSerializer.INSTANCE;
 
@@ -35,19 +40,23 @@ public class SnapshotRecoveryHandler implements RecoveryHandler {
     public void recover(String payload) throws Exception {
         RetryTaskSnapshot snapshot = snapshotSerializer.deserialize(payload);
         if (snapshot == null) {
-            throw new IllegalArgumentException("Retry task snapshot must not be null");
+            throw new IllegalArgumentException("任务快照不能为空");
         }
 
         Object bean = resolveBean(snapshot.getBeanName());
         Method method = resolveMethod(bean.getClass(), snapshot.getMethodName(), snapshot.getArgTypes());
         Object[] args = deserializeArgs(snapshot.getArgTypes(), snapshot.getArgJsonValues());
 
+        // 在恢复上下文中执行目标方法，防止触发循环重试
         RecoveryExecutionContext.run((RecoveryExecutionContext.CheckedRunnable) () -> invoke(bean, method, args));
     }
 
+    /**
+     * 根据 Bean 名称解析目标对象
+     */
     protected Object resolveBean(String beanName) {
         if (beanName == null || beanName.trim().isEmpty()) {
-            throw new IllegalArgumentException("Snapshot beanName must not be blank");
+            throw new IllegalArgumentException("快照中 Bean 名称不能为空");
         }
 
         BeanManager beanManager = BeanManager.getInstance();
@@ -56,6 +65,7 @@ public class SnapshotRecoveryHandler implements RecoveryHandler {
             return bean;
         }
 
+        // 尝试通过类名解析
         try {
             Class<?> beanType = Class.forName(beanName);
             bean = beanManager.getBean(beanType);
@@ -63,12 +73,14 @@ public class SnapshotRecoveryHandler implements RecoveryHandler {
                 return bean;
             }
         } catch (ClassNotFoundException ignored) {
-            // ignore and fall through
         }
 
-        throw new IllegalStateException("Cannot resolve bean from BeanManager. beanName=" + beanName);
+        throw new IllegalStateException("无法从 BeanManager 解析目标对象，名称: " + beanName);
     }
 
+    /**
+     * 根据方法名及参数类型解析目标方法
+     */
     protected Method resolveMethod(Class<?> beanClass, String methodName, List<String> argTypeNames) {
         Class<?>[] argTypes = toClasses(argTypeNames);
         try {
@@ -77,20 +89,23 @@ public class SnapshotRecoveryHandler implements RecoveryHandler {
             return method;
         } catch (NoSuchMethodException e) {
             throw new IllegalStateException(
-                    "Cannot resolve recovery method. class=" + beanClass.getName()
-                            + ", method=" + methodName
-                            + ", argTypes=" + argTypeNames, e);
+                    "无法解析恢复方法。类: " + beanClass.getName()
+                            + ", 方法: " + methodName
+                            + ", 参数类型: " + argTypeNames, e);
         }
     }
 
+    /**
+     * 反序列化方法调用参数
+     */
     protected Object[] deserializeArgs(List<String> argTypeNames, List<String> argJsonValues) {
         if (argTypeNames == null || argTypeNames.isEmpty()) {
             return new Object[0];
         }
         if (argJsonValues == null || argJsonValues.size() != argTypeNames.size()) {
             throw new IllegalArgumentException(
-                    "Snapshot argJsonValues size must match argTypes size. argTypes="
-                            + argTypeNames.size() + ", argJsonValues="
+                    "快照中参数值数量与参数类型数量不匹配。类型数量: "
+                            + argTypeNames.size() + ", 参数值数量: "
                             + (argJsonValues == null ? null : argJsonValues.size()));
         }
 
@@ -103,6 +118,9 @@ public class SnapshotRecoveryHandler implements RecoveryHandler {
         return args;
     }
 
+    /**
+     * 将 JSON 字符串反序列化为指定类型的参数对象
+     */
     protected Object deserializeArg(Class<?> argType, String json) {
         if (json == null) {
             return null;
@@ -118,6 +136,9 @@ public class SnapshotRecoveryHandler implements RecoveryHandler {
         return JSONUtil.toBean(json, argType);
     }
 
+    /**
+     * 判断是否为简单类型（基本类型及其包装类、字符串等）
+     */
     protected boolean isSimpleType(Class<?> type) {
         return type.isPrimitive()
                 || type == String.class
@@ -131,6 +152,9 @@ public class SnapshotRecoveryHandler implements RecoveryHandler {
                 || type == Character.class;
     }
 
+    /**
+     * 反射调用目标方法
+     */
     protected void invoke(Object bean, Method method, Object[] args) throws Exception {
         try {
             method.invoke(bean, args);
@@ -144,10 +168,13 @@ public class SnapshotRecoveryHandler implements RecoveryHandler {
             }
             throw new RuntimeException(target);
         } catch (IllegalAccessException e) {
-            throw new IllegalStateException("Failed to invoke recovery method: " + method, e);
+            throw new IllegalStateException("调用恢复方法失败: " + method, e);
         }
     }
 
+    /**
+     * 将类名列表转换为 Class 数组
+     */
     protected Class<?>[] toClasses(List<String> typeNames) {
         Class<?>[] types = new Class<?>[typeNames == null ? 0 : typeNames.size()];
         for (int i = 0; i < types.length; i++) {
@@ -156,9 +183,12 @@ public class SnapshotRecoveryHandler implements RecoveryHandler {
         return types;
     }
 
+    /**
+     * 将类名转换为对应的 Class 对象，支持基本类型映射
+     */
     protected Class<?> toClass(String name) {
         if (name == null || name.trim().isEmpty()) {
-            throw new IllegalArgumentException("Argument type name must not be blank");
+            throw new IllegalArgumentException("参数类型名称不能为空");
         }
 
         switch (name) {
@@ -185,7 +215,7 @@ public class SnapshotRecoveryHandler implements RecoveryHandler {
         try {
             return Class.forName(name);
         } catch (ClassNotFoundException e) {
-            throw new IllegalStateException("Cannot load argument type: " + name, e);
+            throw new IllegalStateException("无法加载参数类型: " + name, e);
         }
     }
 }

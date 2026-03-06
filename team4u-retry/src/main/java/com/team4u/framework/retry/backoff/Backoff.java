@@ -3,17 +3,17 @@ package com.team4u.framework.retry.backoff;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * 退避策略
- * <p>
- * 用于计算下一次重试前的等待时间。
+ * 重试退避策略
+ *
+ * 用于计算任务重试前的等待延迟。
  */
 @FunctionalInterface
 public interface Backoff {
 
     /**
-     * 固定间隔重试策略
+     * 固定间隔退避策略
      *
-     * @param delayMillis 固定的延迟时间，单位：毫秒
+     * @param delayMillis 固定的延迟时长（毫秒）
      * @return 退避策略实例
      */
     static Backoff fixed(long delayMillis) {
@@ -21,16 +21,13 @@ public interface Backoff {
     }
 
     /**
-     * 增量间隔重试策略
-     * <p>
-     * 随着重试次数增加，延迟时间线性增长。
-     * 例如，初始延迟为1000ms，步长为1000ms：
-     * 第1次重试：1000ms
-     * 第2次重试：2000ms
-     * 第3次重试：3000ms
+     * 线性增量退避策略
      *
-     * @param initialDelayMillis 初始延迟时间，单位：毫秒
-     * @param stepMillis         每次递增的步长，单位：毫秒
+     * 延迟时长随重试次数线性增长。
+     * 公式：initialDelay + (attempt - 1) * step
+     *
+     * @param initialDelayMillis 初始延迟时长（毫秒）
+     * @param stepMillis         每次递增的步长（毫秒）
      * @return 退避策略实例
      */
     static Backoff increment(long initialDelayMillis, long stepMillis) {
@@ -38,17 +35,14 @@ public interface Backoff {
     }
 
     /**
-     * 指数间隔退避策略
-     * <p>
-     * 随着重试次数增加，延迟时间呈指数增长，直至达到最大延迟限制。
-     * 例如，初始延迟为1000ms，乘数为2.0，最大为10000ms：
-     * 第1次重试：1000ms
-     * 第2次重试：2000ms
-     * 第3次重试：4000ms
+     * 指数退避策略
      *
-     * @param initialDelayMillis 初始延迟时间，单位：毫秒
-     * @param multiplier         每次递增的乘数
-     * @param maxDelayMillis     最大允许的延迟时间，单位：毫秒
+     * 延迟时长随重试次数呈指数级增长，直至达到最大限制。
+     * 公式：min(initialDelay * multiplier^(attempt - 1), maxDelay)
+     *
+     * @param initialDelayMillis 初始延迟时长（毫秒）
+     * @param multiplier         增长乘数
+     * @param maxDelayMillis     最大允许延迟时长（毫秒）
      * @return 退避策略实例
      */
     static Backoff exponential(long initialDelayMillis, double multiplier, long maxDelayMillis) {
@@ -59,14 +53,14 @@ public interface Backoff {
     }
 
     /**
-     * 全抖动指数退避策略
-     * <p>
-     * 在指数级退避的基础上加入了随机因子，有助于打散系统中瞬间产生的高并发重试请求，
-     * 以防止出现雪崩或惊群效应。
+     * 带随机抖动的指数退避策略
      *
-     * @param initialDelayMillis 初始延迟时间，单位：毫秒
-     * @param multiplier         每次递增的乘数
-     * @param maxDelayMillis     最大允许的延迟时间，单位：毫秒
+     * 在指数退避基础上引入随机因子，有效分散系统瞬时产生的高并发重试请求，
+     * 缓解集群雪崩效应。
+     *
+     * @param initialDelayMillis 初始延迟时长（毫秒）
+     * @param multiplier         增长乘数
+     * @param maxDelayMillis     最大允许延迟时长（毫秒）
      * @return 退避策略实例
      */
     static Backoff exponentialJitter(long initialDelayMillis, double multiplier, long maxDelayMillis) {
@@ -81,10 +75,10 @@ public interface Backoff {
     }
 
     /**
-     * 计算等待时间
+     * 计算当前重试轮次的等待时间
      *
-     * @param attempt 当前已尝试次数，从1开始
-     * @return 延迟的毫秒数
+     * @param attempt 当前已执行尝试次数（从 1 开始）
+     * @return 延迟等待毫秒数
      */
     long calculateMillis(int attempt);
 }

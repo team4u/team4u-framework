@@ -18,30 +18,45 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Role;
 
 /**
- * Spring 配置类，用于无缝接入重试能力。
+ * 重试组件 Spring 自动化配置
+ * <p>
+ * 提供 AOP 切面及拦截器，支持通过 @Retryable 注解自动接入重试逻辑。
  */
 @Configuration
 public class RetrySpringConfiguration {
 
+    /**
+     * 定义默认的 Advisor 自动代理创建器
+     */
     @Bean(name = AopConfigUtils.AUTO_PROXY_CREATOR_BEAN_NAME)
     @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
     public static DefaultAdvisorAutoProxyCreator retryAutoProxyCreator() {
         return new DefaultAdvisorAutoProxyCreator();
     }
 
+    /**
+     * 定义重试切面 Advisor，绑定 SpringRetryInterceptor 拦截器
+     */
     @Bean
     public RetryAdvisor retryAdvisor(BeanFactory beanFactory) {
         RetryAdvisor advisor = new RetryAdvisor();
         advisor.setAdvice(new SpringRetryInterceptor(() -> getRetryBackend(beanFactory)));
+        // 设定较低优先级，确保重试拦截器在外层执行
         advisor.setOrder(org.springframework.core.Ordered.LOWEST_PRECEDENCE - 1);
         return advisor;
     }
 
+    /**
+     * 注册默认恢复处理器
+     */
     @Bean
     public DefaultRecoveryHandlerRegistrar defaultRecoveryHandlerRegistrar() {
         return new DefaultRecoveryHandlerRegistrar();
     }
 
+    /**
+     * 解析重试后端实现，优先从 Spring 容器获取
+     */
     private RetryBackend getRetryBackend(BeanFactory beanFactory) {
         try {
             return beanFactory.getBean(RetryBackend.class);
@@ -51,19 +66,23 @@ public class RetrySpringConfiguration {
     }
 
     /**
-     * 自定义 Advisor，使用 Spring AOP 切点匹配类级与方法级注解。
+     * 自定义重试 Advisor
+     * <p>
+     * 使用 Spring AOP 组合切点，匹配类级或方法级上的 @Retryable 注解。
      */
     public static class RetryAdvisor extends AbstractBeanFactoryPointcutAdvisor {
         @Override
         public Pointcut getPointcut() {
+            // 类级别匹配
             Pointcut classLevelPointcut = new AnnotationMatchingPointcut(Retryable.class, true);
+            // 方法级别匹配
             Pointcut methodLevelPointcut = new AnnotationMatchingPointcut(null, Retryable.class, true);
             return new ComposablePointcut(classLevelPointcut).union(methodLevelPointcut);
         }
     }
 
     /**
-     * Spring 启动时自动确保默认恢复处理器可用。
+     * 自动注册默认恢复处理器
      */
     public static class DefaultRecoveryHandlerRegistrar {
         public DefaultRecoveryHandlerRegistrar() {

@@ -9,7 +9,7 @@ import java.util.List;
 /**
  * 重试任务快照
  * <p>
- * 包含了跨节点还原方法调用所需的所有元数据以及重试进度状态。
+ * 包含跨节点恢复方法调用所需的元数据及重试进度。
  *
  * @author jay.wu
  */
@@ -18,11 +18,11 @@ import java.util.List;
 @NoArgsConstructor
 public class RetryTaskSnapshot {
     /**
-     * 任务全局唯一 ID，用于幂等去重
+     * 任务全局唯一 ID
      */
     private String taskId;
     /**
-     * 任务类型标识（Policy Key）
+     * 任务类型标识
      */
     private String taskType;
     /**
@@ -30,28 +30,28 @@ public class RetryTaskSnapshot {
      */
     private int executedAttempts;
     /**
-     * 总尝试上限（-1 表示无限）
+     * 最大尝试次数限制（-1 表示无限制）
      */
     private int maxAttempts;
     /**
-     * 任务首次创建时间戳
+     * 任务创建时间戳
      */
     private long createdAt = System.currentTimeMillis();
 
     /**
-     * Bean 标识符（对应 BeanManager 中的名称或类全限定名）
+     * Bean 标识符
      */
     private String beanName;
     /**
-     * 方法名
+     * 方法名称
      */
     private String methodName;
     /**
-     * 参数类型全限定名列表
+     * 参数类型列表
      */
     private List<String> argTypes;
     /**
-     * 参数 JSON 序列化后的字符串列表
+     * 序列化后的参数值列表
      */
     private List<String> argJsonValues;
 
