@@ -7,6 +7,7 @@ import org.springframework.aop.Pointcut;
 import org.springframework.aop.config.AopConfigUtils;
 import org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator;
 import org.springframework.aop.support.AbstractBeanFactoryPointcutAdvisor;
+import org.springframework.aop.support.ComposablePointcut;
 import org.springframework.aop.support.annotation.AnnotationMatchingPointcut;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactory;
@@ -16,7 +17,7 @@ import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Role;
 
 /**
- * Spring 配置类，用于无缝接入重试功能
+ * Spring 配置类，用于无缝接入重试能力。
  */
 @Configuration
 public class RetrySpringConfiguration {
@@ -30,9 +31,7 @@ public class RetrySpringConfiguration {
     @Bean
     public RetryAdvisor retryAdvisor(BeanFactory beanFactory) {
         RetryAdvisor advisor = new RetryAdvisor();
-        // 设置拦截器
         advisor.setAdvice(new SpringRetryInterceptor(() -> getRetryBackend(beanFactory)));
-        // 可以设置优先级，例如让重试在事务（@Transactional）之外执行
         advisor.setOrder(org.springframework.core.Ordered.LOWEST_PRECEDENCE - 1);
         return advisor;
     }
@@ -46,13 +45,14 @@ public class RetrySpringConfiguration {
     }
 
     /**
-     * 自定义 Advisor，使用 Spring 的切点匹配
+     * 自定义 Advisor，使用 Spring AOP 切点匹配类级与方法级注解。
      */
     public static class RetryAdvisor extends AbstractBeanFactoryPointcutAdvisor {
         @Override
         public Pointcut getPointcut() {
-            // 匹配类上或方法上的 @Retryable 注解
-            return new AnnotationMatchingPointcut(null, Retryable.class, true);
+            Pointcut classLevelPointcut = new AnnotationMatchingPointcut(Retryable.class, true);
+            Pointcut methodLevelPointcut = new AnnotationMatchingPointcut(null, Retryable.class, true);
+            return new ComposablePointcut(classLevelPointcut).union(methodLevelPointcut);
         }
     }
 }

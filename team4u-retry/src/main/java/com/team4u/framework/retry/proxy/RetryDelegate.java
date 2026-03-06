@@ -20,6 +20,8 @@ import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.IntFunction;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -63,7 +65,7 @@ public class RetryDelegate {
         RetryBackend backend = backendSupplier != null ? backendSupplier.get() : null;
         validateBackendIfNeeded(method, policyKey, durability, backend);
         boolean isAsync = CompletableFuture.class.isAssignableFrom(method.getReturnType());
-        RetryTaskSnapshot frozenSnapshot = buildFrozenSnapshot(method, target, args, taskType, policy);
+        IntFunction<String> payloadBuilder = createPayloadBuilder(method, target, args, taskType, policy, durability);
 
         Retryer retryer = Retryer.builder()
                 .policy(policy)
@@ -74,8 +76,7 @@ public class RetryDelegate {
         if (isAsync) {
             return retryer.executeAsync(
                     taskType,
-                    executedAttempts -> snapshotSerializer.serialize(
-                            copySnapshotForAttempt(frozenSnapshot, executedAttempts)),
+                    payloadBuilder,
                     () -> {
                         try {
                             @SuppressWarnings("unchecked")
@@ -89,11 +90,19 @@ public class RetryDelegate {
                     },
                     scheduler != null ? scheduler : RetryExecutorManager.global().getScheduler());
         } else {
+            if (durability == RetryDurability.MEMORY_ONLY) {
+                try {
+                    return retryer.execute(proceedTask);
+                } catch (Exception | Error e) {
+                    throw e;
+                } catch (Throwable t) {
+                    throw new RuntimeException(t);
+                }
+            }
             try {
                 return retryer.execute(
                         taskType,
-                        executedAttempts -> snapshotSerializer.serialize(
-                                copySnapshotForAttempt(frozenSnapshot, executedAttempts)),
+                        payloadBuilder,
                         proceedTask);
             } catch (Exception | Error e) {
                 throw e;
@@ -112,6 +121,49 @@ public class RetryDelegate {
         throw new IllegalStateException(
                 "Retry backend is required when durability is [" + durability + "], but none was provided. " +
                         "method=" + methodSignature + ", policyKey=" + policyKey);
+    }
+
+    private IntFunction<String> createPayloadBuilder(Method method,
+                                                     Object target,
+                                                     Object[] args,
+                                                     String taskType,
+                                                     RetryPolicy policy,
+                                                     RetryDurability durability) {
+        if (durability == RetryDurability.MEMORY_ONLY) {
+            return attempt -> {
+                throw new IllegalStateException("Payload builder must not be used for MEMORY_ONLY retry methods.");
+            };
+        }
+
+        Supplier<RetryTaskSnapshot> snapshotSupplier;
+        if (durability == RetryDurability.AT_LEAST_ONCE_DURABLE) {
+            RetryTaskSnapshot frozenSnapshot = buildFrozenSnapshot(method, target, args, taskType, policy);
+            snapshotSupplier = () -> frozenSnapshot;
+        } else {
+            snapshotSupplier = memoizeSnapshot(() -> buildFrozenSnapshot(method, target, args, taskType, policy));
+        }
+
+        return executedAttempts -> snapshotSerializer.serialize(
+                copySnapshotForAttempt(snapshotSupplier.get(), executedAttempts));
+    }
+
+    private Supplier<RetryTaskSnapshot> memoizeSnapshot(Supplier<RetryTaskSnapshot> snapshotBuilder) {
+        AtomicReference<RetryTaskSnapshot> cachedSnapshot = new AtomicReference<>();
+        Object monitor = new Object();
+        return () -> {
+            RetryTaskSnapshot snapshot = cachedSnapshot.get();
+            if (snapshot != null) {
+                return snapshot;
+            }
+            synchronized (monitor) {
+                snapshot = cachedSnapshot.get();
+                if (snapshot == null) {
+                    snapshot = snapshotBuilder.get();
+                    cachedSnapshot.set(snapshot);
+                }
+                return snapshot;
+            }
+        };
     }
 
     private RetryTaskSnapshot buildFrozenSnapshot(Method method,
