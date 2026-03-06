@@ -8,6 +8,7 @@ import com.team4u.framework.policy.core.KeyedPolicyRegistry;
 public class RecoveryHandlerRegistry extends KeyedPolicyRegistry<String, RecoveryHandler> {
 
     private static final RecoveryHandlerRegistry INSTANCE = new RecoveryHandlerRegistry();
+    private static final Object DEFAULT_PROXY_RECOVERY_MONITOR = new Object();
 
     public RecoveryHandlerRegistry() {
         super(RecoveryHandler.class);
@@ -20,5 +21,27 @@ public class RecoveryHandlerRegistry extends KeyedPolicyRegistry<String, Recover
      */
     public static RecoveryHandlerRegistry global() {
         return INSTANCE;
+    }
+
+    /**
+     * 幂等注册默认的注解快照恢复处理器。
+     */
+    public void registerDefaultProxyRecoveryHandler() {
+        if (get(RetryTaskTypes.DEFAULT_PROXY_RECOVERY).isPresent()) {
+            return;
+        }
+        synchronized (DEFAULT_PROXY_RECOVERY_MONITOR) {
+            if (get(RetryTaskTypes.DEFAULT_PROXY_RECOVERY).isPresent()) {
+                return;
+            }
+            register(new SnapshotRecoveryHandler(RetryTaskTypes.DEFAULT_PROXY_RECOVERY));
+        }
+    }
+
+    /**
+     * 便捷静态入口，供 Spring 和 Proxy 场景复用。
+     */
+    public static void ensureDefaultProxyRecoveryHandlerRegistered() {
+        global().registerDefaultProxyRecoveryHandler();
     }
 }

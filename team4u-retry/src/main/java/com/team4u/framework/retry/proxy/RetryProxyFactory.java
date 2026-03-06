@@ -2,6 +2,7 @@ package com.team4u.framework.retry.proxy;
 
 import com.team4u.framework.proxy.ProxyBuilder;
 import com.team4u.framework.retry.RetryBackend;
+import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 
 /**
  * 重试代理工厂
@@ -11,6 +12,13 @@ import com.team4u.framework.retry.RetryBackend;
  * @author jay.wu
  */
 public class RetryProxyFactory {
+
+    /**
+     * 注册默认的注解快照恢复处理器。
+     */
+    public static void registerDefaultRecoveryHandler() {
+        RecoveryHandlerRegistry.ensureDefaultProxyRecoveryHandlerRegistered();
+    }
 
     /**
      * 为指定对象创建重试代理 (仅使用内存重试)

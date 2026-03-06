@@ -3,6 +3,7 @@ package com.team4u.framework.retry.spring;
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.retry.RetryBackend;
 import com.team4u.framework.retry.proxy.Retryable;
+import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import org.springframework.aop.Pointcut;
 import org.springframework.aop.config.AopConfigUtils;
 import org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator;
@@ -36,6 +37,11 @@ public class RetrySpringConfiguration {
         return advisor;
     }
 
+    @Bean
+    public DefaultRecoveryHandlerRegistrar defaultRecoveryHandlerRegistrar() {
+        return new DefaultRecoveryHandlerRegistrar();
+    }
+
     private RetryBackend getRetryBackend(BeanFactory beanFactory) {
         try {
             return beanFactory.getBean(RetryBackend.class);
@@ -53,6 +59,15 @@ public class RetrySpringConfiguration {
             Pointcut classLevelPointcut = new AnnotationMatchingPointcut(Retryable.class, true);
             Pointcut methodLevelPointcut = new AnnotationMatchingPointcut(null, Retryable.class, true);
             return new ComposablePointcut(classLevelPointcut).union(methodLevelPointcut);
+        }
+    }
+
+    /**
+     * Spring 启动时自动确保默认恢复处理器可用。
+     */
+    public static class DefaultRecoveryHandlerRegistrar {
+        public DefaultRecoveryHandlerRegistrar() {
+            RecoveryHandlerRegistry.ensureDefaultProxyRecoveryHandlerRegistered();
         }
     }
 }

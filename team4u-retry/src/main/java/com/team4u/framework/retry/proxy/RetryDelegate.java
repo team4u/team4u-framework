@@ -9,6 +9,8 @@ import com.team4u.framework.retry.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.config.DynamicRetryPolicyRegistry;
 import com.team4u.framework.retry.proxy.serialize.HutoolRetryContextSerializer;
 import com.team4u.framework.retry.proxy.serialize.RetryContextSerializer;
+import com.team4u.framework.retry.recovery.RecoveryExecutionContext;
+import com.team4u.framework.retry.recovery.RetryTaskTypes;
 import lombok.Setter;
 
 import java.lang.reflect.Method;
@@ -46,18 +48,18 @@ public class RetryDelegate {
             Callable<Object> proceedTask,
             Supplier<RetryBackend> backendSupplier) throws Throwable {
 
-        if (retryable == null) {
+        if (retryable == null || RecoveryExecutionContext.isRecovering()) {
             return proceedTask.call();
         }
 
         String policyKey = retryable.policy();
-        String taskType = retryable.taskType().isEmpty() ? method.getName() : retryable.taskType();
+        RetryDurability durability = retryable.durability();
+        String taskType = resolveTaskType(method, retryable, durability);
         RetryPolicy policy = Optional.ofNullable(DynamicRetryPolicyRegistry.getPolicy(policyKey))
                 .orElseGet(() -> RetryPolicyRegistry.global().get(policyKey)
                         .map(NamedRetryPolicy::getPolicy)
                         .orElseThrow(() -> new IllegalArgumentException("Retry policy not found. Key: " + policyKey)));
 
-        RetryDurability durability = retryable.durability();
         RetryBackend backend = backendSupplier != null ? backendSupplier.get() : null;
         validateBackendIfNeeded(method, policyKey, durability, backend);
         boolean isAsync = CompletableFuture.class.isAssignableFrom(method.getReturnType());
@@ -132,6 +134,17 @@ public class RetryDelegate {
         throw new IllegalStateException(
                 "Retry backend is required when durability is [" + durability + "], but none was provided. " +
                         "method=" + methodSignature + ", policyKey=" + policyKey);
+    }
+
+    private String resolveTaskType(Method method, Retryable retryable, RetryDurability durability) {
+        String declaredTaskType = retryable.taskType();
+        if (declaredTaskType != null && !declaredTaskType.trim().isEmpty()) {
+            return declaredTaskType;
+        }
+        if (durability == RetryDurability.MEMORY_ONLY) {
+            return method.getName();
+        }
+        return RetryTaskTypes.DEFAULT_PROXY_RECOVERY;
     }
 
     private RetryPayloadBuilder createPayloadBuilder(Method method,

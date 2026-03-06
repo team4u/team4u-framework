@@ -5,6 +5,8 @@ import com.team4u.framework.retry.RetryBackend;
 import com.team4u.framework.retry.RetryDurability;
 import com.team4u.framework.retry.RetryExhaustedException;
 import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.recovery.RecoveryExecutionContext;
+import com.team4u.framework.retry.recovery.RetryTaskTypes;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -206,6 +208,67 @@ public class RetryDelegateTest {
         Assert.assertEquals(
                 DelegateContractImpl.class.getName(),
                 JSONUtil.parseObj(backend.savedPayload).getStr("beanName"));
+        Assert.assertEquals(
+                RetryTaskTypes.DEFAULT_PROXY_RECOVERY,
+                JSONUtil.parseObj(backend.savedPayload).getStr("taskType"));
+    }
+
+    @Test
+    public void testExplicitTaskTypeStillWinsForDurableAnnotation() throws Throwable {
+        RetryDelegate delegate = new RetryDelegate();
+        Method method = DelegateApi.class.getDeclaredMethod("customTaskType", String.class);
+        Retryable retryable = method.getAnnotation(Retryable.class);
+        CapturingBackend backend = new CapturingBackend();
+
+        try {
+            delegate.executeWithRetry(
+                    method,
+                    new DelegateApi(),
+                    new Object[]{"payload"},
+                    retryable,
+                    () -> {
+                        throw new RuntimeException("fail");
+                    },
+                    () -> backend);
+            Assert.fail("expected RetryExhaustedException");
+        } catch (RetryExhaustedException expected) {
+            // expected
+        }
+
+        Assert.assertEquals(
+                "custom-task",
+                JSONUtil.parseObj(backend.submittedPayload).getStr("taskType"));
+    }
+
+    @Test
+    public void testRecoveringContextSkipsRetryPipeline() throws Throwable {
+        RetryDelegate delegate = new RetryDelegate();
+        Method method = DelegateApi.class.getDeclaredMethod("memoryFallback", String.class);
+        Retryable retryable = method.getAnnotation(Retryable.class);
+        AtomicInteger proceedCount = new AtomicInteger();
+        CapturingBackend backend = new CapturingBackend();
+
+        RecoveryExecutionContext.enter();
+        String result;
+        try {
+            result = (String) delegate.executeWithRetry(
+                    method,
+                    new DelegateApi(),
+                    new Object[]{"payload"},
+                    retryable,
+                    () -> {
+                        proceedCount.incrementAndGet();
+                        return "ok";
+                    },
+                    () -> backend);
+        } finally {
+            RecoveryExecutionContext.exit();
+        }
+
+        Assert.assertEquals("ok", result);
+        Assert.assertEquals(1, proceedCount.get());
+        Assert.assertNull(backend.savedPayload);
+        Assert.assertNull(backend.submittedPayload);
     }
 
     public interface DelegateContract {
@@ -232,6 +295,12 @@ public class RetryDelegateTest {
         @Retryable(policy = "delegate-freeze", durability = RetryDurability.MEMORY_FALLBACK)
         public String memoryFallbackDeferred(Object value) {
             return String.valueOf(value);
+        }
+
+        @Retryable(policy = "delegate-freeze", taskType = "custom-task",
+                durability = RetryDurability.MEMORY_FALLBACK)
+        public String customTaskType(String value) {
+            return value;
         }
     }
 
