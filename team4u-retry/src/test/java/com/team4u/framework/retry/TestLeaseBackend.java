@@ -2,6 +2,7 @@ package com.team4u.framework.retry;
 
 import com.team4u.framework.lease.LeaseBackend;
 import com.team4u.framework.lease.LeaseGrant;
+import com.team4u.framework.lease.LeaseHandle;
 import com.team4u.framework.lease.LeasePublishRequest;
 import com.team4u.framework.lease.LeaseAcquireRequest;
 import com.team4u.framework.lease.LeaseAdminResult;
@@ -69,22 +70,27 @@ public abstract class TestLeaseBackend implements LeaseBackend {
     }
 
     @Override
-    public LeaseRuntimeResult ack(String taskId, String workerId, String leaseToken) {
+    public LeaseRuntimeResult ack(LeaseHandle handle) {
         return LeaseRuntimeResult.APPLIED;
     }
 
     @Override
-    public LeaseRuntimeResult retry(String taskId, String workerId, String leaseToken, long delayMillis, Throwable cause) {
+    public LeaseRuntimeResult retry(LeaseHandle handle, long delayMillis, Throwable cause) {
         return LeaseRuntimeResult.APPLIED;
     }
 
     @Override
-    public LeaseRuntimeResult fail(String taskId, String workerId, String leaseToken, Throwable cause) {
+    public LeaseRuntimeResult fail(LeaseHandle handle, Throwable cause) {
         return LeaseRuntimeResult.APPLIED;
     }
 
     @Override
-    public LeaseRuntimeResult heartbeat(String taskId, String workerId, String leaseToken, long extendMillis) {
+    public LeaseRuntimeResult heartbeat(LeaseHandle handle, long extendMillis) {
+        return LeaseRuntimeResult.APPLIED;
+    }
+
+    @Override
+    public LeaseRuntimeResult release(LeaseHandle handle, long delayMillis) {
         return LeaseRuntimeResult.APPLIED;
     }
 
