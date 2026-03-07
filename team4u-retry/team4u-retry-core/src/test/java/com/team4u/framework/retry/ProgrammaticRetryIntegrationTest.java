@@ -62,8 +62,8 @@ public class ProgrammaticRetryIntegrationTest {
                 callCount.incrementAndGet();
                 throw new RuntimeException("fail");
             });
-            Assert.fail("应该抛出 RetryExhaustedException");
-        } catch (RetryExhaustedException e) {
+            Assert.fail("应该抛出 RetryHandoffException");
+        } catch (RetryHandoffException e) {
             Assert.assertTrue(e.getMessage().contains("In-memory retries exhausted"));
         }
 

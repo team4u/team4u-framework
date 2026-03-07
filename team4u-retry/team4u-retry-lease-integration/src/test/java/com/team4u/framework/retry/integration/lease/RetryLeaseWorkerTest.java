@@ -4,7 +4,7 @@ import com.team4u.framework.base.backoff.Backoff;
 import com.team4u.framework.lease.LeasePublishRequest;
 import com.team4u.framework.lease.LeaseWorkerPolicy;
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
-import com.team4u.framework.retry.RetryExhaustedException;
+import com.team4u.framework.retry.RetryHandoffException;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.Retryer;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
@@ -140,8 +140,8 @@ public class RetryLeaseWorkerTest {
                     callCount.incrementAndGet();
                     throw new IllegalStateException("downstream timeout");
                 });
-                Assert.fail("应该抛出 RetryExhaustedException");
-            } catch (RetryExhaustedException ex) {
+                Assert.fail("应该抛出 RetryHandoffException");
+            } catch (RetryHandoffException ex) {
                 Assert.assertTrue(ex.getMessage().contains("In-memory retries exhausted"));
             }
 

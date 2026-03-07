@@ -172,11 +172,11 @@ public class RetryerTest {
                 callCount.incrementAndGet();
                 throw new RuntimeException("always fail");
             });
-            Assert.fail("预期抛出 RetryExhaustedException");
-        } catch (RetryExhaustedException ex) {
+            Assert.fail("预期抛出 RetryHandoffException");
+        } catch (RetryHandoffException ex) {
             // expected
         } catch (Exception e) {
-            Assert.fail("预期抛出 RetryExhaustedException");
+            Assert.fail("预期抛出 RetryHandoffException");
         }
 
         Assert.assertEquals("持久化模式默认前台只尝试2次", 2, callCount.get());
@@ -225,11 +225,11 @@ public class RetryerTest {
             }, () -> {
                 throw new RuntimeException("fail");
             });
-            Assert.fail("expected RetryExhaustedException");
-        } catch (RetryExhaustedException expected) {
+            Assert.fail("expected RetryHandoffException");
+        } catch (RetryHandoffException expected) {
             // expected
         } catch (Exception e) {
-            Assert.fail("expected RetryExhaustedException");
+            Assert.fail("expected RetryHandoffException");
         }
 
         Assert.assertNotNull(prepareContext.get());

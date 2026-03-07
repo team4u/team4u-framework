@@ -48,7 +48,7 @@
 * [动态策略与配置中心](#动态策略与配置中心)
 * [完整示例：内置 Backend + Worker](#完整示例内置-backend--worker)
 * [完整示例：Spring-Boot-接入](#完整示例spring-boot-接入)
-* [边界与注意事项](#边界与注意事项)
+* [FAQ](#faq)
 * [核心类与执行流程](#核心类与执行流程)
 
 
@@ -62,6 +62,15 @@
 | 业务本身就是异步调用        | `Retryer.executeAsync(...)`                       | 非阻塞重试      |
 | 想给接口方法无侵入加重试      | `@Retryable` + `RetryProxyFactory`                | 不依赖 Spring |
 | 已经在 Spring 项目里    | `@EnableRetry` + `@Retryable`                     | 接入成本最低     |
+
+## 运行模式对照
+
+| 模式 | 是否需要 LeaseBackend | 是否需要 payloadBuilder | 本地耗尽后 | 调用方看到什么 | 是否需要 Worker |
+| --- | --- | --- | --- | --- | --- |
+| 纯内存同步/异步 | 否 | 否 | 直接结束 | 最终业务异常 | 否 |
+| 持久化降级（编程式） | 是 | 是 | reschedule 到后端 | RetryHandoffException | 是 |
+| 持久化降级（注解式） | 是 | 否（框架快照） | reschedule 到后端 | RetryHandoffException | 是 |
+
 
 ### 一句话建议
 
@@ -164,6 +173,22 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), null);
 
 如果你在 Spring 中，直接配合 `@EnableRetry` 使用即可。
 
+### 4）最小示例：本地重试耗尽后移交后端
+
+当你配置了 `RetryBackend` 时，本地重试次数耗尽后会抛出 `RetryHandoffException` 并将任务移交给后端：
+
+```java
+try {
+    retryer.execute("pay-notify", ctx -> "{\"orderId\":\"A1001\"}", () -> {
+        throw new RuntimeException("downstream timeout");
+    });
+} catch (RetryHandoffException ex) {
+    // 表示前台本地尝试已经结束，但任务已交给后端继续恢复
+    // 这个异常不是“彻底失败”，而是“托管权转移”
+}
+```
+
+
 
 
 ## 核心概念
@@ -219,6 +244,18 @@ Backoff.exponentialJitter(...)
 ```
 
 这样可以减少大量请求同时重试带来的“扎堆”问题。
+
+## 异常与终止规则
+
+| 情况 | 是否重试 | 说明 |
+| --- | --- | --- |
+| 命中 `retryOn` | 是 | 按策略继续 |
+| 命中 `abortOn` | 否 | 立即终止 |
+| `CompletionException` / `ExecutionException` 等包装异常 | 看根因 | 框架会先解包 |
+| `InterruptedException` | 否 | 立即终止并恢复中断标记 |
+| `Error` | 否 | 直接透传 |
+| 持久化模式下本地预算耗尽 | 不在当前线程继续 | 交给后端，前台抛 `RetryHandoffException` |
+
 
 
 
@@ -489,7 +526,13 @@ public class PayServiceImpl {
 
 
 
+> ⚠️ 注意
+> 在 Spring 中提供 `LeaseBackend` 只代表允许持久化降级。
+> 如果没有同时启动后端 Worker 并注册对应 `RecoveryHandler`，
+> 任务虽然会成功入队，但不会被恢复执行。
+
 ### 4）Spring AOP 边界
+
 
 这个模块遵循标准 Spring AOP 规则，因此要注意：
 
@@ -499,9 +542,53 @@ public class PayServiceImpl {
 
 如果你要求“自调用也能触发重试”，建议把待重试逻辑拆到独立 Bean，或者改用编程式接入。
 
+## FAQ
 
+### `maxAttempts(3)` 是重试 3 次还是总共 3 次？
 
-## 持久化降级与恢复执行
+包含首次调用在内，共 3 次（即最多额外重试 2 次）。
+
+### `RetryHandoffException` 是不是表示任务彻底失败？
+
+不是。
+
+在纯内存模式下，重试耗尽通常意味着当前调用结束并向上抛出最终异常。
+但在配置了 `LeaseBackend` 的持久化模式下，当前线程的本地尝试预算耗尽后，
+框架会把任务移交给后端系统继续恢复执行，此时前台抛出的
+`RetryHandoffException` 表示“当前线程不再继续重试”，
+而不是“整个任务生命周期已经彻底失败”。
+
+### 为什么恢复阶段不会再次进入重试代理？
+
+因为后端恢复调用的语义是“基于已保存快照执行一次补偿恢复”，
+不是“重新从业务入口再走一整遍调用侧重试托管流程”。
+这样可以避免重复预写 intent、重复入队和恢复过程递归套娃。
+
+### 为什么加了 `@RetryIgnore` 后恢复时拿不到这个参数？
+
+因为标记了 `@RetryIgnore` 的参数不会被序列化到快照中。恢复阶段是反序列化快照后通过反射调用的，缺失的参数会以 `null` 传入。
+
+### 为什么 Spring 里自调用没有触发重试？
+
+这是 Spring AOP 的标准限制。代理对象只在外部调用时生效，类内部方法直接调用 `this.xxx()` 会绕过代理。
+建议将重试方法移到另一个 Bean，或者通过 `AopContext.currentProxy()` 拿到代理对象调用。
+
+### `Error` 会触发重试吗？
+
+不会。例如 `OutOfMemoryError` 等 `Error` 类错误会直接透传，不做无意义重试。
+
+### 线程中断（`InterruptedException`）后会继续重试吗？
+
+不会。遇到 `InterruptedException` 时，框架会立即停止后续重试，恢复线程中断标记并抛出异常。
+
+### 为什么任务成功后，后端依然显示处于进行中？
+
+持久化模式下的清理（`complete` call）通常是异步的。业务成功返回与后端状态更新之间可能存在极短的时间差，因此后端恢复逻辑必须具备幂等性。
+
+### 应用关闭时需要注意什么？
+
+在非 Spring 场景下，建议显式调用 `RetryExecutorManager.global().shutdown()` 以优雅关闭内置线程池。
+
 
 ### 模式语义
 
@@ -870,97 +957,6 @@ public String notifyPay(String orderId) {
 
 
 
-## 边界与注意事项
-
-### 1. `maxAttempts` 包含第一次调用
-
-```java
-maxAttempts(3)
-```
-
-表示总共最多执行 3 次，不是“失败后再重试 3 次”。
-
-
-
-### 2. `Error` 不会重试
-
-例如：
-
-* `OutOfMemoryError`
-
-这类错误会直接透传，不会做无意义重试。
-
-
-
-### 3. 同步模式下，中断会立即终止
-
-遇到 `InterruptedException` 时会：
-
-* 恢复线程中断标记
-* 立即抛出
-* 停止后续重试
-
-
-
-### 4. 持久化模式下的清理是异步的
-
-任务成功后，对 intent 的清理通过异步执行器完成，不保证一定在业务返回前已经完成。
-
-这意味着：
-
-* “业务成功”
-* “intent 已被清理”
-
-之间可能存在一个短暂窗口。
-
-因此后端恢复逻辑应具备幂等性。
-
-
-
-### 5. 开启持久化前，先确认参数可序列化
-
-尤其是注解模式，方法参数会被序列化为快照。
-
-需要特别留意：
-
-* Web 请求对象
-* 流对象
-* 本地连接对象
-* 线程上下文
-* 过大对象
-* 循环引用对象
-
-必要时可通过 `@RetryIgnore` 跳过，但跳过后恢复阶段也无法再使用这些参数。
-
-
-
-### 6. 恢复执行不会再次自动托管重试
-
-后端恢复阶段执行的是一次恢复调用，不会重新写 intent，也不会再次自动移交后端。
-
-如果恢复失败：
-
-* 是否再次重试
-* 是否死信
-* 是否告警
-
-这些责任应该由你的后端消费系统承担。
-
-
-
-### 7. 非 Spring 场景注意线程池关闭
-
-应用退出前建议显式调用：
-
-```java
-RetryExecutorManager.global().shutdown();
-```
-
-如需 daemon 线程，可配置：
-
-```text
--Dteam4u.retry.executors.daemon=true
-```
 
 
 
@@ -990,7 +986,7 @@ graph TD
     D -->|否| F{是否存在 RetryBackend}
     F -->|否| G[抛出最终异常]
     F -->|是| H[handoff intent 到后端]
-    H --> I[抛出 RetryExhaustedException]
+    H --> I[抛出 RetryHandoffException]
     I --> J[Worker 拉起恢复任务]
     J --> K[RecoveryHandlerRegistry 路由]
 ```

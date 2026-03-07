@@ -310,13 +310,13 @@ public class Retryer {
         }
     }
 
-    private RetryExhaustedException enqueueToBackend(String intentId, Throwable cause) {
+    private RetryHandoffException enqueueToBackend(String intentId, Throwable cause) {
         long nextDelay = policy.getDelayMillis(getNextAttemptAfterInMemory());
         if (intentId == null || intentId.isEmpty()) {
             throw new IllegalStateException("Persistent retry handoff requires a prepared intent id.");
         }
         backendAdapter.handoff(intentId, nextDelay);
-        return new RetryExhaustedException("In-memory retries exhausted; task has been handed over to backend queue.",
+        return new RetryHandoffException("In-memory retries exhausted; task has been handed over to backend queue.",
                 cause);
     }
 

@@ -2,7 +2,7 @@ package com.team4u.framework.retry.proxy;
 
 import com.team4u.framework.base.backoff.Backoff;
 import com.team4u.framework.proxy.ProxyBuilder;
-import com.team4u.framework.retry.RetryExhaustedException;
+import com.team4u.framework.retry.RetryHandoffException;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.TestLeaseBackend;
 import com.team4u.framework.retry.policy.NamedRetryPolicy;
@@ -120,8 +120,8 @@ public class RetryInterceptorTest {
 
         try {
             proxy.send("visible", "top-secret");
-            Assert.fail("expected RetryExhaustedException");
-        } catch (RetryExhaustedException expected) {
+            Assert.fail("expected RetryHandoffException");
+        } catch (RetryHandoffException expected) {
             // expected
         }
 

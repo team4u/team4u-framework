@@ -1,6 +1,7 @@
 package com.team4u.framework.retry.proxy;
 
 import com.team4u.framework.proxy.ProxyBuilder;
+import com.team4u.framework.retry.RetryHandoffException;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.TestLeaseBackend;
 import com.team4u.framework.retry.policy.NamedRetryPolicy;
@@ -71,11 +72,11 @@ public class PersistentFallbackTest {
                 .addInterceptor(interceptor)
                 .build();
 
-        // 4. 执行业务方法（由于 persistent=true，重试耗尽后应抛出 RetryExhaustedException 告知任务已被后台接管）
+        // 4. 执行业务方法（由于 persistent=true，重试耗尽后应抛出 RetryHandoffException 告知任务已被后台接管）
         try {
             service.doSomething("test-arg");
-            Assert.fail("预期抛出 RetryExhaustedException");
-        } catch (com.team4u.framework.retry.RetryExhaustedException e) {
+            Assert.fail("预期抛出 RetryHandoffException");
+        } catch (RetryHandoffException e) {
             // success
         }
 

@@ -79,24 +79,15 @@
 1. 同一时刻只允许一个 worker 合法写回该任务
 2. worker 异常退出后，任务会在租约过期后重新变得可抢占
 
-### 什么是 queue，什么是 taskType
+### queue 和 taskType 的职责区别
 
-当前实现里，`queue` 和 `taskType` 扮演不同角色：
+- `queue`：决定任务会被哪一类 Worker 订阅和拉取，是调度边界
+- `taskType`：决定同一个 queue 内由哪个本地处理器处理，是路由键
 
-#### queue：调度边界
+可以把它理解成：
+- queue 解决“谁来拿到任务”
+- taskType 解决“拿到以后谁来处理”
 
-后端抢任务时只按 `queue` 过滤。Worker 订阅的也是 `queue`。
-
-#### taskType：本地路由键
-
-抢到任务后，Worker 再根据 `taskType` 找到本地注册的 `LeaseTaskHandler`。
-
-也就是说：
-
-* 后端负责把某个 queue 的任务分配出去
-* Worker 本地负责决定某个 taskType 由哪个处理器来执行
-
-这让框架既保留了统一调度，又允许一个队列下承载多种业务类型。
 
 ## 框架能做什么
 
@@ -218,42 +209,26 @@ JDBC 持久化实现 `JdbcLeaseBackend`。
 
 后端契约测试模块，定义两类后端必须满足的统一行为。
 
-## 五分钟快速上手
+## 5 分钟跑通一个任务
 
-下面用内存版后端说明最基本的接入方式。
+下面用内存版后端说明最基本的接入方式，通过 4 步完成闭环。
 
-### 引入后端
-
+### 1. 引入后端
 ```java
 LeaseBackend backend = new InMemoryLeaseBackend();
 ```
 
-如果是生产环境，希望任务落库，则使用：
-
-```java
-DataSource dataSource = ...;
-LeaseBackend backend = new JdbcLeaseBackend(dataSource);
-```
-
-### 注册处理器
-
+### 2. 写 Handler 并注册
 ```java
 DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
 
-registry.
-
-register("default","pay",context ->{
-        System.out.println("process payload="+context.getPayload());
+registry.register("default", "pay", context -> {
+    System.out.println("process payload=" + context.getPayload());
+    // 正常返回即为 SUCCEEDED
 });
 ```
 
-这里注册的是：
-
-* 订阅队列：`default`
-* 处理类型：`pay`
-
-### 启动 Worker
-
+### 3. 创建并启动 Worker
 ```java
 LeaseWorker worker = new LeaseWorker(
         backend,
@@ -261,25 +236,15 @@ LeaseWorker worker = new LeaseWorker(
         LeaseWorkerPolicy.builder()
                 .workerId("worker-a")
                 .leaseMillis(30_000L)
-                .pollWaitMillis(1_000L)
                 .build()
 );
 
 worker.start("lease-worker-main");
 ```
 
-启动后，Worker 会持续：
-
-* 读取注册表里的订阅集合
-* 按队列去抢任务
-* 找到对应处理器执行
-* 成功后自动 `ack`
-* 失败后按策略 `retry` 或 `fail`
-
-### 发布任务
-
+### 4. 发布任务并观察
 ```java
-String taskId = backend.publish(
+backend.publish(
         LeasePublishRequest.builder()
                 .queue("default")
                 .taskType("pay")
@@ -288,13 +253,11 @@ String taskId = backend.publish(
 );
 ```
 
-### 关闭 Worker
+**预期结果：**
+- handler 正常返回：任务进入 `SUCCEEDED`
+- handler 抛出可重试异常：按 `maxFailures + backoff` 继续重试
+- handler 抛出 `NonRetryableLeaseException`：直接进入 `DEAD`
 
-```java
-worker.shutdown();
-```
-
-`shutdown()` 会等待当前 in-flight 任务处理完成后再退出，而不是立刻粗暴中断。
 
 ## 任务执行模型
 
@@ -504,28 +467,15 @@ Worker 正常执行完成后：
 
 这是框架明确提供的“毒任务 / 业务不可恢复错误”通道。
 
-### 缺失处理器策略
-
-当前实现考虑了这样一种情况：
-
-* Worker 订阅了某个 queue
-* 但本地没有注册对应 `taskType` 的处理器
+### 缺失处理器时会发生什么
 
 可选策略由 `MissingHandlerStrategy` 控制：
 
-#### `FAIL_FAST`
+- `FAIL_FAST`：本地没有对应 handler 时直接按失败处理，任务进入 `DEAD`。
+- `RETRY_LATER`：先释放回队列，等待具备处理能力的 Worker 接手，且不增加 `failureCount`。
 
-立即按失败处理，任务进入 `DEAD`。
+这个对异构 worker 部署场景非常有用。
 
-#### `RETRY_LATER`
-
-不是记失败，而是：
-
-* `release`
-* 按退避策略延迟后重新变为可见
-* `failureCount` 不增加
-
-这个策略很实用，适合做“能力尚未全量发布”的灰度场景。
 
 ### 心跳机制
 
@@ -568,38 +518,13 @@ Worker 正常执行完成后：
 * `heartbeatIntervalMillis`
 * `missingHandlerStrategy`
 
-### 默认值
+### WorkerPolicy 默认行为
 
-如果未显式配置，当前默认行为为：
+- 不显式传入 `LeaseWorkerPolicy` 时，Worker 会使用默认配置
+- `heartbeatIntervalMillis` 默认取 `leaseMillis / 3`
+- `heartbeatIntervalMillis` 必须小于 `leaseMillis`
+- `maxFailures` 必须为正数，或由框架约定为无限重试值 `-1`
 
-* `workerId`：自动生成 `lease-worker-<uuid>`
-* `leaseMillis`：`30000ms`
-* `pollWaitMillis`：`1000ms`
-* `maxFailures`：`8`
-* `backoff`：固定 `1000ms`
-* `heartbeatEnabled`：`true`
-* `heartbeatIntervalMillis`：`leaseMillis / 3`
-* `missingHandlerStrategy`：`FAIL_FAST`
-
-### 重要校验规则
-
-当前代码里有这些硬性约束：
-
-* `leaseMillis > 0`
-* `pollWaitMillis >= 0`
-* `maxFailures` 只能是正数或 `-1`
-* `heartbeatIntervalMillis > 0`
-* 当开启心跳时，`heartbeatIntervalMillis < leaseMillis`
-
-其中：
-
-* `maxFailures = -1` 表示无限重试
-* `shouldRetry(nextFailureCount)` 的规则是：`nextFailureCount < maxFailures`
-
-这意味着：
-
-* `maxFailures = 3` 时，前两次失败会重试
-* 第三次失败会进入 `DEAD`
 
 ## 状态流转语义
 
@@ -610,35 +535,26 @@ Worker 正常执行完成后：
 * `SUCCEEDED`
 * `DEAD`
 
-可以把它理解成下面这张状态图：
+## 状态流转
 
-```text
-publish -> SCHEDULED
-SCHEDULED --acquire--> LEASED
-LEASED --ack--> SUCCEEDED
-LEASED --retry--> SCHEDULED
-LEASED --release--> SCHEDULED
-LEASED --fail--> DEAD
-DEAD --requeueDead--> SCHEDULED
+```mermaid
+stateDiagram-v2
+    [*] --> SCHEDULED: publish
+    SCHEDULED --> LEASED: acquire
+    LEASED --> SUCCEEDED: ack
+    LEASED --> SCHEDULED: retry(delay)
+    LEASED --> SCHEDULED: release(delay)
+    LEASED --> DEAD: fail
+    LEASED --> SCHEDULED: lease expired
 ```
 
 ### `retry` 与 `release` 的区别
 
 这两个动作都会让任务回到 `SCHEDULED`，但语义完全不同：
 
-#### `retry`
+- `retry`：表示这次处理失败了，会增加失败次数（`failureCount + 1`）并记录 `lastError`
+- `release`：表示这次不想继续持有执行权（如本地忙、缺少处理器），但不视为失败
 
-表示“这次执行失败了，但值得再试一次”
-
-* `failureCount + 1`
-* 记录 `lastError`
-
-#### `release`
-
-表示“当前不继续做了，稍后再来”
-
-* `failureCount` 不变
-* `lastError` 保持原样
 
 ### `cancel` 的真实语义
 
@@ -657,89 +573,28 @@ DEAD --requeueDead--> SCHEDULED
 
 这个语义很重要，因为它表示查询结果中的 `lastError` 反映的是当前任务最近一次仍然有效的失败信息。
 
-## 管理与查询能力
+## 管理操作语义
 
-这套代码不只是消费框架，也带了一个比较完整的控制面接口。
+| 操作 | 作用 | 典型场景 | 可能结果 |
+| --- | --- | --- | --- |
+| `reschedule` | 改下次可见时间 | 延后执行、人工改期 | APPLIED / TASK_NOT_FOUND / TERMINAL / ACTIVE_LEASE_PRESENT |
+| `cancel` | 终止任务 | 人工取消、作废任务 | APPLIED / TASK_NOT_FOUND / TERMINAL / ACTIVE_LEASE_PRESENT |
+| `requeueDead` | 把 DEAD 任务重新放回队列 | 修复环境后重跑 | APPLIED / TASK_NOT_FOUND / TERMINAL / ACTIVE_LEASE_PRESENT |
 
-### 查询单个任务
+## JDBC 后端接入
 
-```java
-Optional<LeaseTaskRecord> record = backend.get(taskId);
-```
+1. 执行 `schema/lease_task_mysql.sql`（通常在 `team4u-lease/team4u-lease-jdbc/src/test/resources/sql`）
+2. 创建 `JdbcLeaseBackend`
+3. 根据数据库选择方言
+4. 生产环境建议保留以下索引：
+   - `idx_lease_task_acquire`
+   - `idx_lease_task_worker`
+   - `idx_lease_task_type`
 
-适合查看：
+说明：
+- 当前 PostgreSQL 方言实现沿用 MySQL 兼容逻辑
+- 建议先用 H2 / MySQL 模式验证，再接入正式数据库
 
-* 当前状态
-* 最近错误
-* 当前 worker
-* 失败/投递次数
-* 下一次可见时间
-
-### 分页查询任务
-
-```java
-LeaseTaskPage page = backend.list(
-        LeaseQueryRequest.builder()
-                .queue("default")
-                .taskType("pay")
-                .status(LeaseTaskStatus.SCHEDULED)
-                .page(0)
-                .pageSize(50)
-                .build()
-);
-```
-
-支持过滤：
-
-* queue
-* taskType
-* 多状态集合
-* workerId
-
-默认排序：
-
-* 按 `createdAtMillis ASC`
-* 再按 `taskId ASC`
-
-### 重排执行时间
-
-```java
-backend.reschedule(taskId, 30_000L);
-```
-
-当前实现中：
-
-* 只要不是终态且没有有效租约，就允许重排
-* 会改回 `SCHEDULED`
-* 重新设置 `visibleAtMillis`
-
-### 取消任务
-
-```java
-backend.cancel(taskId);
-```
-
-如果任务仍持有有效租约，会返回：
-
-* `ACTIVE_LEASE_PRESENT`
-
-不会强行打断运行中的任务。
-
-### 重放死信任务
-
-```java
-backend.requeueDead(taskId, 10_000L);
-```
-
-只允许对 `DEAD` 任务执行。
-
-当前实现里：
-
-* 会恢复成 `SCHEDULED`
-* 保留 `failureCount`
-* 保留 `lastError`
-
-这非常适合“修复环境后重新投递”。
 
 ## 两种后端的实现方式
 
