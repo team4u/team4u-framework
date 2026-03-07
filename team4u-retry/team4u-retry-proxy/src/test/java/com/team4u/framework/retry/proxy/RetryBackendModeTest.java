@@ -1,7 +1,7 @@
 package com.team4u.framework.retry.proxy;
 
 import com.team4u.framework.proxy.ProxyBuilder;
-import com.team4u.framework.retry.RetryExhaustedException;
+import com.team4u.framework.retry.RetryHandoffException;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.TestLeaseBackend;
 import com.team4u.framework.retry.policy.NamedRetryPolicy;
@@ -49,8 +49,8 @@ public class RetryBackendModeTest {
         try {
             service.failingCall();
             Assert.fail("预期抛出原始异常");
-        } catch (RetryExhaustedException e) {
-            Assert.fail("内存模式不应抛出 RetryExhaustedException");
+        } catch (RetryHandoffException e) {
+            Assert.fail("内存模式不应抛出 RetryHandoffException");
         } catch (RuntimeException e) {
             Assert.assertEquals("fail", e.getMessage());
         }
@@ -66,8 +66,8 @@ public class RetryBackendModeTest {
 
         try {
             service.failingCall();
-            Assert.fail("预期抛出 RetryExhaustedException");
-        } catch (RetryExhaustedException expected) {
+            Assert.fail("预期抛出 RetryHandoffException");
+        } catch (RetryHandoffException expected) {
             // expected
         }
 

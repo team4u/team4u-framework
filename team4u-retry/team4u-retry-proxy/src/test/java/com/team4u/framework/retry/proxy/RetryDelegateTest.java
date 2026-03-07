@@ -1,7 +1,7 @@
 package com.team4u.framework.retry.proxy;
 
 import cn.hutool.json.JSONUtil;
-import com.team4u.framework.retry.RetryExhaustedException;
+import com.team4u.framework.retry.RetryHandoffException;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.TestLeaseBackend;
 import com.team4u.framework.retry.policy.NamedRetryPolicy;
@@ -129,8 +129,8 @@ public class RetryDelegateTest {
                         throw new RuntimeException("fail");
                     },
                     () -> backend);
-            Assert.fail("expected RetryExhaustedException");
-        } catch (RetryExhaustedException expected) {
+            Assert.fail("expected RetryHandoffException");
+        } catch (RetryHandoffException expected) {
             // expected
         }
 
@@ -186,8 +186,8 @@ public class RetryDelegateTest {
                         throw new RuntimeException("fail");
                     },
                     () -> backend);
-            Assert.fail("expected RetryExhaustedException");
-        } catch (RetryExhaustedException expected) {
+            Assert.fail("expected RetryHandoffException");
+        } catch (RetryHandoffException expected) {
             // expected
         }
 
@@ -227,8 +227,8 @@ public class RetryDelegateTest {
                         throw new RuntimeException("fail");
                     },
                     () -> backend);
-            Assert.fail("expected RetryExhaustedException");
-        } catch (RetryExhaustedException expected) {
+            Assert.fail("expected RetryHandoffException");
+        } catch (RetryHandoffException expected) {
             // expected
         }
 
