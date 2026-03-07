@@ -1,7 +1,7 @@
 package com.team4u.framework.retry.lease;
 
 import com.team4u.framework.lease.LeaseTaskHandler;
-import com.team4u.framework.lease.LeaseWorker;
+import com.team4u.framework.lease.LeaseExecutionContext;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 
 /**
@@ -32,12 +32,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
     }
 
     @Override
-    public String key() {
-        return delegate.key();
-    }
-
-    @Override
-    public void handle(String payload) throws Exception {
-        delegate.recover(payload);
+    public void handle(LeaseExecutionContext context) throws Exception {
+        delegate.recover(context.getPayload());
     }
 }

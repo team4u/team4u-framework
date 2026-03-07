@@ -2,7 +2,16 @@ package com.team4u.framework.retry;
 
 import com.team4u.framework.lease.LeaseBackend;
 import com.team4u.framework.lease.LeaseGrant;
+import com.team4u.framework.lease.LeasePublishRequest;
+import com.team4u.framework.lease.LeaseAcquireRequest;
+import com.team4u.framework.lease.LeaseAdminResult;
+import com.team4u.framework.lease.LeaseQueryRequest;
+import com.team4u.framework.lease.LeaseRuntimeResult;
+import com.team4u.framework.lease.LeaseTaskPage;
+import com.team4u.framework.lease.LeaseTaskRecord;
+import com.team4u.framework.retry.lease.RetryLeaseQueues;
 
+import java.util.Optional;
 import java.util.UUID;
 
 /**
@@ -24,12 +33,10 @@ public abstract class TestLeaseBackend implements LeaseBackend {
     public abstract void submitForDelay(String intentId, String taskType, String payload, long delay);
 
     @Override
-    public String publish(String taskType, String payload) {
-        return publish(taskType, payload, 0L);
-    }
-
-    @Override
-    public String publish(String taskType, String payload, long delayMillis) {
+    public String publish(LeasePublishRequest request) {
+        String taskType = request == null ? null : request.getTaskType();
+        String payload = request == null ? null : request.getPayload();
+        long delayMillis = request == null ? 0L : request.getDelayMillis();
         if (delayMillis >= PREPARE_THRESHOLD_MILLIS) {
             return saveIntent(taskType, payload);
         }
@@ -39,33 +46,55 @@ public abstract class TestLeaseBackend implements LeaseBackend {
     }
 
     @Override
-    public void reschedule(String taskId, long delayMillis) {
+    public LeaseAdminResult reschedule(String taskId, long delayMillis) {
         submitForDelay(taskId, null, null, delayMillis);
+        return LeaseAdminResult.APPLIED;
     }
 
     @Override
-    public void cancel(String taskId) {
+    public LeaseAdminResult cancel(String taskId) {
         completeIntent(taskId);
+        return LeaseAdminResult.APPLIED;
     }
 
     @Override
-    public LeaseGrant acquire(String workerId, long leaseMillis, long waitTimeoutMillis) {
+    public LeaseAdminResult requeueDead(String taskId, long delayMillis) {
+        submitForDelay(taskId, null, null, delayMillis);
+        return LeaseAdminResult.APPLIED;
+    }
+
+    @Override
+    public LeaseGrant acquire(LeaseAcquireRequest request) {
         return null;
     }
 
     @Override
-    public void ack(String taskId, String workerId, String leaseToken) {
+    public LeaseRuntimeResult ack(String taskId, String workerId, String leaseToken) {
+        return LeaseRuntimeResult.APPLIED;
     }
 
     @Override
-    public void retry(String taskId, String workerId, String leaseToken, long delayMillis, Throwable cause) {
+    public LeaseRuntimeResult retry(String taskId, String workerId, String leaseToken, long delayMillis, Throwable cause) {
+        return LeaseRuntimeResult.APPLIED;
     }
 
     @Override
-    public void fail(String taskId, String workerId, String leaseToken, Throwable cause) {
+    public LeaseRuntimeResult fail(String taskId, String workerId, String leaseToken, Throwable cause) {
+        return LeaseRuntimeResult.APPLIED;
     }
 
     @Override
-    public void heartbeat(String taskId, String workerId, String leaseToken, long extendMillis) {
+    public LeaseRuntimeResult heartbeat(String taskId, String workerId, String leaseToken, long extendMillis) {
+        return LeaseRuntimeResult.APPLIED;
+    }
+
+    @Override
+    public Optional<LeaseTaskRecord> get(String taskId) {
+        return Optional.empty();
+    }
+
+    @Override
+    public LeaseTaskPage list(LeaseQueryRequest request) {
+        return LeaseTaskPage.builder().total(0).page(0).pageSize(0).build();
     }
 }

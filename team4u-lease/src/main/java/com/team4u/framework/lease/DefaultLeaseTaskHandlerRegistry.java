@@ -1,6 +1,8 @@
 package com.team4u.framework.lease;
 
 import java.util.Optional;
+import java.util.LinkedHashSet;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
 
@@ -9,25 +11,46 @@ import java.util.concurrent.ConcurrentMap;
  */
 public class DefaultLeaseTaskHandlerRegistry implements LeaseTaskHandlerRegistry {
 
-    private final ConcurrentMap<String, LeaseTaskHandler> handlers = new ConcurrentHashMap<String, LeaseTaskHandler>();
+    private final ConcurrentMap<String, ConcurrentMap<String, LeaseTaskHandler>> handlers =
+            new ConcurrentHashMap<String, ConcurrentMap<String, LeaseTaskHandler>>();
 
     @Override
-    public void register(LeaseTaskHandler handler) {
+    public void register(String queue, String taskType, LeaseTaskHandler handler) {
         if (handler == null) {
             throw new IllegalArgumentException("handler must not be null");
         }
-        String key = handler.key();
-        if (key == null || key.trim().isEmpty()) {
-            throw new IllegalArgumentException("handler.key() must not be blank");
+        if (queue == null || queue.trim().isEmpty()) {
+            throw new IllegalArgumentException("queue must not be blank");
         }
-        handlers.put(key, handler);
+        if (taskType == null || taskType.trim().isEmpty()) {
+            throw new IllegalArgumentException("taskType must not be blank");
+        }
+        ConcurrentMap<String, LeaseTaskHandler> queueHandlers = handlers.computeIfAbsent(queue,
+                ignored -> new ConcurrentHashMap<String, LeaseTaskHandler>());
+        LeaseTaskHandler previous = queueHandlers.putIfAbsent(taskType, handler);
+        if (previous != null) {
+            throw new IllegalStateException("LeaseTaskHandler already registered. queue=" + queue + ", taskType=" + taskType);
+        }
     }
 
     @Override
-    public Optional<LeaseTaskHandler> get(String taskType) {
-        if (taskType == null) {
+    public Optional<LeaseTaskHandler> get(String queue, String taskType) {
+        if (queue == null || taskType == null) {
             return Optional.empty();
         }
-        return Optional.ofNullable(handlers.get(taskType));
+        ConcurrentMap<String, LeaseTaskHandler> queueHandlers = handlers.get(queue);
+        if (queueHandlers == null) {
+            return Optional.empty();
+        }
+        return Optional.ofNullable(queueHandlers.get(taskType));
+    }
+
+    @Override
+    public Set<LeaseSubscription> subscriptions() {
+        Set<LeaseSubscription> subscriptions = new LinkedHashSet<LeaseSubscription>();
+        for (String queue : handlers.keySet()) {
+            subscriptions.add(LeaseSubscription.builder().queue(queue).build());
+        }
+        return subscriptions;
     }
 }

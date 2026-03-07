@@ -1,6 +1,10 @@
 package com.team4u.framework.retry;
 
+import com.team4u.framework.lease.LeaseAdminService;
 import com.team4u.framework.lease.LeaseBackend;
+import com.team4u.framework.lease.LeasePublishRequest;
+import com.team4u.framework.lease.LeaseProducer;
+import com.team4u.framework.retry.lease.RetryLeaseQueues;
 import com.team4u.framework.retry.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.exception.RetrySerializationException;
 
@@ -26,7 +30,8 @@ public class Retryer {
     /**
      * 重试持久化后端（当前接入了 LeaseBackend 实现分布式任务保障）
      */
-    private final LeaseBackend backend;
+    private final LeaseProducer producer;
+    private final LeaseAdminService adminService;
     /**
      * 当前进程内允许执行的最大尝试次数
      */
@@ -43,8 +48,9 @@ public class Retryer {
      */
     private Retryer(Builder builder) {
         this.policy = builder.policy;
-        this.backend = builder.backend;
-        this.localAttempts = resolveLocalAttempts(policy, backend);
+        this.producer = builder.producer;
+        this.adminService = builder.adminService;
+        this.localAttempts = resolveLocalAttempts(policy, producer);
         this.cleanupExecutor = builder.cleanupExecutor != null ? builder.cleanupExecutor
                 : RetryExecutorManager.global().getCleanupExecutor();
     }
@@ -79,7 +85,7 @@ public class Retryer {
      * @throws Exception 业务异常或重试失败异常
      */
     public <T> T execute(Callable<T> task) throws Exception {
-        if (backend != null) {
+        if (producer != null) {
             throw new IllegalStateException(
                     "Retryer.execute(Callable) supports memory mode only. Use execute(taskType, payloadBuilder, task) "
                             + "or executeAsync(taskType, payloadBuilder, ...) when a backend is configured.");
@@ -124,7 +130,7 @@ public class Retryer {
     public <T> CompletableFuture<T> executeAsync(
             java.util.function.Supplier<CompletableFuture<T>> asyncTask,
             ScheduledExecutorService scheduler) {
-        if (backend != null) {
+        if (producer != null) {
             throw new IllegalStateException(
                     "Retryer.executeAsync(asyncTask, scheduler) supports memory mode only. "
                             + "Use executeAsync(taskType, payloadBuilder, ...) when a backend is configured.");
@@ -151,9 +157,9 @@ public class Retryer {
         while (true) {
             try {
                 T result = task.call();
-                if (intentContext.intentId != null) {
+                if (intentContext.intentId != null && adminService != null) {
                     String finalIntentId = intentContext.intentId;
-                    CompletableFuture.runAsync(() -> backend.cancel(finalIntentId), cleanupExecutor);
+                    CompletableFuture.runAsync(() -> adminService.cancel(finalIntentId), cleanupExecutor);
                 }
                 return result;
             } catch (Throwable ex) {
@@ -161,10 +167,9 @@ public class Retryer {
                 RetryDecisionType decision = evaluateDecision(attempt, cause);
 
                 if (decision == RetryDecisionType.FAIL_TERMINAL) {
-                    if (intentContext.intentId != null) {
+                    if (intentContext.intentId != null && adminService != null) {
                         String finalIntentId = intentContext.intentId;
-                        CompletableFuture.runAsync(() -> backend.cancel(finalIntentId),
-                                cleanupExecutor);
+                        CompletableFuture.runAsync(() -> adminService.cancel(finalIntentId), cleanupExecutor);
                     }
                     if (cause instanceof Exception) {
                         throw (Exception) cause;
@@ -203,7 +208,7 @@ public class Retryer {
         if (attempt < localAttempts) {
             return RetryDecisionType.RETRY_IN_MEMORY;
         }
-        if (backend != null && shouldFallbackToBackend()) {
+        if (producer != null && adminService != null && shouldFallbackToBackend()) {
             return RetryDecisionType.HANDOFF_TO_BACKEND;
         }
         return RetryDecisionType.FAIL_TERMINAL;
@@ -226,8 +231,8 @@ public class Retryer {
      * @param backend 持久化后端
      * @return 本地尝试次数
      */
-    private int resolveLocalAttempts(RetryPolicy policy, LeaseBackend backend) {
-        if (backend == null) {
+    private int resolveLocalAttempts(RetryPolicy policy, LeaseProducer producer) {
+        if (producer == null) {
             if (policy.getMaxAttempts() == -1) {
                 return Integer.MAX_VALUE;
             }
@@ -321,7 +326,9 @@ public class Retryer {
      */
     private <T> void handleAsyncSuccess(String intentId, CompletableFuture<T> promise, T result) {
         if (intentId != null) {
-            CompletableFuture.runAsync(() -> backend.cancel(intentId), cleanupExecutor);
+            if (adminService != null) {
+                CompletableFuture.runAsync(() -> adminService.cancel(intentId), cleanupExecutor);
+            }
         }
         promise.complete(result);
     }
@@ -372,7 +379,9 @@ public class Retryer {
             }
         } else {
             if (intentId != null) {
-                CompletableFuture.runAsync(() -> backend.cancel(intentId), cleanupExecutor);
+                if (adminService != null) {
+                    CompletableFuture.runAsync(() -> adminService.cancel(intentId), cleanupExecutor);
+                }
             }
             promise.completeExceptionally(cause);
         }
@@ -386,12 +395,17 @@ public class Retryer {
      * @return 意图上下文
      */
     private IntentContext prepareIntent(String taskType, RetryPayloadBuilder payloadBuilder) {
-        if (backend == null) {
+        if (producer == null) {
             return new IntentContext(null);
         }
         try {
             String payload = payloadBuilder.build(RetryPayloadContext.prepareIntent());
-            String intentId = backend.publish(taskType, payload, PREPARED_INTENT_DELAY_MILLIS);
+            String intentId = producer.publish(LeasePublishRequest.builder()
+                    .queue(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE)
+                    .taskType(taskType)
+                    .payload(payload)
+                    .delayMillis(PREPARED_INTENT_DELAY_MILLIS)
+                    .build());
             if (intentId == null || intentId.isEmpty()) {
                 throw new IllegalStateException(
                         "Persistent retry requires non-null taskId from backend.publish()");
@@ -415,7 +429,7 @@ public class Retryer {
         if (intentId == null || intentId.isEmpty()) {
             throw new IllegalStateException("Persistent retry handoff requires a prepared intent id.");
         }
-        backend.reschedule(intentId, nextDelay);
+        adminService.reschedule(intentId, nextDelay);
         return new RetryExhaustedException("In-memory retries exhausted; task has been handed over to backend queue.",
                 cause);
     }
@@ -499,9 +513,10 @@ public class Retryer {
     /**
      * Retryer 建造者
      */
-    public static class Builder {
+        public static class Builder {
         private RetryPolicy policy;
-        private LeaseBackend backend;
+        private LeaseProducer producer;
+        private LeaseAdminService adminService;
         private Executor cleanupExecutor;
 
         /**
@@ -521,8 +536,19 @@ public class Retryer {
          * @param backend 后端实例（集成自 team4u-lease）
          * @return 当前建造者
          */
+        public Builder producer(LeaseProducer producer) {
+            this.producer = producer;
+            return this;
+        }
+
+        public Builder adminService(LeaseAdminService adminService) {
+            this.adminService = adminService;
+            return this;
+        }
+
         public Builder backend(LeaseBackend backend) {
-            this.backend = backend;
+            this.producer = backend;
+            this.adminService = backend;
             return this;
         }
 
