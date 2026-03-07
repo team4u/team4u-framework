@@ -130,7 +130,7 @@ public class RetryLeaseWorkerTest {
 
         Retryer retryer = Retryer.builder()
                 .policy(RetryPolicy.builder().maxAttempts(3).localAttempts(1).build())
-                .backend(new LeaseRetryBackend(leaseBackend, leaseBackend))
+                .backend(new LeaseRetryBackend(leaseBackend))
                 .build();
 
         worker.start("retry-lease-worker-e2e-test");

@@ -12,6 +12,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
 
+/**
+ * 脏数据（异常数据）重试场景测试
+ * <p>
+ * 重点验证序列化失败、模式切换边界以及各类异常场景下的重试行为。
+ */
 public class PoisonDataTest {
 
     private final TestLeaseBackend mockBackend = new TestLeaseBackend() {
@@ -23,7 +28,6 @@ public class PoisonDataTest {
         @Override
         public void completeIntent(String intentId) {
         }
-
 
         @Override
         public void markTerminalFailure(String intentId, Throwable cause) {

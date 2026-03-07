@@ -7,11 +7,14 @@ import java.lang.reflect.Parameter;
 
 /**
  * 基于 Hutool JSONUtil 实现的重试上下文序列化器
- *
- * @author antigravity
+ * <p>
+ * 将方法调用参数通过 Hutool 的 JSON 工具转换为 JSON 字符串。
  */
 public class HutoolRetryContextSerializer implements RetryContextSerializer {
 
+    /**
+     * 全局默认实例
+     */
     public static final HutoolRetryContextSerializer INSTANCE = new HutoolRetryContextSerializer();
 
     @Override
@@ -30,7 +33,8 @@ public class HutoolRetryContextSerializer implements RetryContextSerializer {
         } catch (Exception e) {
             throw new RetrySerializationException(
                     "重试参数序列化失败。类型: " + arg.getClass().getName()
-                            + ", 错误信息: " + e.getMessage(), e);
+                            + ", 错误信息: " + e.getMessage(),
+                    e);
         }
     }
 }

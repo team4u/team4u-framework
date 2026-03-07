@@ -18,6 +18,11 @@ import org.junit.Test;
 import java.util.Arrays;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * SnapshotRecoveryHandler 恢复器测试
+ * <p>
+ * 验证通过任务快照恢复原始方法执行现场的准确性与幂等性。
+ */
 public class SnapshotRecoveryHandlerTest {
 
     @Before

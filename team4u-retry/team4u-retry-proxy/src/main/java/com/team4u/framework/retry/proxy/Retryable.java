@@ -3,26 +3,30 @@ package com.team4u.framework.retry.proxy;
 import java.lang.annotation.*;
 
 /**
- * 标识方法或类支持自动重试
+ * 重试机制标识注解
  * <p>
- * 结合 team4u-proxy 或 Spring AOP 使用，可实现对业务方法的透明重试增强。
+ * 该注解用于标识方法或类支持自动重试增强。当应用于类时，类中所有公共方法都将具备重试能力。
+ * 结合 team4u-proxy 或 Spring AOP 使用，可实现对业务逻辑的透明化重试。
  */
-@Target({ElementType.METHOD, ElementType.TYPE})
+@Target({ ElementType.METHOD, ElementType.TYPE })
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 @Documented
 public @interface Retryable {
 
     /**
-     * 重试策略标识 Key
+     * 重试策略标识名称
+     * <p>
+     * 对应重试策略注册表中的 Key，默认为 "default"。可通过配置中心动态调整策略参数。
      */
     String policy() default "default";
 
     /**
-     * 业务任务类型
+     * 重试任务类型标识
      * <p>
-     * 持久化模式下，系统发生宕机后，Worker 根据此类型查找对应的处理器进行恢复。
-     * 若未指定，则由运行时模式自动推导默认值。
+     * 在持久化重试模式下，系统发生故障（如宕机）后，后台 Worker 会根据此任务类型查找
+     * 对应的恢复处理器（RecoveryHandler）进行任务恢复。
+     * 若未指定，则系统会根据运行时环境自动推导默认值。
      */
     String taskType() default "";
 }

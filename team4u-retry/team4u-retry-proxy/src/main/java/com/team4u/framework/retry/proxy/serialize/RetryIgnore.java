@@ -3,12 +3,11 @@ package com.team4u.framework.retry.proxy.serialize;
 import java.lang.annotation.*;
 
 /**
- * 标记重试快照构建时应忽略的参数
+ * 重试参数忽略注解
  * <p>
- * 被此注解标记的参数在持久化重试快照时将被跳过，
- * 适用于 HttpServletRequest、InputStream 或超大对象等无法或无需序列化的场景。
- *
- * @author antigravity
+ * 用于标记在构建重试任务快照时应忽略的方法参数。
+ * 被此注解标记的参数在持久化序列化过程中将被跳过，
+ * 适用于 HttpServletRequest、InputStream 或超大对象等无法或无需持久化的场景。
  */
 @Target(ElementType.PARAMETER)
 @Retention(RetentionPolicy.RUNTIME)

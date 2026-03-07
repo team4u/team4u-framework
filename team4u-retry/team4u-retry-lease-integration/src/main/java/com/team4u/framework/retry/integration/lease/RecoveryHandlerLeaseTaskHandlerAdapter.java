@@ -4,14 +4,19 @@ import com.team4u.framework.lease.LeaseExecutionContext;
 import com.team4u.framework.lease.LeaseTaskHandler;
 import com.team4u.framework.lease.LeaseWorker;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
+import lombok.Getter;
 
 /**
  * 将 {@link RecoveryHandler} 适配为 {@link LeaseTaskHandler} 的包装类。
  * <p>
  * 使得原有的重试恢复逻辑可以无缝接入 {@link LeaseWorker} 的任务执行流程中。
  */
+@Getter
 public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler {
 
+    /**
+     * 获取原始的恢复处理器
+     */
     private final RecoveryHandler delegate;
 
     /**
@@ -21,15 +26,6 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
      */
     public RecoveryHandlerLeaseTaskHandlerAdapter(RecoveryHandler delegate) {
         this.delegate = delegate;
-    }
-
-    /**
-     * 获取原始的恢复处理器
-     *
-     * @return 原始处理器
-     */
-    public RecoveryHandler getDelegate() {
-        return delegate;
     }
 
     @Override
