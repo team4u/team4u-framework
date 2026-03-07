@@ -25,7 +25,7 @@ public class RetryPolicy {
     /**
      * 内存重试配额（可选，未设置时将自动推导）
      */
-    private final Integer inMemoryAttempts;
+    private final Integer localAttempts;
     private final Backoff backoff;
     private final Set<Class<? extends Throwable>> retryOnExceptions;
     private final Set<Class<? extends Throwable>> abortOnExceptions;
@@ -33,7 +33,7 @@ public class RetryPolicy {
 
     private RetryPolicy(Builder builder) {
         this.maxAttempts = builder.maxAttempts;
-        this.inMemoryAttempts = builder.inMemoryAttempts;
+        this.localAttempts = builder.localAttempts;
         this.backoff = builder.backoff;
         this.retryOnExceptions = Collections.unmodifiableSet(new HashSet<>(builder.retryOnExceptions));
         this.abortOnExceptions = Collections.unmodifiableSet(new HashSet<>(builder.abortOnExceptions));
@@ -134,7 +134,7 @@ public class RetryPolicy {
         private final Set<Class<? extends Throwable>> retryOnExceptions = new HashSet<>();
         private final Set<Class<? extends Throwable>> abortOnExceptions = new HashSet<>();
         private int maxAttempts = 3;
-        private Integer inMemoryAttempts;
+        private Integer localAttempts;
         private Backoff backoff = Backoff.fixed(1000);
         private String conditionExpression;
 
@@ -150,13 +150,13 @@ public class RetryPolicy {
         }
 
         /**
-         * 设置内存重试尝试次数
+         * 设置本地进程内尝试次数
          *
-         * @param inMemoryAttempts 内存尝试配额
+         * @param localAttempts 本地尝试配额
          * @return 构建器自身
          */
-        public Builder inMemoryAttempts(int inMemoryAttempts) {
-            this.inMemoryAttempts = inMemoryAttempts;
+        public Builder localAttempts(int localAttempts) {
+            this.localAttempts = localAttempts;
             return this;
         }
 
@@ -226,11 +226,11 @@ public class RetryPolicy {
             if (maxAttempts == 0 || maxAttempts < -1) {
                 throw new IllegalArgumentException("maxAttempts must be greater than 0 or -1 (infinite retries)");
             }
-            if (inMemoryAttempts != null && inMemoryAttempts <= 0) {
-                throw new IllegalArgumentException("inMemoryAttempts must be greater than 0");
+            if (localAttempts != null && localAttempts <= 0) {
+                throw new IllegalArgumentException("localAttempts must be greater than 0");
             }
-            if (maxAttempts != -1 && inMemoryAttempts != null && inMemoryAttempts > maxAttempts) {
-                throw new IllegalArgumentException("inMemoryAttempts must not be greater than maxAttempts");
+            if (maxAttempts != -1 && localAttempts != null && localAttempts > maxAttempts) {
+                throw new IllegalArgumentException("localAttempts must not be greater than maxAttempts");
             }
             return new RetryPolicy(this);
         }

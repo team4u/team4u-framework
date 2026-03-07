@@ -18,9 +18,9 @@ public class RetryPolicyConfig {
      */
     private int maxAttempts = 3;
     /**
-     * 内存阶段尝试次数
+     * 本地进程内尝试次数
      */
-    private Integer inMemoryAttempts;
+    private Integer localAttempts;
     /**
      * 退避类型：fixed, increment, exponential, exponentialJitter
      */

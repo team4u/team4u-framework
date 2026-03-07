@@ -1,7 +1,6 @@
 package com.team4u.framework.retry.proxy;
 
 import com.team4u.framework.proxy.ProxyBuilder;
-import com.team4u.framework.retry.RetryDurability;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.TestLeaseBackend;
 import com.team4u.framework.retry.recovery.RetryTaskTypes;
@@ -29,7 +28,7 @@ public class PersistentFallbackTest {
 
             @Override
             public RetryPolicy getPolicy() {
-                return RetryPolicy.builder().maxAttempts(3).inMemoryAttempts(1).build();
+                return RetryPolicy.builder().maxAttempts(3).localAttempts(1).build();
             }
         });
 
@@ -38,7 +37,10 @@ public class PersistentFallbackTest {
         TestLeaseBackend mockBackend = new TestLeaseBackend() {
             @Override
             public String saveIntent(String queueName, String contextJson) {
-                return null;
+                Assert.assertEquals(RetryTaskTypes.DEFAULT_PROXY_RECOVERY, queueName);
+                Assert.assertTrue("Context snippet should contain method name", contextJson.contains("doSomething"));
+                Assert.assertTrue("Context snippet should contain arg value", contextJson.contains("test-arg"));
+                return "intent";
             }
 
             @Override
@@ -52,9 +54,9 @@ public class PersistentFallbackTest {
             @Override
             public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
                 submitCount.incrementAndGet();
-                Assert.assertEquals(RetryTaskTypes.DEFAULT_PROXY_RECOVERY, queueName);
-                Assert.assertTrue("Context snippet should contain method name", contextJson.contains("doSomething"));
-                Assert.assertTrue("Context snippet should contain arg value", contextJson.contains("test-arg"));
+                Assert.assertNull(queueName);
+                Assert.assertNull(contextJson);
+                Assert.assertEquals("intent", intentId);
                 Assert.assertEquals(1000, delayMs);
             }
         };
@@ -79,7 +81,7 @@ public class PersistentFallbackTest {
     }
 
     public interface TestService {
-        @Retryable(policy = "fallback-test", durability = RetryDurability.MEMORY_FALLBACK)
+        @Retryable(policy = "fallback-test")
         void doSomething(String arg);
     }
 

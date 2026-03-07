@@ -2,7 +2,9 @@ package com.team4u.framework.retry.proxy;
 
 import cn.hutool.crypto.digest.DigestUtil;
 import com.team4u.framework.lease.LeaseBackend;
-import com.team4u.framework.retry.*;
+import com.team4u.framework.retry.RetryPayloadBuilder;
+import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.Retryer;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.backend.serialize.HutoolRetryTaskSnapshotSerializer;
 import com.team4u.framework.retry.backend.serialize.RetryTaskSnapshotSerializer;
@@ -20,7 +22,6 @@ import java.util.*;
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
 
@@ -73,8 +74,6 @@ public class RetryDelegate {
         }
 
         String policyKey = retryable.policy();
-        RetryDurability durability = retryable.durability();
-        String taskType = resolveTaskType(method, retryable, durability);
 
         // 获取重试策略，优先从动态注册表获取
         RetryPolicy policy = Optional.ofNullable(DynamicRetryPolicyRegistry.getPolicy(policyKey))
@@ -83,28 +82,28 @@ public class RetryDelegate {
                         .orElseThrow(() -> new IllegalArgumentException("未找到重试策略: " + policyKey)));
 
         LeaseBackend backend = backendSupplier != null ? backendSupplier.get() : null;
-        validateBackendIfNeeded(method, policyKey, durability, backend);
+        boolean persistent = backend != null;
+        String taskType = resolveTaskType(method, retryable, persistent);
 
         boolean isAsync = CompletableFuture.class.isAssignableFrom(method.getReturnType());
-        RetryPayloadBuilder payloadBuilder = createPayloadBuilder(method, target, args, taskType, policy, durability);
+        RetryPayloadBuilder payloadBuilder = createPayloadBuilder(method, target, args, taskType, policy, persistent);
 
         Retryer retryer = Retryer.builder()
                 .policy(policy)
                 .backend(backend)
-                .durability(durability)
                 .build();
 
         if (isAsync) {
-            return executeAsync(proceedTask, retryer, durability, taskType, payloadBuilder);
+            return executeAsync(proceedTask, retryer, persistent, taskType, payloadBuilder);
         } else {
-            return executeSync(proceedTask, retryer, durability, taskType, payloadBuilder);
+            return executeSync(proceedTask, retryer, persistent, taskType, payloadBuilder);
         }
     }
 
-    private Object executeAsync(Callable<Object> proceedTask, Retryer retryer, RetryDurability durability,
+    private Object executeAsync(Callable<Object> proceedTask, Retryer retryer, boolean persistent,
                                 String taskType, RetryPayloadBuilder payloadBuilder) {
         ScheduledExecutorService executor = scheduler != null ? scheduler : RetryExecutorManager.global().getScheduler();
-        if (durability == RetryDurability.MEMORY_ONLY) {
+        if (!persistent) {
             return retryer.executeAsync(
                     () -> invokeProceedTask(proceedTask),
                     executor);
@@ -116,9 +115,9 @@ public class RetryDelegate {
                 executor);
     }
 
-    private Object executeSync(Callable<Object> proceedTask, Retryer retryer, RetryDurability durability,
+    private Object executeSync(Callable<Object> proceedTask, Retryer retryer, boolean persistent,
                                String taskType, RetryPayloadBuilder payloadBuilder) throws Throwable {
-        if (durability == RetryDurability.MEMORY_ONLY) {
+        if (!persistent) {
             try {
                 return retryer.execute(proceedTask);
             } catch (Exception | Error e) {
@@ -152,27 +151,14 @@ public class RetryDelegate {
     }
 
     /**
-     * 校验重试后端配置
-     */
-    private void validateBackendIfNeeded(Method method, String policyKey, RetryDurability durability,
-                                         LeaseBackend backend) {
-        if (durability == RetryDurability.MEMORY_ONLY || backend != null) {
-            return;
-        }
-        String methodSignature = method != null ? method.toGenericString() : "<unknown-method>";
-        throw new IllegalStateException(
-                "当可靠性级别为 [" + durability + "] 时必须提供重试后端。方法: " + methodSignature + ", 策略: " + policyKey);
-    }
-
-    /**
      * 解析任务类型，若未显式指定则根据方法名或默认规则生成
      */
-    private String resolveTaskType(Method method, Retryable retryable, RetryDurability durability) {
+    private String resolveTaskType(Method method, Retryable retryable, boolean persistent) {
         String declaredTaskType = retryable.taskType();
         if (declaredTaskType != null && !declaredTaskType.trim().isEmpty()) {
             return declaredTaskType;
         }
-        if (durability == RetryDurability.MEMORY_ONLY) {
+        if (!persistent) {
             return method.getName();
         }
         return RetryTaskTypes.DEFAULT_PROXY_RECOVERY;
@@ -186,47 +172,15 @@ public class RetryDelegate {
                                                      Object[] args,
                                                      String taskType,
                                                      RetryPolicy policy,
-                                                     RetryDurability durability) {
-        if (durability == RetryDurability.MEMORY_ONLY) {
-            return context -> {
-                throw new IllegalStateException("内存重试模式下不应调用负载构建器");
-            };
+                                                     boolean persistent) {
+        if (!persistent) {
+            return null;
         }
 
-        Supplier<RetryTaskSnapshot> snapshotSupplier;
-        if (durability == RetryDurability.AT_LEAST_ONCE_DURABLE) {
-            // 实时构建快照，确保数据一致性
-            RetryTaskSnapshot frozenSnapshot = buildFrozenSnapshot(method, target, args, taskType, policy);
-            snapshotSupplier = () -> frozenSnapshot;
-        } else {
-            // 延迟并缓存快照构建结果
-            snapshotSupplier = memoizeSnapshot(() -> buildFrozenSnapshot(method, target, args, taskType, policy));
-        }
+        RetryTaskSnapshot frozenSnapshot = buildFrozenSnapshot(method, target, args, taskType, policy);
 
         return context -> snapshotSerializer.serialize(
-                copySnapshotForAttempt(snapshotSupplier.get(), context.getExecutedAttempts()));
-    }
-
-    /**
-     * 实现快照的延迟加载与结果缓存
-     */
-    private Supplier<RetryTaskSnapshot> memoizeSnapshot(Supplier<RetryTaskSnapshot> snapshotBuilder) {
-        AtomicReference<RetryTaskSnapshot> cachedSnapshot = new AtomicReference<>();
-        Object monitor = new Object();
-        return () -> {
-            RetryTaskSnapshot snapshot = cachedSnapshot.get();
-            if (snapshot != null) {
-                return snapshot;
-            }
-            synchronized (monitor) {
-                snapshot = cachedSnapshot.get();
-                if (snapshot == null) {
-                    snapshot = snapshotBuilder.get();
-                    cachedSnapshot.set(snapshot);
-                }
-                return snapshot;
-            }
-        };
+                copySnapshotForAttempt(frozenSnapshot, context.getExecutedAttempts()));
     }
 
     /**

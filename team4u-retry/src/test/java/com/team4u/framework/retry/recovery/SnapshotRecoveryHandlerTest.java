@@ -2,7 +2,6 @@ package com.team4u.framework.retry.recovery;
 
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.proxy.ProxyBuilder;
-import com.team4u.framework.retry.RetryDurability;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.TestLeaseBackend;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
@@ -77,7 +76,7 @@ public class SnapshotRecoveryHandlerTest {
     }
 
     public interface RecoveryService {
-        @Retryable(policy = "snapshot-recovery", durability = RetryDurability.AT_LEAST_ONCE_DURABLE)
+        @Retryable(policy = "snapshot-recovery")
         void process(String value, int times);
     }
 

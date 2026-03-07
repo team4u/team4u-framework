@@ -13,8 +13,8 @@ public interface LeaseBackend extends LeasePublisher {
      * 在分布式环境下，通过该方法竞争任务所有权（租约）。
      * 若当前无可用任务，该方法会进入等待状态直至超时。
      *
-     * @param workerId         当前请求的 Worker 身份标识
-     * @param leaseMillis      租约时长（毫秒），Worker 需在此时间内完成任务或续约
+     * @param workerId          当前请求的 Worker 身份标识
+     * @param leaseMillis       租约时长（毫秒），Worker 需在此时间内完成任务或续约
      * @param waitTimeoutMillis 阻塞获取的最大等待时长（毫秒）
      * @return 成功获取到的任务准入证（LeaseGrant）；若超时未获取到则返回 null
      * @throws InterruptedException 获取过程中若线程被中断抛出

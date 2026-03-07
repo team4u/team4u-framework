@@ -1,6 +1,7 @@
 package com.team4u.framework.retry.lease;
 
 import com.team4u.framework.lease.LeaseTaskHandler;
+import com.team4u.framework.lease.LeaseWorker;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 
 /**

@@ -1,7 +1,6 @@
 package com.team4u.framework.retry.proxy;
 
 import com.team4u.framework.proxy.ProxyBuilder;
-import com.team4u.framework.retry.RetryDurability;
 import com.team4u.framework.retry.RetryExhaustedException;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.TestLeaseBackend;
@@ -48,7 +47,7 @@ public class RetryInterceptorTest {
             public RetryPolicy getPolicy() {
                 return RetryPolicy.builder()
                         .maxAttempts(2)
-                        .inMemoryAttempts(1)
+                        .localAttempts(1)
                         .build();
             }
         });
@@ -145,7 +144,7 @@ public class RetryInterceptorTest {
     }
 
     public interface IgnoredArgService {
-        @Retryable(policy = "ignore-policy", durability = RetryDurability.MEMORY_FALLBACK)
+        @Retryable(policy = "ignore-policy")
         void send(String name, Object secret);
     }
 
@@ -192,7 +191,8 @@ public class RetryInterceptorTest {
 
         @Override
         public String saveIntent(String queueName, String contextJson) {
-            return null;
+            this.submittedPayload = contextJson;
+            return "intent";
         }
 
         @Override
@@ -205,7 +205,9 @@ public class RetryInterceptorTest {
 
         @Override
         public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
-            this.submittedPayload = contextJson;
+            if (contextJson != null) {
+                this.submittedPayload = contextJson;
+            }
         }
     }
 }

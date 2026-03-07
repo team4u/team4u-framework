@@ -9,9 +9,7 @@ import org.junit.Test;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.ExecutionException;
 import java.util.concurrent.Executors;
-import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class PoisonDataTest {
@@ -37,14 +35,13 @@ public class PoisonDataTest {
     };
 
     /**
-     * 验证 AT_LEAST_ONCE_DURABLE 模式下的快速失败
+     * 验证持久化模式下的快速失败
      */
     @Test
-    public void testStrongConsistencyFailFast() throws Exception {
+    public void testPersistentModeFailFast() throws Exception {
         Retryer retryer = Retryer.builder()
                 .policy(RetryPolicy.builder().build())
                 .backend(mockBackend)
-                .durability(RetryDurability.AT_LEAST_ONCE_DURABLE)
                 .build();
 
         try {
@@ -53,49 +50,18 @@ public class PoisonDataTest {
             }, () -> "ok");
             Assert.fail("预期抛出 IllegalStateException");
         } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("AT_LEAST_ONCE_DURABLE requires serializable arguments"));
+            Assert.assertTrue(e.getMessage().contains("Persistent retry requires serializable arguments"));
             Assert.assertTrue(e.getCause() instanceof RetrySerializationException);
         }
     }
 
     /**
-     * 验证 MEMORY_FALLBACK 模式下的优雅降级失败
+     * 验证内存模式下完全不涉及序列化
      */
     @Test
-    public void testMemoryFallbackGracefulFailure() throws Exception {
-        Retryer retryer = Retryer.builder()
-                .policy(RetryPolicy.builder()
-                        .maxAttempts(3)
-                        .inMemoryAttempts(1) // 强制 1 次内存尝试后降级
-                        .build())
-                .backend(mockBackend)
-                .durability(RetryDurability.MEMORY_FALLBACK)
-                .build();
-
-        try {
-            retryer.execute("task", context -> {
-                throw new RetrySerializationException("serialization failed");
-            }, () -> {
-                throw new RuntimeException("business failed");
-            });
-            Assert.fail("预期抛出 RetryExhaustedException");
-        } catch (RetryExhaustedException e) {
-            Assert.assertTrue("Error message should indicate serialization failure",
-                    e.getMessage().contains("argument serialization failed"));
-            Assert.assertEquals("business failed", e.getCause().getMessage());
-            Assert.assertEquals(1, e.getSuppressed().length);
-            Assert.assertTrue(e.getSuppressed()[0] instanceof RetrySerializationException);
-        }
-    }
-
-    /**
-     * 验证 MEMORY_ONLY 模式下完全不涉及序列化（延迟计算的优势）
-     */
-    @Test
-    public void testMemoryOnlyNoSerialization() throws Exception {
+    public void testMemoryModeNoSerializationWhenUsingPayloadOverload() throws Exception {
         Retryer retryer = Retryer.builder()
                 .policy(RetryPolicy.builder().build())
-                .durability(RetryDurability.MEMORY_ONLY)
                 .build();
 
         AtomicBoolean supplierCalled = new AtomicBoolean(false);
@@ -105,18 +71,64 @@ public class PoisonDataTest {
         }, () -> "ok");
 
         Assert.assertEquals("ok", result);
-        Assert.assertFalse("MEMORY_ONLY 不应触发序列化", supplierCalled.get());
+        Assert.assertFalse("内存模式不应触发序列化", supplierCalled.get());
+    }
+
+    /**
+     * 验证持久化模式下序列化失败发生在业务执行前
+     */
+    @Test
+    public void testPersistentModeSerializationFailsBeforeBusinessExecution() throws Exception {
+        Retryer retryer = Retryer.builder()
+                .policy(RetryPolicy.builder()
+                        .maxAttempts(3)
+                        .localAttempts(1)
+                        .build())
+                .backend(mockBackend)
+                .build();
+
+        AtomicBoolean businessExecuted = new AtomicBoolean(false);
+        try {
+            retryer.execute("task", context -> {
+                throw new RetrySerializationException("serialization failed");
+            }, () -> {
+                businessExecuted.set(true);
+                throw new RuntimeException("business failed");
+            });
+            Assert.fail("预期抛出 IllegalStateException");
+        } catch (IllegalStateException e) {
+            Assert.assertTrue(e.getMessage().contains("Persistent retry requires serializable arguments"));
+            Assert.assertFalse("业务逻辑不应在 prepare 失败后执行", businessExecuted.get());
+        }
+    }
+
+    /**
+     * 验证内存模式下 simple execute 不受 payload builder 影响
+     */
+    @Test
+    public void testMemoryOnlyNoSerialization() throws Exception {
+        Retryer retryer = Retryer.builder()
+                .policy(RetryPolicy.builder().build())
+                .build();
+
+        AtomicBoolean supplierCalled = new AtomicBoolean(false);
+        String result = retryer.execute("task", context -> {
+            supplierCalled.set(true);
+            return "{}";
+        }, () -> "ok");
+
+        Assert.assertEquals("ok", result);
+        Assert.assertFalse("内存模式不应触发序列化", supplierCalled.get());
     }
 
     /**
      * 验证异步情况下的快速失败
      */
     @Test
-    public void testAsyncStrongConsistencyFailFast() {
+    public void testAsyncPersistentModeFailFast() {
         Retryer retryer = Retryer.builder()
                 .policy(RetryPolicy.builder().build())
                 .backend(mockBackend)
-                .durability(RetryDurability.AT_LEAST_ONCE_DURABLE)
                 .build();
 
         try {
@@ -125,40 +137,37 @@ public class PoisonDataTest {
             }, () -> CompletableFuture.completedFuture("ok"), Executors.newSingleThreadScheduledExecutor());
             Assert.fail("预期抛出 IllegalStateException");
         } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("AT_LEAST_ONCE_DURABLE requires serializable arguments"));
+            Assert.assertTrue(e.getMessage().contains("Persistent retry requires serializable arguments"));
         }
     }
 
     /**
-     * 验证异步情况下的降级失败
+     * 验证异步持久化模式下 prepare 失败不会执行业务
      */
     @Test
-    public void testAsyncMemoryFallbackGracefulFailure() throws Exception {
+    public void testAsyncPersistentModeSerializationFailsBeforeBusinessExecution() throws Exception {
         Retryer retryer = Retryer.builder()
                 .policy(RetryPolicy.builder()
                         .maxAttempts(3)
-                        .inMemoryAttempts(1)
+                        .localAttempts(1)
                         .build())
                 .backend(mockBackend)
-                .durability(RetryDurability.MEMORY_FALLBACK)
                 .build();
 
-        CompletableFuture<String> future = retryer.executeAsync("task", context -> {
-            throw new RetrySerializationException("serialization failed");
-        }, () -> {
-            CompletableFuture<String> f = new CompletableFuture<>();
-            f.completeExceptionally(new RuntimeException("business failed"));
-            return f;
-        }, Executors.newSingleThreadScheduledExecutor());
-
+        AtomicBoolean businessExecuted = new AtomicBoolean(false);
         try {
-            future.get(5, TimeUnit.SECONDS);
+            retryer.executeAsync("task", context -> {
+                throw new RetrySerializationException("serialization failed");
+            }, () -> {
+                businessExecuted.set(true);
+                CompletableFuture<String> f = new CompletableFuture<>();
+                f.completeExceptionally(new RuntimeException("business failed"));
+                return f;
+            }, Executors.newSingleThreadScheduledExecutor());
             Assert.fail("预期抛出异常");
-        } catch (ExecutionException e) {
-            Throwable cause = e.getCause();
-            Assert.assertTrue(cause instanceof RetryExhaustedException);
-            Assert.assertTrue(cause.getMessage().contains("argument serialization failed"));
-            Assert.assertEquals(1, cause.getSuppressed().length);
+        } catch (IllegalStateException e) {
+            Assert.assertTrue(e.getMessage().contains("Persistent retry requires serializable arguments"));
+            Assert.assertFalse("业务逻辑不应在 prepare 失败后执行", businessExecuted.get());
         }
     }
 

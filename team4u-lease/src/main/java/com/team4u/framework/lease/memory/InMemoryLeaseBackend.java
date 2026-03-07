@@ -3,16 +3,10 @@ package com.team4u.framework.lease.memory;
 import com.team4u.framework.lease.LeaseBackend;
 import com.team4u.framework.lease.LeaseGrant;
 import com.team4u.framework.lease.LeaseTaskStatus;
+import lombok.*;
 
-import java.util.Collections;
-import java.util.LinkedHashMap;
-import java.util.Map;
-import java.util.UUID;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.DelayQueue;
-import java.util.concurrent.Delayed;
-import java.util.concurrent.TimeUnit;
+import java.util.*;
+import java.util.concurrent.*;
 
 /**
  * 内存版租约后端。
@@ -41,7 +35,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                 now,
                 now + Math.max(0L, delayMillis),
                 0,
-                Collections.<String, String>emptyMap(),
+                Collections.emptyMap(),
                 LeaseTaskStatus.SCHEDULED,
                 null,
                 null,
@@ -136,11 +130,19 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     public synchronized Map<String, StoredTask> snapshot() {
         Map<String, StoredTask> snapshot = new LinkedHashMap<String, StoredTask>();
         for (Map.Entry<String, StoredTask> entry : records.entrySet()) {
-            snapshot.put(entry.getKey(), entry.getValue().copy());
+            snapshot.put(entry.getKey(), entry.getValue().toBuilder().build());
         }
         return snapshot;
     }
 
+    /**
+     * 等待并获取队列中可见的任务。
+     *
+     * @param deadline          获取操作的绝对截止毫秒时间戳
+     * @param waitTimeoutMillis 相对等待时长
+     * @return 可用的任务引用；若在截止时间内无任务则返回 null
+     * @throws InterruptedException 若当前线程被中断
+     */
     private AvailabilityRef pollRef(long deadline, long waitTimeoutMillis) throws InterruptedException {
         if (waitTimeoutMillis <= 0L) {
             return queue.poll();
@@ -152,27 +154,51 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         return queue.poll(remaining, TimeUnit.MILLISECONDS);
     }
 
+    /**
+     * 竞争并锁定任务的所有权（租约）。
+     * <p>
+     * 该方法会进行“可见性校验”和“版本校验”，确保一个过期任务或被重新调度的任务不会被错误领取。
+     *
+     * @param ref         从延迟队列中取出的任务可见性引用
+     * @param workerId    尝试竞争的 Worker ID
+     * @param leaseMillis 期望锁定的时长
+     * @return 成功竞争后返回租约通行证；若任务已被取消、完成或可见性已变更则返回 null
+     */
     private synchronized LeaseGrant claim(AvailabilityRef ref, String workerId, long leaseMillis) {
         StoredTask current = records.get(ref.taskId);
+        // 如果任务已被删除或处于终态，则标记无效
         if (current == null || isTerminal(current)) {
             return null;
         }
+
         long now = System.currentTimeMillis();
+        // 计算任务最新的可用时间（可能是原始可见时间，也可能是之前租约的到期时间）
         long availableAt = current.getStatus() == LeaseTaskStatus.LEASED
                 ? current.getLeaseExpiresAtMillis()
                 : current.getVisibleAtMillis();
+
+        // 双重检查：如果任务的可用时刻已经发生了偏移，当前 ref 已失效
         if (availableAt != ref.availableAtMillis || availableAt > now) {
             return null;
         }
 
         String leaseToken = nextLeaseToken();
         long leaseExpiresAt = now + Math.max(1L, leaseMillis);
+
+        // 更新记录并维护内存视图
         StoredTask leased = current.claim(workerId, leaseToken, leaseExpiresAt);
         records.put(ref.taskId, leased);
+
+        // 重新放入延迟队列，以便租约到期后能再次可见
         queue.offer(new AvailabilityRef(ref.taskId, leaseExpiresAt));
         return leased.toGrant();
     }
 
+    /**
+     * 校验租约的合法性。
+     *
+     * @return true 表示该 Worker 仍合法持有该任务的当前租约且未过期
+     */
     private boolean matchesLease(StoredTask current, String workerId, String leaseToken) {
         if (current == null || current.getStatus() != LeaseTaskStatus.LEASED) {
             return false;
@@ -180,9 +206,13 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         if (!stringEquals(current.getWorkerId(), workerId) || !stringEquals(current.getLeaseToken(), leaseToken)) {
             return false;
         }
+        // 只有当前时间小于到期时间才认为有效
         return current.getLeaseExpiresAtMillis() >= System.currentTimeMillis();
     }
 
+    /**
+     * 判断任务是否已进入最终状态（成功或死亡）。
+     */
     private boolean isTerminal(StoredTask current) {
         return current.getStatus() == LeaseTaskStatus.SUCCEEDED || current.getStatus() == LeaseTaskStatus.DEAD;
     }
@@ -200,17 +230,14 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     }
 
     private boolean stringEquals(String left, String right) {
-        return left == null ? right == null : left.equals(right);
+        return Objects.equals(left, right);
     }
 
+    @Getter
+    @AllArgsConstructor(access = AccessLevel.PRIVATE)
     private static class AvailabilityRef implements Delayed {
         private final String taskId;
         private final long availableAtMillis;
-
-        private AvailabilityRef(String taskId, long availableAtMillis) {
-            this.taskId = taskId;
-            this.availableAtMillis = availableAtMillis;
-        }
 
         @Override
         public long getDelay(TimeUnit unit) {
@@ -226,126 +253,156 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     }
 
     /**
-     * 调试与测试辅助视图。
+     * 存储的任务实例，用于内存中维护任务状态和生命周期。
+     * 提供不可变的数据视图以及通过 Lombok 生成的辅助修改方法。
      */
+    @Getter
+    @Builder(toBuilder = true)
+    @AllArgsConstructor(access = AccessLevel.PRIVATE)
     public static final class StoredTask {
+        /**
+         * 任务唯一标识符
+         */
         private final String taskId;
+        /**
+         * 任务类型，用于区分不同业务逻辑的处理器
+         */
         private final String taskType;
+        /**
+         * 任务执行所需的数据载荷
+         */
         private final String payload;
+        /**
+         * 任务创建的时间戳（毫秒）
+         */
         private final long createdAtMillis;
+        /**
+         * 任务预计对 Worker 可见的时间戳（毫秒），用于延迟调度
+         */
+
         private final long visibleAtMillis;
+        /**
+         * 任务已经被尝试执行的次数
+         */
         private final int attemptCount;
+        /**
+         * 任务的附加属性集合
+         */
+        @Singular
         private final Map<String, String> attributes;
+        /**
+         * 任务当前所处的状态（如：已调度、已租赁、已成功、已死亡等）
+         */
+
         private final LeaseTaskStatus status;
+        /**
+         * 当前持有该任务租约的 Worker ID
+         */
+
         private final String workerId;
+        /**
+         * 验证租约所有权的令牌
+         */
+
         private final String leaseToken;
+        /**
+         * 当前租约到期的时间戳（毫秒）
+         */
+
         private final long leaseExpiresAtMillis;
+        /**
+         * 任务最近一次执行失败的错误信息
+         */
+
         private final String lastError;
 
-        private StoredTask(String taskId,
-                           String taskType,
-                           String payload,
-                           long createdAtMillis,
-                           long visibleAtMillis,
-                           int attemptCount,
-                           Map<String, String> attributes,
-                           LeaseTaskStatus status,
-                           String workerId,
-                           String leaseToken,
-                           long leaseExpiresAtMillis,
-                           String lastError) {
-            this.taskId = taskId;
-            this.taskType = taskType;
-            this.payload = payload;
-            this.createdAtMillis = createdAtMillis;
-            this.visibleAtMillis = visibleAtMillis;
-            this.attemptCount = attemptCount;
-            this.attributes = attributes == null
-                    ? Collections.<String, String>emptyMap()
-                    : Collections.unmodifiableMap(new LinkedHashMap<String, String>(attributes));
-            this.status = status;
-            this.workerId = workerId;
-            this.leaseToken = leaseToken;
-            this.leaseExpiresAtMillis = leaseExpiresAtMillis;
-            this.lastError = lastError;
-        }
-
-        public String getTaskId() {
-            return taskId;
-        }
-
-        public String getTaskType() {
-            return taskType;
-        }
-
-        public String getPayload() {
-            return payload;
-        }
-
-        public long getCreatedAtMillis() {
-            return createdAtMillis;
-        }
-
-        public long getVisibleAtMillis() {
-            return visibleAtMillis;
-        }
-
-        public int getAttemptCount() {
-            return attemptCount;
-        }
-
-        public Map<String, String> getAttributes() {
-            return attributes;
-        }
-
-        public LeaseTaskStatus getStatus() {
-            return status;
-        }
-
-        public String getWorkerId() {
-            return workerId;
-        }
-
-        public String getLeaseToken() {
-            return leaseToken;
-        }
-
-        public long getLeaseExpiresAtMillis() {
-            return leaseExpiresAtMillis;
-        }
-
-        public String getLastError() {
-            return lastError;
-        }
-
-        private StoredTask copy() {
-            return new StoredTask(taskId, taskType, payload, createdAtMillis, visibleAtMillis, attemptCount,
-                    attributes, status, workerId, leaseToken, leaseExpiresAtMillis, lastError);
-        }
-
+        /**
+         * 认领任务并更新相关租约信息。
+         *
+         * @param workerId             认领任务的 Worker ID
+         * @param leaseToken           分配给此次租约的令牌
+         * @param leaseExpiresAtMillis 租约的过期时间戳
+         * @return 认领后的新任务状态副本
+         */
         private StoredTask claim(String workerId, String leaseToken, long leaseExpiresAtMillis) {
-            return new StoredTask(taskId, taskType, payload, createdAtMillis, visibleAtMillis, attemptCount + 1,
-                    attributes, LeaseTaskStatus.LEASED, workerId, leaseToken, leaseExpiresAtMillis, lastError);
+            return toBuilder()
+                    .workerId(workerId)
+                    .leaseToken(leaseToken)
+                    .leaseExpiresAtMillis(leaseExpiresAtMillis)
+                    .status(LeaseTaskStatus.LEASED)
+                    .attemptCount(attemptCount + 1)
+                    .build();
         }
 
+        /**
+         * 重新调度任务，清除当前的租约信息并设定新的可见时间。
+         *
+         * @param visibleAtMillis 任务下一次变为可见的时间戳
+         * @param lastError       重新调度前记录的错误信息（如果有）
+         * @return 重新调度后的新任务状态副本
+         */
         private StoredTask withSchedule(long visibleAtMillis, String lastError) {
-            return new StoredTask(taskId, taskType, payload, createdAtMillis, visibleAtMillis, attemptCount,
-                    attributes, LeaseTaskStatus.SCHEDULED, null, null, 0L, lastError);
+            return toBuilder()
+                    .visibleAtMillis(visibleAtMillis)
+                    .lastError(lastError)
+                    .status(LeaseTaskStatus.SCHEDULED)
+                    .workerId(null)
+                    .leaseToken(null)
+                    .leaseExpiresAtMillis(0L)
+                    .build();
         }
 
+        /**
+         * 更新任务的租约信息（如续租）。
+         *
+         * @param workerId             持有租约的 Worker ID
+         * @param leaseToken           租约令牌
+         * @param leaseExpiresAtMillis 新的租约过期时间戳
+         * @return 更新租约后的新任务状态副本
+         */
         private StoredTask withLease(String workerId, String leaseToken, long leaseExpiresAtMillis) {
-            return new StoredTask(taskId, taskType, payload, createdAtMillis, visibleAtMillis, attemptCount,
-                    attributes, LeaseTaskStatus.LEASED, workerId, leaseToken, leaseExpiresAtMillis, lastError);
+            return toBuilder()
+                    .workerId(workerId)
+                    .leaseToken(leaseToken)
+                    .leaseExpiresAtMillis(leaseExpiresAtMillis)
+                    .status(LeaseTaskStatus.LEASED)
+                    .build();
         }
 
+        /**
+         * 将任务设置为终态（如：成功或死亡），并清除租约信息。
+         *
+         * @param status    目标终态
+         * @param lastError 导致终态的错误信息（如有）
+         * @return 设置为终态后的新任务状态副本
+         */
         private StoredTask withTerminal(LeaseTaskStatus status, String lastError) {
-            return new StoredTask(taskId, taskType, payload, createdAtMillis, visibleAtMillis, attemptCount,
-                    attributes, status, null, null, 0L, lastError);
+            return toBuilder()
+                    .status(status)
+                    .lastError(lastError)
+                    .workerId(null)
+                    .leaseToken(null)
+                    .leaseExpiresAtMillis(0L)
+                    .build();
         }
 
+        /**
+         * 将存储的任务对象转换为对外提供的租约授权模型。
+         *
+         * @return 对应的 {@link LeaseGrant} 对象
+         */
         private LeaseGrant toGrant() {
-            return new LeaseGrant(taskId, taskType, payload, workerId, leaseToken, attemptCount,
-                    createdAtMillis, visibleAtMillis, leaseExpiresAtMillis);
+            return LeaseGrant.builder()
+                    .taskId(taskId)
+                    .taskType(taskType)
+                    .payload(payload)
+                    .workerId(workerId)
+                    .leaseToken(leaseToken)
+                    .attemptCount(attemptCount)
+                    .createdAtMillis(createdAtMillis)
+                    .visibleAtMillis(visibleAtMillis)
+                    .leaseExpiresAtMillis(leaseExpiresAtMillis)
+                    .build();
         }
     }
 }

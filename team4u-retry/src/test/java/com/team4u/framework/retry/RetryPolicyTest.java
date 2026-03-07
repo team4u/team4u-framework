@@ -40,12 +40,12 @@ public class RetryPolicyTest {
     }
 
     @Test
-    public void testInMemoryAttemptsValidation() {
+    public void testLocalAttemptsValidation() {
         try {
-            RetryPolicy.builder().maxAttempts(3).inMemoryAttempts(4).build();
+            RetryPolicy.builder().maxAttempts(3).localAttempts(4).build();
             Assert.fail("预期抛出 IllegalArgumentException");
         } catch (IllegalArgumentException e) {
-            Assert.assertTrue(e.getMessage().contains("inMemoryAttempts"));
+            Assert.assertTrue(e.getMessage().contains("localAttempts"));
         }
     }
 
