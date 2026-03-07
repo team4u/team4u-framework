@@ -9,7 +9,7 @@ import com.team4u.framework.log.pipeline.context.LogContextSource;
  * 提供静态方法用于注册自定义上下文寻值源。
  * 核心逻辑由 {@link LogContextCollector} 负责，已重构为高性能的 Pull（拉）模型。
  *
- * @author team4u
+ * @author jay.wu
  */
 public class LogContext {
 

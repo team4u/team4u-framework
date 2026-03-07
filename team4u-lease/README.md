@@ -1,109 +1,210 @@
-# [返回总目录](../README.md)
+# team4u-lease
 
-# team4u-lease：分布式任务与租约调度框架
+一个基于 Lease（租约）协议 的分布式任务调度框架，用来解决多节点环境下的 任务唯一消费、长耗时执行、失败重试、租约续约与故障自愈
+问题。
 
-[![JDK 8+](https://img.shields.io/badge/JDK-8+-green.svg)](https://openjdk.org/)
-[![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+适用于这类场景：
 
-## 📖 前因后果（背景与动机）
+- 异步回调
+- 报表生成
+- 批处理任务
+- 营销消息投递
+- 延迟任务 / 重试任务
+- 需要在集群中“同一时刻只允许一个节点执行”的后台作业
 
-在微服务和分布式系统中，我们经常需要处理异步流程式任务或后置处理（如生成报表、批量发送营销邮件、异步回调通知等）。传统的做法通常存在以下痛点：
+## 为什么需要它
 
-1.  **简单定时任务框架不佳**：比如普通的 `@Scheduled` 或者是 Spring 定时任务，很难在集群多个节点之间做安全的分发。如果同一时间多个节点执行同一任务，必然造成并发重复消费带来的数据错乱（惊群效应）。
-2.  **常规消息队列（MQ）重投递失控**：虽然 MQ 擅长消息分发，但是对于长耗时任务支持性不佳。基于“超时未 ACK 就重发”的特性，若一个报表任务需要运行 5 分钟，而 MQ 超时设为 1 分钟，那么在任务结束前，MQ 已经将此任务强行派发给其余 4 个节点处理，最终系统发生“雪崩”。
-3.  **数据库悲观锁性能差且易死锁**：使用 `SELECT ... FOR UPDATE` 在高并发场景下容易把数据库线程池打满；当应用非正常关闭时（如 OOM、杀进程），事务如果没有回滚，相关的任务记录将永久性锁死变为“死数据”。
+在分布式系统里，后台任务调度通常会遇到这些问题：
 
-为了优雅且彻底地解决长周期与高并发任务下的这些坑，`team4u-lease` 借鉴了分布式系统（如选主、文件访问排他）内的“**租约（Lease）协议**”，提供了一种安全、轻量、高灵活性且具备自愈能力的任务调度框架。它通过“**排他租约竞争 + 心跳自保守护**”的模型，完美兼顾了分布式任务的高可用调度与单任务执行的唯一性。
+### 1. 普通定时任务无法天然支持集群互斥
 
----
+像 `@Scheduled` 这类本地调度方式，在多节点部署下很容易出现同一任务被多个实例同时执行的问题。
 
-## 💡 背后的核心原理
+### 2. MQ 不一定适合长耗时任务
 
-整个 `team4u-lease` 的工作流，建立在“**拉取模型（Polling Pull）**”与“**防篡改租约（Lease Protocol）**”两大基石上：
+消息队列擅长分发，但对于“执行时间远大于消费超时时间”的任务，可能出现重复投递、并行执行和状态失真。
 
-### 1. 任务拉取与所有权竞争（防多点并跑）
+### 3. 数据库锁方案重、脆、恢复差
 
-框架核心驱动是 `LeaseWorker`，这是一个常驻内存的轮询线程。不同节点上的 `LeaseWorker` 会主动定时并发向后端 `LeaseBackend` 尝试“**申领（`acquire`）**”。
+基于悲观锁或长事务的实现，在高并发或异常宕机场景下，容易引发锁等待、死锁或脏状态残留。
 
-*   当 Worker 成功抢夺到一个可用任务时，也会同时获取一个带有期限的租约（`LeaseToken` 等准入凭证）。
-*   这份租约代表：在限定的时间（`leaseMillis`）内，该任务专属当前节点，并加上了一把带有版本记录的“排他乐观锁”，其他任何请求都不可争抢该任务。
+## 核心思路
 
-### 2. 心跳守护机制（解决长耗时与中途断电场景）
+`team4u-lease` 的核心不是“推送任务给 Worker”，而是：
 
-*   **超长执行保护**：普通锁往往是一次性赋予锁定时间，这不够灵活。我们的 Worker 在获取租约后，会异步开启一条心跳监控守护线程（`Heartbeat Guardian`）。在业务代码忙于执行长耗时任务时，该守护线程会持续地向 Backend 发送心跳指令请求延长自己执行该任务的截止时间。
-*   **异常宕机自愈**：如果执行该任务的节点遭遇物理断网或意外宕机，该守护线程就随同主进程死亡，后端不再收到续命请求。这把任务防乱入的“租约锁”一旦随时间耗尽，其他存活的计算节点就能够检测到锁已释放，进而顺畅接手重试（实现自适应调度）。
+> Worker 主动拉取任务，并通过租约竞争获得某个任务在一段时间内的独占执行权。
 
-### 3. 可靠的生命周期闭环体系
+只要租约仍然有效，其他节点就不能接手这个任务；  
+如果当前节点挂掉且租约未续期，任务会在租约到期后重新变为可抢占，从而实现自动恢复。
 
-在业务处理器执行完代码后，Worker 会持之前核发给它的 `LeaseHandle` 去向 Backend 做最后防篡改的汇报验证：
+## 核心机制
 
-*   **处理成功**：调用 `ack`，将任务标记为 `SUCCEEDED`。
-*   **遇非致命错误**：框架捕获到业务抛出可重试异常时，会主动调用 `retry` 投递延迟计划，配合内部的“退避系统（Backoff Delay）”计算出的下回可见时间。
-*   **彻底抛弃**：如重试到达上限（`maxFailures`），将该项标记为 `DEAD` 结束生命。
+### 1. Acquire：抢占任务并获得租约
 
----
+Worker 周期性向后端发起 `acquire` 请求。
 
-## 🏗 项目结构
+当某个任务满足以下任一条件时，就有机会被当前 Worker 抢到：
 
-`team4u-lease` 采用了模块化设计：
+- 任务状态为 `SCHEDULED`，且已经到达可见时间
+- 任务状态为 `LEASED`，但原租约已经过期
 
-*   **`team4u-lease-core`**: 框架核心定义、Worker 实现及常用退避算法。
-*   **`team4u-lease-memory`**: 内存版租约后端实现，非常适合单元测试和单机环境演示。
+抢占成功后，Worker 会获得一份 `LeaseHandle`，其中包含：
 
----
+- `taskId`
+- `workerId`
+- `leaseToken`
 
-## 🚀 快速上手 (Quick Start)
+后续的 `ack / retry / fail / heartbeat / release` 都必须带上这份句柄，避免错误节点篡改任务状态。
 
-只需几步代码配置，即可构建您的分布式调度 Worker，下方的演示为单机模拟完整生命周期：
+### 2. Heartbeat：长任务通过心跳续约
 
-### 1. 引入 Maven 依赖
+对于执行时间较长的任务，Worker 可以定时发送 `heartbeat` 来延长租约有效期。
 
-在 pom.xml 中添加核心依赖与内存版后端：
+这意味着：
+
+- 长任务不需要一次性设置特别大的锁时间
+- 只要 Worker 还活着，就能持续保有任务执行权
+- 如果 Worker 异常退出，心跳停止，租约会自然过期
+
+### 3. Ack / Retry / Fail：形成完整生命周期闭环
+
+处理器执行结束后，Worker 会根据结果回写状态：
+
+- `ack`：任务执行成功，标记为 `SUCCEEDED`
+- `retry`：任务执行失败但允许重试，回到 `SCHEDULED`，并设置下一次可见时间
+- `fail`：任务终止，标记为 `DEAD`
+- `release`：主动释放租约但不计失败次数，稍后重新入队
+
+## 任务状态
+
+框架当前定义了 4 个核心状态：
+
+- `SCHEDULED`：已入队，等待被消费
+- `LEASED`：已被某个 Worker 持有租约，正在处理
+- `SUCCEEDED`：执行成功，终态
+- `DEAD`：执行失败且不再重试，终态
+
+## 项目结构
+
+当前项目采用多模块结构：
+
+- `team4u-lease-core`  
+  核心抽象、Worker、租约协议、重试退避策略等
+
+- `team4u-lease-memory`  
+  基于内存的后端实现，适合单测、示例和本地演示
+
+- `team4u-lease-jdbc`  
+  基于 JDBC 的后端实现，可接数据库使用
+
+- `team4u-lease-test`  
+  后端实现的通用契约测试
+
+## 核心抽象
+
+### `LeaseBackend`
+
+统一后端接口，组合了以下能力：
+
+- 任务生产：`LeaseProducer`
+- 运行时租约操作：`LeaseRuntimeClient`
+- 管理能力：`LeaseAdminService`
+- 查询能力：`LeaseQueryService`
+
+这意味着你可以基于内存、JDBC 或其他存储实现同一套调度模型。
+
+### `LeaseWorker`
+
+负责：
+
+- 拉取任务
+- 获取租约
+- 路由到对应的 `LeaseTaskHandler`
+- 启动心跳续约
+- 根据执行结果回写状态
+
+它是整个框架的执行引擎。
+
+### `LeaseTaskHandler`
+
+业务处理器接口：
+
+```java
+public interface LeaseTaskHandler {
+    void handle(LeaseExecutionContext context) throws Exception;
+}
+````
+
+你只需要关注业务逻辑，不需要自己处理抢锁、续约、重试写回这些细节。
+
+### `LeaseWorkerPolicy`
+
+用于配置 Worker 的运行策略，例如：
+
+* `workerId`
+* `leaseMillis`
+* `pollWaitMillis`
+* `maxFailures`
+* `backoff`
+* `heartbeatEnabled`
+* `heartbeatIntervalMillis`
+* `missingHandlerStrategy`
+
+### `Backoff`
+
+失败重试的退避策略接口，内置支持：
+
+* 固定延迟 `fixed`
+* 线性递增 `increment`
+* 指数退避 `exponential`
+* 带抖动的指数退避 `exponentialJitter`
+
+## 快速开始
+
+## 1. 引入依赖
 
 ```xml
+
 <dependency>
     <groupId>com.team4u</groupId>
     <artifactId>team4u-lease-core</artifactId>
     <version>1.0.0-SNAPSHOT</version>
 </dependency>
+
 <dependency>
-    <groupId>com.team4u</groupId>
-    <artifactId>team4u-lease-memory</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+<groupId>com.team4u</groupId>
+<artifactId>team4u-lease-memory</artifactId>
+<version>1.0.0-SNAPSHOT</version>
 </dependency>
 ```
 
-### 2. 定义核心业务处理器 Handler
-
-实现 `LeaseTaskHandler`，不需要关心重试或抢锁等底层，只聚焦纯净的业务：
+## 2. 定义任务处理器
 
 ```java
-import com.team4u.framework.lease.LeaseTaskHandler;
 import com.team4u.framework.lease.LeaseExecutionContext;
+import com.team4u.framework.lease.LeaseTaskHandler;
 import com.team4u.framework.lease.NonRetryableLeaseException;
 
 public class PushNotificationHandler implements LeaseTaskHandler {
+
     @Override
     public void handle(LeaseExecutionContext context) throws Exception {
-        // context 提供 payload、queue、taskType、deliveryCount、failureCount、attributes 等运行态信息
-        System.out.println("【业务处理】拉取到通知推送任务，参数: " + context.getPayload());
+        System.out.println("收到任务: " + context.getPayload());
 
-        // 模拟执行一个复杂、耗时较长的网络操作
-        Thread.sleep(5000);
+        // 模拟耗时处理
+        Thread.sleep(3000);
 
-        // 如果发现是无法修复的业务异常，可以抛出 NonRetryableLeaseException 立即终止重试
+        // 对于不可恢复错误，直接抛出不可重试异常
         if ("invalid-payload".equals(context.getPayload())) {
-            throw new NonRetryableLeaseException("Payload 内容不合法");
+            throw new NonRetryableLeaseException("Payload 不合法");
         }
 
-        System.out.println("【业务处理】推送成功。通知 LeaseWorker 去自动 Ack ");
+        System.out.println("处理完成");
     }
 }
 ```
 
-### 3. 配置运行策略并启动 Worker
-
-接下来进行轻便的注册，演示用内置安全内存 `InMemoryLeaseBackend` 进行调度处理：
+## 3. 注册处理器并启动 Worker
 
 ```java
 import com.team4u.framework.lease.DefaultLeaseTaskHandlerRegistry;
@@ -113,88 +214,148 @@ import com.team4u.framework.lease.LeaseWorkerPolicy;
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
 
 public class LeaseDemoApp {
-    public static void main(String[] args) throws InterruptedException {
-        // [模块 1]: 初始化内存版租约后端
+
+    static void main(String[] args) throws Exception {
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
 
-        // [模块 2]: 向注册表绑定 queue (订阅队列) + taskType (任务类型) -> 对应的业务类
         DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
         registry.register("push-queue", "sms-task", new PushNotificationHandler());
 
-        // [模块 3]: 自定义 Worker 运行策略
         LeaseWorkerPolicy policy = LeaseWorkerPolicy.builder()
-                .workerId("Node-01")             // Worker 唯一标识，默认为自动生成的 UUID
-                .leaseMillis(30_000L)            // 任务锁定时间，默认 30 秒
-                .maxFailures(5)                  // 最大重试次数，默认 8 次
-                .heartbeatEnabled(true)          // 是否开启心跳保护，默认开启
+                .workerId("worker-node-1")
+                .leaseMillis(30_000L)
+                .pollWaitMillis(1_000L)
+                .maxFailures(5)
+                .heartbeatEnabled(true)
                 .build();
 
-        // [模块 4]: 启动 Worker，它将自动订阅 registry 中注册的所有 queue
         LeaseWorker worker = new LeaseWorker(backend, registry, policy);
-        worker.start("Notification-Worker");
+        worker.start("notification-worker");
 
-        // ----------------------------------------------------
-        // [上游业务]: 向后端发布一个任务
         backend.publish(LeasePublishRequest.builder()
                 .queue("push-queue")
                 .taskType("sms-task")
-                .payload("{\"phone\":\"13800138000\", \"content\":\"验证码：1234\"}")
-                .delayMillis(1000L)              // 延迟 1 秒后开始调度
+                .payload("{\"phone\":\"13800138000\",\"content\":\"验证码：1234\"}")
+                .delayMillis(1000L)
                 .build());
 
-        // 模拟应用运行一段时间
-        Thread.sleep(15000);
-
-        // 安全关闭 Worker
+        Thread.sleep(10_000L);
         worker.shutdown();
     }
 }
 ```
 
----
-
-## 🏗 核心抽象说明
-
-为支持多种存储后端及扩展，框架设计了以下关键接口：
-
-### 1. 任务生产与管理 (`LeaseProducer` / `LeaseAdminService`)
-
-*   `publish()`: 发布任务，支持 `delayMillis` 延迟执行和 `priority` 优先级。
-*   `cancel()` / `reschedule()`: 对未执行任务进行操作。
-*   `requeueDead()`: 将状态为 `DEAD` 的任务重新投入调度队列。
-
-### 2. 运行时操作与查询 (`LeaseRuntimeClient` / `LeaseQueryService`)
-
-*   `acquire()`: 获取任务，支持阻塞等待 (`pollWaitMillis`) 和多队列订阅。
-*   `ack()` / `retry()` / `fail()`: 任务执行结果反馈，需携带有效 `LeaseHandle`（包含 `taskId`, `workerId`, `leaseToken`）。
-*   `heartbeat()`: 延长租约有效期。
-
-### 3. Worker 策略配置 (`LeaseWorkerPolicy`)
-
-*   **退避策略 (`Backoff`)**: 内置 `fixed`, `increment`, `exponential`, `exponentialJitter` 等多种算法。
-*   **缺失处理器策略 (`MissingHandlerStrategy`)**: 
-    *   `FAIL_FAST`: 找不到处理器时直接标记任务为 `DEAD`（默认）。
-    *   `RETRY_LATER`: 释放任务回队列，等待后续可能的具备处理能力的 Worker。
-
----
-
-## 🛠 开发最佳实践
-
-1.  **业务幂等性**：由于网络超时或宕机可能导致同一任务被多次抢占执行，处理程序必须保证幂等。
-2.  **合理设置租约时间**：`leaseMillis` 应大于业务平均处理时间。若业务处理时间波动剧烈，务必开启心跳功能。
-3.  **精简 Payload**：`payload` 应只存储关键 ID，避免存储大数据量内容，以保证后端存储性能和调度灵活性。
-4.  **善用 NonRetryableLeaseException**：对于确定无法通过重试解决的业务逻辑错误，直接抛出此异常，节省系统重试资源。
-
----
-
-## 📊 系统工作流
+## 执行流程
 
 ```mermaid
 graph TD
-    Publisher[上游/API网关] -->|1. publish 存入任务| Backend[(Lease Backend 后端)]
-    Worker((LeaseWorker 进程)) -->|2. acquire 竞争租约| Backend
-    Worker -->|3. 成功获取并生成 Handle| Handler[TaskHandler 业务逻辑]
-    Worker -.->|4. 异步 heartbeat 续约| Backend
-    Handler -->|5. 处理结果执行写回| Worker
-    Worker -->|6. ack / retry / fail 持 Handle 定谳| Backend
+    P[业务系统发布任务] --> B[LeaseBackend]
+    W[LeaseWorker] -->|acquire| B
+    B -->|LeaseGrant| W
+    W --> H[LeaseTaskHandler]
+    W -. heartbeat .-> B
+    H --> W
+    W -->|ack / retry / fail / release| B
 ```
+
+## 重试与失败策略
+
+默认情况下，业务处理抛出的普通异常会进入重试流程：
+
+* `failureCount + 1`
+* 按 `Backoff` 计算下一次重试时间
+* 重新变为 `SCHEDULED`
+
+当满足以下条件之一时，任务会进入 `DEAD`：
+
+* 抛出 `NonRetryableLeaseException`
+* 已达到 `maxFailures`
+
+## Missing Handler 策略
+
+当 Worker 抢到任务后，如果本地没有匹配的处理器，框架支持两种策略：
+
+### `FAIL_FAST`（默认）
+
+直接将任务标记为失败终态。
+
+适合“任务类型必须严格可识别”的场景。
+
+### `RETRY_LATER`
+
+释放任务并延迟重新入队，不增加失败次数。
+
+适合滚动发布、处理器尚未全量部署完成等场景。
+
+## 管理能力
+
+后端还提供基础运维操作：
+
+* `reschedule(taskId, delayMillis)`：重新调度未终态任务
+* `cancel(taskId)`：取消任务
+* `requeueDead(taskId, delayMillis)`：将死信任务重新放回调度队列
+
+## 查询能力
+
+框架支持查询：
+
+* 单任务详情：`get(taskId)`
+* 按条件分页查询：`list(LeaseQueryRequest)`
+
+可按以下条件过滤：
+
+* `queue`
+* `taskType`
+* `status`
+* `workerId`
+
+## 适合什么场景
+
+推荐用于：
+
+* 需要集群互斥消费的任务
+* 执行时间不稳定、可能较长的任务
+* 需要失败重试和退避控制的任务
+* 希望具备“节点宕机自动接管”能力的调度系统
+
+不推荐直接用于：
+
+* 极高吞吐、纯消息广播类场景
+* 对实时延迟要求极低、必须毫秒级推送的场景
+* 已经由成熟 MQ 消费模型完美覆盖的简单短任务
+
+## 最佳实践
+
+### 保证业务幂等
+
+租约过期、节点宕机或网络抖动时，任务可能被再次执行。
+业务侧必须能接受“至少一次执行”。
+
+### 合理设置 `leaseMillis`
+
+* 太短：任务可能尚未执行完就丢失租约
+* 太长：故障恢复会变慢
+
+通常建议：
+
+* 平稳短任务：设置略大于平均耗时
+* 波动较大的长任务：开启心跳续约
+
+### 谨慎设计 Payload
+
+建议 Payload 只携带必要信息，例如业务 ID，而不是完整大对象。
+
+### 区分可重试与不可重试异常
+
+* 可恢复错误：抛普通异常，交给框架重试
+* 不可恢复错误：抛 `NonRetryableLeaseException`
+
+## 已有实现
+
+当前仓库内已提供：
+
+* `InMemoryLeaseBackend`
+* `JdbcLeaseBackend`
+
+如果你希望接入 Redis、MySQL 专用实现、PostgreSQL 或其他存储系统，也可以基于 `LeaseBackend` 抽象继续扩展。
+

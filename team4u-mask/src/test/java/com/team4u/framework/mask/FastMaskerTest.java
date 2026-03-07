@@ -19,7 +19,7 @@ public class FastMaskerTest {
         Assert.assertEquals("****艾山", FastMasker.mask("买买提·艾山", MaskType.NAME));
         // 英文姓名：显示前一后一
         Assert.assertEquals("j*y", FastMasker.mask("jay", MaskType.NAME));
-        Assert.assertEquals("f***y", FastMasker.mask("fjayy", MaskType.NAME));
+        Assert.assertEquals("f***y", FastMasker.mask("jay.wuy", MaskType.NAME));
     }
 
     @Test
@@ -80,7 +80,7 @@ public class FastMaskerTest {
 
     @Test
     public void testMaskEmail() {
-        Assert.assertEquals("f****@gmail.com", FastMasker.mask("fjayy@gmail.com", MaskType.EMAIL));
+        Assert.assertEquals("f****@gmail.com", FastMasker.mask("jay.wuy@gmail.com", MaskType.EMAIL));
     }
 
     @Test

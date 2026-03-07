@@ -1,6 +1,6 @@
 package com.team4u.framework.lease;
 
-import com.team4u.framework.lease.backoff.Backoff;
+import com.team4u.framework.base.backoff.Backoff;
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
 import org.junit.Assert;
 import org.junit.Test;

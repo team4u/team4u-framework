@@ -7,7 +7,13 @@ import java.util.*;
 import java.util.concurrent.*;
 
 /**
- * 内存版租约后端。
+ * 内存版租赁后端实现
+ * <p>
+ * 该实现将所有任务状态存储在 JVM 内存中，不具备持久化能力。
+ * 内部通过 {@link ConcurrentHashMap} 管理任务快照，并利用 {@link DelayQueue} 实现任务的可视化延迟判定及 Worker 的阻塞拉取。
+ * 主要适用于：
+ * 1. 单机环境下的简单任务调度。
+ * 2. 自动化集成测试场景。
  */
 public class InMemoryLeaseBackend implements LeaseBackend {
 

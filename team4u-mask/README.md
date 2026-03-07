@@ -30,7 +30,8 @@
 2. **注解式脱敏**：基于 `@Mask` 注解声明字段脱敏规则。
 3. **配置驱动脱敏**：通过 `team4u.mask.rules` 动态规则为第三方类/Map 提供无侵入脱敏。
 
-模块内部基于 [team4u-policy](../team4u-policy/README.md) 的 `KeyedPolicyRegistry` 实现策略路由，内置标准算法，并支持 SPI 与编程式扩展。
+模块内部基于 [team4u-policy](../team4u-policy/README.md) 的 `KeyedPolicyRegistry` 实现策略路由，内置标准算法，并支持 SPI
+与编程式扩展。
 
 ### 核心优势
 
@@ -47,6 +48,7 @@
 ### 引入依赖
 
 ```xml
+
 <dependency>
     <groupId>com.team4u</groupId>
     <artifactId>team4u-mask</artifactId>
@@ -65,7 +67,7 @@ import com.team4u.framework.mask.FastMasker;
 import com.team4u.framework.mask.MaskType;
 
 String mobile = FastMasker.mask("13812345678", MaskType.MOBILE);   // 138*****678
-String email = FastMasker.mask("fjayy@gmail.com", MaskType.EMAIL); // f****@gmail.com
+String email = FastMasker.mask("jay.wuy@gmail.com", MaskType.EMAIL); // f****@gmail.com
 String name = FastMasker.mask("周杰伦", MaskType.NAME);              // **伦
 ```
 
@@ -77,23 +79,23 @@ String name = FastMasker.mask("周杰伦", MaskType.NAME);              // **伦
 
 `MaskType` 内置以下标准策略：
 
-| 类型 | 说明 |
-| :--- | :--- |
-| `NAME` | 姓名脱敏（中文保留尾部，英文保留首尾） |
-| `MOBILE` | 手机号（保留前 3 后 3） |
-| `BANK_CARD_NO` | 银行卡号（保留前 4 后 2） |
-| `ID_CARD_NO` | 身份证号（保留前 5 后 2） |
-| `B1A1` | 保留前 1 后 1 |
-| `B2A2` | 保留前 2 后 2 |
-| `PERCENT66` | 居中掩码约 66% |
-| `PERCENT66_LIMIT10` | 66% 掩码后最多显示 10 字符 |
-| `PERCENT1_LIMIT200` | 1% 掩码后最多显示 200 字符 |
-| `ADDRESS` | 地址（保留前 9） |
-| `EMAIL` | 邮箱脱敏 |
-| `NONE` | 不脱敏（原样返回） |
-| `HIDE` | 固定返回 `*` |
-| `NULL` | 固定返回 `null` |
-| `PASSWORD` | 固定返回 `******` |
+| 类型                  | 说明                  |
+|:--------------------|:--------------------|
+| `NAME`              | 姓名脱敏（中文保留尾部，英文保留首尾） |
+| `MOBILE`            | 手机号（保留前 3 后 3）      |
+| `BANK_CARD_NO`      | 银行卡号（保留前 4 后 2）     |
+| `ID_CARD_NO`        | 身份证号（保留前 5 后 2）     |
+| `B1A1`              | 保留前 1 后 1           |
+| `B2A2`              | 保留前 2 后 2           |
+| `PERCENT66`         | 居中掩码约 66%           |
+| `PERCENT66_LIMIT10` | 66% 掩码后最多显示 10 字符   |
+| `PERCENT1_LIMIT200` | 1% 掩码后最多显示 200 字符   |
+| `ADDRESS`           | 地址（保留前 9）           |
+| `EMAIL`             | 邮箱脱敏                |
+| `NONE`              | 不脱敏（原样返回）           |
+| `HIDE`              | 固定返回 `*`            |
+| `NULL`              | 固定返回 `null`         |
+| `PASSWORD`          | 固定返回 `******`       |
 
 ### 2. 行为约定
 
@@ -139,7 +141,9 @@ public class PassportMaskPolicy implements MaskPolicy {
     }
 }
 
-FastMasker.register(new PassportMaskPolicy());
+FastMasker.
+
+register(new PassportMaskPolicy());
 String result = FastMasker.mask("E123456789", "PASSPORT");
 ```
 
@@ -171,7 +175,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.team4u.framework.mask.jackson.JacksonMaskModule;
 
 ObjectMapper mapper = new ObjectMapper();
-mapper.registerModule(new JacksonMaskModule());
+mapper.
+
+registerModule(new JacksonMaskModule());
 
 String json = mapper.writeValueAsString(userDTO);
 ```
@@ -191,7 +197,11 @@ import com.team4u.framework.mask.MaskBootstrap;
 import com.team4u.framework.config.core.ConfigManager;
 
 ConfigManager configManager = ...;
-MaskBootstrap.global().start(configManager);
+        MaskBootstrap.
+
+global().
+
+start(configManager);
 
 // 应用关闭时可调用
 // MaskBootstrap.global().stop();
@@ -310,11 +320,11 @@ graph TD
     A[业务对象/Map] --> B[ObjectMapper + JacksonMaskModule]
     B --> C[DynamicMaskSerializerModifier]
     C --> D{@Mask 注解?}
-    D -->|是| E[MaskStringSerializer]
-    D -->|否| F[MaskRuleRepository 查规则]
-    F --> E
-    E --> G[FastMasker]
-    G --> H[KeyedPolicyRegistry]
-    H --> I[具体 MaskPolicy]
-    I --> J[脱敏后输出]
+D -->|是|E[MaskStringSerializer]
+D -->|否|F[MaskRuleRepository 查规则]
+F --> E
+E --> G[FastMasker]
+G --> H[KeyedPolicyRegistry]
+H --> I[具体 MaskPolicy]
+I --> J[脱敏后输出]
 ```

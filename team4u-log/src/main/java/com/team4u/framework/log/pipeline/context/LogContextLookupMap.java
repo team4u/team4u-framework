@@ -13,7 +13,7 @@ import java.util.Set;
  * 核心设计思路：按需拉取数据。该 Map 本身不持有任何键值对拷贝，
  * 只有当表达式引擎调用其 get(key) 时，才会依次询问所有的 {@link LogContextSource}。
  *
- * @author team4u
+ * @author jay.wu
  */
 public class LogContextLookupMap extends AbstractMap<String, Object> {
 

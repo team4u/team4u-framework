@@ -12,7 +12,7 @@ import java.util.Map;
 /**
  * 日志上下文收集器单元测试 (Pull 模型)
  *
- * @author team4u
+ * @author jay.wu
  */
 public class LogContextCollectorTest {
 

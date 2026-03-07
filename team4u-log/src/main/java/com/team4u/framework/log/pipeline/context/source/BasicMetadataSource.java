@@ -8,7 +8,7 @@ import com.team4u.framework.log.pipeline.context.LogContextSource;
  * <p>
  * 处理日志事件的核心字段 (action, level, logger, thread, status, durationMs 等)
  *
- * @author team4u
+ * @author jay.wu
  */
 public class BasicMetadataSource implements LogContextSource {
 

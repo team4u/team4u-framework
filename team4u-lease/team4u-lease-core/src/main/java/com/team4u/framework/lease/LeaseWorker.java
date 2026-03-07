@@ -12,7 +12,13 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
- * 基于租约协议消费任务的 Worker 实现。
+ * 分布式任务工作者实现
+ * <p>
+ * 该类是租约系统的核心执行引擎，负责：
+ * 1. 周期性地从 {@link LeaseRuntimeClient} 抢占（Acquire）待处理任务。
+ * 2. 维护已持有任务的租约心跳（Heartbeat），防止执行期间租约过期。
+ * 3. 协调 {@link LeaseTaskHandler} 执行具体的业务逻辑。
+ * 4. 根据执行结果进行确认（Ack）、重试（Retry）或失败（Fail）回写。
  */
 public class LeaseWorker implements Runnable, AutoCloseable {
 
@@ -43,6 +49,9 @@ public class LeaseWorker implements Runnable, AutoCloseable {
         start(null);
     }
 
+    /**
+     * 以指定线程名异步启动工作者
+     */
     public synchronized void start(String threadName) {
         if (shutdown) {
             throw new IllegalStateException("LeaseWorker cannot be restarted after shutdown");
@@ -93,6 +102,11 @@ public class LeaseWorker implements Runnable, AutoCloseable {
         shutdown();
     }
 
+    /**
+     * 工作者主循环
+     * <p>
+     * 持续抢占并执行任务，直到被停止或线程中断。
+     */
     @Override
     public void run() {
         try {
@@ -135,6 +149,9 @@ public class LeaseWorker implements Runnable, AutoCloseable {
         }
     }
 
+    /**
+     * 尝试抢占下一个可用的任务租约
+     */
     private LeaseGrant acquireNextGrant() {
         try {
             Set<LeaseSubscription> subscriptions = registry.subscriptions();
@@ -191,6 +208,15 @@ public class LeaseWorker implements Runnable, AutoCloseable {
         handleFailure(grant, ex, false);
     }
 
+    /**
+     * 处理任务执行失败的情况
+     * <p>
+     * 判断是否允许重试，并计算下次重试的延迟时间。
+     *
+     * @param grant      当前任务租约
+     * @param ex         捕获到的异常
+     * @param allowRetry 是否允许重试（取决于异常类型及策略）
+     */
     private void handleFailure(LeaseGrant grant, Exception ex, boolean allowRetry) {
         log.error("Lease worker handle failed. taskId={}, queue={}, taskType={}",
                 grant.getTaskId(), grant.getQueue(), grant.getTaskType(), ex);
