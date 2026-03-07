@@ -1,7 +1,9 @@
 package com.team4u.framework.lease;
 
 /**
- * 缺失处理器的应对策略枚举。
+ * 缺失处理器的应对策略枚举
+ * <p>
+ * 当工作者抢占到任务但本地未注册对应的 {@link LeaseTaskHandler} 时，定义系统的兜底处理行为。
  */
 public enum MissingHandlerStrategy {
     /**

@@ -1,16 +1,17 @@
 package com.team4u.framework.lease;
 
-import com.team4u.framework.lease.backoff.Backoff;
+import com.team4u.framework.base.backoff.Backoff;
 import lombok.Builder;
 import lombok.Getter;
 
 import java.util.UUID;
 
 /**
- * Worker 运行策略配置类。
+ * 工作者运行策略配置类
  * <p>
- * 定义了 Worker 的身份标识、轮询频率、租赁时长、重试退避策略以及心跳机制等关键运行参数。
- * 建议使用 {@link #builder()} 进行流式构建。
+ * 定义了工作者的身份标识、轮询频率、租赁时长、重试退避策略以及心跳机制等核心参数。
+ * 正确的配置对于系统的吞吐量、任务实时性以及故障恢复能力至关重要。
+ * 建议使用 {@link #builder()} 进行流式构建，该构造逻辑包含了基本的参数合法性校验及默认值填充。
  */
 @Getter
 public class LeaseWorkerPolicy {
@@ -93,9 +94,11 @@ public class LeaseWorkerPolicy {
 
     /**
      * 判断是否满足重试条件
+     * <p>
+     * 根据当前失败计数与配置的最大允许失败次数进行比对。
      *
-     * @param nextFailureCount 即将写回的失败次数
-     * @return 允许重试返回 true
+     * @param nextFailureCount 即将写回的累计失败次数
+     * @return 允许重试返回 true，否则返回 false 并建议触发终态失败回写
      */
     public boolean shouldRetry(int nextFailureCount) {
         return maxFailures == -1 || nextFailureCount < maxFailures;
@@ -103,9 +106,11 @@ public class LeaseWorkerPolicy {
 
     /**
      * 计算下次尝试前的延迟时间
+     * <p>
+     * 委托给配置的 {@link Backoff} 策略根据当前失败次数计算具体的等待毫秒数。
      *
-     * @param nextFailureCount 即将写回的失败次数
-     * @return 延迟毫秒数
+     * @param nextFailureCount 即将写回的累计失败次数
+     * @return 需要等待的延迟毫秒数
      */
     public long nextDelayMillis(int nextFailureCount) {
         return backoff.calculateMillis(nextFailureCount);

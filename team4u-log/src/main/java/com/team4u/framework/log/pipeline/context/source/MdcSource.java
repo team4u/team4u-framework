@@ -7,7 +7,7 @@ import org.slf4j.MDC;
 /**
  * MDC (Mapped Diagnostic Context) 寻值源
  *
- * @author team4u
+ * @author jay.wu
  */
 public class MdcSource implements LogContextSource {
 

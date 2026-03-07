@@ -9,7 +9,7 @@ import com.team4u.framework.log.pipeline.context.LogContextSource;
  * 负责从 LogEvent 的 payload Map 中提取数据。
  * 同时支持通过 "payload" 关键字获取完整的 Map。
  *
- * @author team4u
+ * @author jay.wu
  */
 public class PayloadSource implements LogContextSource {
 

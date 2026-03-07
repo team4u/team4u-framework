@@ -1,0 +1,215 @@
+package com.team4u.framework.retry.proxy;
+
+import com.team4u.framework.base.backoff.Backoff;
+import com.team4u.framework.proxy.ProxyBuilder;
+import com.team4u.framework.retry.RetryExhaustedException;
+import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.TestLeaseBackend;
+import com.team4u.framework.retry.policy.NamedRetryPolicy;
+import com.team4u.framework.retry.policy.RetryPolicyRegistry;
+import com.team4u.framework.retry.proxy.serialize.RetryIgnore;
+import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
+import com.team4u.framework.retry.recovery.RetryTaskTypes;
+import org.junit.Assert;
+import org.junit.Before;
+import org.junit.Test;
+
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class RetryInterceptorTest {
+
+    @Before
+    public void setup() {
+        RetryPolicyRegistry.global().unregisterAll();
+        RecoveryHandlerRegistry.global().unregisterAll();
+        RetryPolicyRegistry.global().register(new NamedRetryPolicy() {
+            @Override
+            public String key() {
+                return "rpc-policy";
+            }
+
+            @Override
+            public RetryPolicy getPolicy() {
+                return RetryPolicy.builder()
+                        .maxAttempts(4)
+                        .backoff(Backoff.fixed(5))
+                        .condition("message contains 'timeout' && attempt < 4")
+                        .build();
+            }
+        });
+        RetryPolicyRegistry.global().register(new NamedRetryPolicy() {
+            @Override
+            public String key() {
+                return "ignore-policy";
+            }
+
+            @Override
+            public RetryPolicy getPolicy() {
+                return RetryPolicy.builder()
+                        .maxAttempts(2)
+                        .localAttempts(1)
+                        .build();
+            }
+        });
+    }
+
+    @Test
+    public void testSyncRetry() throws Exception {
+        OrderServiceImpl delegate = new OrderServiceImpl();
+        OrderService proxy = ProxyBuilder.forClass(OrderService.class)
+                .withDelegate(delegate)
+                .addInterceptor(new RetryInterceptor())
+                .build();
+
+        String result = proxy.createOrderSync("100");
+        Assert.assertEquals("sync_ok_100", result);
+        Assert.assertEquals(3, delegate.syncCount.get());
+    }
+
+    @Test
+    public void testAsyncRetry() throws Throwable {
+        OrderServiceImpl delegate = new OrderServiceImpl();
+        OrderService proxy = ProxyBuilder.forClass(OrderService.class)
+                .withDelegate(delegate)
+                .addInterceptor(new RetryInterceptor())
+                .build();
+
+        CompletableFuture<String> future = proxy.createOrderAsync("200");
+        String result = future.get(1, TimeUnit.SECONDS);
+
+        Assert.assertEquals("async_ok_200", result);
+        Assert.assertEquals(3, delegate.asyncCount.get());
+    }
+
+    @Test
+    public void testFilterByConditionExpression() {
+        OrderServiceImpl delegate = new OrderServiceImpl();
+        OrderService proxy = ProxyBuilder.forClass(OrderService.class)
+                .withDelegate(delegate)
+                .addInterceptor(new RetryInterceptor())
+                .build();
+
+        try {
+            proxy.nonRetryException("300");
+            Assert.fail("expected exception");
+        } catch (Exception e) {
+            Throwable cause = e;
+            while (cause.getCause() != null) {
+                cause = cause.getCause();
+            }
+            Assert.assertEquals("system error", cause.getMessage());
+        }
+
+        Assert.assertEquals(1, delegate.nonRetryCount.get());
+    }
+
+    @Test
+    public void testImplementationMethodParameterAnnotationsAreUsed() {
+        CapturingBackend backend = new CapturingBackend();
+        IgnoredArgService proxy = ProxyBuilder.forClass(IgnoredArgService.class)
+                .withDelegate(new IgnoredArgServiceImpl())
+                .addInterceptor(new RetryInterceptor(backend))
+                .build();
+
+        try {
+            proxy.send("visible", "top-secret");
+            Assert.fail("expected RetryExhaustedException");
+        } catch (RetryExhaustedException expected) {
+            // expected
+        }
+
+        Assert.assertNotNull(backend.submittedPayload);
+        Assert.assertTrue(backend.submittedPayload.contains("visible"));
+        Assert.assertFalse(backend.submittedPayload.contains("top-secret"));
+    }
+
+    @Test
+    public void testRetryProxyFactoryCanRegisterDefaultRecoveryHandler() {
+        Assert.assertFalse(RecoveryHandlerRegistry.global().get(RetryTaskTypes.DEFAULT_PROXY_RECOVERY).isPresent());
+
+        RetryProxyFactory.registerDefaultRecoveryHandler();
+
+        Assert.assertTrue(RecoveryHandlerRegistry.global().get(RetryTaskTypes.DEFAULT_PROXY_RECOVERY).isPresent());
+    }
+
+    public interface OrderService {
+        @Retryable(policy = "rpc-policy")
+        String createOrderSync(String orderId) throws Exception;
+
+        @Retryable(policy = "rpc-policy")
+        CompletableFuture<String> createOrderAsync(String orderId) throws Exception;
+
+        @Retryable(policy = "rpc-policy")
+        String nonRetryException(String orderId) throws Exception;
+    }
+
+    public interface IgnoredArgService {
+        @Retryable(policy = "ignore-policy")
+        void send(String name, Object secret);
+    }
+
+    public static class OrderServiceImpl implements OrderService {
+        private final AtomicInteger syncCount = new AtomicInteger();
+        private final AtomicInteger asyncCount = new AtomicInteger();
+        private final AtomicInteger nonRetryCount = new AtomicInteger();
+
+        @Override
+        public String createOrderSync(String orderId) {
+            if (syncCount.incrementAndGet() < 3) {
+                throw new RuntimeException("connection timeout");
+            }
+            return "sync_ok_" + orderId;
+        }
+
+        @Override
+        public CompletableFuture<String> createOrderAsync(String orderId) {
+            CompletableFuture<String> future = new CompletableFuture<>();
+            if (asyncCount.incrementAndGet() < 3) {
+                future.completeExceptionally(new RuntimeException("read timeout"));
+            } else {
+                future.complete("async_ok_" + orderId);
+            }
+            return future;
+        }
+
+        @Override
+        public String nonRetryException(String orderId) {
+            nonRetryCount.incrementAndGet();
+            throw new RuntimeException("system error");
+        }
+    }
+
+    public static class IgnoredArgServiceImpl implements IgnoredArgService {
+        @Override
+        public void send(String name, @RetryIgnore Object secret) {
+            throw new RuntimeException("retry me");
+        }
+    }
+
+    private static class CapturingBackend extends TestLeaseBackend {
+        private String submittedPayload;
+
+        @Override
+        public String saveIntent(String queueName, String contextJson) {
+            this.submittedPayload = contextJson;
+            return "intent";
+        }
+
+        @Override
+        public void completeIntent(String intentId) {
+        }
+
+        @Override
+        public void markTerminalFailure(String intentId, Throwable cause) {
+        }
+
+        @Override
+        public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
+            if (contextJson != null) {
+                this.submittedPayload = contextJson;
+            }
+        }
+    }
+}

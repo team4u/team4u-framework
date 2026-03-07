@@ -1,11 +1,11 @@
 package com.team4u.framework.log.pipeline.context;
 
-import com.team4u.framework.policy.core.OrderedPolicyChain;
-import com.team4u.framework.policy.util.PolicyScanner;
 import com.team4u.framework.log.core.LogEvent;
 import com.team4u.framework.log.pipeline.context.source.BasicMetadataSource;
 import com.team4u.framework.log.pipeline.context.source.MdcSource;
 import com.team4u.framework.log.pipeline.context.source.PayloadSource;
+import com.team4u.framework.policy.core.OrderedPolicyChain;
+import com.team4u.framework.policy.util.PolicyScanner;
 
 import java.util.Map;
 
@@ -17,7 +17,7 @@ import java.util.Map;
  * <p>
  * 当前已重构为按需拉取的 Pull 模型，大幅提升了性能并减少了临时对象的产生。
  *
- * @author team4u
+ * @author jay.wu
  */
 public class LogContextCollector {
 

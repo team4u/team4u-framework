@@ -1,7 +1,7 @@
 package com.team4u.framework.log.pipeline.context;
 
-import com.team4u.framework.policy.api.ContextPolicy;
 import com.team4u.framework.log.core.LogEvent;
+import com.team4u.framework.policy.api.ContextPolicy;
 
 /**
  * 日志上下文寻值接口 (Pull 模型)
@@ -9,7 +9,7 @@ import com.team4u.framework.log.core.LogEvent;
  * 基于 team4u-policy 框架实现。允许在执行动态染色、限流匹配时，
  * 按需从不同数据源（如 MDC、基础元数据、全局/线程局部属性、外部插件等）拉取数据。
  *
- * @author team4u
+ * @author jay.wu
  */
 public interface LogContextSource extends ContextPolicy<LogEvent> {
 

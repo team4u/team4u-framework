@@ -1,7 +1,9 @@
 package com.team4u.framework.lease;
 
 /**
- * 租约任务状态枚举。
+ * 租约任务状态枚举
+ * <p>
+ * 描述任务在分布式环境下的完整生命周期状态。
  */
 public enum LeaseTaskStatus {
     /**
