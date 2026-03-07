@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.lease;
 
-import com.team4u.framework.lease.LeaseBackend;
+import com.team4u.framework.lease.LeaseRuntimeClient;
 import com.team4u.framework.lease.LeaseWorker;
 import com.team4u.framework.lease.LeaseWorkerPolicy;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
@@ -17,30 +17,30 @@ public class RetryLeaseWorker extends LeaseWorker {
     /**
      * 使用默认的恢复处理器注册表和策略创建工作者
      *
-     * @param backend 租约/重试存储后端
+     * @param runtimeClient 租约/重试运行时客户端
      */
-    public RetryLeaseWorker(LeaseBackend backend) {
-        this(backend, RecoveryHandlerRegistry.global(), LeaseWorkerPolicy.builder().build());
+    public RetryLeaseWorker(LeaseRuntimeClient runtimeClient) {
+        this(runtimeClient, RecoveryHandlerRegistry.global(), LeaseWorkerPolicy.builder().build());
     }
 
     /**
      * 使用指定的恢复处理器注册表创建工作者
      *
-     * @param backend  租约/重试存储后端
+     * @param runtimeClient 运行时客户端
      * @param registry 恢复处理器注册表
      */
-    public RetryLeaseWorker(LeaseBackend backend, RecoveryHandlerRegistry registry) {
-        this(backend, registry, LeaseWorkerPolicy.builder().build());
+    public RetryLeaseWorker(LeaseRuntimeClient runtimeClient, RecoveryHandlerRegistry registry) {
+        this(runtimeClient, registry, LeaseWorkerPolicy.builder().build());
     }
 
     /**
      * 全参构造函数，允许完全自定义行为
      *
-     * @param backend  租约/重试存储后端
+     * @param runtimeClient 运行时客户端
      * @param registry 恢复处理器注册表
      * @param policy   租约工作策略
      */
-    public RetryLeaseWorker(LeaseBackend backend, RecoveryHandlerRegistry registry, LeaseWorkerPolicy policy) {
-        super(backend, new RecoveryHandlerRegistryLeaseAdapter(registry), policy);
+    public RetryLeaseWorker(LeaseRuntimeClient runtimeClient, RecoveryHandlerRegistry registry, LeaseWorkerPolicy policy) {
+        super(runtimeClient, new RecoveryHandlerRegistryLeaseAdapter(registry, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE), policy);
     }
 }

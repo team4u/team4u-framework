@@ -72,23 +72,19 @@
 
 ```java
 import com.team4u.framework.lease.LeaseTaskHandler;
+import com.team4u.framework.lease.LeaseExecutionContext;
 
 public class PushNotificationHandler implements LeaseTaskHandler {
     @Override
-    public String key() {
-        return "push-app-task";
-    }
-
-    @Override
-    public void handle(String payload) throws Exception {
-        // payload 为发布者丢进来的简单载荷（如 JSON）
-        System.out.println("【业务处理】拉取到通知推送任务，参数: " + payload);
+    public void handle(LeaseExecutionContext context) throws Exception {
+        // context 提供 payload、queue、taskType、deliveryCount、failureCount、attributes 等运行态信息
+        System.out.println("【业务处理】拉取到通知推送任务，参数: " + context.getPayload());
 
         // 模拟执行一个复杂、耗时较长的网络操作
         Thread.sleep(5000);
 
         // 如果这里直接通过 throw new RuntimeException("发生超时网络波动"); 
-        // 框架会自动捕获，根据策略并暂存错误供下一次时间槽再进行安全的投递重试
+        // 框架会自动捕获，根据 failureCount 与 backoff 策略决定 retry 或 DEAD
 
         System.out.println("【业务处理】推送成功。通知 LeaseWorker 去自动 Ack ");
     }
@@ -101,6 +97,7 @@ public class PushNotificationHandler implements LeaseTaskHandler {
 
 ```java
 import com.team4u.framework.lease.DefaultLeaseTaskHandlerRegistry;
+import com.team4u.framework.lease.LeasePublishRequest;
 import com.team4u.framework.lease.LeaseWorker;
 import com.team4u.framework.lease.LeaseWorkerPolicy;
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
@@ -110,9 +107,9 @@ public class LeaseDemoApp {
         // [模块 1]: 载入后备数据库或持久化层中心 (此处使用完全内存的后台作为演示支撑)
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
 
-        // [模块 2]: 向注册表绑定你的特定任务类型 -> 对应的业务类
+        // [模块 2]: 向注册表绑定 queue + taskType -> 对应的业务类
         DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
-        registry.register(new PushNotificationHandler());
+        registry.register("push", "push-app-task", new PushNotificationHandler());
 
         // [模块 3]: 自定义该程序的轮询策略规则
         LeaseWorkerPolicy policy = LeaseWorkerPolicy.builder()
@@ -120,7 +117,7 @@ public class LeaseDemoApp {
                 .leaseMillis(30_000L)                // 首次发放的无竞争保护租约有效时间：30 秒
                 .heartbeatEnabled(true)              // ★关键：开启防任务超时的心跳守护
                 .heartbeatIntervalMillis(10_000L)    // ★补充：每隔 10 秒发一次心跳，但每次续约长度仍是 leaseMillis
-                .maxAttempts(3)                      // 一旦产生出错，框架将尝试 3 次最终才会报“DEAD”死信
+                .maxFailures(3)                      // handler 失败累计 3 次后进入 DEAD
                 .build();
 
         // [模块 4]: 点燃后台默默奉献的核心 Worker，它将不停监听新业务！
@@ -130,7 +127,11 @@ public class LeaseDemoApp {
         // ----------------------------------------------------
         // [业务上游/API网关控制部分]：向中枢扔进任务，Worker会自动被唤醒嗅探到并带出来计算。
         System.out.println(">>> 外部请求：发布了一条 Push 任务...");
-        backend.publish("push-app-task", "{\"targetUid\":\"U99881\", \"msg\":\"您有一条未读包裹！\"}");
+        backend.publish(LeasePublishRequest.builder()
+                .queue("push")
+                .taskType("push-app-task")
+                .payload("{\"targetUid\":\"U99881\", \"msg\":\"您有一条未读包裹！\"}")
+                .build());
 
         // 为了避免系统瞬间退出，模拟 Web容器持续运作 15 秒观察后台轮询流转情况
         Thread.sleep(15000);
@@ -150,20 +151,23 @@ public class LeaseDemoApp {
 
 为支持多种接入端及扩展环境接入组件（从 MySQL 到 Redis 再到内存），框架设计了三类关键的隔离抽象基类接口。
 
-### 1. `LeasePublisher` (发布者接口)
+### 1. `LeaseProducer` / `LeaseAdminService`
 
-负责客户端发号指令：
+负责发布与运维：
 
 - `publish()`：发布即刻起生效或定格倒计时的`延时触发式处理任务`。
-- `cancel()` / `reschedule()`：系统级别高级人工介入管控，提供在不终止物理程序前可手动让特定的积压旧件重排查废。
+- `cancel()` / `reschedule()`：只对未持有有效租约的任务生效；若任务已 `LEASED`，返回 `ACTIVE_LEASE_PRESENT`。
+- `requeueDead()`：仅允许把 `DEAD` 任务重新投入调度。
 
-### 2. `LeaseBackend` (存储仓与裁判抽象)
+### 2. `LeaseRuntimeClient` / `LeaseQueryService`
 
-从 `Publisher` 延展，全权掌握各 Worker 分组争抢中的任务声明全线历史存储（底层是真实对接各种存储方案的落库者）：
+运行时与查询面职责分离：
 
 - `acquire`：最重要原语，带有严格版本的防并发抢锁入口。
-- `ack` / `retry` / `fail`：严谨的凭证后置确认方式，使用专属于持有者的 `LeaseToken` 抵御来自别的主机因意外乱报成功事件。
-- `heartbeat`：接盘长跑超时 Worker 的生命延长口。
+- `acquire` 在请求里携带 worker 的 `queue` 订阅能力，后端只返回匹配 queue 的任务，再由 `taskType` 路由到 handler。
+- `ack` / `retry` / `fail`：严谨的凭证后置确认方式，返回显式结果，便于识别 `LEASE_LOST`、`TASK_NOT_FOUND`、`TERMINAL`。
+- `heartbeat`：接盘长跑超时 Worker 的生命延长口，同样返回显式结果。
+- `get` / `list`：查询当前任务记录，可按 `queue`、`taskType`、`status`、`workerId` 过滤。
 
 ### 3. `LeaseWorkerPolicy` (Worker 调度策略库)
 
@@ -181,7 +185,7 @@ public class LeaseDemoApp {
 1. 绝对落实无副作用的业务幂等性
    微服务端网络变数和意外 JVM OOM 常发！试想当 Worker 已经刚把第三方推送调用下发，就在要发出 `ack`
    销账的一瞬间由于网线被拔出断开连接——框架是无从得知下发是否成功的；伴随租借过期它必定会被分派给下一个健康的主机进行“重试执行”。因此您的所有被拉起的
-   `LeaseTaskHandler.handle` 必须像水泵一样，要具备重复调用且结果完全统一安全的“事务幂等性能力”（常见用数据表防重约束做检查）。
+   `LeaseTaskHandler.handle(LeaseExecutionContext)` 必须像水泵一样，要具备重复调用且结果完全统一安全的“事务幂等性能力”（常见用数据表防重约束做检查）。
 
 2. 区分“可重试环境错误”与“决绝业务错误（Fail-Fast）”
    当抛出的异常是确定性的绝路错误（比如报文中包含错误JSON字段格式、被调用的客户端帐号本来就违规已被永封），这是无法用“反复尝试”修补的，此时你应手动记录或

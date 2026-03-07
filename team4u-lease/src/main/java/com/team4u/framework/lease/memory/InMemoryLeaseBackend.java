@@ -1,41 +1,63 @@
 package com.team4u.framework.lease.memory;
 
+import com.team4u.framework.lease.LeaseAcquireRequest;
+import com.team4u.framework.lease.LeaseAdminResult;
 import com.team4u.framework.lease.LeaseBackend;
 import com.team4u.framework.lease.LeaseGrant;
+import com.team4u.framework.lease.LeasePublishRequest;
+import com.team4u.framework.lease.LeaseQueryRequest;
+import com.team4u.framework.lease.LeaseRuntimeResult;
+import com.team4u.framework.lease.LeaseSubscription;
+import com.team4u.framework.lease.LeaseTaskPage;
+import com.team4u.framework.lease.LeaseTaskRecord;
 import com.team4u.framework.lease.LeaseTaskStatus;
-import lombok.*;
+import lombok.AccessLevel;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.Singular;
 
-import java.util.*;
-import java.util.concurrent.*;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.LinkedHashMap;
+import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.UUID;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.DelayQueue;
+import java.util.concurrent.Delayed;
+import java.util.concurrent.TimeUnit;
 
 /**
  * 内存版租约后端。
- * <p>
- * 该类是 {@link LeaseBackend} 的单进程内存实现，主要用于单元测试、演示或轻量级本地任务调度。
- * 它利用 {@link DelayQueue} 管理任务的可见性和租赁过期，并通过 {@link ConcurrentHashMap} 持久化任务记录。
  */
 public class InMemoryLeaseBackend implements LeaseBackend {
 
     private final ConcurrentMap<String, StoredTask> records = new ConcurrentHashMap<String, StoredTask>();
-    private final DelayQueue<AvailabilityRef> queue = new DelayQueue<AvailabilityRef>();
+    private final ConcurrentMap<QueueKey, DelayQueue<AvailabilityRef>> queueStates =
+            new ConcurrentHashMap<QueueKey, DelayQueue<AvailabilityRef>>();
 
     @Override
-    public String publish(String taskType, String payload) {
-        return publish(taskType, payload, 0L);
-    }
-
-    @Override
-    public synchronized String publish(String taskType, String payload, long delayMillis) {
+    public synchronized String publish(LeasePublishRequest request) {
+        validatePublishRequest(request);
         long now = System.currentTimeMillis();
         String taskId = nextTaskId();
         StoredTask task = new StoredTask(
                 taskId,
-                taskType,
-                payload,
+                defaultNamespace(request.getNamespace()),
+                request.getQueue(),
+                request.getTaskType(),
+                request.getPayload(),
                 now,
-                now + Math.max(0L, delayMillis),
+                now + Math.max(0L, request.getDelayMillis()),
+                request.getPriority(),
                 0,
-                Collections.emptyMap(),
+                0,
+                request.getAttributes(),
                 LeaseTaskStatus.SCHEDULED,
                 null,
                 null,
@@ -43,88 +65,186 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                 null
         );
         records.put(taskId, task);
-        queue.offer(new AvailabilityRef(taskId, task.getVisibleAtMillis()));
+        offer(task);
+        notifyAll();
         return taskId;
     }
 
     @Override
-    public synchronized void reschedule(String taskId, long delayMillis) {
-        StoredTask current = records.get(taskId);
-        if (current == null || isTerminal(current)) {
-            return;
-        }
-        long now = System.currentTimeMillis();
-        StoredTask next = current.withSchedule(now + Math.max(0L, delayMillis), current.getLastError());
-        records.put(taskId, next);
-        queue.offer(new AvailabilityRef(taskId, next.getVisibleAtMillis()));
-    }
-
-    @Override
-    public synchronized void cancel(String taskId) {
-        StoredTask current = records.get(taskId);
-        if (current == null || isTerminal(current)) {
-            return;
-        }
-        records.put(taskId, current.withTerminal(LeaseTaskStatus.DEAD, "cancelled"));
-    }
-
-    @Override
-    public LeaseGrant acquire(String workerId, long leaseMillis, long waitTimeoutMillis) throws InterruptedException {
-        long timeout = Math.max(0L, waitTimeoutMillis);
+    public synchronized LeaseGrant acquire(LeaseAcquireRequest request) throws InterruptedException {
+        validateAcquireRequest(request);
+        long timeout = Math.max(0L, request.getWaitTimeoutMillis());
         long deadline = System.currentTimeMillis() + timeout;
         while (true) {
-            AvailabilityRef ref = pollRef(deadline, timeout);
-            if (ref == null) {
-                return null;
-            }
-
-            LeaseGrant grant = claim(ref, workerId, leaseMillis);
+            long now = System.currentTimeMillis();
+            long nextVisibleAt = Long.MAX_VALUE;
+            LeaseGrant grant = tryAcquire(request, now);
             if (grant != null) {
                 return grant;
             }
+            for (LeaseSubscription subscription : request.getSubscriptions()) {
+                DelayQueue<AvailabilityRef> queue = queueStates.get(new QueueKey(
+                        defaultNamespace(subscription.getNamespace()), subscription.getQueue()));
+                if (queue == null) {
+                    continue;
+                }
+                AvailabilityRef head = queue.peek();
+                if (head != null) {
+                    nextVisibleAt = Math.min(nextVisibleAt, head.getAvailableAtMillis());
+                }
+            }
+            if (timeout <= 0L) {
+                return null;
+            }
+            long remaining = deadline - now;
+            if (remaining <= 0L) {
+                return null;
+            }
+            long waitMillis = remaining;
+            if (nextVisibleAt != Long.MAX_VALUE) {
+                waitMillis = Math.min(waitMillis, Math.max(1L, nextVisibleAt - now));
+            }
+            wait(waitMillis);
         }
     }
 
     @Override
-    public synchronized void ack(String taskId, String workerId, String leaseToken) {
+    public synchronized LeaseRuntimeResult ack(String taskId, String workerId, String leaseToken) {
         StoredTask current = records.get(taskId);
-        if (!matchesLease(current, workerId, leaseToken)) {
-            return;
+        LeaseRuntimeResult result = validateRuntimeMutation(current, workerId, leaseToken);
+        if (result != LeaseRuntimeResult.APPLIED) {
+            return result;
         }
-        records.put(taskId, current.withTerminal(LeaseTaskStatus.SUCCEEDED, null));
+        records.put(taskId, current.withTerminal(LeaseTaskStatus.SUCCEEDED, current.getFailureCount(), null));
+        notifyAll();
+        return LeaseRuntimeResult.APPLIED;
     }
 
     @Override
-    public synchronized void retry(String taskId, String workerId, String leaseToken, long delayMillis, Throwable cause) {
+    public synchronized LeaseRuntimeResult retry(String taskId, String workerId, String leaseToken,
+                                                 long delayMillis, Throwable cause) {
         StoredTask current = records.get(taskId);
-        if (!matchesLease(current, workerId, leaseToken)) {
-            return;
+        LeaseRuntimeResult result = validateRuntimeMutation(current, workerId, leaseToken);
+        if (result != LeaseRuntimeResult.APPLIED) {
+            return result;
         }
         long visibleAt = System.currentTimeMillis() + Math.max(0L, delayMillis);
-        StoredTask next = current.withSchedule(visibleAt, errorMessage(cause));
+        StoredTask next = current.withSchedule(visibleAt, current.getFailureCount() + 1, errorMessage(cause));
         records.put(taskId, next);
-        queue.offer(new AvailabilityRef(taskId, next.getVisibleAtMillis()));
+        offer(next);
+        notifyAll();
+        return LeaseRuntimeResult.APPLIED;
     }
 
     @Override
-    public synchronized void fail(String taskId, String workerId, String leaseToken, Throwable cause) {
+    public synchronized LeaseRuntimeResult fail(String taskId, String workerId, String leaseToken, Throwable cause) {
         StoredTask current = records.get(taskId);
-        if (!matchesLease(current, workerId, leaseToken)) {
-            return;
+        LeaseRuntimeResult result = validateRuntimeMutation(current, workerId, leaseToken);
+        if (result != LeaseRuntimeResult.APPLIED) {
+            return result;
         }
-        records.put(taskId, current.withTerminal(LeaseTaskStatus.DEAD, errorMessage(cause)));
+        records.put(taskId, current.withTerminal(LeaseTaskStatus.DEAD, current.getFailureCount() + 1, errorMessage(cause)));
+        notifyAll();
+        return LeaseRuntimeResult.APPLIED;
     }
 
     @Override
-    public synchronized void heartbeat(String taskId, String workerId, String leaseToken, long extendMillis) {
+    public synchronized LeaseRuntimeResult heartbeat(String taskId, String workerId, String leaseToken,
+                                                     long extendMillis) {
         StoredTask current = records.get(taskId);
-        if (!matchesLease(current, workerId, leaseToken)) {
-            return;
+        LeaseRuntimeResult result = validateRuntimeMutation(current, workerId, leaseToken);
+        if (result != LeaseRuntimeResult.APPLIED) {
+            return result;
         }
         long nextLeaseExpiresAt = System.currentTimeMillis() + Math.max(1L, extendMillis);
         StoredTask next = current.withLease(workerId, leaseToken, nextLeaseExpiresAt);
         records.put(taskId, next);
-        queue.offer(new AvailabilityRef(taskId, next.getLeaseExpiresAtMillis()));
+        offer(next);
+        notifyAll();
+        return LeaseRuntimeResult.APPLIED;
+    }
+
+    @Override
+    public synchronized LeaseAdminResult reschedule(String taskId, long delayMillis) {
+        StoredTask current = records.get(taskId);
+        if (current == null) {
+            return LeaseAdminResult.TASK_NOT_FOUND;
+        }
+        if (isTerminal(current)) {
+            return LeaseAdminResult.TERMINAL;
+        }
+        if (hasActiveLease(current)) {
+            return LeaseAdminResult.ACTIVE_LEASE_PRESENT;
+        }
+        long now = System.currentTimeMillis();
+        StoredTask next = current.withSchedule(now + Math.max(0L, delayMillis), current.getFailureCount(), current.getLastError());
+        records.put(taskId, next);
+        offer(next);
+        notifyAll();
+        return LeaseAdminResult.APPLIED;
+    }
+
+    @Override
+    public synchronized LeaseAdminResult cancel(String taskId) {
+        StoredTask current = records.get(taskId);
+        if (current == null) {
+            return LeaseAdminResult.TASK_NOT_FOUND;
+        }
+        if (isTerminal(current)) {
+            return LeaseAdminResult.TERMINAL;
+        }
+        if (hasActiveLease(current)) {
+            return LeaseAdminResult.ACTIVE_LEASE_PRESENT;
+        }
+        records.put(taskId, current.withTerminal(LeaseTaskStatus.DEAD, current.getFailureCount(), "cancelled"));
+        notifyAll();
+        return LeaseAdminResult.APPLIED;
+    }
+
+    @Override
+    public synchronized LeaseAdminResult requeueDead(String taskId, long delayMillis) {
+        StoredTask current = records.get(taskId);
+        if (current == null) {
+            return LeaseAdminResult.TASK_NOT_FOUND;
+        }
+        if (current.getStatus() != LeaseTaskStatus.DEAD) {
+            return isTerminal(current) ? LeaseAdminResult.TERMINAL : LeaseAdminResult.TERMINAL;
+        }
+        long visibleAt = System.currentTimeMillis() + Math.max(0L, delayMillis);
+        StoredTask next = current.withSchedule(visibleAt, current.getFailureCount(), current.getLastError());
+        records.put(taskId, next);
+        offer(next);
+        notifyAll();
+        return LeaseAdminResult.APPLIED;
+    }
+
+    @Override
+    public synchronized Optional<LeaseTaskRecord> get(String taskId) {
+        StoredTask task = records.get(taskId);
+        return task == null ? Optional.<LeaseTaskRecord>empty() : Optional.of(task.toRecord());
+    }
+
+    @Override
+    public synchronized LeaseTaskPage list(LeaseQueryRequest request) {
+        LeaseQueryRequest safeRequest = request == null ? LeaseQueryRequest.builder().build() : request;
+        List<LeaseTaskRecord> matches = new ArrayList<LeaseTaskRecord>();
+        for (StoredTask task : records.values()) {
+            if (!matches(safeRequest, task)) {
+                continue;
+            }
+            matches.add(task.toRecord());
+        }
+        matches.sort(Comparator.comparingLong(LeaseTaskRecord::getCreatedAtMillis).thenComparing(LeaseTaskRecord::getTaskId));
+        int page = Math.max(0, safeRequest.getPage());
+        int pageSize = safeRequest.getPageSize() <= 0 ? 50 : safeRequest.getPageSize();
+        int fromIndex = Math.min(matches.size(), page * pageSize);
+        int toIndex = Math.min(matches.size(), fromIndex + pageSize);
+        return LeaseTaskPage.builder()
+                .total(matches.size())
+                .page(page)
+                .pageSize(pageSize)
+                .items(new ArrayList<LeaseTaskRecord>(matches.subList(fromIndex, toIndex)))
+                .build();
     }
 
     public synchronized Map<String, StoredTask> snapshot() {
@@ -135,86 +255,140 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         return snapshot;
     }
 
-    /**
-     * 等待并获取队列中可见的任务。
-     *
-     * @param deadline          获取操作的绝对截止毫秒时间戳
-     * @param waitTimeoutMillis 相对等待时长
-     * @return 可用的任务引用；若在截止时间内无任务则返回 null
-     * @throws InterruptedException 若当前线程被中断
-     */
-    private AvailabilityRef pollRef(long deadline, long waitTimeoutMillis) throws InterruptedException {
-        if (waitTimeoutMillis <= 0L) {
-            return queue.poll();
+    private LeaseGrant tryAcquire(LeaseAcquireRequest request, long now) {
+        for (LeaseSubscription subscription : request.getSubscriptions()) {
+            DelayQueue<AvailabilityRef> queue = queueStates.get(new QueueKey(
+                    defaultNamespace(subscription.getNamespace()), subscription.getQueue()));
+            if (queue == null) {
+                continue;
+            }
+            while (true) {
+                AvailabilityRef ref = queue.peek();
+                if (ref == null || ref.getAvailableAtMillis() > now) {
+                    break;
+                }
+                queue.poll();
+                LeaseGrant grant = claim(ref, request.getWorkerId(), request.getLeaseMillis());
+                if (grant != null) {
+                    return grant;
+                }
+            }
         }
-        long remaining = deadline - System.currentTimeMillis();
-        if (remaining <= 0L) {
-            return null;
-        }
-        return queue.poll(remaining, TimeUnit.MILLISECONDS);
+        return null;
     }
 
-    /**
-     * 竞争并锁定任务的所有权（租约）。
-     * <p>
-     * 该方法会进行“可见性校验”和“版本校验”，确保一个过期任务或被重新调度的任务不会被错误领取。
-     *
-     * @param ref         从延迟队列中取出的任务可见性引用
-     * @param workerId    尝试竞争的 Worker ID
-     * @param leaseMillis 期望锁定的时长
-     * @return 成功竞争后返回租约通行证；若任务已被取消、完成或可见性已变更则返回 null
-     */
-    private synchronized LeaseGrant claim(AvailabilityRef ref, String workerId, long leaseMillis) {
+    private LeaseGrant claim(AvailabilityRef ref, String workerId, long leaseMillis) {
         StoredTask current = records.get(ref.taskId);
-        // 如果任务已被删除或处于终态，则标记无效
         if (current == null || isTerminal(current)) {
             return null;
         }
-
         long now = System.currentTimeMillis();
-        // 计算任务最新的可用时间（可能是原始可见时间，也可能是之前租约的到期时间）
-        long availableAt = current.getStatus() == LeaseTaskStatus.LEASED
-                ? current.getLeaseExpiresAtMillis()
-                : current.getVisibleAtMillis();
-
-        // 双重检查：如果任务的可用时刻已经发生了偏移，当前 ref 已失效
+        long availableAt = nextAvailableAt(current);
         if (availableAt != ref.availableAtMillis || availableAt > now) {
             return null;
         }
 
         String leaseToken = nextLeaseToken();
         long leaseExpiresAt = now + Math.max(1L, leaseMillis);
-
-        // 更新记录并维护内存视图
         StoredTask leased = current.claim(workerId, leaseToken, leaseExpiresAt);
         records.put(ref.taskId, leased);
-
-        // 重新放入延迟队列，以便租约到期后能再次可见
-        queue.offer(new AvailabilityRef(ref.taskId, leaseExpiresAt));
+        offer(leased);
+        notifyAll();
         return leased.toGrant();
     }
 
-    /**
-     * 校验租约的合法性。
-     *
-     * @return true 表示该 Worker 仍合法持有该任务的当前租约且未过期
-     */
-    private boolean matchesLease(StoredTask current, String workerId, String leaseToken) {
-        if (current == null || current.getStatus() != LeaseTaskStatus.LEASED) {
+    private boolean matches(LeaseQueryRequest request, StoredTask task) {
+        if (request.getNamespace() != null && !request.getNamespace().equals(task.getNamespace())) {
             return false;
         }
-        if (!stringEquals(current.getWorkerId(), workerId) || !stringEquals(current.getLeaseToken(), leaseToken)) {
+        if (request.getQueue() != null && !request.getQueue().equals(task.getQueue())) {
             return false;
         }
-        // 只有当前时间小于到期时间才认为有效
-        return current.getLeaseExpiresAtMillis() >= System.currentTimeMillis();
+        if (request.getTaskType() != null && !request.getTaskType().equals(task.getTaskType())) {
+            return false;
+        }
+        if (!request.getStatuses().isEmpty() && !request.getStatuses().contains(task.getStatus())) {
+            return false;
+        }
+        return request.getWorkerId() == null || request.getWorkerId().equals(task.getWorkerId());
     }
 
-    /**
-     * 判断任务是否已进入最终状态（成功或死亡）。
-     */
+    private LeaseRuntimeResult validateRuntimeMutation(StoredTask current, String workerId, String leaseToken) {
+        if (current == null) {
+            return LeaseRuntimeResult.TASK_NOT_FOUND;
+        }
+        if (isTerminal(current)) {
+            return LeaseRuntimeResult.TERMINAL;
+        }
+        if (current.getStatus() != LeaseTaskStatus.LEASED) {
+            return LeaseRuntimeResult.LEASE_LOST;
+        }
+        if (!Objects.equals(current.getWorkerId(), workerId) || !Objects.equals(current.getLeaseToken(), leaseToken)) {
+            return LeaseRuntimeResult.LEASE_LOST;
+        }
+        if (current.getLeaseExpiresAtMillis() < System.currentTimeMillis()) {
+            return LeaseRuntimeResult.LEASE_LOST;
+        }
+        return LeaseRuntimeResult.APPLIED;
+    }
+
+    private boolean hasActiveLease(StoredTask current) {
+        return current.getStatus() == LeaseTaskStatus.LEASED
+                && current.getLeaseExpiresAtMillis() >= System.currentTimeMillis();
+    }
+
     private boolean isTerminal(StoredTask current) {
         return current.getStatus() == LeaseTaskStatus.SUCCEEDED || current.getStatus() == LeaseTaskStatus.DEAD;
+    }
+
+    private void validatePublishRequest(LeasePublishRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request must not be null");
+        }
+        if (isBlank(request.getQueue())) {
+            throw new IllegalArgumentException("request.queue must not be blank");
+        }
+        if (isBlank(request.getTaskType())) {
+            throw new IllegalArgumentException("request.taskType must not be blank");
+        }
+    }
+
+    private void validateAcquireRequest(LeaseAcquireRequest request) {
+        if (request == null) {
+            throw new IllegalArgumentException("request must not be null");
+        }
+        if (isBlank(request.getWorkerId())) {
+            throw new IllegalArgumentException("request.workerId must not be blank");
+        }
+        if (request.getLeaseMillis() <= 0L) {
+            throw new IllegalArgumentException("request.leaseMillis must be greater than 0");
+        }
+        if (request.getSubscriptions().isEmpty()) {
+            throw new IllegalArgumentException("request.subscriptions must not be empty");
+        }
+        for (LeaseSubscription subscription : request.getSubscriptions()) {
+            if (subscription == null || isBlank(subscription.getQueue())) {
+                throw new IllegalArgumentException("subscription.queue must not be blank");
+            }
+        }
+    }
+
+    private void offer(StoredTask task) {
+        queueState(task.getNamespace(), task.getQueue()).offer(new AvailabilityRef(
+                task.getTaskId(), nextAvailableAt(task), task.getPriority(), task.getCreatedAtMillis()));
+    }
+
+    private long nextAvailableAt(StoredTask task) {
+        return task.getStatus() == LeaseTaskStatus.LEASED ? task.getLeaseExpiresAtMillis() : task.getVisibleAtMillis();
+    }
+
+    private DelayQueue<AvailabilityRef> queueState(String namespace, String queue) {
+        return queueStates.computeIfAbsent(new QueueKey(defaultNamespace(namespace), queue),
+                ignored -> new DelayQueue<AvailabilityRef>());
+    }
+
+    private String defaultNamespace(String namespace) {
+        return isBlank(namespace) ? "default" : namespace;
     }
 
     private String nextTaskId() {
@@ -229,8 +403,8 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         return cause == null ? null : String.valueOf(cause);
     }
 
-    private boolean stringEquals(String left, String right) {
-        return Objects.equals(left, right);
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 
     @Getter
@@ -238,6 +412,8 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     private static class AvailabilityRef implements Delayed {
         private final String taskId;
         private final long availableAtMillis;
+        private final int priority;
+        private final long createdAtMillis;
 
         @Override
         public long getDelay(TimeUnit unit) {
@@ -247,103 +423,78 @@ public class InMemoryLeaseBackend implements LeaseBackend {
 
         @Override
         public int compareTo(Delayed other) {
-            AvailabilityRef o = (AvailabilityRef) other;
-            return Long.compare(this.availableAtMillis, o.availableAtMillis);
+            AvailabilityRef that = (AvailabilityRef) other;
+            int byTime = Long.compare(this.availableAtMillis, that.availableAtMillis);
+            if (byTime != 0) {
+                return byTime;
+            }
+            int byPriority = Integer.compare(that.priority, this.priority);
+            if (byPriority != 0) {
+                return byPriority;
+            }
+            return Long.compare(this.createdAtMillis, that.createdAtMillis);
         }
     }
 
-    /**
-     * 存储的任务实例，用于内存中维护任务状态和生命周期。
-     * 提供不可变的数据视图以及通过 Lombok 生成的辅助修改方法。
-     */
+    @AllArgsConstructor
+    private static class QueueKey {
+        private final String namespace;
+        private final String queue;
+
+        @Override
+        public boolean equals(Object obj) {
+            if (this == obj) {
+                return true;
+            }
+            if (!(obj instanceof QueueKey)) {
+                return false;
+            }
+            QueueKey that = (QueueKey) obj;
+            return Objects.equals(namespace, that.namespace) && Objects.equals(queue, that.queue);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(namespace, queue);
+        }
+    }
+
     @Getter
     @Builder(toBuilder = true)
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
     public static final class StoredTask {
-        /**
-         * 任务唯一标识符
-         */
         private final String taskId;
-        /**
-         * 任务类型，用于区分不同业务逻辑的处理器
-         */
+        private final String namespace;
+        private final String queue;
         private final String taskType;
-        /**
-         * 任务执行所需的数据载荷
-         */
         private final String payload;
-        /**
-         * 任务创建的时间戳（毫秒）
-         */
         private final long createdAtMillis;
-        /**
-         * 任务预计对 Worker 可见的时间戳（毫秒），用于延迟调度
-         */
-
         private final long visibleAtMillis;
-        /**
-         * 任务已经被尝试执行的次数
-         */
-        private final int attemptCount;
-        /**
-         * 任务的附加属性集合
-         */
+        private final int priority;
+        private final int deliveryCount;
+        private final int failureCount;
         @Singular
         private final Map<String, String> attributes;
-        /**
-         * 任务当前所处的状态（如：已调度、已租赁、已成功、已死亡等）
-         */
-
         private final LeaseTaskStatus status;
-        /**
-         * 当前持有该任务租约的 Worker ID
-         */
-
         private final String workerId;
-        /**
-         * 验证租约所有权的令牌
-         */
-
         private final String leaseToken;
-        /**
-         * 当前租约到期的时间戳（毫秒）
-         */
-
         private final long leaseExpiresAtMillis;
-        /**
-         * 任务最近一次执行失败的错误信息
-         */
-
         private final String lastError;
 
-        /**
-         * 认领任务并更新相关租约信息。
-         *
-         * @param workerId             认领任务的 Worker ID
-         * @param leaseToken           分配给此次租约的令牌
-         * @param leaseExpiresAtMillis 租约的过期时间戳
-         * @return 认领后的新任务状态副本
-         */
         private StoredTask claim(String workerId, String leaseToken, long leaseExpiresAtMillis) {
             return toBuilder()
                     .workerId(workerId)
                     .leaseToken(leaseToken)
                     .leaseExpiresAtMillis(leaseExpiresAtMillis)
                     .status(LeaseTaskStatus.LEASED)
-                    .attemptCount(attemptCount + 1)
+                    .deliveryCount(deliveryCount + 1)
                     .build();
         }
 
-        /**
-         * 重新调度任务，清除当前的租约信息并设定新的可见时间。
-         *
-         * @param visibleAtMillis 任务下一次变为可见的时间戳
-         * @param lastError       重新调度前记录的错误信息（如果有）
-         * @return 重新调度后的新任务状态副本
-         */
-        private StoredTask withSchedule(long visibleAtMillis, String lastError) {
+        private StoredTask withSchedule(long visibleAtMillis, int failureCount, String lastError) {
             return toBuilder()
                     .visibleAtMillis(visibleAtMillis)
+                    .failureCount(failureCount)
                     .lastError(lastError)
                     .status(LeaseTaskStatus.SCHEDULED)
                     .workerId(null)
@@ -352,14 +503,6 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                     .build();
         }
 
-        /**
-         * 更新任务的租约信息（如续租）。
-         *
-         * @param workerId             持有租约的 Worker ID
-         * @param leaseToken           租约令牌
-         * @param leaseExpiresAtMillis 新的租约过期时间戳
-         * @return 更新租约后的新任务状态副本
-         */
         private StoredTask withLease(String workerId, String leaseToken, long leaseExpiresAtMillis) {
             return toBuilder()
                     .workerId(workerId)
@@ -369,16 +512,10 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                     .build();
         }
 
-        /**
-         * 将任务设置为终态（如：成功或死亡），并清除租约信息。
-         *
-         * @param status    目标终态
-         * @param lastError 导致终态的错误信息（如有）
-         * @return 设置为终态后的新任务状态副本
-         */
-        private StoredTask withTerminal(LeaseTaskStatus status, String lastError) {
+        private StoredTask withTerminal(LeaseTaskStatus status, int failureCount, String lastError) {
             return toBuilder()
                     .status(status)
+                    .failureCount(failureCount)
                     .lastError(lastError)
                     .workerId(null)
                     .leaseToken(null)
@@ -386,22 +523,28 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                     .build();
         }
 
-        /**
-         * 将存储的任务对象转换为对外提供的租约授权模型。
-         *
-         * @return 对应的 {@link LeaseGrant} 对象
-         */
         private LeaseGrant toGrant() {
-            return LeaseGrant.builder()
+            return new LeaseGrant(taskId, queue, taskType, payload, deliveryCount, failureCount, attributes,
+                    createdAtMillis, visibleAtMillis, leaseExpiresAtMillis, workerId, leaseToken);
+        }
+
+        private LeaseTaskRecord toRecord() {
+            return LeaseTaskRecord.builder()
                     .taskId(taskId)
+                    .namespace(namespace)
+                    .queue(queue)
                     .taskType(taskType)
                     .payload(payload)
+                    .status(status)
                     .workerId(workerId)
-                    .leaseToken(leaseToken)
-                    .attemptCount(attemptCount)
+                    .priority(priority)
+                    .deliveryCount(deliveryCount)
+                    .failureCount(failureCount)
                     .createdAtMillis(createdAtMillis)
                     .visibleAtMillis(visibleAtMillis)
                     .leaseExpiresAtMillis(leaseExpiresAtMillis)
+                    .lastError(lastError)
+                    .attributes(attributes == null ? Collections.<String, String>emptyMap() : attributes)
                     .build();
         }
     }

@@ -5,9 +5,9 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 表示任务已被某个 worker 成功持有租约。
+ * 处理器执行上下文。
  */
-public class LeaseGrant {
+public class LeaseExecutionContext {
 
     private final String taskId;
     private final String queue;
@@ -19,21 +19,19 @@ public class LeaseGrant {
     private final long createdAtMillis;
     private final long visibleAtMillis;
     private final long leaseExpiresAtMillis;
-    private final String workerId;
-    private final String leaseToken;
+    private final Runnable heartbeatRequester;
 
-    public LeaseGrant(String taskId,
-                      String queue,
-                      String taskType,
-                      String payload,
-                      int deliveryCount,
-                      int failureCount,
-                      Map<String, String> attributes,
-                      long createdAtMillis,
-                      long visibleAtMillis,
-                      long leaseExpiresAtMillis,
-                      String workerId,
-                      String leaseToken) {
+    public LeaseExecutionContext(String taskId,
+                                 String queue,
+                                 String taskType,
+                                 String payload,
+                                 int deliveryCount,
+                                 int failureCount,
+                                 Map<String, String> attributes,
+                                 long createdAtMillis,
+                                 long visibleAtMillis,
+                                 long leaseExpiresAtMillis,
+                                 Runnable heartbeatRequester) {
         this.taskId = taskId;
         this.queue = queue;
         this.taskType = taskType;
@@ -46,8 +44,7 @@ public class LeaseGrant {
         this.createdAtMillis = createdAtMillis;
         this.visibleAtMillis = visibleAtMillis;
         this.leaseExpiresAtMillis = leaseExpiresAtMillis;
-        this.workerId = workerId;
-        this.leaseToken = leaseToken;
+        this.heartbeatRequester = heartbeatRequester;
     }
 
     public String getTaskId() {
@@ -90,11 +87,9 @@ public class LeaseGrant {
         return leaseExpiresAtMillis;
     }
 
-    String workerId() {
-        return workerId;
-    }
-
-    String leaseToken() {
-        return leaseToken;
+    public void requestHeartbeat() {
+        if (heartbeatRequester != null) {
+            heartbeatRequester.run();
+        }
     }
 }

@@ -27,4 +27,14 @@ public class LeaseWorkerPolicyTest {
             Assert.assertTrue(ex.getMessage().contains("heartbeatIntervalMillis"));
         }
     }
+
+    @Test
+    public void testMaxFailuresMustBePositiveOrInfinite() {
+        try {
+            LeaseWorkerPolicy.builder().maxFailures(0).build();
+            Assert.fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException ex) {
+            Assert.assertTrue(ex.getMessage().contains("maxFailures"));
+        }
+    }
 }

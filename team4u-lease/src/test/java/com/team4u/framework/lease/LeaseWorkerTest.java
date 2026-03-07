@@ -5,7 +5,6 @@ import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.Map;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -14,24 +13,18 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class LeaseWorkerTest {
 
+    private static final String DEFAULT_QUEUE = "default";
+
     @Test
     public void testWorkerAcksOnSuccess() throws Exception {
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
         DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
-        final CountDownLatch latch = new CountDownLatch(1);
-        final AtomicReference<String> payloadRef = new AtomicReference<String>();
+        CountDownLatch latch = new CountDownLatch(1);
+        AtomicReference<String> payloadRef = new AtomicReference<String>();
 
-        registry.register(new LeaseTaskHandler() {
-            @Override
-            public String key() {
-                return "pay";
-            }
-
-            @Override
-            public void handle(String payload) {
-                payloadRef.set(payload);
-                latch.countDown();
-            }
+        registry.register(DEFAULT_QUEUE, "pay", context -> {
+            payloadRef.set(context.getPayload());
+            latch.countDown();
         });
 
         LeaseWorker worker = new LeaseWorker(backend, registry, LeaseWorkerPolicy.builder()
@@ -40,42 +33,31 @@ public class LeaseWorkerTest {
                 .build());
         worker.start("lease-worker-test-success");
         try {
-            backend.publish("pay", "{\"id\":1}");
+            backend.publish(request("pay", "{\"id\":1}"));
             Assert.assertTrue(latch.await(2, TimeUnit.SECONDS));
             Assert.assertEquals("{\"id\":1}", payloadRef.get());
-
-            Map<String, InMemoryLeaseBackend.StoredTask> snapshot = backend.snapshot();
-            InMemoryLeaseBackend.StoredTask task = snapshot.values().iterator().next();
-            Assert.assertEquals(LeaseTaskStatus.SUCCEEDED, task.getStatus());
+            Assert.assertEquals(LeaseTaskStatus.SUCCEEDED, backend.snapshot().values().iterator().next().getStatus());
         } finally {
             worker.shutdown();
         }
     }
 
     @Test
-    public void testWorkerFailsAfterMaxAttempts() throws Exception {
+    public void testWorkerRetriesByFailureCountAndMarksDead() throws Exception {
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
         DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
-        final CountDownLatch latch = new CountDownLatch(3);
-        final AtomicInteger attempts = new AtomicInteger();
+        CountDownLatch latch = new CountDownLatch(3);
+        AtomicInteger attempts = new AtomicInteger();
 
-        registry.register(new LeaseTaskHandler() {
-            @Override
-            public String key() {
-                return "pay";
-            }
-
-            @Override
-            public void handle(String payload) {
-                attempts.incrementAndGet();
-                latch.countDown();
-                throw new IllegalStateException("boom");
-            }
+        registry.register(DEFAULT_QUEUE, "pay", context -> {
+            attempts.incrementAndGet();
+            latch.countDown();
+            throw new IllegalStateException("boom");
         });
 
         LeaseWorker worker = new LeaseWorker(backend, registry, LeaseWorkerPolicy.builder()
                 .workerId("worker-a")
-                .maxAttempts(3)
+                .maxFailures(3)
                 .backoff(Backoff.fixed(10L))
                 .leaseMillis(100L)
                 .pollWaitMillis(20L)
@@ -83,12 +65,13 @@ public class LeaseWorkerTest {
                 .build());
         worker.start("lease-worker-test-failure");
         try {
-            String taskId = backend.publish("pay", "payload");
+            String taskId = backend.publish(request("pay", "payload"));
             Assert.assertTrue(latch.await(2, TimeUnit.SECONDS));
 
-            InMemoryLeaseBackend.StoredTask task = awaitTask(snapshotTask(taskId, backend), taskId, backend, LeaseTaskStatus.DEAD);
+            InMemoryLeaseBackend.StoredTask task = awaitTask(taskId, backend, LeaseTaskStatus.DEAD);
             Assert.assertEquals(3, attempts.get());
-            Assert.assertEquals(LeaseTaskStatus.DEAD, task.getStatus());
+            Assert.assertEquals(3, task.getFailureCount());
+            Assert.assertEquals(3, task.getDeliveryCount());
             Assert.assertTrue(task.getLastError().contains("boom"));
         } finally {
             worker.shutdown();
@@ -96,47 +79,41 @@ public class LeaseWorkerTest {
     }
 
     @Test
-    public void testMissingHandlerRetryLater() throws Exception {
+    public void testWorkerWithNoSubscriptionsDoesNotConsumeTask() throws Exception {
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
-        DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
-        LeaseWorker worker = new LeaseWorker(backend, registry, LeaseWorkerPolicy.builder()
+        LeaseWorker worker = new LeaseWorker(backend, new DefaultLeaseTaskHandlerRegistry(), LeaseWorkerPolicy.builder()
                 .workerId("worker-a")
-                .maxAttempts(2)
-                .backoff(Backoff.fixed(20L))
                 .pollWaitMillis(20L)
-                .missingHandlerStrategy(MissingHandlerStrategy.RETRY_LATER)
                 .build());
 
-        worker.start("lease-worker-test-missing-handler");
+        worker.start("lease-worker-test-no-subscriptions");
         try {
-            String taskId = backend.publish("missing", "payload");
+            String taskId = backend.publish(request("missing", "payload"));
+            Thread.sleep(120L);
 
-            InMemoryLeaseBackend.StoredTask task = awaitTask(null, taskId, backend, LeaseTaskStatus.DEAD);
-            Assert.assertEquals(LeaseTaskStatus.DEAD, task.getStatus());
-            Assert.assertEquals(2, task.getAttemptCount());
+            InMemoryLeaseBackend.StoredTask task = backend.snapshot().get(taskId);
+            Assert.assertNotNull(task);
+            Assert.assertEquals(LeaseTaskStatus.SCHEDULED, task.getStatus());
+            Assert.assertEquals(0, task.getDeliveryCount());
+            Assert.assertEquals(0, task.getFailureCount());
         } finally {
             worker.shutdown();
         }
     }
 
     @Test
-    public void testHeartbeatUsesLeaseDurationInsteadOfHeartbeatInterval() throws Exception {
+    public void testHandlerReceivesExecutionContextAndCanRequestHeartbeat() throws Exception {
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
         DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
-        final CountDownLatch started = new CountDownLatch(1);
-        final CountDownLatch release = new CountDownLatch(1);
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicReference<LeaseExecutionContext> contextRef = new AtomicReference<LeaseExecutionContext>();
 
-        registry.register(new LeaseTaskHandler() {
-            @Override
-            public String key() {
-                return "pay";
-            }
-
-            @Override
-            public void handle(String payload) throws Exception {
-                started.countDown();
-                Assert.assertTrue(release.await(2, TimeUnit.SECONDS));
-            }
+        registry.register(DEFAULT_QUEUE, "pay", context -> {
+            contextRef.set(context);
+            context.requestHeartbeat();
+            started.countDown();
+            Assert.assertTrue(release.await(2, TimeUnit.SECONDS));
         });
 
         LeaseWorker worker = new LeaseWorker(backend, registry, LeaseWorkerPolicy.builder()
@@ -145,15 +122,27 @@ public class LeaseWorkerTest {
                 .heartbeatIntervalMillis(40L)
                 .pollWaitMillis(20L)
                 .build());
-        worker.start("lease-worker-heartbeat-duration");
-        String taskId = backend.publish("pay", "payload");
+        worker.start("lease-worker-context");
+        String taskId = backend.publish(LeasePublishRequest.builder()
+                .queue(DEFAULT_QUEUE)
+                .taskType("pay")
+                .payload("payload")
+                .attribute("traceId", "T-1")
+                .build());
         try {
             Assert.assertTrue(started.await(1, TimeUnit.SECONDS));
-            Thread.sleep(70L);
+            LeaseExecutionContext context = contextRef.get();
+            Assert.assertNotNull(context);
+            Assert.assertEquals(DEFAULT_QUEUE, context.getQueue());
+            Assert.assertEquals("pay", context.getTaskType());
+            Assert.assertEquals("payload", context.getPayload());
+            Assert.assertEquals("T-1", context.getAttributes().get("traceId"));
+            Assert.assertEquals(1, context.getDeliveryCount());
+            Assert.assertEquals(0, context.getFailureCount());
 
-            InMemoryLeaseBackend.StoredTask task = snapshotTask(taskId, backend);
-            long remainingLeaseMillis = task.getLeaseExpiresAtMillis() - System.currentTimeMillis();
-            Assert.assertTrue("remaining lease should still be close to a full lease after heartbeat", remainingLeaseMillis >= 80L);
+            Thread.sleep(70L);
+            long remainingLeaseMillis = backend.snapshot().get(taskId).getLeaseExpiresAtMillis() - System.currentTimeMillis();
+            Assert.assertTrue(remainingLeaseMillis >= 80L);
         } finally {
             release.countDown();
             worker.shutdown();
@@ -161,40 +150,30 @@ public class LeaseWorkerTest {
     }
 
     @Test
-    public void testHeartbeatContinuesAfterTransientBackendFailure() throws Exception {
-        FlakyHeartbeatBackend backend = new FlakyHeartbeatBackend();
+    public void testNonRetryableExceptionDirectlyMarksDead() throws Exception {
+        InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
         DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
-        final CountDownLatch handled = new CountDownLatch(1);
+        CountDownLatch latch = new CountDownLatch(1);
 
-        registry.register(new LeaseTaskHandler() {
-            @Override
-            public String key() {
-                return "pay";
-            }
-
-            @Override
-            public void handle(String payload) throws Exception {
-                Thread.sleep(220L);
-                handled.countDown();
-            }
+        registry.register(DEFAULT_QUEUE, "pay", context -> {
+            latch.countDown();
+            throw new NonRetryableLeaseException("poison");
         });
 
         LeaseWorker worker = new LeaseWorker(backend, registry, LeaseWorkerPolicy.builder()
                 .workerId("worker-a")
-                .leaseMillis(120L)
-                .heartbeatIntervalMillis(40L)
+                .maxFailures(10)
+                .backoff(Backoff.fixed(10L))
                 .pollWaitMillis(20L)
+                .heartbeatEnabled(false)
                 .build());
-        worker.start("lease-worker-heartbeat-flaky");
-        String taskId = backend.publish("pay", "payload");
+        worker.start("lease-worker-non-retryable");
         try {
-            Assert.assertTrue(handled.await(1, TimeUnit.SECONDS));
-            InMemoryLeaseBackend.StoredTask task = awaitTask(null, taskId, backend.delegate, LeaseTaskStatus.SUCCEEDED);
-            Assert.assertNotNull(task);
-            Assert.assertEquals(LeaseTaskStatus.SUCCEEDED, task.getStatus());
-            Assert.assertEquals(1, backend.failedHeartbeatCount.get());
-            Assert.assertTrue("heartbeat should continue after the transient failure",
-                    backend.totalHeartbeatCount.get() > backend.failedHeartbeatCount.get());
+            String taskId = backend.publish(request("pay", "payload"));
+            Assert.assertTrue(latch.await(1, TimeUnit.SECONDS));
+            InMemoryLeaseBackend.StoredTask task = awaitTask(taskId, backend, LeaseTaskStatus.DEAD);
+            Assert.assertEquals(1, task.getFailureCount());
+            Assert.assertEquals(1, task.getDeliveryCount());
         } finally {
             worker.shutdown();
         }
@@ -204,21 +183,13 @@ public class LeaseWorkerTest {
     public void testShutdownWaitsForInFlightTask() throws Exception {
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
         DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
-        final CountDownLatch started = new CountDownLatch(1);
-        final CountDownLatch release = new CountDownLatch(1);
-        final AtomicLong shutdownFinishedAt = new AtomicLong(0L);
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicLong shutdownFinishedAt = new AtomicLong(0L);
 
-        registry.register(new LeaseTaskHandler() {
-            @Override
-            public String key() {
-                return "pay";
-            }
-
-            @Override
-            public void handle(String payload) throws Exception {
-                started.countDown();
-                Assert.assertTrue(release.await(2, TimeUnit.SECONDS));
-            }
+        registry.register(DEFAULT_QUEUE, "pay", context -> {
+            started.countDown();
+            Assert.assertTrue(release.await(2, TimeUnit.SECONDS));
         });
 
         LeaseWorker worker = new LeaseWorker(backend, registry, LeaseWorkerPolicy.builder()
@@ -227,28 +198,24 @@ public class LeaseWorkerTest {
                 .heartbeatIntervalMillis(60L)
                 .pollWaitMillis(20L)
                 .build());
-        String taskId = backend.publish("pay", "payload");
+        String taskId = backend.publish(request("pay", "payload"));
         worker.start("lease-worker-shutdown-graceful");
         Assert.assertTrue(started.await(1, TimeUnit.SECONDS));
 
-        Thread shutdownThread = new Thread(new Runnable() {
-            @Override
-            public void run() {
-                worker.shutdown();
-                shutdownFinishedAt.set(System.currentTimeMillis());
-            }
+        Thread shutdownThread = new Thread(() -> {
+            worker.shutdown();
+            shutdownFinishedAt.set(System.currentTimeMillis());
         });
         shutdownThread.start();
 
         Thread.sleep(80L);
-        Assert.assertTrue("shutdown should wait until the in-flight task completes", shutdownThread.isAlive());
+        Assert.assertTrue(shutdownThread.isAlive());
 
         release.countDown();
         shutdownThread.join(1_000L);
 
-        Assert.assertTrue("shutdown thread should exit after task completion", shutdownFinishedAt.get() > 0L);
-        InMemoryLeaseBackend.StoredTask task = awaitTask(null, taskId, backend, LeaseTaskStatus.SUCCEEDED);
-        Assert.assertEquals(LeaseTaskStatus.SUCCEEDED, task.getStatus());
+        Assert.assertTrue(shutdownFinishedAt.get() > 0L);
+        Assert.assertEquals(LeaseTaskStatus.SUCCEEDED, awaitTask(taskId, backend, LeaseTaskStatus.SUCCEEDED).getStatus());
     }
 
     @Test
@@ -266,79 +233,25 @@ public class LeaseWorkerTest {
         }
     }
 
-    private InMemoryLeaseBackend.StoredTask snapshotTask(String taskId, InMemoryLeaseBackend backend) {
-        return backend.snapshot().get(taskId);
-    }
-
-    private InMemoryLeaseBackend.StoredTask awaitTask(InMemoryLeaseBackend.StoredTask initial,
-                                                      String taskId,
+    private InMemoryLeaseBackend.StoredTask awaitTask(String taskId,
                                                       InMemoryLeaseBackend backend,
                                                       LeaseTaskStatus status) throws Exception {
-        InMemoryLeaseBackend.StoredTask current = initial;
         long deadline = System.currentTimeMillis() + 2_000L;
         while (System.currentTimeMillis() < deadline) {
-            current = backend.snapshot().get(taskId);
+            InMemoryLeaseBackend.StoredTask current = backend.snapshot().get(taskId);
             if (current != null && current.getStatus() == status) {
                 return current;
             }
             Thread.sleep(20L);
         }
-        return current;
+        return backend.snapshot().get(taskId);
     }
 
-    private static final class FlakyHeartbeatBackend implements LeaseBackend {
-        private final InMemoryLeaseBackend delegate = new InMemoryLeaseBackend();
-        private final AtomicInteger totalHeartbeatCount = new AtomicInteger();
-        private final AtomicInteger failedHeartbeatCount = new AtomicInteger();
-
-        @Override
-        public String publish(String taskType, String payload) {
-            return delegate.publish(taskType, payload);
-        }
-
-        @Override
-        public String publish(String taskType, String payload, long delayMillis) {
-            return delegate.publish(taskType, payload, delayMillis);
-        }
-
-        @Override
-        public void reschedule(String taskId, long delayMillis) {
-            delegate.reschedule(taskId, delayMillis);
-        }
-
-        @Override
-        public void cancel(String taskId) {
-            delegate.cancel(taskId);
-        }
-
-        @Override
-        public LeaseGrant acquire(String workerId, long leaseMillis, long waitTimeoutMillis) throws InterruptedException {
-            return delegate.acquire(workerId, leaseMillis, waitTimeoutMillis);
-        }
-
-        @Override
-        public void ack(String taskId, String workerId, String leaseToken) {
-            delegate.ack(taskId, workerId, leaseToken);
-        }
-
-        @Override
-        public void retry(String taskId, String workerId, String leaseToken, long delayMillis, Throwable cause) {
-            delegate.retry(taskId, workerId, leaseToken, delayMillis, cause);
-        }
-
-        @Override
-        public void fail(String taskId, String workerId, String leaseToken, Throwable cause) {
-            delegate.fail(taskId, workerId, leaseToken, cause);
-        }
-
-        @Override
-        public void heartbeat(String taskId, String workerId, String leaseToken, long extendMillis) {
-            totalHeartbeatCount.incrementAndGet();
-            if (failedHeartbeatCount.get() == 0) {
-                failedHeartbeatCount.incrementAndGet();
-                throw new IllegalStateException("transient heartbeat failure");
-            }
-            delegate.heartbeat(taskId, workerId, leaseToken, extendMillis);
-        }
+    private LeasePublishRequest request(String taskType, String payload) {
+        return LeasePublishRequest.builder()
+                .queue(DEFAULT_QUEUE)
+                .taskType(taskType)
+                .payload(payload)
+                .build();
     }
 }

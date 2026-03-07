@@ -469,13 +469,17 @@ public class RetryConfig {
 
 ```java
 public interface LeaseBackend {
-    String publish(String taskType, String payload, long delayMillis);
-    void cancel(String taskId);
-    LeaseGrant acquire(String workerId, long leaseMillis, long waitTimeoutMillis) throws InterruptedException;
-    void ack(String taskId, String workerId, String leaseToken);
-    void retry(String taskId, String workerId, String leaseToken, long delayMillis, Throwable cause);
-    void fail(String taskId, String workerId, String leaseToken, Throwable cause);
-    void heartbeat(String taskId, String workerId, String leaseToken, long extendMillis);
+    String publish(LeasePublishRequest request);
+    LeaseAdminResult cancel(String taskId);
+    LeaseAdminResult reschedule(String taskId, long delayMillis);
+    LeaseAdminResult requeueDead(String taskId, long delayMillis);
+    LeaseGrant acquire(LeaseAcquireRequest request) throws InterruptedException;
+    LeaseRuntimeResult ack(String taskId, String workerId, String leaseToken);
+    LeaseRuntimeResult retry(String taskId, String workerId, String leaseToken, long delayMillis, Throwable cause);
+    LeaseRuntimeResult fail(String taskId, String workerId, String leaseToken, Throwable cause);
+    LeaseRuntimeResult heartbeat(String taskId, String workerId, String leaseToken, long extendMillis);
+    Optional<LeaseTaskRecord> get(String taskId);
+    LeaseTaskPage list(LeaseQueryRequest request);
 }
 ```
 
@@ -485,13 +489,14 @@ public interface LeaseBackend {
 
 如果你希望直接用框架内置 Worker 消费它，还可以配合：
 
-- `RetryLeaseWorker`：按 `taskType` 路由到 `RecoveryHandler`
+- `RetryLeaseWorker`：固定消费 `retry-recovery` queue，并在该队列内按 `taskType` 路由到 `RecoveryHandler`
 
 `Retryer` 在这套模型里的语义可以理解为：
 
-- `publish(..., preparedDelay)`：预写一条长期不可见的 prepared task，用于 durable intent
+- `publish(..., preparedDelay)`：预写到 `retry-recovery` queue 的长期不可见 prepared task，用于 durable intent
 - `cancel(taskId)`：任务成功或终止后撤销 prepared task
 - `reschedule(taskId, nextDelay)`：把 prepared intent 重新交给后端延迟恢复
+- `Retryer` 代码层面只依赖 `LeaseProducer + LeaseAdminService`；`RetryLeaseWorker` 只依赖 `LeaseRuntimeClient`
 - `acquire/ack/retry/fail/heartbeat`：由 worker 侧消费与续租
 
 此外，第一次实现 `LeaseBackend` 时，通常还要明确这几个约束：

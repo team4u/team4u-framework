@@ -28,9 +28,9 @@ public class LeaseWorkerPolicy {
      */
     private final long pollWaitMillis;
     /**
-     * 最大重试次数（-1 表示无限制）
+     * 最大失败次数（-1 表示无限制）
      */
-    private final int maxAttempts;
+    private final int maxFailures;
     /**
      * 退避算法策略，用于计算重试延迟
      */
@@ -52,7 +52,7 @@ public class LeaseWorkerPolicy {
     private LeaseWorkerPolicy(String workerId,
                               Long leaseMillis,
                               Long pollWaitMillis,
-                              Integer maxAttempts,
+                              Integer maxFailures,
                               Backoff backoff,
                               Boolean heartbeatEnabled,
                               Long heartbeatIntervalMillis,
@@ -68,7 +68,7 @@ public class LeaseWorkerPolicy {
                 : workerId;
         this.leaseMillis = resolvedLeaseMillis;
         this.pollWaitMillis = pollWaitMillis == null ? 1_000L : pollWaitMillis;
-        this.maxAttempts = maxAttempts == null ? 8 : maxAttempts;
+        this.maxFailures = maxFailures == null ? 8 : maxFailures;
         this.backoff = backoff == null ? Backoff.fixed(1_000L) : backoff;
         this.heartbeatEnabled = resolvedHeartbeatEnabled;
         this.heartbeatIntervalMillis = resolvedHeartbeatIntervalMillis;
@@ -80,8 +80,8 @@ public class LeaseWorkerPolicy {
         if (this.pollWaitMillis < 0L) {
             throw new IllegalArgumentException("pollWaitMillis must be greater than or equal to 0");
         }
-        if (this.maxAttempts == 0 || this.maxAttempts < -1) {
-            throw new IllegalArgumentException("maxAttempts must be greater than 0 or -1");
+        if (this.maxFailures == 0 || this.maxFailures < -1) {
+            throw new IllegalArgumentException("maxFailures must be greater than 0 or -1");
         }
         if (this.heartbeatIntervalMillis <= 0L) {
             throw new IllegalArgumentException("heartbeatIntervalMillis must be greater than 0");
@@ -94,20 +94,20 @@ public class LeaseWorkerPolicy {
     /**
      * 判断是否满足重试条件
      *
-     * @param attemptCount 已尝试次数
+     * @param nextFailureCount 即将写回的失败次数
      * @return 允许重试返回 true
      */
-    public boolean shouldRetry(int attemptCount) {
-        return maxAttempts == -1 || attemptCount < maxAttempts;
+    public boolean shouldRetry(int nextFailureCount) {
+        return maxFailures == -1 || nextFailureCount < maxFailures;
     }
 
     /**
      * 计算下次尝试前的延迟时间
      *
-     * @param attemptCount 当前已尝试次数
+     * @param nextFailureCount 即将写回的失败次数
      * @return 延迟毫秒数
      */
-    public long nextDelayMillis(int attemptCount) {
-        return backoff.calculateMillis(attemptCount);
+    public long nextDelayMillis(int nextFailureCount) {
+        return backoff.calculateMillis(nextFailureCount);
     }
 }
