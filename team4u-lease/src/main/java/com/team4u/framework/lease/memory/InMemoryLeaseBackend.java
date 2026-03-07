@@ -91,7 +91,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         if (!matchesLease(current, workerId, leaseToken)) {
             return;
         }
-        records.put(taskId, current.withTerminal(LeaseTaskStatus.SUCCEEDED, current.getLastError()));
+        records.put(taskId, current.withTerminal(LeaseTaskStatus.SUCCEEDED, null));
     }
 
     @Override
@@ -121,7 +121,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         if (!matchesLease(current, workerId, leaseToken)) {
             return;
         }
-        long nextLeaseExpiresAt = System.currentTimeMillis() + Math.max(0L, extendMillis);
+        long nextLeaseExpiresAt = System.currentTimeMillis() + Math.max(1L, extendMillis);
         StoredTask next = current.withLease(workerId, leaseToken, nextLeaseExpiresAt);
         records.put(taskId, next);
         queue.offer(new AvailabilityRef(taskId, next.getLeaseExpiresAtMillis()));

@@ -8,6 +8,7 @@ import lombok.RequiredArgsConstructor;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 基于租约协议消费任务的 Worker 实现。
@@ -25,8 +26,10 @@ public class LeaseWorker implements Runnable, AutoCloseable {
     private final LeaseTaskHandlerRegistry registry;
     private final LeaseWorkerPolicy policy;
     private final ScheduledExecutorService heartbeatExecutor;
+    private final AtomicBoolean processingTask = new AtomicBoolean(false);
 
     private volatile boolean running;
+    private volatile boolean shutdown;
     private Thread workerThread;
 
     /**
@@ -60,6 +63,9 @@ public class LeaseWorker implements Runnable, AutoCloseable {
      * @param threadName 线程名称，若为 null 则使用默认名称 "lease-worker"
      */
     public synchronized void start(String threadName) {
+        if (shutdown) {
+            throw new IllegalStateException("LeaseWorker cannot be restarted after shutdown");
+        }
         if (running) {
             return;
         }
@@ -74,7 +80,28 @@ public class LeaseWorker implements Runnable, AutoCloseable {
      * <p>
      * 该操作会中断轮询线程并强行关闭心跳调度器。
      */
-    public synchronized void shutdown() {
+    public void shutdown() {
+        shutdownGracefully(0L);
+    }
+
+    public void shutdownGracefully(long timeoutMillis) {
+        Thread threadToJoin;
+        synchronized (this) {
+            shutdown = true;
+            running = false;
+            threadToJoin = workerThread;
+            if (threadToJoin != null && !processingTask.get()) {
+                threadToJoin.interrupt();
+            }
+        }
+
+        waitForWorker(threadToJoin, timeoutMillis);
+        heartbeatExecutor.shutdown();
+        waitForHeartbeatExecutor(timeoutMillis);
+    }
+
+    public synchronized void shutdownNow() {
+        shutdown = true;
         running = false;
         if (workerThread != null) {
             workerThread.interrupt();
@@ -97,9 +124,8 @@ public class LeaseWorker implements Runnable, AutoCloseable {
             } catch (InterruptedException e) {
                 Thread.currentThread().interrupt();
                 break;
-            } catch (Throwable ex) {
+            } catch (Exception ex) {
                 log.error("Lease worker acquire failed. workerId={}", policy.getWorkerId(), ex);
-                // 异常退避：若获取失败（如网络抖动），等待一段时间后继续
                 sleepQuietly(policy.getPollWaitMillis());
                 continue;
             }
@@ -110,6 +136,7 @@ public class LeaseWorker implements Runnable, AutoCloseable {
 
             // 2. 租约获取成功，创建心跳续约任务
             HeartbeatTask heartbeatTask = createHeartbeatTask(grant);
+            processingTask.set(true);
             try {
                 // 3. 查找业务处理器
                 LeaseTaskHandler handler = registry.get(grant.getTaskType()).orElse(null);
@@ -126,7 +153,7 @@ public class LeaseWorker implements Runnable, AutoCloseable {
                     // 5. 业务处理成功，反馈后端 ACK 完成任务
                     backend.ack(grant.getTaskId(), grant.getWorkerId(), grant.getLeaseToken());
                 }
-            } catch (Throwable ex) {
+            } catch (Exception ex) {
                 // 6. 业务处理异常，触发重试或失败确认逻辑
                 handleFailure(grant, ex);
             } finally {
@@ -134,6 +161,7 @@ public class LeaseWorker implements Runnable, AutoCloseable {
                 if (heartbeatTask != null) {
                     heartbeatTask.stop();
                 }
+                processingTask.set(false);
             }
         }
 
@@ -146,12 +174,12 @@ public class LeaseWorker implements Runnable, AutoCloseable {
         completeWithFailure(grant, ex, allowRetry);
     }
 
-    private void handleFailure(LeaseGrant grant, Throwable ex) {
+    private void handleFailure(LeaseGrant grant, Exception ex) {
         log.error("Lease worker handle failed. taskId={}, taskType={}", grant.getTaskId(), grant.getTaskType(), ex);
         completeWithFailure(grant, ex, true);
     }
 
-    private void completeWithFailure(LeaseGrant grant, Throwable ex, boolean allowRetry) {
+    private void completeWithFailure(LeaseGrant grant, Exception ex, boolean allowRetry) {
         try {
             if (allowRetry && policy.shouldRetry(grant.getAttemptCount())) {
                 backend.retry(grant.getTaskId(), grant.getWorkerId(), grant.getLeaseToken(),
@@ -159,7 +187,7 @@ public class LeaseWorker implements Runnable, AutoCloseable {
             } else {
                 backend.fail(grant.getTaskId(), grant.getWorkerId(), grant.getLeaseToken(), ex);
             }
-        } catch (Throwable writeEx) {
+        } catch (Exception writeEx) {
             log.error("Lease worker write-back failed. taskId={}", grant.getTaskId(), writeEx);
         }
     }
@@ -168,7 +196,8 @@ public class LeaseWorker implements Runnable, AutoCloseable {
         if (!policy.isHeartbeatEnabled()) {
             return null;
         }
-        return new HeartbeatTask(backend, heartbeatExecutor, grant, policy.getHeartbeatIntervalMillis());
+        return new HeartbeatTask(backend, heartbeatExecutor, grant,
+                policy.getHeartbeatIntervalMillis(), policy.getLeaseMillis());
     }
 
     private void sleepQuietly(long millis) {
@@ -182,12 +211,45 @@ public class LeaseWorker implements Runnable, AutoCloseable {
         }
     }
 
+    private void waitForWorker(Thread threadToJoin, long timeoutMillis) {
+        if (threadToJoin == null || threadToJoin == Thread.currentThread()) {
+            return;
+        }
+        try {
+            if (timeoutMillis > 0L) {
+                threadToJoin.join(timeoutMillis);
+            } else {
+                threadToJoin.join();
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+        }
+    }
+
+    private void waitForHeartbeatExecutor(long timeoutMillis) {
+        try {
+            if (timeoutMillis > 0L) {
+                if (!heartbeatExecutor.awaitTermination(timeoutMillis, TimeUnit.MILLISECONDS)) {
+                    heartbeatExecutor.shutdownNow();
+                }
+            } else {
+                while (!heartbeatExecutor.awaitTermination(1L, TimeUnit.SECONDS)) {
+                    // wait until the current task completes and the heartbeat loop exits cleanly
+                }
+            }
+        } catch (InterruptedException e) {
+            heartbeatExecutor.shutdownNow();
+            Thread.currentThread().interrupt();
+        }
+    }
+
     @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
     private static class HeartbeatTask implements Runnable {
         private final LeaseBackend backend;
         private final ScheduledExecutorService executor;
         private final LeaseGrant grant;
         private final long intervalMillis;
+        private final long leaseMillis;
         private volatile java.util.concurrent.ScheduledFuture<?> future;
 
         private void start() {
@@ -202,7 +264,12 @@ public class LeaseWorker implements Runnable, AutoCloseable {
 
         @Override
         public void run() {
-            backend.heartbeat(grant.getTaskId(), grant.getWorkerId(), grant.getLeaseToken(), intervalMillis);
+            try {
+                backend.heartbeat(grant.getTaskId(), grant.getWorkerId(), grant.getLeaseToken(), leaseMillis);
+            } catch (Exception ex) {
+                log.warn("Lease heartbeat failed. taskId={}, workerId={}",
+                        grant.getTaskId(), grant.getWorkerId(), ex);
+            }
         }
     }
 }

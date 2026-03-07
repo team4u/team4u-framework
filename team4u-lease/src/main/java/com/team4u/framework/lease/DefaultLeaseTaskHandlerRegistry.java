@@ -13,10 +13,14 @@ public class DefaultLeaseTaskHandlerRegistry implements LeaseTaskHandlerRegistry
 
     @Override
     public void register(LeaseTaskHandler handler) {
-        if (handler == null || handler.key() == null) {
-            return;
+        if (handler == null) {
+            throw new IllegalArgumentException("handler must not be null");
         }
-        handlers.put(handler.key(), handler);
+        String key = handler.key();
+        if (key == null || key.trim().isEmpty()) {
+            throw new IllegalArgumentException("handler.key() must not be blank");
+        }
+        handlers.put(key, handler);
     }
 
     @Override

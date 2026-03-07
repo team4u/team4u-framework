@@ -42,4 +42,21 @@ public class InMemoryLeaseBackendTest extends AbstractLeaseBackendContractTest {
         Assert.assertEquals(LeaseTaskStatus.DEAD, snapshot.get(taskId).getStatus());
         Assert.assertEquals("cancelled", snapshot.get(taskId).getLastError());
     }
+
+    @Test
+    public void testAckClearsPreviousLastError() throws Exception {
+        InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
+        String taskId = backend.publish("pay", "payload");
+
+        LeaseGrant firstGrant = backend.acquire("worker-a", 100L, 200L);
+        backend.retry(taskId, "worker-a", firstGrant.getLeaseToken(), 10L, new IllegalStateException("boom"));
+
+        Thread.sleep(20L);
+        LeaseGrant secondGrant = backend.acquire("worker-a", 100L, 200L);
+        backend.ack(taskId, "worker-a", secondGrant.getLeaseToken());
+
+        Map<String, InMemoryLeaseBackend.StoredTask> snapshot = backend.snapshot();
+        Assert.assertEquals(LeaseTaskStatus.SUCCEEDED, snapshot.get(taskId).getStatus());
+        Assert.assertNull(snapshot.get(taskId).getLastError());
+    }
 }
