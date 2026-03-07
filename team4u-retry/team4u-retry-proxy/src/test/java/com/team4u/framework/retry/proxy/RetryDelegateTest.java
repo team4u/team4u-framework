@@ -20,6 +20,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * RetryDelegate 核心逻辑单元测试
+ * <p>
+ * 验证重试任务快照构建、模式自动推导、任务冻结等核心委托逻辑。
+ */
 public class RetryDelegateTest {
 
     @Before
@@ -87,7 +92,7 @@ public class RetryDelegateTest {
         Object result = delegate.executeWithRetry(
                 method,
                 new DelegateApi(),
-                new Object[]{new Object()},
+                new Object[] { new Object() },
                 retryable,
                 () -> "ok",
                 null);
@@ -117,7 +122,7 @@ public class RetryDelegateTest {
             delegate.executeWithRetry(
                     method,
                     new DelegateApi(),
-                    new Object[]{"payload"},
+                    new Object[] { "payload" },
                     retryable,
                     () -> {
                         businessExecuted.set(true);
@@ -151,7 +156,7 @@ public class RetryDelegateTest {
         Object result = delegate.executeWithRetry(
                 method,
                 new DelegateApi(),
-                new Object[]{"a"},
+                new Object[] { "a" },
                 retryable,
                 () -> "ok",
                 null);
@@ -173,7 +178,7 @@ public class RetryDelegateTest {
             delegate.executeWithRetry(
                     method,
                     new DelegateContractImpl(),
-                    new Object[]{args},
+                    new Object[] { args },
                     retryable,
                     () -> {
                         args.clear();
@@ -216,7 +221,7 @@ public class RetryDelegateTest {
             delegate.executeWithRetry(
                     method,
                     new DelegateApi(),
-                    new Object[]{"payload"},
+                    new Object[] { "payload" },
                     retryable,
                     () -> {
                         throw new RuntimeException("fail");
@@ -244,7 +249,7 @@ public class RetryDelegateTest {
             result = (String) delegate.executeWithRetry(
                     method,
                     new DelegateApi(),
-                    new Object[]{"payload"},
+                    new Object[] { "payload" },
                     retryable,
                     () -> {
                         proceedCount.incrementAndGet();

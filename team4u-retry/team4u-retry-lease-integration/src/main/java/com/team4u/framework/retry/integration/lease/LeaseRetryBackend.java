@@ -1,6 +1,7 @@
 package com.team4u.framework.retry.integration.lease;
 
 import com.team4u.framework.lease.LeaseAdminService;
+import com.team4u.framework.lease.LeaseBackend;
 import com.team4u.framework.lease.LeaseProducer;
 import com.team4u.framework.lease.LeasePublishRequest;
 import com.team4u.framework.retry.backend.RetryBackend;
@@ -17,6 +18,14 @@ public class LeaseRetryBackend implements RetryBackend {
     private final LeaseProducer producer;
     private final LeaseAdminService adminService;
     private final String queue;
+
+    public LeaseRetryBackend(LeaseBackend backend) {
+        this(backend, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE);
+    }
+
+    public LeaseRetryBackend(LeaseBackend backend, String queue) {
+        this(backend, backend, queue);
+    }
 
     public LeaseRetryBackend(LeaseProducer producer, LeaseAdminService adminService) {
         this(producer, adminService, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE);

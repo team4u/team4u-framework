@@ -78,11 +78,8 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
             return Optional.empty();
         }
         Optional<RecoveryHandler> handler = delegate.get(taskType);
-        if (!handler.isPresent()) {
-            return Optional.empty();
-        }
         // 将获取到的重试处理器包装成租约处理器返回
-        return Optional.of(new RecoveryHandlerLeaseTaskHandlerAdapter(handler.get()));
+        return handler.map(RecoveryHandlerLeaseTaskHandlerAdapter::new);
     }
 
     @Override

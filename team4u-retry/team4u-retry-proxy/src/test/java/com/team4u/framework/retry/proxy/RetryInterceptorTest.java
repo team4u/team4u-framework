@@ -18,6 +18,11 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * RetryInterceptor 拦截器集成测试
+ * <p>
+ * 验证基于代理模式的同步/异步方法重试增强逻辑。
+ */
 public class RetryInterceptorTest {
 
     @Before
