@@ -75,6 +75,11 @@ import com.team4u.framework.lease.LeaseTaskHandler;
 
 public class PushNotificationHandler implements LeaseTaskHandler {
     @Override
+    public String key() {
+        return "push-app-task";
+    }
+
+    @Override
     public void handle(String payload) throws Exception {
         // payload 为发布者丢进来的简单载荷（如 JSON）
         System.out.println("【业务处理】拉取到通知推送任务，参数: " + payload);
@@ -101,20 +106,20 @@ import com.team4u.framework.lease.LeaseWorkerPolicy;
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
 
 public class LeaseDemoApp {
-    static void main(String[] args) throws InterruptedException {
+    public static void main(String[] args) throws InterruptedException {
         // [模块 1]: 载入后备数据库或持久化层中心 (此处使用完全内存的后台作为演示支撑)
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
 
         // [模块 2]: 向注册表绑定你的特定任务类型 -> 对应的业务类
         DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
-        registry.register("push-app-task", new PushNotificationHandler());
+        registry.register(new PushNotificationHandler());
 
         // [模块 3]: 自定义该程序的轮询策略规则
         LeaseWorkerPolicy policy = LeaseWorkerPolicy.builder()
                 .workerId("Node-Server-Beijing-01")  // 当前应用的身份名字
                 .leaseMillis(30_000L)                // 首次发放的无竞争保护租约有效时间：30 秒
                 .heartbeatEnabled(true)              // ★关键：开启防任务超时的心跳守护
-                .heartbeatIntervalMillis(10_000L)    // ★补充：任务超长运行时，每隔数 10 秒去增加租赁时间
+                .heartbeatIntervalMillis(10_000L)    // ★补充：每隔 10 秒发一次心跳，但每次续约长度仍是 leaseMillis
                 .maxAttempts(3)                      // 一旦产生出错，框架将尝试 3 次最终才会报“DEAD”死信
                 .build();
 
@@ -130,12 +135,14 @@ public class LeaseDemoApp {
         // 为了避免系统瞬间退出，模拟 Web容器持续运作 15 秒观察后台轮询流转情况
         Thread.sleep(15000);
 
-        // 当进程被 kill，请千万记住通知 worker 平稳的关闭轮询池以及心跳发令兵 
+        // shutdown() 会停止拉新任务，并等待当前任务处理完成后再退出
         worker.shutdown();
         System.out.println(">>> 应用安全关闭");
     }
 }
 ```
+
+`InMemoryLeaseBackend` 主要用于测试、示例和单进程验证，不适合生产环境的长时间高频负载。
 
 ---
 

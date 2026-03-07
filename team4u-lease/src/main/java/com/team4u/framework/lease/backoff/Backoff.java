@@ -18,7 +18,13 @@ public interface Backoff {
      * @return 退避策略实例
      */
     static Backoff fixed(long delayMillis) {
-        return attempt -> delayMillis;
+        if (delayMillis < 0L) {
+            throw new IllegalArgumentException("delayMillis must be greater than or equal to 0");
+        }
+        return attempt -> {
+            validateAttempt(attempt);
+            return delayMillis;
+        };
     }
 
     /**
@@ -29,7 +35,16 @@ public interface Backoff {
      * @return 退避策略实例
      */
     static Backoff increment(long initialDelayMillis, long stepMillis) {
-        return attempt -> initialDelayMillis + (attempt - 1) * stepMillis;
+        if (initialDelayMillis < 0L) {
+            throw new IllegalArgumentException("initialDelayMillis must be greater than or equal to 0");
+        }
+        if (stepMillis < 0L) {
+            throw new IllegalArgumentException("stepMillis must be greater than or equal to 0");
+        }
+        return attempt -> {
+            validateAttempt(attempt);
+            return initialDelayMillis + (attempt - 1L) * stepMillis;
+        };
     }
 
     /**
@@ -41,7 +56,17 @@ public interface Backoff {
      * @return 退避策略实例
      */
     static Backoff exponential(long initialDelayMillis, double multiplier, long maxDelayMillis) {
+        if (initialDelayMillis < 0L) {
+            throw new IllegalArgumentException("initialDelayMillis must be greater than or equal to 0");
+        }
+        if (multiplier <= 0D) {
+            throw new IllegalArgumentException("multiplier must be greater than 0");
+        }
+        if (maxDelayMillis < initialDelayMillis) {
+            throw new IllegalArgumentException("maxDelayMillis must be greater than or equal to initialDelayMillis");
+        }
         return attempt -> {
+            validateAttempt(attempt);
             long delay = (long) (initialDelayMillis * Math.pow(multiplier, attempt - 1));
             return Math.min(delay, maxDelayMillis);
         };
@@ -59,6 +84,7 @@ public interface Backoff {
      */
     static Backoff exponentialJitter(long initialDelayMillis, double multiplier, long maxDelayMillis) {
         return attempt -> {
+            validateAttempt(attempt);
             long maxCalculatedDelay = exponential(initialDelayMillis, multiplier, maxDelayMillis)
                     .calculateMillis(attempt);
             if (maxCalculatedDelay <= initialDelayMillis) {
@@ -66,6 +92,12 @@ public interface Backoff {
             }
             return ThreadLocalRandom.current().nextLong(initialDelayMillis, maxCalculatedDelay + 1);
         };
+    }
+
+    static void validateAttempt(int attempt) {
+        if (attempt <= 0) {
+            throw new IllegalArgumentException("attempt must be greater than 0");
+        }
     }
 
     /**

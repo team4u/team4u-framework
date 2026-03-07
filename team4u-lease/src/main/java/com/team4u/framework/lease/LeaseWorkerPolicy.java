@@ -57,15 +57,21 @@ public class LeaseWorkerPolicy {
                               Boolean heartbeatEnabled,
                               Long heartbeatIntervalMillis,
                               MissingHandlerStrategy missingHandlerStrategy) {
+        long resolvedLeaseMillis = leaseMillis == null ? 30_000L : leaseMillis;
+        boolean resolvedHeartbeatEnabled = heartbeatEnabled == null || heartbeatEnabled;
+        long resolvedHeartbeatIntervalMillis = heartbeatIntervalMillis == null
+                ? Math.max(1L, resolvedLeaseMillis / 3L)
+                : heartbeatIntervalMillis;
+
         this.workerId = (workerId == null || workerId.trim().isEmpty())
                 ? "lease-worker-" + UUID.randomUUID().toString().replace("-", "")
                 : workerId;
-        this.leaseMillis = leaseMillis == null ? 30_000L : leaseMillis;
+        this.leaseMillis = resolvedLeaseMillis;
         this.pollWaitMillis = pollWaitMillis == null ? 1_000L : pollWaitMillis;
         this.maxAttempts = maxAttempts == null ? 8 : maxAttempts;
         this.backoff = backoff == null ? Backoff.fixed(1_000L) : backoff;
-        this.heartbeatEnabled = heartbeatEnabled == null || heartbeatEnabled;
-        this.heartbeatIntervalMillis = heartbeatIntervalMillis == null ? 10_000L : heartbeatIntervalMillis;
+        this.heartbeatEnabled = resolvedHeartbeatEnabled;
+        this.heartbeatIntervalMillis = resolvedHeartbeatIntervalMillis;
         this.missingHandlerStrategy = missingHandlerStrategy == null ? MissingHandlerStrategy.FAIL_FAST : missingHandlerStrategy;
 
         if (this.leaseMillis <= 0L) {
@@ -79,6 +85,9 @@ public class LeaseWorkerPolicy {
         }
         if (this.heartbeatIntervalMillis <= 0L) {
             throw new IllegalArgumentException("heartbeatIntervalMillis must be greater than 0");
+        }
+        if (this.heartbeatEnabled && this.heartbeatIntervalMillis >= this.leaseMillis) {
+            throw new IllegalArgumentException("heartbeatIntervalMillis must be less than leaseMillis when heartbeat is enabled");
         }
     }
 
