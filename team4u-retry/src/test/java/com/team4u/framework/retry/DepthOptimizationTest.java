@@ -52,12 +52,29 @@ public class DepthOptimizationTest {
     }
 
     @Test(expected = IllegalStateException.class)
-    public void testFailFastWhenBackendMissing() {
+    public void testSimpleExecuteFailsFastWhenBackendConfigured() throws Exception {
         Retryer.builder()
                 .policy(RetryPolicy.builder().build())
-                .durability(RetryDurability.AT_LEAST_ONCE_DURABLE)
-                .backend(null) // 故意不提供后端
-                .build();
+                .backend(new TestLeaseBackend() {
+                    @Override
+                    public String saveIntent(String taskType, String payload) {
+                        return "intent";
+                    }
+
+                    @Override
+                    public void completeIntent(String intentId) {
+                    }
+
+                    @Override
+                    public void markTerminalFailure(String intentId, Throwable cause) {
+                    }
+
+                    @Override
+                    public void submitForDelay(String intentId, String taskType, String payload, long delay) {
+                    }
+                })
+                .build()
+                .execute(() -> "ok");
     }
 
     /**

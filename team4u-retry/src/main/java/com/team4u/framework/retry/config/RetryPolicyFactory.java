@@ -30,8 +30,8 @@ public class RetryPolicyFactory {
                 .maxAttempts(config.getMaxAttempts())
                 .condition(config.getCondition());
 
-        if (config.getInMemoryAttempts() != null) {
-            builder.inMemoryAttempts(config.getInMemoryAttempts());
+        if (config.getLocalAttempts() != null) {
+            builder.localAttempts(config.getLocalAttempts());
         }
 
         String type = config.getBackoffType() == null ? "fixed" : config.getBackoffType().toLowerCase();

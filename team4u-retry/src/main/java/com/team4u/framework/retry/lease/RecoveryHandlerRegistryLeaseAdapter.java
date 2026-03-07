@@ -67,7 +67,7 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
             return Optional.empty();
         }
         // 将获取到的重试处理器包装成租约处理器返回
-        return Optional.<LeaseTaskHandler>of(new RecoveryHandlerLeaseTaskHandlerAdapter(handler.get()));
+        return Optional.of(new RecoveryHandlerLeaseTaskHandlerAdapter(handler.get()));
     }
 
     /**

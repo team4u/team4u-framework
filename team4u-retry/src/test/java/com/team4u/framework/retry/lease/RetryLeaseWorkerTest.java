@@ -1,12 +1,11 @@
 package com.team4u.framework.retry.lease;
 
-import com.team4u.framework.retry.RetryDurability;
-import com.team4u.framework.retry.RetryExhaustedException;
-import com.team4u.framework.retry.RetryPolicy;
-import com.team4u.framework.retry.Retryer;
 import com.team4u.framework.lease.LeaseWorkerPolicy;
 import com.team4u.framework.lease.backoff.Backoff;
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
+import com.team4u.framework.retry.RetryExhaustedException;
+import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.Retryer;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import org.junit.Assert;
@@ -128,9 +127,8 @@ public class RetryLeaseWorkerTest {
                 .build());
 
         Retryer retryer = Retryer.builder()
-                .policy(RetryPolicy.builder().maxAttempts(3).inMemoryAttempts(1).build())
+                .policy(RetryPolicy.builder().maxAttempts(3).localAttempts(1).build())
                 .backend(leaseBackend)
-                .durability(RetryDurability.MEMORY_FALLBACK)
                 .build();
 
         worker.start("retry-lease-worker-e2e-test");

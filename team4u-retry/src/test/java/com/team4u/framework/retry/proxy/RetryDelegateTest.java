@@ -1,7 +1,6 @@
 package com.team4u.framework.retry.proxy;
 
 import cn.hutool.json.JSONUtil;
-import com.team4u.framework.retry.RetryDurability;
 import com.team4u.framework.retry.RetryExhaustedException;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.TestLeaseBackend;
@@ -45,7 +44,7 @@ public class RetryDelegateTest {
             public RetryPolicy getPolicy() {
                 return RetryPolicy.builder()
                         .maxAttempts(2)
-                        .inMemoryAttempts(1)
+                        .localAttempts(1)
                         .build();
             }
         });
@@ -96,17 +95,19 @@ public class RetryDelegateTest {
     }
 
     @Test
-    public void testMemoryFallbackBuildsSnapshotOnlyWhenHandingOff() throws Throwable {
+    public void testPersistentModeBuildsSnapshotBeforeBusinessExecution() throws Throwable {
         RetryDelegate delegate = new RetryDelegate();
-        AtomicBoolean proceeded = new AtomicBoolean(false);
+        AtomicBoolean serializerCalled = new AtomicBoolean(false);
+        AtomicBoolean businessExecuted = new AtomicBoolean(false);
         AtomicInteger serializeCount = new AtomicInteger();
         delegate.setSerializer((parameter, arg) -> {
-            Assert.assertTrue("serializer should run after business execution fails", proceeded.get());
+            Assert.assertFalse("serializer should run before business execution", businessExecuted.get());
+            serializerCalled.set(true);
             serializeCount.incrementAndGet();
             return JSONUtil.toJsonStr(String.valueOf(arg));
         });
 
-        Method method = DelegateApi.class.getDeclaredMethod("memoryFallbackDeferred", Object.class);
+        Method method = DelegateApi.class.getDeclaredMethod("persistentCall", Object.class);
         Retryable retryable = method.getAnnotation(Retryable.class);
         CapturingBackend backend = new CapturingBackend();
 
@@ -117,7 +118,7 @@ public class RetryDelegateTest {
                     new Object[]{"payload"},
                     retryable,
                     () -> {
-                        proceeded.set(true);
+                        businessExecuted.set(true);
                         throw new RuntimeException("fail");
                     },
                     () -> backend);
@@ -126,32 +127,35 @@ public class RetryDelegateTest {
             // expected
         }
 
-        Assert.assertTrue(proceeded.get());
+        Assert.assertTrue(serializerCalled.get());
+        Assert.assertTrue(businessExecuted.get());
         Assert.assertEquals(1, serializeCount.get());
+        Assert.assertNotNull(backend.savedPayload);
         Assert.assertNotNull(backend.submittedPayload);
-        Assert.assertTrue(backend.submittedPayload.contains("payload"));
+        Assert.assertTrue(backend.savedPayload.contains("payload"));
     }
 
     @Test
-    public void testMissingBackendGivesActionableError() throws Throwable {
+    public void testMissingBackendFallsBackToMemoryMode() throws Throwable {
         RetryDelegate delegate = new RetryDelegate();
-        Method method = DelegateApi.class.getDeclaredMethod("memoryFallback", String.class);
+        Method method = DelegateApi.class.getDeclaredMethod("persistentCall", Object.class);
         Retryable retryable = method.getAnnotation(Retryable.class);
+        AtomicInteger serializeCount = new AtomicInteger();
+        delegate.setSerializer((parameter, arg) -> {
+            serializeCount.incrementAndGet();
+            return JSONUtil.toJsonStr(String.valueOf(arg));
+        });
 
-        try {
-            delegate.executeWithRetry(
-                    method,
-                    new DelegateApi(),
-                    new Object[]{"a"},
-                    retryable,
-                    () -> "ok",
-                    null);
-            Assert.fail("expected IllegalStateException");
-        } catch (IllegalStateException ex) {
-            Assert.assertTrue(ex.getMessage().contains("MEMORY_FALLBACK"));
-            Assert.assertTrue(ex.getMessage().contains("delegate-test"));
-            Assert.assertTrue(ex.getMessage().contains("memoryFallback"));
-        }
+        Object result = delegate.executeWithRetry(
+                method,
+                new DelegateApi(),
+                new Object[]{"a"},
+                retryable,
+                () -> "ok",
+                null);
+
+        Assert.assertEquals("ok", result);
+        Assert.assertEquals(0, serializeCount.get());
     }
 
     @Test
@@ -191,20 +195,6 @@ public class RetryDelegateTest {
                 .getJSONArray("argJsonValues")
                 .getStr(0)
                 .contains("after"));
-        Assert.assertTrue(JSONUtil.parseObj(backend.submittedPayload)
-                .getJSONArray("argJsonValues")
-                .getStr(0)
-                .contains("before"));
-        Assert.assertFalse(JSONUtil.parseObj(backend.submittedPayload)
-                .getJSONArray("argJsonValues")
-                .getStr(0)
-                .contains("after"));
-        Assert.assertEquals(
-                JSONUtil.parseObj(backend.savedPayload).getLong("createdAt"),
-                JSONUtil.parseObj(backend.submittedPayload).getLong("createdAt"));
-        Assert.assertEquals(
-                JSONUtil.parseObj(backend.savedPayload).getStr("taskId"),
-                JSONUtil.parseObj(backend.submittedPayload).getStr("taskId"));
         Assert.assertEquals(
                 DelegateContractImpl.class.getName(),
                 JSONUtil.parseObj(backend.savedPayload).getStr("beanName"));
@@ -235,15 +225,13 @@ public class RetryDelegateTest {
             // expected
         }
 
-        Assert.assertEquals(
-                "custom-task",
-                JSONUtil.parseObj(backend.submittedPayload).getStr("taskType"));
+        Assert.assertEquals("custom-task", JSONUtil.parseObj(backend.savedPayload).getStr("taskType"));
     }
 
     @Test
     public void testRecoveringContextSkipsRetryPipeline() throws Throwable {
         RetryDelegate delegate = new RetryDelegate();
-        Method method = DelegateApi.class.getDeclaredMethod("memoryFallback", String.class);
+        Method method = DelegateApi.class.getDeclaredMethod("persistentCall", Object.class);
         Retryable retryable = method.getAnnotation(Retryable.class);
         AtomicInteger proceedCount = new AtomicInteger();
         CapturingBackend backend = new CapturingBackend();
@@ -272,33 +260,27 @@ public class RetryDelegateTest {
     }
 
     public interface DelegateContract {
-        @Retryable(policy = "delegate-freeze", durability = RetryDurability.AT_LEAST_ONCE_DURABLE)
+        @Retryable(policy = "delegate-freeze")
         String durableCall(List<String> value);
     }
 
     public static class DelegateApi {
-        @Retryable(policy = "delegate-test", durability = RetryDurability.AT_LEAST_ONCE_DURABLE)
+        @Retryable(policy = "delegate-test")
         public static String strongConsistency(String value) {
             return value;
         }
 
-        @Retryable(policy = "delegate-test", durability = RetryDurability.MEMORY_ONLY)
+        @Retryable(policy = "delegate-test")
         public String memoryOnly(Object value) {
             return String.valueOf(value);
         }
 
-        @Retryable(policy = "delegate-test", durability = RetryDurability.MEMORY_FALLBACK)
-        public String memoryFallback(String value) {
-            return value;
-        }
-
-        @Retryable(policy = "delegate-freeze", durability = RetryDurability.MEMORY_FALLBACK)
-        public String memoryFallbackDeferred(Object value) {
+        @Retryable(policy = "delegate-freeze")
+        public String persistentCall(Object value) {
             return String.valueOf(value);
         }
 
-        @Retryable(policy = "delegate-freeze", taskType = "custom-task",
-                durability = RetryDurability.MEMORY_FALLBACK)
+        @Retryable(policy = "delegate-freeze", taskType = "custom-task")
         public String customTaskType(String value) {
             return value;
         }
@@ -355,7 +337,7 @@ public class RetryDelegateTest {
 
         @Override
         public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
-            this.submittedPayload = contextJson;
+            this.submittedPayload = savedPayload;
         }
     }
 }

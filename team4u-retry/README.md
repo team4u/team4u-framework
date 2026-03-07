@@ -111,7 +111,7 @@ CompletableFuture<String> future = retryer.executeAsync(
 
 说明：
 
-- 这个写法在 `Retryer.with(policy)` 下仍然是 `MEMORY_ONLY`
+- 这个写法在 `Retryer.with(policy)` 下仍然是内存模式
 - 纯内存异步重试不需要 `taskType` 和 `payloadBuilder`
 - 只有当你需要失败后移交后端继续恢复时，才需要使用带 `taskType/payloadBuilder` 的那个 `executeAsync(...)` 重载
 
@@ -135,7 +135,7 @@ public interface PayService {
 常用配置：
 
 - `maxAttempts(int)`：总尝试次数，包含第一次调用
-- `inMemoryAttempts(int)`：仅控制内存阶段的尝试次数
+- `localAttempts(int)`：仅控制持久化模式下当前进程内的尝试次数
 - `infiniteAttempts()`：无限重试，等价于 `maxAttempts = -1`
 - `backoff(Backoff)`：退避策略
 - `retryOn(...)`：只对这些异常重试
@@ -192,8 +192,8 @@ String result = retryer.execute(() -> doBusiness());
 
 注意：
 
-- 该入口只支持 `MEMORY_ONLY`
-- 如果你配置了持久化级别，不要调用这个重载
+- 该入口只支持内存模式
+- 如果你配置了 `backend`，不要调用这个重载
 
 ### 支持后端降级的同步重试
 
@@ -201,7 +201,6 @@ String result = retryer.execute(() -> doBusiness());
 Retryer retryer = Retryer.builder()
         .policy(policy)
         .backend(retryBackend)
-        .durability(RetryDurability.MEMORY_FALLBACK)
         .build();
 
 String result = retryer.execute(
@@ -280,7 +279,7 @@ context -> {
 
 ```java
 public interface PayService {
-    @Retryable(policy = "pay-notify", durability = RetryDurability.MEMORY_FALLBACK)
+    @Retryable(policy = "pay-notify")
     String notifyPay(String orderId);
 }
 ```
@@ -295,17 +294,16 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), leaseBack
 
 - `policy`：策略名，默认是 `default`
 - `taskType`：任务类型，供后端恢复时路由
-- `durability`：可靠性级别，默认 `MEMORY_ONLY`
 
 关于 `taskType`，还需要补充一个注解模式下的默认约定：
 
 - 如果 `@Retryable(taskType = "...")` 显式声明了 `taskType`，始终优先使用显式值
-- 如果 `taskType` 为空且 `durability != MEMORY_ONLY`，框架会自动落到默认 Proxy 恢复任务类型 `RetryTaskTypes.DEFAULT_PROXY_RECOVERY`
-- 如果 `durability == MEMORY_ONLY`，不会进入后端恢复链路，因此也不会使用默认恢复任务类型
+- 如果 `taskType` 为空且运行时存在 `LeaseBackend`，框架会自动落到默认 Proxy 恢复任务类型 `RetryTaskTypes.DEFAULT_PROXY_RECOVERY`
+- 如果运行时没有 `LeaseBackend`，不会进入后端恢复链路，因此也不会使用默认恢复任务类型
 
 这个默认 key 是框架保留值，适合配合通用快照恢复器使用；业务侧如果需要自定义路由，仍建议显式声明自己的 `taskType`。
 
-当 `durability != MEMORY_ONLY` 时，注解式接入不会直接把“原始方法调用现场”丢给后端，而是会先把方法信息和参数快照序列化成一份 `RetryTaskSnapshot`，再交给 `LeaseBackend`。这意味着：
+当运行时存在 `LeaseBackend` 时，注解式接入不会直接把“原始方法调用现场”丢给后端，而是会先把方法信息和参数快照序列化成一份 `RetryTaskSnapshot`，再交给 `LeaseBackend`。这意味着：
 
 - `taskType` 决定后端如何路由任务
 - `payload` 不一定是你手写的业务 JSON；在注解场景下，它通常是一份框架生成的快照
@@ -316,13 +314,10 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), leaseBack
 
 ### 注解快照的生成时机
 
-这次版本里，注解式持久化快照的构建语义更明确了：
+这次版本里，注解式快照的构建语义更明确了：
 
-- `MEMORY_ONLY`：不会序列化方法参数，也不会构建快照
-- `MEMORY_FALLBACK`：只有当前进程内的内存重试耗尽、真正要移交后端时，才会延迟构建一次快照
-- `AT_LEAST_ONCE_DURABLE`：会在执行前就冻结一份快照，用于预写一条 prepared lease task
-
-这样做的目的，是避免 `MEMORY_FALLBACK` 在本地就能成功时产生不必要的序列化开销，同时保证 `AT_LEAST_ONCE_DURABLE` 模式下“先记账、后执行”的语义成立。
+- 无 `LeaseBackend`：不会序列化方法参数，也不会构建快照
+- 有 `LeaseBackend`：会在执行前就冻结一份快照，用于预写一条 prepared lease task
 
 ### 注解快照的冻结语义
 
@@ -336,7 +331,10 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), leaseBack
 
 ### 什么时候需要提供 `LeaseBackend`
 
-当 `durability != MEMORY_ONLY` 时，必须提供 `LeaseBackend`。否则会抛出 `IllegalStateException`。
+是否提供 `LeaseBackend` 就决定了模式：
+
+- 不提供：内存模式
+- 提供：持久化模式
 
 ### 参数序列化约束
 
@@ -443,13 +441,12 @@ public class RetryConfig {
 
 ## 持久化降级与恢复
 
-### 可靠性级别
+### 模式语义
 
-`RetryDurability` 提供三种模式：
+当前只保留两种运行态：
 
-- `MEMORY_ONLY`：只在当前进程内重试，最快，但不抗宕机
-- `MEMORY_FALLBACK`：先内存重试，耗尽后移交后端
-- `AT_LEAST_ONCE_DURABLE`：执行前先写 intent，保证至少一次持久化
+- 无 `LeaseBackend`：只在当前进程内重试，最快，但不抗宕机
+- 有 `LeaseBackend`：执行前先写 intent，本地尝试耗尽后通过 `reschedule(intentId, delay)` 交给后端
 
 这里的“至少一次”强调的是“任务意图至少被可靠记录一次”，不是“业务只会被执行一次”。如果业务成功返回后，异步清理 intent 失败，后端仍有可能再次看到该任务并尝试恢复，所以业务补偿逻辑必须天然支持幂等。
 
@@ -494,7 +491,7 @@ public interface LeaseBackend {
 
 - `publish(..., preparedDelay)`：预写一条长期不可见的 prepared task，用于 durable intent
 - `cancel(taskId)`：任务成功或终止后撤销 prepared task
-- `publish(..., nextDelay)`：把失败任务重新交给后端延迟恢复
+- `reschedule(taskId, nextDelay)`：把 prepared intent 重新交给后端延迟恢复
 - `acquire/ack/retry/fail/heartbeat`：由 worker 侧消费与续租
 
 此外，第一次实现 `LeaseBackend` 时，通常还要明确这几个约束：
@@ -547,8 +544,8 @@ RetryTaskTypes.DEFAULT_PROXY_RECOVERY
 规则如下：
 
 - 如果 `@Retryable(taskType = "...")` 显式声明了 `taskType`，仍然优先使用显式值
-- 如果 `taskType` 为空且 `durability != MEMORY_ONLY`，框架自动使用 `DEFAULT_PROXY_RECOVERY`
-- 如果 `durability == MEMORY_ONLY`，不会走后端恢复，仍保持本地语义
+- 如果 `taskType` 为空且运行时存在 `LeaseBackend`，框架自动使用 `DEFAULT_PROXY_RECOVERY`
+- 如果运行时没有 `LeaseBackend`，不会走后端恢复，仍保持本地语义
 
 它的恢复流程可以概括为：
 
@@ -610,23 +607,23 @@ worker.start("retry-worker");
 
 因此，后端恢复调用可以被理解为“拿着已保存好的快照直接补偿执行”，而不是“重新从调用侧入口完整走一遍重试托管流程”。
 
-### `MEMORY_FALLBACK` 的次数语义
+### 本地尝试次数语义
 
 设：
 
 - `T = maxAttempts`，总尝试次数，包含第一次
-- `M = inMemoryAttempts`，内存阶段尝试次数，包含第一次
+- `L = localAttempts`，持久化模式下当前进程内尝试次数，包含第一次
 
 则：
 
-- 当前进程内最多执行 `M` 次
-- 只有 `M < T`，或者 `T == -1` 时，才会降级到后端
-- 有限重试场景下，后端剩余次数为 `T - M`
+- 当前进程内最多执行 `L` 次
+- 只有 `L < T`，或者 `T == -1` 时，才会降级到后端
+- 有限重试场景下，后端剩余次数为 `T - L`
 
 默认值：
 
-- `MEMORY_ONLY`：默认全部在内存中完成
-- `MEMORY_FALLBACK` / `AT_LEAST_ONCE_DURABLE`：如果未显式配置 `inMemoryAttempts`，默认当前进程内尝试 2 次
+- 无 `LeaseBackend`：默认全部在内存中完成
+- 有 `LeaseBackend`：如果未显式配置 `localAttempts`，默认当前进程内尝试 2 次
 
 ---
 
@@ -645,7 +642,7 @@ retry.policy.pay-notify={"maxAttempts":5,"backoffType":"exponentialJitter"}
 ```properties
 retry.policy.pay-notify={
   "maxAttempts": 5,
-  "inMemoryAttempts": 2,
+  "localAttempts": 2,
   "backoffType": "exponentialJitter",
   "initialDelay": 200,
   "multiplier": 2.0,
@@ -702,7 +699,6 @@ public class PayNotifyRecoveryHandler implements RecoveryHandler {
 ### 怎么把它串起来
 
 ```java
-import com.team4u.framework.retry.RetryDurability;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.Retryer;
 import com.team4u.framework.retry.backoff.Backoff;
@@ -719,14 +715,13 @@ worker.start("retry-worker");
 
 RetryPolicy policy = RetryPolicy.builder()
         .maxAttempts(5)
-        .inMemoryAttempts(2)
+        .localAttempts(2)
         .backoff(Backoff.exponentialJitter(200, 2.0, 5000))
         .build();
 
 Retryer retryer = Retryer.builder()
         .policy(policy)
         .backend(backend)
-        .durability(RetryDurability.MEMORY_FALLBACK)
         .build();
 
 retryer.execute(
@@ -876,7 +871,7 @@ public class LeaseBackendConfig {
 然后把业务方法改成：
 
 ```java
-@Retryable(policy = "pay-policy", taskType = "pay-notify", durability = RetryDurability.MEMORY_FALLBACK)
+@Retryable(policy = "pay-policy", taskType = "pay-notify")
 public String notifyPay(String orderId) {
     // ...
 }
@@ -924,13 +919,13 @@ public RetryLeaseWorker retryWorker(LeaseBackend backend) {
 
 ### 4. 异步清理不是强一致同步完成
 
-在 `AT_LEAST_ONCE_DURABLE` 模式下，prepared task 的 `cancel(...)` 使用异步清理执行器，不保证一定在业务返回前完成。
+在持久化模式下，prepared task 的 `cancel(...)` 使用异步清理执行器，不保证一定在业务返回前完成。
 
 这意味着“业务成功”与“intent 已删除”之间存在短暂窗口。如果你的后端会扫描未清理 intent，请把恢复逻辑设计成幂等操作。
 
 ### 5. 开启持久化前先确认参数可序列化
 
-尤其是 `AT_LEAST_ONCE_DURABLE`。如果参数无法序列化，框架无法把任务安全移交到后端。
+只要启用持久化模式，如果参数无法序列化，框架就无法把任务安全移交到后端。
 
 注解式接入默认会序列化方法参数；不需要恢复的参数可以用 `@RetryIgnore` 跳过，但一旦跳过，就不能再指望恢复阶段拿到它。
 
@@ -990,9 +985,9 @@ graph TD
     C --> D{还能重试?}
     D -->|是| E[Backoff 计算延迟]
     E --> B
-    D -->|否| F{durability}
-    F -->|MEMORY_ONLY| G[抛出最终异常]
-    F -->|MEMORY_FALLBACK / AT_LEAST_ONCE_DURABLE| H[LeaseBackend.publish]
+    D -->|否| F{是否存在 backend}
+    F -->|否| G[抛出最终异常]
+    F -->|是| H[LeaseBackend.reschedule]
     H --> I[抛出 RetryExhaustedException]
     I --> J[RetryLeaseWorker 或 LeaseWorker 恢复执行]
     J --> K[RecoveryHandlerRegistry 路由]

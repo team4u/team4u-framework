@@ -127,7 +127,7 @@ public class RetryerTest {
     }
 
     @Test
-    public void testPersistentDurabilityDefaultInMemoryAttempts() {
+    public void testPersistentModeDefaultLocalAttempts() {
         RetryPolicy policy = RetryPolicy.builder()
                 .maxAttempts(5)
                 .build();
@@ -139,7 +139,7 @@ public class RetryerTest {
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
             public String saveIntent(String taskType, String payload) {
-                return null;
+                return "intent";
             }
 
             @Override
@@ -161,7 +161,6 @@ public class RetryerTest {
         Retryer retryer = Retryer.builder()
                 .policy(policy)
                 .backend(backend)
-                .durability(RetryDurability.MEMORY_FALLBACK)
                 .build();
 
         try {
@@ -183,14 +182,13 @@ public class RetryerTest {
     }
 
     @Test
-    public void testPayloadBuilderReceivesExplicitContext() {
+    public void testPayloadBuilderReceivesPrepareContextOnly() {
         RetryPolicy policy = RetryPolicy.builder()
                 .maxAttempts(2)
-                .inMemoryAttempts(1)
+                .localAttempts(1)
                 .build();
 
         AtomicReference<RetryPayloadContext> prepareContext = new AtomicReference<>();
-        AtomicReference<RetryPayloadContext> handoffContext = new AtomicReference<>();
 
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
@@ -215,16 +213,11 @@ public class RetryerTest {
         Retryer retryer = Retryer.builder()
                 .policy(policy)
                 .backend(backend)
-                .durability(RetryDurability.AT_LEAST_ONCE_DURABLE)
                 .build();
 
         try {
             retryer.execute("task", context -> {
-                if (context.getPhase() == RetryPayloadContext.Phase.PREPARE_INTENT) {
-                    prepareContext.set(context);
-                } else {
-                    handoffContext.set(context);
-                }
+                prepareContext.set(context);
                 return "{}";
             }, () -> {
                 throw new RuntimeException("fail");
@@ -239,10 +232,6 @@ public class RetryerTest {
         Assert.assertNotNull(prepareContext.get());
         Assert.assertEquals(RetryPayloadContext.Phase.PREPARE_INTENT, prepareContext.get().getPhase());
         Assert.assertEquals(0, prepareContext.get().getExecutedAttempts());
-
-        Assert.assertNotNull(handoffContext.get());
-        Assert.assertEquals(RetryPayloadContext.Phase.HANDOFF_TO_BACKEND, handoffContext.get().getPhase());
-        Assert.assertEquals(1, handoffContext.get().getExecutedAttempts());
     }
 
     @Test
@@ -283,7 +272,6 @@ public class RetryerTest {
         Retryer retryer = Retryer.builder()
                 .policy(policy)
                 .backend(backend)
-                .durability(RetryDurability.AT_LEAST_ONCE_DURABLE)
                 .cleanupExecutor(customExecutor)
                 .build();
 
@@ -331,7 +319,6 @@ public class RetryerTest {
         Retryer retryer = Retryer.builder()
                 .policy(policy)
                 .backend(backend)
-                .durability(RetryDurability.AT_LEAST_ONCE_DURABLE)
                 .cleanupExecutor(customExecutor)
                 .build();
 
@@ -350,10 +337,10 @@ public class RetryerTest {
     }
 
     @Test
-    public void testBackendHandoffPublishesTaskIds() {
+    public void testBackendHandoffReschedulesPreparedIntentIds() {
         RetryPolicy policy = RetryPolicy.builder()
                 .maxAttempts(2)
-                .inMemoryAttempts(1)
+                .localAttempts(1)
                 .build();
 
         java.util.concurrent.atomic.AtomicReference<String> lastIntentId = new java.util.concurrent.atomic.AtomicReference<>();
@@ -361,7 +348,7 @@ public class RetryerTest {
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
             public String saveIntent(String queueName, String contextJson) {
-                return null;
+                return "intent-" + System.nanoTime();
             }
 
             @Override
@@ -382,7 +369,6 @@ public class RetryerTest {
         Retryer retryer = Retryer.builder()
                 .policy(policy)
                 .backend(backend)
-                .durability(RetryDurability.MEMORY_FALLBACK)
                 .build();
 
         String taskType = "test-task";
@@ -398,7 +384,7 @@ public class RetryerTest {
 
         String id1 = lastIntentId.get();
         Assert.assertNotNull(id1);
-        Assert.assertTrue(id1.startsWith("lease-test-"));
+        Assert.assertTrue(id1.startsWith("intent-"));
 
         // 第二次执行（相同 taskType 和 payload）仍应成功发布到后端
         try {
@@ -410,7 +396,7 @@ public class RetryerTest {
 
         String id2 = lastIntentId.get();
         Assert.assertNotNull(id2);
-        Assert.assertNotEquals("Lease backend 生成的 taskId 不要求稳定复用", id1, id2);
+        Assert.assertNotEquals("每次 prepared intent 都应有独立 id", id1, id2);
 
         // 不同 payload 应生成不同 id
         try {
@@ -425,7 +411,7 @@ public class RetryerTest {
     }
 
     @Test(expected = IllegalStateException.class)
-    public void testStrongConsistencyFailFastWhenSaveIntentReturnsNull() throws Exception {
+    public void testPersistentModeFailFastWhenSaveIntentReturnsNull() throws Exception {
         RetryPolicy policy = RetryPolicy.builder().build();
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
@@ -450,7 +436,6 @@ public class RetryerTest {
         Retryer retryer = Retryer.builder()
                 .policy(policy)
                 .backend(backend)
-                .durability(RetryDurability.AT_LEAST_ONCE_DURABLE)
                 .build();
 
         retryer.execute("task", context -> "{}", () -> "success");
@@ -470,7 +455,7 @@ public class RetryerTest {
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
             public String saveIntent(String taskType, String payload) {
-                return null;
+                return "intent";
             }
 
             @Override
@@ -491,7 +476,6 @@ public class RetryerTest {
         Retryer retryer = Retryer.builder()
                 .policy(policy)
                 .backend(backend)
-                .durability(RetryDurability.MEMORY_FALLBACK)
                 .build();
 
         Thread worker = new Thread(() -> {
@@ -515,7 +499,7 @@ public class RetryerTest {
     }
 
     @Test
-    public void testSimpleExecuteFailFastForDurableModes() {
+    public void testSimpleExecuteFailFastForPersistentMode() {
         RetryPolicy policy = RetryPolicy.builder().maxAttempts(2).build();
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
@@ -539,21 +523,20 @@ public class RetryerTest {
         Retryer retryer = Retryer.builder()
                 .policy(policy)
                 .backend(backend)
-                .durability(RetryDurability.MEMORY_FALLBACK)
                 .build();
 
         try {
             retryer.execute(() -> "ok");
             Assert.fail("expected IllegalStateException");
         } catch (IllegalStateException expected) {
-            Assert.assertTrue(expected.getMessage().contains("MEMORY_ONLY"));
+            Assert.assertTrue(expected.getMessage().contains("memory mode only"));
         } catch (Exception e) {
             Assert.fail("expected IllegalStateException");
         }
     }
 
     @Test
-    public void testSimpleAsyncExecuteFailFastForDurableModes() {
+    public void testSimpleAsyncExecuteFailFastForPersistentMode() {
         RetryPolicy policy = RetryPolicy.builder().maxAttempts(2).build();
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
@@ -577,7 +560,6 @@ public class RetryerTest {
         Retryer retryer = Retryer.builder()
                 .policy(policy)
                 .backend(backend)
-                .durability(RetryDurability.MEMORY_FALLBACK)
                 .build();
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 
@@ -585,7 +567,7 @@ public class RetryerTest {
             retryer.executeAsync(() -> CompletableFuture.completedFuture("ok"), scheduler);
             Assert.fail("expected IllegalStateException");
         } catch (IllegalStateException expected) {
-            Assert.assertTrue(expected.getMessage().contains("MEMORY_ONLY"));
+            Assert.assertTrue(expected.getMessage().contains("memory mode only"));
         } finally {
             scheduler.shutdown();
         }
