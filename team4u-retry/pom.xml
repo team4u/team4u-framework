@@ -45,7 +45,7 @@
         </dependency>
         <dependency>
             <groupId>com.team4u</groupId>
-            <artifactId>team4u-lease</artifactId>
+            <artifactId>team4u-lease-core</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
@@ -55,6 +55,12 @@
         <dependency>
             <groupId>com.team4u</groupId>
             <artifactId>team4u-config-test</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-lease-memory</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
