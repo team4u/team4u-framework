@@ -160,7 +160,7 @@ worker.shutdown();
 任务通过三个维度表达其当前处境：
 
 | 状态 | 说明 |
-|  |  |
+| --- | --- |
 | `READY` | 待命状态，可供 Worker 获取执行（包含延迟生效的任务）。 |
 | `RUNNING` | 已被某个 Worker 成功抢占，正在执行中。 |
 | `CLOSED` | 终局状态，任务已结束，不再自动流转。 |
@@ -288,7 +288,7 @@ adminService.update(
 ### `LeaseWorkerPolicy` 配置表
 
 | 参数 | 说明 | 默认值 | 校验规则 |
-|  |  |  |  |
+| --- | --- | --- | --- |
 | `workerId` | 唯一身份标识 | 随机 UUID | 不能为空 |
 | `leaseMillis` | 租赁（锁定）时长 | 30,000 ms | > 0 |
 | `pollWaitMillis` | 轮询阻塞等待时长 | 1,000 ms | >= 0 |
@@ -377,7 +377,7 @@ worker.shutdownGracefully(5000);
 ## 适用与局限
 
 | 推荐场景 | 不太适合 |
-|  |  |
+| --- | --- |
 | 中小规模异步任务执行 | 每秒数万次的超大规模消息吞吐 |
 | 需要强单节点执行语义 | 需要 Topic 广播、Consumer Group 等 MQ 特性 |
 | 需要高可见性与人工干预 | 复杂的 DAG 编排与大型工作流 |
