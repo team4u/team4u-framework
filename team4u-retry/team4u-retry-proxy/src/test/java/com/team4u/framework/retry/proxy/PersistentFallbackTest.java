@@ -39,28 +39,23 @@ public class PersistentFallbackTest {
         AtomicInteger submitCount = new AtomicInteger(0);
         TestLeaseBackend mockBackend = new TestLeaseBackend() {
             @Override
-            public String saveIntent(String queueName, String contextJson) {
-                Assert.assertEquals(RetryTaskTypes.DEFAULT_PROXY_RECOVERY, queueName);
+            public void save(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
+                Assert.assertEquals(RetryTaskTypes.DEFAULT_PROXY_RECOVERY, snapshot.getTaskType());
+                String contextJson = cn.hutool.json.JSONUtil.toJsonStr(snapshot);
                 Assert.assertTrue("Context snippet should contain method name", contextJson.contains("doSomething"));
                 Assert.assertTrue("Context snippet should contain arg value", contextJson.contains("test-arg"));
-                return "intent";
+                snapshot.setTaskId("intent");
             }
 
             @Override
-            public void completeIntent(String intentId) {
+            public void delete(String taskId) {
             }
 
             @Override
-            public void markTerminalFailure(String intentId, Throwable cause) {
-            }
-
-            @Override
-            public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
+            public void handoff(String taskId, long delayMillis) {
                 submitCount.incrementAndGet();
-                Assert.assertNull(queueName);
-                Assert.assertNull(contextJson);
-                Assert.assertEquals("intent", intentId);
-                Assert.assertEquals(1000, delayMs);
+                Assert.assertEquals("intent", taskId);
+                Assert.assertEquals(1000, delayMillis);
             }
         };
 

@@ -1,6 +1,5 @@
 package com.team4u.framework.retry;
 
-import com.team4u.framework.base.backoff.Backoff;
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.criterion.MatchContext;
 import lombok.Getter;
@@ -64,12 +63,12 @@ public class RetryPolicy {
     /**
      * 检查是否允许继续进行下一次尝试
      *
-     * @param currentAttempt 当前尝试次数
-     * @param ex             当前发生的异常
-     * @return 是否满足重试条件
+     * @param executedAttempts 已执行完成并失败的尝试次数（从 1 开始）
+     * @param ex               当前发生的异常
+     * @return 是否满足重试条件，即是否允许进行第 executedAttempts + 1 次尝试
      */
-    public boolean canRetry(int currentAttempt, Throwable ex) {
-        if (currentAttempt >= maxAttempts && maxAttempts != -1) {
+    public boolean canRetry(int executedAttempts, Throwable ex) {
+        if (maxAttempts != -1 && executedAttempts >= maxAttempts) {
             return false;
         }
 
@@ -85,7 +84,7 @@ public class RetryPolicy {
 
         // 使用集成表达式引擎进行高级条件判定（如异常信息内容匹配等）
         if (conditionExpression != null && !conditionExpression.isEmpty()) {
-            RetryContext contextData = new RetryContext(currentAttempt, getMaxAttempts(), cause);
+            RetryContext contextData = new RetryContext(executedAttempts, getMaxAttempts(), cause);
             MatchContext ctx = MatchContext.of(contextData);
             return Criteria.global().matches(conditionExpression, ctx);
         }

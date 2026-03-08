@@ -1,5 +1,6 @@
 package com.team4u.framework.retry;
 
+import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
@@ -8,7 +9,9 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -30,7 +33,7 @@ public class ProgrammaticRetryIntegrationTest {
         backend = new MockLeaseBackend();
         retryer = Retryer.builder()
                 .policy(RetryPolicy.builder().maxAttempts(3).build())
-                .backend(backend)
+                .retryBackend(backend)
                 .build();
     }
 
@@ -38,7 +41,11 @@ public class ProgrammaticRetryIntegrationTest {
     public void testExecuteSuccessWithWAL() throws Exception {
         AtomicInteger callCount = new AtomicInteger();
 
-        String result = retryer.execute(taskType, context -> payload, () -> {
+        String result = retryer.execute(taskType, context -> {
+            RetryTaskSnapshot snapshot = new RetryTaskSnapshot();
+            snapshot.setTaskId("id-" + System.currentTimeMillis());
+            return snapshot;
+        }, () -> {
             callCount.incrementAndGet();
             return "success";
         });
@@ -47,10 +54,10 @@ public class ProgrammaticRetryIntegrationTest {
         Assert.assertEquals(1, callCount.get());
 
         // 验证 WAL 流程：保存了意图
-        Assert.assertEquals(1, backend.savedIntents.size());
+        Assert.assertEquals(1, backend.savedSnapshots.size());
         // 由于是异步清理，稍微等待或简化模拟
         Thread.sleep(100);
-        Assert.assertEquals(1, backend.completedIntents.size());
+        Assert.assertEquals(1, backend.deletedTaskIds.size());
     }
 
     @Test
@@ -58,7 +65,11 @@ public class ProgrammaticRetryIntegrationTest {
         AtomicInteger callCount = new AtomicInteger();
 
         try {
-            retryer.execute(taskType, context -> payload, () -> {
+            retryer.execute(taskType, context -> {
+                RetryTaskSnapshot snapshot = new RetryTaskSnapshot();
+                snapshot.setTaskId("id-exhausted");
+                return snapshot;
+            }, () -> {
                 callCount.incrementAndGet();
                 throw new RuntimeException("fail");
             });
@@ -70,11 +81,10 @@ public class ProgrammaticRetryIntegrationTest {
         // 持久化模式下未显式配置 localAttempts，默认前台内存预算为 2 次
         Assert.assertEquals(2, callCount.get());
         // 验证 prepared intent 已被重调度到延迟队列
-        Assert.assertEquals(1, backend.savedIntents.size());
-        Assert.assertEquals(1, backend.delayedIntents.size());
-        Assert.assertEquals(backend.savedIntents.get(0).id, backend.delayedIntents.get(0).id);
-        Assert.assertNull(backend.delayedIntents.get(0).taskType);
-        Assert.assertNull(backend.delayedIntents.get(0).payload);
+        Assert.assertEquals(1, backend.savedSnapshots.size());
+        Assert.assertEquals(1, backend.delayedTasks.size());
+        Assert.assertEquals(backend.savedSnapshots.values().iterator().next().getTaskId(),
+                backend.delayedTasks.get(0).taskId);
     }
 
     @Test
@@ -112,41 +122,32 @@ public class ProgrammaticRetryIntegrationTest {
      * 模拟后端实现
      */
     private static class MockLeaseBackend extends TestLeaseBackend {
-        List<Intent> savedIntents = new ArrayList<>();
-        List<String> completedIntents = new ArrayList<>();
-        List<Intent> delayedIntents = new ArrayList<>();
+        Map<String, RetryTaskSnapshot> savedSnapshots = new LinkedHashMap<>();
+        List<String> deletedTaskIds = new ArrayList<>();
+        List<DelayedTask> delayedTasks = new ArrayList<>();
 
         @Override
-        public String saveIntent(String taskType, String payload) {
-            String id = "id-" + System.currentTimeMillis();
-            savedIntents.add(new Intent(id, taskType, payload));
-            return id;
+        public void save(RetryTaskSnapshot snapshot) {
+            savedSnapshots.put(snapshot.getTaskId(), snapshot);
         }
 
         @Override
-        public void completeIntent(String intentId) {
-            completedIntents.add(intentId);
-        }
-
-
-        @Override
-        public void markTerminalFailure(String intentId, Throwable cause) {
+        public void delete(String taskId) {
+            deletedTaskIds.add(taskId);
         }
 
         @Override
-        public void submitForDelay(String intentId, String taskType, String payload, long delay) {
-            delayedIntents.add(new Intent(intentId, taskType, payload));
+        public void handoff(String taskId, long delay) {
+            delayedTasks.add(new DelayedTask(taskId, delay));
         }
 
-        static class Intent {
-            String id;
-            String taskType;
-            String payload;
+        static class DelayedTask {
+            String taskId;
+            long delay;
 
-            Intent(String id, String taskType, String payload) {
-                this.id = id;
-                this.taskType = taskType;
-                this.payload = payload;
+            DelayedTask(String taskId, long delay) {
+                this.taskId = taskId;
+                this.delay = delay;
             }
         }
     }

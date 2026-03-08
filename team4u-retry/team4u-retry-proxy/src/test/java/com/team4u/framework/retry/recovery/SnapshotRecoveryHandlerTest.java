@@ -104,22 +104,18 @@ public class SnapshotRecoveryHandlerTest {
         private final AtomicInteger submitCount = new AtomicInteger();
 
         @Override
-        public String saveIntent(String queueName, String contextJson) {
+        public void save(RetryTaskSnapshot snapshot) {
             saveCount.incrementAndGet();
-            return "intent";
+            snapshot.setTaskId("intent");
         }
 
         @Override
-        public void completeIntent(String intentId) {
-        }
-
-        @Override
-        public void markTerminalFailure(String intentId, Throwable cause) {
-        }
-
-        @Override
-        public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
+        public void handoff(String taskId, long delayMillis) {
             submitCount.incrementAndGet();
+        }
+
+        @Override
+        public void delete(String taskId) {
         }
     }
 }

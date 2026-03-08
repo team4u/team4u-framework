@@ -1,5 +1,6 @@
 package com.team4u.framework.lease;
 
+import com.team4u.framework.lease.runtime.LeaseWorkerPolicy;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -25,16 +26,6 @@ public class LeaseWorkerPolicyTest {
             Assert.fail("expected IllegalArgumentException");
         } catch (IllegalArgumentException ex) {
             Assert.assertTrue(ex.getMessage().contains("heartbeatIntervalMillis"));
-        }
-    }
-
-    @Test
-    public void testMaxFailuresMustBePositiveOrInfinite() {
-        try {
-            LeaseWorkerPolicy.builder().maxFailures(0).build();
-            Assert.fail("expected IllegalArgumentException");
-        } catch (IllegalArgumentException ex) {
-            Assert.assertTrue(ex.getMessage().contains("maxFailures"));
         }
     }
 }

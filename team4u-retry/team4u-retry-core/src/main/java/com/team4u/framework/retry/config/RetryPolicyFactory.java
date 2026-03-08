@@ -4,7 +4,7 @@ import cn.hutool.core.util.ClassUtil;
 import cn.hutool.json.JSONUtil;
 import cn.hutool.log.Log;
 import cn.hutool.log.LogFactory;
-import com.team4u.framework.base.backoff.Backoff;
+import com.team4u.framework.retry.Backoff;
 import com.team4u.framework.retry.RetryPolicy;
 
 /**

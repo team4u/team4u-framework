@@ -1,5 +1,8 @@
 package com.team4u.framework.lease;
 
+import com.team4u.framework.lease.api.LeaseBackend;
+import com.team4u.framework.lease.enums.LeaseRuntimeResult;
+import com.team4u.framework.lease.model.*;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -10,7 +13,7 @@ public abstract class AbstractLeaseBackendContractTest {
 
     protected static final String DEFAULT_QUEUE = "default";
 
-    protected abstract LeaseBackend createBackend();
+    protected abstract com.team4u.framework.lease.api.LeaseBackend createBackend();
 
     @Test
     public void testPublishAndAcquireReadyTask() throws Exception {
@@ -30,7 +33,7 @@ public abstract class AbstractLeaseBackendContractTest {
 
     @Test
     public void testOnlyOneWorkerCanAcquireSameTask() throws Exception {
-        final LeaseBackend backend = createBackend();
+        final com.team4u.framework.lease.api.LeaseBackend backend = createBackend();
         publish(backend, "pay", "payload");
 
         final CountDownLatch ready = new CountDownLatch(2);
@@ -62,32 +65,13 @@ public abstract class AbstractLeaseBackendContractTest {
     }
 
     @Test
-    public void testRetryMakesTaskVisibleAgainAndIncrementsFailureCount() throws Exception {
-        LeaseBackend backend = createBackend();
-        String taskId = publish(backend, "pay", "payload");
-        LeaseGrant grant = acquire(backend, "worker-a", 200L, 500L);
-
-        Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.retry(
-                grant.getHandle(), 50L, new IllegalStateException("boom")));
-
-        Assert.assertNull(acquire(backend, "worker-b", 200L, 20L));
-        Thread.sleep(80L);
-
-        LeaseGrant nextGrant = acquire(backend, "worker-b", 200L, 200L);
-        Assert.assertNotNull(nextGrant);
-        Assert.assertEquals(2, nextGrant.getDeliveryCount());
-        Assert.assertEquals(1, nextGrant.getFailureCount());
-        Assert.assertEquals(taskId, nextGrant.getTaskId());
-    }
-
-    @Test
     public void testFailMakesTaskTerminal() throws Exception {
         LeaseBackend backend = createBackend();
-        String taskId = publish(backend, "pay", "payload");
+        publish(backend, "pay", "payload");
         LeaseGrant grant = acquire(backend, "worker-a", 200L, 500L);
 
         Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.fail(
-                grant.getHandle(), new IllegalStateException("boom")));
+                grant.getHandle(), LeaseFailureRequest.of(new IllegalStateException("boom"))));
 
         Assert.assertNull(acquire(backend, "worker-b", 200L, 100L));
     }
@@ -101,9 +85,7 @@ public abstract class AbstractLeaseBackendContractTest {
 
         Assert.assertEquals(LeaseRuntimeResult.LEASE_LOST, backend.ack(wrongHandle));
         Assert.assertEquals(LeaseRuntimeResult.LEASE_LOST,
-                backend.retry(wrongHandle, 0L, new IllegalStateException("wrong")));
-        Assert.assertEquals(LeaseRuntimeResult.LEASE_LOST,
-                backend.fail(wrongHandle, new IllegalStateException("wrong")));
+                backend.fail(wrongHandle, LeaseFailureRequest.of(new IllegalStateException("wrong"))));
         Assert.assertEquals(LeaseRuntimeResult.LEASE_LOST, backend.heartbeat(wrongHandle, 500L));
 
         Thread.sleep(150L);
@@ -148,7 +130,8 @@ public abstract class AbstractLeaseBackendContractTest {
         publish(backend, "pay", "payload");
         LeaseGrant grant = acquire(backend, "worker-a", 80L, 500L);
 
-        Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.release(grant.getHandle(), 50L));
+        Assert.assertEquals(LeaseRuntimeResult.APPLIED,
+                backend.release(grant.getHandle(), LeaseReleaseRequest.of(50L)));
         Assert.assertNull(acquire(backend, "worker-b", 80L, 20L));
         Thread.sleep(70L);
 
@@ -182,7 +165,7 @@ public abstract class AbstractLeaseBackendContractTest {
                 .build()));
     }
 
-    private Thread createAcquireThread(final LeaseBackend backend,
+    private Thread createAcquireThread(final com.team4u.framework.lease.api.LeaseBackend backend,
                                        final CountDownLatch ready,
                                        final CountDownLatch start,
                                        final LeaseGrant[] grants,
@@ -202,11 +185,12 @@ public abstract class AbstractLeaseBackendContractTest {
         });
     }
 
-    protected String publish(LeaseBackend backend, String taskType, String payload) {
+    protected String publish(com.team4u.framework.lease.api.LeaseBackend backend, String taskType, String payload) {
         return publish(backend, taskType, payload, 0L);
     }
 
-    protected String publish(LeaseBackend backend, String taskType, String payload, long delayMillis) {
+    protected String publish(com.team4u.framework.lease.api.LeaseBackend backend, String taskType, String payload,
+                             long delayMillis) {
         return backend.publish(LeasePublishRequest.builder()
                 .queue(DEFAULT_QUEUE)
                 .taskType(taskType)
@@ -215,7 +199,7 @@ public abstract class AbstractLeaseBackendContractTest {
                 .build());
     }
 
-    protected LeaseGrant acquire(LeaseBackend backend, String workerId, long leaseMillis,
+    protected LeaseGrant acquire(com.team4u.framework.lease.api.LeaseBackend backend, String workerId, long leaseMillis,
                                  long waitTimeoutMillis) throws Exception {
         return backend.acquire(LeaseAcquireRequest.builder()
                 .workerId(workerId)
@@ -225,7 +209,7 @@ public abstract class AbstractLeaseBackendContractTest {
                 .build());
     }
 
-    protected LeaseGrant acquire(LeaseBackend backend, String workerId, long leaseMillis,
+    protected LeaseGrant acquire(com.team4u.framework.lease.api.LeaseBackend backend, String workerId, long leaseMillis,
                                  long waitTimeoutMillis, String... ignoredTaskTypes) throws Exception {
         return acquire(backend, workerId, leaseMillis, waitTimeoutMillis);
     }

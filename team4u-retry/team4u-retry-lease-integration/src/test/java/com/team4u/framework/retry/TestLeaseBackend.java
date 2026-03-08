@@ -1,6 +1,9 @@
 package com.team4u.framework.retry;
 
-import com.team4u.framework.lease.*;
+import com.team4u.framework.lease.api.LeaseBackend;
+import com.team4u.framework.lease.enums.LeaseAdminResult;
+import com.team4u.framework.lease.enums.LeaseRuntimeResult;
+import com.team4u.framework.lease.model.*;
 
 import java.util.Optional;
 import java.util.UUID;
@@ -65,12 +68,7 @@ public abstract class TestLeaseBackend implements LeaseBackend {
     }
 
     @Override
-    public LeaseRuntimeResult retry(LeaseHandle handle, long delayMillis, Throwable cause) {
-        return LeaseRuntimeResult.APPLIED;
-    }
-
-    @Override
-    public LeaseRuntimeResult fail(LeaseHandle handle, Throwable cause) {
+    public LeaseRuntimeResult fail(LeaseHandle handle, LeaseFailureRequest request) {
         return LeaseRuntimeResult.APPLIED;
     }
 
@@ -80,7 +78,7 @@ public abstract class TestLeaseBackend implements LeaseBackend {
     }
 
     @Override
-    public LeaseRuntimeResult release(LeaseHandle handle, long delayMillis) {
+    public LeaseRuntimeResult release(LeaseHandle handle, LeaseReleaseRequest request) {
         return LeaseRuntimeResult.APPLIED;
     }
 

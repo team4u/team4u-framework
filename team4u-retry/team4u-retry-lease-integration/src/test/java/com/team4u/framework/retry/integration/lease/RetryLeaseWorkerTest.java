@@ -1,9 +1,8 @@
 package com.team4u.framework.retry.integration.lease;
 
-import com.team4u.framework.base.backoff.Backoff;
-import com.team4u.framework.lease.LeasePublishRequest;
-import com.team4u.framework.lease.LeaseWorkerPolicy;
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
+import com.team4u.framework.lease.model.LeasePublishRequest;
+import com.team4u.framework.lease.runtime.LeaseWorkerPolicy;
 import com.team4u.framework.retry.RetryHandoffException;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.Retryer;
@@ -76,8 +75,6 @@ public class RetryLeaseWorkerTest {
 
         RetryLeaseWorker worker = new RetryLeaseWorker(backend, registry, LeaseWorkerPolicy.builder()
                 .workerId("retry-lease-worker")
-                .maxFailures(2)
-                .backoff(Backoff.fixed(10L))
                 .pollWaitMillis(20L)
                 .heartbeatEnabled(false)
                 .build());
@@ -93,9 +90,9 @@ public class RetryLeaseWorkerTest {
                 Thread.sleep(20L);
             }
 
-            Assert.assertEquals(2, attempts.get());
+            Assert.assertEquals(1, attempts.get());
             Assert.assertEquals("DEAD", backend.snapshot().get(taskId).getStatus().name());
-            Assert.assertEquals(2, backend.snapshot().get(taskId).getFailureCount());
+            Assert.assertEquals(1, backend.snapshot().get(taskId).getFailureCount());
             Assert.assertTrue(backend.snapshot().get(taskId).getLastError().contains("recover boom"));
         } finally {
             worker.shutdown();
@@ -123,20 +120,24 @@ public class RetryLeaseWorkerTest {
             }
         });
 
-        RetryLeaseWorker worker = new RetryLeaseWorker(leaseBackend, registry, LeaseWorkerPolicy.builder()
+        try (RetryLeaseWorker worker = new RetryLeaseWorker(leaseBackend, registry, LeaseWorkerPolicy.builder()
                 .workerId("retry-lease-worker-e2e")
                 .pollWaitMillis(20L)
-                .build());
+                .build())) {
 
-        Retryer retryer = Retryer.builder()
-                .policy(RetryPolicy.builder().maxAttempts(3).localAttempts(1).build())
-                .backend(new LeaseRetryBackend(leaseBackend))
-                .build();
+            Retryer retryer = Retryer.builder()
+                    .policy(RetryPolicy.builder().maxAttempts(3).localAttempts(1).build())
+                    .retryBackend(new LeaseRetryPersistenceAdapter(leaseBackend))
+                    .build();
 
-        worker.start("retry-lease-worker-e2e-test");
-        try {
+            worker.start("retry-lease-worker-e2e-test");
+
             try {
-                retryer.execute("pay-notify", context -> "{\"orderId\":\"A3001\"}", () -> {
+                retryer.execute("pay-notify", context -> {
+                    com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot = new com.team4u.framework.retry.backend.RetryTaskSnapshot();
+                    snapshot.setPayload("{\"orderId\":\"A3001\"}");
+                    return snapshot;
+                }, () -> {
                     callCount.incrementAndGet();
                     throw new IllegalStateException("downstream timeout");
                 });
@@ -148,8 +149,6 @@ public class RetryLeaseWorkerTest {
             Assert.assertEquals(1, callCount.get());
             Assert.assertTrue(latch.await(2, TimeUnit.SECONDS));
             Assert.assertEquals("{\"orderId\":\"A3001\"}", payloadRef.get());
-        } finally {
-            worker.shutdown();
         }
     }
 

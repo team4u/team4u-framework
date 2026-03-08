@@ -1,6 +1,6 @@
 package com.team4u.framework.retry;
 
-import com.team4u.framework.base.backoff.Backoff;
+import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -137,38 +137,38 @@ public class RetryerTest {
                 .maxAttempts(5)
                 .build();
 
-        AtomicInteger submitCount = new AtomicInteger(0);
+        AtomicInteger handoffCount = new AtomicInteger(0);
         AtomicInteger callCount = new AtomicInteger(0);
         AtomicInteger delayMs = new AtomicInteger(0);
 
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public String saveIntent(String taskType, String payload) {
-                return "intent";
+            public void save(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void completeIntent(String intentId) {
+            public void delete(String taskId) {
             }
 
             @Override
-            public void markTerminalFailure(String intentId, Throwable cause) {
-            }
-
-            @Override
-            public void submitForDelay(String intentId, String taskType, String payload, long delay) {
-                submitCount.incrementAndGet();
+            public void handoff(String taskId, long delay) {
+                handoffCount.incrementAndGet();
                 delayMs.set((int) delay);
             }
         };
 
         Retryer retryer = Retryer.builder()
                 .policy(policy)
-                .backend(backend)
+                .retryBackend(backend)
                 .build();
 
         try {
-            retryer.execute("task", context -> "{}", () -> {
+            retryer.execute("task", context -> {
+                RetryTaskSnapshot s = new RetryTaskSnapshot();
+                s.setTaskId("intent");
+                s.setExecutedAttempts(context.getExecutedAttempts());
+                return s;
+            }, () -> {
                 callCount.incrementAndGet();
                 throw new RuntimeException("always fail");
             });
@@ -180,7 +180,7 @@ public class RetryerTest {
         }
 
         Assert.assertEquals("持久化模式默认前台只尝试2次", 2, callCount.get());
-        Assert.assertEquals("应提交一次到后端", 1, submitCount.get());
+        Assert.assertEquals("应提交一次到后端", 1, handoffCount.get());
         Assert.assertEquals("后端下一次应为第3次尝试对应延迟", 1000, delayMs.get());
 
     }
@@ -196,32 +196,29 @@ public class RetryerTest {
 
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public String saveIntent(String taskType, String payload) {
-                return "intent";
+            public void save(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void completeIntent(String intentId) {
+            public void delete(String taskId) {
             }
 
             @Override
-            public void markTerminalFailure(String intentId, Throwable cause) {
-            }
-
-            @Override
-            public void submitForDelay(String intentId, String taskType, String payload, long delay) {
+            public void handoff(String taskId, long delay) {
             }
         };
 
         Retryer retryer = Retryer.builder()
                 .policy(policy)
-                .backend(backend)
+                .retryBackend(backend)
                 .build();
 
         try {
             retryer.execute("task", context -> {
                 prepareContext.set(context);
-                return "{}";
+                RetryTaskSnapshot s = new RetryTaskSnapshot();
+                s.setTaskId("intent");
+                return s;
             }, () -> {
                 throw new RuntimeException("fail");
             });
@@ -247,12 +244,11 @@ public class RetryerTest {
         // [2] 模拟后端
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public String saveIntent(String taskType, String payload) {
-                return "intent-123";
+            public void save(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void completeIntent(String intentId) {
+            public void delete(String taskId) {
                 // 模拟 IO 耗时
                 try {
                     Thread.sleep(100);
@@ -262,23 +258,23 @@ public class RetryerTest {
             }
 
             @Override
-            public void markTerminalFailure(String intentId, Throwable cause) {
-            }
-
-            @Override
-            public void submitForDelay(String intentId, String taskType, String payload, long delay) {
+            public void handoff(String taskId, long delay) {
             }
         };
 
         // [3] 构建 Retryer
         Retryer retryer = Retryer.builder()
                 .policy(policy)
-                .backend(backend)
+                .retryBackend(backend)
                 .cleanupExecutor(customExecutor)
                 .build();
 
         // [4] 执行成功逻辑
-        String result = retryer.execute("test-task", context -> "{}", () -> "success");
+        String result = retryer.execute("test-task", context -> {
+            RetryTaskSnapshot s = new RetryTaskSnapshot();
+            s.setTaskId("intent-123");
+            return s;
+        }, () -> "success");
 
         // [5] 验证结果和清理线程池
         Assert.assertEquals("success", result);
@@ -298,34 +294,33 @@ public class RetryerTest {
         // [2] 模拟后端
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public String saveIntent(String taskType, String payload) {
-                return "intent-async-123";
+            public void save(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void completeIntent(String intentId) {
+            public void delete(String taskId) {
                 latch.countDown();
             }
 
             @Override
-            public void markTerminalFailure(String intentId, Throwable cause) {
-            }
-
-            @Override
-            public void submitForDelay(String intentId, String taskType, String payload, long delay) {
+            public void handoff(String taskId, long delay) {
             }
         };
 
         // [3] 构建 Retryer
         Retryer retryer = Retryer.builder()
                 .policy(policy)
-                .backend(backend)
+                .retryBackend(backend)
                 .cleanupExecutor(customExecutor)
                 .build();
 
         // [4] 执行异步任务
         CompletableFuture<String> future = retryer.executeAsync(
-                "task", context -> "{}",
+                "task", context -> {
+                    RetryTaskSnapshot s = new RetryTaskSnapshot();
+                    s.setTaskId("intent-async-123");
+                    return s;
+                },
                 () -> CompletableFuture.completedFuture("async success"),
                 scheduler);
 
@@ -344,31 +339,26 @@ public class RetryerTest {
                 .localAttempts(1)
                 .build();
 
-        java.util.concurrent.atomic.AtomicReference<String> lastIntentId = new java.util.concurrent.atomic.AtomicReference<>();
+        java.util.concurrent.atomic.AtomicReference<String> lastTaskId = new java.util.concurrent.atomic.AtomicReference<>();
 
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public String saveIntent(String queueName, String contextJson) {
-                return "intent-" + System.nanoTime();
+            public void save(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void completeIntent(String intentId) {
+            public void delete(String taskId) {
             }
 
             @Override
-            public void markTerminalFailure(String intentId, Throwable cause) {
-            }
-
-            @Override
-            public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
-                lastIntentId.set(intentId);
+            public void handoff(String taskId, long delayMs) {
+                lastTaskId.set(taskId);
             }
         };
 
         Retryer retryer = Retryer.builder()
                 .policy(policy)
-                .backend(backend)
+                .retryBackend(backend)
                 .build();
 
         String taskType = "test-task";
@@ -376,109 +366,115 @@ public class RetryerTest {
 
         // 第一次执行并失败，触发降级
         try {
-            retryer.execute(taskType, context -> payload, () -> {
+            retryer.execute(taskType, context -> {
+                RetryTaskSnapshot s = new RetryTaskSnapshot();
+                s.setTaskId("intent-" + System.nanoTime());
+                return s;
+            }, () -> {
                 throw new RuntimeException("fail");
             });
         } catch (Exception ignored) {
         }
 
-        String id1 = lastIntentId.get();
+        String id1 = lastTaskId.get();
         Assert.assertNotNull(id1);
         Assert.assertTrue(id1.startsWith("intent-"));
 
         // 第二次执行（相同 taskType 和 payload）仍应成功发布到后端
         try {
-            retryer.execute(taskType, context -> payload, () -> {
+            retryer.execute(taskType, context -> {
+                RetryTaskSnapshot s = new RetryTaskSnapshot();
+                s.setTaskId("intent-" + System.nanoTime());
+                return s;
+            }, () -> {
                 throw new RuntimeException("fail");
             });
         } catch (Exception ignored) {
         }
 
-        String id2 = lastIntentId.get();
+        String id2 = lastTaskId.get();
         Assert.assertNotNull(id2);
         Assert.assertNotEquals("每次 prepared intent 都应有独立 id", id1, id2);
 
         // 不同 payload 应生成不同 id
         try {
-            retryer.execute(taskType, context -> "{\"id\":2}", () -> {
+            retryer.execute(taskType, context -> {
+                RetryTaskSnapshot s = new RetryTaskSnapshot();
+                s.setTaskId("intent-" + System.nanoTime());
+                return s;
+            }, () -> {
                 throw new RuntimeException("fail");
             });
         } catch (Exception ignored) {
         }
 
-        String id3 = lastIntentId.get();
+        String id3 = lastTaskId.get();
         Assert.assertNotNull(id3);
     }
 
     @Test(expected = IllegalStateException.class)
-    public void testPersistentModeFailFastWhenSaveIntentReturnsNull() throws Exception {
+    public void testPersistentModeFailFastWhenTaskIdIsNull() throws Exception {
         RetryPolicy policy = RetryPolicy.builder().build();
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public String saveIntent(String queueName, String contextJson) {
-                return null;
+            public void save(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void completeIntent(String intentId) {
+            public void delete(String taskId) {
             }
 
             @Override
-            public void markTerminalFailure(String intentId, Throwable cause) {
-            }
-
-            @Override
-            public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
+            public void handoff(String taskId, long delayMs) {
             }
         };
 
         Retryer retryer = Retryer.builder()
                 .policy(policy)
-                .backend(backend)
+                .retryBackend(backend)
                 .build();
 
-        retryer.execute("task", context -> "{}", () -> "success");
+        retryer.execute("task", context -> new RetryTaskSnapshot(), () -> "success");
     }
 
     @Test
-    public void testInterruptedDuringBackoffShouldNotFallbackToBackend() throws Exception {
+    public void testInterruptedDuringBackoffShouldNotFallbackToPersistence() throws Exception {
         RetryPolicy policy = RetryPolicy.builder()
                 .maxAttempts(3)
                 .backoff(Backoff.fixed(5000))
                 .build();
 
-        AtomicInteger submitCount = new AtomicInteger(0);
+        AtomicInteger handoffCount = new AtomicInteger(0);
         CountDownLatch firstAttemptStarted = new CountDownLatch(1);
         AtomicReference<Throwable> thrown = new AtomicReference<>();
 
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public String saveIntent(String taskType, String payload) {
-                return "intent";
+            public void save(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void completeIntent(String intentId) {
+            public void delete(String taskId) {
             }
 
             @Override
-            public void markTerminalFailure(String intentId, Throwable cause) {
-            }
-
-            @Override
-            public void submitForDelay(String intentId, String taskType, String payload, long delay) {
-                submitCount.incrementAndGet();
+            public void handoff(String taskId, long delay) {
+                handoffCount.incrementAndGet();
             }
         };
 
         Retryer retryer = Retryer.builder()
                 .policy(policy)
-                .backend(backend)
+                .retryBackend(backend)
                 .build();
 
         Thread worker = new Thread(() -> {
             try {
-                retryer.execute("task", context -> "{}", () -> {
+                retryer.execute("task", context -> {
+                    RetryTaskSnapshot s = new RetryTaskSnapshot();
+                    s.setTaskId("intent");
+                    return s;
+                }, () -> {
                     firstAttemptStarted.countDown();
                     throw new RuntimeException("fail");
                 });
@@ -493,7 +489,7 @@ public class RetryerTest {
         worker.join(1500);
 
         Assert.assertTrue("应抛出 InterruptedException", thrown.get() instanceof InterruptedException);
-        Assert.assertEquals("中断不应触发后端降级", 0, submitCount.get());
+        Assert.assertEquals("中断不应触发后端降级", 0, handoffCount.get());
     }
 
     @Test
@@ -501,26 +497,21 @@ public class RetryerTest {
         RetryPolicy policy = RetryPolicy.builder().maxAttempts(2).build();
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public String saveIntent(String taskType, String payload) {
-                return "intent";
+            public void save(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void completeIntent(String intentId) {
+            public void delete(String taskId) {
             }
 
             @Override
-            public void markTerminalFailure(String intentId, Throwable cause) {
-            }
-
-            @Override
-            public void submitForDelay(String intentId, String taskType, String payload, long delayMs) {
+            public void handoff(String taskId, long delayMs) {
             }
         };
 
         Retryer retryer = Retryer.builder()
                 .policy(policy)
-                .backend(backend)
+                .retryBackend(backend)
                 .build();
 
         try {
@@ -538,26 +529,21 @@ public class RetryerTest {
         RetryPolicy policy = RetryPolicy.builder().maxAttempts(2).build();
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public String saveIntent(String taskType, String payload) {
-                return "intent";
+            public void save(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void completeIntent(String intentId) {
+            public void delete(String taskId) {
             }
 
             @Override
-            public void markTerminalFailure(String intentId, Throwable cause) {
-            }
-
-            @Override
-            public void submitForDelay(String intentId, String taskType, String payload, long delayMs) {
+            public void handoff(String taskId, long delayMs) {
             }
         };
 
         Retryer retryer = Retryer.builder()
                 .policy(policy)
-                .backend(backend)
+                .retryBackend(backend)
                 .build();
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
 

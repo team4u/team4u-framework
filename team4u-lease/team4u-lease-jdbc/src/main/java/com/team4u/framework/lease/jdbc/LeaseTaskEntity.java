@@ -1,8 +1,8 @@
 package com.team4u.framework.lease.jdbc;
 
-import com.team4u.framework.lease.LeaseGrant;
-import com.team4u.framework.lease.LeaseTaskRecord;
-import com.team4u.framework.lease.LeaseTaskStatus;
+import com.team4u.framework.lease.enums.LeaseTaskStatus;
+import com.team4u.framework.lease.model.LeaseGrant;
+import com.team4u.framework.lease.model.LeaseTaskRecord;
 import lombok.AccessLevel;
 import lombok.AllArgsConstructor;
 import lombok.Builder;

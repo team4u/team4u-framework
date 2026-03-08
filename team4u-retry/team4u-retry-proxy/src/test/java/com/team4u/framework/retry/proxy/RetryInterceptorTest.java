@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.proxy;
 
-import com.team4u.framework.base.backoff.Backoff;
+import com.team4u.framework.retry.Backoff;
 import com.team4u.framework.proxy.ProxyBuilder;
 import com.team4u.framework.retry.RetryHandoffException;
 import com.team4u.framework.retry.RetryPolicy;
@@ -197,23 +197,19 @@ public class RetryInterceptorTest {
         private String submittedPayload;
 
         @Override
-        public String saveIntent(String queueName, String contextJson) {
-            this.submittedPayload = contextJson;
-            return "intent";
+        public void save(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
+            this.submittedPayload = cn.hutool.json.JSONUtil.toJsonStr(snapshot);
+            snapshot.setTaskId("intent");
         }
 
         @Override
-        public void completeIntent(String intentId) {
+        public void delete(String taskId) {
         }
 
         @Override
-        public void markTerminalFailure(String intentId, Throwable cause) {
-        }
-
-        @Override
-        public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
-            if (contextJson != null) {
-                this.submittedPayload = contextJson;
+        public void handoff(String taskId, long delayMillis) {
+            if (taskId != null) {
+                // mock behavior: if taskId is provided, represent it in submittedPayload
             }
         }
     }

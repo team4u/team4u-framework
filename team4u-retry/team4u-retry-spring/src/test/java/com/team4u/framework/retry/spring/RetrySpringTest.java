@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.spring;
 
-import com.team4u.framework.base.backoff.Backoff;
+import com.team4u.framework.retry.Backoff;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.policy.NamedRetryPolicy;
 import com.team4u.framework.retry.policy.RetryPolicyRegistry;

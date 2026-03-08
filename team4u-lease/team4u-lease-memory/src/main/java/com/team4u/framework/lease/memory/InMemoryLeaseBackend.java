@@ -1,6 +1,10 @@
 package com.team4u.framework.lease.memory;
 
-import com.team4u.framework.lease.*;
+import com.team4u.framework.lease.api.LeaseBackend;
+import com.team4u.framework.lease.enums.LeaseAdminResult;
+import com.team4u.framework.lease.enums.LeaseRuntimeResult;
+import com.team4u.framework.lease.enums.LeaseTaskStatus;
+import com.team4u.framework.lease.model.*;
 import lombok.*;
 
 import java.util.*;
@@ -10,7 +14,8 @@ import java.util.concurrent.*;
  * 内存版租赁后端实现
  * <p>
  * 该实现将所有任务状态存储在 JVM 内存中，不具备持久化能力。
- * 内部通过 {@link ConcurrentHashMap} 管理任务快照，并利用 {@link DelayQueue} 实现任务的可视化延迟判定及 Worker 的阻塞拉取。
+ * 内部通过 {@link ConcurrentHashMap} 管理任务快照，并利用 {@link DelayQueue} 实现任务的可视化延迟判定及
+ * Worker 的阻塞拉取。
  * 主要适用于：
  * 1. 单机环境下的简单任务调度。
  * 2. 自动化集成测试场景。
@@ -18,8 +23,7 @@ import java.util.concurrent.*;
 public class InMemoryLeaseBackend implements LeaseBackend {
 
     private final ConcurrentMap<String, StoredTask> records = new ConcurrentHashMap<String, StoredTask>();
-    private final ConcurrentMap<QueueKey, DelayQueue<AvailabilityRef>> queueStates =
-            new ConcurrentHashMap<QueueKey, DelayQueue<AvailabilityRef>>();
+    private final ConcurrentMap<QueueKey, DelayQueue<AvailabilityRef>> queueStates = new ConcurrentHashMap<QueueKey, DelayQueue<AvailabilityRef>>();
 
     @Override
     public synchronized String publish(LeasePublishRequest request) {
@@ -41,8 +45,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                 null,
                 null,
                 0L,
-                null
-        );
+                null);
         records.put(taskId, task);
         offer(task);
         notifyAll();
@@ -93,35 +96,22 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         if (result != LeaseRuntimeResult.APPLIED) {
             return result;
         }
-        records.put(handle.getTaskId(), current.withTerminal(LeaseTaskStatus.SUCCEEDED, current.getFailureCount(), null));
+        records.put(handle.getTaskId(),
+                current.withTerminal(LeaseTaskStatus.SUCCEEDED, current.getFailureCount(), null));
         notifyAll();
         return LeaseRuntimeResult.APPLIED;
     }
 
     @Override
-    public synchronized LeaseRuntimeResult retry(LeaseHandle handle, long delayMillis, Throwable cause) {
-        StoredTask current = records.get(taskId(handle));
-        LeaseRuntimeResult result = validateRuntimeMutation(current, handle);
-        if (result != LeaseRuntimeResult.APPLIED) {
-            return result;
-        }
-        long visibleAt = System.currentTimeMillis() + Math.max(0L, delayMillis);
-        StoredTask next = current.withSchedule(visibleAt, current.getFailureCount() + 1, errorMessage(cause));
-        records.put(handle.getTaskId(), next);
-        offer(next);
-        notifyAll();
-        return LeaseRuntimeResult.APPLIED;
-    }
-
-    @Override
-    public synchronized LeaseRuntimeResult fail(LeaseHandle handle, Throwable cause) {
+    public synchronized LeaseRuntimeResult fail(LeaseHandle handle, LeaseFailureRequest request) {
         StoredTask current = records.get(taskId(handle));
         LeaseRuntimeResult result = validateRuntimeMutation(current, handle);
         if (result != LeaseRuntimeResult.APPLIED) {
             return result;
         }
         records.put(handle.getTaskId(),
-                current.withTerminal(LeaseTaskStatus.DEAD, current.getFailureCount() + 1, errorMessage(cause)));
+                current.withTerminal(LeaseTaskStatus.DEAD, current.getFailureCount() + 1,
+                        errorMessage(request.getCause())));
         notifyAll();
         return LeaseRuntimeResult.APPLIED;
     }
@@ -142,13 +132,13 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     }
 
     @Override
-    public synchronized LeaseRuntimeResult release(LeaseHandle handle, long delayMillis) {
+    public synchronized LeaseRuntimeResult release(LeaseHandle handle, LeaseReleaseRequest request) {
         StoredTask current = records.get(taskId(handle));
         LeaseRuntimeResult result = validateRuntimeMutation(current, handle);
         if (result != LeaseRuntimeResult.APPLIED) {
             return result;
         }
-        long visibleAt = System.currentTimeMillis() + Math.max(0L, delayMillis);
+        long visibleAt = System.currentTimeMillis() + Math.max(0L, request.getDelayMillis());
         StoredTask next = current.withSchedule(visibleAt, current.getFailureCount(), current.getLastError());
         records.put(handle.getTaskId(), next);
         offer(next);
@@ -169,7 +159,8 @@ public class InMemoryLeaseBackend implements LeaseBackend {
             return LeaseAdminResult.ACTIVE_LEASE_PRESENT;
         }
         long now = System.currentTimeMillis();
-        StoredTask next = current.withSchedule(now + Math.max(0L, delayMillis), current.getFailureCount(), current.getLastError());
+        StoredTask next = current.withSchedule(now + Math.max(0L, delayMillis), current.getFailureCount(),
+                current.getLastError());
         records.put(taskId, next);
         offer(next);
         notifyAll();
@@ -226,7 +217,8 @@ public class InMemoryLeaseBackend implements LeaseBackend {
             }
             matches.add(task.toRecord());
         }
-        matches.sort(Comparator.comparingLong(LeaseTaskRecord::getCreatedAtMillis).thenComparing(LeaseTaskRecord::getTaskId));
+        matches.sort(Comparator.comparingLong(LeaseTaskRecord::getCreatedAtMillis)
+                .thenComparing(LeaseTaskRecord::getTaskId));
         int page = Math.max(0, safeRequest.getPage());
         int pageSize = safeRequest.getPageSize() <= 0 ? 50 : safeRequest.getPageSize();
         int fromIndex = Math.min(matches.size(), page * pageSize);
