@@ -41,7 +41,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
     }
 
     public RecoveryHandlerLeaseTaskHandlerAdapter(RecoveryHandler delegate, RetryBackend retryBackend,
-                                                  RetryPolicyRegistry policyRegistry) {
+            RetryPolicyRegistry policyRegistry) {
         this.delegate = delegate;
         this.retryBackend = retryBackend;
         this.policyRegistry = policyRegistry;
@@ -68,7 +68,6 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
         int failedAttempts = snapshot.getExecutedAttempts() + 1;
         snapshot.setExecutedAttempts(failedAttempts);
         snapshot.setLastError(cause.toString());
-        snapshot.setLastAttemptAt(System.currentTimeMillis());
 
         RetryPolicy policy = resolvePolicy(snapshot);
         RetryRecoveryPlanner.Plan plan = planner.plan(snapshot, policy, cause);
