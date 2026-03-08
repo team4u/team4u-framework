@@ -306,10 +306,10 @@ public class Retryer {
     }
 
     private RetryHandoffException handoffToPersistence(String taskType,
-                                                       RetryTaskSnapshot snapshot,
-                                                       RetryPayloadBuilder payloadBuilder,
-                                                       int executedAttempts,
-                                                       Throwable cause) {
+            RetryTaskSnapshot snapshot,
+            RetryPayloadBuilder payloadBuilder,
+            int executedAttempts,
+            Throwable cause) {
         int nextAttempt = executedAttempts + 1;
         RetryTaskSnapshot finalSnapshot = snapshot;
 
@@ -320,14 +320,11 @@ public class Retryer {
         finalSnapshot.setTaskType(taskType);
         finalSnapshot.setExecutedAttempts(nextAttempt);
         finalSnapshot.setLastError(cause.toString());
-        long now = System.currentTimeMillis();
-        finalSnapshot.setLastAttemptAt(now);
 
         finalSnapshot.setMaxAttempts(policy.getMaxAttempts());
         finalSnapshot.setPolicyKey(policy instanceof NamedRetryPolicy ? ((NamedRetryPolicy) policy).key() : null);
 
         long delay = policy.getDelayMillis(nextAttempt + 1);
-        finalSnapshot.setNextAttemptAt(delay > 0 ? now + delay : 0);
 
         retryBackend.prepare(finalSnapshot);
 

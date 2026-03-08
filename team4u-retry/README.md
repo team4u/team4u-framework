@@ -438,8 +438,6 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), RetryBack
 * `maxAttempts`
 * `policyKey`
 * `lastError`
-* `lastAttemptAt`
-* `nextAttemptAt`
 
 也就是说：
 
@@ -700,8 +698,6 @@ RecoveryHandlerRegistry.global().register(new RecoveryHandler() {
 * `maxAttempts`
 * `policyKey`
 * `lastError`
-* `lastAttemptAt`
-* `nextAttemptAt`
 
 因此恢复器可以根据快照做更精细的补偿和日志输出，而不只是拿到一段原始字符串。
 
