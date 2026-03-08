@@ -4,10 +4,12 @@ import com.team4u.framework.lease.api.LeaseAdminService;
 import com.team4u.framework.lease.api.LeaseBackend;
 import com.team4u.framework.lease.api.LeaseProducer;
 import com.team4u.framework.lease.enums.LeaseAdminResult;
+import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
+import com.team4u.framework.lease.enums.LeaseTaskOutcome;
+import com.team4u.framework.lease.model.LeaseCloseRequest;
 import com.team4u.framework.lease.model.LeasePublishRequest;
 import com.team4u.framework.lease.model.LeaseUpdateRequest;
-import com.team4u.framework.retry.backend.RetryBackend;
-import com.team4u.framework.retry.backend.RetryTaskSnapshot;
+import com.team4u.framework.retry.backend.*;
 import com.team4u.framework.retry.backend.serialize.HutoolRetryTaskSnapshotSerializer;
 import com.team4u.framework.retry.backend.serialize.RetryTaskSnapshotSerializer;
 import lombok.Setter;
@@ -46,6 +48,11 @@ public class LeaseRetryBackend implements RetryBackend {
         this.queue = (queue == null || queue.trim().isEmpty()) ? RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE : queue;
     }
 
+    /**
+     * 校验重试任务快照的有效性
+     *
+     * @param snapshot 任务快照
+     */
     private static void validateSnapshot(RetryTaskSnapshot snapshot) {
         if (snapshot == null) {
             throw new IllegalArgumentException("snapshot must not be null");
@@ -106,14 +113,53 @@ public class LeaseRetryBackend implements RetryBackend {
     }
 
     @Override
-    public void complete(String taskId) {
-        assertTaskId(taskId, "delete");
-        assertApplied("delete", taskId, adminService.cancel(taskId));
+    public void close(String taskId, RetryCloseRequest request) {
+        assertTaskId(taskId, "close");
+        LeaseCloseRequest closeRequest = LeaseCloseRequest.builder()
+                .outcome(mapOutcome(request == null ? null : request.getOutcome()))
+                .failureReason(mapReason(request == null ? null : request.getReason()))
+                .errorMessage(request == null ? null : request.getErrorMessage())
+                .build();
+        assertApplied("close", taskId, adminService.close(taskId, closeRequest));
     }
 
-    @Override
-    public void terminalFail(String taskId, Throwable cause) {
-        assertTaskId(taskId, "terminalFail");
-        assertApplied("terminalFail", taskId, adminService.fail(taskId, cause == null ? "" : cause.toString()));
+    /**
+     * 将重试系统的执行结果映射为租约任务的最终结果
+     *
+     * @param outcome 重试任务结束结果
+     * @return 租约任务结果
+     */
+    private LeaseTaskOutcome mapOutcome(RetryCloseOutcome outcome) {
+        if (outcome == null) {
+            return LeaseTaskOutcome.CANCELLED;
+        }
+        switch (outcome) {
+            case SUCCEEDED:
+                return LeaseTaskOutcome.SUCCEEDED;
+            case FAILED:
+                return LeaseTaskOutcome.FAILED;
+            case CANCELLED:
+            default:
+                return LeaseTaskOutcome.CANCELLED;
+        }
+    }
+
+    /**
+     * 将重试系统的终止原因映射为租约任务的失败原因
+     *
+     * @param reason 重试任务终止原因
+     * @return 租约任务失败原因
+     */
+    private LeaseTaskFailureReason mapReason(RetryCloseReason reason) {
+        if (reason == null) {
+            return null;
+        }
+        switch (reason) {
+            case RETRY_EXHAUSTED:
+                return LeaseTaskFailureReason.RETRY_EXHAUSTED;
+            case ABORTED_BY_POLICY:
+            default:
+                return LeaseTaskFailureReason.ABORTED_BY_POLICY;
+        }
     }
 }

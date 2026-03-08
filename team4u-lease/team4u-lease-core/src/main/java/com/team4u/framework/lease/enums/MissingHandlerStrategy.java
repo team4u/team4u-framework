@@ -9,7 +9,7 @@ import com.team4u.framework.lease.handler.LeaseTaskHandler;
  */
 public enum MissingHandlerStrategy {
     /**
-     * 立即失败。将任务标记为 DEAD 状态，不再尝试获取租约。
+     * 立即关闭为 FAILED，失败原因标记为 MISSING_HANDLER，不再自动推进。
      */
     FAIL_FAST,
     /**

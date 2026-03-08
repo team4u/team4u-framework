@@ -1,6 +1,8 @@
 package com.team4u.framework.lease.model;
 
-import com.team4u.framework.lease.enums.LeaseTaskStatus;
+import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
+import com.team4u.framework.lease.enums.LeaseTaskOutcome;
+import com.team4u.framework.lease.enums.LeaseTaskState;
 import lombok.*;
 
 import java.util.Collections;
@@ -11,7 +13,7 @@ import java.util.Map;
  * 任务查询记录模型
  * <p>
  * 该模型面向控制面板及运维 API，提供了任务全方位的静态与运行时元数据，
- * 包括执行状态、投递统计以及最近一次失败的错误堆栈信息。
+ * 包括执行状态、结束结果、投递统计以及最近一次错误摘要。
  */
 @Data
 @Builder(toBuilder = true)
@@ -36,9 +38,17 @@ public class LeaseTaskRecord {
     /**
      * 当前任务生命周期状态
      */
-    private final LeaseTaskStatus status;
+    private final LeaseTaskState state;
     /**
-     * 当前持有该任务的 Worker ID（仅在 LEASED 状态下有效）
+     * 任务结束结果，仅在 CLOSED 时有效。
+     */
+    private final LeaseTaskOutcome outcome;
+    /**
+     * 任务失败原因，仅在 outcome=FAILED 时有效。
+     */
+    private final LeaseTaskFailureReason failureReason;
+    /**
+     * 当前持有该任务的 Worker ID（仅在 RUNNING 状态下有效）
      */
     private final String workerId;
     /**
@@ -68,7 +78,7 @@ public class LeaseTaskRecord {
     /**
      * 最近一次异常失败的关键错误信息
      */
-    private final String lastError;
+    private final String errorMessage;
     /**
      * 任务扩展属性映射
      */

@@ -19,5 +19,5 @@ public enum LeaseRuntimeResult {
     /**
      * 任务已经进入终态。
      */
-    TERMINAL
+    CLOSED
 }

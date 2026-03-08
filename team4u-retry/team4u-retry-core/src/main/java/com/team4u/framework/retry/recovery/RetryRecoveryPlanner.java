@@ -1,7 +1,10 @@
 package com.team4u.framework.retry.recovery;
 
 import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.backend.RetryCloseOutcome;
+import com.team4u.framework.retry.backend.RetryCloseReason;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
+import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -25,31 +28,43 @@ public class RetryRecoveryPlanner {
     public Plan plan(RetryTaskSnapshot snapshot, RetryPolicy policy, Throwable cause) {
         int currentAttempt = snapshot.getExecutedAttempts();
 
-        // 检查策略是否允许继续
-        if (!policy.canRetry(currentAttempt, cause)) {
-            return new Plan(Decision.FAIL_TERMINAL, 0);
+        RetryCloseReason closeReason = classifyCloseReason(policy, currentAttempt, cause);
+        if (closeReason != null) {
+            return Plan.close(RetryCloseOutcome.FAILED, closeReason, cause == null ? null : cause.toString());
         }
 
-        // 计算下次延迟
         long delay = policy.getDelayMillis(currentAttempt + 1);
-        return new Plan(Decision.RETRY, delay);
+        return Plan.retry(delay);
     }
 
-    public enum Decision {
-        /**
-         * 继续重试
-         */
-        RETRY,
-        /**
-         * 最终失败
-         */
-        FAIL_TERMINAL
+    private RetryCloseReason classifyCloseReason(RetryPolicy policy, int executedAttempts, Throwable cause) {
+        if (policy.getMaxAttempts() != -1 && executedAttempts >= policy.getMaxAttempts()) {
+            return RetryCloseReason.RETRY_EXHAUSTED;
+        }
+        if (!policy.canRetry(executedAttempts, cause)) {
+            return RetryCloseReason.ABORTED_BY_POLICY;
+        }
+        return null;
     }
 
     @Getter
-    @RequiredArgsConstructor
+    @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
     public static class Plan {
-        private final Decision decision;
         private final long delayMillis;
+        private final RetryCloseOutcome outcome;
+        private final RetryCloseReason reason;
+        private final String errorMessage;
+
+        public static Plan retry(long delayMillis) {
+            return new Plan(delayMillis, null, null, null);
+        }
+
+        public static Plan close(RetryCloseOutcome outcome, RetryCloseReason reason, String errorMessage) {
+            return new Plan(0L, outcome, reason, errorMessage);
+        }
+
+        public boolean isRetry() {
+            return outcome == null;
+        }
     }
 }

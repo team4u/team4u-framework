@@ -1,6 +1,7 @@
 package com.team4u.framework.lease.api;
 
 import com.team4u.framework.lease.enums.LeaseAdminResult;
+import com.team4u.framework.lease.model.LeaseCloseRequest;
 import com.team4u.framework.lease.model.LeaseUpdateRequest;
 
 /**
@@ -22,25 +23,24 @@ public interface LeaseAdminService {
     LeaseAdminResult reschedule(String taskId, long delayMillis);
 
     /**
-     * 取消任务
-     * <p>
-     * 将任务标记为永久取消或从系统中移除。
+     * 关闭任务。
      *
-     * @param taskId 全局唯一的任务 ID
+     * @param taskId  全局唯一的任务 ID
+     * @param request 关闭请求
      * @return 操作结果状态
      */
-    LeaseAdminResult cancel(String taskId);
+    LeaseAdminResult close(String taskId, LeaseCloseRequest request);
 
     /**
-     * 将死信任务重新放回就绪队列
+     * 将失败任务重新放回就绪队列
      * <p>
-     * 针对已进入失败终止状态的任务，修正其环境后重新触发执行。
+     * 针对已关闭且结果为失败的任务，修正其环境后重新触发执行。
      *
      * @param taskId      全局唯一的任务 ID
      * @param delayMillis 期望的延迟执行毫秒数
      * @return 操作结果状态
      */
-    LeaseAdminResult requeueDead(String taskId, long delayMillis);
+    LeaseAdminResult requeueFailed(String taskId, long delayMillis);
 
     /**
      * 更新任务内容
@@ -49,13 +49,4 @@ public interface LeaseAdminService {
      * @return 操作结果状态
      */
     LeaseAdminResult update(LeaseUpdateRequest request);
-
-    /**
-     * 标记任务失败（运维接口）
-     *
-     * @param taskId 全局唯一的任务 ID
-     * @param cause  失败原因堆栈
-     * @return 操作结果状态
-     */
-    LeaseAdminResult fail(String taskId, String cause);
 }

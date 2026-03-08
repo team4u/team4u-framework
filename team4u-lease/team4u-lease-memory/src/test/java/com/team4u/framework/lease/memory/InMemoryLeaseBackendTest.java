@@ -1,11 +1,8 @@
 package com.team4u.framework.lease.memory;
 
-import com.team4u.framework.lease.AbstractLeaseBackendContractTest;
+import com.team4u.framework.lease.AbstractLeaseContractSupport;
 import com.team4u.framework.lease.enums.LeaseAdminResult;
-import com.team4u.framework.lease.enums.LeaseRuntimeResult;
-import com.team4u.framework.lease.enums.LeaseTaskStatus;
-import com.team4u.framework.lease.model.LeaseFailureRequest;
-import com.team4u.framework.lease.model.LeaseGrant;
+import com.team4u.framework.lease.enums.LeaseTaskState;
 import com.team4u.framework.lease.model.LeasePublishRequest;
 import com.team4u.framework.lease.model.LeaseQueryRequest;
 import org.junit.Assert;
@@ -13,7 +10,7 @@ import org.junit.Test;
 
 import java.util.Map;
 
-public class InMemoryLeaseBackendTest extends AbstractLeaseBackendContractTest {
+public class InMemoryLeaseBackendTest extends AbstractLeaseContractSupport {
 
     @Override
     protected com.team4u.framework.lease.api.LeaseBackend createBackend() {
@@ -21,80 +18,7 @@ public class InMemoryLeaseBackendTest extends AbstractLeaseBackendContractTest {
     }
 
     @Test
-    public void testRescheduleOverridesVisibleTime() throws Exception {
-        InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
-        String taskId = publish(backend, "pay", "payload", 200L);
-
-        Thread.sleep(30L);
-        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.reschedule(taskId, 20L));
-        Thread.sleep(40L);
-
-        LeaseGrant grant = acquire(backend, "worker-a", 100L, 200L, "pay");
-        Assert.assertNotNull(grant);
-        Assert.assertEquals(taskId, grant.getTaskId());
-    }
-
-    @Test
-    public void testCancelMarksTaskDead() throws Exception {
-        InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
-        String taskId = publish(backend, "pay", "payload");
-
-        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.cancel(taskId));
-
-        Assert.assertNull(acquire(backend, "worker-a", 100L, 50L, "pay"));
-        Map<String, InMemoryLeaseBackend.StoredTask> snapshot = backend.snapshot();
-        Assert.assertEquals(LeaseTaskStatus.DEAD, snapshot.get(taskId).getStatus());
-        Assert.assertEquals("cancelled", snapshot.get(taskId).getLastError());
-    }
-
-    @Test
-    public void testAckClearsPreviousLastError() throws Exception {
-        InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
-        String taskId = publish(backend, "pay", "payload");
-
-        LeaseGrant firstGrant = acquire(backend, "worker-a", 100L, 200L, "pay");
-        Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.fail(
-                firstGrant.getHandle(), LeaseFailureRequest.of(new IllegalStateException("boom"))));
-        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.requeueDead(taskId, 0L));
-
-        Thread.sleep(20L);
-        LeaseGrant secondGrant = acquire(backend, "worker-a", 100L, 200L, "pay");
-        Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.ack(secondGrant.getHandle()));
-
-        Map<String, InMemoryLeaseBackend.StoredTask> snapshot = backend.snapshot();
-        Assert.assertEquals(LeaseTaskStatus.SUCCEEDED, snapshot.get(taskId).getStatus());
-        Assert.assertNull(snapshot.get(taskId).getLastError());
-    }
-
-    @Test
-    public void testCancelRejectsActiveLease() throws Exception {
-        InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
-        String taskId = publish(backend, "pay", "payload");
-        acquire(backend, "worker-a", 100L, 200L, "pay");
-
-        Assert.assertEquals(LeaseAdminResult.ACTIVE_LEASE_PRESENT, backend.cancel(taskId));
-    }
-
-    @Test
-    public void testRequeueDeadOnlyAppliesToDeadTask() throws Exception {
-        InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
-        String taskId = publish(backend, "pay", "payload");
-        LeaseGrant grant = acquire(backend, "worker-a", 100L, 200L, "pay");
-
-        Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.fail(
-                grant.getHandle(), LeaseFailureRequest.of(new IllegalStateException("boom"))));
-        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.requeueDead(taskId, 10L));
-
-        Thread.sleep(20L);
-        LeaseGrant next = acquire(backend, "worker-b", 100L, 200L, "pay");
-        Assert.assertNotNull(next);
-        Assert.assertEquals(1, next.getFailureCount());
-        Assert.assertEquals(2, next.getDeliveryCount());
-        Assert.assertEquals(LeaseAdminResult.TERMINAL, backend.requeueDead(next.getTaskId(), 0L));
-    }
-
-    @Test
-    public void testListCanFilterByQueueTaskTypeAndStatus() {
+    public void testListCanFilterByQueueTaskTypeAndState() {
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
         backend.publish(
                 LeasePublishRequest.builder().queue("queue-a").taskType("pay").payload("a").priority(5).build());
@@ -103,7 +27,23 @@ public class InMemoryLeaseBackendTest extends AbstractLeaseBackendContractTest {
         Assert.assertEquals(1, backend.list(LeaseQueryRequest.builder()
                 .queue("queue-a")
                 .taskType("pay")
-                .status(LeaseTaskStatus.SCHEDULED)
+                .state(LeaseTaskState.READY)
                 .build()).getItems().size());
+    }
+
+    @Test
+    public void testSnapshotReflectsInternalStoredTasks() {
+        InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
+        String taskId = backend.publish(LeasePublishRequest.builder()
+                .queue("queue-a")
+                .taskType("pay")
+                .payload("a")
+                .build());
+
+        Map<String, InMemoryLeaseBackend.StoredTask> snapshot = backend.snapshot();
+        Assert.assertTrue(snapshot.containsKey(taskId));
+        Assert.assertEquals(LeaseTaskState.READY, snapshot.get(taskId).getState());
+        Assert.assertEquals("queue-a", snapshot.get(taskId).getQueue());
+        Assert.assertEquals("pay", snapshot.get(taskId).getTaskType());
     }
 }

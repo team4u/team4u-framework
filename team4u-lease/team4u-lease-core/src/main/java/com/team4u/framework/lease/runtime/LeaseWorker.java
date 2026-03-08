@@ -2,6 +2,7 @@ package com.team4u.framework.lease.runtime;
 
 import com.team4u.framework.lease.api.LeaseRuntimeClient;
 import com.team4u.framework.lease.enums.LeaseRuntimeResult;
+import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
 import com.team4u.framework.lease.enums.MissingHandlerStrategy;
 import com.team4u.framework.lease.handler.LeaseTaskHandler;
 import com.team4u.framework.lease.handler.LeaseTaskHandlerRegistry;
@@ -134,7 +135,7 @@ public class LeaseWorker implements Runnable, AutoCloseable {
                         heartbeatTask.start();
                     }
                     handler.handle(toExecutionContext(grant, heartbeatTask));
-                    handleWriteResult("ack", grant, runtimeClient.ack(grant.getHandle()));
+                    handleWriteResult("close", grant, runtimeClient.close(grant.getHandle(), LeaseCloseRequest.succeeded()));
                 } catch (Exception ex) {
                     handleFailure(grant, ex);
                 } finally {
@@ -212,7 +213,7 @@ public class LeaseWorker implements Runnable, AutoCloseable {
             }
             return;
         }
-        handleFailure(grant, ex);
+        handleFailure(grant, ex, LeaseTaskFailureReason.MISSING_HANDLER);
     }
 
     /**
@@ -222,10 +223,15 @@ public class LeaseWorker implements Runnable, AutoCloseable {
      * @param ex    捕获到的异常
      */
     private void handleFailure(LeaseGrant grant, Exception ex) {
+        handleFailure(grant, ex, LeaseTaskFailureReason.HANDLER_EXCEPTION);
+    }
+
+    private void handleFailure(LeaseGrant grant, Exception ex, LeaseTaskFailureReason reason) {
         log.error("Lease worker handle failed. taskId={}, queue={}, taskType={}",
                 grant.getTaskId(), grant.getQueue(), grant.getTaskType(), ex);
         try {
-            handleWriteResult("fail", grant, runtimeClient.fail(grant.getHandle(), LeaseFailureRequest.of(ex)));
+            handleWriteResult("close", grant,
+                    runtimeClient.close(grant.getHandle(), LeaseCloseRequest.failed(reason, String.valueOf(ex))));
         } catch (Exception writeEx) {
             log.error("Lease worker write-back failed. taskId={}", grant.getTaskId(), writeEx);
         }

@@ -1,6 +1,7 @@
 package com.team4u.framework.retry;
 
 import com.team4u.framework.retry.backend.RetryBackend;
+import com.team4u.framework.retry.backend.RetryCloseRequest;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 
 /**
@@ -17,14 +18,10 @@ public abstract class TestLeaseBackend implements RetryBackend {
     }
 
     @Override
-    public void complete(String taskId) {
+    public void close(String taskId, RetryCloseRequest request) {
     }
 
     @Override
     public void saveProgress(RetryTaskSnapshot snapshot) {
-    }
-
-    @Override
-    public void terminalFail(String taskId, Throwable cause) {
     }
 }
