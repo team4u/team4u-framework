@@ -5,6 +5,7 @@ import com.team4u.framework.lease.handler.LeaseTaskHandlerRegistry;
 import com.team4u.framework.lease.model.LeaseSubscription;
 import com.team4u.framework.lease.runtime.LeaseExecutionContext;
 import com.team4u.framework.retry.backend.RetryBackend;
+import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 
@@ -41,7 +42,7 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
     }
 
     public RecoveryHandlerRegistryLeaseAdapter(RetryBackend retryBackend, RecoveryHandlerRegistry delegate,
-                                               String queue) {
+            String queue) {
         this.retryBackend = retryBackend;
         this.delegate = delegate == null ? RecoveryHandlerRegistry.global() : delegate;
         this.queue = (queue == null || queue.trim().isEmpty()) ? RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE : queue;
@@ -113,9 +114,11 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
         }
 
         @Override
-        public void recover(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) throws Exception {
-            delegate.handle(new LeaseExecutionContext(
-                    snapshot.getTaskId(), null, taskType, null, 0, 0, null, 0L, 0L, 0L, null, null, null));
+        public void recover(RetryTaskSnapshot snapshot) throws Exception {
+            delegate.handle(LeaseExecutionContext.builder()
+                    .taskId(snapshot.getTaskId())
+                    .taskType(taskType)
+                    .build());
         }
     }
 }

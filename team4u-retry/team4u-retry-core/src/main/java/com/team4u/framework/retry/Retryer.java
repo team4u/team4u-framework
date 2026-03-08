@@ -7,6 +7,8 @@ import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.policy.NamedRetryPolicy;
 
+import lombok.Builder;
+
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executor;
@@ -27,21 +29,23 @@ public class Retryer {
     private final int localAttempts;
     private final Executor cleanupExecutor;
 
-    private Retryer(Builder builder) {
-        this.policy = builder.policy;
-        this.retryBackend = builder.retryBackend;
-        this.localAttempts = resolveLocalAttempts(policy, retryBackend);
-        this.cleanupExecutor = builder.cleanupExecutor != null ? builder.cleanupExecutor
-                : RetryExecutorManager.global().getCleanupExecutor();
-    }
-
     /**
-     * 获取重试引擎构建器
+     * 构建重试执行引擎
      *
-     * @return 构建器实例
+     * @param policy          重试策略，定义了何时重试以及重试间隔
+     * @param retryBackend    重试后端持久化适配器，用于将重试任务持久化到外部存储
+     * @param cleanupExecutor 清理任务执行器，用于异步处理后端任务的关闭或清理动作
      */
-    public static Builder builder() {
-        return new Builder();
+    @Builder
+    private Retryer(RetryPolicy policy, RetryBackend retryBackend, Executor cleanupExecutor) {
+        if (policy == null) {
+            throw new IllegalStateException("RetryPolicy must not be null");
+        }
+        this.policy = policy;
+        this.retryBackend = retryBackend;
+        this.localAttempts = resolveLocalAttempts(policy, retryBackend);
+        this.cleanupExecutor = cleanupExecutor != null ? cleanupExecutor
+                : RetryExecutorManager.global().getCleanupExecutor();
     }
 
     /**
@@ -68,32 +72,7 @@ public class Retryer {
                     "Retryer.execute(Callable) supports memory mode only. Use execute(taskType, payloadBuilder, task) "
                             + "or executeAsync(taskType, payloadBuilder, ...) when a persistence adapter is configured.");
         }
-        int executedAttempts = 0;
-        while (true) {
-            try {
-                return task.call();
-            } catch (Throwable ex) {
-                Throwable cause = normalizeSyncFailure(ex);
-                RetryDecisionType decision = evaluateDecision(executedAttempts, cause);
-                if (decision != RetryDecisionType.RETRY_IN_MEMORY) {
-                    if (cause instanceof Exception) {
-                        throw (Exception) cause;
-                    }
-                    throw new RuntimeException(cause);
-                }
-
-                long delay = policy.getDelayMillis(executedAttempts + 1);
-                if (delay > 0) {
-                    try {
-                        Thread.sleep(delay);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        throw e;
-                    }
-                }
-                executedAttempts++;
-            }
-        }
+        return execute(null, null, task);
     }
 
     /**
@@ -129,7 +108,10 @@ public class Retryer {
      * @throws Exception 任务最终失败抛出的异常
      */
     public <T> T execute(String taskType, RetryPayloadBuilder payloadBuilder, Callable<T> task) throws Exception {
-        RetryTaskSnapshot snapshot = prepareSnapshot(taskType, payloadBuilder);
+        RetryTaskSnapshot snapshot = (payloadBuilder != null && retryBackend != null)
+                ? prepareSnapshot(taskType, payloadBuilder)
+                : null;
+
         int executedAttempts = 0;
         while (true) {
             try {
@@ -152,15 +134,7 @@ public class Retryer {
                     throw handoffToPersistence(taskType, snapshot, payloadBuilder, executedAttempts, cause);
                 }
 
-                long delay = policy.getDelayMillis(executedAttempts + 1);
-                if (delay > 0) {
-                    try {
-                        Thread.sleep(delay);
-                    } catch (InterruptedException e) {
-                        Thread.currentThread().interrupt();
-                        throw e;
-                    }
-                }
+                sleepQuietly(executedAttempts + 1);
                 executedAttempts++;
             }
         }
@@ -179,7 +153,7 @@ public class Retryer {
         return RetryDecisionType.FAIL_TERMINAL;
     }
 
-    private int resolveLocalAttempts(RetryPolicy policy, RetryBackend persistenceAdapter) {
+    private static int resolveLocalAttempts(RetryPolicy policy, RetryBackend persistenceAdapter) {
         if (persistenceAdapter == null) {
             if (policy.getMaxAttempts() == -1) {
                 return Integer.MAX_VALUE;
@@ -308,10 +282,10 @@ public class Retryer {
     }
 
     private RetryHandoffException handoffToPersistence(String taskType,
-                                                       RetryTaskSnapshot snapshot,
-                                                       RetryPayloadBuilder payloadBuilder,
-                                                       int executedAttempts,
-                                                       Throwable cause) {
+            RetryTaskSnapshot snapshot,
+            RetryPayloadBuilder payloadBuilder,
+            int executedAttempts,
+            Throwable cause) {
         int nextAttempt = executedAttempts + 1;
         RetryTaskSnapshot finalSnapshot = snapshot;
 
@@ -353,17 +327,21 @@ public class Retryer {
         CompletableFuture.runAsync(() -> retryBackend.close(taskId, request), cleanupExecutor);
     }
 
+    private void sleepQuietly(int nextAttempt) throws InterruptedException {
+        long delay = policy.getDelayMillis(nextAttempt);
+        if (delay > 0) {
+            try {
+                Thread.sleep(delay);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                throw e;
+            }
+        }
+    }
+
     private Throwable normalizeSyncFailure(Throwable ex) throws InterruptedException {
-        if (ex instanceof InterruptedException) {
-            Thread.currentThread().interrupt();
-            throw (InterruptedException) ex;
-        }
-        if (ex instanceof Error) {
-            throw (Error) ex;
-        }
-        Throwable cause = RetryExceptionUtil.unwrap(ex);
+        Throwable cause = normalize(ex);
         if (cause instanceof InterruptedException) {
-            Thread.currentThread().interrupt();
             throw (InterruptedException) cause;
         }
         if (cause instanceof Error) {
@@ -373,6 +351,10 @@ public class Retryer {
     }
 
     private Throwable normalizeAsyncFailure(Throwable ex) {
+        return normalize(ex);
+    }
+
+    private Throwable normalize(Throwable ex) {
         if (ex instanceof InterruptedException) {
             Thread.currentThread().interrupt();
             return ex;
@@ -405,57 +387,4 @@ public class Retryer {
         FAIL_TERMINAL
     }
 
-    /**
-     * Retryer 构建器
-     */
-    public static class Builder {
-        private RetryPolicy policy;
-        private RetryBackend retryBackend;
-        private Executor cleanupExecutor;
-
-        /**
-         * 设置重试策略
-         *
-         * @param policy 重试策略
-         * @return 构建器自身
-         */
-        public Builder policy(RetryPolicy policy) {
-            this.policy = policy;
-            return this;
-        }
-
-        /**
-         * 设置重试持久化适配器
-         *
-         * @param retryBackend 持久化适配器
-         * @return 构建器自身
-         */
-        public Builder retryBackend(RetryBackend retryBackend) {
-            this.retryBackend = retryBackend;
-            return this;
-        }
-
-        /**
-         * 设置清理任务执行器，用于异步完成或取消后端任务
-         *
-         * @param cleanupExecutor 清理执行器
-         * @return 构建器自身
-         */
-        public Builder cleanupExecutor(Executor cleanupExecutor) {
-            this.cleanupExecutor = cleanupExecutor;
-            return this;
-        }
-
-        /**
-         * 构造 Retryer 实例
-         *
-         * @return 重试执行引擎
-         */
-        public Retryer build() {
-            if (policy == null) {
-                throw new IllegalStateException("RetryPolicy must not be null");
-            }
-            return new Retryer(this);
-        }
-    }
 }
