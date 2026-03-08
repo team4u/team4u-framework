@@ -3,7 +3,7 @@ package com.team4u.framework.lease.runtime;
 import com.team4u.framework.lease.api.LeaseRuntimeClient;
 import com.team4u.framework.lease.model.LeaseHandle;
 import lombok.Builder;
-import lombok.Getter;
+import lombok.Data;
 import lombok.Singular;
 
 import java.util.Map;
@@ -13,7 +13,7 @@ import java.util.Map;
  * <p>
  * 封装了任务在处理期间所需的全部信息，并提供了与运行时（如主动心跳续约）交互的接口。
  */
-@Getter
+@Data
 public class LeaseExecutionContext {
 
     /**
@@ -70,19 +70,19 @@ public class LeaseExecutionContext {
     private final LeaseHandle handle;
 
     @Builder
-    public LeaseExecutionContext(String taskId,
-                                 String queue,
-                                 String taskType,
-                                 String payload,
-                                 int deliveryCount,
-                                 int failureCount,
-                                 @Singular Map<String, String> attributes,
-                                 long createdAtMillis,
-                                 long visibleAtMillis,
-                                 long leaseExpiresAtMillis,
-                                 Runnable heartbeatRequester,
-                                 LeaseRuntimeClient runtimeClient,
-                                 LeaseHandle handle) {
+    private LeaseExecutionContext(String taskId,
+            String queue,
+            String taskType,
+            String payload,
+            int deliveryCount,
+            int failureCount,
+            @Singular Map<String, String> attributes,
+            long createdAtMillis,
+            long visibleAtMillis,
+            long leaseExpiresAtMillis,
+            Runnable heartbeatRequester,
+            LeaseRuntimeClient runtimeClient,
+            LeaseHandle handle) {
         this.taskId = taskId;
         this.queue = queue;
         this.taskType = taskType;

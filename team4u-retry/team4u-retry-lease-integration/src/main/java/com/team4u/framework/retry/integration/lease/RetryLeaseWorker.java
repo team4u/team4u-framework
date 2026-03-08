@@ -22,12 +22,14 @@ public class RetryLeaseWorker implements Runnable, AutoCloseable {
         this(runtimeClient, retryBackend, RecoveryHandlerRegistry.global(), LeaseWorkerPolicy.builder().build());
     }
 
-    public RetryLeaseWorker(LeaseRuntimeClient runtimeClient, RetryBackend retryBackend,
+    public RetryLeaseWorker(LeaseRuntimeClient runtimeClient,
+                            RetryBackend retryBackend,
                             RecoveryHandlerRegistry registry) {
         this(runtimeClient, retryBackend, registry, LeaseWorkerPolicy.builder().build());
     }
 
-    public RetryLeaseWorker(LeaseRuntimeClient runtimeClient, RetryBackend retryBackend,
+    public RetryLeaseWorker(LeaseRuntimeClient runtimeClient,
+                            RetryBackend retryBackend,
                             RecoveryHandlerRegistry registry,
                             LeaseWorkerPolicy policy) {
         this.registry = registry;

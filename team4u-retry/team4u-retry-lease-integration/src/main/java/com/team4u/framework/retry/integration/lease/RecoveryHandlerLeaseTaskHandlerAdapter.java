@@ -73,13 +73,15 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
             retryBackend.saveProgress(snapshot);
             LeaseRuntimeResult result = context.getRuntimeClient().release(
                     context.getHandle(),
-                    LeaseReleaseRequest.of(plan.getDelayMillis(), cause == null ? null : cause.toString()));
+                    LeaseReleaseRequest.of(plan.getDelayMillis(), cause.toString())
+            );
             checkResult(result, "release", snapshot.getTaskId());
         } else {
             log.error("Task failed closed: {}", snapshot.getTaskId(), cause);
             LeaseRuntimeResult result = context.getRuntimeClient().close(
                     context.getHandle(),
-                    LeaseCloseRequest.failed(mapFailureReason(plan.getReason()), plan.getErrorMessage()));
+                    LeaseCloseRequest.failed(mapFailureReason(plan.getReason()), plan.getErrorMessage())
+            );
             checkResult(result, "close", snapshot.getTaskId());
         }
     }
