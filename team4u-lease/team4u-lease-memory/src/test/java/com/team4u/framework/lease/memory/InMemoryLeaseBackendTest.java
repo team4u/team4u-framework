@@ -1,6 +1,13 @@
 package com.team4u.framework.lease.memory;
 
-import com.team4u.framework.lease.*;
+import com.team4u.framework.lease.AbstractLeaseBackendContractTest;
+import com.team4u.framework.lease.enums.LeaseAdminResult;
+import com.team4u.framework.lease.enums.LeaseRuntimeResult;
+import com.team4u.framework.lease.enums.LeaseTaskStatus;
+import com.team4u.framework.lease.model.LeaseFailureRequest;
+import com.team4u.framework.lease.model.LeaseGrant;
+import com.team4u.framework.lease.model.LeasePublishRequest;
+import com.team4u.framework.lease.model.LeaseQueryRequest;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -9,7 +16,7 @@ import java.util.Map;
 public class InMemoryLeaseBackendTest extends AbstractLeaseBackendContractTest {
 
     @Override
-    protected LeaseBackend createBackend() {
+    protected com.team4u.framework.lease.api.LeaseBackend createBackend() {
         return new InMemoryLeaseBackend();
     }
 
@@ -46,8 +53,9 @@ public class InMemoryLeaseBackendTest extends AbstractLeaseBackendContractTest {
         String taskId = publish(backend, "pay", "payload");
 
         LeaseGrant firstGrant = acquire(backend, "worker-a", 100L, 200L, "pay");
-        Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.retry(
-                firstGrant.getHandle(), 10L, new IllegalStateException("boom")));
+        Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.fail(
+                firstGrant.getHandle(), LeaseFailureRequest.of(new IllegalStateException("boom"))));
+        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.requeueDead(taskId, 0L));
 
         Thread.sleep(20L);
         LeaseGrant secondGrant = acquire(backend, "worker-a", 100L, 200L, "pay");
@@ -74,7 +82,7 @@ public class InMemoryLeaseBackendTest extends AbstractLeaseBackendContractTest {
         LeaseGrant grant = acquire(backend, "worker-a", 100L, 200L, "pay");
 
         Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.fail(
-                grant.getHandle(), new IllegalStateException("boom")));
+                grant.getHandle(), LeaseFailureRequest.of(new IllegalStateException("boom"))));
         Assert.assertEquals(LeaseAdminResult.APPLIED, backend.requeueDead(taskId, 10L));
 
         Thread.sleep(20L);
@@ -88,7 +96,8 @@ public class InMemoryLeaseBackendTest extends AbstractLeaseBackendContractTest {
     @Test
     public void testListCanFilterByQueueTaskTypeAndStatus() {
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
-        backend.publish(LeasePublishRequest.builder().queue("queue-a").taskType("pay").payload("a").priority(5).build());
+        backend.publish(
+                LeasePublishRequest.builder().queue("queue-a").taskType("pay").payload("a").priority(5).build());
         backend.publish(LeasePublishRequest.builder().queue("queue-b").taskType("mail").payload("b").build());
 
         Assert.assertEquals(1, backend.list(LeaseQueryRequest.builder()

@@ -16,7 +16,8 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * backend presence determines whether proxy retry runs in memory or persistent mode.
+ * backend presence determines whether proxy retry runs in memory or persistent
+ * mode.
  */
 public class RetryBackendModeTest {
 
@@ -71,7 +72,7 @@ public class RetryBackendModeTest {
             // expected
         }
 
-        Assert.assertEquals(1, backend.saveCount.get());
+        Assert.assertEquals(2, backend.saveCount.get());
         Assert.assertEquals(1, backend.submitCount.get());
         Assert.assertEquals(backend.lastIntentId.get(), backend.lastSubmitIntentId.get());
         Assert.assertEquals(1000, backend.lastDelayMs.get());
@@ -127,27 +128,23 @@ public class RetryBackendModeTest {
         CountDownLatch completeLatch = new CountDownLatch(1);
 
         @Override
-        public String saveIntent(String queueName, String contextJson) {
+        public void save(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
             String id = "intent-" + saveCount.incrementAndGet();
             lastIntentId.set(id);
-            return id;
+            snapshot.setTaskId(id);
         }
 
         @Override
-        public void completeIntent(String intentId) {
-            completedIntentId.set(intentId);
+        public void delete(String taskId) {
+            completedIntentId.set(taskId);
             completeLatch.countDown();
         }
 
         @Override
-        public void markTerminalFailure(String intentId, Throwable cause) {
-        }
-
-        @Override
-        public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
+        public void handoff(String taskId, long delayMillis) {
             submitCount.incrementAndGet();
-            lastSubmitIntentId.set(intentId);
-            lastDelayMs.set((int) delayMs);
+            lastSubmitIntentId.set(taskId);
+            lastDelayMs.set((int) delayMillis);
         }
     }
 }

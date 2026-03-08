@@ -64,7 +64,7 @@
 
 * `leaseExpiresAtMillis`
 
-后续对任务的所有写回操作（成功、失败、重试、续约、释放），都必须带着这个 lease 凭证。
+后续对任务的所有写回操作（成功、失败、续约、释放），都必须带着这个 lease 凭证。
 
 如果：
 
@@ -118,18 +118,23 @@ Worker 按订阅的 `queue` 抢占可执行任务。
 任务处理完成后，可以回写：
 
 * `ack`：成功完成
-* `retry`：延迟后重试
-* `fail`：标记为死信
+* `fail`：标记为最终失败
 * `release`：主动让出执行权
 * `heartbeat`：续约
 
 ### 重试与退避
 
-`LeaseWorker` 内置：
+当前代码中已经具备：
 
-* 最大失败次数限制
-* Backoff 退避策略
 * 不可重试异常快速失败
+* `MissingHandlerStrategy.RETRY_LATER` 下释放回队列
+* 通过 `requeueDead` 做人工重放
+
+当前代码中尚未内置：
+
+* `LeaseWorker` 自动重试
+* Backoff 退避策略
+* `retry` 运行时接口
 
 ### 心跳续约
 
@@ -255,7 +260,7 @@ backend.publish(
 
 **预期结果：**
 - handler 正常返回：任务进入 `SUCCEEDED`
-- handler 抛出可重试异常：按 `maxFailures + backoff` 继续重试
+- handler 抛出普通异常：任务进入 `DEAD`
 - handler 抛出 `NonRetryableLeaseException`：直接进入 `DEAD`
 
 
@@ -299,24 +304,19 @@ Worker 正常执行完成后：
 * 清空 `workerId / leaseToken / leaseExpiresAtMillis`
 * 清空 `lastError`
 
-### 执行失败但允许重试
+### 执行失败
 
-如果处理器抛出普通异常，`LeaseWorker` 会根据策略决定是否重试。
+如果处理器抛出普通异常，当前 `LeaseWorker` 会直接调用 `fail`：
 
-如果允许重试，则：
-
-* 调用 `retry`
-* 状态回到 `SCHEDULED`
+* 状态变为 `DEAD`
 * `failureCount + 1`
-* 设置新的 `visibleAtMillis`
-* 清空租约字段
+* 记录 `lastError`
 
 ### 执行失败且不再重试
 
 如果：
 
 * 抛出 `NonRetryableLeaseException`
-* 或失败次数达到上限
 * 或缺失处理器且策略要求立即失败
 
 则任务会被 `fail`：
@@ -436,7 +436,7 @@ Worker 正常执行完成后：
 * 调用 `runtimeClient.acquire(...)` 抢一个任务
 * 通过 `queue + taskType` 在本地注册表中找处理器
 * 执行业务处理逻辑
-* 根据结果调用 `ack/retry/fail/release`
+* 根据结果调用 `ack/fail/release`
 * 持续循环直到关闭
 
 ### 自动 Ack
@@ -447,25 +447,23 @@ Worker 正常执行完成后：
 
 所以业务处理器本身一般不需要直接操作后端。
 
-### 异常与重试
+### 异常与失败处理
 
 #### 普通异常
 
 如果处理器抛出普通 `Exception`：
 
-* Worker 计算下一次失败次数 `nextFailureCount = currentFailureCount + 1`
-* 调用 `policy.shouldRetry(nextFailureCount)`
-* 若允许重试，则 `retry`
-* 否则 `fail`
+* Worker 直接调用 `fail`
+* 任务进入 `DEAD`
+* `failureCount + 1`
 
 #### 不可重试异常
 
 如果处理器抛出 `NonRetryableLeaseException`：
 
-* 不看最大重试次数
 * 直接 `fail`
 
-这是框架明确提供的“毒任务 / 业务不可恢复错误”通道。
+当前实现里，它和普通异常的最终状态一样，都是 `DEAD`。这个异常的主要意义是表达“业务明确不可恢复”。
 
 ### 缺失处理器时会发生什么
 
@@ -512,8 +510,6 @@ Worker 正常执行完成后：
 * `workerId`
 * `leaseMillis`
 * `pollWaitMillis`
-* `maxFailures`
-* `backoff`
 * `heartbeatEnabled`
 * `heartbeatIntervalMillis`
 * `missingHandlerStrategy`
@@ -521,9 +517,12 @@ Worker 正常执行完成后：
 ### WorkerPolicy 默认行为
 
 - 不显式传入 `LeaseWorkerPolicy` 时，Worker 会使用默认配置
+- `workerId` 默认自动生成，格式为 `lease-worker-<uuid>`
+- `leaseMillis` 默认 `30000`
+- `pollWaitMillis` 默认 `1000`
+- `heartbeatEnabled` 默认 `true`
 - `heartbeatIntervalMillis` 默认取 `leaseMillis / 3`
 - `heartbeatIntervalMillis` 必须小于 `leaseMillis`
-- `maxFailures` 必须为正数，或由框架约定为无限重试值 `-1`
 
 
 ## 状态流转语义
@@ -542,17 +541,16 @@ stateDiagram-v2
     [*] --> SCHEDULED: publish
     SCHEDULED --> LEASED: acquire
     LEASED --> SUCCEEDED: ack
-    LEASED --> SCHEDULED: retry(delay)
     LEASED --> SCHEDULED: release(delay)
     LEASED --> DEAD: fail
     LEASED --> SCHEDULED: lease expired
 ```
 
-### `retry` 与 `release` 的区别
+### `fail` 与 `release` 的区别
 
-这两个动作都会让任务回到 `SCHEDULED`，但语义完全不同：
+这两个动作都发生在任务已被租约持有时，但语义完全不同：
 
-- `retry`：表示这次处理失败了，会增加失败次数（`failureCount + 1`）并记录 `lastError`
+- `fail`：表示这次处理失败，任务进入 `DEAD`，会增加失败次数并记录 `lastError`
 - `release`：表示这次不想继续持有执行权（如本地忙、缺少处理器），但不视为失败
 
 
@@ -567,7 +565,7 @@ stateDiagram-v2
 
 ### `ack` 会清空历史错误
 
-如果任务之前因为失败重试过，那么成功结束时：
+如果任务之前因为失败后又被重新放回执行过，那么成功结束时：
 
 * `lastError` 会被清空
 
@@ -579,11 +577,11 @@ stateDiagram-v2
 | --- | --- | --- | --- |
 | `reschedule` | 改下次可见时间 | 延后执行、人工改期 | APPLIED / TASK_NOT_FOUND / TERMINAL / ACTIVE_LEASE_PRESENT |
 | `cancel` | 终止任务 | 人工取消、作废任务 | APPLIED / TASK_NOT_FOUND / TERMINAL / ACTIVE_LEASE_PRESENT |
-| `requeueDead` | 把 DEAD 任务重新放回队列 | 修复环境后重跑 | APPLIED / TASK_NOT_FOUND / TERMINAL / ACTIVE_LEASE_PRESENT |
+| `requeueDead` | 把 DEAD 任务重新放回队列 | 修复环境后重跑 | APPLIED / TASK_NOT_FOUND / TERMINAL |
 
 ## JDBC 后端接入
 
-1. 执行 `schema/lease_task_mysql.sql`（通常在 `team4u-lease/team4u-lease-jdbc/src/test/resources/sql`）
+1. 执行 `team4u-lease-jdbc/src/main/resources/schema/lease_task_mysql.sql`
 2. 创建 `JdbcLeaseBackend`
 3. 根据数据库选择方言
 4. 生产环境建议保留以下索引：
@@ -592,7 +590,8 @@ stateDiagram-v2
    - `idx_lease_task_type`
 
 说明：
-- 当前 PostgreSQL 方言实现沿用 MySQL 兼容逻辑
+- 当前默认构造函数使用 `MySqlLeaseDbDialect`
+- 也可以显式传入 `PostgresLeaseDbDialect` 或自定义 `LeaseDbDialect`
 - 建议先用 H2 / MySQL 模式验证，再接入正式数据库
 
 
@@ -755,8 +754,8 @@ JDBC 版不是直接 `SELECT FOR UPDATE` 一把锁死，而是两步：
 ### 如何选择重试策略
 
 * 明显不可恢复的业务错误：抛 `NonRetryableLeaseException`
-* 可恢复的临时错误：抛普通异常，让 Worker 自动重试
-* 暂时不想处理但不是失败：使用 `release`
+* 可恢复但当前不想终态失败的情况：自行调用 `release`
+* 已经进入 `DEAD` 但确认可以再跑：使用 `requeueDead`
 
 ## 当前实现的边界与注意事项
 
@@ -777,7 +776,7 @@ JDBC 版不是直接 `SELECT FOR UPDATE` 一把锁死，而是两步：
 
 ### `requeueDead` 会保留历史失败次数
 
-这说明“重放”不是重新创建一条新任务，而是把原来的死信任务重新激活。
+这说明“重放”不是重新创建一条新任务，而是把原来的 `DEAD` 任务重新激活。
 
 ### 心跳续约是重设过期时间
 
@@ -787,17 +786,13 @@ JDBC 版不是直接 `SELECT FOR UPDATE` 一把锁死，而是两步：
 
 Worker 默认传的是 `leaseMillis`，所以行为相当于“从当前时刻续一个完整租期”。
 
-### `maxFailures` 的含义要注意
+### 当前没有内建自动重试策略
 
-判断条件是：
+这意味着：
 
-* `nextFailureCount < maxFailures`
-
-所以当 `maxFailures=3` 时：
-
-* 第 1 次失败：重试
-* 第 2 次失败：重试
-* 第 3 次失败：不再重试，进入 `DEAD`
+* 普通异常不会自动回到 `SCHEDULED`
+* 当前 `LeaseWorker` 不会根据失败次数做重试判断
+* 如果业务需要延迟再试，需要显式 `release` 或后续人工 `requeueDead`
 
 ### JDBC 版错误信息只保存摘要字符串
 
@@ -814,26 +809,19 @@ Worker 默认传的是 `leaseMillis`，所以行为相当于“从当前时刻�
 LeaseBackend backend = new JdbcLeaseBackend(dataSource);
 DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
 
-registry.
+registry.register("order", "pay", context -> {
+    String payload = context.getPayload();
 
-register("order","pay",context ->{
-String payload = context.getPayload();
+    // 业务预计较长，先主动续一次约
+    context.requestHeartbeat();
 
-// 业务预计较长，先主动续一次约
-    context.
-
-requestHeartbeat();
-
-    try{
-            // do business
-            }catch(
-IllegalArgumentException ex){
-        // 明确不可恢复，直接死信
-        throw new
-
-NonRetryableLeaseException("invalid payload",ex);
+    try {
+        // do business
+    } catch (IllegalArgumentException ex) {
+        // 明确不可恢复，直接失败
+        throw new NonRetryableLeaseException("invalid payload", ex);
     }
-            });
+});
 
 LeaseWorker worker = new LeaseWorker(
         backend,
@@ -842,16 +830,13 @@ LeaseWorker worker = new LeaseWorker(
                 .workerId("order-worker-1")
                 .leaseMillis(30_000L)
                 .pollWaitMillis(1_000L)
-                .maxFailures(5)
                 .heartbeatEnabled(true)
                 .heartbeatIntervalMillis(10_000L)
                 .missingHandlerStrategy(MissingHandlerStrategy.RETRY_LATER)
                 .build()
 );
 
-worker.
-
-start("order-worker-thread");
+worker.start("order-worker-thread");
 
 String taskId = backend.publish(
         LeasePublishRequest.builder()

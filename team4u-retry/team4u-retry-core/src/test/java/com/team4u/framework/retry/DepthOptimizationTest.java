@@ -55,22 +55,17 @@ public class DepthOptimizationTest {
     public void testSimpleExecuteFailsFastWhenBackendConfigured() throws Exception {
         Retryer.builder()
                 .policy(RetryPolicy.builder().build())
-                .backend(new TestLeaseBackend() {
+                .retryBackend(new TestLeaseBackend() {
                     @Override
-                    public String saveIntent(String taskType, String payload) {
-                        return "intent";
+                    public void save(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
                     }
 
                     @Override
-                    public void completeIntent(String intentId) {
+                    public void handoff(String taskId, long delayMillis) {
                     }
 
                     @Override
-                    public void markTerminalFailure(String intentId, Throwable cause) {
-                    }
-
-                    @Override
-                    public void submitForDelay(String intentId, String taskType, String payload, long delay) {
+                    public void delete(String taskId) {
                     }
                 })
                 .build()

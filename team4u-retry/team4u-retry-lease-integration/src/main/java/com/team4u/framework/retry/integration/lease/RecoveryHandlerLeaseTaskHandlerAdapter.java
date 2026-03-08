@@ -1,8 +1,8 @@
 package com.team4u.framework.retry.integration.lease;
 
-import com.team4u.framework.lease.LeaseExecutionContext;
-import com.team4u.framework.lease.LeaseTaskHandler;
-import com.team4u.framework.lease.LeaseWorker;
+import com.team4u.framework.lease.handler.LeaseTaskHandler;
+import com.team4u.framework.lease.runtime.LeaseExecutionContext;
+import com.team4u.framework.lease.runtime.LeaseWorker;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import lombok.Getter;
 

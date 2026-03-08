@@ -1,8 +1,9 @@
 package com.team4u.framework.retry;
 
 import com.team4u.framework.retry.backend.RetryBackend;
+import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.concurrent.RetryExecutorManager;
-import com.team4u.framework.retry.exception.RetrySerializationException;
+import com.team4u.framework.retry.policy.NamedRetryPolicy;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -20,14 +21,14 @@ public class Retryer {
     private static final int DEFAULT_IN_MEMORY_ATTEMPTS_FOR_PERSISTENCE = 2;
 
     private final RetryPolicy policy;
-    private final RetryBackend backendAdapter;
+    private final RetryBackend retryBackend;
     private final int localAttempts;
     private final Executor cleanupExecutor;
 
     private Retryer(Builder builder) {
         this.policy = builder.policy;
-        this.backendAdapter = builder.backendAdapter;
-        this.localAttempts = resolveLocalAttempts(policy, backendAdapter);
+        this.retryBackend = builder.retryBackend;
+        this.localAttempts = resolveLocalAttempts(policy, retryBackend);
         this.cleanupExecutor = builder.cleanupExecutor != null ? builder.cleanupExecutor
                 : RetryExecutorManager.global().getCleanupExecutor();
     }
@@ -60,26 +61,26 @@ public class Retryer {
      * @throws Exception 任务最终失败抛出的异常或重试过程中的异常
      */
     public <T> T execute(Callable<T> task) throws Exception {
-        if (backendAdapter != null) {
+        if (retryBackend != null) {
             throw new IllegalStateException(
                     "Retryer.execute(Callable) supports memory mode only. Use execute(taskType, payloadBuilder, task) "
-                            + "or executeAsync(taskType, payloadBuilder, ...) when a backend is configured.");
+                            + "or executeAsync(taskType, payloadBuilder, ...) when a persistence adapter is configured.");
         }
-        int attempt = 1;
+        int executedAttempts = 0;
         while (true) {
             try {
                 return task.call();
             } catch (Throwable ex) {
                 Throwable cause = normalizeSyncFailure(ex);
-                RetryDecisionType decision = evaluateDecision(attempt, cause);
-                if (decision == RetryDecisionType.FAIL_TERMINAL || decision == RetryDecisionType.HANDOFF_TO_BACKEND) {
+                RetryDecisionType decision = evaluateDecision(executedAttempts, cause);
+                if (decision != RetryDecisionType.RETRY_IN_MEMORY) {
                     if (cause instanceof Exception) {
                         throw (Exception) cause;
                     }
                     throw new RuntimeException(cause);
                 }
 
-                long delay = policy.getDelayMillis(attempt);
+                long delay = policy.getDelayMillis(executedAttempts + 1);
                 if (delay > 0) {
                     try {
                         Thread.sleep(delay);
@@ -88,7 +89,7 @@ public class Retryer {
                         throw e;
                     }
                 }
-                attempt++;
+                executedAttempts++;
             }
         }
     }
@@ -104,14 +105,14 @@ public class Retryer {
     public <T> CompletableFuture<T> executeAsync(
             java.util.function.Supplier<CompletableFuture<T>> asyncTask,
             ScheduledExecutorService scheduler) {
-        if (backendAdapter != null) {
+        if (retryBackend != null) {
             throw new IllegalStateException(
                     "Retryer.executeAsync(asyncTask, scheduler) supports memory mode only. "
-                            + "Use executeAsync(taskType, payloadBuilder, ...) when a backend is configured.");
+                            + "Use executeAsync(taskType, payloadBuilder, ...) when a persistence adapter is configured.");
         }
 
         CompletableFuture<T> promise = new CompletableFuture<T>();
-        attemptAsync(null, null, null, asyncTask, scheduler, promise, 1);
+        attemptAsync(null, null, null, asyncTask, scheduler, promise, 0);
         return promise;
     }
 
@@ -119,36 +120,37 @@ public class Retryer {
      * 同步执行任务，支持持久化重试模式
      *
      * @param taskType       任务类型标识
-     * @param payloadBuilder 重试载荷解析器
+     * @param payloadBuilder 重试快照构建器
      * @param task           待执行的任务回调
      * @param <T>            返回结果类型
      * @return 任务执行结果
      * @throws Exception 任务最终失败抛出的异常
      */
     public <T> T execute(String taskType, RetryPayloadBuilder payloadBuilder, Callable<T> task) throws Exception {
-        IntentContext intentContext = prepareIntent(taskType, payloadBuilder);
-        int attempt = 1;
+        RetryTaskSnapshot snapshot = prepareSnapshot(taskType, payloadBuilder);
+        int executedAttempts = 0;
         while (true) {
             try {
                 T result = task.call();
-                completeIntentAsync(intentContext.intentId);
+                completeSnapshotAsync(snapshot != null ? snapshot.getTaskId() : null);
                 return result;
             } catch (Throwable ex) {
                 Throwable cause = normalizeSyncFailure(ex);
-                RetryDecisionType decision = evaluateDecision(attempt, cause);
+                RetryDecisionType decision = evaluateDecision(executedAttempts, cause);
 
                 if (decision == RetryDecisionType.FAIL_TERMINAL) {
-                    completeIntentAsync(intentContext.intentId);
+                    completeSnapshotAsync(snapshot != null ? snapshot.getTaskId() : null);
                     if (cause instanceof Exception) {
                         throw (Exception) cause;
                     }
                     throw new RuntimeException(cause);
                 }
+
                 if (decision == RetryDecisionType.HANDOFF_TO_BACKEND) {
-                    throw enqueueToBackend(intentContext.intentId, cause);
+                    throw handoffToPersistence(snapshot, payloadBuilder, executedAttempts, cause);
                 }
 
-                long delay = policy.getDelayMillis(attempt);
+                long delay = policy.getDelayMillis(executedAttempts + 1);
                 if (delay > 0) {
                     try {
                         Thread.sleep(delay);
@@ -157,31 +159,26 @@ public class Retryer {
                         throw e;
                     }
                 }
-                attempt++;
+                executedAttempts++;
             }
         }
     }
 
-    private RetryDecisionType evaluateDecision(int attempt, Throwable cause) {
-        if (!policy.canRetry(attempt, cause)) {
+    private RetryDecisionType evaluateDecision(int executedAttempts, Throwable cause) {
+        if (!policy.canRetry(executedAttempts, cause)) {
             return RetryDecisionType.FAIL_TERMINAL;
         }
-        if (attempt < localAttempts) {
+        if (executedAttempts + 1 < localAttempts) {
             return RetryDecisionType.RETRY_IN_MEMORY;
         }
-        if (backendAdapter != null && shouldFallbackToBackend()) {
+        if (retryBackend != null && shouldFallbackToPersistence(executedAttempts)) {
             return RetryDecisionType.HANDOFF_TO_BACKEND;
         }
         return RetryDecisionType.FAIL_TERMINAL;
     }
 
-    private int getNextAttemptAfterInMemory() {
-        return Math.min(localAttempts + 1,
-                policy.getMaxAttempts() == -1 ? localAttempts + 1 : policy.getMaxAttempts());
-    }
-
-    private int resolveLocalAttempts(RetryPolicy policy, RetryBackend backendAdapter) {
-        if (backendAdapter == null) {
+    private int resolveLocalAttempts(RetryPolicy policy, RetryBackend persistenceAdapter) {
+        if (persistenceAdapter == null) {
             if (policy.getMaxAttempts() == -1) {
                 return Integer.MAX_VALUE;
             }
@@ -196,15 +193,15 @@ public class Retryer {
         return Math.min(resolved, policy.getMaxAttempts());
     }
 
-    private boolean shouldFallbackToBackend() {
-        return policy.getMaxAttempts() == -1 || localAttempts < policy.getMaxAttempts();
+    private boolean shouldFallbackToPersistence(int executedAttempts) {
+        return policy.getMaxAttempts() == -1 || executedAttempts + 1 < policy.getMaxAttempts();
     }
 
     /**
      * 异步执行任务，支持持久化重试模式
      *
      * @param taskType       任务类型标识
-     * @param payloadBuilder 重试载荷解析器
+     * @param payloadBuilder 重试快照构建器
      * @param asyncTask      提供异步任务的供给者
      * @param scheduler      用于延迟任务调度的执行器
      * @param <T>            返回结果类型
@@ -215,19 +212,19 @@ public class Retryer {
             RetryPayloadBuilder payloadBuilder,
             java.util.function.Supplier<CompletableFuture<T>> asyncTask,
             ScheduledExecutorService scheduler) {
-        IntentContext intentContext = prepareIntent(taskType, payloadBuilder);
+        RetryTaskSnapshot snapshot = prepareSnapshot(taskType, payloadBuilder);
 
         CompletableFuture<T> promise = new CompletableFuture<T>();
-        attemptAsync(taskType, payloadBuilder, intentContext.intentId, asyncTask, scheduler, promise, 1);
+        attemptAsync(taskType, payloadBuilder, snapshot, asyncTask, scheduler, promise, 0);
         return promise;
     }
 
     private <T> void attemptAsync(
-            String taskType, RetryPayloadBuilder payloadBuilder, String intentId,
+            String taskType, RetryPayloadBuilder payloadBuilder, RetryTaskSnapshot snapshot,
             java.util.function.Supplier<CompletableFuture<T>> asyncTask,
             ScheduledExecutorService scheduler,
             CompletableFuture<T> promise,
-            int attempt) {
+            int executedAttempts) {
         try {
             CompletableFuture<T> future = asyncTask.get();
             if (future == null) {
@@ -235,28 +232,28 @@ public class Retryer {
             }
             future.whenComplete((result, ex) -> {
                 if (ex == null) {
-                    handleAsyncSuccess(intentId, promise, result);
+                    handleAsyncSuccess(snapshot != null ? snapshot.getTaskId() : null, promise, result);
                 } else {
-                    handleAsyncFailure(taskType, payloadBuilder, intentId, asyncTask, scheduler, promise,
-                            attempt, ex);
+                    handleAsyncFailure(taskType, payloadBuilder, snapshot, asyncTask, scheduler, promise,
+                            executedAttempts, ex);
                 }
             });
         } catch (Throwable ex) {
-            handleAsyncFailure(taskType, payloadBuilder, intentId, asyncTask, scheduler, promise, attempt, ex);
+            handleAsyncFailure(taskType, payloadBuilder, snapshot, asyncTask, scheduler, promise, executedAttempts, ex);
         }
     }
 
-    private <T> void handleAsyncSuccess(String intentId, CompletableFuture<T> promise, T result) {
-        completeIntentAsync(intentId);
+    private <T> void handleAsyncSuccess(String taskId, CompletableFuture<T> promise, T result) {
+        completeSnapshotAsync(taskId);
         promise.complete(result);
     }
 
     private <T> void handleAsyncFailure(
-            String taskType, RetryPayloadBuilder payloadBuilder, String intentId,
+            String taskType, RetryPayloadBuilder payloadBuilder, RetryTaskSnapshot snapshot,
             java.util.function.Supplier<CompletableFuture<T>> asyncTask,
             ScheduledExecutorService scheduler,
             CompletableFuture<T> promise,
-            int attempt,
+            int executedAttempts,
             Throwable ex) {
         Throwable cause = normalizeAsyncFailure(ex);
         if (cause instanceof Error || cause instanceof InterruptedException) {
@@ -264,14 +261,14 @@ public class Retryer {
             return;
         }
 
-        RetryDecisionType decision = evaluateDecision(attempt, cause);
+        RetryDecisionType decision = evaluateDecision(executedAttempts, cause);
 
         if (decision == RetryDecisionType.RETRY_IN_MEMORY) {
-            long delay = policy.getDelayMillis(attempt);
+            long delay = policy.getDelayMillis(executedAttempts + 1);
             try {
                 scheduler.schedule(
-                        () -> attemptAsync(taskType, payloadBuilder, intentId, asyncTask, scheduler, promise,
-                                attempt + 1),
+                        () -> attemptAsync(taskType, payloadBuilder, snapshot, asyncTask, scheduler, promise,
+                                executedAttempts + 1),
                         delay, java.util.concurrent.TimeUnit.MILLISECONDS);
             } catch (Exception e) {
                 promise.completeExceptionally(e);
@@ -281,50 +278,66 @@ public class Retryer {
 
         if (decision == RetryDecisionType.HANDOFF_TO_BACKEND) {
             try {
-                promise.completeExceptionally(enqueueToBackend(intentId, cause));
-            } catch (IllegalStateException stateEx) {
+                promise.completeExceptionally(handoffToPersistence(snapshot, payloadBuilder, executedAttempts, cause));
+            } catch (Exception stateEx) {
                 promise.completeExceptionally(stateEx);
             }
             return;
         }
 
-        completeIntentAsync(intentId);
+        completeSnapshotAsync(snapshot != null ? snapshot.getTaskId() : null);
         promise.completeExceptionally(cause);
     }
 
-    private IntentContext prepareIntent(String taskType, RetryPayloadBuilder payloadBuilder) {
-        if (backendAdapter == null) {
-            return new IntentContext(null);
+    private RetryTaskSnapshot prepareSnapshot(String taskType, RetryPayloadBuilder payloadBuilder) {
+        if (retryBackend == null) {
+            return null;
         }
-        try {
-            String payload = payloadBuilder.build(RetryPayloadContext.prepareIntent());
-            String intentId = backendAdapter.prepare(taskType, payload);
-            if (intentId == null || intentId.isEmpty()) {
-                throw new IllegalStateException(
-                        "Persistent retry requires non-null intent id from backendAdapter.prepare()");
-            }
-            return new IntentContext(intentId);
-        } catch (RetrySerializationException e) {
-            throw new IllegalStateException(
-                    "Persistent retry requires serializable arguments, but serialization failed.", e);
+        RetryTaskSnapshot snapshot = payloadBuilder.build(RetryPayloadContext.prepareIntent());
+        snapshot.setTaskType(taskType);
+        retryBackend.save(snapshot);
+
+        if (snapshot.getTaskId() == null || snapshot.getTaskId().isEmpty()) {
+            throw new IllegalStateException("Persistent retry intent requires a task id.");
         }
+
+        return snapshot;
     }
 
-    private RetryHandoffException enqueueToBackend(String intentId, Throwable cause) {
-        long nextDelay = policy.getDelayMillis(getNextAttemptAfterInMemory());
-        if (intentId == null || intentId.isEmpty()) {
-            throw new IllegalStateException("Persistent retry handoff requires a prepared intent id.");
+    private RetryHandoffException handoffToPersistence(RetryTaskSnapshot snapshot,
+                                                       RetryPayloadBuilder payloadBuilder,
+                                                       int executedAttempts,
+                                                       Throwable cause) {
+        int nextAttempt = executedAttempts + 1;
+        RetryTaskSnapshot finalSnapshot = snapshot;
+
+        if (finalSnapshot == null) {
+            finalSnapshot = payloadBuilder.build(RetryPayloadContext.handoffToBackend(nextAttempt));
+            retryBackend.save(finalSnapshot);
+        } else {
+            finalSnapshot.setExecutedAttempts(nextAttempt);
+            // 再次保存以更新已尝试次数
+            retryBackend.save(finalSnapshot);
         }
-        backendAdapter.handoff(intentId, nextDelay);
-        return new RetryHandoffException("In-memory retries exhausted; task has been handed over to backend queue.",
+
+        if (finalSnapshot.getTaskId() == null || finalSnapshot.getTaskId().isEmpty()) {
+            throw new IllegalStateException("Persistent retry handoff requires a task id.");
+        }
+
+        finalSnapshot.setMaxAttempts(policy.getMaxAttempts());
+        finalSnapshot.setPolicyKey(policy instanceof NamedRetryPolicy ? ((NamedRetryPolicy) policy).key() : null);
+
+        retryBackend.handoff(finalSnapshot.getTaskId(), policy.getDelayMillis(nextAttempt + 1));
+        return new RetryHandoffException(
+                "In-memory retries exhausted; task has been handed over to persistence storage.",
                 cause);
     }
 
-    private void completeIntentAsync(String intentId) {
-        if (intentId == null || backendAdapter == null) {
+    private void completeSnapshotAsync(String taskId) {
+        if (taskId == null || retryBackend == null) {
             return;
         }
-        CompletableFuture.runAsync(() -> backendAdapter.complete(intentId), cleanupExecutor);
+        CompletableFuture.runAsync(() -> retryBackend.delete(taskId), cleanupExecutor);
     }
 
     private Throwable normalizeSyncFailure(Throwable ex) throws InterruptedException {
@@ -379,20 +392,12 @@ public class Retryer {
         FAIL_TERMINAL
     }
 
-    private static final class IntentContext {
-        private final String intentId;
-
-        private IntentContext(String intentId) {
-            this.intentId = intentId;
-        }
-    }
-
     /**
      * Retryer 构建器
      */
     public static class Builder {
         private RetryPolicy policy;
-        private RetryBackend backendAdapter;
+        private RetryBackend retryBackend;
         private Executor cleanupExecutor;
 
         /**
@@ -407,13 +412,13 @@ public class Retryer {
         }
 
         /**
-         * 设置重试后端
+         * 设置重试持久化适配器
          *
-         * @param backendAdapter 后端适配器
+         * @param retryBackend 持久化适配器
          * @return 构建器自身
          */
-        public Builder backend(RetryBackend backendAdapter) {
-            this.backendAdapter = backendAdapter;
+        public Builder retryBackend(RetryBackend retryBackend) {
+            this.retryBackend = retryBackend;
             return this;
         }
 

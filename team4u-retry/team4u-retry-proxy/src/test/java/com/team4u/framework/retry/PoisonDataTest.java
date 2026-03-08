@@ -21,20 +21,16 @@ public class PoisonDataTest {
 
     private final TestLeaseBackend mockBackend = new TestLeaseBackend() {
         @Override
-        public String saveIntent(String taskType, String payload) {
-            return "intentId";
+        public void save(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
+            snapshot.setTaskId("intentId");
         }
 
         @Override
-        public void completeIntent(String intentId) {
+        public void handoff(String taskId, long delayMillis) {
         }
 
         @Override
-        public void markTerminalFailure(String intentId, Throwable cause) {
-        }
-
-        @Override
-        public void submitForDelay(String intentId, String taskType, String payload, long delay) {
+        public void delete(String taskId) {
         }
     };
 
@@ -45,17 +41,16 @@ public class PoisonDataTest {
     public void testPersistentModeFailFast() throws Exception {
         Retryer retryer = Retryer.builder()
                 .policy(RetryPolicy.builder().build())
-                .backend(mockBackend)
+                .retryBackend(mockBackend)
                 .build();
 
         try {
             retryer.execute("task", context -> {
                 throw new RetrySerializationException("serialization failed");
             }, () -> "ok");
-            Assert.fail("预期抛出 IllegalStateException");
-        } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("Persistent retry requires serializable arguments"));
-            Assert.assertTrue(e.getCause() instanceof RetrySerializationException);
+            Assert.fail("预期抛出 RetrySerializationException");
+        } catch (RetrySerializationException e) {
+            Assert.assertEquals("serialization failed", e.getMessage());
         }
     }
 
@@ -71,7 +66,9 @@ public class PoisonDataTest {
         AtomicBoolean supplierCalled = new AtomicBoolean(false);
         String result = retryer.execute("task", context -> {
             supplierCalled.set(true);
-            return "{}";
+            com.team4u.framework.retry.backend.RetryTaskSnapshot s = new com.team4u.framework.retry.backend.RetryTaskSnapshot();
+            s.setPayload("{}");
+            return s;
         }, () -> "ok");
 
         Assert.assertEquals("ok", result);
@@ -88,7 +85,7 @@ public class PoisonDataTest {
                         .maxAttempts(3)
                         .localAttempts(1)
                         .build())
-                .backend(mockBackend)
+                .retryBackend(mockBackend)
                 .build();
 
         AtomicBoolean businessExecuted = new AtomicBoolean(false);
@@ -99,9 +96,8 @@ public class PoisonDataTest {
                 businessExecuted.set(true);
                 throw new RuntimeException("business failed");
             });
-            Assert.fail("预期抛出 IllegalStateException");
-        } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("Persistent retry requires serializable arguments"));
+            Assert.fail("预期抛出 RetrySerializationException");
+        } catch (RetrySerializationException e) {
             Assert.assertFalse("业务逻辑不应在 prepare 失败后执行", businessExecuted.get());
         }
     }
@@ -118,7 +114,9 @@ public class PoisonDataTest {
         AtomicBoolean supplierCalled = new AtomicBoolean(false);
         String result = retryer.execute("task", context -> {
             supplierCalled.set(true);
-            return "{}";
+            com.team4u.framework.retry.backend.RetryTaskSnapshot s = new com.team4u.framework.retry.backend.RetryTaskSnapshot();
+            s.setPayload("{}");
+            return s;
         }, () -> "ok");
 
         Assert.assertEquals("ok", result);
@@ -132,16 +130,16 @@ public class PoisonDataTest {
     public void testAsyncPersistentModeFailFast() {
         Retryer retryer = Retryer.builder()
                 .policy(RetryPolicy.builder().build())
-                .backend(mockBackend)
+                .retryBackend(mockBackend)
                 .build();
 
         try {
             retryer.executeAsync("task", context -> {
                 throw new RetrySerializationException("serialization failed");
             }, () -> CompletableFuture.completedFuture("ok"), Executors.newSingleThreadScheduledExecutor());
-            Assert.fail("预期抛出 IllegalStateException");
-        } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("Persistent retry requires serializable arguments"));
+            Assert.fail("预期抛出 RetrySerializationException");
+        } catch (RetrySerializationException e) {
+            Assert.assertEquals("serialization failed", e.getMessage());
         }
     }
 
@@ -155,7 +153,7 @@ public class PoisonDataTest {
                         .maxAttempts(3)
                         .localAttempts(1)
                         .build())
-                .backend(mockBackend)
+                .retryBackend(mockBackend)
                 .build();
 
         AtomicBoolean businessExecuted = new AtomicBoolean(false);
@@ -169,8 +167,7 @@ public class PoisonDataTest {
                 return f;
             }, Executors.newSingleThreadScheduledExecutor());
             Assert.fail("预期抛出异常");
-        } catch (IllegalStateException e) {
-            Assert.assertTrue(e.getMessage().contains("Persistent retry requires serializable arguments"));
+        } catch (RetrySerializationException e) {
             Assert.assertFalse("业务逻辑不应在 prepare 失败后执行", businessExecuted.get());
         }
     }

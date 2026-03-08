@@ -92,7 +92,7 @@ public class RetryDelegateTest {
         Object result = delegate.executeWithRetry(
                 method,
                 new DelegateApi(),
-                new Object[] { new Object() },
+                new Object[]{new Object()},
                 retryable,
                 () -> "ok",
                 null);
@@ -122,7 +122,7 @@ public class RetryDelegateTest {
             delegate.executeWithRetry(
                     method,
                     new DelegateApi(),
-                    new Object[] { "payload" },
+                    new Object[]{"payload"},
                     retryable,
                     () -> {
                         businessExecuted.set(true);
@@ -156,7 +156,7 @@ public class RetryDelegateTest {
         Object result = delegate.executeWithRetry(
                 method,
                 new DelegateApi(),
-                new Object[] { "a" },
+                new Object[]{"a"},
                 retryable,
                 () -> "ok",
                 null);
@@ -178,7 +178,7 @@ public class RetryDelegateTest {
             delegate.executeWithRetry(
                     method,
                     new DelegateContractImpl(),
-                    new Object[] { args },
+                    new Object[]{args},
                     retryable,
                     () -> {
                         args.clear();
@@ -221,7 +221,7 @@ public class RetryDelegateTest {
             delegate.executeWithRetry(
                     method,
                     new DelegateApi(),
-                    new Object[] { "payload" },
+                    new Object[]{"payload"},
                     retryable,
                     () -> {
                         throw new RuntimeException("fail");
@@ -249,7 +249,7 @@ public class RetryDelegateTest {
             result = (String) delegate.executeWithRetry(
                     method,
                     new DelegateApi(),
-                    new Object[] { "payload" },
+                    new Object[]{"payload"},
                     retryable,
                     () -> {
                         proceedCount.incrementAndGet();
@@ -305,22 +305,18 @@ public class RetryDelegateTest {
         private final CountDownLatch completeLatch = new CountDownLatch(1);
 
         @Override
-        public String saveIntent(String queueName, String contextJson) {
+        public void save(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
             saveCount.incrementAndGet();
-            return "intent-1";
+            snapshot.setTaskId("intent-1");
         }
 
         @Override
-        public void completeIntent(String intentId) {
+        public void delete(String taskId) {
             completeLatch.countDown();
         }
 
         @Override
-        public void markTerminalFailure(String intentId, Throwable cause) {
-        }
-
-        @Override
-        public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
+        public void handoff(String taskId, long delayMillis) {
         }
     }
 
@@ -329,21 +325,17 @@ public class RetryDelegateTest {
         private String submittedPayload;
 
         @Override
-        public String saveIntent(String queueName, String contextJson) {
-            this.savedPayload = contextJson;
-            return "intent-1";
+        public void save(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
+            this.savedPayload = JSONUtil.toJsonStr(snapshot);
+            snapshot.setTaskId("intent-1");
         }
 
         @Override
-        public void completeIntent(String intentId) {
+        public void delete(String taskId) {
         }
 
         @Override
-        public void markTerminalFailure(String intentId, Throwable cause) {
-        }
-
-        @Override
-        public void submitForDelay(String intentId, String queueName, String contextJson, long delayMs) {
+        public void handoff(String taskId, long delayMs) {
             this.submittedPayload = savedPayload;
         }
     }

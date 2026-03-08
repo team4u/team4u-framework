@@ -4,12 +4,12 @@ import cn.hutool.crypto.digest.DigestUtil;
 import com.team4u.framework.retry.RetryPayloadBuilder;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.Retryer;
-import com.team4u.framework.retry.backend.RetryBackend;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.backend.serialize.HutoolRetryTaskSnapshotSerializer;
 import com.team4u.framework.retry.backend.serialize.RetryTaskSnapshotSerializer;
 import com.team4u.framework.retry.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.config.DynamicRetryPolicyRegistry;
+import com.team4u.framework.retry.backend.RetryBackend;
 import com.team4u.framework.retry.policy.NamedRetryPolicy;
 import com.team4u.framework.retry.policy.RetryPolicyRegistry;
 import com.team4u.framework.retry.proxy.serialize.HutoolRetryContextSerializer;
@@ -92,11 +92,12 @@ public class RetryDelegate {
         boolean isAsync = CompletableFuture.class.isAssignableFrom(method.getReturnType());
 
         // 构建重试任务负载构造器（仅持久化模式需要）
-        RetryPayloadBuilder payloadBuilder = createPayloadBuilder(method, target, args, taskType, policy, persistent);
+        RetryPayloadBuilder payloadBuilder = createPayloadBuilder(method, target, args, taskType, policy, persistent,
+                retryable.payload());
 
         Retryer retryer = Retryer.builder()
                 .policy(policy)
-                .backend(backend)
+                .retryBackend(backend)
                 .build();
 
         if (isAsync) {
@@ -109,7 +110,7 @@ public class RetryDelegate {
      * 处理异步方法重试
      */
     private Object executeAsync(Callable<Object> proceedTask, Retryer retryer, boolean persistent,
-            String taskType, RetryPayloadBuilder payloadBuilder) {
+                                String taskType, RetryPayloadBuilder payloadBuilder) {
         ScheduledExecutorService executor = scheduler != null ? scheduler
                 : RetryExecutorManager.global().getScheduler();
         if (!persistent) {
@@ -122,7 +123,7 @@ public class RetryDelegate {
      * 处理同步方法重试
      */
     private Object executeSync(Callable<Object> proceedTask, Retryer retryer, boolean persistent,
-            String taskType, RetryPayloadBuilder payloadBuilder) throws Throwable {
+                               String taskType, RetryPayloadBuilder payloadBuilder) throws Throwable {
         if (!persistent) {
             try {
                 return retryer.execute(proceedTask);
@@ -174,30 +175,33 @@ public class RetryDelegate {
      * 创建任务负载（Payload）构造器，负责在重试前冻结任务快照
      */
     private RetryPayloadBuilder createPayloadBuilder(Method method,
-            Object target,
-            Object[] args,
-            String taskType,
-            RetryPolicy policy,
-            boolean persistent) {
+                                                     Object target,
+                                                     Object[] args,
+                                                     String taskType,
+                                                     RetryPolicy policy,
+                                                     boolean persistent,
+                                                     String policyKey) {
         if (!persistent) {
             return null;
         }
 
         // 预先构建并冻结任务的基础信息（参数、类名、方法等）
-        RetryTaskSnapshot frozenSnapshot = buildFrozenSnapshot(method, target, args, taskType, policy);
-        return context -> snapshotSerializer
-                .serialize(copySnapshotForAttempt(frozenSnapshot, context.getExecutedAttempts()));
+        RetryTaskSnapshot frozenSnapshot = buildFrozenSnapshot(method, target, args, taskType, policy, policyKey);
+        return context -> copySnapshotForAttempt(frozenSnapshot, context.getExecutedAttempts());
     }
 
     /**
      * 构建初始任务快照
      */
     private RetryTaskSnapshot buildFrozenSnapshot(Method method,
-            Object target,
-            Object[] args,
-            String taskType,
-            RetryPolicy policy) {
+                                                  Object target,
+                                                  Object[] args,
+                                                  String taskType,
+                                                  RetryPolicy policy,
+                                                  String policyKey) {
         RetryTaskSnapshot snapshot = new RetryTaskSnapshot();
+        snapshot.setPolicyKey(policyKey);
+        snapshot.setLocalAttempts(policy.getLocalAttempts());
         snapshot.setTaskType(taskType);
         snapshot.setMaxAttempts(policy.getMaxAttempts());
         snapshot.setBeanName(resolveBeanName(method, target));

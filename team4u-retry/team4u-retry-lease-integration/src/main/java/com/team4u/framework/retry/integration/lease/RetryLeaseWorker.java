@@ -1,8 +1,8 @@
 package com.team4u.framework.retry.integration.lease;
 
-import com.team4u.framework.lease.LeaseRuntimeClient;
-import com.team4u.framework.lease.LeaseWorker;
-import com.team4u.framework.lease.LeaseWorkerPolicy;
+import com.team4u.framework.lease.api.LeaseRuntimeClient;
+import com.team4u.framework.lease.runtime.LeaseWorker;
+import com.team4u.framework.lease.runtime.LeaseWorkerPolicy;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 
 /**

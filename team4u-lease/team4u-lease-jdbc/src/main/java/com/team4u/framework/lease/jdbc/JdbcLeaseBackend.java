@@ -4,10 +4,14 @@ import cn.hutool.core.util.IdUtil;
 import cn.hutool.core.util.ObjectUtil;
 import cn.hutool.core.util.StrUtil;
 import cn.hutool.db.Db;
-import com.team4u.framework.lease.*;
+import com.team4u.framework.lease.api.LeaseBackend;
+import com.team4u.framework.lease.enums.LeaseAdminResult;
+import com.team4u.framework.lease.enums.LeaseRuntimeResult;
+import com.team4u.framework.lease.enums.LeaseTaskStatus;
 import com.team4u.framework.lease.jdbc.codec.LeaseJsonCodec;
 import com.team4u.framework.lease.jdbc.dialect.LeaseDbDialect;
 import com.team4u.framework.lease.jdbc.dialect.MySqlLeaseDbDialect;
+import com.team4u.framework.lease.model.*;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
@@ -102,30 +106,18 @@ public class JdbcLeaseBackend implements LeaseBackend {
 
     @Override
     public LeaseRuntimeResult ack(LeaseHandle handle) {
-        return applyRuntimeMutation(handle, now -> dao.ack(handle.getTaskId(), handle.getWorkerId(), handle.getLeaseToken(), now));
+        return applyRuntimeMutation(handle,
+                now -> dao.ack(handle.getTaskId(), handle.getWorkerId(), handle.getLeaseToken(), now));
     }
 
     @Override
-    public LeaseRuntimeResult retry(LeaseHandle handle, long delayMillis, Throwable cause) {
-        return applyRuntimeMutation(handle, now -> dao.retry(
-                handle.getTaskId(),
-                handle.getWorkerId(),
-                handle.getLeaseToken(),
-                now + Math.max(0L, delayMillis),
-                errorMessage(cause),
-                now
-        ));
-    }
-
-    @Override
-    public LeaseRuntimeResult fail(LeaseHandle handle, Throwable cause) {
+    public LeaseRuntimeResult fail(LeaseHandle handle, LeaseFailureRequest request) {
         return applyRuntimeMutation(handle, now -> dao.fail(
                 handle.getTaskId(),
                 handle.getWorkerId(),
                 handle.getLeaseToken(),
-                errorMessage(cause),
-                now
-        ));
+                errorMessage(request.getCause()),
+                now));
     }
 
     @Override
@@ -135,19 +127,17 @@ public class JdbcLeaseBackend implements LeaseBackend {
                 handle.getWorkerId(),
                 handle.getLeaseToken(),
                 now + Math.max(1L, extendMillis),
-                now
-        ));
+                now));
     }
 
     @Override
-    public LeaseRuntimeResult release(LeaseHandle handle, long delayMillis) {
+    public LeaseRuntimeResult release(LeaseHandle handle, LeaseReleaseRequest request) {
         return applyRuntimeMutation(handle, now -> dao.release(
                 handle.getTaskId(),
                 handle.getWorkerId(),
                 handle.getLeaseToken(),
-                now + Math.max(0L, delayMillis),
-                now
-        ));
+                now + Math.max(0L, request.getDelayMillis()),
+                now));
     }
 
     @Override
@@ -210,7 +200,8 @@ public class JdbcLeaseBackend implements LeaseBackend {
     private LeaseGrant tryAcquireOnce(LeaseAcquireRequest request) {
         long now = System.currentTimeMillis();
         try {
-            for (LeaseTaskEntity candidate : dao.findAcquirableTasks(request.getSubscriptions(), now, ACQUIRE_BATCH_SIZE)) {
+            for (LeaseTaskEntity candidate : dao.findAcquirableTasks(request.getSubscriptions(), now,
+                    ACQUIRE_BATCH_SIZE)) {
                 String leaseToken = nextLeaseToken();
                 long leaseExpiresAt = now + Math.max(1L, request.getLeaseMillis());
                 int updated = dao.tryAcquire(
@@ -218,8 +209,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
                         request.getWorkerId(),
                         leaseToken,
                         leaseExpiresAt,
-                        now
-                );
+                        now);
                 if (updated == 1) {
                     LeaseTaskEntity claimed = dao.findById(candidate.getTaskId());
                     if (claimed != null

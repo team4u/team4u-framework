@@ -1,8 +1,9 @@
 package com.team4u.framework.retry.integration.lease;
 
-import com.team4u.framework.lease.LeaseSubscription;
-import com.team4u.framework.lease.LeaseTaskHandler;
-import com.team4u.framework.lease.LeaseTaskHandlerRegistry;
+import com.team4u.framework.lease.handler.LeaseTaskHandler;
+import com.team4u.framework.lease.handler.LeaseTaskHandlerRegistry;
+import com.team4u.framework.lease.model.LeaseSubscription;
+import com.team4u.framework.lease.runtime.LeaseExecutionContext;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 
@@ -55,7 +56,8 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
             return;
         }
         if (!this.queue.equals(queue)) {
-            throw new IllegalArgumentException("Recovery handler queue mismatch. expected=" + this.queue + ", actual=" + queue);
+            throw new IllegalArgumentException(
+                    "Recovery handler queue mismatch. expected=" + this.queue + ", actual=" + queue);
         }
         // 如果已经是适配器，则提取原生的重试恢复处理器并注册
         if (handler instanceof RecoveryHandlerLeaseTaskHandlerAdapter) {
@@ -108,7 +110,7 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
 
         @Override
         public void recover(String payload) throws Exception {
-            delegate.handle(new com.team4u.framework.lease.LeaseExecutionContext(
+            delegate.handle(new LeaseExecutionContext(
                     null, null, taskType, payload, 0, 0, null, 0L, 0L, 0L, null));
         }
     }

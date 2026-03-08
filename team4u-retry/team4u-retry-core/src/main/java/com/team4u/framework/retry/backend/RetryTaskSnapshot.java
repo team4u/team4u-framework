@@ -37,6 +37,19 @@ public class RetryTaskSnapshot {
      * 任务创建时间戳
      */
     private long createdAt = System.currentTimeMillis();
+    /**
+     * 持久化策略标识
+     */
+    private String policyKey;
+    /**
+     * 本次分配的本地重试配额
+     */
+    private Integer localAttempts;
+
+    /**
+     * 程序化重试的业务载荷（与 proxy 模式的元数据二选一）
+     */
+    private String payload;
 
     /**
      * 目标对象执行环境快照：Bean 标识符

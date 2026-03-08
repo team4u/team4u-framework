@@ -1,7 +1,14 @@
 package com.team4u.framework.lease;
 
-import com.team4u.framework.base.backoff.Backoff;
+import com.team4u.framework.lease.enums.LeaseTaskStatus;
+import com.team4u.framework.lease.enums.MissingHandlerStrategy;
+import com.team4u.framework.lease.exception.NonRetryableLeaseException;
+import com.team4u.framework.lease.handler.DefaultLeaseTaskHandlerRegistry;
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
+import com.team4u.framework.lease.model.LeasePublishRequest;
+import com.team4u.framework.lease.runtime.LeaseExecutionContext;
+import com.team4u.framework.lease.runtime.LeaseWorker;
+import com.team4u.framework.lease.runtime.LeaseWorkerPolicy;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -43,10 +50,10 @@ public class LeaseWorkerTest {
     }
 
     @Test
-    public void testWorkerRetriesByFailureCountAndMarksDead() throws Exception {
+    public void testWorkerMarksDeadOnFailure() throws Exception {
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
         DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
-        CountDownLatch latch = new CountDownLatch(3);
+        CountDownLatch latch = new CountDownLatch(1);
         AtomicInteger attempts = new AtomicInteger();
 
         registry.register(DEFAULT_QUEUE, "pay", context -> {
@@ -57,9 +64,6 @@ public class LeaseWorkerTest {
 
         LeaseWorker worker = new LeaseWorker(backend, registry, LeaseWorkerPolicy.builder()
                 .workerId("worker-a")
-                .maxFailures(3)
-                .backoff(Backoff.fixed(10L))
-                .leaseMillis(100L)
                 .pollWaitMillis(20L)
                 .heartbeatEnabled(false)
                 .build());
@@ -69,9 +73,9 @@ public class LeaseWorkerTest {
             Assert.assertTrue(latch.await(2, TimeUnit.SECONDS));
 
             InMemoryLeaseBackend.StoredTask task = awaitTask(taskId, backend, LeaseTaskStatus.DEAD);
-            Assert.assertEquals(3, attempts.get());
-            Assert.assertEquals(3, task.getFailureCount());
-            Assert.assertEquals(3, task.getDeliveryCount());
+            Assert.assertEquals(1, attempts.get());
+            Assert.assertEquals(1, task.getFailureCount());
+            Assert.assertEquals(1, task.getDeliveryCount());
             Assert.assertTrue(task.getLastError().contains("boom"));
         } finally {
             worker.shutdown();
@@ -141,7 +145,8 @@ public class LeaseWorkerTest {
             Assert.assertEquals(0, context.getFailureCount());
 
             Thread.sleep(70L);
-            long remainingLeaseMillis = backend.snapshot().get(taskId).getLeaseExpiresAtMillis() - System.currentTimeMillis();
+            long remainingLeaseMillis = backend.snapshot().get(taskId).getLeaseExpiresAtMillis()
+                    - System.currentTimeMillis();
             Assert.assertTrue(remainingLeaseMillis >= 80L);
         } finally {
             release.countDown();
@@ -162,8 +167,6 @@ public class LeaseWorkerTest {
 
         LeaseWorker worker = new LeaseWorker(backend, registry, LeaseWorkerPolicy.builder()
                 .workerId("worker-a")
-                .maxFailures(10)
-                .backoff(Backoff.fixed(10L))
                 .pollWaitMillis(20L)
                 .heartbeatEnabled(false)
                 .build());
@@ -215,7 +218,8 @@ public class LeaseWorkerTest {
         shutdownThread.join(1_000L);
 
         Assert.assertTrue(shutdownFinishedAt.get() > 0L);
-        Assert.assertEquals(LeaseTaskStatus.SUCCEEDED, awaitTask(taskId, backend, LeaseTaskStatus.SUCCEEDED).getStatus());
+        Assert.assertEquals(LeaseTaskStatus.SUCCEEDED,
+                awaitTask(taskId, backend, LeaseTaskStatus.SUCCEEDED).getStatus());
     }
 
     @Test
@@ -246,7 +250,6 @@ public class LeaseWorkerTest {
                 .pollWaitMillis(20L)
                 .leaseMillis(100L)
                 .heartbeatEnabled(false)
-                .backoff(Backoff.fixed(500L))
                 .missingHandlerStrategy(MissingHandlerStrategy.RETRY_LATER)
                 .build());
         firstWorker.start("lease-worker-missing-handler");
@@ -271,7 +274,8 @@ public class LeaseWorkerTest {
         secondWorker.start("lease-worker-correct-handler");
         try {
             Assert.assertTrue(latch.await(2, TimeUnit.SECONDS));
-            Assert.assertEquals(LeaseTaskStatus.SUCCEEDED, awaitTask(taskId, backend, LeaseTaskStatus.SUCCEEDED).getStatus());
+            Assert.assertEquals(LeaseTaskStatus.SUCCEEDED,
+                    awaitTask(taskId, backend, LeaseTaskStatus.SUCCEEDED).getStatus());
         } finally {
             secondWorker.shutdown();
         }
