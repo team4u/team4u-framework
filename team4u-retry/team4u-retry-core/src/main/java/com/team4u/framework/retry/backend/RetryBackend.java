@@ -27,9 +27,30 @@ public interface RetryBackend {
     void handoff(String taskId, long delayMillis);
 
     /**
+     * 保存任务执行进度
+     * <p>
+     * 当任务在后端执行失败但仍需重试时，调用此方法更新已执行次数、错误信息等状态。
+     *
+     * @param snapshot 任务快照
+     */
+    void saveProgress(RetryTaskSnapshot snapshot);
+
+    /**
      * 完成重试任务
      * <p>
      * 当任务在内存中最终执行成功，或者重试流程终止时，清理后端的任务状态。
+     *
+     * @param taskId 任务 ID
      */
     void complete(String taskId);
+
+    /**
+     * 标记任务最终失败
+     * <p>
+     * 当重试次数耗尽或遇到不可重试异常时，调用此方法将任务标记为最终失败状态。
+     *
+     * @param taskId 任务 ID
+     * @param cause  引发失败的异常原因
+     */
+    void terminalFail(String taskId, Throwable cause);
 }

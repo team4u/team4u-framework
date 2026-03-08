@@ -147,7 +147,7 @@ public class Retryer {
                 }
 
                 if (decision == RetryDecisionType.HANDOFF_TO_BACKEND) {
-                    throw handoffToPersistence(snapshot, payloadBuilder, executedAttempts, cause);
+                    throw handoffToPersistence(taskType, snapshot, payloadBuilder, executedAttempts, cause);
                 }
 
                 long delay = policy.getDelayMillis(executedAttempts + 1);
@@ -278,7 +278,8 @@ public class Retryer {
 
         if (decision == RetryDecisionType.HANDOFF_TO_BACKEND) {
             try {
-                promise.completeExceptionally(handoffToPersistence(snapshot, payloadBuilder, executedAttempts, cause));
+                promise.completeExceptionally(
+                        handoffToPersistence(taskType, snapshot, payloadBuilder, executedAttempts, cause));
             } catch (Exception stateEx) {
                 promise.completeExceptionally(stateEx);
             }
@@ -304,7 +305,8 @@ public class Retryer {
         return snapshot;
     }
 
-    private RetryHandoffException handoffToPersistence(RetryTaskSnapshot snapshot,
+    private RetryHandoffException handoffToPersistence(String taskType,
+                                                       RetryTaskSnapshot snapshot,
                                                        RetryPayloadBuilder payloadBuilder,
                                                        int executedAttempts,
                                                        Throwable cause) {
@@ -313,21 +315,27 @@ public class Retryer {
 
         if (finalSnapshot == null) {
             finalSnapshot = payloadBuilder.build(RetryPayloadContext.handoffToBackend(nextAttempt));
-            retryBackend.prepare(finalSnapshot);
-        } else {
-            finalSnapshot.setExecutedAttempts(nextAttempt);
-            // 再次保存以更新已尝试次数
-            retryBackend.prepare(finalSnapshot);
         }
+
+        finalSnapshot.setTaskType(taskType);
+        finalSnapshot.setExecutedAttempts(nextAttempt);
+        finalSnapshot.setLastError(cause.toString());
+        long now = System.currentTimeMillis();
+        finalSnapshot.setLastAttemptAt(now);
+
+        finalSnapshot.setMaxAttempts(policy.getMaxAttempts());
+        finalSnapshot.setPolicyKey(policy instanceof NamedRetryPolicy ? ((NamedRetryPolicy) policy).key() : null);
+
+        long delay = policy.getDelayMillis(nextAttempt + 1);
+        finalSnapshot.setNextAttemptAt(delay > 0 ? now + delay : 0);
+
+        retryBackend.prepare(finalSnapshot);
 
         if (finalSnapshot.getTaskId() == null || finalSnapshot.getTaskId().isEmpty()) {
             throw new IllegalStateException("Persistent retry handoff requires a task id.");
         }
 
-        finalSnapshot.setMaxAttempts(policy.getMaxAttempts());
-        finalSnapshot.setPolicyKey(policy instanceof NamedRetryPolicy ? ((NamedRetryPolicy) policy).key() : null);
-
-        retryBackend.handoff(finalSnapshot.getTaskId(), policy.getDelayMillis(nextAttempt + 1));
+        retryBackend.handoff(finalSnapshot.getTaskId(), delay);
         return new RetryHandoffException(
                 "In-memory retries exhausted; task has been handed over to persistence storage.",
                 cause);

@@ -3,6 +3,8 @@ package com.team4u.framework.retry.integration.lease;
 import com.team4u.framework.lease.api.LeaseRuntimeClient;
 import com.team4u.framework.lease.runtime.LeaseWorker;
 import com.team4u.framework.lease.runtime.LeaseWorkerPolicy;
+import com.team4u.framework.retry.backend.RetryBackend;
+import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 
 /**
@@ -14,20 +16,25 @@ import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 public class RetryLeaseWorker implements Runnable, AutoCloseable {
 
     private final LeaseWorker delegate;
+    private final RecoveryHandlerRegistry registry;
 
-    public RetryLeaseWorker(LeaseRuntimeClient runtimeClient) {
-        this(runtimeClient, RecoveryHandlerRegistry.global(), LeaseWorkerPolicy.builder().build());
+    public RetryLeaseWorker(LeaseRuntimeClient runtimeClient, RetryBackend retryBackend) {
+        this(runtimeClient, retryBackend, RecoveryHandlerRegistry.global(), LeaseWorkerPolicy.builder().build());
     }
 
-    public RetryLeaseWorker(LeaseRuntimeClient runtimeClient, RecoveryHandlerRegistry registry) {
-        this(runtimeClient, registry, LeaseWorkerPolicy.builder().build());
+    public RetryLeaseWorker(LeaseRuntimeClient runtimeClient, RetryBackend retryBackend,
+                            RecoveryHandlerRegistry registry) {
+        this(runtimeClient, retryBackend, registry, LeaseWorkerPolicy.builder().build());
     }
 
-    public RetryLeaseWorker(LeaseRuntimeClient runtimeClient, RecoveryHandlerRegistry registry,
+    public RetryLeaseWorker(LeaseRuntimeClient runtimeClient, RetryBackend retryBackend,
+                            RecoveryHandlerRegistry registry,
                             LeaseWorkerPolicy policy) {
+        this.registry = registry;
         this.delegate = new LeaseWorker(
                 runtimeClient,
-                new RecoveryHandlerRegistryLeaseAdapter(registry, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE),
+                new RecoveryHandlerRegistryLeaseAdapter(retryBackend, registry,
+                        RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE),
                 policy);
     }
 
@@ -59,5 +66,9 @@ public class RetryLeaseWorker implements Runnable, AutoCloseable {
     @Override
     public void close() {
         delegate.close();
+    }
+
+    public void register(RecoveryHandler handler) {
+        registry.register(handler);
     }
 }

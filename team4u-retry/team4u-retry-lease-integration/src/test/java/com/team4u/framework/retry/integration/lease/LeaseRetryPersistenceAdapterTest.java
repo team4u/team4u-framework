@@ -4,6 +4,7 @@ import com.team4u.framework.lease.api.LeaseAdminService;
 import com.team4u.framework.lease.api.LeaseProducer;
 import com.team4u.framework.lease.enums.LeaseAdminResult;
 import com.team4u.framework.lease.model.LeasePublishRequest;
+import com.team4u.framework.lease.model.LeaseUpdateRequest;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import org.junit.Assert;
 import org.junit.Test;
@@ -12,6 +13,13 @@ import java.util.concurrent.atomic.AtomicReference;
 
 public class LeaseRetryPersistenceAdapterTest {
 
+    private static RetryTaskSnapshot snapshot(String taskType, String payload) {
+        RetryTaskSnapshot snapshot = new RetryTaskSnapshot();
+        snapshot.setTaskType(taskType);
+        snapshot.setPayload(payload);
+        return snapshot;
+    }
+
     @Test
     public void saveShouldPublishPreparedIntentWhenTaskIdMissing() {
         AtomicReference<LeasePublishRequest> requestRef = new AtomicReference<>();
@@ -19,8 +27,7 @@ public class LeaseRetryPersistenceAdapterTest {
             requestRef.set(request);
             return "lease-task-1";
         };
-        LeaseRetryBackend adapter =
-                new LeaseRetryBackend(producer, new NoopAdminService(), "retry-q");
+        LeaseRetryBackend adapter = new LeaseRetryBackend(producer, new NoopAdminService(), "retry-q");
         RetryTaskSnapshot snapshot = snapshot("task-a", "{\"id\":1}");
 
         adapter.prepare(snapshot);
@@ -28,7 +35,10 @@ public class LeaseRetryPersistenceAdapterTest {
         Assert.assertEquals("lease-task-1", snapshot.getTaskId());
         Assert.assertEquals("retry-q", requestRef.get().getQueue());
         Assert.assertEquals("task-a", requestRef.get().getTaskType());
-        Assert.assertEquals("{\"id\":1}", requestRef.get().getPayload());
+        // payload 现在是序列化后的完整快照 JSON，反序列化后验证原始业务载荷
+        RetryTaskSnapshot published = com.team4u.framework.retry.backend.serialize.HutoolRetryTaskSnapshotSerializer.INSTANCE
+                .deserialize(requestRef.get().getPayload());
+        Assert.assertEquals("{\"id\":1}", published.getPayload());
         Assert.assertTrue(requestRef.get().getDelayMillis() > 24L * 60L * 60L * 1000L);
     }
 
@@ -39,8 +49,7 @@ public class LeaseRetryPersistenceAdapterTest {
             requestRef.set(request);
             return "unexpected";
         };
-        LeaseRetryBackend adapter =
-                new LeaseRetryBackend(producer, new NoopAdminService());
+        LeaseRetryBackend adapter = new LeaseRetryBackend(producer, new NoopAdminService());
         RetryTaskSnapshot snapshot = snapshot("task-a", "{\"id\":1}");
         snapshot.setTaskId("existing-id");
 
@@ -52,8 +61,7 @@ public class LeaseRetryPersistenceAdapterTest {
 
     @Test
     public void saveShouldRejectNullSnapshot() {
-        LeaseRetryBackend adapter =
-                new LeaseRetryBackend(request -> "unused", new NoopAdminService());
+        LeaseRetryBackend adapter = new LeaseRetryBackend(request -> "unused", new NoopAdminService());
 
         try {
             adapter.prepare(null);
@@ -65,8 +73,7 @@ public class LeaseRetryPersistenceAdapterTest {
 
     @Test
     public void saveShouldRejectBlankTaskType() {
-        LeaseRetryBackend adapter =
-                new LeaseRetryBackend(request -> "unused", new NoopAdminService());
+        LeaseRetryBackend adapter = new LeaseRetryBackend(request -> "unused", new NoopAdminService());
         RetryTaskSnapshot snapshot = snapshot("  ", "{\"id\":1}");
 
         try {
@@ -79,8 +86,7 @@ public class LeaseRetryPersistenceAdapterTest {
 
     @Test
     public void saveShouldRejectNullPayload() {
-        LeaseRetryBackend adapter =
-                new LeaseRetryBackend(request -> "unused", new NoopAdminService());
+        LeaseRetryBackend adapter = new LeaseRetryBackend(request -> "unused", new NoopAdminService());
         RetryTaskSnapshot snapshot = snapshot("task-a", null);
 
         try {
@@ -93,9 +99,9 @@ public class LeaseRetryPersistenceAdapterTest {
 
     @Test
     public void handoffShouldThrowWhenLeaseAdminRejectsOperation() {
-        LeaseAdminService adminService = new StubAdminService(LeaseAdminResult.ACTIVE_LEASE_PRESENT, LeaseAdminResult.APPLIED);
-        LeaseRetryBackend adapter =
-                new LeaseRetryBackend(request -> "unused", adminService);
+        LeaseAdminService adminService = new StubAdminService(LeaseAdminResult.ACTIVE_LEASE_PRESENT,
+                LeaseAdminResult.APPLIED);
+        LeaseRetryBackend adapter = new LeaseRetryBackend(request -> "unused", adminService);
 
         try {
             adapter.handoff("task-1", 1000L);
@@ -107,9 +113,9 @@ public class LeaseRetryPersistenceAdapterTest {
 
     @Test
     public void deleteShouldThrowWhenLeaseAdminRejectsOperation() {
-        LeaseAdminService adminService = new StubAdminService(LeaseAdminResult.APPLIED, LeaseAdminResult.TASK_NOT_FOUND);
-        LeaseRetryBackend adapter =
-                new LeaseRetryBackend(request -> "unused", adminService);
+        LeaseAdminService adminService = new StubAdminService(LeaseAdminResult.APPLIED,
+                LeaseAdminResult.TASK_NOT_FOUND);
+        LeaseRetryBackend adapter = new LeaseRetryBackend(request -> "unused", adminService);
 
         try {
             adapter.complete("task-1");
@@ -119,16 +125,19 @@ public class LeaseRetryPersistenceAdapterTest {
         }
     }
 
-    private static RetryTaskSnapshot snapshot(String taskType, String payload) {
-        RetryTaskSnapshot snapshot = new RetryTaskSnapshot();
-        snapshot.setTaskType(taskType);
-        snapshot.setPayload(payload);
-        return snapshot;
-    }
-
     private static final class NoopAdminService implements LeaseAdminService {
         @Override
         public LeaseAdminResult reschedule(String taskId, long delayMillis) {
+            return LeaseAdminResult.APPLIED;
+        }
+
+        @Override
+        public LeaseAdminResult update(LeaseUpdateRequest request) {
+            return LeaseAdminResult.APPLIED;
+        }
+
+        @Override
+        public LeaseAdminResult fail(String taskId, String cause) {
             return LeaseAdminResult.APPLIED;
         }
 
@@ -155,6 +164,16 @@ public class LeaseRetryPersistenceAdapterTest {
         @Override
         public LeaseAdminResult reschedule(String taskId, long delayMillis) {
             return rescheduleResult;
+        }
+
+        @Override
+        public LeaseAdminResult update(LeaseUpdateRequest request) {
+            return LeaseAdminResult.APPLIED;
+        }
+
+        @Override
+        public LeaseAdminResult fail(String taskId, String cause) {
+            return LeaseAdminResult.APPLIED;
         }
 
         @Override

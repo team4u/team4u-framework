@@ -85,9 +85,9 @@
 - `taskType`：决定同一个 queue 内由哪个本地处理器处理，是路由键
 
 可以把它理解成：
+
 - queue 解决“谁来拿到任务”
 - taskType 解决“拿到以后谁来处理”
-
 
 ## 框架能做什么
 
@@ -143,14 +143,16 @@ Worker 按订阅的 `queue` 抢占可执行任务。
 * Worker 可按策略自动心跳
 * 业务代码也可以主动请求一次立即心跳
 
-### 运维查询与人工干预
+### 运营管理与人工干预
 
 支持：
 
 * 按条件分页查询任务
 * 查询单个任务详情
-* 重排执行时间
+* 修改任务类型 / payload / priority / attributes
+* 调整下次执行时间
 * 取消任务
+* 强制标记任务失败
 * 将死信任务重新放回队列
 
 ### 多种后端
@@ -170,7 +172,7 @@ Worker 按订阅的 `queue` 抢占可执行任务。
 * 运行时接口：`LeaseRuntimeClient`
 * 管理接口：`LeaseAdminService`
 * 查询接口：`LeaseQueryService`
-* 组合接口：`LeaseBackend`
+* 集成接口：`LeaseBackend`
 * Worker：`LeaseWorker`
 * Worker 配置：`LeaseWorkerPolicy`
 * 处理器注册表：`LeaseTaskHandlerRegistry`
@@ -219,21 +221,28 @@ JDBC 持久化实现 `JdbcLeaseBackend`。
 下面用内存版后端说明最基本的接入方式，通过 4 步完成闭环。
 
 ### 1. 引入后端
+
 ```java
 LeaseBackend backend = new InMemoryLeaseBackend();
 ```
 
 ### 2. 写 Handler 并注册
+
 ```java
 DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
 
-registry.register("default", "pay", context -> {
-    System.out.println("process payload=" + context.getPayload());
-    // 正常返回即为 SUCCEEDED
-});
+registry.
+
+register("default","pay",context ->{
+        System.out.
+
+println("process payload="+context.getPayload());
+        // 正常返回即为 SUCCEEDED
+        });
 ```
 
 ### 3. 创建并启动 Worker
+
 ```java
 LeaseWorker worker = new LeaseWorker(
         backend,
@@ -244,21 +253,33 @@ LeaseWorker worker = new LeaseWorker(
                 .build()
 );
 
-worker.start("lease-worker-main");
+worker.
+
+start("lease-worker-main");
 ```
 
 ### 4. 发布任务并观察
+
 ```java
 backend.publish(
         LeasePublishRequest.builder()
-                .queue("default")
-                .taskType("pay")
-                .payload("{\"orderId\":123}")
-                .build()
+                .
+
+queue("default")
+                .
+
+taskType("pay")
+                .
+
+payload("{\"orderId\":123}")
+                .
+
+build()
 );
 ```
 
 **预期结果：**
+
 - handler 正常返回：任务进入 `SUCCEEDED`
 - handler 抛出异常：任务进入 `DEAD`
 
@@ -310,16 +331,16 @@ Worker 正常执行完成后：
 * `failureCount + 1`
 * 记录 `lastError`
 
-### 租约过期
+### 租约过期处理逻辑
 
 如果 worker 没有在租约期内完成处理，也没有成功续约，那么租约到期后，该任务会再次变得可抢占。
 
-注意当前实现的语义：
+处理行为说明：
 
 * 租约自然过期不会增加 `failureCount`
 * 但下次重新被抢到时，`deliveryCount` 会继续增加
 
-这意味着系统把“超时失联”视为一次未完成投递，而不是一次明确失败。
+系统将“超时失联”视为一次未完成投递，而不是一次明确失败。
 
 ## 核心概念与数据模型
 
@@ -395,6 +416,22 @@ Worker 正常执行完成后：
 * token 是否一致
 * 租约是否还未过期
 
+### `LeaseUpdateRequest`
+
+用于运维态更新任务内容，字段包括：
+
+* `taskId`：必填
+* `taskType`：可选，非 `null` 时更新
+* `payload`：可选，非 `null` 时更新
+* `priority`：可选，非 `null` 时更新
+* `attributes`：可选，非 `null` 时整体覆盖
+
+管理行为说明：
+
+* `taskId` 不存在时返回 `TASK_NOT_FOUND`
+* 未提供任何可更新字段时，不建议调用 `update`
+* `attributes` 是整包覆盖，不是 merge
+
 ### `LeaseExecutionContext`
 
 这是处理器真正拿到的执行上下文，包括：
@@ -404,10 +441,21 @@ Worker 正常执行完成后：
 * attributes
 * 任务时间信息
 * `requestHeartbeat()`
+* `getRuntimeClient()`
+* `getHandle()`
 
 `requestHeartbeat()` 的意义是：
 
 > 当业务代码知道后面还有一段耗时逻辑时，可以主动触发一次立即续约，而不必等定时心跳。
+
+`getRuntimeClient()` 与 `getHandle()` 的意义是：
+
+> 为高级场景暴露底层租约写回能力，例如自定义执行编排、显式续约或把租约句柄传给外层组件。
+
+对于普通 handler：
+
+* 优先使用 `requestHeartbeat()`
+* 不建议在正常返回前自行调用 `ack/release/fail`，因为 `LeaseWorker` 仍会在 handler 返回后自动 `ack`
 
 ## Worker 是怎么工作的
 
@@ -442,15 +490,14 @@ Worker 正常执行完成后：
 * 任务进入 `DEAD`
 * `failureCount + 1`
 
-### 缺失处理器时会发生什么
+### 缺失处理器的处理策略
 
-可选策略由 `MissingHandlerStrategy` 控制：
+缺失处理器的行为可由 `MissingHandlerStrategy` 控制：
 
 - `FAIL_FAST`：本地没有对应 handler 时直接按失败处理，任务进入 `DEAD`。
 - `RETRY_LATER`：先释放回队列，等待具备处理能力的 Worker 接手，且不增加 `failureCount`。
 
 这个对异构 worker 部署场景非常有用。
-
 
 ### 心跳机制
 
@@ -501,7 +548,6 @@ Worker 正常执行完成后：
 - `heartbeatIntervalMillis` 默认取 `leaseMillis / 3`
 - `heartbeatIntervalMillis` 必须小于 `leaseMillis`
 
-
 ## 状态流转语义
 
 当前状态枚举只有四种：
@@ -530,15 +576,14 @@ stateDiagram-v2
 - `fail`：表示这次处理失败，任务进入 `DEAD`，会增加失败次数并记录 `lastError`
 - `release`：表示这次不想继续持有执行权（如本地忙、缺少处理器），但不视为失败
 
+### `cancel` 的行为逻辑
 
-### `cancel` 的真实语义
-
-从实现上看，`cancel` 并不是删除任务，而是：
+在逻辑设计上，`cancel` 并不是删除任务，而是：
 
 * 将状态改成 `DEAD`
 * `lastError = "cancelled"`
 
-所以被取消的任务，在系统里仍然可查询。
+因此被取消的任务仍保留在系统记录中，并可被查询。
 
 ### `ack` 会清空历史错误
 
@@ -550,11 +595,13 @@ stateDiagram-v2
 
 ## 管理操作语义
 
-| 操作 | 作用 | 典型场景 | 可能结果 |
-| --- | --- | --- | --- |
-| `reschedule` | 改下次可见时间 | 延后执行、人工改期 | APPLIED / TASK_NOT_FOUND / TERMINAL / ACTIVE_LEASE_PRESENT |
-| `cancel` | 终止任务 | 人工取消、作废任务 | APPLIED / TASK_NOT_FOUND / TERMINAL / ACTIVE_LEASE_PRESENT |
-| `requeueDead` | 把 DEAD 任务重新放回队列 | 修复环境后重跑 | APPLIED / TASK_NOT_FOUND / TERMINAL |
+| 操作            | 作用              | 典型场景                                    | 可能结果                                                       |
+|---------------|-----------------|-----------------------------------------|------------------------------------------------------------|
+| `update`      | 修改任务内容          | 修正 taskType、payload、priority、attributes | APPLIED / TASK_NOT_FOUND                                   |
+| `reschedule`  | 改下次可见时间         | 延后执行、人工改期                               | APPLIED / TASK_NOT_FOUND / TERMINAL / ACTIVE_LEASE_PRESENT |
+| `cancel`      | 终止任务            | 人工取消、作废任务                               | APPLIED / TASK_NOT_FOUND / TERMINAL / ACTIVE_LEASE_PRESENT |
+| `fail`        | 强制标记任务失败        | 人工终止异常任务、补录失败原因                         | APPLIED / TASK_NOT_FOUND                                   |
+| `requeueDead` | 把 DEAD 任务重新放回队列 | 修复环境后重跑                                 | APPLIED / TASK_NOT_FOUND / TERMINAL                        |
 
 ## JDBC 后端接入
 
@@ -562,15 +609,15 @@ stateDiagram-v2
 2. 创建 `JdbcLeaseBackend`
 3. 根据数据库选择方言
 4. 生产环境建议保留以下索引：
-   - `idx_lease_task_acquire`
-   - `idx_lease_task_worker`
-   - `idx_lease_task_type`
+    - `idx_lease_task_acquire`
+    - `idx_lease_task_worker`
+    - `idx_lease_task_type`
 
 说明：
+
 - 当前默认构造函数使用 `MySqlLeaseDbDialect`
 - 也可以显式传入 `PostgresLeaseDbDialect` 或自定义 `LeaseDbDialect`
 - 建议先用 H2 / MySQL 模式验证，再接入正式数据库
-
 
 ## 两种后端的实现方式
 
@@ -581,19 +628,19 @@ stateDiagram-v2
 * `ConcurrentMap<String, StoredTask> records`
 * `ConcurrentMap<QueueKey, DelayQueue<AvailabilityRef>> queueStates`
 
-### 它怎么判断任务是否可抢占
+### 租约抢占判定机制
 
-对于每个 queue，会维护一个 `DelayQueue`，其中记录任务下一次可用时间。
+对于每个 queue，系统会维护一个 `DelayQueue`，其中记录任务下一次可用时间。
 
 * `SCHEDULED` 任务按 `visibleAtMillis` 进入队列
 * `LEASED` 任务按 `leaseExpiresAtMillis` 进入队列
 
-Worker 抢任务时：
+Worker 抢任务时的流程：
 
-* 遍历自己订阅的 queue
-* 看该 queue 的延迟队列头部是否已到期
-* 到期后尝试 claim
-* claim 成功则写入新的租约信息
+* 遍历已订阅的 queue
+* 检查该 queue 的延迟队列头部是否已到期
+* 到期后尝试抢占任务
+* 抢占成功则写入新的租约信息
 
 ### 适用场景
 
@@ -639,7 +686,7 @@ JDBC 版将任务保存在数据库表 `lease_task` 中。
 * worker 索引：`(worker_id, status)`
 * 类型索引：`(queue_name, task_type, status)`
 
-### 它怎么抢占任务
+### 任务抢占实现原理
 
 JDBC 版不是直接 `SELECT FOR UPDATE` 一把锁死，而是两步：
 
@@ -706,7 +753,7 @@ JDBC 版不是直接 `SELECT FOR UPDATE` 一把锁死，而是两步：
 * 需要比普通线程池更稳妥的失败恢复
 * 已有数据库，希望低成本落地持久化任务系统
 
-### 什么时候不太适合
+### 限制与不适用场景
 
 不太适合：
 
@@ -734,11 +781,11 @@ JDBC 版不是直接 `SELECT FOR UPDATE` 一把锁死，而是两步：
 * 可恢复但当前不想终态失败的情况：自行调用 `release`
 * 已经进入 `DEAD` 但确认可以再跑：使用 `requeueDead`
 
-## 当前实现的边界与注意事项
+## 边界说明与注意事项
 
-这部分非常重要，它描述的是“代码真实行为”，不是泛泛而谈。
+以下是系统在特定边界场景下的具体行为逻辑：
 
-### 订阅只到 queue，不到 taskType
+### 订阅粒度
 
 后端抢占时并不知道 Worker 是否真的能处理某个 `taskType`。
 
@@ -751,9 +798,19 @@ JDBC 版不是直接 `SELECT FOR UPDATE` 一把锁死，而是两步：
 
 被取消任务仍然保留在系统中，状态为 `DEAD`，便于审计和排查。
 
-### `requeueDead` 会保留历史失败次数
+### `requeueDead` 行为说明
 
-这说明“重放”不是重新创建一条新任务，而是把原来的 `DEAD` 任务重新激活。
+“重放”机制会复用原任务记录，并保留历史失败次数。
+
+### `update` / `fail` 接口特性
+
+这两个接口和 `reschedule` / `cancel` 的约束不同：
+
+* 不要求任务当前没有活跃租约
+* 不要求任务当前不是终态
+* 接口更面向管理平台或人工补偿脚本
+
+在使用这些接口前，需自行评估对执行中任务状态的影响。
 
 ### 心跳续约是重设过期时间
 
@@ -786,19 +843,24 @@ Worker 默认传的是 `leaseMillis`，所以行为相当于“从当前时刻�
 LeaseBackend backend = new JdbcLeaseBackend(dataSource);
 DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
 
-registry.register("order", "pay", context -> {
-    String payload = context.getPayload();
+registry.
 
-    // 业务预计较长，先主动续一次约
-    context.requestHeartbeat();
+register("order","pay",context ->{
+String payload = context.getPayload();
 
-    try {
-        // do business
-    } catch (IllegalArgumentException ex) {
+// 业务预计较长，先主动续一次约
+    context.
+
+requestHeartbeat();
+
+    try{
+            // do business
+            }catch(
+IllegalArgumentException ex){
         // 明确不可恢复，直接失败
         throw ex;
     }
-});
+            });
 
 LeaseWorker worker = new LeaseWorker(
         backend,
@@ -813,7 +875,9 @@ LeaseWorker worker = new LeaseWorker(
                 .build()
 );
 
-worker.start("order-worker-thread");
+worker.
+
+start("order-worker-thread");
 
 String taskId = backend.publish(
         LeasePublishRequest.builder()

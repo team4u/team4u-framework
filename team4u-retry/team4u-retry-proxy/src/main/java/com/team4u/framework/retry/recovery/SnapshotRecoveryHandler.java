@@ -47,11 +47,9 @@ public class SnapshotRecoveryHandler implements RecoveryHandler {
     }
 
     @Override
-    public void recover(String payload) throws Exception {
-        // 反序列化快照
-        RetryTaskSnapshot snapshot = snapshotSerializer.deserialize(payload);
+    public void recover(RetryTaskSnapshot snapshot) throws Exception {
         if (snapshot == null) {
-            throw new IllegalArgumentException("任务快照反序列化结果不能为空");
+            throw new IllegalArgumentException("任务快照不能为空");
         }
 
         // 解析目标 Bean、方法及其参数

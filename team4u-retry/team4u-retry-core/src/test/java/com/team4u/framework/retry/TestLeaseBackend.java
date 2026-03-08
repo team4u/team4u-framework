@@ -19,4 +19,12 @@ public abstract class TestLeaseBackend implements RetryBackend {
     @Override
     public void complete(String taskId) {
     }
+
+    @Override
+    public void saveProgress(RetryTaskSnapshot snapshot) {
+    }
+
+    @Override
+    public void terminalFail(String taskId, Throwable cause) {
+    }
 }

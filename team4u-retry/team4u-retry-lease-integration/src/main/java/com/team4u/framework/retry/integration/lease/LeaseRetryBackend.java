@@ -5,8 +5,12 @@ import com.team4u.framework.lease.api.LeaseBackend;
 import com.team4u.framework.lease.api.LeaseProducer;
 import com.team4u.framework.lease.enums.LeaseAdminResult;
 import com.team4u.framework.lease.model.LeasePublishRequest;
+import com.team4u.framework.lease.model.LeaseUpdateRequest;
 import com.team4u.framework.retry.backend.RetryBackend;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
+import com.team4u.framework.retry.backend.serialize.HutoolRetryTaskSnapshotSerializer;
+import com.team4u.framework.retry.backend.serialize.RetryTaskSnapshotSerializer;
+import lombok.Setter;
 
 /**
  * 基于 Lease 功能实现的重试持久化适配器
@@ -20,6 +24,9 @@ public class LeaseRetryBackend implements RetryBackend {
     private final LeaseProducer producer;
     private final LeaseAdminService adminService;
     private final String queue;
+
+    @Setter
+    private RetryTaskSnapshotSerializer snapshotSerializer = HutoolRetryTaskSnapshotSerializer.INSTANCE;
 
     public LeaseRetryBackend(LeaseBackend backend) {
         this(backend, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE);
@@ -37,33 +44,6 @@ public class LeaseRetryBackend implements RetryBackend {
         this.producer = producer;
         this.adminService = adminService;
         this.queue = (queue == null || queue.trim().isEmpty()) ? RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE : queue;
-    }
-
-    @Override
-    public void prepare(RetryTaskSnapshot snapshot) {
-        validateSnapshot(snapshot);
-
-        if (snapshot.getTaskId() == null) {
-            String taskId = producer.publish(LeasePublishRequest.builder()
-                    .queue(queue)
-                    .taskType(snapshot.getTaskType())
-                    .payload(snapshot.getPayload())
-                    .delayMillis(PREPARED_INTENT_DELAY_MILLIS)
-                    .build());
-            snapshot.setTaskId(taskId);
-        }
-    }
-
-    @Override
-    public void handoff(String taskId, long delayMillis) {
-        assertTaskId(taskId, "handoff");
-        assertApplied("handoff", taskId, adminService.reschedule(taskId, delayMillis));
-    }
-
-    @Override
-    public void complete(String taskId) {
-        assertTaskId(taskId, "delete");
-        assertApplied("delete", taskId, adminService.cancel(taskId));
     }
 
     private static void validateSnapshot(RetryTaskSnapshot snapshot) {
@@ -89,5 +69,51 @@ public class LeaseRetryBackend implements RetryBackend {
             throw new IllegalStateException(
                     "Lease " + operation + " was not applied for taskId=" + taskId + ", result=" + result);
         }
+    }
+
+    @Override
+    public void prepare(RetryTaskSnapshot snapshot) {
+        validateSnapshot(snapshot);
+
+        if (snapshot.getTaskId() == null) {
+            String taskId = producer.publish(LeasePublishRequest.builder()
+                    .queue(queue)
+                    .taskType(snapshot.getTaskType())
+                    .payload(snapshotSerializer.serialize(snapshot))
+                    .delayMillis(PREPARED_INTENT_DELAY_MILLIS)
+                    .build());
+            snapshot.setTaskId(taskId);
+        } else {
+            saveProgress(snapshot);
+        }
+    }
+
+    @Override
+    public void handoff(String taskId, long delayMillis) {
+        assertTaskId(taskId, "handoff");
+        assertApplied("handoff", taskId, adminService.reschedule(taskId, delayMillis));
+    }
+
+    @Override
+    public void saveProgress(RetryTaskSnapshot snapshot) {
+        assertTaskId(snapshot.getTaskId(), "saveProgress");
+
+        assertApplied("saveProgress", snapshot.getTaskId(), adminService.update(
+                LeaseUpdateRequest.builder()
+                        .taskId(snapshot.getTaskId())
+                        .payload(snapshotSerializer.serialize(snapshot))
+                        .build()));
+    }
+
+    @Override
+    public void complete(String taskId) {
+        assertTaskId(taskId, "delete");
+        assertApplied("delete", taskId, adminService.cancel(taskId));
+    }
+
+    @Override
+    public void terminalFail(String taskId, Throwable cause) {
+        assertTaskId(taskId, "terminalFail");
+        assertApplied("terminalFail", taskId, adminService.fail(taskId, cause == null ? "" : cause.toString()));
     }
 }
