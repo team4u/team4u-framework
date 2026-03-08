@@ -36,28 +36,36 @@
 
 ## 目录
 
-* [接入方式怎么选](#接入方式怎么选)
+* [接入方式选择](#接入方式选择)
 * [快速开始](#快速开始)
+* [执行语义说明](#执行语义说明)
 * [核心概念](#核心概念)
 * [编程式接入](#编程式接入)
 * [注解式接入](#注解式接入)
 * [Spring 接入](#spring-接入)
 * [持久化降级与恢复执行](#持久化降级与恢复执行)
 * [动态策略与配置中心](#动态策略与配置中心)
-* [完整示例：内置 Backend + Worker](#完整示例内置-backend--worker)
-* [完整示例：Spring-Boot-接入](#完整示例spring-boot-接入)
+* [注意事项](#注意事项)
 * [FAQ](#faq)
 * [核心类与执行流程](#核心类与执行流程)
 
-## 接入方式怎么选
+## 接入方式选择
 
-| 你的场景              | 推荐方式                                              | 说明         |
-|-------------------|---------------------------------------------------|------------|
-| 普通 Java 代码里重试一段逻辑 | `Retryer.execute(Callable)`                       | 最简单，纯内存模式  |
-| 失败后需要移交后端继续重试     | `Retryer.execute(taskType, payloadBuilder, task)` | 支持持久化降级    |
-| 业务本身就是异步调用        | `Retryer.executeAsync(...)`                       | 非阻塞重试      |
-| 想给接口方法无侵入加重试      | `@Retryable` + `RetryProxyFactory`                | 不依赖 Spring |
-| 已经在 Spring 项目里    | `@EnableRetry` + `@Retryable`                     | 接入成本最低     |
+本项目按使用场景拆分为 4 个模块：
+
+| 场景 | 推荐模块 | 说明 |
+|---|---|---|
+| 仅需要在代码里手动包裹重试逻辑 | `team4u-retry-core` | 适合工具类、基础组件、非 Spring 场景 |
+| 希望通过注解给接口 / 类方法增加重试能力 | `team4u-retry-proxy` | 基于代理增强 `@Retryable` 方法 |
+| Spring 项目中自动识别 `@Retryable` | `team4u-retry-spring` | 通过 `@EnableRetry` 自动织入 |
+| 需要在进程退出、服务重启后继续恢复重试 | `team4u-retry-lease-integration` | 提供基于 Lease 的持久化重试后端 |
+
+> 一般建议：
+>
+> - 纯 Java 项目：优先使用 `core`
+> - 需要声明式重试：使用 `proxy`
+> - Spring 项目：使用 `spring`
+> - 对“失败后可恢复执行”有要求：结合 `lease-integration`
 
 ## 运行模式对照
 
@@ -67,12 +75,6 @@
 | 持久化降级（编程式） | 是（`RetryBackend`） | 是                   | handoff 到后端 | RetryHandoffException | 是           |
 | 持久化降级（注解式） | 是（`RetryBackend`） | 否（框架快照）             | handoff 到后端 | RetryHandoffException | 是           |
 
-### 一句话建议
-
-* 只需要本地重试：用 `Retryer.with(policy).execute(...)`
-* 需要失败后交给后端恢复：用 `Retryer.builder()` 并配置 `RetryBackend`
-* 已经在 Spring 中：优先用 `@EnableRetry`
-
 ## 快速开始
 
 ### Maven 依赖
@@ -80,7 +82,6 @@
 编程式最小依赖：
 
 ```xml
-
 <dependency>
     <groupId>com.team4u</groupId>
     <artifactId>team4u-retry-core</artifactId>
@@ -88,38 +89,63 @@
 </dependency>
 ```
 
-注解式代理额外需要：
+想要持久化重试（基于 Lease）：
 
 ```xml
-
-<dependency>
-    <groupId>com.team4u</groupId>
-    <artifactId>team4u-retry-proxy</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
-</dependency>
-```
-
-Spring 自动代理额外需要：
-
-```xml
-
-<dependency>
-    <groupId>com.team4u</groupId>
-    <artifactId>team4u-retry-spring</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
-</dependency>
-```
-
-如果你要对接 `team4u-lease` 做持久化恢复，还需要：
-
-```xml
-
 <dependency>
     <groupId>com.team4u</groupId>
     <artifactId>team4u-retry-lease-integration</artifactId>
     <version>1.0.0-SNAPSHOT</version>
 </dependency>
 ```
+
+### 最小完整示例
+
+#### 内存模式
+
+```java
+RetryPolicy policy = RetryPolicy.builder()
+        .maxAttempts(3)
+        .build();
+
+Retryer retryer = Retryer.with(policy);
+
+String result = retryer.execute(() -> {
+    // 业务逻辑
+    return "ok";
+});
+```
+
+#### 持久化模式
+
+```java
+RetryPolicy policy = RetryPolicy.builder()
+        .maxAttempts(5)
+        .localAttempts(2)
+        .build();
+
+RetryBackend backend = ...;
+
+Retryer retryer = Retryer.builder()
+        .policy(policy)
+        .retryBackend(backend)
+        .build();
+
+String result = retryer.execute(
+        "order-submit",
+        context -> {
+            RetryTaskSnapshot snapshot = new RetryTaskSnapshot();
+            snapshot.setTaskId("order-123");
+            return snapshot;
+        },
+        () -> {
+            // 业务逻辑
+            return "ok";
+        }
+);
+```
+
+> 若本地尝试耗尽但未达到最大尝试次数，框架会抛出 `RetryHandoffException`，表示任务已移交后端继续处理。
 
 ### 1）同步重试：最小示例
 
@@ -213,6 +239,38 @@ RetryHandoffException ex){
         // 这个异常不是“彻底失败”，而是“托管权转移”
         }
 ```
+
+## 执行语义说明
+
+### `maxAttempts` 是什么？
+
+`maxAttempts` 表示**总执行次数上限**，包含首次执行，不是“失败后的额外重试次数”。
+
+例如：
+
+- `maxAttempts = 1`：只执行一次，不重试
+- `maxAttempts = 3`：最多执行 3 次（首次 + 最多 2 次重试）
+
+### `localAttempts` 是什么？
+
+`localAttempts` 表示**前台 / 当前进程内最多尝试次数**。
+
+它仅在**持久化重试模式**下有意义：
+
+- 当未配置持久化后端时，所有尝试都在当前进程内完成
+- 当配置了持久化后端时：
+  - 若失败次数仍在 `localAttempts` 范围内，则继续本地重试
+  - 若超出 `localAttempts`，但还未达到 `maxAttempts`，则任务会移交给后端继续调度执行
+
+### 什么是 handoff？
+
+当本地尝试次数耗尽，但任务仍可继续重试时，框架会把任务移交给持久化后端，此时会抛出 `RetryHandoffException`。
+
+请注意：
+
+- `RetryHandoffException` **不代表最终失败**
+- 它表示：**前台执行已结束，任务已交由后端继续处理**
+- 如果你的系统接入了告警，请避免把它误判为业务最终失败
 
 ## 核心概念
 
@@ -412,67 +470,33 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), RetryBack
 
 ### `@Retryable` 参数说明
 
-* `policy`：策略名，默认 `default`
-* `taskType`：任务类型，用于后端恢复路由
+- `policy`：重试策略标识，对应策略注册表中的 Key
+- `taskType`：持久化恢复时用于定位 `RecoveryHandler` 的任务类型
+- `payload`：预留的附加业务信息字段
 
-规则如下：
+> 当前版本中，注解模式下的持久化恢复主要依赖方法调用快照（如 bean、方法名、参数类型、参数值等）。
+> `payload` 可作为补充信息使用，但不建议把它视为注解模式下唯一的恢复依据。
 
-* 如果显式写了 `taskType`，优先使用显式值
-* 如果没写 `taskType`，但运行时存在 `RetryBackend`，则自动使用默认任务类型：
-  `RetryTaskTypes.DEFAULT_PROXY_RECOVERY`
-* 如果没有 `RetryBackend`，则只做本地重试，不进入后端恢复链路
+## 注解模式下的持久化快照内容
 
-### 注解模式下保存的不是你手写的 JSON
+在 `@Retryable` 的持久化重试模式下，框架默认不是简单保存一个字符串 payload，而是会基于方法调用现场生成可恢复的任务快照。
 
-和编程式接入不同，注解式接入通常不会让你手工写 payload。
+典型快照内容包括：
 
-当存在 `RetryBackend` 时，框架会把方法调用现场冻结成一份 `RetryTaskSnapshot`，里面会包含：
+- Spring / Bean 容器中的 `beanName`
+- 调用的 `methodName`
+- 参数类型列表 `argTypes`
+- 参数序列化结果 `argJsonValues`
+- `taskType`
+- 当前策略相关信息（如最大尝试次数）
+- 自动生成或后端分配的 `taskId`
 
-* `beanName`
-* `methodName`
-* `argTypes`
-* `argJsonValues`
-* `taskId`
-* `createdAt`
-* `executedAttempts`
-* `maxAttempts`
-* `policyKey`
-* `lastError`
-
-也就是说：
-
-* 编程式接入：你自己定义 payload 结构
-* 注解式接入：框架帮你托管方法调用快照
-
-### 注解快照的冻结语义
-
-一旦 `RetryTaskSnapshot` 被构建出来，恢复所需的关键数据就会固定下来：
-
-* 参数按构建时的状态冻结
-* 同一个业务意图在整个重试周期内复用同一个 `taskId`
-* `createdAt` 在整个生命周期中保持一致
-
-这能确保后端拿到的是一份稳定的恢复材料，而不是运行时被继续修改过的对象。
+恢复执行时，后台 Worker 会根据这些信息重新定位方法并恢复调用。
 
 ### `@RetryIgnore`
 
-如果某些参数不适合被序列化，比如：
+如果某个参数不适合进入快照（例如请求上下文、流对象、不可序列化对象、大对象），可以在参数上使用 `@RetryIgnore`，框架会在构建快照时跳过该参数。
 
-* `HttpServletRequest`
-* `InputStream`
-* 本地连接对象
-* 线程上下文对象
-* 超大对象
-
-可以用 `@RetryIgnore` 标记跳过：
-
-```java
-public interface TestService {
-    void doWork(String name, @RetryIgnore Object secret);
-}
-```
-
-但要注意：凡是被忽略的参数，恢复阶段就不能再依赖它。
 
 ## Spring 接入
 
@@ -540,6 +564,33 @@ public class PayServiceImpl {
 * 与 `@Transactional`、日志、监控等多个 Advisor 共存时，生效顺序取决于代理链顺序
 
 如果你要求“自调用也能触发重试”，建议把待重试逻辑拆到独立 Bean，或者改用编程式接入。
+
+## 注意事项
+
+### 1. 内存模式与持久化模式的 API 不同
+
+当配置了持久化后端后，不能再使用仅适用于内存模式的简化 API，例如：
+
+- `Retryer.execute(Callable<T>)`
+- `Retryer.executeAsync(Supplier<CompletableFuture<T>>, ScheduledExecutorService)`
+
+此时应使用带 `taskType` 和 `payloadBuilder` 的持久化模式 API。
+
+### 2. 持久化模式要求可生成有效 `taskId`
+
+若后端在 `prepare` 阶段未能为任务生成或补全 `taskId`，框架会快速失败并抛出异常。
+
+### 3. Spring 环境下推荐开启 `@EnableRetry`
+
+在 Spring 项目中，建议通过 `@EnableRetry` 开启自动重试支持，由框架自动注册代理与生命周期管理逻辑。
+
+### 4. 恢复执行过程中不会重复进入重试增强链路
+
+框架内部会使用恢复执行上下文标记，避免任务在恢复执行时再次被代理层重复包装。
+
+### 5. 异步重试依赖调度线程池
+
+异步执行依赖 `ScheduledExecutorService` 进行延迟调度；如未显式指定清理执行器，框架会使用全局执行器完成关闭和清理动作。
 
 ## FAQ
 
@@ -745,40 +796,44 @@ RetryTaskTypes.DEFAULT_PROXY_RECOVERY
 * 一次补偿执行
 * 而不是重新从入口完整走一遍调用侧托管流程
 
-## 动态策略与配置中心
+## 策略加载优先级
 
-`DynamicRetryPolicyRegistry` 支持从配置中心读取前缀为 `retry.policy.` 的配置。
+框架在解析策略时，按以下顺序查找：
 
-例如：
+1. 动态策略注册表
+2. 静态全局策略注册表
+
+也就是说，若同名策略同时存在，动态策略会覆盖静态策略。
+
+## 动态策略配置示例
+
+动态策略通常以 `retry.policy.` 作为前缀，例如：
 
 ```properties
-retry.policy.pay-notify={
-"maxAttempts"=5,
-"localAttempts"=2,
-"backoffType"="exponentialJitter",
-"initialDelay"=200,
-"multiplier"=2.0,
-"maxDelay"=5000
+retry.policy.order-submit={
+  "maxAttempts"=6,
+  "localAttempts"=2,
+  "backoffType"="EXPONENTIAL",
+  "initialDelay"=500,
+  "multiplier"=2.0,
+  "maxDelay"=10000,
+  "retryOnExceptions"=["java.net.SocketTimeoutException", "java.io.IOException"],
+  "abortOnExceptions"=["java.lang.IllegalArgumentException"],
+  "condition"=""
 }=
 ```
 
-获取方式：
+可配置字段包括：
 
-```java
-RetryPolicy policy = DynamicRetryPolicyRegistry.getPolicy("pay-notify");
-```
-
-约定：
-
-* 传入的 key 不带前缀
-* 底层会查找 `retry.policy.pay-notify`
-* 动态策略查不到时，注解式接入会回退到静态注册表
-
-适用场景：
-
-* 线上动态调参
-* 针对不同任务类型设置不同策略
-* 快速收敛重试风暴
+* `maxAttempts`
+* `localAttempts`
+* `backoffType`
+* `initialDelay`
+* `multiplier`
+* `maxDelay`
+* `retryOnExceptions`
+* `abortOnExceptions`
+* `condition`
 
 ## 完整示例：内置 Backend + Worker
 
