@@ -143,11 +143,11 @@ public class RetryerTest {
 
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public void save(RetryTaskSnapshot snapshot) {
+            public void prepare(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void delete(String taskId) {
+            public void complete(String taskId) {
             }
 
             @Override
@@ -196,11 +196,11 @@ public class RetryerTest {
 
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public void save(RetryTaskSnapshot snapshot) {
+            public void prepare(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void delete(String taskId) {
+            public void complete(String taskId) {
             }
 
             @Override
@@ -244,11 +244,11 @@ public class RetryerTest {
         // [2] 模拟后端
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public void save(RetryTaskSnapshot snapshot) {
+            public void prepare(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void delete(String taskId) {
+            public void complete(String taskId) {
                 // 模拟 IO 耗时
                 try {
                     Thread.sleep(100);
@@ -294,11 +294,11 @@ public class RetryerTest {
         // [2] 模拟后端
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public void save(RetryTaskSnapshot snapshot) {
+            public void prepare(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void delete(String taskId) {
+            public void complete(String taskId) {
                 latch.countDown();
             }
 
@@ -343,11 +343,11 @@ public class RetryerTest {
 
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public void save(RetryTaskSnapshot snapshot) {
+            public void prepare(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void delete(String taskId) {
+            public void complete(String taskId) {
             }
 
             @Override
@@ -417,11 +417,11 @@ public class RetryerTest {
         RetryPolicy policy = RetryPolicy.builder().build();
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public void save(RetryTaskSnapshot snapshot) {
+            public void prepare(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void delete(String taskId) {
+            public void complete(String taskId) {
             }
 
             @Override
@@ -450,11 +450,11 @@ public class RetryerTest {
 
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public void save(RetryTaskSnapshot snapshot) {
+            public void prepare(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void delete(String taskId) {
+            public void complete(String taskId) {
             }
 
             @Override
@@ -497,11 +497,11 @@ public class RetryerTest {
         RetryPolicy policy = RetryPolicy.builder().maxAttempts(2).build();
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public void save(RetryTaskSnapshot snapshot) {
+            public void prepare(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void delete(String taskId) {
+            public void complete(String taskId) {
             }
 
             @Override
@@ -529,11 +529,11 @@ public class RetryerTest {
         RetryPolicy policy = RetryPolicy.builder().maxAttempts(2).build();
         TestLeaseBackend backend = new TestLeaseBackend() {
             @Override
-            public void save(RetryTaskSnapshot snapshot) {
+            public void prepare(RetryTaskSnapshot snapshot) {
             }
 
             @Override
-            public void delete(String taskId) {
+            public void complete(String taskId) {
             }
 
             @Override

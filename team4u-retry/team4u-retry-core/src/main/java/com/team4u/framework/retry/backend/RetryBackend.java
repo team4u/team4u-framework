@@ -1,22 +1,22 @@
 package com.team4u.framework.retry.backend;
 
 /**
- * 重试持久化适配器
+ * 重试后端
  * <p>
- * 定义重试任务持久化存储与状态管理的抽象接口，取代旧的 RetryBackend。
+ * 定义重试任务持久化存储与状态管理的抽象接口
  *
  * @author jay.wu
  */
 public interface RetryBackend {
 
     /**
-     * 保存重试任务快照
+     * 将任务正式移交给后端重试
      * <p>
-     * 具体实现可以只支持 prepare 阶段的初始化持久化，不保证支持运行中快照更新。
+     * 激活预处理的意向，使其进入重试队列或调度系统。
      *
      * @param snapshot 任务快照
      */
-    void save(RetryTaskSnapshot snapshot);
+    void prepare(RetryTaskSnapshot snapshot);
 
     /**
      * 正式移交任务至异步处理链（如进入延迟队列或租约系统）
@@ -27,9 +27,9 @@ public interface RetryBackend {
     void handoff(String taskId, long delayMillis);
 
     /**
-     * 删除/完成重试任务
-     *
-     * @param taskId 任务 ID
+     * 完成重试任务
+     * <p>
+     * 当任务在内存中最终执行成功，或者重试流程终止时，清理后端的任务状态。
      */
-    void delete(String taskId);
+    void complete(String taskId);
 }

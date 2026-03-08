@@ -128,14 +128,14 @@ public class RetryBackendModeTest {
         CountDownLatch completeLatch = new CountDownLatch(1);
 
         @Override
-        public void save(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
+        public void prepare(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
             String id = "intent-" + saveCount.incrementAndGet();
             lastIntentId.set(id);
             snapshot.setTaskId(id);
         }
 
         @Override
-        public void delete(String taskId) {
+        public void complete(String taskId) {
             completedIntentId.set(taskId);
             completeLatch.countDown();
         }

@@ -57,7 +57,7 @@ public class DepthOptimizationTest {
                 .policy(RetryPolicy.builder().build())
                 .retryBackend(new TestLeaseBackend() {
                     @Override
-                    public void save(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
+                    public void prepare(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
                     }
 
                     @Override
@@ -65,7 +65,7 @@ public class DepthOptimizationTest {
                     }
 
                     @Override
-                    public void delete(String taskId) {
+                    public void complete(String taskId) {
                     }
                 })
                 .build()
