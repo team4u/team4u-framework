@@ -1,9 +1,6 @@
 package com.team4u.framework.lease.model;
 
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
+import lombok.*;
 
 import java.util.Collections;
 import java.util.List;
@@ -11,9 +8,8 @@ import java.util.List;
 /**
  * 任务分页查询结果包装类
  */
-@Getter
+@Data
 @Builder
-@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class LeaseTaskPage {
 
     /**

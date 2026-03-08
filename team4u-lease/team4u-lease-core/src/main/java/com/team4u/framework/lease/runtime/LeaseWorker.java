@@ -3,7 +3,6 @@ package com.team4u.framework.lease.runtime;
 import com.team4u.framework.lease.api.LeaseRuntimeClient;
 import com.team4u.framework.lease.enums.LeaseRuntimeResult;
 import com.team4u.framework.lease.enums.MissingHandlerStrategy;
-import com.team4u.framework.lease.exception.NonRetryableLeaseException;
 import com.team4u.framework.lease.handler.LeaseTaskHandler;
 import com.team4u.framework.lease.handler.LeaseTaskHandlerRegistry;
 import com.team4u.framework.lease.model.*;
@@ -136,8 +135,6 @@ public class LeaseWorker implements Runnable, AutoCloseable {
                     }
                     handler.handle(toExecutionContext(grant, heartbeatTask));
                     handleWriteResult("ack", grant, runtimeClient.ack(grant.getHandle()));
-                } catch (NonRetryableLeaseException ex) {
-                    handleFailure(grant, ex);
                 } catch (Exception ex) {
                     handleFailure(grant, ex);
                 } finally {
@@ -184,18 +181,19 @@ public class LeaseWorker implements Runnable, AutoCloseable {
 
     private LeaseExecutionContext toExecutionContext(LeaseGrant grant, HeartbeatTask heartbeatTask) {
         Runnable heartbeatRequester = heartbeatTask == null ? null : heartbeatTask::requestNow;
-        return new LeaseExecutionContext(
-                grant.getTaskId(),
-                grant.getQueue(),
-                grant.getTaskType(),
-                grant.getPayload(),
-                grant.getDeliveryCount(),
-                grant.getFailureCount(),
-                grant.getAttributes(),
-                grant.getCreatedAtMillis(),
-                grant.getVisibleAtMillis(),
-                grant.getLeaseExpiresAtMillis(),
-                heartbeatRequester);
+        return LeaseExecutionContext.builder()
+                .taskId(grant.getTaskId())
+                .queue(grant.getQueue())
+                .taskType(grant.getTaskType())
+                .payload(grant.getPayload())
+                .deliveryCount(grant.getDeliveryCount())
+                .failureCount(grant.getFailureCount())
+                .attributes(grant.getAttributes())
+                .createdAtMillis(grant.getCreatedAtMillis())
+                .visibleAtMillis(grant.getVisibleAtMillis())
+                .leaseExpiresAtMillis(grant.getLeaseExpiresAtMillis())
+                .heartbeatRequester(heartbeatRequester)
+                .build();
     }
 
     private void handleMissingHandler(LeaseGrant grant) {
