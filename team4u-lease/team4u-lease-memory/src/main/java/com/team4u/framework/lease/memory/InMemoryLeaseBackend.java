@@ -213,12 +213,12 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                 .total(matches.size())
                 .page(page)
                 .pageSize(pageSize)
-                .items(new ArrayList<LeaseTaskRecord>(matches.subList(fromIndex, toIndex)))
+                .items(new ArrayList<>(matches.subList(fromIndex, toIndex)))
                 .build();
     }
 
     public synchronized Map<String, StoredTask> snapshot() {
-        Map<String, StoredTask> snapshot = new LinkedHashMap<String, StoredTask>();
+        Map<String, StoredTask> snapshot = new LinkedHashMap<>();
         for (Map.Entry<String, StoredTask> entry : records.entrySet()) {
             snapshot.put(entry.getKey(), entry.getValue().toBuilder().build());
         }
