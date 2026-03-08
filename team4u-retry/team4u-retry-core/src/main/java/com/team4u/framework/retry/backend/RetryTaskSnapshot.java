@@ -47,6 +47,19 @@ public class RetryTaskSnapshot {
     private Integer localAttempts;
 
     /**
+     * 最后一次尝试失败的错误信息
+     */
+    private String lastError;
+    /**
+     * 上一次尝试的时间戳
+     */
+    private Long lastAttemptAt;
+    /**
+     * 下一次尝试的时间戳
+     */
+    private Long nextAttemptAt;
+
+    /**
      * 程序化重试的业务载荷（与 proxy 模式的元数据二选一）
      */
     private String payload;

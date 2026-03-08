@@ -193,6 +193,8 @@ public class LeaseWorker implements Runnable, AutoCloseable {
                 .visibleAtMillis(grant.getVisibleAtMillis())
                 .leaseExpiresAtMillis(grant.getLeaseExpiresAtMillis())
                 .heartbeatRequester(heartbeatRequester)
+                .runtimeClient(runtimeClient)
+                .handle(grant.getHandle())
                 .build();
     }
 

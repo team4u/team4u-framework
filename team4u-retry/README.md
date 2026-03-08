@@ -34,8 +34,6 @@
 * 幂等冲突
 * 明确的业务拒绝类异常
 
-
-
 ## 目录
 
 * [接入方式怎么选](#接入方式怎么选)
@@ -51,12 +49,10 @@
 * [FAQ](#faq)
 * [核心类与执行流程](#核心类与执行流程)
 
-
-
 ## 接入方式怎么选
 
 | 你的场景              | 推荐方式                                              | 说明         |
-| -- | - | - |
+|-------------------|---------------------------------------------------|------------|
 | 普通 Java 代码里重试一段逻辑 | `Retryer.execute(Callable)`                       | 最简单，纯内存模式  |
 | 失败后需要移交后端继续重试     | `Retryer.execute(taskType, payloadBuilder, task)` | 支持持久化降级    |
 | 业务本身就是异步调用        | `Retryer.executeAsync(...)`                       | 非阻塞重试      |
@@ -65,20 +61,17 @@
 
 ## 运行模式对照
 
-| 模式 | 是否需要持久化适配器 | 是否需要 payloadBuilder | 本地耗尽后 | 调用方看到什么 | 是否需要 Worker |
-| --- | --- | --- | --- | --- | --- |
-| 纯内存同步/异步 | 否 | 否 | 直接结束 | 最终业务异常 | 否 |
-| 持久化降级（编程式） | 是（`RetryBackend`） | 是 | handoff 到后端 | RetryHandoffException | 是 |
-| 持久化降级（注解式） | 是（`RetryBackend`） | 否（框架快照） | handoff 到后端 | RetryHandoffException | 是 |
-
+| 模式         | 是否需要持久化适配器        | 是否需要 payloadBuilder | 本地耗尽后       | 调用方看到什么               | 是否需要 Worker |
+|------------|-------------------|---------------------|-------------|-----------------------|-------------|
+| 纯内存同步/异步   | 否                 | 否                   | 直接结束        | 最终业务异常                | 否           |
+| 持久化降级（编程式） | 是（`RetryBackend`） | 是                   | handoff 到后端 | RetryHandoffException | 是           |
+| 持久化降级（注解式） | 是（`RetryBackend`） | 否（框架快照）             | handoff 到后端 | RetryHandoffException | 是           |
 
 ### 一句话建议
 
 * 只需要本地重试：用 `Retryer.with(policy).execute(...)`
 * 需要失败后交给后端恢复：用 `Retryer.builder()` 并配置 `RetryBackend`
 * 已经在 Spring 中：优先用 `@EnableRetry`
-
-
 
 ## 快速开始
 
@@ -87,6 +80,7 @@
 编程式最小依赖：
 
 ```xml
+
 <dependency>
     <groupId>com.team4u</groupId>
     <artifactId>team4u-retry-core</artifactId>
@@ -97,6 +91,7 @@
 注解式代理额外需要：
 
 ```xml
+
 <dependency>
     <groupId>com.team4u</groupId>
     <artifactId>team4u-retry-proxy</artifactId>
@@ -107,6 +102,7 @@
 Spring 自动代理额外需要：
 
 ```xml
+
 <dependency>
     <groupId>com.team4u</groupId>
     <artifactId>team4u-retry-spring</artifactId>
@@ -117,14 +113,13 @@ Spring 自动代理额外需要：
 如果你要对接 `team4u-lease` 做持久化恢复，还需要：
 
 ```xml
+
 <dependency>
     <groupId>com.team4u</groupId>
     <artifactId>team4u-retry-lease-integration</artifactId>
     <version>1.0.0-SNAPSHOT</version>
 </dependency>
 ```
-
-
 
 ### 1）同步重试：最小示例
 
@@ -151,8 +146,6 @@ String result = retryer.execute(() -> {
 * 本地快速重试
 * 不需要任务持久化
 * 不需要后端恢复
-
-
 
 ### 2）异步重试：最小示例
 
@@ -186,8 +179,6 @@ CompletableFuture<String> future = retryer.executeAsync(
 * 不会阻塞当前线程去 `sleep`
 * 通过 `ScheduledExecutorService` 调度下一次尝试
 
-
-
 ### 3）注解式重试：最小示例
 
 ```java
@@ -210,18 +201,18 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), null);
 当你配置了 `RetryBackend` 时，本地重试次数耗尽后会抛出 `RetryHandoffException` 并将任务移交给后端：
 
 ```java
-try {
-    retryer.execute("pay-notify", ctx -> "{\"orderId\":\"A1001\"}", () -> {
-        throw new RuntimeException("downstream timeout");
+try{
+        retryer.execute("pay-notify",ctx ->"{\"orderId\":\"A1001\"}",()->{
+        throw new
+
+RuntimeException("downstream timeout");
     });
-} catch (RetryHandoffException ex) {
-    // 表示前台本地尝试已经结束，但任务已交给后端继续恢复
-    // 这个异常不是“彻底失败”，而是“托管权转移”
-}
+            }catch(
+RetryHandoffException ex){
+        // 表示前台本地尝试已经结束，但任务已交给后端继续恢复
+        // 这个异常不是“彻底失败”，而是“托管权转移”
+        }
 ```
-
-
-
 
 ## 核心概念
 
@@ -261,8 +252,6 @@ RetryPolicy policy = RetryPolicy.builder()
 * 纯内存模式下，`localAttempts` 默认等于 `maxAttempts`
 * 持久化模式下，如果不显式设置 `localAttempts`，当前实现默认只在前台尝试 2 次
 
-
-
 ### 2. `Backoff`
 
 `Backoff` 决定每次失败后等待多久再重试。
@@ -284,17 +273,14 @@ Backoff.exponentialJitter(...)
 
 ## 异常与终止规则
 
-| 情况 | 是否重试 | 说明 |
-| --- | --- | --- |
-| 命中 `retryOn` | 是 | 按策略继续 |
-| 命中 `abortOn` | 否 | 立即终止 |
-| `CompletionException` / `ExecutionException` 等包装异常 | 看根因 | 框架会先解包 |
-| `InterruptedException` | 否 | 立即终止并恢复中断标记 |
-| `Error` | 否 | 直接透传 |
-| 持久化模式下本地预算耗尽 | 不在当前线程继续 | 交给后端，前台抛 `RetryHandoffException` |
-
-
-
+| 情况                                                 | 是否重试     | 说明                               |
+|----------------------------------------------------|----------|----------------------------------|
+| 命中 `retryOn`                                       | 是        | 按策略继续                            |
+| 命中 `abortOn`                                       | 否        | 立即终止                             |
+| `CompletionException` / `ExecutionException` 等包装异常 | 看根因      | 框架会先解包                           |
+| `InterruptedException`                             | 否        | 立即终止并恢复中断标记                      |
+| `Error`                                            | 否        | 直接透传                             |
+| 持久化模式下本地预算耗尽                                       | 不在当前线程继续 | 交给后端，前台抛 `RetryHandoffException` |
 
 ### 3. 内存重试 vs 持久化重试
 
@@ -313,8 +299,6 @@ Backoff.exponentialJitter(...)
 * 本地尝试耗尽后，任务移交后端继续恢复执行
 * 更适合需要抗宕机的场景
 
-
-
 ### 4. 恢复执行
 
 当任务被移交到后端后，后端 Worker 会根据 `taskType` 找到对应的 `RecoveryHandler`，然后使用保存下来的 `payload` 或快照继续恢复执行。
@@ -323,8 +307,6 @@ Backoff.exponentialJitter(...)
 
 * 调用侧负责首次执行和本地重试
 * 后端负责任务托管和后续恢复
-
-
 
 ## 编程式接入
 
@@ -337,8 +319,6 @@ String result = retryer.execute(() -> doBusiness());
 ```
 
 这是最简单的方式，只适用于纯内存模式。
-
-
 
 ### 支持后端降级的同步重试
 
@@ -366,12 +346,10 @@ String result = retryer.execute(
 例如支付通知失败后要交给后端继续处理，至少要能知道是哪笔订单：
 
 ```java
-context -> "{\"orderId\":\"A1001\"}"
+context ->"{\"orderId\":\"A1001\"}"
 ```
 
 否则后端只能知道“有个 pay-notify 任务失败了”，却不知道该恢复哪一条业务。
-
-
 
 ### `RetryPayloadContext` 是什么
 
@@ -393,12 +371,10 @@ context -> "{\"orderId\":\"A1001\"}"
 但当前默认执行路径中，`payloadBuilder` 实际只会收到一次 `PREPARE_INTENT` 回调，所以大多数场景直接返回固定 payload 即可：
 
 ```java
-context -> "{\"orderId\":\"A1001\"}"
+context ->"{\"orderId\":\"A1001\"}"
 ```
 
 如果后续持久化实现扩展为在 handoff 阶段再次构建快照，再利用 `HANDOFF_TO_BACKEND` 分支即可。
-
-
 
 ### 异步非阻塞重试
 
@@ -417,8 +393,6 @@ CompletableFuture<String> future = retryer.executeAsync(
 * 下一次尝试由 `ScheduledExecutorService` 调度
 * 调度器异常关闭时，`future` 会异常完成，不会悬挂
 
-
-
 ## 注解式接入
 
 ### 基础用法
@@ -436,8 +410,6 @@ public interface PayService {
 PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), RetryBackend);
 ```
 
-
-
 ### `@Retryable` 参数说明
 
 * `policy`：策略名，默认 `default`
@@ -449,8 +421,6 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), RetryBack
 * 如果没写 `taskType`，但运行时存在 `RetryBackend`，则自动使用默认任务类型：
   `RetryTaskTypes.DEFAULT_PROXY_RECOVERY`
 * 如果没有 `RetryBackend`，则只做本地重试，不进入后端恢复链路
-
-
 
 ### 注解模式下保存的不是你手写的 JSON
 
@@ -466,13 +436,15 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), RetryBack
 * `createdAt`
 * `executedAttempts`
 * `maxAttempts`
+* `policyKey`
+* `lastError`
+* `lastAttemptAt`
+* `nextAttemptAt`
 
 也就是说：
 
 * 编程式接入：你自己定义 payload 结构
 * 注解式接入：框架帮你托管方法调用快照
-
-
 
 ### 注解快照的冻结语义
 
@@ -483,8 +455,6 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), RetryBack
 * `createdAt` 在整个生命周期中保持一致
 
 这能确保后端拿到的是一份稳定的恢复材料，而不是运行时被继续修改过的对象。
-
-
 
 ### `@RetryIgnore`
 
@@ -506,8 +476,6 @@ public interface TestService {
 
 但要注意：凡是被忽略的参数，恢复阶段就不能再依赖它。
 
-
-
 ## Spring 接入
 
 如果你已经在 Spring 中，推荐这个方式，接入成本最低。
@@ -520,8 +488,6 @@ public interface TestService {
 public class RetryConfig {
 }
 ```
-
-
 
 ### 2）注册策略
 
@@ -549,8 +515,6 @@ RetryPolicyRegistry.global().register(new NamedRetryPolicy() {
 
 则运行期优先使用动态配置。
 
-
-
 ### 3）在 Bean 上使用
 
 ```java
@@ -564,15 +528,12 @@ public class PayServiceImpl {
 }
 ```
 
-
-
 > ⚠️ 注意
 > 在 Spring 中提供 `RetryBackend` 只代表允许持久化降级。
 > 如果没有同时启动后端 Worker 并注册对应 `RecoveryHandler`，
 > 任务虽然会成功入队，但不会被恢复执行。
 
 ### 4）Spring AOP 边界
-
 
 这个模块遵循标准 Spring AOP 规则，因此要注意：
 
@@ -629,7 +590,6 @@ public class PayServiceImpl {
 
 在非 Spring 场景下，建议显式调用 `RetryExecutorManager.global().shutdown()` 以优雅关闭内置线程池。
 
-
 ### 模式语义
 
 当前有两种运行模式：
@@ -652,8 +612,6 @@ public class PayServiceImpl {
 
 所以你的业务恢复逻辑应该具备幂等性。
 
-
-
 ### `payload`、`intent`、`taskId` 的区别
 
 这三个概念很容易混。
@@ -667,8 +625,6 @@ public class PayServiceImpl {
 * `payload` 回答“后端拿什么来恢复”
 * `intent` 回答“系统是否已经正式托管这次任务”
 
-
-
 ### `RetryBackend` 的职责
 
 当前 `Retryer` 实际对接的是 `RetryBackend`，它承担持久化能力：
@@ -676,21 +632,25 @@ public class PayServiceImpl {
 ```java
 public interface RetryBackend {
 
-    void save(RetryTaskSnapshot snapshot);
+    void prepare(RetryTaskSnapshot snapshot);
 
     void handoff(String taskId, long delayMillis);
 
-    void delete(String taskId);
+    void saveProgress(RetryTaskSnapshot snapshot);
+
+    void complete(String taskId);
+
+    void terminalFail(String taskId, Throwable cause);
 }
 ```
 
 语义上：
 
-* `save(...)`：执行前保存或更新任务快照
-* `handoff(...)`：本地重试耗尽后，正式移交后端
-* `delete(...)`：任务成功或终止后，异步清理该任务
-
-
+* `prepare(...)`：执行前预写任务意图；已有 `taskId` 时也可用于补充最新快照
+* `handoff(...)`：本地重试耗尽后，正式激活后端恢复链路
+* `saveProgress(...)`：后端恢复失败但仍需继续重试时，保存执行进度
+* `complete(...)`：任务成功后清理或终止该任务
+* `terminalFail(...)`：达到终态失败时，记录最终失败原因
 
 ### 基于 Lease 的内置适配
 
@@ -701,16 +661,17 @@ public interface RetryBackend {
 
 说明：
 
-* `LeaseRetryBackend` 当前直接使用 `RetryTaskSnapshot.payload` 作为 lease 任务载荷
-* 因此它更适合编程式接入里“你自己显式提供 payload”的恢复链路
+* `LeaseRetryBackend` 当前会把整个 `RetryTaskSnapshot` 序列化后写入 lease `payload`
+* 所以 lease 任务里的 `payload` 不再只是业务 JSON，而是完整快照
+* 编程式接入和注解式接入都可以复用同一条恢复链路
+* 后端恢复失败但仍可重试时，会更新快照进度并通过 lease `release(delay)` 重新入队
+* 达到终态失败时，会同时调用 retry 后端 `terminalFail(...)` 和 lease 运行时 `fail(...)`
 
 默认恢复队列为：
 
 ```java
 retry-recovery
 ```
-
-
 
 ### 恢复执行：`RecoveryHandler`
 
@@ -724,20 +685,34 @@ RecoveryHandlerRegistry.global().register(new RecoveryHandler() {
     }
 
     @Override
-    public void recover(String payload) {
+    public void recover(RetryTaskSnapshot snapshot) {
+        String payload = snapshot.getPayload();
         // 反序列化 payload 并继续执行业务
     }
 });
 ```
 
+这里的 `snapshot` 除了业务 `payload`，还会携带：
 
+* `taskId`
+* `taskType`
+* `executedAttempts`
+* `maxAttempts`
+* `policyKey`
+* `lastError`
+* `lastAttemptAt`
+* `nextAttemptAt`
+
+因此恢复器可以根据快照做更精细的补偿和日志输出，而不只是拿到一段原始字符串。
 
 ### 通用快照恢复器：`SnapshotRecoveryHandler`
 
 如果你的 payload 是注解模式生成的 `RetryTaskSnapshot`，可以直接注册通用恢复器：
 
 ```java
-RecoveryHandlerRegistry.global().register(
+RecoveryHandlerRegistry.global().
+
+register(
         new SnapshotRecoveryHandler("pay-notify")
 );
 ```
@@ -757,8 +732,6 @@ RetryTaskTypes.DEFAULT_PROXY_RECOVERY
 4. 反序列化参数
 5. 调用目标方法继续恢复执行
 
-
-
 ### 为什么恢复执行不会再次进入重试代理
 
 恢复阶段会通过 `RecoveryExecutionContext` 标记当前线程处于“恢复中”。
@@ -774,8 +747,6 @@ RetryTaskTypes.DEFAULT_PROXY_RECOVERY
 * 一次补偿执行
 * 而不是重新从入口完整走一遍调用侧托管流程
 
-
-
 ## 动态策略与配置中心
 
 `DynamicRetryPolicyRegistry` 支持从配置中心读取前缀为 `retry.policy.` 的配置。
@@ -784,13 +755,13 @@ RetryTaskTypes.DEFAULT_PROXY_RECOVERY
 
 ```properties
 retry.policy.pay-notify={
-  "maxAttempts": 5,
-  "localAttempts": 2,
-  "backoffType": "exponentialJitter",
-  "initialDelay": 200,
-  "multiplier": 2.0,
-  "maxDelay": 5000
-}
+"maxAttempts"=5,
+"localAttempts"=2,
+"backoffType"="exponentialJitter",
+"initialDelay"=200,
+"multiplier"=2.0,
+"maxDelay"=5000
+}=
 ```
 
 获取方式：
@@ -811,8 +782,6 @@ RetryPolicy policy = DynamicRetryPolicyRegistry.getPolicy("pay-notify");
 * 针对不同任务类型设置不同策略
 * 快速收敛重试风暴
 
-
-
 ## 完整示例：内置 Backend + Worker
 
 下面这个例子使用 `team4u-lease-memory` 和 retry 的 lease 集成层，适合本地开发和 demo。
@@ -829,8 +798,8 @@ public class PayNotifyRecoveryHandler implements RecoveryHandler {
     }
 
     @Override
-    public void recover(String payload) {
-        System.out.println("recover payload = " + payload);
+    public void recover(RetryTaskSnapshot snapshot) {
+        System.out.println("recover payload = " + snapshot.getPayload());
     }
 }
 ```
@@ -847,10 +816,11 @@ import com.team4u.framework.retry.integration.lease.RetryLeaseWorker;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 
 InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
+LeaseRetryBackend retryBackend = new LeaseRetryBackend(backend);
 
 RecoveryHandlerRegistry.global().register(new PayNotifyRecoveryHandler());
 
-RetryLeaseWorker worker = new RetryLeaseWorker(backend);
+RetryLeaseWorker worker = new RetryLeaseWorker(backend, retryBackend);
 worker.start("retry-worker");
 
 RetryPolicy policy = RetryPolicy.builder()
@@ -861,7 +831,7 @@ RetryPolicy policy = RetryPolicy.builder()
 
 Retryer retryer = Retryer.builder()
         .policy(policy)
-        .retryBackend(new LeaseRetryBackend(backend))
+        .retryBackend(retryBackend)
         .build();
 
 retryer.execute(
@@ -879,15 +849,15 @@ retryer.execute(
 * `payload` 带上版本号
 * 后端持久化建议接消息队列、数据库或 Redis 延迟结构
 * 恢复逻辑必须具备幂等性
-* 恢复失败后的再次重试、死信、告警由后端消费系统负责
-
-
+* 如果使用 lease 集成，恢复失败后的再次重试与终态失败会由 `RetryLeaseWorker + LeaseRetryBackend` 协同处理
+* 告警、可视化和人工干预仍建议由外部运维系统补上
 
 ## 完整示例：Spring Boot 接入
 
 ### 1）注册策略
 
 ```java
+
 @Configuration
 public class RetryPolicyConfig {
 
@@ -913,22 +883,20 @@ public class RetryPolicyConfig {
 
 JDK 8 / Spring 5 项目可使用 `javax.annotation.PostConstruct`。
 
-
-
 ### 2）开启自动代理
 
 ```java
+
 @Configuration
 @EnableRetry
 public class RetryAutoConfiguration {
 }
 ```
 
-
-
 ### 3）声明业务服务
 
 ```java
+
 @Service
 public class PayService {
 
@@ -944,11 +912,10 @@ public class PayService {
 }
 ```
 
-
-
 ### 4）调用效果
 
 ```java
+
 @Component
 public class DemoRunner implements CommandLineRunner {
 
@@ -972,13 +939,12 @@ public class DemoRunner implements CommandLineRunner {
 * 第三次成功
 * 调用方无需自己写循环重试逻辑
 
-
-
 ### 5）如果要启用持久化降级
 
 额外提供一个 `RetryBackend` Bean：
 
 ```java
+
 @Configuration
 public class RetryBackendConfig {
 
@@ -992,20 +958,17 @@ public class RetryBackendConfig {
 然后业务方法声明任务类型：
 
 ```java
+
 @Retryable(policy = "pay-policy", taskType = "pay-notify")
 public String notifyPay(String orderId) {
     // ...
 }
 ```
 
-对于注解模式，这个适配器需要能够保存完整 `RetryTaskSnapshot` 并在恢复阶段提供给 `SnapshotRecoveryHandler` 或你的自定义 `RecoveryHandler`。
+对于注解模式，这个适配器需要能够保存完整 `RetryTaskSnapshot` 并在恢复阶段提供给 `SnapshotRecoveryHandler` 或你的自定义
+`RecoveryHandler`。
 
 此时还需要配套的 Worker 和 `RecoveryHandler`，否则任务只能入队，无法恢复执行。
-
-
-
-
-
 
 ## 核心类与执行流程
 
@@ -1018,8 +981,6 @@ public String notifyPay(String orderId) {
 * `RecoveryHandler` / `RecoveryHandlerRegistry`：恢复执行路由
 * `@Retryable`：注解式接入
 * `@EnableRetry`：Spring 自动代理开关
-
-
 
 ### 执行流程
 

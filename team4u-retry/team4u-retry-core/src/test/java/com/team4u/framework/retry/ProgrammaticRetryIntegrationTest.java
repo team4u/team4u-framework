@@ -98,8 +98,8 @@ public class ProgrammaticRetryIntegrationTest {
             }
 
             @Override
-            public void recover(String p) {
-                Assert.assertEquals(payload, p);
+            public void recover(RetryTaskSnapshot snapshot) {
+                Assert.assertEquals(payload, snapshot.getPayload());
                 recoveredCount.incrementAndGet();
             }
         };
@@ -109,7 +109,9 @@ public class ProgrammaticRetryIntegrationTest {
         // 模拟 Worker 捞起任务并恢复
         RecoveryHandlerRegistry.global().get(taskType).ifPresent(h -> {
             try {
-                h.recover(payload);
+                RetryTaskSnapshot snapshot = new RetryTaskSnapshot();
+                snapshot.setPayload(payload);
+                h.recover(snapshot);
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }

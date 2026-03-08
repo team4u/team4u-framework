@@ -4,6 +4,7 @@ import com.team4u.framework.lease.handler.LeaseTaskHandler;
 import com.team4u.framework.lease.handler.LeaseTaskHandlerRegistry;
 import com.team4u.framework.lease.model.LeaseSubscription;
 import com.team4u.framework.lease.runtime.LeaseExecutionContext;
+import com.team4u.framework.retry.backend.RetryBackend;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 
@@ -20,13 +21,14 @@ import java.util.Set;
 public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegistry {
 
     private final RecoveryHandlerRegistry delegate;
+    private final RetryBackend retryBackend;
     private final String queue;
 
     /**
      * 使用全局默认的恢复处理器注册表创建适配器
      */
-    public RecoveryHandlerRegistryLeaseAdapter() {
-        this(RecoveryHandlerRegistry.global(), RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE);
+    public RecoveryHandlerRegistryLeaseAdapter(RetryBackend retryBackend) {
+        this(retryBackend, RecoveryHandlerRegistry.global(), RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE);
     }
 
     /**
@@ -34,11 +36,13 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
      *
      * @param delegate 被委托的重试恢复处理器注册表
      */
-    public RecoveryHandlerRegistryLeaseAdapter(RecoveryHandlerRegistry delegate) {
-        this(delegate, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE);
+    public RecoveryHandlerRegistryLeaseAdapter(RetryBackend retryBackend, RecoveryHandlerRegistry delegate) {
+        this(retryBackend, delegate, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE);
     }
 
-    public RecoveryHandlerRegistryLeaseAdapter(RecoveryHandlerRegistry delegate, String queue) {
+    public RecoveryHandlerRegistryLeaseAdapter(RetryBackend retryBackend, RecoveryHandlerRegistry delegate,
+                                               String queue) {
+        this.retryBackend = retryBackend;
         this.delegate = delegate == null ? RecoveryHandlerRegistry.global() : delegate;
         this.queue = (queue == null || queue.trim().isEmpty()) ? RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE : queue;
     }
@@ -81,7 +85,7 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
         }
         Optional<RecoveryHandler> handler = delegate.get(taskType);
         // 将获取到的重试处理器包装成租约处理器返回
-        return handler.map(RecoveryHandlerLeaseTaskHandlerAdapter::new);
+        return handler.map(h -> new RecoveryHandlerLeaseTaskHandlerAdapter(h, retryBackend));
     }
 
     @Override
@@ -109,9 +113,9 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
         }
 
         @Override
-        public void recover(String payload) throws Exception {
+        public void recover(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) throws Exception {
             delegate.handle(new LeaseExecutionContext(
-                    null, null, taskType, payload, 0, 0, null, 0L, 0L, 0L, null));
+                    snapshot.getTaskId(), null, taskType, null, 0, 0, null, 0L, 0L, 0L, null, null, null));
         }
     }
 }

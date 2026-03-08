@@ -85,8 +85,7 @@ public class JdbcLeaseTaskDao {
     public LeaseTaskEntity findById(String taskId) throws SQLException {
         List<Entity> rows = db.query(
                 "SELECT " + COLUMNS + " FROM " + TABLE_NAME + " WHERE task_id = ?",
-                taskId
-        );
+                taskId);
         return rows.isEmpty() ? null : toEntity(rows.get(0));
     }
 
@@ -145,8 +144,7 @@ public class JdbcLeaseTaskDao {
                 LeaseTaskStatus.SCHEDULED.name(),
                 now,
                 LeaseTaskStatus.LEASED.name(),
-                now
-        );
+                now);
     }
 
     /**
@@ -170,8 +168,7 @@ public class JdbcLeaseTaskDao {
                 LeaseTaskStatus.LEASED.name(),
                 workerId,
                 leaseToken,
-                now
-        );
+                now);
     }
 
     /**
@@ -189,7 +186,8 @@ public class JdbcLeaseTaskDao {
     public int retry(String taskId, String workerId, String leaseToken, long visibleAt, String lastError, long now)
             throws SQLException {
         return db.execute(
-                "UPDATE " + TABLE_NAME + " SET status = ?, visible_at = ?, failure_count = failure_count + 1, worker_id = NULL, "
+                "UPDATE " + TABLE_NAME
+                        + " SET status = ?, visible_at = ?, failure_count = failure_count + 1, worker_id = NULL, "
                         + "lease_token = NULL, lease_expires_at = 0, last_error = ?, updated_at = ? "
                         + "WHERE task_id = ? AND status = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
                 LeaseTaskStatus.SCHEDULED.name(),
@@ -200,8 +198,7 @@ public class JdbcLeaseTaskDao {
                 LeaseTaskStatus.LEASED.name(),
                 workerId,
                 leaseToken,
-                now
-        );
+                now);
     }
 
     /**
@@ -217,7 +214,8 @@ public class JdbcLeaseTaskDao {
      */
     public int fail(String taskId, String workerId, String leaseToken, String lastError, long now) throws SQLException {
         return db.execute(
-                "UPDATE " + TABLE_NAME + " SET status = ?, failure_count = failure_count + 1, worker_id = NULL, lease_token = NULL, "
+                "UPDATE " + TABLE_NAME
+                        + " SET status = ?, failure_count = failure_count + 1, worker_id = NULL, lease_token = NULL, "
                         + "lease_expires_at = 0, last_error = ?, updated_at = ? "
                         + "WHERE task_id = ? AND status = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
                 LeaseTaskStatus.DEAD.name(),
@@ -227,8 +225,7 @@ public class JdbcLeaseTaskDao {
                 LeaseTaskStatus.LEASED.name(),
                 workerId,
                 leaseToken,
-                now
-        );
+                now);
     }
 
     /**
@@ -253,8 +250,7 @@ public class JdbcLeaseTaskDao {
                 LeaseTaskStatus.LEASED.name(),
                 workerId,
                 leaseToken,
-                now
-        );
+                now);
     }
 
     /**
@@ -268,9 +264,11 @@ public class JdbcLeaseTaskDao {
      * @return 更新行数
      * @throws SQLException SQL 异常
      */
-    public int release(String taskId, String workerId, String leaseToken, long visibleAt, long now) throws SQLException {
+    public int release(String taskId, String workerId, String leaseToken, long visibleAt, long now)
+            throws SQLException {
         return db.execute(
-                "UPDATE " + TABLE_NAME + " SET status = ?, visible_at = ?, worker_id = NULL, lease_token = NULL, lease_expires_at = 0, "
+                "UPDATE " + TABLE_NAME
+                        + " SET status = ?, visible_at = ?, worker_id = NULL, lease_token = NULL, lease_expires_at = 0, "
                         + "updated_at = ? "
                         + "WHERE task_id = ? AND status = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
                 LeaseTaskStatus.SCHEDULED.name(),
@@ -280,8 +278,7 @@ public class JdbcLeaseTaskDao {
                 LeaseTaskStatus.LEASED.name(),
                 workerId,
                 leaseToken,
-                now
-        );
+                now);
     }
 
     /**
@@ -295,7 +292,8 @@ public class JdbcLeaseTaskDao {
      */
     public int reschedule(String taskId, long visibleAt, long now) throws SQLException {
         return db.execute(
-                "UPDATE " + TABLE_NAME + " SET status = ?, visible_at = ?, worker_id = NULL, lease_token = NULL, lease_expires_at = 0, "
+                "UPDATE " + TABLE_NAME
+                        + " SET status = ?, visible_at = ?, worker_id = NULL, lease_token = NULL, lease_expires_at = 0, "
                         + "updated_at = ? WHERE task_id = ? "
                         + "AND status NOT IN (?, ?) "
                         + "AND NOT (status = ? AND lease_expires_at >= ?)",
@@ -306,8 +304,7 @@ public class JdbcLeaseTaskDao {
                 LeaseTaskStatus.SUCCEEDED.name(),
                 LeaseTaskStatus.DEAD.name(),
                 LeaseTaskStatus.LEASED.name(),
-                now
-        );
+                now);
     }
 
     /**
@@ -332,8 +329,7 @@ public class JdbcLeaseTaskDao {
                 LeaseTaskStatus.SUCCEEDED.name(),
                 LeaseTaskStatus.DEAD.name(),
                 LeaseTaskStatus.LEASED.name(),
-                now
-        );
+                now);
     }
 
     /**
@@ -347,14 +343,62 @@ public class JdbcLeaseTaskDao {
      */
     public int requeueDead(String taskId, long visibleAt, long now) throws SQLException {
         return db.execute(
-                "UPDATE " + TABLE_NAME + " SET status = ?, visible_at = ?, worker_id = NULL, lease_token = NULL, lease_expires_at = 0, "
+                "UPDATE " + TABLE_NAME
+                        + " SET status = ?, visible_at = ?, worker_id = NULL, lease_token = NULL, lease_expires_at = 0, "
                         + "updated_at = ? WHERE task_id = ? AND status = ?",
                 LeaseTaskStatus.SCHEDULED.name(),
                 visibleAt,
                 now,
                 taskId,
-                LeaseTaskStatus.DEAD.name()
-        );
+                LeaseTaskStatus.DEAD.name());
+    }
+
+    /**
+     * 更新任务属性（运维接口）
+     *
+     * @param request 更新请求
+     * @param now     当前时间
+     * @return 更新行数
+     * @throws SQLException SQL 异常
+     */
+    public int update(com.team4u.framework.lease.model.LeaseUpdateRequest request, long now) throws SQLException {
+        Entity entity = Entity.create(TABLE_NAME);
+        if (request.getTaskType() != null) {
+            entity.set("task_type", request.getTaskType());
+        }
+        if (request.getPayload() != null) {
+            entity.set("payload", request.getPayload());
+        }
+        if (request.getPriority() != null) {
+            entity.set("priority", request.getPriority());
+        }
+        if (request.getAttributes() != null) {
+            entity.set("attributes_json", jsonCodec.toJson(request.getAttributes()));
+        }
+        if (entity.isEmpty()) {
+            return 0;
+        }
+        entity.set("updated_at", now);
+        return db.update(entity, Entity.create(TABLE_NAME).set("task_id", request.getTaskId()));
+    }
+
+    /**
+     * 强行标记任务失败（运维接口）
+     *
+     * @param taskId    任务 ID
+     * @param lastError 错误原因
+     * @param now       当前时间
+     * @return 更新行数
+     * @throws SQLException SQL 异常
+     */
+    public int fail(String taskId, String lastError, long now) throws SQLException {
+        return db.execute(
+                "UPDATE " + TABLE_NAME + " SET status = ?, worker_id = NULL, lease_token = NULL, "
+                        + "lease_expires_at = 0, last_error = ?, updated_at = ? WHERE task_id = ?",
+                LeaseTaskStatus.DEAD.name(),
+                lastError,
+                now,
+                taskId);
     }
 
     /**
@@ -376,8 +420,7 @@ public class JdbcLeaseTaskDao {
                 filterQueue,
                 filterTaskType,
                 filterStatuses ? safeRequest.getStatuses().size() : 0,
-                filterWorkerId
-        );
+                filterWorkerId);
 
         applyQueryParams(safeRequest, params);
 

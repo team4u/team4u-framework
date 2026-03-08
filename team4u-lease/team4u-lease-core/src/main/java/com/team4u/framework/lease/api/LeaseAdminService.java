@@ -1,6 +1,7 @@
 package com.team4u.framework.lease.api;
 
 import com.team4u.framework.lease.enums.LeaseAdminResult;
+import com.team4u.framework.lease.model.LeaseUpdateRequest;
 
 /**
  * 租约管理与运维服务接口
@@ -40,4 +41,21 @@ public interface LeaseAdminService {
      * @return 操作结果状态
      */
     LeaseAdminResult requeueDead(String taskId, long delayMillis);
+
+    /**
+     * 更新任务内容
+     *
+     * @param request 任务更新请求
+     * @return 操作结果状态
+     */
+    LeaseAdminResult update(LeaseUpdateRequest request);
+
+    /**
+     * 标记任务失败（运维接口）
+     *
+     * @param taskId 全局唯一的任务 ID
+     * @param cause  失败原因堆栈
+     * @return 操作结果状态
+     */
+    LeaseAdminResult fail(String taskId, String cause);
 }

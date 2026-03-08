@@ -182,6 +182,16 @@ public class JdbcLeaseBackend implements LeaseBackend {
     }
 
     @Override
+    public LeaseAdminResult update(LeaseUpdateRequest request) {
+        return applyAdminMutation(request.getTaskId(), now -> dao.update(request, now));
+    }
+
+    @Override
+    public LeaseAdminResult fail(String taskId, String cause) {
+        return applyAdminMutation(taskId, now -> dao.fail(taskId, cause, now));
+    }
+
+    @Override
     public LeaseTaskPage list(LeaseQueryRequest request) {
         try {
             return dao.query(request);

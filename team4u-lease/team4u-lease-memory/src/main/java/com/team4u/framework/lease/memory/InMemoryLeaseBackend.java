@@ -188,6 +188,46 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     }
 
     @Override
+    public synchronized LeaseAdminResult update(LeaseUpdateRequest request) {
+        if (request == null || isBlank(request.getTaskId())) {
+            return LeaseAdminResult.TASK_NOT_FOUND;
+        }
+        StoredTask current = records.get(request.getTaskId());
+        if (current == null) {
+            return LeaseAdminResult.TASK_NOT_FOUND;
+        }
+        // 管理态更新不应受限于任务状态（通常用于人工干预），但这里可以根据需要增加限制。
+        StoredTask.StoredTaskBuilder builder = current.toBuilder();
+        if (!isBlank(request.getTaskType())) {
+            builder.taskType(request.getTaskType());
+        }
+        if (request.getPayload() != null) {
+            builder.payload(request.getPayload());
+        }
+        if (request.getPriority() != null) {
+            builder.priority(request.getPriority());
+        }
+        if (request.getAttributes() != null) {
+            builder.attributes(request.getAttributes());
+        }
+        store(builder.build(), false);
+        return LeaseAdminResult.APPLIED;
+    }
+
+    @Override
+    public synchronized LeaseAdminResult fail(String taskId, String cause) {
+        if (isBlank(taskId)) {
+            return LeaseAdminResult.TASK_NOT_FOUND;
+        }
+        StoredTask current = records.get(taskId);
+        if (current == null) {
+            return LeaseAdminResult.TASK_NOT_FOUND;
+        }
+        store(current.fail(cause), false);
+        return LeaseAdminResult.APPLIED;
+    }
+
+    @Override
     public synchronized Optional<LeaseTaskRecord> get(String taskId) {
         StoredTask task = records.get(taskId);
         return task == null ? Optional.empty() : Optional.of(task.toRecord());
