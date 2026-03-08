@@ -1,7 +1,9 @@
 package com.team4u.framework.lease.model;
 
-import java.util.Collections;
-import java.util.LinkedHashMap;
+import lombok.Builder;
+import lombok.Data;
+import lombok.Singular;
+
 import java.util.Map;
 
 /**
@@ -9,6 +11,7 @@ import java.util.Map;
  * <p>
  * 当工作者成功抢占到任务后，后端返回该对象，包含任务的所有业务载荷以及执行凭证。
  */
+@Data
 public class LeaseGrant {
 
     /**
@@ -64,6 +67,7 @@ public class LeaseGrant {
      */
     private final String leaseToken;
 
+    @Builder
     public LeaseGrant(String taskId,
                       String workerId,
                       String leaseToken,
@@ -72,6 +76,7 @@ public class LeaseGrant {
                       String payload,
                       int deliveryCount,
                       int failureCount,
+                      @Singular
                       Map<String, String> attributes,
                       long createdAtMillis,
                       long visibleAtMillis,
@@ -83,57 +88,11 @@ public class LeaseGrant {
         this.payload = payload;
         this.deliveryCount = deliveryCount;
         this.failureCount = failureCount;
-        this.attributes = attributes == null
-                ? Collections.emptyMap()
-                : Collections.unmodifiableMap(new LinkedHashMap<String, String>(attributes));
+        this.attributes = attributes;
         this.createdAtMillis = createdAtMillis;
         this.visibleAtMillis = visibleAtMillis;
         this.leaseExpiresAtMillis = leaseExpiresAtMillis;
         this.workerId = workerId;
         this.leaseToken = leaseToken;
-    }
-
-    public LeaseHandle getHandle() {
-        return handle;
-    }
-
-    public String getTaskId() {
-        return taskId;
-    }
-
-    public String getQueue() {
-        return queue;
-    }
-
-    public String getTaskType() {
-        return taskType;
-    }
-
-    public String getPayload() {
-        return payload;
-    }
-
-    public int getDeliveryCount() {
-        return deliveryCount;
-    }
-
-    public int getFailureCount() {
-        return failureCount;
-    }
-
-    public Map<String, String> getAttributes() {
-        return attributes;
-    }
-
-    public long getCreatedAtMillis() {
-        return createdAtMillis;
-    }
-
-    public long getVisibleAtMillis() {
-        return visibleAtMillis;
-    }
-
-    public long getLeaseExpiresAtMillis() {
-        return leaseExpiresAtMillis;
     }
 }

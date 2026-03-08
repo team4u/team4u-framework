@@ -13,8 +13,7 @@ import java.util.concurrent.ConcurrentMap;
  */
 public class DefaultLeaseTaskHandlerRegistry implements LeaseTaskHandlerRegistry {
 
-    private final ConcurrentMap<String, ConcurrentMap<String, LeaseTaskHandler>> handlers =
-            new ConcurrentHashMap<String, ConcurrentMap<String, LeaseTaskHandler>>();
+    private final ConcurrentMap<String, ConcurrentMap<String, LeaseTaskHandler>> handlers = new ConcurrentHashMap<String, ConcurrentMap<String, LeaseTaskHandler>>();
 
     @Override
     public void register(String queue, String taskType, LeaseTaskHandler handler) {
@@ -27,11 +26,16 @@ public class DefaultLeaseTaskHandlerRegistry implements LeaseTaskHandlerRegistry
         if (taskType == null || taskType.trim().isEmpty()) {
             throw new IllegalArgumentException("taskType must not be blank");
         }
-        ConcurrentMap<String, LeaseTaskHandler> queueHandlers = handlers.computeIfAbsent(queue,
-                ignored -> new ConcurrentHashMap<String, LeaseTaskHandler>());
+
+        ConcurrentMap<String, LeaseTaskHandler> queueHandlers = handlers.computeIfAbsent(
+                queue,
+                ignored -> new ConcurrentHashMap<>()
+        );
+
         LeaseTaskHandler previous = queueHandlers.putIfAbsent(taskType, handler);
         if (previous != null) {
-            throw new IllegalStateException("LeaseTaskHandler already registered. queue=" + queue + ", taskType=" + taskType);
+            throw new IllegalStateException("LeaseTaskHandler already registered. " +
+                    "queue=" + queue + ", taskType=" + taskType);
         }
     }
 

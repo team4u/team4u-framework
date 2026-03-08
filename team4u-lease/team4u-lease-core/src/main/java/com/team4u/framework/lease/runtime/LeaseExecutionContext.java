@@ -1,7 +1,9 @@
 package com.team4u.framework.lease.runtime;
 
-import java.util.Collections;
-import java.util.LinkedHashMap;
+import lombok.Builder;
+import lombok.Getter;
+import lombok.Singular;
+
 import java.util.Map;
 
 /**
@@ -9,6 +11,7 @@ import java.util.Map;
  * <p>
  * 封装了任务在处理期间所需的全部信息，并提供了与运行时（如主动心跳续约）交互的接口。
  */
+@Getter
 public class LeaseExecutionContext {
 
     /**
@@ -56,12 +59,14 @@ public class LeaseExecutionContext {
      */
     private final Runnable heartbeatRequester;
 
+    @Builder
     public LeaseExecutionContext(String taskId,
                                  String queue,
                                  String taskType,
                                  String payload,
                                  int deliveryCount,
                                  int failureCount,
+                                 @Singular
                                  Map<String, String> attributes,
                                  long createdAtMillis,
                                  long visibleAtMillis,
@@ -73,53 +78,11 @@ public class LeaseExecutionContext {
         this.payload = payload;
         this.deliveryCount = deliveryCount;
         this.failureCount = failureCount;
-        this.attributes = attributes == null
-                ? Collections.emptyMap()
-                : Collections.unmodifiableMap(new LinkedHashMap<String, String>(attributes));
+        this.attributes = attributes;
         this.createdAtMillis = createdAtMillis;
         this.visibleAtMillis = visibleAtMillis;
         this.leaseExpiresAtMillis = leaseExpiresAtMillis;
         this.heartbeatRequester = heartbeatRequester;
-    }
-
-    public String getTaskId() {
-        return taskId;
-    }
-
-    public String getQueue() {
-        return queue;
-    }
-
-    public String getTaskType() {
-        return taskType;
-    }
-
-    public String getPayload() {
-        return payload;
-    }
-
-    public int getDeliveryCount() {
-        return deliveryCount;
-    }
-
-    public int getFailureCount() {
-        return failureCount;
-    }
-
-    public Map<String, String> getAttributes() {
-        return attributes;
-    }
-
-    public long getCreatedAtMillis() {
-        return createdAtMillis;
-    }
-
-    public long getVisibleAtMillis() {
-        return visibleAtMillis;
-    }
-
-    public long getLeaseExpiresAtMillis() {
-        return leaseExpiresAtMillis;
     }
 
     /**

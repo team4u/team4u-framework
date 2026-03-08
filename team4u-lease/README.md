@@ -260,9 +260,7 @@ backend.publish(
 
 **预期结果：**
 - handler 正常返回：任务进入 `SUCCEEDED`
-- handler 抛出普通异常：任务进入 `DEAD`
-- handler 抛出 `NonRetryableLeaseException`：直接进入 `DEAD`
-
+- handler 抛出异常：任务进入 `DEAD`
 
 ## 任务执行模型
 
@@ -307,19 +305,6 @@ Worker 正常执行完成后：
 ### 执行失败
 
 如果处理器抛出普通异常，当前 `LeaseWorker` 会直接调用 `fail`：
-
-* 状态变为 `DEAD`
-* `failureCount + 1`
-* 记录 `lastError`
-
-### 执行失败且不再重试
-
-如果：
-
-* 抛出 `NonRetryableLeaseException`
-* 或缺失处理器且策略要求立即失败
-
-则任务会被 `fail`：
 
 * 状态变为 `DEAD`
 * `failureCount + 1`
@@ -449,21 +434,13 @@ Worker 正常执行完成后：
 
 ### 异常与失败处理
 
-#### 普通异常
+#### 异常
 
-如果处理器抛出普通 `Exception`：
+如果处理器抛出 `Exception`：
 
 * Worker 直接调用 `fail`
 * 任务进入 `DEAD`
 * `failureCount + 1`
-
-#### 不可重试异常
-
-如果处理器抛出 `NonRetryableLeaseException`：
-
-* 直接 `fail`
-
-当前实现里，它和普通异常的最终状态一样，都是 `DEAD`。这个异常的主要意义是表达“业务明确不可恢复”。
 
 ### 缺失处理器时会发生什么
 
@@ -753,7 +730,7 @@ JDBC 版不是直接 `SELECT FOR UPDATE` 一把锁死，而是两步：
 
 ### 如何选择重试策略
 
-* 明显不可恢复的业务错误：抛 `NonRetryableLeaseException`
+* 明显不可恢复的业务错误：抛 `Exception`
 * 可恢复但当前不想终态失败的情况：自行调用 `release`
 * 已经进入 `DEAD` 但确认可以再跑：使用 `requeueDead`
 
@@ -819,7 +796,7 @@ registry.register("order", "pay", context -> {
         // do business
     } catch (IllegalArgumentException ex) {
         // 明确不可恢复，直接失败
-        throw new NonRetryableLeaseException("invalid payload", ex);
+        throw ex;
     }
 });
 

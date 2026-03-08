@@ -1,9 +1,6 @@
 package com.team4u.framework.lease.model;
 
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.*;
 
 import java.util.Map;
 
@@ -12,10 +9,8 @@ import java.util.Map;
  * <p>
  * 用于将当前持有的任务标记为最终失败状态。
  */
-@Getter
+@Data
 @Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class LeaseFailureRequest {
 
     /**

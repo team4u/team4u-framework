@@ -1,10 +1,7 @@
 package com.team4u.framework.lease.model;
 
 import com.team4u.framework.lease.enums.LeaseTaskStatus;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
+import lombok.*;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -16,9 +13,8 @@ import java.util.Map;
  * 该模型面向控制面板及运维 API，提供了任务全方位的静态与运行时元数据，
  * 包括执行状态、投递统计以及最近一次失败的错误堆栈信息。
  */
-@Getter
+@Data
 @Builder(toBuilder = true)
-@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class LeaseTaskRecord {
 
     /**
@@ -82,6 +78,6 @@ public class LeaseTaskRecord {
         if (attributes == null) {
             return Collections.emptyMap();
         }
-        return Collections.unmodifiableMap(new LinkedHashMap<String, String>(attributes));
+        return Collections.unmodifiableMap(new LinkedHashMap<>(attributes));
     }
 }

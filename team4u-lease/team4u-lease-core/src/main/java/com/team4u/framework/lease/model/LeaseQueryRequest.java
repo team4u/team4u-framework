@@ -10,9 +10,8 @@ import java.util.Set;
 /**
  * 任务查询请求。
  */
-@Getter
+@Data
 @Builder
-@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class LeaseQueryRequest {
 
     private final String queue;

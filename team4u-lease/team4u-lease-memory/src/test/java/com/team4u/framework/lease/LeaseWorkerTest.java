@@ -2,7 +2,6 @@ package com.team4u.framework.lease;
 
 import com.team4u.framework.lease.enums.LeaseTaskStatus;
 import com.team4u.framework.lease.enums.MissingHandlerStrategy;
-import com.team4u.framework.lease.exception.NonRetryableLeaseException;
 import com.team4u.framework.lease.handler.DefaultLeaseTaskHandlerRegistry;
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
 import com.team4u.framework.lease.model.LeasePublishRequest;
@@ -155,14 +154,14 @@ public class LeaseWorkerTest {
     }
 
     @Test
-    public void testNonRetryableExceptionDirectlyMarksDead() throws Exception {
+    public void testExceptionDirectlyMarksDead() throws Exception {
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
         DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
         CountDownLatch latch = new CountDownLatch(1);
 
         registry.register(DEFAULT_QUEUE, "pay", context -> {
             latch.countDown();
-            throw new NonRetryableLeaseException("poison");
+            throw new RuntimeException("poison");
         });
 
         LeaseWorker worker = new LeaseWorker(backend, registry, LeaseWorkerPolicy.builder()

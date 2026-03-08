@@ -11,9 +11,8 @@ import java.util.Map;
  * <p>
  * 封装了发布任务所需的全部元数据，包括目标队列、任务类型以及执行参数。
  */
-@Getter
+@Data
 @Builder
-@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class LeasePublishRequest {
 
     /**
@@ -50,6 +49,6 @@ public class LeasePublishRequest {
         if (attributes == null) {
             return Collections.emptyMap();
         }
-        return Collections.unmodifiableMap(new LinkedHashMap<String, String>(attributes));
+        return Collections.unmodifiableMap(new LinkedHashMap<>(attributes));
     }
 }

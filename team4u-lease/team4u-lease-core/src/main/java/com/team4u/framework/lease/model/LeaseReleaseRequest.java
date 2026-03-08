@@ -1,9 +1,7 @@
 package com.team4u.framework.lease.model;
 
-import lombok.AllArgsConstructor;
 import lombok.Builder;
-import lombok.Getter;
-import lombok.NoArgsConstructor;
+import lombok.Data;
 
 import java.util.Map;
 
@@ -12,10 +10,8 @@ import java.util.Map;
  * <p>
  * 用于将当前持有的任务释放回调度系统，并指定其下次可见的时间。
  */
-@Getter
+@Data
 @Builder
-@NoArgsConstructor
-@AllArgsConstructor
 public class LeaseReleaseRequest {
 
     /**

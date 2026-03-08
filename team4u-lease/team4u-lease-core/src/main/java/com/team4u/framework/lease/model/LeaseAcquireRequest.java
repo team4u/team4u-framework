@@ -1,6 +1,8 @@
 package com.team4u.framework.lease.model;
 
-import lombok.*;
+import lombok.Builder;
+import lombok.Data;
+import lombok.Singular;
 
 import java.util.Collections;
 import java.util.LinkedHashSet;
@@ -11,9 +13,8 @@ import java.util.Set;
  * <p>
  * 封装了消费者（Worker）向后端请求锁定任务的具体参数。
  */
-@Getter
+@Data
 @Builder
-@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class LeaseAcquireRequest {
 
     /**
@@ -38,6 +39,6 @@ public class LeaseAcquireRequest {
         if (subscriptions == null) {
             return Collections.emptySet();
         }
-        return Collections.unmodifiableSet(new LinkedHashSet<LeaseSubscription>(subscriptions));
+        return Collections.unmodifiableSet(new LinkedHashSet<>(subscriptions));
     }
 }

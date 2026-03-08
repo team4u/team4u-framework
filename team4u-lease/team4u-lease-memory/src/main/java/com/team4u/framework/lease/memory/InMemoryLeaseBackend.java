@@ -549,8 +549,20 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         }
 
         private LeaseGrant toGrant() {
-            return new LeaseGrant(taskId, workerId, leaseToken, queue, taskType, payload, deliveryCount,
-                    failureCount, attributes, createdAtMillis, visibleAtMillis, leaseExpiresAtMillis);
+            return LeaseGrant.builder()
+                    .taskId(taskId)
+                    .workerId(workerId)
+                    .leaseToken(leaseToken)
+                    .queue(queue)
+                    .taskType(taskType)
+                    .payload(payload)
+                    .deliveryCount(deliveryCount)
+                    .failureCount(failureCount)
+                    .attributes(attributes)
+                    .createdAtMillis(createdAtMillis)
+                    .visibleAtMillis(visibleAtMillis)
+                    .leaseExpiresAtMillis(leaseExpiresAtMillis)
+                    .build();
         }
 
         private LeaseTaskRecord toRecord() {

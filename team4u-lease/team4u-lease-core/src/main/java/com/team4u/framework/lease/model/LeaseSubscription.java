@@ -1,18 +1,14 @@
 package com.team4u.framework.lease.model;
 
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
+import lombok.*;
 
 /**
  * 租约订阅声明
  * <p>
  * 定义了工作者关注的具体任务队列。
  */
-@Getter
+@Data
 @Builder
-@AllArgsConstructor(access = AccessLevel.PRIVATE)
 public class LeaseSubscription {
 
     /**
