@@ -134,7 +134,7 @@ public class ProgrammaticRetryIntegrationTest {
         }
 
         @Override
-        public void complete(String taskId) {
+        public void close(String taskId, com.team4u.framework.retry.backend.RetryCloseRequest request) {
             deletedTaskIds.add(taskId);
         }
 

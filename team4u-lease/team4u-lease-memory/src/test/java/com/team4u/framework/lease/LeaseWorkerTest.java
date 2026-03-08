@@ -1,6 +1,8 @@
 package com.team4u.framework.lease;
 
-import com.team4u.framework.lease.enums.LeaseTaskStatus;
+import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
+import com.team4u.framework.lease.enums.LeaseTaskOutcome;
+import com.team4u.framework.lease.enums.LeaseTaskState;
 import com.team4u.framework.lease.enums.MissingHandlerStrategy;
 import com.team4u.framework.lease.handler.DefaultLeaseTaskHandlerRegistry;
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
@@ -42,7 +44,7 @@ public class LeaseWorkerTest {
             backend.publish(request("pay", "{\"id\":1}"));
             Assert.assertTrue(latch.await(2, TimeUnit.SECONDS));
             Assert.assertEquals("{\"id\":1}", payloadRef.get());
-            Assert.assertEquals(LeaseTaskStatus.SUCCEEDED, backend.snapshot().values().iterator().next().getStatus());
+            Assert.assertEquals(LeaseTaskOutcome.SUCCEEDED, backend.snapshot().values().iterator().next().getOutcome());
         } finally {
             worker.shutdown();
         }
@@ -71,11 +73,13 @@ public class LeaseWorkerTest {
             String taskId = backend.publish(request("pay", "payload"));
             Assert.assertTrue(latch.await(2, TimeUnit.SECONDS));
 
-            InMemoryLeaseBackend.StoredTask task = awaitTask(taskId, backend, LeaseTaskStatus.DEAD);
+            InMemoryLeaseBackend.StoredTask task = awaitTask(taskId, backend, LeaseTaskState.CLOSED);
             Assert.assertEquals(1, attempts.get());
             Assert.assertEquals(1, task.getFailureCount());
             Assert.assertEquals(1, task.getDeliveryCount());
-            Assert.assertTrue(task.getLastError().contains("boom"));
+            Assert.assertEquals(LeaseTaskOutcome.FAILED, task.getOutcome());
+            Assert.assertEquals(LeaseTaskFailureReason.HANDLER_EXCEPTION, task.getFailureReason());
+            Assert.assertTrue(task.getErrorMessage().contains("boom"));
         } finally {
             worker.shutdown();
         }
@@ -96,7 +100,7 @@ public class LeaseWorkerTest {
 
             InMemoryLeaseBackend.StoredTask task = backend.snapshot().get(taskId);
             Assert.assertNotNull(task);
-            Assert.assertEquals(LeaseTaskStatus.SCHEDULED, task.getStatus());
+            Assert.assertEquals(LeaseTaskState.READY, task.getState());
             Assert.assertEquals(0, task.getDeliveryCount());
             Assert.assertEquals(0, task.getFailureCount());
         } finally {
@@ -154,7 +158,7 @@ public class LeaseWorkerTest {
     }
 
     @Test
-    public void testExceptionDirectlyMarksDead() throws Exception {
+    public void testExceptionDirectlyClosesFailed() throws Exception {
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
         DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
         CountDownLatch latch = new CountDownLatch(1);
@@ -173,9 +177,10 @@ public class LeaseWorkerTest {
         try {
             String taskId = backend.publish(request("pay", "payload"));
             Assert.assertTrue(latch.await(1, TimeUnit.SECONDS));
-            InMemoryLeaseBackend.StoredTask task = awaitTask(taskId, backend, LeaseTaskStatus.DEAD);
+            InMemoryLeaseBackend.StoredTask task = awaitTask(taskId, backend, LeaseTaskState.CLOSED);
             Assert.assertEquals(1, task.getFailureCount());
             Assert.assertEquals(1, task.getDeliveryCount());
+            Assert.assertEquals(LeaseTaskOutcome.FAILED, task.getOutcome());
         } finally {
             worker.shutdown();
         }
@@ -217,8 +222,8 @@ public class LeaseWorkerTest {
         shutdownThread.join(1_000L);
 
         Assert.assertTrue(shutdownFinishedAt.get() > 0L);
-        Assert.assertEquals(LeaseTaskStatus.SUCCEEDED,
-                awaitTask(taskId, backend, LeaseTaskStatus.SUCCEEDED).getStatus());
+        Assert.assertEquals(LeaseTaskOutcome.SUCCEEDED,
+                awaitTask(taskId, backend, LeaseTaskState.CLOSED).getOutcome());
     }
 
     @Test
@@ -273,8 +278,8 @@ public class LeaseWorkerTest {
         secondWorker.start("lease-worker-correct-handler");
         try {
             Assert.assertTrue(latch.await(2, TimeUnit.SECONDS));
-            Assert.assertEquals(LeaseTaskStatus.SUCCEEDED,
-                    awaitTask(taskId, backend, LeaseTaskStatus.SUCCEEDED).getStatus());
+            Assert.assertEquals(LeaseTaskOutcome.SUCCEEDED,
+                    awaitTask(taskId, backend, LeaseTaskState.CLOSED).getOutcome());
         } finally {
             secondWorker.shutdown();
         }
@@ -282,11 +287,11 @@ public class LeaseWorkerTest {
 
     private InMemoryLeaseBackend.StoredTask awaitTask(String taskId,
                                                       InMemoryLeaseBackend backend,
-                                                      LeaseTaskStatus status) throws Exception {
+                                                      LeaseTaskState state) throws Exception {
         long deadline = System.currentTimeMillis() + 2_000L;
         while (System.currentTimeMillis() < deadline) {
             InMemoryLeaseBackend.StoredTask current = backend.snapshot().get(taskId);
-            if (current != null && current.getStatus() == status) {
+            if (current != null && current.getState() == state) {
                 return current;
             }
             Thread.sleep(20L);
@@ -300,7 +305,7 @@ public class LeaseWorkerTest {
         while (System.currentTimeMillis() < deadline) {
             InMemoryLeaseBackend.StoredTask current = backend.snapshot().get(taskId);
             if (current != null
-                    && current.getStatus() == LeaseTaskStatus.SCHEDULED
+                    && current.getState() == LeaseTaskState.READY
                     && current.getDeliveryCount() == 1
                     && current.getFailureCount() == 0) {
                 return current;

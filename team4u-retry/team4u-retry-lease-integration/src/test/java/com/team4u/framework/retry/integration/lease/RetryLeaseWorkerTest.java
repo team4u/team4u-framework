@@ -1,5 +1,8 @@
 package com.team4u.framework.retry.integration.lease;
 
+import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
+import com.team4u.framework.lease.enums.LeaseTaskOutcome;
+import com.team4u.framework.lease.enums.LeaseTaskState;
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
 import com.team4u.framework.lease.model.LeasePublishRequest;
 import com.team4u.framework.lease.runtime.LeaseWorkerPolicy;
@@ -72,7 +75,7 @@ public class RetryLeaseWorkerTest {
     }
 
     @Test
-    public void testRetryLeaseWorkerMarksDeadAfterHandlerFailures() throws Exception {
+    public void testRetryLeaseWorkerMarksClosedFailedAfterHandlerFailures() throws Exception {
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
         RecoveryHandlerRegistry registry = new RecoveryHandlerRegistry();
         final AtomicInteger attempts = new AtomicInteger();
@@ -107,14 +110,16 @@ public class RetryLeaseWorkerTest {
             long deadline = System.currentTimeMillis() + 2000L;
             while (System.currentTimeMillis() < deadline) {
                 if (backend.snapshot().containsKey(taskId)
-                        && "DEAD".equals(backend.snapshot().get(taskId).getStatus().name())) {
+                        && backend.snapshot().get(taskId).getState() == LeaseTaskState.CLOSED) {
                     break;
                 }
                 Thread.sleep(20L);
             }
 
             Assert.assertEquals(1, attempts.get());
-            Assert.assertEquals("DEAD", backend.snapshot().get(taskId).getStatus().name());
+            Assert.assertEquals(LeaseTaskOutcome.FAILED, backend.snapshot().get(taskId).getOutcome());
+            Assert.assertEquals(LeaseTaskFailureReason.RETRY_EXHAUSTED,
+                    backend.snapshot().get(taskId).getFailureReason());
         } finally {
             worker.shutdown();
         }

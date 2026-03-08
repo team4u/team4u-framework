@@ -7,7 +7,9 @@ import cn.hutool.db.Db;
 import com.team4u.framework.lease.api.LeaseBackend;
 import com.team4u.framework.lease.enums.LeaseAdminResult;
 import com.team4u.framework.lease.enums.LeaseRuntimeResult;
-import com.team4u.framework.lease.enums.LeaseTaskStatus;
+import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
+import com.team4u.framework.lease.enums.LeaseTaskOutcome;
+import com.team4u.framework.lease.enums.LeaseTaskState;
 import com.team4u.framework.lease.jdbc.codec.LeaseJsonCodec;
 import com.team4u.framework.lease.jdbc.dialect.LeaseDbDialect;
 import com.team4u.framework.lease.jdbc.dialect.MySqlLeaseDbDialect;
@@ -53,7 +55,9 @@ public class JdbcLeaseBackend implements LeaseBackend {
                 .queue(request.getQueue())
                 .taskType(request.getTaskType())
                 .payload(request.getPayload())
-                .status(LeaseTaskStatus.SCHEDULED)
+                .state(LeaseTaskState.READY)
+                .outcome(null)
+                .failureReason(null)
                 .priority(request.getPriority())
                 .deliveryCount(0)
                 .failureCount(0)
@@ -63,7 +67,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
                 .visibleAtMillis(now + Math.max(0L, request.getDelayMillis()))
                 .createdAtMillis(now)
                 .updatedAtMillis(now)
-                .lastError(null)
+                .errorMessage(null)
                 .attributes(request.getAttributes())
                 .build();
         try {
@@ -105,19 +109,9 @@ public class JdbcLeaseBackend implements LeaseBackend {
     }
 
     @Override
-    public LeaseRuntimeResult ack(LeaseHandle handle) {
+    public LeaseRuntimeResult close(LeaseHandle handle, LeaseCloseRequest request) {
         return applyRuntimeMutation(handle,
-                now -> dao.ack(handle.getTaskId(), handle.getWorkerId(), handle.getLeaseToken(), now));
-    }
-
-    @Override
-    public LeaseRuntimeResult fail(LeaseHandle handle, LeaseFailureRequest request) {
-        return applyRuntimeMutation(handle, now -> dao.fail(
-                handle.getTaskId(),
-                handle.getWorkerId(),
-                handle.getLeaseToken(),
-                errorMessage(request.getCause()),
-                now));
+                now -> dao.close(handle.getTaskId(), handle.getWorkerId(), handle.getLeaseToken(), request, now));
     }
 
     @Override
@@ -137,6 +131,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
                 handle.getWorkerId(),
                 handle.getLeaseToken(),
                 now + Math.max(0L, request.getDelayMillis()),
+                request.getErrorMessage(),
                 now));
     }
 
@@ -146,27 +141,27 @@ public class JdbcLeaseBackend implements LeaseBackend {
     }
 
     @Override
-    public LeaseAdminResult cancel(String taskId) {
-        return applyAdminMutation(taskId, now -> dao.cancel(taskId, "cancelled", now));
+    public LeaseAdminResult close(String taskId, LeaseCloseRequest request) {
+        return applyAdminMutation(taskId, now -> dao.close(taskId, request, now));
     }
 
     @Override
-    public LeaseAdminResult requeueDead(String taskId, long delayMillis) {
+    public LeaseAdminResult requeueFailed(String taskId, long delayMillis) {
         validateTaskId(taskId);
         try {
             LeaseTaskEntity current = dao.findById(taskId);
             if (current == null) {
                 return LeaseAdminResult.TASK_NOT_FOUND;
             }
-            if (current.getStatus() != LeaseTaskStatus.DEAD) {
-                return LeaseAdminResult.TERMINAL;
+            if (current.getState() != LeaseTaskState.CLOSED || current.getOutcome() != LeaseTaskOutcome.FAILED) {
+                return LeaseAdminResult.CLOSED;
             }
             long now = System.currentTimeMillis();
-            return dao.requeueDead(taskId, now + Math.max(0L, delayMillis), now) == 1
+            return dao.requeueFailed(taskId, now + Math.max(0L, delayMillis), now) == 1
                     ? LeaseAdminResult.APPLIED
-                    : LeaseAdminResult.TERMINAL;
+                    : LeaseAdminResult.CLOSED;
         } catch (SQLException e) {
-            throw new IllegalStateException("requeueDead failed: " + taskId, e);
+            throw new IllegalStateException("requeueFailed failed: " + taskId, e);
         }
     }
 
@@ -184,11 +179,6 @@ public class JdbcLeaseBackend implements LeaseBackend {
     @Override
     public LeaseAdminResult update(LeaseUpdateRequest request) {
         return applyAdminMutation(request.getTaskId(), now -> dao.update(request, now));
-    }
-
-    @Override
-    public LeaseAdminResult fail(String taskId, String cause) {
-        return applyAdminMutation(taskId, now -> dao.fail(taskId, cause, now));
     }
 
     @Override
@@ -223,7 +213,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
                 if (updated == 1) {
                     LeaseTaskEntity claimed = dao.findById(candidate.getTaskId());
                     if (claimed != null
-                            && claimed.getStatus() == LeaseTaskStatus.LEASED
+                            && claimed.getState() == LeaseTaskState.RUNNING
                             && Objects.equals(claimed.getWorkerId(), request.getWorkerId())
                             && Objects.equals(claimed.getLeaseToken(), leaseToken)) {
                         return claimed.toGrant();
@@ -256,7 +246,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
             return LeaseRuntimeResult.TASK_NOT_FOUND;
         }
         if (isTerminal(current)) {
-            return LeaseRuntimeResult.TERMINAL;
+            return LeaseRuntimeResult.CLOSED;
         }
         return LeaseRuntimeResult.LEASE_LOST;
     }
@@ -281,7 +271,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
             return LeaseAdminResult.TASK_NOT_FOUND;
         }
         if (isTerminal(current)) {
-            return LeaseAdminResult.TERMINAL;
+            return LeaseAdminResult.CLOSED;
         }
         if (hasActiveLease(current)) {
             return LeaseAdminResult.ACTIVE_LEASE_PRESENT;
@@ -290,12 +280,12 @@ public class JdbcLeaseBackend implements LeaseBackend {
     }
 
     private boolean hasActiveLease(LeaseTaskEntity task) {
-        return task.getStatus() == LeaseTaskStatus.LEASED
+        return task.getState() == LeaseTaskState.RUNNING
                 && task.getLeaseExpiresAtMillis() >= System.currentTimeMillis();
     }
 
     private boolean isTerminal(LeaseTaskEntity task) {
-        return task.getStatus() == LeaseTaskStatus.SUCCEEDED || task.getStatus() == LeaseTaskStatus.DEAD;
+        return task.getState() == LeaseTaskState.CLOSED;
     }
 
     private void validatePublishRequest(LeasePublishRequest request) {
@@ -355,10 +345,6 @@ public class JdbcLeaseBackend implements LeaseBackend {
 
     private String nextLeaseToken() {
         return "lease-token-" + IdUtil.fastSimpleUUID();
-    }
-
-    private String errorMessage(Throwable cause) {
-        return cause == null ? null : cause.toString();
     }
 
     @FunctionalInterface

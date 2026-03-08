@@ -1,8 +1,9 @@
 package com.team4u.framework.retry.integration.lease;
 
 import com.team4u.framework.lease.enums.LeaseRuntimeResult;
+import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
 import com.team4u.framework.lease.handler.LeaseTaskHandler;
-import com.team4u.framework.lease.model.LeaseFailureRequest;
+import com.team4u.framework.lease.model.LeaseCloseRequest;
 import com.team4u.framework.lease.model.LeaseReleaseRequest;
 import com.team4u.framework.lease.runtime.LeaseExecutionContext;
 import com.team4u.framework.lease.runtime.LeaseWorker;
@@ -41,7 +42,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
     }
 
     public RecoveryHandlerLeaseTaskHandlerAdapter(RecoveryHandler delegate, RetryBackend retryBackend,
-            RetryPolicyRegistry policyRegistry) {
+                                                  RetryPolicyRegistry policyRegistry) {
         this.delegate = delegate;
         this.retryBackend = retryBackend;
         this.policyRegistry = policyRegistry;
@@ -53,12 +54,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
 
         try {
             delegate.recover(snapshot);
-            // 成功后由 LeaseWorker 自动调 ack，这里补充下 retry 后端的清理逻辑
-            retryBackend.complete(snapshot.getTaskId());
         } catch (Throwable cause) {
-            // adapter 自行处理失败（release 重试 / fail 终态），不再抛出异常。
-            // LeaseWorker 随后的 ack 因为 handle 已被 release/fail 会返回 LEASE_LOST，
-            // 被安全忽略。
             handleFailure(context, snapshot, cause);
         }
     }
@@ -72,20 +68,32 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
         RetryPolicy policy = resolvePolicy(snapshot);
         RetryRecoveryPlanner.Plan plan = planner.plan(snapshot, policy, cause);
 
-        if (plan.getDecision() == RetryRecoveryPlanner.Decision.RETRY) {
+        if (plan.isRetry()) {
             log.info("Task failed, retrying in {}ms: {}", plan.getDelayMillis(), snapshot.getTaskId());
             retryBackend.saveProgress(snapshot);
             LeaseRuntimeResult result = context.getRuntimeClient().release(
                     context.getHandle(),
-                    LeaseReleaseRequest.of(plan.getDelayMillis(), cause));
+                    LeaseReleaseRequest.of(plan.getDelayMillis(), cause == null ? null : cause.toString()));
             checkResult(result, "release", snapshot.getTaskId());
         } else {
-            log.error("Task failed terminal: {}", snapshot.getTaskId(), cause);
-            retryBackend.terminalFail(snapshot.getTaskId(), cause);
-            LeaseRuntimeResult result = context.getRuntimeClient().fail(
+            log.error("Task failed closed: {}", snapshot.getTaskId(), cause);
+            LeaseRuntimeResult result = context.getRuntimeClient().close(
                     context.getHandle(),
-                    LeaseFailureRequest.of(cause));
-            checkResult(result, "fail", snapshot.getTaskId());
+                    LeaseCloseRequest.failed(mapFailureReason(plan.getReason()), plan.getErrorMessage()));
+            checkResult(result, "close", snapshot.getTaskId());
+        }
+    }
+
+    private LeaseTaskFailureReason mapFailureReason(com.team4u.framework.retry.backend.RetryCloseReason reason) {
+        if (reason == null) {
+            return LeaseTaskFailureReason.ABORTED_BY_POLICY;
+        }
+        switch (reason) {
+            case RETRY_EXHAUSTED:
+                return LeaseTaskFailureReason.RETRY_EXHAUSTED;
+            case ABORTED_BY_POLICY:
+            default:
+                return LeaseTaskFailureReason.ABORTED_BY_POLICY;
         }
     }
 

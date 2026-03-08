@@ -3,8 +3,10 @@ package com.team4u.framework.retry.integration.lease;
 import com.team4u.framework.lease.api.LeaseAdminService;
 import com.team4u.framework.lease.api.LeaseProducer;
 import com.team4u.framework.lease.enums.LeaseAdminResult;
+import com.team4u.framework.lease.model.LeaseCloseRequest;
 import com.team4u.framework.lease.model.LeasePublishRequest;
 import com.team4u.framework.lease.model.LeaseUpdateRequest;
+import com.team4u.framework.retry.backend.RetryCloseRequest;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import org.junit.Assert;
 import org.junit.Test;
@@ -112,13 +114,13 @@ public class LeaseRetryPersistenceAdapterTest {
     }
 
     @Test
-    public void deleteShouldThrowWhenLeaseAdminRejectsOperation() {
+    public void closeShouldThrowWhenLeaseAdminRejectsOperation() {
         LeaseAdminService adminService = new StubAdminService(LeaseAdminResult.APPLIED,
                 LeaseAdminResult.TASK_NOT_FOUND);
         LeaseRetryBackend adapter = new LeaseRetryBackend(request -> "unused", adminService);
 
         try {
-            adapter.complete("task-1");
+            adapter.close("task-1", RetryCloseRequest.succeeded());
             Assert.fail("expected IllegalStateException");
         } catch (IllegalStateException expected) {
             Assert.assertTrue(expected.getMessage().contains("TASK_NOT_FOUND"));
@@ -137,17 +139,12 @@ public class LeaseRetryPersistenceAdapterTest {
         }
 
         @Override
-        public LeaseAdminResult fail(String taskId, String cause) {
+        public LeaseAdminResult close(String taskId, LeaseCloseRequest request) {
             return LeaseAdminResult.APPLIED;
         }
 
         @Override
-        public LeaseAdminResult cancel(String taskId) {
-            return LeaseAdminResult.APPLIED;
-        }
-
-        @Override
-        public LeaseAdminResult requeueDead(String taskId, long delayMillis) {
+        public LeaseAdminResult requeueFailed(String taskId, long delayMillis) {
             return LeaseAdminResult.APPLIED;
         }
     }
@@ -172,17 +169,12 @@ public class LeaseRetryPersistenceAdapterTest {
         }
 
         @Override
-        public LeaseAdminResult fail(String taskId, String cause) {
-            return LeaseAdminResult.APPLIED;
-        }
-
-        @Override
-        public LeaseAdminResult cancel(String taskId) {
+        public LeaseAdminResult close(String taskId, LeaseCloseRequest request) {
             return cancelResult;
         }
 
         @Override
-        public LeaseAdminResult requeueDead(String taskId, long delayMillis) {
+        public LeaseAdminResult requeueFailed(String taskId, long delayMillis) {
             return LeaseAdminResult.APPLIED;
         }
     }

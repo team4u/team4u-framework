@@ -147,7 +147,7 @@ public class RetryerTest {
             }
 
             @Override
-            public void complete(String taskId) {
+            public void close(String taskId, com.team4u.framework.retry.backend.RetryCloseRequest request) {
             }
 
             @Override
@@ -200,7 +200,7 @@ public class RetryerTest {
             }
 
             @Override
-            public void complete(String taskId) {
+            public void close(String taskId, com.team4u.framework.retry.backend.RetryCloseRequest request) {
             }
 
             @Override
@@ -248,7 +248,7 @@ public class RetryerTest {
             }
 
             @Override
-            public void complete(String taskId) {
+            public void close(String taskId, com.team4u.framework.retry.backend.RetryCloseRequest request) {
                 // 模拟 IO 耗时
                 try {
                     Thread.sleep(100);
@@ -298,7 +298,7 @@ public class RetryerTest {
             }
 
             @Override
-            public void complete(String taskId) {
+            public void close(String taskId, com.team4u.framework.retry.backend.RetryCloseRequest request) {
                 latch.countDown();
             }
 
@@ -347,7 +347,7 @@ public class RetryerTest {
             }
 
             @Override
-            public void complete(String taskId) {
+            public void close(String taskId, com.team4u.framework.retry.backend.RetryCloseRequest request) {
             }
 
             @Override
@@ -421,7 +421,7 @@ public class RetryerTest {
             }
 
             @Override
-            public void complete(String taskId) {
+            public void close(String taskId, com.team4u.framework.retry.backend.RetryCloseRequest request) {
             }
 
             @Override
@@ -454,7 +454,7 @@ public class RetryerTest {
             }
 
             @Override
-            public void complete(String taskId) {
+            public void close(String taskId, com.team4u.framework.retry.backend.RetryCloseRequest request) {
             }
 
             @Override
@@ -501,7 +501,7 @@ public class RetryerTest {
             }
 
             @Override
-            public void complete(String taskId) {
+            public void close(String taskId, com.team4u.framework.retry.backend.RetryCloseRequest request) {
             }
 
             @Override
@@ -533,7 +533,7 @@ public class RetryerTest {
             }
 
             @Override
-            public void complete(String taskId) {
+            public void close(String taskId, com.team4u.framework.retry.backend.RetryCloseRequest request) {
             }
 
             @Override

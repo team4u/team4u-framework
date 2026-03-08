@@ -10,47 +10,39 @@ package com.team4u.framework.retry.backend;
 public interface RetryBackend {
 
     /**
-     * 将任务正式移交给后端重试
+     * 预处理重试意向或保存初始进度
      * <p>
-     * 激活预处理的意向，使其进入重试队列或调度系统。
+     * 当任务首次尝试失败且符合持久化条件时，调用此方法以确保后端存储已初始化该任务 ID；
+     * 或者用于在任务正式移交前同步当前执行状态。
      *
      * @param snapshot 任务快照
      */
     void prepare(RetryTaskSnapshot snapshot);
 
     /**
-     * 正式移交任务至异步处理链（如进入延迟队列或租约系统）
+     * 正式将任务移交给异步重试后端（如进入延迟队列或调度系统）
      *
-     * @param taskId      任务 ID
-     * @param delayMillis 延迟触发毫秒数
+     * @param taskId      已持久化的任务 ID
+     * @param delayMillis 下次重试的延迟触发时间（毫秒）
      */
     void handoff(String taskId, long delayMillis);
 
     /**
-     * 保存任务执行进度
+     * 保存当前任务执行的最新进度
      * <p>
-     * 当任务在后端执行失败但仍需重试时，调用此方法更新已执行次数、错误信息等状态。
+     * 记录已执行次数、最后一次异常信息等状态，用于在节点宕机或重启后能够恢复执行。
      *
-     * @param snapshot 任务快照
+     * @param snapshot 包含最新状态的任务快照
      */
     void saveProgress(RetryTaskSnapshot snapshot);
 
     /**
-     * 完成重试任务
+     * 彻底结束重试任务
      * <p>
-     * 当任务在内存中最终执行成功，或者重试流程终止时，清理后端的任务状态。
+     * 当任务最终成功、最终失败或被取消时调用，后端根据请求状态清理或标记该任务。
      *
-     * @param taskId 任务 ID
+     * @param taskId  任务 ID
+     * @param request 关闭请求信息
      */
-    void complete(String taskId);
-
-    /**
-     * 标记任务最终失败
-     * <p>
-     * 当重试次数耗尽或遇到不可重试异常时，调用此方法将任务标记为最终失败状态。
-     *
-     * @param taskId 任务 ID
-     * @param cause  引发失败的异常原因
-     */
-    void terminalFail(String taskId, Throwable cause);
+    void close(String taskId, RetryCloseRequest request);
 }

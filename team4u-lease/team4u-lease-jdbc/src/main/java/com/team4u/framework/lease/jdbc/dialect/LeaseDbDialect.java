@@ -22,12 +22,16 @@ public interface LeaseDbDialect {
      *
      * @param filterQueue    是否过滤队列
      * @param filterTaskType 是否过滤任务类型
-     * @param statusCount    过滤的状态码数量
+     * @param stateCount     过滤的生命周期状态数量
+     * @param outcomeCount   过滤的结束结果数量
+     * @param reasonCount    过滤的失败原因数量
      * @param filterWorkerId 是否过滤工作节点 ID
      * @return 完整的 SQL 语句
      */
     String buildQuerySql(boolean filterQueue,
                          boolean filterTaskType,
-                         int statusCount,
+                         int stateCount,
+                         int outcomeCount,
+                         int reasonCount,
                          boolean filterWorkerId);
 }

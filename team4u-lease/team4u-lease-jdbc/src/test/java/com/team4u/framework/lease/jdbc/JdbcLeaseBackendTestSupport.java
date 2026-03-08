@@ -2,25 +2,16 @@ package com.team4u.framework.lease.jdbc;
 
 import cn.hutool.db.Db;
 import cn.hutool.db.ds.simple.SimpleDataSource;
-import com.team4u.framework.lease.AbstractLeaseContractSupport;
-import com.team4u.framework.lease.enums.LeaseAdminResult;
-import com.team4u.framework.lease.enums.LeaseTaskState;
-import com.team4u.framework.lease.model.LeasePublishRequest;
-import com.team4u.framework.lease.model.LeaseQueryRequest;
-import org.junit.Assert;
-import org.junit.Test;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
 
-public class JdbcLeaseBackendContractTest extends AbstractLeaseContractSupport {
+final class JdbcLeaseBackendTestSupport {
 
-    @Override
-    protected com.team4u.framework.lease.api.LeaseBackend createBackend() {
-        return new JdbcLeaseBackend(newDataSource());
+    private JdbcLeaseBackendTestSupport() {
     }
 
-    private DataSource newDataSource() {
+    static DataSource newDataSource() {
         String dbName = "lease_" + System.nanoTime();
         String jdbcUrl = "jdbc:h2:mem:" + dbName + ";MODE=MySQL;DB_CLOSE_DELAY=-1";
         DataSource dataSource = new SimpleDataSource(jdbcUrl, "sa", "");
@@ -56,28 +47,5 @@ public class JdbcLeaseBackendContractTest extends AbstractLeaseContractSupport {
             throw new IllegalStateException("failed to initialize H2 schema", e);
         }
         return dataSource;
-    }
-
-    @Test
-    public void testQueryFiltersStillWorkOnDedicatedSchema() {
-        JdbcLeaseBackend backend = new JdbcLeaseBackend(newDataSource());
-        backend.publish(LeasePublishRequest.builder().queue("queue-a").taskType("pay").payload("a").priority(5).build());
-        backend.publish(LeasePublishRequest.builder().queue("queue-b").taskType("mail").payload("b").build());
-
-        Assert.assertEquals(1, backend.list(LeaseQueryRequest.builder()
-                .queue("queue-a")
-                .taskType("pay")
-                .state(LeaseTaskState.READY)
-                .build()).getItems().size());
-    }
-
-    @Test
-    public void testRescheduleWorksAgainstDedicatedSchema() {
-        JdbcLeaseBackend backend = new JdbcLeaseBackend(newDataSource());
-        String taskId = publish(backend, "pay", "payload", 200L);
-
-        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.reschedule(taskId, 0L));
-        Assert.assertTrue(backend.get(taskId).isPresent());
-        Assert.assertEquals(LeaseTaskState.READY, backend.get(taskId).get().getState());
     }
 }

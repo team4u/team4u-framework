@@ -1,6 +1,8 @@
 package com.team4u.framework.lease.model;
 
-import com.team4u.framework.lease.enums.LeaseTaskStatus;
+import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
+import com.team4u.framework.lease.enums.LeaseTaskOutcome;
+import com.team4u.framework.lease.enums.LeaseTaskState;
 import lombok.*;
 
 import java.util.Collections;
@@ -17,17 +19,35 @@ public class LeaseQueryRequest {
     private final String queue;
     private final String taskType;
     @Singular
-    private final Set<LeaseTaskStatus> statuses;
+    private final Set<LeaseTaskState> states;
+    @Singular
+    private final Set<LeaseTaskOutcome> outcomes;
+    @Singular
+    private final Set<LeaseTaskFailureReason> failureReasons;
     private final String workerId;
     @Builder.Default
     private final int page = 0;
     @Builder.Default
     private final int pageSize = 50;
 
-    public Set<LeaseTaskStatus> getStatuses() {
-        if (statuses == null) {
+    public Set<LeaseTaskState> getStates() {
+        if (states == null) {
             return Collections.emptySet();
         }
-        return Collections.unmodifiableSet(new LinkedHashSet<LeaseTaskStatus>(statuses));
+        return Collections.unmodifiableSet(new LinkedHashSet<LeaseTaskState>(states));
+    }
+
+    public Set<LeaseTaskOutcome> getOutcomes() {
+        if (outcomes == null) {
+            return Collections.emptySet();
+        }
+        return Collections.unmodifiableSet(new LinkedHashSet<LeaseTaskOutcome>(outcomes));
+    }
+
+    public Set<LeaseTaskFailureReason> getFailureReasons() {
+        if (failureReasons == null) {
+            return Collections.emptySet();
+        }
+        return Collections.unmodifiableSet(new LinkedHashSet<LeaseTaskFailureReason>(failureReasons));
     }
 }

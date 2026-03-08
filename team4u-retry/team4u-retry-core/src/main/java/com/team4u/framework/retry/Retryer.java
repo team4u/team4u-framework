@@ -1,6 +1,8 @@
 package com.team4u.framework.retry;
 
 import com.team4u.framework.retry.backend.RetryBackend;
+import com.team4u.framework.retry.backend.RetryCloseReason;
+import com.team4u.framework.retry.backend.RetryCloseRequest;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.policy.NamedRetryPolicy;
@@ -132,14 +134,14 @@ public class Retryer {
         while (true) {
             try {
                 T result = task.call();
-                completeSnapshotAsync(snapshot != null ? snapshot.getTaskId() : null);
+                closeSnapshotAsync(snapshot != null ? snapshot.getTaskId() : null, RetryCloseRequest.succeeded());
                 return result;
             } catch (Throwable ex) {
                 Throwable cause = normalizeSyncFailure(ex);
                 RetryDecisionType decision = evaluateDecision(executedAttempts, cause);
 
                 if (decision == RetryDecisionType.FAIL_TERMINAL) {
-                    completeSnapshotAsync(snapshot != null ? snapshot.getTaskId() : null);
+                    closeSnapshotAsync(snapshot != null ? snapshot.getTaskId() : null, closeFailureRequest(cause));
                     if (cause instanceof Exception) {
                         throw (Exception) cause;
                     }
@@ -244,7 +246,7 @@ public class Retryer {
     }
 
     private <T> void handleAsyncSuccess(String taskId, CompletableFuture<T> promise, T result) {
-        completeSnapshotAsync(taskId);
+        closeSnapshotAsync(taskId, RetryCloseRequest.succeeded());
         promise.complete(result);
     }
 
@@ -286,7 +288,7 @@ public class Retryer {
             return;
         }
 
-        completeSnapshotAsync(snapshot != null ? snapshot.getTaskId() : null);
+        closeSnapshotAsync(snapshot != null ? snapshot.getTaskId() : null, closeFailureRequest(cause));
         promise.completeExceptionally(cause);
     }
 
@@ -306,10 +308,10 @@ public class Retryer {
     }
 
     private RetryHandoffException handoffToPersistence(String taskType,
-            RetryTaskSnapshot snapshot,
-            RetryPayloadBuilder payloadBuilder,
-            int executedAttempts,
-            Throwable cause) {
+                                                       RetryTaskSnapshot snapshot,
+                                                       RetryPayloadBuilder payloadBuilder,
+                                                       int executedAttempts,
+                                                       Throwable cause) {
         int nextAttempt = executedAttempts + 1;
         RetryTaskSnapshot finalSnapshot = snapshot;
 
@@ -338,11 +340,17 @@ public class Retryer {
                 cause);
     }
 
-    private void completeSnapshotAsync(String taskId) {
-        if (taskId == null || retryBackend == null) {
+    private RetryCloseRequest closeFailureRequest(Throwable cause) {
+        RetryCloseReason reason = policy.getMaxAttempts() != -1 ? RetryCloseReason.RETRY_EXHAUSTED
+                : RetryCloseReason.ABORTED_BY_POLICY;
+        return RetryCloseRequest.failed(reason, cause == null ? null : cause.toString());
+    }
+
+    private void closeSnapshotAsync(String taskId, RetryCloseRequest request) {
+        if (taskId == null || retryBackend == null || request == null) {
             return;
         }
-        CompletableFuture.runAsync(() -> retryBackend.complete(taskId), cleanupExecutor);
+        CompletableFuture.runAsync(() -> retryBackend.close(taskId, request), cleanupExecutor);
     }
 
     private Throwable normalizeSyncFailure(Throwable ex) throws InterruptedException {

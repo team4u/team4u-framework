@@ -9,11 +9,12 @@ public class MySqlLeaseDbDialect implements LeaseDbDialect {
 
     @Override
     public String buildAcquireCandidateSql(int queueCount) {
-        return "SELECT task_id, queue_name, task_type, payload, status, priority, delivery_count, failure_count, "
-                + "worker_id, lease_token, lease_expires_at, visible_at, created_at, updated_at, last_error, attributes_json "
+        return "SELECT task_id, queue_name, task_type, payload, state, outcome, failure_reason, priority, "
+                + "delivery_count, failure_count, worker_id, lease_token, lease_expires_at, visible_at, created_at, "
+                + "updated_at, error_message, attributes_json "
                 + "FROM lease_task "
                 + "WHERE queue_name IN (" + placeholders(queueCount) + ") "
-                + "AND ((status = 'SCHEDULED' AND visible_at <= ?) OR (status = 'LEASED' AND lease_expires_at <= ?)) "
+                + "AND ((state = 'READY' AND visible_at <= ?) OR (state = 'RUNNING' AND lease_expires_at <= ?)) "
                 + "ORDER BY priority DESC, created_at ASC, task_id ASC "
                 + "LIMIT ?";
     }
@@ -21,11 +22,13 @@ public class MySqlLeaseDbDialect implements LeaseDbDialect {
     @Override
     public String buildQuerySql(boolean filterQueue,
                                 boolean filterTaskType,
-                                int statusCount,
+                                int stateCount,
+                                int outcomeCount,
+                                int reasonCount,
                                 boolean filterWorkerId) {
-        StringBuilder sql = new StringBuilder("SELECT task_id, queue_name, task_type, payload, status, priority, ")
-                .append("delivery_count, failure_count, worker_id, lease_token, lease_expires_at, visible_at, ")
-                .append("created_at, updated_at, last_error, attributes_json ")
+        StringBuilder sql = new StringBuilder("SELECT task_id, queue_name, task_type, payload, state, outcome, ")
+                .append("failure_reason, priority, delivery_count, failure_count, worker_id, lease_token, ")
+                .append("lease_expires_at, visible_at, created_at, updated_at, error_message, attributes_json ")
                 .append("FROM lease_task WHERE 1=1");
         if (filterQueue) {
             sql.append(" AND queue_name = ?");
@@ -33,8 +36,14 @@ public class MySqlLeaseDbDialect implements LeaseDbDialect {
         if (filterTaskType) {
             sql.append(" AND task_type = ?");
         }
-        if (statusCount > 0) {
-            sql.append(" AND status IN (").append(placeholders(statusCount)).append(")");
+        if (stateCount > 0) {
+            sql.append(" AND state IN (").append(placeholders(stateCount)).append(")");
+        }
+        if (outcomeCount > 0) {
+            sql.append(" AND outcome IN (").append(placeholders(outcomeCount)).append(")");
+        }
+        if (reasonCount > 0) {
+            sql.append(" AND failure_reason IN (").append(placeholders(reasonCount)).append(")");
         }
         if (filterWorkerId) {
             sql.append(" AND worker_id = ?");

@@ -625,7 +625,7 @@ public class PayServiceImpl {
 
 ### `RetryBackend` 的职责
 
-当前 `Retryer` 实际对接的是 `RetryBackend`，它承担持久化能力：
+当前 `Retryer` 对接的是 `RetryBackend`，它承担持久化能力：
 
 ```java
 public interface RetryBackend {
@@ -636,19 +636,22 @@ public interface RetryBackend {
 
     void saveProgress(RetryTaskSnapshot snapshot);
 
-    void complete(String taskId);
-
-    void terminalFail(String taskId, Throwable cause);
+    void close(String taskId, RetryCloseRequest request);
 }
 ```
 
 语义上：
 
 * `prepare(...)`：执行前预写任务意图；已有 `taskId` 时也可用于补充最新快照
-* `handoff(...)`：本地重试耗尽后，正式激活后端恢复链路
+* `handoff(...)`：本地重试预算耗尽后，正式激活后端恢复链路
 * `saveProgress(...)`：后端恢复失败但仍需继续重试时，保存执行进度
-* `complete(...)`：任务成功后清理或终止该任务
-* `terminalFail(...)`：达到终态失败时，记录最终失败原因
+* `close(...)`：关闭该重试任务，并显式声明结束结果
+
+`RetryCloseRequest` 现在把“怎么结束”拆开表达：
+
+* `outcome`：`SUCCEEDED / FAILED / CANCELLED`
+* `reason`：失败时的具体原因
+* `errorMessage`：可选错误摘要
 
 ### 基于 Lease 的内置适配
 
@@ -663,7 +666,8 @@ public interface RetryBackend {
 * 所以 lease 任务里的 `payload` 不再只是业务 JSON，而是完整快照
 * 编程式接入和注解式接入都可以复用同一条恢复链路
 * 后端恢复失败但仍可重试时，会更新快照进度并通过 lease `release(delay)` 重新入队
-* 达到终态失败时，会同时调用 retry 后端 `terminalFail(...)` 和 lease 运行时 `fail(...)`
+* 达到终态时，会通过统一的 `close(...)` 结束任务；对于当前已持有 lease 的恢复任务，只走一次 lease runtime `close(...)` 或
+  `release(...)`，不再双写
 
 默认恢复队列为：
 
@@ -706,9 +710,7 @@ RecoveryHandlerRegistry.global().register(new RecoveryHandler() {
 如果你的 payload 是注解模式生成的 `RetryTaskSnapshot`，可以直接注册通用恢复器：
 
 ```java
-RecoveryHandlerRegistry.global().
-
-register(
+RecoveryHandlerRegistry.global().register(
         new SnapshotRecoveryHandler("pay-notify")
 );
 ```

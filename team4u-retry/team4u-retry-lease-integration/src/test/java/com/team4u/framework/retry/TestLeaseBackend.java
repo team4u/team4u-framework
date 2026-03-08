@@ -22,8 +22,6 @@ public abstract class TestLeaseBackend implements LeaseBackend {
 
     public abstract void completeIntent(String intentId);
 
-    public abstract void markTerminalFailure(String intentId, Throwable cause);
-
     public abstract void submitForDelay(String intentId, String taskType, String payload, long delay);
 
     @Override
@@ -46,13 +44,13 @@ public abstract class TestLeaseBackend implements LeaseBackend {
     }
 
     @Override
-    public LeaseAdminResult cancel(String taskId) {
+    public LeaseAdminResult close(String taskId, LeaseCloseRequest request) {
         completeIntent(taskId);
         return LeaseAdminResult.APPLIED;
     }
 
     @Override
-    public LeaseAdminResult requeueDead(String taskId, long delayMillis) {
+    public LeaseAdminResult requeueFailed(String taskId, long delayMillis) {
         submitForDelay(taskId, null, null, delayMillis);
         return LeaseAdminResult.APPLIED;
     }
@@ -63,12 +61,7 @@ public abstract class TestLeaseBackend implements LeaseBackend {
     }
 
     @Override
-    public LeaseRuntimeResult ack(LeaseHandle handle) {
-        return LeaseRuntimeResult.APPLIED;
-    }
-
-    @Override
-    public LeaseRuntimeResult fail(LeaseHandle handle, LeaseFailureRequest request) {
+    public LeaseRuntimeResult close(LeaseHandle handle, LeaseCloseRequest request) {
         return LeaseRuntimeResult.APPLIED;
     }
 

@@ -1,6 +1,8 @@
 package com.team4u.framework.lease.jdbc;
 
-import com.team4u.framework.lease.enums.LeaseTaskStatus;
+import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
+import com.team4u.framework.lease.enums.LeaseTaskOutcome;
+import com.team4u.framework.lease.enums.LeaseTaskState;
 import com.team4u.framework.lease.model.LeaseGrant;
 import com.team4u.framework.lease.model.LeaseTaskRecord;
 import lombok.AccessLevel;
@@ -45,7 +47,9 @@ public class LeaseTaskEntity {
     /**
      * 任务当前状态
      */
-    private final LeaseTaskStatus status;
+    private final LeaseTaskState state;
+    private final LeaseTaskOutcome outcome;
+    private final LeaseTaskFailureReason failureReason;
 
     /**
      * 任务优先级
@@ -95,7 +99,7 @@ public class LeaseTaskEntity {
     /**
      * 最后一次执行的错误摘要
      */
-    private final String lastError;
+    private final String errorMessage;
 
     /**
      * 扩展属性
@@ -141,7 +145,9 @@ public class LeaseTaskEntity {
                 .queue(queue)
                 .taskType(taskType)
                 .payload(payload)
-                .status(status)
+                .state(state)
+                .outcome(outcome)
+                .failureReason(failureReason)
                 .workerId(workerId)
                 .priority(priority)
                 .deliveryCount(deliveryCount)
@@ -149,7 +155,7 @@ public class LeaseTaskEntity {
                 .createdAtMillis(createdAtMillis)
                 .visibleAtMillis(visibleAtMillis)
                 .leaseExpiresAtMillis(leaseExpiresAtMillis)
-                .lastError(lastError)
+                .errorMessage(errorMessage)
                 .attributes(attributes)
                 .build();
     }

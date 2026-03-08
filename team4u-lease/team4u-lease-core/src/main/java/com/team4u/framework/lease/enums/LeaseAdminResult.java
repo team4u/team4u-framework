@@ -15,7 +15,7 @@ public enum LeaseAdminResult {
     /**
      * 任务已经处于终态。
      */
-    TERMINAL,
+    CLOSED,
     /**
      * 任务当前持有有效租约，拒绝直接改写状态。
      */

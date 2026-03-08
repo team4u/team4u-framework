@@ -22,25 +22,13 @@ public interface LeaseRuntimeClient {
     LeaseGrant acquire(LeaseAcquireRequest request) throws InterruptedException;
 
     /**
-     * 对任务执行结果进行正向确认（Ack）
-     * <p>
-     * 调用该方法意味着任务已成功处理，后端应将其标记为已完成或删除。
-     *
-     * @param handle 租约操作句柄
-     * @return 确认结果状态
-     */
-    LeaseRuntimeResult ack(LeaseHandle handle);
-
-    /**
-     * 标记任务执行彻底失败
-     * <p>
-     * 当任务不可重试时，通过该方法将其移动到死信队列或标记为失败终止状态。
+     * 关闭当前租约任务。
      *
      * @param handle  租约操作句柄
-     * @param request 失败请求详情
-     * @return 操作结果状态
+     * @param request 关闭请求
+     * @return 关闭结果
      */
-    LeaseRuntimeResult fail(LeaseHandle handle, LeaseFailureRequest request);
+    LeaseRuntimeResult close(LeaseHandle handle, LeaseCloseRequest request);
 
     /**
      * 续约（心跳机制）

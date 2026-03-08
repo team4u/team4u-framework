@@ -25,9 +25,9 @@ public class LeaseReleaseRequest {
     private Map<String, String> attributes;
 
     /**
-     * 失败原因（可选，记录释放时的错误上下文）
+     * 释放时记录的错误摘要（可选）。
      */
-    private Throwable cause;
+    private String errorMessage;
 
     public static LeaseReleaseRequest of(long delayMillis) {
         return LeaseReleaseRequest.builder()
@@ -35,10 +35,10 @@ public class LeaseReleaseRequest {
                 .build();
     }
 
-    public static LeaseReleaseRequest of(long delayMillis, Throwable cause) {
+    public static LeaseReleaseRequest of(long delayMillis, String errorMessage) {
         return LeaseReleaseRequest.builder()
                 .delayMillis(delayMillis)
-                .cause(cause)
+                .errorMessage(errorMessage)
                 .build();
     }
 }

@@ -3,9 +3,12 @@ package com.team4u.framework.lease.jdbc;
 import cn.hutool.core.convert.Convert;
 import cn.hutool.db.Db;
 import cn.hutool.db.Entity;
-import com.team4u.framework.lease.enums.LeaseTaskStatus;
+import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
+import com.team4u.framework.lease.enums.LeaseTaskOutcome;
+import com.team4u.framework.lease.enums.LeaseTaskState;
 import com.team4u.framework.lease.jdbc.codec.LeaseJsonCodec;
 import com.team4u.framework.lease.jdbc.dialect.LeaseDbDialect;
+import com.team4u.framework.lease.model.LeaseCloseRequest;
 import com.team4u.framework.lease.model.LeaseQueryRequest;
 import com.team4u.framework.lease.model.LeaseSubscription;
 import com.team4u.framework.lease.model.LeaseTaskPage;
@@ -35,9 +38,9 @@ public class JdbcLeaseTaskDao {
     /**
      * 字段列表
      */
-    public static final String COLUMNS = "task_id, queue_name, task_type, payload, status, priority, " +
-            "delivery_count, failure_count, worker_id, lease_token, lease_expires_at, visible_at, " +
-            "created_at, updated_at, last_error, attributes_json";
+    public static final String COLUMNS = "task_id, queue_name, task_type, payload, state, outcome, failure_reason, "
+            + "priority, delivery_count, failure_count, worker_id, lease_token, lease_expires_at, visible_at, "
+            + "created_at, updated_at, error_message, attributes_json";
 
     private final Db db;
     private final LeaseDbDialect dialect;
@@ -61,7 +64,9 @@ public class JdbcLeaseTaskDao {
                 .set("queue_name", entity.getQueue())
                 .set("task_type", entity.getTaskType())
                 .set("payload", entity.getPayload())
-                .set("status", entity.getStatus().name())
+                .set("state", entity.getState().name())
+                .set("outcome", entity.getOutcome() == null ? null : entity.getOutcome().name())
+                .set("failure_reason", entity.getFailureReason() == null ? null : entity.getFailureReason().name())
                 .set("priority", entity.getPriority())
                 .set("delivery_count", entity.getDeliveryCount())
                 .set("failure_count", entity.getFailureCount())
@@ -71,7 +76,7 @@ public class JdbcLeaseTaskDao {
                 .set("visible_at", entity.getVisibleAtMillis())
                 .set("created_at", entity.getCreatedAtMillis())
                 .set("updated_at", entity.getUpdatedAtMillis())
-                .set("last_error", entity.getLastError())
+                .set("error_message", entity.getErrorMessage())
                 .set("attributes_json", jsonCodec.toJson(entity.getAttributes())));
     }
 
@@ -117,8 +122,8 @@ public class JdbcLeaseTaskDao {
      * 尝试原子性抢占租约（核心乐观锁实现）
      * <p>
      * 该 SQL 确保只有满足以下条件之一的任务才能被抢占：
-     * 1. 任务处于 SCHEDULED 状态且已过可见时间（visible_at）。
-     * 2. 任务处于 LEASED 状态但租约已过期（lease_expires_at），即原持有节点疑似宕机或执行超时。
+     * 1. 任务处于 READY 状态且已过可见时间（visible_at）。
+     * 2. 任务处于 RUNNING 状态但租约已过期（lease_expires_at），即原持有节点疑似宕机或执行超时。
      *
      * @param taskId         任务 ID
      * @param workerId       抢占该租约的工作节点 ID
@@ -131,24 +136,24 @@ public class JdbcLeaseTaskDao {
     public int tryAcquire(String taskId, String workerId, String leaseToken, long leaseExpiresAt, long now)
             throws SQLException {
         return db.execute(
-                "UPDATE " + TABLE_NAME + " SET status = ?, worker_id = ?, lease_token = ?, lease_expires_at = ?, "
+                "UPDATE " + TABLE_NAME + " SET state = ?, worker_id = ?, lease_token = ?, lease_expires_at = ?, "
                         + "delivery_count = delivery_count + 1, updated_at = ? "
                         + "WHERE task_id = ? "
-                        + "AND ((status = ? AND visible_at <= ?) OR (status = ? AND lease_expires_at <= ?))",
-                LeaseTaskStatus.LEASED.name(),
+                        + "AND ((state = ? AND visible_at <= ?) OR (state = ? AND lease_expires_at <= ?))",
+                LeaseTaskState.RUNNING.name(),
                 workerId,
                 leaseToken,
                 leaseExpiresAt,
                 now,
                 taskId,
-                LeaseTaskStatus.SCHEDULED.name(),
+                LeaseTaskState.READY.name(),
                 now,
-                LeaseTaskStatus.LEASED.name(),
+                LeaseTaskState.RUNNING.name(),
                 now);
     }
 
     /**
-     * 确认任务完成
+     * 关闭运行中的任务
      *
      * @param taskId     任务 ID
      * @param workerId   工作节点 ID
@@ -157,72 +162,25 @@ public class JdbcLeaseTaskDao {
      * @return 更新行数
      * @throws SQLException SQL 异常
      */
-    public int ack(String taskId, String workerId, String leaseToken, long now) throws SQLException {
-        return db.execute(
-                "UPDATE " + TABLE_NAME + " SET status = ?, worker_id = NULL, lease_token = NULL, lease_expires_at = 0, "
-                        + "last_error = NULL, updated_at = ? "
-                        + "WHERE task_id = ? AND status = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
-                LeaseTaskStatus.SUCCEEDED.name(),
-                now,
-                taskId,
-                LeaseTaskStatus.LEASED.name(),
-                workerId,
-                leaseToken,
-                now);
-    }
-
-    /**
-     * 重试任务
-     *
-     * @param taskId     任务 ID
-     * @param workerId   工作节点 ID
-     * @param leaseToken 租约令牌
-     * @param visibleAt  下次可见时间戳
-     * @param lastError  错误原因
-     * @param now        当前时间戳
-     * @return 更新行数
-     * @throws SQLException SQL 异常
-     */
-    public int retry(String taskId, String workerId, String leaseToken, long visibleAt, String lastError, long now)
+    public int close(String taskId, String workerId, String leaseToken, LeaseCloseRequest request, long now)
             throws SQLException {
+        LeaseCloseRequest safeRequest = request == null ? LeaseCloseRequest.succeeded() : request;
+        LeaseTaskOutcome outcome = safeRequest.getOutcome();
+        LeaseTaskFailureReason reason = outcome == LeaseTaskOutcome.FAILED ? safeRequest.getFailureReason() : null;
+        int failureIncrement = outcome == LeaseTaskOutcome.FAILED ? 1 : 0;
         return db.execute(
-                "UPDATE " + TABLE_NAME
-                        + " SET status = ?, visible_at = ?, failure_count = failure_count + 1, worker_id = NULL, "
-                        + "lease_token = NULL, lease_expires_at = 0, last_error = ?, updated_at = ? "
-                        + "WHERE task_id = ? AND status = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
-                LeaseTaskStatus.SCHEDULED.name(),
-                visibleAt,
-                lastError,
+                "UPDATE " + TABLE_NAME + " SET state = ?, outcome = ?, failure_reason = ?, "
+                        + "failure_count = failure_count + ?, worker_id = NULL, lease_token = NULL, lease_expires_at = 0, "
+                        + "error_message = ?, updated_at = ? "
+                        + "WHERE task_id = ? AND state = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
+                LeaseTaskState.CLOSED.name(),
+                outcome.name(),
+                reason == null ? null : reason.name(),
+                failureIncrement,
+                safeRequest.getErrorMessage(),
                 now,
                 taskId,
-                LeaseTaskStatus.LEASED.name(),
-                workerId,
-                leaseToken,
-                now);
-    }
-
-    /**
-     * 任务标记为失败（不再重试）
-     *
-     * @param taskId     任务 ID
-     * @param workerId   工作节点 ID
-     * @param leaseToken 租约令牌
-     * @param lastError  错误原因
-     * @param now        当前时间戳
-     * @return 更新行数
-     * @throws SQLException SQL 异常
-     */
-    public int fail(String taskId, String workerId, String leaseToken, String lastError, long now) throws SQLException {
-        return db.execute(
-                "UPDATE " + TABLE_NAME
-                        + " SET status = ?, failure_count = failure_count + 1, worker_id = NULL, lease_token = NULL, "
-                        + "lease_expires_at = 0, last_error = ?, updated_at = ? "
-                        + "WHERE task_id = ? AND status = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
-                LeaseTaskStatus.DEAD.name(),
-                lastError,
-                now,
-                taskId,
-                LeaseTaskStatus.LEASED.name(),
+                LeaseTaskState.RUNNING.name(),
                 workerId,
                 leaseToken,
                 now);
@@ -243,11 +201,11 @@ public class JdbcLeaseTaskDao {
             throws SQLException {
         return db.execute(
                 "UPDATE " + TABLE_NAME + " SET lease_expires_at = ?, updated_at = ? "
-                        + "WHERE task_id = ? AND status = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
+                        + "WHERE task_id = ? AND state = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
                 leaseExpiresAt,
                 now,
                 taskId,
-                LeaseTaskStatus.LEASED.name(),
+                LeaseTaskState.RUNNING.name(),
                 workerId,
                 leaseToken,
                 now);
@@ -264,18 +222,19 @@ public class JdbcLeaseTaskDao {
      * @return 更新行数
      * @throws SQLException SQL 异常
      */
-    public int release(String taskId, String workerId, String leaseToken, long visibleAt, long now)
+    public int release(String taskId, String workerId, String leaseToken, long visibleAt, String errorMessage, long now)
             throws SQLException {
         return db.execute(
                 "UPDATE " + TABLE_NAME
-                        + " SET status = ?, visible_at = ?, worker_id = NULL, lease_token = NULL, lease_expires_at = 0, "
-                        + "updated_at = ? "
-                        + "WHERE task_id = ? AND status = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
-                LeaseTaskStatus.SCHEDULED.name(),
+                        + " SET state = ?, outcome = NULL, failure_reason = NULL, visible_at = ?, worker_id = NULL, "
+                        + "lease_token = NULL, lease_expires_at = 0, error_message = ?, updated_at = ? "
+                        + "WHERE task_id = ? AND state = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
+                LeaseTaskState.READY.name(),
                 visibleAt,
+                errorMessage,
                 now,
                 taskId,
-                LeaseTaskStatus.LEASED.name(),
+                LeaseTaskState.RUNNING.name(),
                 workerId,
                 leaseToken,
                 now);
@@ -293,64 +252,62 @@ public class JdbcLeaseTaskDao {
     public int reschedule(String taskId, long visibleAt, long now) throws SQLException {
         return db.execute(
                 "UPDATE " + TABLE_NAME
-                        + " SET status = ?, visible_at = ?, worker_id = NULL, lease_token = NULL, lease_expires_at = 0, "
-                        + "updated_at = ? WHERE task_id = ? "
-                        + "AND status NOT IN (?, ?) "
-                        + "AND NOT (status = ? AND lease_expires_at >= ?)",
-                LeaseTaskStatus.SCHEDULED.name(),
+                        + " SET state = ?, outcome = NULL, failure_reason = NULL, error_message = NULL, visible_at = ?, "
+                        + "worker_id = NULL, lease_token = NULL, lease_expires_at = 0, updated_at = ? WHERE task_id = ? "
+                        + "AND state <> ? "
+                        + "AND NOT (state = ? AND lease_expires_at >= ?)",
+                LeaseTaskState.READY.name(),
                 visibleAt,
                 now,
                 taskId,
-                LeaseTaskStatus.SUCCEEDED.name(),
-                LeaseTaskStatus.DEAD.name(),
-                LeaseTaskStatus.LEASED.name(),
+                LeaseTaskState.CLOSED.name(),
+                LeaseTaskState.RUNNING.name(),
                 now);
     }
 
     /**
-     * 取消任务
-     *
-     * @param taskId    任务 ID
-     * @param lastError 错误消息
-     * @param now       当前时间戳
-     * @return 更新行数
-     * @throws SQLException SQL 异常
+     * 管理面关闭任务
      */
-    public int cancel(String taskId, String lastError, long now) throws SQLException {
-        return db.execute(
-                "UPDATE " + TABLE_NAME + " SET status = ?, worker_id = NULL, lease_token = NULL, lease_expires_at = 0, "
-                        + "last_error = ?, updated_at = ? WHERE task_id = ? "
-                        + "AND status NOT IN (?, ?) "
-                        + "AND NOT (status = ? AND lease_expires_at >= ?)",
-                LeaseTaskStatus.DEAD.name(),
-                lastError,
-                now,
-                taskId,
-                LeaseTaskStatus.SUCCEEDED.name(),
-                LeaseTaskStatus.DEAD.name(),
-                LeaseTaskStatus.LEASED.name(),
-                now);
-    }
-
-    /**
-     * 将死信任务重新放入队列
-     *
-     * @param taskId    任务 ID
-     * @param visibleAt 重入后的可见时间
-     * @param now       当前时间
-     * @return 更新行数
-     * @throws SQLException SQL 异常
-     */
-    public int requeueDead(String taskId, long visibleAt, long now) throws SQLException {
+    public int close(String taskId, LeaseCloseRequest request, long now) throws SQLException {
+        LeaseCloseRequest safeRequest = request == null ? LeaseCloseRequest.cancelled(null) : request;
+        LeaseTaskOutcome outcome = safeRequest.getOutcome();
+        LeaseTaskFailureReason reason = outcome == LeaseTaskOutcome.FAILED
+                ? (safeRequest.getFailureReason() == null ? LeaseTaskFailureReason.MANUAL_FAIL
+                : safeRequest.getFailureReason())
+                : null;
+        int failureIncrement = outcome == LeaseTaskOutcome.FAILED ? 1 : 0;
         return db.execute(
                 "UPDATE " + TABLE_NAME
-                        + " SET status = ?, visible_at = ?, worker_id = NULL, lease_token = NULL, lease_expires_at = 0, "
-                        + "updated_at = ? WHERE task_id = ? AND status = ?",
-                LeaseTaskStatus.SCHEDULED.name(),
+                        + " SET state = ?, outcome = ?, failure_reason = ?, failure_count = failure_count + ?, "
+                        + "worker_id = NULL, lease_token = NULL, lease_expires_at = 0, error_message = ?, "
+                        + "updated_at = ? WHERE task_id = ? AND state <> ? AND NOT (state = ? AND lease_expires_at >= ?)",
+                LeaseTaskState.CLOSED.name(),
+                outcome.name(),
+                reason == null ? null : reason.name(),
+                failureIncrement,
+                safeRequest.getErrorMessage(),
+                now,
+                taskId,
+                LeaseTaskState.CLOSED.name(),
+                LeaseTaskState.RUNNING.name(),
+                now);
+    }
+
+    /**
+     * 将失败任务重新放入队列
+     */
+    public int requeueFailed(String taskId, long visibleAt, long now) throws SQLException {
+        return db.execute(
+                "UPDATE " + TABLE_NAME
+                        + " SET state = ?, outcome = NULL, failure_reason = NULL, error_message = NULL, visible_at = ?, "
+                        + "worker_id = NULL, lease_token = NULL, lease_expires_at = 0, updated_at = ? "
+                        + "WHERE task_id = ? AND state = ? AND outcome = ?",
+                LeaseTaskState.READY.name(),
                 visibleAt,
                 now,
                 taskId,
-                LeaseTaskStatus.DEAD.name());
+                LeaseTaskState.CLOSED.name(),
+                LeaseTaskOutcome.FAILED.name());
     }
 
     /**
@@ -383,25 +340,6 @@ public class JdbcLeaseTaskDao {
     }
 
     /**
-     * 强行标记任务失败（运维接口）
-     *
-     * @param taskId    任务 ID
-     * @param lastError 错误原因
-     * @param now       当前时间
-     * @return 更新行数
-     * @throws SQLException SQL 异常
-     */
-    public int fail(String taskId, String lastError, long now) throws SQLException {
-        return db.execute(
-                "UPDATE " + TABLE_NAME + " SET status = ?, worker_id = NULL, lease_token = NULL, "
-                        + "lease_expires_at = 0, last_error = ?, updated_at = ? WHERE task_id = ?",
-                LeaseTaskStatus.DEAD.name(),
-                lastError,
-                now,
-                taskId);
-    }
-
-    /**
      * 分页查询任务
      *
      * @param request 查询请求
@@ -413,13 +351,17 @@ public class JdbcLeaseTaskDao {
         List<Object> params = new ArrayList<Object>();
         boolean filterQueue = safeRequest.getQueue() != null;
         boolean filterTaskType = safeRequest.getTaskType() != null;
-        boolean filterStatuses = !safeRequest.getStatuses().isEmpty();
+        boolean filterStates = !safeRequest.getStates().isEmpty();
+        boolean filterOutcomes = !safeRequest.getOutcomes().isEmpty();
+        boolean filterFailureReasons = !safeRequest.getFailureReasons().isEmpty();
         boolean filterWorkerId = safeRequest.getWorkerId() != null;
 
         String sql = dialect.buildQuerySql(
                 filterQueue,
                 filterTaskType,
-                filterStatuses ? safeRequest.getStatuses().size() : 0,
+                filterStates ? safeRequest.getStates().size() : 0,
+                filterOutcomes ? safeRequest.getOutcomes().size() : 0,
+                filterFailureReasons ? safeRequest.getFailureReasons().size() : 0,
                 filterWorkerId);
 
         applyQueryParams(safeRequest, params);
@@ -463,8 +405,15 @@ public class JdbcLeaseTaskDao {
         if (safeRequest.getTaskType() != null) {
             sql.append(" AND task_type = ?");
         }
-        if (!safeRequest.getStatuses().isEmpty()) {
-            sql.append(" AND status IN (").append(placeholders(safeRequest.getStatuses().size())).append(")");
+        if (!safeRequest.getStates().isEmpty()) {
+            sql.append(" AND state IN (").append(placeholders(safeRequest.getStates().size())).append(")");
+        }
+        if (!safeRequest.getOutcomes().isEmpty()) {
+            sql.append(" AND outcome IN (").append(placeholders(safeRequest.getOutcomes().size())).append(")");
+        }
+        if (!safeRequest.getFailureReasons().isEmpty()) {
+            sql.append(" AND failure_reason IN (").append(placeholders(safeRequest.getFailureReasons().size()))
+                    .append(")");
         }
         if (safeRequest.getWorkerId() != null) {
             sql.append(" AND worker_id = ?");
@@ -487,9 +436,19 @@ public class JdbcLeaseTaskDao {
         if (request.getTaskType() != null) {
             params.add(request.getTaskType());
         }
-        if (!request.getStatuses().isEmpty()) {
-            for (LeaseTaskStatus status : request.getStatuses()) {
-                params.add(status.name());
+        if (!request.getStates().isEmpty()) {
+            for (LeaseTaskState state : request.getStates()) {
+                params.add(state.name());
+            }
+        }
+        if (!request.getOutcomes().isEmpty()) {
+            for (LeaseTaskOutcome outcome : request.getOutcomes()) {
+                params.add(outcome.name());
+            }
+        }
+        if (!request.getFailureReasons().isEmpty()) {
+            for (LeaseTaskFailureReason failureReason : request.getFailureReasons()) {
+                params.add(failureReason.name());
             }
         }
         if (request.getWorkerId() != null) {
@@ -522,7 +481,10 @@ public class JdbcLeaseTaskDao {
                 .queue(row.getStr("queue_name"))
                 .taskType(row.getStr("task_type"))
                 .payload(row.getStr("payload"))
-                .status(LeaseTaskStatus.valueOf(row.getStr("status")))
+                .state(LeaseTaskState.valueOf(row.getStr("state")))
+                .outcome(row.getStr("outcome") == null ? null : LeaseTaskOutcome.valueOf(row.getStr("outcome")))
+                .failureReason(row.getStr("failure_reason") == null ? null
+                        : LeaseTaskFailureReason.valueOf(row.getStr("failure_reason")))
                 .priority(Convert.toInt(row.get("priority"), 0))
                 .deliveryCount(Convert.toInt(row.get("delivery_count"), 0))
                 .failureCount(Convert.toInt(row.get("failure_count"), 0))
@@ -532,7 +494,7 @@ public class JdbcLeaseTaskDao {
                 .visibleAtMillis(Convert.toLong(row.get("visible_at"), 0L))
                 .createdAtMillis(Convert.toLong(row.get("created_at"), 0L))
                 .updatedAtMillis(Convert.toLong(row.get("updated_at"), 0L))
-                .lastError(row.getStr("last_error"))
+                .errorMessage(row.getStr("error_message"))
                 .attributes(jsonCodec.fromJson(row.getStr("attributes_json")))
                 .build();
     }

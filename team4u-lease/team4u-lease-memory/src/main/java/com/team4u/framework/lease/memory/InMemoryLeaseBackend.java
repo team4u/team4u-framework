@@ -3,7 +3,9 @@ package com.team4u.framework.lease.memory;
 import com.team4u.framework.lease.api.LeaseBackend;
 import com.team4u.framework.lease.enums.LeaseAdminResult;
 import com.team4u.framework.lease.enums.LeaseRuntimeResult;
-import com.team4u.framework.lease.enums.LeaseTaskStatus;
+import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
+import com.team4u.framework.lease.enums.LeaseTaskOutcome;
+import com.team4u.framework.lease.enums.LeaseTaskState;
 import com.team4u.framework.lease.model.*;
 import lombok.*;
 
@@ -41,7 +43,9 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                 0,
                 0,
                 request.getAttributes(),
-                LeaseTaskStatus.SCHEDULED,
+                LeaseTaskState.READY,
+                null,
+                null,
                 null,
                 null,
                 0L,
@@ -89,7 +93,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     }
 
     @Override
-    public synchronized LeaseRuntimeResult ack(LeaseHandle handle) {
+    public synchronized LeaseRuntimeResult close(LeaseHandle handle, LeaseCloseRequest request) {
         StoredTask current = records.get(taskId(handle));
         LeaseRuntimeResult result = current == null
                 ? LeaseRuntimeResult.TASK_NOT_FOUND
@@ -97,20 +101,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         if (result != LeaseRuntimeResult.APPLIED) {
             return result;
         }
-        store(current.succeed(), false);
-        return LeaseRuntimeResult.APPLIED;
-    }
-
-    @Override
-    public synchronized LeaseRuntimeResult fail(LeaseHandle handle, LeaseFailureRequest request) {
-        StoredTask current = records.get(taskId(handle));
-        LeaseRuntimeResult result = current == null
-                ? LeaseRuntimeResult.TASK_NOT_FOUND
-                : current.validateRuntimeMutation(handle, System.currentTimeMillis());
-        if (result != LeaseRuntimeResult.APPLIED) {
-            return result;
-        }
-        store(current.fail(errorMessage(request.getCause())), false);
+        store(current.close(request), false);
         return LeaseRuntimeResult.APPLIED;
     }
 
@@ -139,7 +130,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
             return result;
         }
         long visibleAt = System.currentTimeMillis() + Math.max(0L, request.getDelayMillis());
-        StoredTask next = current.release(visibleAt);
+        StoredTask next = current.release(visibleAt, request.getErrorMessage(), request.getAttributes());
         store(next, true);
         return LeaseRuntimeResult.APPLIED;
     }
@@ -160,26 +151,36 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     }
 
     @Override
-    public synchronized LeaseAdminResult cancel(String taskId) {
+    public synchronized LeaseAdminResult close(String taskId, LeaseCloseRequest request) {
+        if (isBlank(taskId)) {
+            return LeaseAdminResult.TASK_NOT_FOUND;
+        }
         StoredTask current = records.get(taskId);
-        LeaseAdminResult validation = current == null
-                ? LeaseAdminResult.TASK_NOT_FOUND
-                : current.validateAdminMutable(System.currentTimeMillis());
+        LeaseAdminResult validation;
+        if (current == null) {
+            validation = LeaseAdminResult.TASK_NOT_FOUND;
+        } else if (current.getState() == LeaseTaskState.RUNNING && current.hasActiveLease(System.currentTimeMillis())) {
+            validation = LeaseAdminResult.ACTIVE_LEASE_PRESENT;
+        } else if (current.getState() == LeaseTaskState.CLOSED) {
+            validation = LeaseAdminResult.CLOSED;
+        } else {
+            validation = LeaseAdminResult.APPLIED;
+        }
         if (validation != LeaseAdminResult.APPLIED) {
             return validation;
         }
-        store(current.cancel(), false);
+        store(current.adminClose(request), false);
         return LeaseAdminResult.APPLIED;
     }
 
     @Override
-    public synchronized LeaseAdminResult requeueDead(String taskId, long delayMillis) {
+    public synchronized LeaseAdminResult requeueFailed(String taskId, long delayMillis) {
         StoredTask current = records.get(taskId);
         if (current == null) {
             return LeaseAdminResult.TASK_NOT_FOUND;
         }
-        if (!current.isDead()) {
-            return LeaseAdminResult.TERMINAL;
+        if (!current.isRequeueableFailure()) {
+            return LeaseAdminResult.CLOSED;
         }
         long visibleAt = System.currentTimeMillis() + Math.max(0L, delayMillis);
         StoredTask next = current.reschedule(visibleAt);
@@ -211,19 +212,6 @@ public class InMemoryLeaseBackend implements LeaseBackend {
             builder.attributes(request.getAttributes());
         }
         store(builder.build(), false);
-        return LeaseAdminResult.APPLIED;
-    }
-
-    @Override
-    public synchronized LeaseAdminResult fail(String taskId, String cause) {
-        if (isBlank(taskId)) {
-            return LeaseAdminResult.TASK_NOT_FOUND;
-        }
-        StoredTask current = records.get(taskId);
-        if (current == null) {
-            return LeaseAdminResult.TASK_NOT_FOUND;
-        }
-        store(current.fail(cause), false);
         return LeaseAdminResult.APPLIED;
     }
 
@@ -311,7 +299,14 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         if (request.getTaskType() != null && !request.getTaskType().equals(task.getTaskType())) {
             return false;
         }
-        if (!request.getStatuses().isEmpty() && !request.getStatuses().contains(task.getStatus())) {
+        if (!request.getStates().isEmpty() && !request.getStates().contains(task.getState())) {
+            return false;
+        }
+        if (!request.getOutcomes().isEmpty() && !request.getOutcomes().contains(task.getOutcome())) {
+            return false;
+        }
+        if (!request.getFailureReasons().isEmpty()
+                && !request.getFailureReasons().contains(task.getFailureReason())) {
             return false;
         }
         return request.getWorkerId() == null || request.getWorkerId().equals(task.getWorkerId());
@@ -471,38 +466,47 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         private final int failureCount;
         @Singular
         private final Map<String, String> attributes;
-        private final LeaseTaskStatus status;
+        private final LeaseTaskState state;
+        private final LeaseTaskOutcome outcome;
+        private final LeaseTaskFailureReason failureReason;
         private final String workerId;
         private final String leaseToken;
         private final long leaseExpiresAtMillis;
-        private final String lastError;
+        private final String errorMessage;
 
         private StoredTask claim(String workerId, String leaseToken, long leaseExpiresAtMillis) {
-            // 成功领取后进入 LEASED，并累计投递次数。
+            // 成功领取后进入 RUNNING，并累计投递次数。
             return toBuilder()
                     .workerId(workerId)
                     .leaseToken(leaseToken)
                     .leaseExpiresAtMillis(leaseExpiresAtMillis)
-                    .status(LeaseTaskStatus.LEASED)
+                    .state(LeaseTaskState.RUNNING)
                     .deliveryCount(deliveryCount + 1)
                     .build();
         }
 
         private StoredTask reschedule(long visibleAtMillis) {
-            // 重新入队会清掉租约信息，但保留失败计数和最后一次错误。
+            // 重新入队会清掉租约和关闭结果，但保留失败计数。
             return toBuilder()
                     .visibleAtMillis(visibleAtMillis)
-                    .failureCount(failureCount)
-                    .lastError(lastError)
-                    .status(LeaseTaskStatus.SCHEDULED)
+                    .state(LeaseTaskState.READY)
+                    .outcome(null)
+                    .failureReason(null)
+                    .errorMessage(null)
                     .workerId(null)
                     .leaseToken(null)
                     .leaseExpiresAtMillis(0L)
                     .build();
         }
 
-        private StoredTask release(long visibleAtMillis) {
-            return reschedule(visibleAtMillis);
+        private StoredTask release(long visibleAtMillis, String errorMessage, Map<String, String> attributes) {
+            StoredTask next = reschedule(visibleAtMillis).toBuilder()
+                    .errorMessage(errorMessage)
+                    .build();
+            if (attributes != null) {
+                next = next.toBuilder().attributes(attributes).build();
+            }
+            return next;
         }
 
         private StoredTask heartbeat(long leaseExpiresAtMillis) {
@@ -511,27 +515,33 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                     .workerId(workerId)
                     .leaseToken(leaseToken)
                     .leaseExpiresAtMillis(leaseExpiresAtMillis)
-                    .status(LeaseTaskStatus.LEASED)
+                    .state(LeaseTaskState.RUNNING)
                     .build();
         }
 
-        private StoredTask succeed() {
-            return toTerminal(LeaseTaskStatus.SUCCEEDED, failureCount, null);
+        private StoredTask close(LeaseCloseRequest request) {
+            LeaseCloseRequest safeRequest = request == null ? LeaseCloseRequest.succeeded() : request;
+            return toClosedTask(safeRequest, false);
         }
 
-        private StoredTask fail(String lastError) {
-            return toTerminal(LeaseTaskStatus.DEAD, failureCount + 1, lastError);
+        private StoredTask adminClose(LeaseCloseRequest request) {
+            LeaseCloseRequest safeRequest = request == null ? LeaseCloseRequest.cancelled(null) : request;
+            return toClosedTask(safeRequest, true);
         }
 
-        private StoredTask cancel() {
-            return toTerminal(LeaseTaskStatus.DEAD, failureCount, "cancelled");
-        }
-
-        private StoredTask toTerminal(LeaseTaskStatus status, int failureCount, String lastError) {
+        private StoredTask toClosedTask(LeaseCloseRequest request, boolean adminOperation) {
+            LeaseTaskOutcome outcome = request.getOutcome();
+            int nextFailureCount = outcome == LeaseTaskOutcome.FAILED ? failureCount + 1 : failureCount;
+            LeaseTaskFailureReason reason = request.getFailureReason();
+            if (adminOperation && outcome == LeaseTaskOutcome.FAILED && reason == null) {
+                reason = LeaseTaskFailureReason.MANUAL_FAIL;
+            }
             return toBuilder()
-                    .status(status)
-                    .failureCount(failureCount)
-                    .lastError(lastError)
+                    .state(LeaseTaskState.CLOSED)
+                    .outcome(outcome)
+                    .failureReason(outcome == LeaseTaskOutcome.FAILED ? reason : null)
+                    .failureCount(nextFailureCount)
+                    .errorMessage(request.getErrorMessage())
                     .workerId(null)
                     .leaseToken(null)
                     .leaseExpiresAtMillis(0L)
@@ -539,19 +549,19 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         }
 
         private boolean isTerminal() {
-            return status == LeaseTaskStatus.SUCCEEDED || status == LeaseTaskStatus.DEAD;
+            return state == LeaseTaskState.CLOSED;
         }
 
-        private boolean isDead() {
-            return status == LeaseTaskStatus.DEAD;
+        private boolean isRequeueableFailure() {
+            return state == LeaseTaskState.CLOSED && outcome == LeaseTaskOutcome.FAILED;
         }
 
         private boolean hasActiveLease(long now) {
-            return status == LeaseTaskStatus.LEASED && leaseExpiresAtMillis >= now;
+            return state == LeaseTaskState.RUNNING && leaseExpiresAtMillis >= now;
         }
 
         private long nextAvailableAt() {
-            return status == LeaseTaskStatus.LEASED ? leaseExpiresAtMillis : visibleAtMillis;
+            return state == LeaseTaskState.RUNNING ? leaseExpiresAtMillis : visibleAtMillis;
         }
 
         private boolean isClaimable(long expectedAvailableAt, long now) {
@@ -562,9 +572,9 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         private LeaseRuntimeResult validateRuntimeMutation(LeaseHandle handle, long now) {
             // runtime 操作必须由当前持有有效租约的 worker 发起。
             if (isTerminal()) {
-                return LeaseRuntimeResult.TERMINAL;
+                return LeaseRuntimeResult.CLOSED;
             }
-            if (status != LeaseTaskStatus.LEASED) {
+            if (state != LeaseTaskState.RUNNING) {
                 return LeaseRuntimeResult.LEASE_LOST;
             }
             if (!Objects.equals(workerId, handle.getWorkerId())
@@ -580,7 +590,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         private LeaseAdminResult validateAdminMutable(long now) {
             // 管理操作不能覆盖终态任务，也不能打断仍有效的租约。
             if (isTerminal()) {
-                return LeaseAdminResult.TERMINAL;
+                return LeaseAdminResult.CLOSED;
             }
             if (hasActiveLease(now)) {
                 return LeaseAdminResult.ACTIVE_LEASE_PRESENT;
@@ -611,7 +621,9 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                     .queue(queue)
                     .taskType(taskType)
                     .payload(payload)
-                    .status(status)
+                    .state(state)
+                    .outcome(outcome)
+                    .failureReason(failureReason)
                     .workerId(workerId)
                     .priority(priority)
                     .deliveryCount(deliveryCount)
@@ -619,7 +631,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                     .createdAtMillis(createdAtMillis)
                     .visibleAtMillis(visibleAtMillis)
                     .leaseExpiresAtMillis(leaseExpiresAtMillis)
-                    .lastError(lastError)
+                    .errorMessage(errorMessage)
                     .attributes(attributes == null ? Collections.emptyMap() : attributes)
                     .build();
         }
