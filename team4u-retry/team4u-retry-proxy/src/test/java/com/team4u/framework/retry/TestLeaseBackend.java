@@ -9,7 +9,7 @@ import com.team4u.framework.retry.backend.RetryBackend;
 public abstract class TestLeaseBackend implements RetryBackend {
 
     @Override
-    public void save(RetryTaskSnapshot snapshot) {
+    public void prepare(RetryTaskSnapshot snapshot) {
     }
 
     @Override
@@ -17,6 +17,6 @@ public abstract class TestLeaseBackend implements RetryBackend {
     }
 
     @Override
-    public void delete(String taskId) {
+    public void complete(String taskId) {
     }
 }

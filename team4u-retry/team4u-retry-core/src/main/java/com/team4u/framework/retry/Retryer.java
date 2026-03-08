@@ -295,7 +295,7 @@ public class Retryer {
         }
         RetryTaskSnapshot snapshot = payloadBuilder.build(RetryPayloadContext.prepareIntent());
         snapshot.setTaskType(taskType);
-        retryBackend.save(snapshot);
+        retryBackend.prepare(snapshot);
 
         if (snapshot.getTaskId() == null || snapshot.getTaskId().isEmpty()) {
             throw new IllegalStateException("Persistent retry intent requires a task id.");
@@ -313,11 +313,11 @@ public class Retryer {
 
         if (finalSnapshot == null) {
             finalSnapshot = payloadBuilder.build(RetryPayloadContext.handoffToBackend(nextAttempt));
-            retryBackend.save(finalSnapshot);
+            retryBackend.prepare(finalSnapshot);
         } else {
             finalSnapshot.setExecutedAttempts(nextAttempt);
             // 再次保存以更新已尝试次数
-            retryBackend.save(finalSnapshot);
+            retryBackend.prepare(finalSnapshot);
         }
 
         if (finalSnapshot.getTaskId() == null || finalSnapshot.getTaskId().isEmpty()) {
@@ -337,7 +337,7 @@ public class Retryer {
         if (taskId == null || retryBackend == null) {
             return;
         }
-        CompletableFuture.runAsync(() -> retryBackend.delete(taskId), cleanupExecutor);
+        CompletableFuture.runAsync(() -> retryBackend.complete(taskId), cleanupExecutor);
     }
 
     private Throwable normalizeSyncFailure(Throwable ex) throws InterruptedException {

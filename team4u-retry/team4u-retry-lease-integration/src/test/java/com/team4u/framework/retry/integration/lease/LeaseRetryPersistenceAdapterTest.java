@@ -19,11 +19,11 @@ public class LeaseRetryPersistenceAdapterTest {
             requestRef.set(request);
             return "lease-task-1";
         };
-        LeaseRetryPersistenceAdapter adapter =
-                new LeaseRetryPersistenceAdapter(producer, new NoopAdminService(), "retry-q");
+        LeaseRetryBackend adapter =
+                new LeaseRetryBackend(producer, new NoopAdminService(), "retry-q");
         RetryTaskSnapshot snapshot = snapshot("task-a", "{\"id\":1}");
 
-        adapter.save(snapshot);
+        adapter.prepare(snapshot);
 
         Assert.assertEquals("lease-task-1", snapshot.getTaskId());
         Assert.assertEquals("retry-q", requestRef.get().getQueue());
@@ -39,12 +39,12 @@ public class LeaseRetryPersistenceAdapterTest {
             requestRef.set(request);
             return "unexpected";
         };
-        LeaseRetryPersistenceAdapter adapter =
-                new LeaseRetryPersistenceAdapter(producer, new NoopAdminService());
+        LeaseRetryBackend adapter =
+                new LeaseRetryBackend(producer, new NoopAdminService());
         RetryTaskSnapshot snapshot = snapshot("task-a", "{\"id\":1}");
         snapshot.setTaskId("existing-id");
 
-        adapter.save(snapshot);
+        adapter.prepare(snapshot);
 
         Assert.assertNull(requestRef.get());
         Assert.assertEquals("existing-id", snapshot.getTaskId());
@@ -52,11 +52,11 @@ public class LeaseRetryPersistenceAdapterTest {
 
     @Test
     public void saveShouldRejectNullSnapshot() {
-        LeaseRetryPersistenceAdapter adapter =
-                new LeaseRetryPersistenceAdapter(request -> "unused", new NoopAdminService());
+        LeaseRetryBackend adapter =
+                new LeaseRetryBackend(request -> "unused", new NoopAdminService());
 
         try {
-            adapter.save(null);
+            adapter.prepare(null);
             Assert.fail("expected IllegalArgumentException");
         } catch (IllegalArgumentException expected) {
             Assert.assertTrue(expected.getMessage().contains("snapshot"));
@@ -65,12 +65,12 @@ public class LeaseRetryPersistenceAdapterTest {
 
     @Test
     public void saveShouldRejectBlankTaskType() {
-        LeaseRetryPersistenceAdapter adapter =
-                new LeaseRetryPersistenceAdapter(request -> "unused", new NoopAdminService());
+        LeaseRetryBackend adapter =
+                new LeaseRetryBackend(request -> "unused", new NoopAdminService());
         RetryTaskSnapshot snapshot = snapshot("  ", "{\"id\":1}");
 
         try {
-            adapter.save(snapshot);
+            adapter.prepare(snapshot);
             Assert.fail("expected IllegalArgumentException");
         } catch (IllegalArgumentException expected) {
             Assert.assertTrue(expected.getMessage().contains("taskType"));
@@ -79,12 +79,12 @@ public class LeaseRetryPersistenceAdapterTest {
 
     @Test
     public void saveShouldRejectNullPayload() {
-        LeaseRetryPersistenceAdapter adapter =
-                new LeaseRetryPersistenceAdapter(request -> "unused", new NoopAdminService());
+        LeaseRetryBackend adapter =
+                new LeaseRetryBackend(request -> "unused", new NoopAdminService());
         RetryTaskSnapshot snapshot = snapshot("task-a", null);
 
         try {
-            adapter.save(snapshot);
+            adapter.prepare(snapshot);
             Assert.fail("expected IllegalArgumentException");
         } catch (IllegalArgumentException expected) {
             Assert.assertTrue(expected.getMessage().contains("payload"));
@@ -94,8 +94,8 @@ public class LeaseRetryPersistenceAdapterTest {
     @Test
     public void handoffShouldThrowWhenLeaseAdminRejectsOperation() {
         LeaseAdminService adminService = new StubAdminService(LeaseAdminResult.ACTIVE_LEASE_PRESENT, LeaseAdminResult.APPLIED);
-        LeaseRetryPersistenceAdapter adapter =
-                new LeaseRetryPersistenceAdapter(request -> "unused", adminService);
+        LeaseRetryBackend adapter =
+                new LeaseRetryBackend(request -> "unused", adminService);
 
         try {
             adapter.handoff("task-1", 1000L);
@@ -108,11 +108,11 @@ public class LeaseRetryPersistenceAdapterTest {
     @Test
     public void deleteShouldThrowWhenLeaseAdminRejectsOperation() {
         LeaseAdminService adminService = new StubAdminService(LeaseAdminResult.APPLIED, LeaseAdminResult.TASK_NOT_FOUND);
-        LeaseRetryPersistenceAdapter adapter =
-                new LeaseRetryPersistenceAdapter(request -> "unused", adminService);
+        LeaseRetryBackend adapter =
+                new LeaseRetryBackend(request -> "unused", adminService);
 
         try {
-            adapter.delete("task-1");
+            adapter.complete("task-1");
             Assert.fail("expected IllegalStateException");
         } catch (IllegalStateException expected) {
             Assert.assertTrue(expected.getMessage().contains("TASK_NOT_FOUND"));

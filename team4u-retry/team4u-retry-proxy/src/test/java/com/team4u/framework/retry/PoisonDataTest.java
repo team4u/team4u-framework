@@ -21,7 +21,7 @@ public class PoisonDataTest {
 
     private final TestLeaseBackend mockBackend = new TestLeaseBackend() {
         @Override
-        public void save(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
+        public void prepare(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
             snapshot.setTaskId("intentId");
         }
 
@@ -30,7 +30,7 @@ public class PoisonDataTest {
         }
 
         @Override
-        public void delete(String taskId) {
+        public void complete(String taskId) {
         }
     };
 

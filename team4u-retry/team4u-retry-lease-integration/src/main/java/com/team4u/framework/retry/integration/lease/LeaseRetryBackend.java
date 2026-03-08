@@ -5,15 +5,15 @@ import com.team4u.framework.lease.api.LeaseBackend;
 import com.team4u.framework.lease.api.LeaseProducer;
 import com.team4u.framework.lease.enums.LeaseAdminResult;
 import com.team4u.framework.lease.model.LeasePublishRequest;
-import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.backend.RetryBackend;
+import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 
 /**
  * 基于 Lease 功能实现的重试持久化适配器
  * <p>
  * 将重试任务持久化到 Lease 存储中，并利用 Lease 的延迟发布特性实现退避重试。
  */
-public class LeaseRetryPersistenceAdapter implements RetryBackend {
+public class LeaseRetryBackend implements RetryBackend {
 
     private static final long PREPARED_INTENT_DELAY_MILLIS = 3650L * 24L * 60L * 60L * 1000L;
 
@@ -21,30 +21,28 @@ public class LeaseRetryPersistenceAdapter implements RetryBackend {
     private final LeaseAdminService adminService;
     private final String queue;
 
-    public LeaseRetryPersistenceAdapter(LeaseBackend backend) {
+    public LeaseRetryBackend(LeaseBackend backend) {
         this(backend, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE);
     }
 
-    public LeaseRetryPersistenceAdapter(LeaseBackend backend, String queue) {
+    public LeaseRetryBackend(LeaseBackend backend, String queue) {
         this(backend, backend, queue);
     }
 
-    public LeaseRetryPersistenceAdapter(LeaseProducer producer, LeaseAdminService adminService) {
+    public LeaseRetryBackend(LeaseProducer producer, LeaseAdminService adminService) {
         this(producer, adminService, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE);
     }
 
-    public LeaseRetryPersistenceAdapter(LeaseProducer producer, LeaseAdminService adminService, String queue) {
+    public LeaseRetryBackend(LeaseProducer producer, LeaseAdminService adminService, String queue) {
         this.producer = producer;
         this.adminService = adminService;
         this.queue = (queue == null || queue.trim().isEmpty()) ? RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE : queue;
     }
 
     @Override
-    public void save(RetryTaskSnapshot snapshot) {
+    public void prepare(RetryTaskSnapshot snapshot) {
         validateSnapshot(snapshot);
-        // 由于目前 Lease 并不支持 publish 时指定 ID 且不支持覆盖更新，
-        // 在新模型下，save 主要承担 PREPARE_INTENT 阶段的“挂起”持久化。
-        // 如果 snapshot 还没有 taskId（通常在第一次进入持久化层时），我们通过 publish 创建一个超长延迟的任务。
+
         if (snapshot.getTaskId() == null) {
             String taskId = producer.publish(LeasePublishRequest.builder()
                     .queue(queue)
@@ -54,8 +52,6 @@ public class LeaseRetryPersistenceAdapter implements RetryBackend {
                     .build());
             snapshot.setTaskId(taskId);
         }
-        // 注意：Lease 场景下的状态更新通常是通过 handoff (reschedule) 完成的，
-        // 这里的 save 仅处理初始化。如果需要支持运行中快照更新，需扩展 Lease 的自定义 ID 或 Update 接口。
     }
 
     @Override
@@ -65,7 +61,7 @@ public class LeaseRetryPersistenceAdapter implements RetryBackend {
     }
 
     @Override
-    public void delete(String taskId) {
+    public void complete(String taskId) {
         assertTaskId(taskId, "delete");
         assertApplied("delete", taskId, adminService.cancel(taskId));
     }

@@ -104,7 +104,7 @@ public class SnapshotRecoveryHandlerTest {
         private final AtomicInteger submitCount = new AtomicInteger();
 
         @Override
-        public void save(RetryTaskSnapshot snapshot) {
+        public void prepare(RetryTaskSnapshot snapshot) {
             saveCount.incrementAndGet();
             snapshot.setTaskId("intent");
         }
@@ -115,7 +115,7 @@ public class SnapshotRecoveryHandlerTest {
         }
 
         @Override
-        public void delete(String taskId) {
+        public void complete(String taskId) {
         }
     }
 }

@@ -305,13 +305,13 @@ public class RetryDelegateTest {
         private final CountDownLatch completeLatch = new CountDownLatch(1);
 
         @Override
-        public void save(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
+        public void prepare(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
             saveCount.incrementAndGet();
             snapshot.setTaskId("intent-1");
         }
 
         @Override
-        public void delete(String taskId) {
+        public void complete(String taskId) {
             completeLatch.countDown();
         }
 
@@ -325,13 +325,13 @@ public class RetryDelegateTest {
         private String submittedPayload;
 
         @Override
-        public void save(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
+        public void prepare(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
             this.savedPayload = JSONUtil.toJsonStr(snapshot);
             snapshot.setTaskId("intent-1");
         }
 
         @Override
-        public void delete(String taskId) {
+        public void complete(String taskId) {
         }
 
         @Override

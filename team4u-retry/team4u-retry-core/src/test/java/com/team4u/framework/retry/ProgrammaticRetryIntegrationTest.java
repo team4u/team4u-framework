@@ -127,12 +127,12 @@ public class ProgrammaticRetryIntegrationTest {
         List<DelayedTask> delayedTasks = new ArrayList<>();
 
         @Override
-        public void save(RetryTaskSnapshot snapshot) {
+        public void prepare(RetryTaskSnapshot snapshot) {
             savedSnapshots.put(snapshot.getTaskId(), snapshot);
         }
 
         @Override
-        public void delete(String taskId) {
+        public void complete(String taskId) {
             deletedTaskIds.add(taskId);
         }
 

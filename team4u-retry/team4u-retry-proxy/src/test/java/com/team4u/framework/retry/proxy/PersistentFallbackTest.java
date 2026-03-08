@@ -39,7 +39,7 @@ public class PersistentFallbackTest {
         AtomicInteger submitCount = new AtomicInteger(0);
         TestLeaseBackend mockBackend = new TestLeaseBackend() {
             @Override
-            public void save(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
+            public void prepare(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
                 Assert.assertEquals(RetryTaskTypes.DEFAULT_PROXY_RECOVERY, snapshot.getTaskType());
                 String contextJson = cn.hutool.json.JSONUtil.toJsonStr(snapshot);
                 Assert.assertTrue("Context snippet should contain method name", contextJson.contains("doSomething"));
@@ -48,7 +48,7 @@ public class PersistentFallbackTest {
             }
 
             @Override
-            public void delete(String taskId) {
+            public void complete(String taskId) {
             }
 
             @Override
