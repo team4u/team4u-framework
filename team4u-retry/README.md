@@ -706,23 +706,22 @@ public interface RetryBackend {
 
 ### 基于 Lease 的内置适配
 
-如果你使用的是 lease 能力，可以直接使用：
+如果你已经在项目中使用 `team4u-lease` 模块，可以直接利用内置适配器实现持久化重试，无需额外开发。
 
-* `LeaseRetryBackend`
-* `RetryLeaseWorker`
+主要组件：
 
-说明：
+* **`LeaseRetryBackend`**：基于 Lease 的重试后端实现。它会将重试任务快照（`RetryTaskSnapshot`）透明地持久化到 Lease 的 payload 中。
+* **`RetryLeaseWorker`**：配套的后台 Worker。它负责监听指定队列并自动驱动后续的恢复链路。
 
-* `LeaseRetryBackend` 当前会把整个 `RetryTaskSnapshot` 序列化后写入 lease `payload`
-* 所以 lease 任务里的 `payload` 不再只是业务 JSON，而是完整快照
-* 编程式接入和注解式接入都可以复用同一条恢复链路
-* 后端恢复失败但仍可重试时，会更新快照进度并通过 lease `release(delay)` 重新入队
-* 达到终态时，会通过统一的 `close(...)` 结束任务；对于当前已持有 lease 的恢复任务，只走一次 lease runtime `close(...)` 或
-  `release(...)`，不再双写
+特性说明：
 
-默认恢复队列为：
+* **全场景支持**：编程式接入和注解式接入（`@Retryable`）共用同一套基于 Lease 的恢复逻辑，降低维护成本。
+* **状态自动闭环**：`LeaseRetryBackend` 会自动维护任务执行进度。若恢复执行再次失败，它会通过 Lease 的 `release` 机制实现延迟重试；若任务达成终态，则会自动调用 `close` 释放资源。
+* **零配置集成**：默认监听名为 `retry-recovery` 的队列。
 
-```java
+默认恢复队列：
+
+```text
 retry-recovery
 ```
 
