@@ -164,7 +164,9 @@ public class JdbcLeaseTaskDao {
      */
     public int close(String taskId, String workerId, String leaseToken, LeaseCloseRequest request, long now)
             throws SQLException {
-        LeaseCloseRequest safeRequest = request == null ? LeaseCloseRequest.succeeded() : request;
+        LeaseCloseRequest safeRequest = request == null
+                ? LeaseCloseRequest.succeeded()
+                : request.normalizeForRuntime();
         LeaseTaskOutcome outcome = safeRequest.getOutcome();
         LeaseTaskFailureReason reason = outcome == LeaseTaskOutcome.FAILED ? safeRequest.getFailureReason() : null;
         int failureIncrement = outcome == LeaseTaskOutcome.FAILED ? 1 : 0;
@@ -269,12 +271,11 @@ public class JdbcLeaseTaskDao {
      * 管理面关闭任务
      */
     public int close(String taskId, LeaseCloseRequest request, long now) throws SQLException {
-        LeaseCloseRequest safeRequest = request == null ? LeaseCloseRequest.cancelled(null) : request;
+        LeaseCloseRequest safeRequest = request == null
+                ? LeaseCloseRequest.cancelled(null)
+                : request.normalizeForAdmin();
         LeaseTaskOutcome outcome = safeRequest.getOutcome();
-        LeaseTaskFailureReason reason = outcome == LeaseTaskOutcome.FAILED
-                ? (safeRequest.getFailureReason() == null ? LeaseTaskFailureReason.MANUAL_FAIL
-                : safeRequest.getFailureReason())
-                : null;
+        LeaseTaskFailureReason reason = outcome == LeaseTaskOutcome.FAILED ? safeRequest.getFailureReason() : null;
         int failureIncrement = outcome == LeaseTaskOutcome.FAILED ? 1 : 0;
         return db.execute(
                 "UPDATE " + TABLE_NAME
@@ -336,7 +337,34 @@ public class JdbcLeaseTaskDao {
             return 0;
         }
         entity.set("updated_at", now);
-        return db.update(entity, Entity.create(TABLE_NAME).set("task_id", request.getTaskId()));
+        return db.execute(
+                "UPDATE " + TABLE_NAME + " SET "
+                        + buildUpdateAssignments(entity)
+                        + " WHERE task_id = ? AND state <> ? AND NOT (state = ? AND lease_expires_at >= ?)",
+                buildUpdateParams(entity, request.getTaskId(), now));
+    }
+
+    private String buildUpdateAssignments(Entity entity) {
+        StringBuilder sql = new StringBuilder();
+        for (String field : entity.keySet()) {
+            if (sql.length() > 0) {
+                sql.append(", ");
+            }
+            sql.append(field).append(" = ?");
+        }
+        return sql.toString();
+    }
+
+    private Object[] buildUpdateParams(Entity entity, String taskId, long now) {
+        List<Object> params = new ArrayList<Object>(entity.size() + 4);
+        for (String field : entity.keySet()) {
+            params.add(entity.get(field));
+        }
+        params.add(taskId);
+        params.add(LeaseTaskState.CLOSED.name());
+        params.add(LeaseTaskState.RUNNING.name());
+        params.add(now);
+        return params.toArray();
     }
 
     /**

@@ -86,10 +86,11 @@
 LeaseProducer producer = ...;
 
 producer.publish(
-    LeaseTaskPublishRequest.builder()
+    LeasePublishRequest.builder()
+        .queue("demo")
         .taskType("demo")
-        .payloadBytes("hello".getBytes(StandardCharsets.UTF_8))
-        .dueTime(Instant.now())
+        .payload("hello")
+        .delayMillis(0L)
         .build()
 );
 ```
@@ -97,12 +98,16 @@ producer.publish(
 ### 5. 创建 Worker 处理任务
 
 ```java
-LeaseWorker worker = LeaseWorker.builder()
-    .runtimeClient(runtimeClient)
-    .workerId("worker-1")
-    .subscription(LeaseSubscription.of("demo", handler))
-    .policy(LeaseWorkerPolicy.builder().build())
-    .build();
+DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
+registry.register("demo", "demo", context -> {
+    System.out.println(context.getPayload());
+});
+
+LeaseWorker worker = new LeaseWorker(
+    runtimeClient,
+    registry,
+    LeaseWorkerPolicy.builder().workerId("worker-1").build()
+);
 
 worker.start();
 ```
@@ -258,25 +263,25 @@ Worker 执行过程中调用的底层 API。通常只有 Worker 执行链路会�
 ### 管理操作示例
 
 ```java
-// 查询任务列表
-List<LeaseTask> tasks = queryService.list(
-    LeaseTaskQuery.builder()
-        .status(LeaseTaskStatus.FAILED)
+// 查询任务分页
+LeaseTaskPage tasks = queryService.list(
+    LeaseQueryRequest.builder()
+        .outcome(LeaseTaskOutcome.FAILED)
         .taskType("demo")
         .build()
 );
 
-// 重排任务执行时间
-adminService.reschedule(taskId, Instant.now().plusSeconds(300));
+// 延后 5 分钟重新进入可领取状态
+adminService.reschedule(taskId, 300_000L);
 
 // 重新入队失败任务
-adminService.requeueFailed(taskId);
+adminService.requeueFailed(taskId, 0L);
 
 // 更新任务内容
 adminService.update(
-    LeaseTaskUpdateRequest.builder()
+    LeaseUpdateRequest.builder()
         .taskId(taskId)
-        .payloadBytes(newPayload)
+        .payload(newPayload)
         .build()
 );
 ```
@@ -301,6 +306,7 @@ adminService.update(
 - `leaseMillis`：应大于任务正常处理耗时，不宜过短以免频繁超时，不宜过长以免故障接管不及时。
 - `heartbeatIntervalMillis`：必须小于 `leaseMillis`，建议设置为 1/3 ~ 1/2。长耗时任务务必开启心跳。
 - `workerId`：建议在同一运行实例内稳定唯一，具备可观测性。
+- 单个 `LeaseWorker` 当前是串行消费模型：一次只执行一个任务；需要并发处理时应启动多个 Worker 实例。
 
 ### 常见校验失败
 
@@ -318,6 +324,7 @@ adminService.update(
 推荐用于需要持久化、多实例部署的生产环境。
 - 数据库初始化：使用前需要创建 `lease_task` 表。脚本位置：`team4u-lease-jdbc/src/main/resources/schema/lease_task_mysql.sql`。
 - 抢占逻辑：采用乐观抢占模型原子竞争。
+- 等待行为：`acquire()` 当前使用短轮询等待，不是数据库原生阻塞获取，更适合轻量任务场景。
 - 说明：推荐优先在 MySQL 环境下使用；由于 JDBC 实现面向通用能力，迁移到其他数据库请先验证 SQL 兼容性。
 
 ### 内存后端 (InMemoryLeaseBackend)

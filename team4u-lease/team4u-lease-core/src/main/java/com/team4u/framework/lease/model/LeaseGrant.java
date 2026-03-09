@@ -4,6 +4,8 @@ import lombok.Builder;
 import lombok.Data;
 import lombok.Singular;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -88,7 +90,11 @@ public class LeaseGrant {
         this.payload = payload;
         this.deliveryCount = deliveryCount;
         this.failureCount = failureCount;
-        this.attributes = attributes;
+        if (attributes == null) {
+            this.attributes = Collections.emptyMap();
+        } else {
+            this.attributes = Collections.unmodifiableMap(new LinkedHashMap<String, String>(attributes));
+        }
         this.createdAtMillis = createdAtMillis;
         this.visibleAtMillis = visibleAtMillis;
         this.leaseExpiresAtMillis = leaseExpiresAtMillis;

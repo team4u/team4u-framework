@@ -197,7 +197,10 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         if (current == null) {
             return LeaseAdminResult.TASK_NOT_FOUND;
         }
-        // 管理态更新不应受限于任务状态（通常用于人工干预），但这里可以根据需要增加限制。
+        LeaseAdminResult validation = current.validateAdminMutable(System.currentTimeMillis());
+        if (validation != LeaseAdminResult.APPLIED) {
+            return validation;
+        }
         StoredTask.StoredTaskBuilder builder = current.toBuilder();
         if (!isBlank(request.getTaskType())) {
             builder.taskType(request.getTaskType());
@@ -520,12 +523,16 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         }
 
         private StoredTask close(LeaseCloseRequest request) {
-            LeaseCloseRequest safeRequest = request == null ? LeaseCloseRequest.succeeded() : request;
+            LeaseCloseRequest safeRequest = request == null
+                    ? LeaseCloseRequest.succeeded()
+                    : request.normalizeForRuntime();
             return toClosedTask(safeRequest, false);
         }
 
         private StoredTask adminClose(LeaseCloseRequest request) {
-            LeaseCloseRequest safeRequest = request == null ? LeaseCloseRequest.cancelled(null) : request;
+            LeaseCloseRequest safeRequest = request == null
+                    ? LeaseCloseRequest.cancelled(null)
+                    : request.normalizeForAdmin();
             return toClosedTask(safeRequest, true);
         }
 
