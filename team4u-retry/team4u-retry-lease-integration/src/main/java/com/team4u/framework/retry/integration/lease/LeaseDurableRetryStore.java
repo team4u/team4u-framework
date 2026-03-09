@@ -4,15 +4,13 @@ import com.team4u.framework.lease.api.LeaseAdminService;
 import com.team4u.framework.lease.api.LeaseBackend;
 import com.team4u.framework.lease.api.LeaseProducer;
 import com.team4u.framework.lease.enums.LeaseAdminResult;
+import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
+import com.team4u.framework.lease.enums.LeaseTaskOutcome;
 import com.team4u.framework.lease.model.LeaseCloseRequest;
 import com.team4u.framework.lease.model.LeasePublishRequest;
 import com.team4u.framework.lease.model.LeaseUpdateRequest;
-import com.team4u.framework.lease.enums.LeaseTaskOutcome;
-import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
 import com.team4u.framework.retry.client.RetryCoordinator;
-import com.team4u.framework.retry.domain.store.RetryStatus;
 import com.team4u.framework.retry.store.DurableRetryStore;
-import com.team4u.framework.retry.store.TaskHandle;
 import com.team4u.framework.retry.store.record.*;
 import com.team4u.framework.retry.store.serialize.HutoolRetryRecordSerializer;
 import com.team4u.framework.retry.store.serialize.RetryRecordSerializer;
@@ -53,29 +51,26 @@ public class LeaseDurableRetryStore implements DurableRetryStore, RetryCoordinat
     }
 
     @Override
-    public TaskHandle create(RetryRecord initialRecord) {
-        String taskId = producer.publish(LeasePublishRequest.builder()
+    public String create(RetryRecord initialRecord) {
+        return producer.publish(LeasePublishRequest.builder()
                 .queue(queue)
                 .taskType(initialRecord.getRequest().getTaskName())
                 .payload(serializer.serialize(initialRecord))
-                .delayMillis(PREPARED_INTENT_DELAY_MILLIS) // Intentionally delayed to wait for schedule or foreground
-                                                           // execution
+                .delayMillis(PREPARED_INTENT_DELAY_MILLIS) // 故意延迟，以等待调度或前台执行
                 .build());
-        return new TaskHandle(taskId);
     }
 
     @Override
     public void markRunning(String taskId, AttemptRecord attempt) {
-        // Lease execution state can be updated directly via admin service if needed,
-        // but typically running state is managed by Lease itself when a worker polls.
-        // For foreground execution, we can force update the payload state.
+        // 如果需要，可以通过管理服务直接更新 Lease 执行状态，
+        // 但通常运行状态由 Lease 在工作节点轮询时自行管理。
+        // 对于前台执行，我们可以强制更新负载（payload）状态。
     }
 
     @Override
     public void scheduleNext(String taskId, AttemptRecord attempt, Instant nextRunAt, FailureRecord failure) {
-        // In Lease backend, scheduleNext is primarily used to record the next intended
-        // state.
-        // The actual scheduling is done via Coordinator's schedule().
+        // 在 Lease 后端中，scheduleNext 主要用于记录下一个预期的状态。
+        // 实际的调度是通过协调器的 schedule() 方法完成的。
     }
 
     @Override
@@ -104,17 +99,15 @@ public class LeaseDurableRetryStore implements DurableRetryStore, RetryCoordinat
 
     @Override
     public Optional<RetryRecord> get(String taskId) {
-        // LeaseAdminService doesn't have a direct get() for payload easily exposed in
-        // the standard subset,
-        // but if it does, we can implement it. For now return empty.
+        // LeaseAdminService 在标准子集中没有直接暴露获取负载（payload）的 get() 方法，
+        // 但如果后续支持，我们可以实现它。目前返回空。
         return Optional.empty();
     }
 
     @Override
     public void schedule(RetryRecord record, long delayMillis) {
-        // This is the Coordinator interface method to actually tell the backend to run
-        // it.
-        // Update payload first
+        // 这是协调器接口方法，用于实际告知后端运行任务。
+        // 首先更新负载（payload）
         assertApplied("updatePayload", record.getTaskId(), adminService.update(LeaseUpdateRequest.builder()
                 .taskId(record.getTaskId())
                 .payload(serializer.serialize(record))

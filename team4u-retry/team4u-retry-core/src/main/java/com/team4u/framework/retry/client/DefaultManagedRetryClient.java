@@ -8,7 +8,6 @@ import com.team4u.framework.retry.domain.store.RetryState;
 import com.team4u.framework.retry.domain.store.RetryStatus;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.store.DurableRetryStore;
-import com.team4u.framework.retry.store.TaskHandle;
 import com.team4u.framework.retry.store.record.AttemptRecord;
 import com.team4u.framework.retry.store.record.FailureRecord;
 import com.team4u.framework.retry.store.record.RetryRecord;
@@ -121,9 +120,9 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
                 .state(state)
                 .build();
 
-        TaskHandle handle = store.create(record);
-        record.setTaskId(handle.getTaskId());
-        request.setTaskId(handle.getTaskId());
+        String taskId = store.create(record);
+        record.setTaskId(taskId);
+        request.setTaskId(taskId);
         return record;
     }
 

@@ -12,9 +12,9 @@ import java.util.Optional;
 public interface DurableRetryStore {
 
     /**
-     * 持久化保存初始意图并返回任务句柄
+     * 持久化保存初始意图并返回任务ID
      */
-    TaskHandle create(RetryRecord initialRecord);
+    String create(RetryRecord initialRecord);
 
     /**
      * 标记任务正在执行中
