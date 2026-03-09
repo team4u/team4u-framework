@@ -90,10 +90,6 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
                     "MANAGED mode requires a retry policy with foregroundAttempts explicitly configured");
         }
 
-        if (isBlank(spec.getTaskName())) {
-            return new ManagedSubmitResult.Rejected<>(
-                    "MANAGED mode requires RetryTaskSpec.taskName");
-        }
         if (isBlank(spec.getIdempotencyKey())) {
             return new ManagedSubmitResult.Rejected<>(
                     "MANAGED mode requires RetryTaskSpec.idempotencyKey");
@@ -102,9 +98,9 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
             return new ManagedSubmitResult.Rejected<>(
                     "MANAGED mode requires RetryTaskSpec.executor");
         }
-        if (spec.getRecovery() == null || isBlank(spec.getRecovery().getTaskName())) {
+        if (spec.getRecovery() == null || isBlank(spec.getRecovery().getHandlerTaskType())) {
             return new ManagedSubmitResult.Rejected<>(
-                    "MANAGED mode requires a RecoverySpec with a valid task name");
+                    "MANAGED mode requires a RecoverySpec with a valid handlerTaskType");
         }
         return null;
     }
@@ -114,7 +110,7 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
      */
     private RetryRecord createAndPersistRecord(RetryTaskSpec<?> spec, RetryPolicy policy) throws Exception {
         RetryRequest request = RetryRequest.builder()
-                .taskName(spec.getTaskName())
+                .handlerTaskType(spec.getRecovery().getHandlerTaskType())
                 .idempotencyKey(spec.getIdempotencyKey())
                 .recovery(spec.getRecovery())
                 .policy(policy)

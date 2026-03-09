@@ -20,13 +20,13 @@
 
 第一次接入时，建议先按场景选，而不是从全部能力开始看。
 
-| 你的场景                                 | 推荐方式    | 需要模块                                               |
-| ---------------------------------------- | ----------- | ------------------------------------------------------ |
-| 给一段同步代码加重试                     | INLINE      | `team4u-retry-core`                                    |
-| 给 `CompletableFuture` 加异步重试        | INLINE      | `team4u-retry-core`                                    |
-| 想通过注解给方法加重试                   | 代理模式    | `team4u-retry-proxy`                                   |
-| Spring 项目里启用注解重试                | Spring 集成 | `team4u-retry-spring`                                  |
-| 需要任务持久化、后台接管、进程重启后继续 | MANAGED     | `team4u-retry-core` + `team4u-retry-lease-integration` |
+| 你的场景                        | 推荐方式      | 需要模块                                                   |
+|-----------------------------|-----------|--------------------------------------------------------|
+| 给一段同步代码加重试                  | INLINE    | `team4u-retry-core`                                    |
+| 给 `CompletableFuture` 加异步重试 | INLINE    | `team4u-retry-core`                                    |
+| 想通过注解给方法加重试                 | 代理模式      | `team4u-retry-proxy`                                   |
+| Spring 项目里启用注解重试            | Spring 集成 | `team4u-retry-spring`                                  |
+| 需要任务持久化、后台接管、进程重启后继续        | MANAGED   | `team4u-retry-core` + `team4u-retry-lease-integration` |
 
 ### 什么时候用 INLINE
 
@@ -59,7 +59,7 @@
 * 前台尝试失败后可以转后台继续
 * 需要存储、协调器、恢复处理器和 Worker 配合
 * 必须显式配置 `foregroundAttempts`
-* 必须提供有效的 `RecoverySpec.taskName`
+* 必须提供有效的 `RecoverySpec.handlerTaskType`
 
 ---
 
@@ -248,7 +248,6 @@ RetryPolicy policy = RetryPolicy.builder()
         .build();
 
 RetryTaskSpec<String> spec = RetryTaskSpec.<String>builder()
-        .taskName("pay-notify")
         .idempotencyKey("order:1001")
         .executor(() -> notifyPayment())
         .recovery(RecoverySpec.of("pay-notify", "{\"orderId\":\"1001\"}"))
@@ -260,7 +259,6 @@ ManagedSubmitResult<String> result = managedRetryClient.submit(spec);
 
 `RetryTaskSpec` 至少包括：
 
-* `taskName`
 * `idempotencyKey`
 * `executor`
 * `recovery`
@@ -429,7 +427,7 @@ void schedule(RetryRecord record, long delayMillis)
 
 负责“恢复时到底调用谁”。
 
-它内部以 `taskName` 为 key 管理 `RecoveryHandler`，支持：
+它内部以 handler task type 为 key 管理 `RecoveryHandler`，支持：
 
 * 全局单例 `RecoveryHandlerRegistry.global()`
 * SPI 自动扫描
@@ -474,7 +472,6 @@ public class PayNotifyRecoveryHandler implements RecoveryHandler<String> {
 
 ```java
 RetryTaskSpec<String> spec = RetryTaskSpec.<String>builder()
-        .taskName("pay-notify")
         .idempotencyKey("order:1001")
         .executor(() -> notifyPayment())
         .recovery(RecoverySpec.of("pay-notify", "{\"orderId\":\"1001\"}"))
@@ -482,12 +479,10 @@ RetryTaskSpec<String> spec = RetryTaskSpec.<String>builder()
         .build();
 ```
 
-这里有两个 key 必须对上：
+这里的路由 key 必须对上：
 
 * `RecoveryHandler.taskName()`
-* `RecoverySpec.taskName`
-
----
+* `RecoverySpec.handlerTaskType`
 
 ## MANAGED 的几个关键约束
 
@@ -500,14 +495,13 @@ MANAGED 下如果策略没有显式设置 `foregroundAttempts`，提交会直接
 
 以下字段在提交入口就会校验，不会等到前台执行时再报错：
 
-* `taskName`
 * `idempotencyKey`
 * `executor`
-* `recovery.taskName`
+* `recovery.handlerTaskType`
 
-### 必须提供有效的 `RecoverySpec.taskName`
+### 必须提供有效的 `RecoverySpec.handlerTaskType`
 
-如果没有 `recovery`，或者 `taskName` 为空，也会被 `Rejected`。
+如果没有 `recovery`，或者 `handlerTaskType` 为空，也会被 `Rejected`。
 
 ### `foregroundAttempts` 不能大于 `maxAttempts`
 
@@ -736,7 +730,7 @@ public class RetryManagedConfiguration {
 
 代理模式下，框架会为托管任务构造方法恢复数据，后台通过 `InvocationReplay` 反射调用目标 Bean / 方法完成恢复。
 
-恢复执行阶段会通过 `RecoveryExecutionContext` 标识当前线程处于恢复上下文，避免代理再次进入一轮新的重试包装，防止“恢复时再托管、无限套娃”。
+恢复执行阶段会在 lease worker 的统一恢复入口写入 `RecoveryExecutionContext`，避免代理再次进入一轮新的重试包装，防止“恢复时再托管、无限套娃”。
 
 ### 参数序列化注意事项
 
@@ -787,20 +781,20 @@ retry.policy.
 
 ```properties
 retry.policy.order-submit={
-  "maxAttempts": 6,
-  "localAttempts": 2,
-  "backoff": {
-    "type": "exponentialJitter",
-    "params": {
-      "initialDelay": 500,
-      "multiplier": 2.0,
-      "maxDelay": 10000
-    }
-  },
-  "retryOnExceptions": ["java.net.SocketTimeoutException", "java.io.IOException"],
-  "abortOnExceptions": ["java.lang.IllegalArgumentException"],
-  "condition": ""
-}
+"maxAttempts"=6,
+"localAttempts"=2,
+"backoff"={
+"type"="exponentialJitter",
+"params"={
+"initialDelay"=500,
+"multiplier"=2.0,
+"maxDelay"=10000
+}=
+},=
+"retryOnExceptions"=["java.net.SocketTimeoutException", "java.io.IOException"],
+"abortOnExceptions"=["java.lang.IllegalArgumentException"],
+"condition"=""
+}=
 ```
 
 > 兼容说明：当前配置模型里字段名仍为 `localAttempts`，工厂在构建 `RetryPolicy` 时会映射到 `foregroundAttempts`。
@@ -825,7 +819,7 @@ INLINE 的所有尝试都发生在当前进程里，不做持久化，不会跨�
 
 ### MANAGED 不是自动幂等
 
-框架会记录 `idempotencyKey`，但业务是否真的幂等，仍然需要接入方自己保证。
+框架会记录 `idempotencyKey`，代理 / 注解模式下也会基于方法快照自动生成稳定 key，但业务是否真的幂等，仍然需要接入方自己保证。
 
 ### MANAGED 不等于“只要提交就一定成功”
 
@@ -869,7 +863,7 @@ INLINE 的所有尝试都发生在当前进程里，不做持久化，不会跨�
 
 * 没有注册对应的 `RecoveryHandler`
 * 没有启动 `RetryLeaseWorker`
-* `RecoverySpec.taskName` 和 handler 的 `taskName()` 没对上
+* `RecoverySpec.handlerTaskType` 和 handler 的 `taskName()` 没对上
 * 你的 lease backend 其实不具备 `LeaseRuntimeClient` 运行时能力
 
 ### `Accepted` 和 `Completed` 的区别是什么？

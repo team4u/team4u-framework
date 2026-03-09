@@ -19,6 +19,9 @@ import lombok.Setter;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Optional;
@@ -75,17 +78,12 @@ public class RetryDelegate {
         InvocationRecoveryData recoveryData = buildRecoveryData(method, target, args);
 
         Class<? extends RecoveryHandler> recoveryClass = retryable.recovery();
-        String targetTaskName = InvocationReplay.TASK_NAME; // 默认使用通用放音机
-        if (recoveryClass != null && recoveryClass != RecoveryHandler.class) {
-            targetTaskName = recoveryClass.getName();
-        }
+        String handlerTaskType = resolveHandlerTaskType(retryable.recovery());
 
-        RecoverySpec recoverySpec = RecoverySpec.of(targetTaskName, recoveryData);
-
-        String specTaskName = resolveBeanName(method, target) + "#" + method.getName();
+        RecoverySpec recoverySpec = RecoverySpec.of(handlerTaskType, recoveryData);
 
         RetryTaskSpec<Object> taskSpec = RetryTaskSpec.builder()
-                .taskName(specTaskName)
+                .idempotencyKey(buildIdempotencyKey(recoveryData))
                 .policy(policy)
                 .recovery(recoverySpec)
                 .executor(proceedTask)
@@ -177,5 +175,53 @@ public class RetryDelegate {
             targetClass = targetClass.getSuperclass();
         }
         return targetClass.getName();
+    }
+
+    private String resolveHandlerTaskType(Class<? extends RecoveryHandler> recoveryClass) {
+        if (recoveryClass == null || recoveryClass == RecoveryHandler.class) {
+            return InvocationReplay.TASK_NAME;
+        }
+        try {
+            return recoveryClass.getDeclaredConstructor().newInstance().taskName();
+        } catch (ReflectiveOperationException e) {
+            throw new IllegalStateException(
+                    "Failed to resolve handlerTaskType from recovery handler: " + recoveryClass.getName(), e);
+        }
+    }
+
+    private String buildIdempotencyKey(InvocationRecoveryData recoveryData) {
+        StringBuilder source = new StringBuilder();
+        source.append(recoveryData.getBeanName()).append('#').append(recoveryData.getMethodName()).append('|');
+        appendList(source, recoveryData.getArgTypes());
+        source.append('|');
+        appendList(source, recoveryData.getArgValues());
+        return sha256(source.toString());
+    }
+
+    private void appendList(StringBuilder builder, List<String> values) {
+        if (values == null) {
+            return;
+        }
+        for (int i = 0; i < values.size(); i++) {
+            if (i > 0) {
+                builder.append(',');
+            }
+            builder.append(values.get(i));
+        }
+    }
+
+    private String sha256(String value) {
+        try {
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            byte[] bytes = digest.digest(value.getBytes(StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder(bytes.length * 2);
+            for (byte b : bytes) {
+                hex.append(Character.forDigit((b >> 4) & 0xF, 16));
+                hex.append(Character.forDigit(b & 0xF, 16));
+            }
+            return hex.toString();
+        } catch (NoSuchAlgorithmException e) {
+            throw new IllegalStateException("SHA-256 not available", e);
+        }
     }
 }

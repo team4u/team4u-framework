@@ -8,11 +8,7 @@ import com.team4u.framework.lease.enums.LeaseTaskOutcome;
 import com.team4u.framework.lease.enums.LeaseTaskState;
 import com.team4u.framework.lease.jdbc.codec.LeaseJsonCodec;
 import com.team4u.framework.lease.jdbc.dialect.LeaseDbDialect;
-import com.team4u.framework.lease.model.LeaseCloseRequest;
-import com.team4u.framework.lease.model.LeaseQueryRequest;
-import com.team4u.framework.lease.model.LeaseSubscription;
-import com.team4u.framework.lease.model.LeaseTaskPage;
-import com.team4u.framework.lease.model.LeaseTaskRecord;
+import com.team4u.framework.lease.model.*;
 
 import java.sql.SQLException;
 import java.util.ArrayList;
@@ -224,22 +220,33 @@ public class JdbcLeaseTaskDao {
      * @return 更新行数
      * @throws SQLException SQL 异常
      */
-    public int release(String taskId, String workerId, String leaseToken, long visibleAt, String errorMessage, long now)
+    public int release(
+            String taskId,
+            String workerId,
+            String leaseToken,
+            long visibleAt,
+            String payload,
+            String errorMessage,
+            long now)
             throws SQLException {
+        Entity entity = Entity.create(TABLE_NAME);
+        entity.set("state", LeaseTaskState.READY.name());
+        entity.set("outcome", null);
+        entity.set("failure_reason", null);
+        entity.set("visible_at", visibleAt);
+        entity.set("worker_id", null);
+        entity.set("lease_token", null);
+        entity.set("lease_expires_at", 0);
+        entity.set("error_message", errorMessage);
+        if (payload != null) {
+            entity.set("payload", payload);
+        }
+        entity.set("updated_at", now);
         return db.execute(
-                "UPDATE " + TABLE_NAME
-                        + " SET state = ?, outcome = NULL, failure_reason = NULL, visible_at = ?, worker_id = NULL, "
-                        + "lease_token = NULL, lease_expires_at = 0, error_message = ?, updated_at = ? "
-                        + "WHERE task_id = ? AND state = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
-                LeaseTaskState.READY.name(),
-                visibleAt,
-                errorMessage,
-                now,
-                taskId,
-                LeaseTaskState.RUNNING.name(),
-                workerId,
-                leaseToken,
-                now);
+                "UPDATE " + TABLE_NAME + " SET "
+                        + buildUpdateAssignments(entity)
+                        + " WHERE task_id = ? AND state = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
+                buildRuntimeReleaseParams(entity, taskId, workerId, leaseToken, now));
     }
 
     /**
@@ -363,6 +370,24 @@ public class JdbcLeaseTaskDao {
         params.add(taskId);
         params.add(LeaseTaskState.CLOSED.name());
         params.add(LeaseTaskState.RUNNING.name());
+        params.add(now);
+        return params.toArray();
+    }
+
+    private Object[] buildRuntimeReleaseParams(
+            Entity entity,
+            String taskId,
+            String workerId,
+            String leaseToken,
+            long now) {
+        List<Object> params = new ArrayList<>(entity.size() + 5);
+        for (String field : entity.keySet()) {
+            params.add(entity.get(field));
+        }
+        params.add(taskId);
+        params.add(LeaseTaskState.RUNNING.name());
+        params.add(workerId);
+        params.add(leaseToken);
         params.add(now);
         return params.toArray();
     }

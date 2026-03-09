@@ -4,7 +4,6 @@ import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import lombok.Getter;
-import lombok.Setter;
 
 /**
  * 动态配置重试策略注册表
@@ -21,12 +20,21 @@ public class DynamicRetryPolicyRegistry {
      * 注册表实例
      */
     @Getter
-    @Setter
     private static ConfigDrivenRegistry<RetryPolicy> registry = new ConfigDrivenRegistry<>(
             ConfigManager.global(),
             DEFAULT_PREFIX,
             RetryPolicyFactory::create
     );
+
+    /**
+     * 替换全局注册表实例，供测试或启动期装配使用。
+     */
+    public static void setRegistry(ConfigDrivenRegistry<RetryPolicy> registry) {
+        if (registry == null) {
+            throw new IllegalArgumentException("registry must not be null");
+        }
+        DynamicRetryPolicyRegistry.registry = registry;
+    }
 
     /**
      * 重置注册表，仅用于测试

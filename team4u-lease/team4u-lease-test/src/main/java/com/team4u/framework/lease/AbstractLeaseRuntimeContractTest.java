@@ -155,6 +155,28 @@ public abstract class AbstractLeaseRuntimeContractTest extends AbstractLeaseCont
     }
 
     @Test
+    public void testReleaseCanUpdatePayload() throws Exception {
+        LeaseBackend backend = createBackend();
+        String taskId = publish(backend, "pay", "payload-v1");
+        LeaseGrant grant = acquire(backend, "worker-a", 80L, 500L);
+
+        Assert.assertEquals(
+                LeaseRuntimeResult.APPLIED,
+                backend.release(grant.getHandle(), LeaseReleaseRequest.builder()
+                        .delayMillis(50L)
+                        .payload("payload-v2")
+                        .errorMessage("retry")
+                        .build()));
+
+        Thread.sleep(70L);
+        LeaseGrant nextGrant = acquire(backend, "worker-b", 80L, 200L);
+        Assert.assertNotNull(nextGrant);
+        Assert.assertEquals("payload-v2", nextGrant.getPayload());
+        Assert.assertEquals("payload-v2", backend.get(taskId).get().getPayload());
+        Assert.assertEquals("retry", backend.get(taskId).get().getErrorMessage());
+    }
+
+    @Test
     public void testAcquireRespectsDelayVisibility() throws Exception {
         LeaseBackend backend = createBackend();
         publish(backend, "pay", "payload", 80L);
@@ -183,11 +205,11 @@ public abstract class AbstractLeaseRuntimeContractTest extends AbstractLeaseCont
     }
 
     private Thread createAcquireThread(final LeaseBackend backend,
-            final CountDownLatch ready,
-            final CountDownLatch start,
-            final LeaseGrant[] grants,
-            final int index,
-            final String workerId) {
+                                       final CountDownLatch ready,
+                                       final CountDownLatch start,
+                                       final LeaseGrant[] grants,
+                                       final int index,
+                                       final String workerId) {
         return new Thread(new Runnable() {
             @Override
             public void run() {

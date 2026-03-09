@@ -10,6 +10,7 @@ import com.team4u.framework.retry.client.RetryCoordinator;
 import com.team4u.framework.retry.domain.store.RetryStatus;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.recovery.RecoveryContext;
+import com.team4u.framework.retry.recovery.RecoveryExecutionContext;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.store.record.RetryRecord;
 import com.team4u.framework.retry.store.serialize.HutoolRetryRecordSerializer;
@@ -50,7 +51,8 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
                 .build();
 
         try {
-            delegate.recover(record.getRequest().getRecovery().getPayload(), recoveryContext);
+            RecoveryExecutionContext.run(
+                    () -> delegate.recover(record.getRequest().getRecovery().getPayload(), recoveryContext));
 
             // 成功，通过 coordinator 或者直接 close lease（在 worker 里本身就是 lease 上下文，可以直接 close）
             LeaseRuntimeResult result = context.getRuntimeClient().close(
@@ -83,16 +85,13 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
             record.getState().setStatus(RetryStatus.SCHEDULED);
             record.getState().setNextRunAt(Instant.now().plusMillis(delayMillis));
 
-            // 因为当前已经在 Worker 模型下执行中，可以通过 leaseRelease，并且同时更新 payload 给最新的 record
-            // 但 team4u-lease 的 release 好像只支持传 delayMillis 不持支传新 payload
-            // 所以我们需要先通过 coordinator (它通常会包含 adminService.update) 来更新 payload，再
-            // release/reschedule
-
-            coordinator.schedule(record, delayMillis);
-
             LeaseRuntimeResult result = context.getRuntimeClient().release(
                     context.getHandle(),
-                    LeaseReleaseRequest.of(delayMillis, cause.getMessage()));
+                    LeaseReleaseRequest.builder()
+                            .delayMillis(delayMillis)
+                            .payload(serializer.serialize(record))
+                            .errorMessage(cause.getMessage())
+                            .build());
             checkResult(result, "release", record.getTaskId());
         }
     }

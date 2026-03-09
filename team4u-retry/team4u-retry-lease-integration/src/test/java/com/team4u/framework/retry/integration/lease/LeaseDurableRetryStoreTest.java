@@ -7,24 +7,11 @@ import com.team4u.framework.lease.enums.LeaseAdminResult;
 import com.team4u.framework.lease.enums.LeaseRuntimeResult;
 import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
 import com.team4u.framework.lease.enums.LeaseTaskOutcome;
-import com.team4u.framework.lease.model.LeaseAcquireRequest;
-import com.team4u.framework.lease.model.LeaseCloseRequest;
-import com.team4u.framework.lease.model.LeaseGrant;
-import com.team4u.framework.lease.model.LeaseHandle;
-import com.team4u.framework.lease.model.LeasePublishRequest;
-import com.team4u.framework.lease.model.LeaseQueryRequest;
-import com.team4u.framework.lease.model.LeaseReleaseRequest;
-import com.team4u.framework.lease.model.LeaseTaskPage;
-import com.team4u.framework.lease.model.LeaseTaskRecord;
-import com.team4u.framework.lease.model.LeaseUpdateRequest;
+import com.team4u.framework.lease.model.*;
 import com.team4u.framework.retry.domain.store.RetryRequest;
 import com.team4u.framework.retry.domain.store.RetryState;
 import com.team4u.framework.retry.domain.store.RetryStatus;
-import com.team4u.framework.retry.store.record.AttemptRecord;
-import com.team4u.framework.retry.store.record.CancelRecord;
-import com.team4u.framework.retry.store.record.FailureRecord;
-import com.team4u.framework.retry.store.record.RetryRecord;
-import com.team4u.framework.retry.store.record.SuccessRecord;
+import com.team4u.framework.retry.store.record.*;
 import com.team4u.framework.retry.store.serialize.RetryRecordSerializer;
 import org.junit.Assert;
 import org.junit.Test;
@@ -35,6 +22,20 @@ import java.util.List;
 import java.util.Optional;
 
 public class LeaseDurableRetryStoreTest {
+
+    private static RetryRecord retryRecord(String taskType) {
+        return RetryRecord.builder()
+                .request(RetryRequest.builder()
+                        .handlerTaskType(taskType)
+                        .taskId("request-" + taskType)
+                        .createdAt(Instant.now())
+                        .build())
+                .state(RetryState.builder()
+                        .attempts(0)
+                        .status(RetryStatus.PREPARED)
+                        .build())
+                .build();
+    }
 
     /**
      * 验证 create 会使用默认恢复队列发布一个长延迟的 prepared 任务。
@@ -224,20 +225,6 @@ public class LeaseDurableRetryStoreTest {
         Assert.assertTrue(backend.operations.isEmpty());
     }
 
-    private static RetryRecord retryRecord(String taskName) {
-        return RetryRecord.builder()
-                .request(RetryRequest.builder()
-                        .taskName(taskName)
-                        .taskId("request-" + taskName)
-                        .createdAt(Instant.now())
-                        .build())
-                .state(RetryState.builder()
-                        .attempts(0)
-                        .status(RetryStatus.PREPARED)
-                        .build())
-                .build();
-    }
-
     /**
      * 固定返回给定字符串，并记录最近一次序列化入参，便于断言请求拼装。
      */
@@ -282,7 +269,7 @@ public class LeaseDurableRetryStoreTest {
     private static class RecordingAdminService implements LeaseAdminService {
 
         private final List<String> operations = new ArrayList<String>();
-        private LeaseAdminResult rescheduleResult = LeaseAdminResult.APPLIED;
+        private final LeaseAdminResult rescheduleResult = LeaseAdminResult.APPLIED;
         private LeaseAdminResult closeResult = LeaseAdminResult.APPLIED;
         private LeaseAdminResult updateResult = LeaseAdminResult.APPLIED;
         private String rescheduledTaskId;

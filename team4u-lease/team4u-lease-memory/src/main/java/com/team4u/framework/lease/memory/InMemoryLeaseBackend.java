@@ -1,11 +1,7 @@
 package com.team4u.framework.lease.memory;
 
 import com.team4u.framework.lease.api.LeaseBackend;
-import com.team4u.framework.lease.enums.LeaseAdminResult;
-import com.team4u.framework.lease.enums.LeaseRuntimeResult;
-import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
-import com.team4u.framework.lease.enums.LeaseTaskOutcome;
-import com.team4u.framework.lease.enums.LeaseTaskState;
+import com.team4u.framework.lease.enums.*;
 import com.team4u.framework.lease.model.*;
 import lombok.*;
 
@@ -130,7 +126,11 @@ public class InMemoryLeaseBackend implements LeaseBackend {
             return result;
         }
         long visibleAt = System.currentTimeMillis() + Math.max(0L, request.getDelayMillis());
-        StoredTask next = current.release(visibleAt, request.getErrorMessage(), request.getAttributes());
+        StoredTask next = current.release(
+                visibleAt,
+                request.getPayload(),
+                request.getErrorMessage(),
+                request.getAttributes());
         store(next, true);
         return LeaseRuntimeResult.APPLIED;
     }
@@ -502,10 +502,13 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                     .build();
         }
 
-        private StoredTask release(long visibleAtMillis, String errorMessage, Map<String, String> attributes) {
+        private StoredTask release(long visibleAtMillis, String payload, String errorMessage, Map<String, String> attributes) {
             StoredTask next = reschedule(visibleAtMillis).toBuilder()
                     .errorMessage(errorMessage)
                     .build();
+            if (payload != null) {
+                next = next.toBuilder().payload(payload).build();
+            }
             if (attributes != null) {
                 next = next.toBuilder().attributes(attributes).build();
             }

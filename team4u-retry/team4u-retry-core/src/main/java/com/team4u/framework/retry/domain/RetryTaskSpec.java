@@ -16,11 +16,6 @@ import java.util.concurrent.Callable;
 @Builder
 public class RetryTaskSpec<T> {
     /**
-     * 任务名称，用于标识同一类任务。
-     */
-    private final String taskName;
-
-    /**
      * 业务幂等键，主要用于去重和追踪。
      */
     private final String idempotencyKey;
