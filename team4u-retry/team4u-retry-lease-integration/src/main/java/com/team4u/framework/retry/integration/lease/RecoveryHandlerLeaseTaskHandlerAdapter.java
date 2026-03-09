@@ -14,6 +14,8 @@ import com.team4u.framework.retry.backend.serialize.HutoolRetryTaskSnapshotSeria
 import com.team4u.framework.retry.backend.serialize.RetryTaskSnapshotSerializer;
 import com.team4u.framework.retry.policy.RetryPolicyFactory;
 import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
+import com.team4u.framework.retry.RetryExecutionContext;
+import com.team4u.framework.retry.backend.RetryCloseReason;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RetryRecoveryPlanner;
 import lombok.Getter;
@@ -42,7 +44,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
     }
 
     public RecoveryHandlerLeaseTaskHandlerAdapter(RecoveryHandler delegate, RetryBackend retryBackend,
-                                                  RetryPolicyFactoryRegistry policyRegistry) {
+            RetryPolicyFactoryRegistry policyRegistry) {
         this.delegate = delegate;
         this.retryBackend = retryBackend;
         this.policyRegistry = policyRegistry;
@@ -60,33 +62,39 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
     }
 
     private void handleFailure(LeaseExecutionContext context, RetryTaskSnapshot snapshot, Throwable cause) {
-        // 更新快照进度
-        int failedAttempts = snapshot.getExecutedAttempts() + 1;
-        snapshot.setExecutedAttempts(failedAttempts);
-        snapshot.setLastError(cause.toString());
-
         RetryPolicy policy = resolvePolicy(snapshot);
-        RetryRecoveryPlanner.Plan plan = planner.plan(snapshot, policy, cause);
 
-        if (plan.isRetry()) {
+        // 创建临时上下文用于决策
+        RetryExecutionContext<Object> retryContext = new RetryExecutionContext<>(
+                snapshot.getTaskType(), null);
+        retryContext.setSnapshot(snapshot);
+        retryContext.setExecutedAttempts(snapshot.getExecutedAttempts());
+        retryContext.setLastError(cause);
+
+        // 这里 lease 模式通常已经是在后端运行，所以 localAttempts 设为 0，hasRetryBackend 设为 true 确保走持久化逻辑
+        RetryRecoveryPlanner.Plan plan = planner.plan(retryContext, policy, 0, true);
+
+        if (plan.getType() != RetryRecoveryPlanner.Plan.Type.CLOSE) {
             log.info("Task failed, retrying in {}ms: {}", plan.getDelayMillis(), snapshot.getTaskId());
+            // 更新快照进度
+            snapshot.setExecutedAttempts(snapshot.getExecutedAttempts() + 1);
+            snapshot.setLastError(cause.toString());
             retryBackend.saveProgress(snapshot);
+
             LeaseRuntimeResult result = context.getRuntimeClient().release(
                     context.getHandle(),
-                    LeaseReleaseRequest.of(plan.getDelayMillis(), cause.toString())
-            );
+                    LeaseReleaseRequest.of(plan.getDelayMillis(), cause.toString()));
             checkResult(result, "release", snapshot.getTaskId());
         } else {
             log.error("Task failed closed: {}", snapshot.getTaskId(), cause);
             LeaseRuntimeResult result = context.getRuntimeClient().close(
                     context.getHandle(),
-                    LeaseCloseRequest.failed(mapFailureReason(plan.getReason()), plan.getErrorMessage())
-            );
+                    LeaseCloseRequest.failed(mapFailureReason(plan.getReason()), plan.getErrorMessage()));
             checkResult(result, "close", snapshot.getTaskId());
         }
     }
 
-    private LeaseTaskFailureReason mapFailureReason(com.team4u.framework.retry.backend.RetryCloseReason reason) {
+    private LeaseTaskFailureReason mapFailureReason(RetryCloseReason reason) {
         if (reason == null) {
             return LeaseTaskFailureReason.ABORTED_BY_POLICY;
         }

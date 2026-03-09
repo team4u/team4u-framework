@@ -233,8 +233,8 @@ public class RetryerTest {
         }
 
         Assert.assertNotNull(prepareContext.get());
-        Assert.assertEquals(RetryPayloadContext.Phase.PREPARE_INTENT, prepareContext.get().getPhase());
-        Assert.assertEquals(0, prepareContext.get().getExecutedAttempts());
+        Assert.assertEquals(RetryPayloadContext.Phase.HANDOFF_TO_BACKEND, prepareContext.get().getPhase());
+        Assert.assertEquals(1, prepareContext.get().getExecutedAttempts());
     }
 
     @Test
