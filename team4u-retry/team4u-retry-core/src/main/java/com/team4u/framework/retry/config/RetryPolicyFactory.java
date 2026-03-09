@@ -2,8 +2,6 @@ package com.team4u.framework.retry.config;
 
 import cn.hutool.core.util.ClassUtil;
 import cn.hutool.json.JSONUtil;
-import cn.hutool.log.Log;
-import cn.hutool.log.LogFactory;
 import com.team4u.framework.retry.backoff.BackoffRegistry;
 import com.team4u.framework.retry.policy.RetryPolicy;
 
@@ -16,8 +14,6 @@ import com.team4u.framework.retry.policy.RetryPolicy;
  * @author jay.wu
  */
 public class RetryPolicyFactory {
-
-    private static final Log log = LogFactory.get();
 
     /**
      * 从 JSON 配置创建重试策略
@@ -44,13 +40,13 @@ public class RetryPolicyFactory {
 
         if (config.getRetryOnExceptions() != null) {
             for (String className : config.getRetryOnExceptions()) {
-                addExceptionToBuilder(builder, className, true);
+                addExceptionToBuilder(builder, className, "retryOnExceptions", true);
             }
         }
 
         if (config.getAbortOnExceptions() != null) {
             for (String className : config.getAbortOnExceptions()) {
-                addExceptionToBuilder(builder, className, false);
+                addExceptionToBuilder(builder, className, "abortOnExceptions", false);
             }
         }
 
@@ -58,19 +54,28 @@ public class RetryPolicyFactory {
     }
 
     @SuppressWarnings("unchecked")
-    private static void addExceptionToBuilder(RetryPolicy.Builder builder, String className, boolean isRetry) {
+    private static void addExceptionToBuilder(
+            RetryPolicy.Builder builder,
+            String className,
+            String fieldName,
+            boolean isRetry) {
         try {
             Class<?> clazz = ClassUtil.loadClass(className);
-            if (Throwable.class.isAssignableFrom(clazz)) {
-                if (isRetry) {
-                    builder.retryOn((Class<? extends Throwable>) clazz);
-                } else {
-                    builder.abortOn((Class<? extends Throwable>) clazz);
-                }
+            if (!Throwable.class.isAssignableFrom(clazz)) {
+                throw new IllegalArgumentException(
+                        "Invalid retry policy config. " + fieldName + " contains non-Throwable class: " + className);
+            }
+            if (isRetry) {
+                builder.retryOn((Class<? extends Throwable>) clazz);
+            } else {
+                builder.abortOn((Class<? extends Throwable>) clazz);
             }
         } catch (Exception e) {
-            log.error("Failed to load retry policy exception class. className: {}. Please check config spelling.",
-                    className, e);
+            if (e instanceof IllegalArgumentException) {
+                throw (IllegalArgumentException) e;
+            }
+            throw new IllegalArgumentException(
+                    "Invalid retry policy config. Failed to load " + fieldName + " class: " + className, e);
         }
     }
 }

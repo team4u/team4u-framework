@@ -192,9 +192,10 @@ public final class Backoffs {
 
         public Backoff build() {
             BackoffConfig config = new BackoffConfig();
-            config.setType(type);
+            String normalizedType = BackoffRegistry.normalizeType(type);
+            config.setType(normalizedType);
             config.setParams(params);
-            return BackoffRegistry.global().get(type)
+            return BackoffRegistry.global().get(normalizedType)
                     .map(factory -> factory.create(config))
                     .orElseThrow(() -> new IllegalArgumentException("Unsupported backoff type: " + type));
         }

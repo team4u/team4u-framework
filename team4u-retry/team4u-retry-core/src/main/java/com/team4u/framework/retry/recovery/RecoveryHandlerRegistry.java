@@ -9,6 +9,7 @@ import com.team4u.framework.policy.util.PolicyScanner;
 public class RecoveryHandlerRegistry extends KeyedPolicyRegistry<String, RecoveryHandler<?>> {
 
     private static final RecoveryHandlerRegistry INSTANCE = new RecoveryHandlerRegistry();
+    private volatile boolean scanned;
 
     public RecoveryHandlerRegistry() {
         super(RecoveryHandler.class);
@@ -27,7 +28,17 @@ public class RecoveryHandlerRegistry extends KeyedPolicyRegistry<String, Recover
     /**
      * 通过 SPI 自动装配恢复处理器
      */
-    public void autoScan() {
+    public synchronized void autoScan() {
+        if (scanned) {
+            return;
+        }
         PolicyScanner.registerFromServiceLoader(this);
+        scanned = true;
+    }
+
+    @Override
+    public synchronized void unregisterAll() {
+        super.unregisterAll();
+        scanned = false;
     }
 }
