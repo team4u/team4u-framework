@@ -5,6 +5,8 @@ import com.team4u.framework.lease.enums.LeaseTaskOutcome;
 import lombok.Builder;
 import lombok.Data;
 
+import java.util.Collections;
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -33,6 +35,46 @@ public class LeaseCloseRequest {
      * 附加属性快照。
      */
     private Map<String, String> attributes;
+
+    public LeaseCloseRequest normalizeForRuntime() {
+        return validate(outcome, failureReason, errorMessage, attributes);
+    }
+
+    public LeaseCloseRequest normalizeForAdmin() {
+        LeaseTaskFailureReason normalizedReason = failureReason;
+        if (outcome == LeaseTaskOutcome.FAILED && normalizedReason == null) {
+            normalizedReason = LeaseTaskFailureReason.MANUAL_FAIL;
+        }
+        return validate(outcome, normalizedReason, errorMessage, attributes);
+    }
+
+    public Map<String, String> getAttributes() {
+        if (attributes == null) {
+            return Collections.emptyMap();
+        }
+        return Collections.unmodifiableMap(new LinkedHashMap<String, String>(attributes));
+    }
+
+    private static LeaseCloseRequest validate(LeaseTaskOutcome outcome,
+                                              LeaseTaskFailureReason failureReason,
+                                              String errorMessage,
+                                              Map<String, String> attributes) {
+        if (outcome == null) {
+            throw new IllegalArgumentException("request.outcome must not be null");
+        }
+        if (outcome == LeaseTaskOutcome.FAILED && failureReason == null) {
+            throw new IllegalArgumentException("request.failureReason must not be null when outcome is FAILED");
+        }
+        if (outcome != LeaseTaskOutcome.FAILED && failureReason != null) {
+            throw new IllegalArgumentException("request.failureReason must be null unless outcome is FAILED");
+        }
+        return LeaseCloseRequest.builder()
+                .outcome(outcome)
+                .failureReason(failureReason)
+                .errorMessage(errorMessage)
+                .attributes(attributes)
+                .build();
+    }
 
     public static LeaseCloseRequest succeeded() {
         return LeaseCloseRequest.builder()

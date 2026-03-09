@@ -1,12 +1,19 @@
 package com.team4u.framework.lease;
 
+import com.team4u.framework.lease.api.LeaseRuntimeClient;
+import com.team4u.framework.lease.enums.LeaseRuntimeResult;
 import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
 import com.team4u.framework.lease.enums.LeaseTaskOutcome;
 import com.team4u.framework.lease.enums.LeaseTaskState;
 import com.team4u.framework.lease.enums.MissingHandlerStrategy;
 import com.team4u.framework.lease.handler.DefaultLeaseTaskHandlerRegistry;
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
+import com.team4u.framework.lease.model.LeaseAcquireRequest;
+import com.team4u.framework.lease.model.LeaseCloseRequest;
+import com.team4u.framework.lease.model.LeaseGrant;
+import com.team4u.framework.lease.model.LeaseHandle;
 import com.team4u.framework.lease.model.LeasePublishRequest;
+import com.team4u.framework.lease.model.LeaseReleaseRequest;
 import com.team4u.framework.lease.runtime.LeaseExecutionContext;
 import com.team4u.framework.lease.runtime.LeaseWorker;
 import com.team4u.framework.lease.runtime.LeaseWorkerPolicy;
@@ -41,10 +48,11 @@ public class LeaseWorkerTest {
                 .build());
         worker.start("lease-worker-test-success");
         try {
-            backend.publish(request("pay", "{\"id\":1}"));
+            String taskId = backend.publish(request("pay", "{\"id\":1}"));
             Assert.assertTrue(latch.await(2, TimeUnit.SECONDS));
             Assert.assertEquals("{\"id\":1}", payloadRef.get());
-            Assert.assertEquals(LeaseTaskOutcome.SUCCEEDED, backend.snapshot().values().iterator().next().getOutcome());
+            Assert.assertEquals(LeaseTaskOutcome.SUCCEEDED,
+                    awaitTask(taskId, backend, LeaseTaskState.CLOSED).getOutcome());
         } finally {
             worker.shutdown();
         }
@@ -242,6 +250,40 @@ public class LeaseWorkerTest {
     }
 
     @Test
+    public void testRequestHeartbeatDoesNotRunConcurrentlyWithScheduledHeartbeat() throws Exception {
+        DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
+        CountDownLatch handlerStarted = new CountDownLatch(1);
+        CountDownLatch finishHandler = new CountDownLatch(1);
+        ControlledRuntimeClient runtimeClient = new ControlledRuntimeClient();
+
+        registry.register(DEFAULT_QUEUE, "pay", context -> {
+            handlerStarted.countDown();
+            context.requestHeartbeat();
+            context.requestHeartbeat();
+            Assert.assertTrue(finishHandler.await(2, TimeUnit.SECONDS));
+        });
+
+        LeaseWorker worker = new LeaseWorker(runtimeClient, registry, LeaseWorkerPolicy.builder()
+                .workerId("worker-a")
+                .leaseMillis(200L)
+                .heartbeatIntervalMillis(20L)
+                .pollWaitMillis(20L)
+                .build());
+        worker.start("lease-worker-heartbeat-serialized");
+        try {
+            Assert.assertTrue(handlerStarted.await(1, TimeUnit.SECONDS));
+            Assert.assertTrue(runtimeClient.awaitHeartbeatStarted());
+            Thread.sleep(80L);
+
+            Assert.assertEquals(1, runtimeClient.getMaxConcurrentHeartbeats());
+            Assert.assertEquals(1, runtimeClient.getHeartbeatCalls());
+        } finally {
+            finishHandler.countDown();
+            worker.shutdownGracefully(1_000L);
+        }
+    }
+
+    @Test
     public void testMissingHandlerRetryLaterDoesNotIncreaseFailureCount() throws Exception {
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
         DefaultLeaseTaskHandlerRegistry missingRegistry = new DefaultLeaseTaskHandlerRegistry();
@@ -321,5 +363,78 @@ public class LeaseWorkerTest {
                 .taskType(taskType)
                 .payload(payload)
                 .build();
+    }
+
+    private static final class ControlledRuntimeClient implements LeaseRuntimeClient {
+        private final LeaseGrant grant = LeaseGrant.builder()
+                .taskId("task-1")
+                .workerId("worker-a")
+                .leaseToken("lease-1")
+                .queue(DEFAULT_QUEUE)
+                .taskType("pay")
+                .payload("payload")
+                .deliveryCount(1)
+                .failureCount(0)
+                .leaseExpiresAtMillis(System.currentTimeMillis() + 1_000L)
+                .build();
+        private final CountDownLatch heartbeatStarted = new CountDownLatch(1);
+        private final AtomicInteger activeHeartbeats = new AtomicInteger();
+        private final AtomicInteger maxConcurrentHeartbeats = new AtomicInteger();
+        private final AtomicInteger heartbeatCalls = new AtomicInteger();
+
+        @Override
+        public LeaseGrant acquire(LeaseAcquireRequest request) {
+            return grant;
+        }
+
+        @Override
+        public LeaseRuntimeResult close(LeaseHandle handle, LeaseCloseRequest request) {
+            return LeaseRuntimeResult.APPLIED;
+        }
+
+        @Override
+        public LeaseRuntimeResult heartbeat(LeaseHandle handle, long extendMillis) {
+            int current = activeHeartbeats.incrementAndGet();
+            heartbeatCalls.incrementAndGet();
+            updateMaxConcurrent(current);
+            heartbeatStarted.countDown();
+            try {
+                Thread.sleep(80L);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+            } finally {
+                activeHeartbeats.decrementAndGet();
+            }
+            return LeaseRuntimeResult.APPLIED;
+        }
+
+        @Override
+        public LeaseRuntimeResult release(LeaseHandle handle, LeaseReleaseRequest request) {
+            return LeaseRuntimeResult.APPLIED;
+        }
+
+        private boolean awaitHeartbeatStarted() throws InterruptedException {
+            return heartbeatStarted.await(1, TimeUnit.SECONDS);
+        }
+
+        private int getMaxConcurrentHeartbeats() {
+            return maxConcurrentHeartbeats.get();
+        }
+
+        private int getHeartbeatCalls() {
+            return heartbeatCalls.get();
+        }
+
+        private void updateMaxConcurrent(int current) {
+            while (true) {
+                int existing = maxConcurrentHeartbeats.get();
+                if (current <= existing) {
+                    return;
+                }
+                if (maxConcurrentHeartbeats.compareAndSet(existing, current)) {
+                    return;
+                }
+            }
+        }
     }
 }

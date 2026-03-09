@@ -111,6 +111,47 @@ public abstract class AbstractLeaseAdminContractTest extends AbstractLeaseContra
     }
 
     @Test
+    public void testUpdateRejectsActiveLease() throws Exception {
+        LeaseBackend backend = createBackend();
+        String taskId = publish(backend, "pay", "payload");
+        acquire(backend, "worker-a", 200L, 200L);
+
+        Assert.assertEquals(LeaseAdminResult.ACTIVE_LEASE_PRESENT, backend.update(LeaseUpdateRequest.builder()
+                .taskId(taskId)
+                .payload("changed")
+                .build()));
+        Assert.assertEquals("payload", backend.get(taskId).get().getPayload());
+    }
+
+    @Test
+    public void testUpdateRejectsClosedTask() {
+        LeaseBackend backend = createBackend();
+        String taskId = publish(backend, "pay", "payload");
+        Assert.assertEquals(LeaseAdminResult.APPLIED,
+                backend.close(taskId, LeaseCloseRequest.cancelled("cancelled")));
+
+        Assert.assertEquals(LeaseAdminResult.CLOSED, backend.update(LeaseUpdateRequest.builder()
+                .taskId(taskId)
+                .payload("changed")
+                .build()));
+        Assert.assertEquals("payload", backend.get(taskId).get().getPayload());
+    }
+
+    @Test
+    public void testUpdateAllowsExpiredLeaseTask() throws Exception {
+        LeaseBackend backend = createBackend();
+        String taskId = publish(backend, "pay", "payload");
+        acquire(backend, "worker-a", 30L, 100L);
+        Thread.sleep(60L);
+
+        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.update(LeaseUpdateRequest.builder()
+                .taskId(taskId)
+                .payload("changed")
+                .build()));
+        Assert.assertEquals("changed", backend.get(taskId).get().getPayload());
+    }
+
+    @Test
     public void testAdminOperationsReturnTaskNotFoundForMissingTask() {
         LeaseBackend backend = createBackend();
 

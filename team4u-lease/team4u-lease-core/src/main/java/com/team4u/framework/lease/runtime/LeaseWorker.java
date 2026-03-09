@@ -14,6 +14,7 @@ import org.slf4j.LoggerFactory;
 
 import java.util.Set;
 import java.util.concurrent.Executors;
+import java.util.concurrent.RejectedExecutionException;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -36,6 +37,7 @@ public class LeaseWorker implements Runnable, AutoCloseable {
     private final LeaseWorkerPolicy policy;
     private final ScheduledExecutorService heartbeatExecutor;
     private final AtomicBoolean processingTask = new AtomicBoolean(false);
+    private final AtomicBoolean heartbeatExecutorShutdown = new AtomicBoolean(false);
 
     private volatile boolean running;
     private volatile boolean shutdown;
@@ -89,7 +91,7 @@ public class LeaseWorker implements Runnable, AutoCloseable {
 
         boolean workerStopped = waitForWorker(threadToJoin, timeoutMillis);
         if (workerStopped) {
-            heartbeatExecutor.shutdown();
+            shutdownHeartbeatExecutor();
             waitForHeartbeatExecutor(timeoutMillis);
         }
         return workerStopped;
@@ -149,8 +151,14 @@ public class LeaseWorker implements Runnable, AutoCloseable {
                 }
             }
         } finally {
-            heartbeatExecutor.shutdown();
+            shutdownHeartbeatExecutor();
             log.info("Lease worker stopped. workerId={}", policy.getWorkerId());
+        }
+    }
+
+    private void shutdownHeartbeatExecutor() {
+        if (heartbeatExecutorShutdown.compareAndSet(false, true)) {
+            heartbeatExecutor.shutdown();
         }
     }
 
@@ -320,6 +328,7 @@ public class LeaseWorker implements Runnable, AutoCloseable {
         private final long intervalMillis;
         private final long leaseMillis;
         private final String workerId;
+        private final AtomicBoolean heartbeating = new AtomicBoolean(false);
         private volatile java.util.concurrent.ScheduledFuture<?> future;
 
         private void start() {
@@ -333,11 +342,18 @@ public class LeaseWorker implements Runnable, AutoCloseable {
         }
 
         private void requestNow() {
-            run();
+            try {
+                executor.execute(this);
+            } catch (RejectedExecutionException ignored) {
+                // worker is shutting down; skip late manual heartbeat requests
+            }
         }
 
         @Override
         public void run() {
+            if (!heartbeating.compareAndSet(false, true)) {
+                return;
+            }
             try {
                 LeaseRuntimeResult result = runtimeClient.heartbeat(grant.getHandle(), leaseMillis);
                 if (result != LeaseRuntimeResult.APPLIED) {
@@ -346,6 +362,8 @@ public class LeaseWorker implements Runnable, AutoCloseable {
                 }
             } catch (Exception ex) {
                 log.warn("Lease heartbeat failed. taskId={}, workerId={}", grant.getTaskId(), workerId, ex);
+            } finally {
+                heartbeating.set(false);
             }
         }
     }
