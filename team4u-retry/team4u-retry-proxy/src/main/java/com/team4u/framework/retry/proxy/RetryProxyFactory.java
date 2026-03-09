@@ -36,7 +36,7 @@ public class RetryProxyFactory {
      * @return 增强后的代理对象
      */
     public static <T> T createProxy(T target, Class<T> targetClass, InlineRetryClient inlineClient,
-            ManagedRetryClient managedClient) {
+                                    ManagedRetryClient managedClient) {
         return ProxyBuilder.forClass(targetClass)
                 .delegate(target)
                 .intercept(new RetryInterceptor(inlineClient, managedClient))

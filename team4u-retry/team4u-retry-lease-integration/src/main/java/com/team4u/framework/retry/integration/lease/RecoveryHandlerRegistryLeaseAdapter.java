@@ -31,7 +31,7 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
     }
 
     public RecoveryHandlerRegistryLeaseAdapter(RetryCoordinator coordinator, RecoveryHandlerRegistry delegate,
-            String queue) {
+                                               String queue) {
         this.coordinator = coordinator;
         this.delegate = delegate == null ? RecoveryHandlerRegistry.global() : delegate;
         this.queue = (queue == null || queue.trim().isEmpty()) ? RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE : queue;

@@ -364,7 +364,7 @@ ManagedRetryClient managedRetryClient = DefaultManagedRetryClient.builder()
         .build();
 
 // worker（必须有后台执行者）
-RetryLeaseWorker worker = new RetryLeaseWorker((LeaseRuntimeClient) backend, store, registry);
+RetryLeaseWorker worker = new RetryLeaseWorker(backend, store, registry);
 worker.start();
 ```
 
@@ -697,7 +697,7 @@ public class RetryManagedConfiguration {
             LeaseBackend backend,
             LeaseDurableRetryStore store) {
         return new RetryLeaseWorker(
-                (LeaseRuntimeClient) backend,
+                backend,
                 store,
                 RecoveryHandlerRegistry.global()
         );

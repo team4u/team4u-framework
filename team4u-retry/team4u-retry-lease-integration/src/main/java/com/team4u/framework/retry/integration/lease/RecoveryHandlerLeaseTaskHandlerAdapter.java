@@ -7,8 +7,6 @@ import com.team4u.framework.lease.model.LeaseCloseRequest;
 import com.team4u.framework.lease.model.LeaseReleaseRequest;
 import com.team4u.framework.lease.runtime.LeaseExecutionContext;
 import com.team4u.framework.retry.client.RetryCoordinator;
-import com.team4u.framework.retry.domain.store.RetryRequest;
-import com.team4u.framework.retry.domain.store.RetryState;
 import com.team4u.framework.retry.domain.store.RetryStatus;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.recovery.RecoveryContext;
@@ -21,7 +19,6 @@ import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
-import java.util.Optional;
 
 /**
  * 将 {@link RecoveryHandler} 适配为 {@link LeaseTaskHandler} 的包装类。
@@ -30,19 +27,21 @@ import java.util.Optional;
 @Getter
 public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler {
 
+    @SuppressWarnings("rawtypes")
     private final RecoveryHandler delegate;
     private final RetryCoordinator coordinator;
 
     @Setter
     private RetryRecordSerializer serializer = HutoolRetryRecordSerializer.INSTANCE;
 
-    public RecoveryHandlerLeaseTaskHandlerAdapter(RecoveryHandler delegate, RetryCoordinator coordinator) {
+    public RecoveryHandlerLeaseTaskHandlerAdapter(RecoveryHandler<?> delegate, RetryCoordinator coordinator) {
         this.delegate = delegate;
         this.coordinator = coordinator;
     }
 
+    @SuppressWarnings("unchecked")
     @Override
-    public void handle(LeaseExecutionContext context) throws Exception {
+    public void handle(LeaseExecutionContext context) {
         RetryRecord record = serializer.deserialize(context.getPayload());
 
         RecoveryContext recoveryContext = RecoveryContext.builder()
@@ -51,7 +50,6 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
                 .build();
 
         try {
-            // @SuppressWarnings("unchecked")
             delegate.recover(record.getRequest().getRecovery().getPayload(), recoveryContext);
 
             // 成功，通过 coordinator 或者直接 close lease（在 worker 里本身就是 lease 上下文，可以直接 close）
