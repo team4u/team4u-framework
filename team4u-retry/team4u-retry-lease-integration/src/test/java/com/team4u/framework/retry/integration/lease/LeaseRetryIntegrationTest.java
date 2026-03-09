@@ -2,9 +2,9 @@ package com.team4u.framework.retry.integration.lease;
 
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
 import com.team4u.framework.lease.runtime.LeaseWorkerPolicy;
-import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.Retryer;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
+import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import org.junit.Assert;

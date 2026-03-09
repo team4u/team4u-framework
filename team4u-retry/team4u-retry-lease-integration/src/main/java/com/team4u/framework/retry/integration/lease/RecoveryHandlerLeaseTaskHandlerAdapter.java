@@ -7,15 +7,15 @@ import com.team4u.framework.lease.model.LeaseCloseRequest;
 import com.team4u.framework.lease.model.LeaseReleaseRequest;
 import com.team4u.framework.lease.runtime.LeaseExecutionContext;
 import com.team4u.framework.lease.runtime.LeaseWorker;
-import com.team4u.framework.retry.policy.RetryPolicy;
+import com.team4u.framework.retry.RetryExecutionContext;
 import com.team4u.framework.retry.backend.RetryBackend;
+import com.team4u.framework.retry.backend.RetryCloseReason;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.backend.serialize.HutoolRetryTaskSnapshotSerializer;
 import com.team4u.framework.retry.backend.serialize.RetryTaskSnapshotSerializer;
+import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.policy.RetryPolicyFactory;
 import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
-import com.team4u.framework.retry.RetryExecutionContext;
-import com.team4u.framework.retry.backend.RetryCloseReason;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RetryRecoveryPlanner;
 import lombok.Getter;
@@ -44,7 +44,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
     }
 
     public RecoveryHandlerLeaseTaskHandlerAdapter(RecoveryHandler delegate, RetryBackend retryBackend,
-            RetryPolicyFactoryRegistry policyRegistry) {
+                                                  RetryPolicyFactoryRegistry policyRegistry) {
         this.delegate = delegate;
         this.retryBackend = retryBackend;
         this.policyRegistry = policyRegistry;

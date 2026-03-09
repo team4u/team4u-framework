@@ -16,18 +16,18 @@ public class RecoveryHandlerRegistry extends KeyedPolicyRegistry<String, Recover
     }
 
     /**
-     * 通过 SPI 自动装配恢复处理器
-     */
-    public void autoScan() {
-        PolicyScanner.registerFromServiceLoader(this);
-    }
-
-    /**
      * 获取全局注册表单例
      *
      * @return 注册表单例实例
      */
     public static RecoveryHandlerRegistry global() {
         return INSTANCE;
+    }
+
+    /**
+     * 通过 SPI 自动装配恢复处理器
+     */
+    public void autoScan() {
+        PolicyScanner.registerFromServiceLoader(this);
     }
 }

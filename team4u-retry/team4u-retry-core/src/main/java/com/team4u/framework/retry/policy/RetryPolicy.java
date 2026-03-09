@@ -92,6 +92,14 @@ public class RetryPolicy {
         this.condition = condition;
     }
 
+    private static Set<Class<? extends Throwable>> immutableCopy(Set<Class<? extends Throwable>> source) {
+        if (source == null || source.isEmpty()) {
+            return Collections.emptySet();
+        }
+        // 先拷贝再包装，确保即使调用方复用原始集合，也不会破坏对象不可变性。
+        return Collections.unmodifiableSet(new HashSet<>(source));
+    }
+
     public boolean canRetry(int executedAttempts, Throwable ex) {
         if (maxAttempts != -1 && executedAttempts >= maxAttempts) {
             return false;
@@ -126,14 +134,6 @@ public class RetryPolicy {
 
     private Throwable extractCause(Throwable ex) {
         return RetryExceptionUtil.unwrap(ex);
-    }
-
-    private static Set<Class<? extends Throwable>> immutableCopy(Set<Class<? extends Throwable>> source) {
-        if (source == null || source.isEmpty()) {
-            return Collections.emptySet();
-        }
-        // 先拷贝再包装，确保即使调用方复用原始集合，也不会破坏对象不可变性。
-        return Collections.unmodifiableSet(new HashSet<>(source));
     }
 
     @Getter

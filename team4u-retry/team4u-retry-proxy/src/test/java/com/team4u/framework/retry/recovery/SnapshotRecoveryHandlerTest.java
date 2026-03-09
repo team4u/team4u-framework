@@ -2,9 +2,9 @@ package com.team4u.framework.retry.recovery;
 
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.proxy.ProxyBuilder;
-import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.TestLeaseBackend;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
+import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.policy.RetryPolicyFactory;
 import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
 import com.team4u.framework.retry.proxy.RetryInterceptor;

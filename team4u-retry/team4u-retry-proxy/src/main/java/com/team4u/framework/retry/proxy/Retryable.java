@@ -8,7 +8,7 @@ import java.lang.annotation.*;
  * 该注解用于标识方法或类支持自动重试增强。当应用于类时，类中所有公共方法都将具备重试能力。
  * 结合 team4u-proxy 或 Spring AOP 使用，可实现对业务逻辑的透明化重试。
  */
-@Target({ ElementType.METHOD, ElementType.TYPE })
+@Target({ElementType.METHOD, ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
 @Inherited
 @Documented
