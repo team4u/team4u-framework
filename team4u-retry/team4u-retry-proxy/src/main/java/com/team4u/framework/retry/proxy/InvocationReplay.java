@@ -11,6 +11,9 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.lang.reflect.Method;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 /**
  * 通用代理方法重试放音机
@@ -20,6 +23,7 @@ import java.lang.reflect.Method;
 public class InvocationReplay implements RecoveryHandler<InvocationRecoveryData> {
 
     public static final String TASK_NAME = "ProxyInvocationReplay";
+    private static final Map<String, Class<?>> PRIMITIVE_TYPES = primitiveTypes();
 
     @Getter
     @Setter
@@ -87,9 +91,31 @@ public class InvocationReplay implements RecoveryHandler<InvocationRecoveryData>
         }
         Class<?>[] types = new Class<?>[payload.getArgTypes().size()];
         for (int i = 0; i < payload.getArgTypes().size(); i++) {
-            types[i] = Class.forName(payload.getArgTypes().get(i));
+            types[i] = resolveType(payload.getArgTypes().get(i));
         }
         return types;
+    }
+
+    private Class<?> resolveType(String typeName) throws ClassNotFoundException {
+        Class<?> primitiveType = PRIMITIVE_TYPES.get(typeName);
+        if (primitiveType != null) {
+            return primitiveType;
+        }
+        return Class.forName(typeName);
+    }
+
+    private static Map<String, Class<?>> primitiveTypes() {
+        Map<String, Class<?>> primitiveTypes = new HashMap<String, Class<?>>();
+        primitiveTypes.put(boolean.class.getName(), boolean.class);
+        primitiveTypes.put(byte.class.getName(), byte.class);
+        primitiveTypes.put(char.class.getName(), char.class);
+        primitiveTypes.put(short.class.getName(), short.class);
+        primitiveTypes.put(int.class.getName(), int.class);
+        primitiveTypes.put(long.class.getName(), long.class);
+        primitiveTypes.put(float.class.getName(), float.class);
+        primitiveTypes.put(double.class.getName(), double.class);
+        primitiveTypes.put(void.class.getName(), void.class);
+        return Collections.unmodifiableMap(primitiveTypes);
     }
 
     /**
