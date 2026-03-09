@@ -33,8 +33,8 @@ public class HutoolRetryContextSerializer implements RetryContextSerializer {
             return JSONUtil.toJsonStr(arg);
         } catch (Exception e) {
             throw new RetrySerializationException(
-                    "重试参数序列化失败。类型: " + arg.getClass().getName()
-                            + ", 错误信息: " + e.getMessage(),
+                    "Failed to serialize retry arguments. Type: " + arg.getClass().getName()
+                            + ", Error: " + e.getMessage(),
                     e);
         }
     }
@@ -59,8 +59,8 @@ public class HutoolRetryContextSerializer implements RetryContextSerializer {
             return JSONUtil.toBean(json, type);
         } catch (Exception e) {
             throw new RetrySerializationException(
-                    "重试参数反序列化失败。类型: " + type.getName()
-                            + ", 错误信息: " + e.getMessage(),
+                    "Failed to deserialize retry arguments. Type: " + type.getName()
+                            + ", Error: " + e.getMessage(),
                     e);
         }
     }
