@@ -1,6 +1,7 @@
 package com.team4u.framework.retry.recovery;
 
 import com.team4u.framework.policy.core.KeyedPolicyRegistry;
+import com.team4u.framework.policy.util.PolicyScanner;
 
 /**
  * 全局恢复处理器注册表
@@ -11,6 +12,14 @@ public class RecoveryHandlerRegistry extends KeyedPolicyRegistry<String, Recover
 
     public RecoveryHandlerRegistry() {
         super(RecoveryHandler.class);
+        autoScan();
+    }
+
+    /**
+     * 通过 SPI 自动装配恢复处理器
+     */
+    public void autoScan() {
+        PolicyScanner.registerFromServiceLoader(this);
     }
 
     /**

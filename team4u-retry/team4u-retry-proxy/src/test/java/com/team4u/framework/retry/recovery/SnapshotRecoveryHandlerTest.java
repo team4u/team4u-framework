@@ -8,7 +8,6 @@ import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.policy.RetryPolicyFactory;
 import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
 import com.team4u.framework.retry.proxy.RetryInterceptor;
-import com.team4u.framework.retry.proxy.RetryProxyFactory;
 import com.team4u.framework.retry.proxy.Retryable;
 import org.junit.Assert;
 import org.junit.Before;
@@ -44,12 +43,14 @@ public class SnapshotRecoveryHandlerTest {
     }
 
     @Test
-    public void testDefaultProxyRecoveryHandlerRegistrationIsIdempotent() {
-        RetryProxyFactory.registerDefaultRecoveryHandler();
-        RetryProxyFactory.registerDefaultRecoveryHandler();
+    public void testDefaultProxyRecoveryHandlerSpiRegistrationIsIdempotent() {
+        RecoveryHandlerRegistry.global().autoScan();
+        RecoveryHandlerRegistry.global().autoScan();
 
         Assert.assertTrue(RecoveryHandlerRegistry.global().get(RetryTaskTypes.DEFAULT_PROXY_RECOVERY).isPresent());
         Assert.assertEquals(1, RecoveryHandlerRegistry.global().getPolicies().size());
+        Assert.assertEquals(DefaultProxyRecoveryHandler.class,
+                RecoveryHandlerRegistry.global().get(RetryTaskTypes.DEFAULT_PROXY_RECOVERY).get().getClass());
     }
 
     @Test
