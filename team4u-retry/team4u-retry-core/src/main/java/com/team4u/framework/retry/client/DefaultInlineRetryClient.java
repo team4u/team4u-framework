@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.client;
 
-import com.team4u.framework.retry.RetryExceptionUtil;
+import com.team4u.framework.retry.util.RetryExceptionUtil;
 import com.team4u.framework.retry.policy.RetryPolicy;
 
 import java.util.concurrent.Callable;

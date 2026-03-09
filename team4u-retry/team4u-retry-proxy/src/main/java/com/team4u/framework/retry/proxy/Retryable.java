@@ -1,6 +1,5 @@
 package com.team4u.framework.retry.proxy;
 
-import com.team4u.framework.retry.RetryMode;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 
 import java.lang.annotation.*;

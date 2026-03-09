@@ -1,6 +1,5 @@
 package com.team4u.framework.retry.proxy;
 
-import com.team4u.framework.retry.RetryMode;
 import com.team4u.framework.retry.client.InlineRetryClient;
 import com.team4u.framework.retry.client.ManagedRetryClient;
 import com.team4u.framework.retry.concurrent.RetryExecutorManager;
