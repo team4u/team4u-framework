@@ -2,18 +2,12 @@ package com.team4u.framework.retry.integration.lease;
 
 import com.team4u.framework.lease.api.LeaseRuntimeClient;
 import com.team4u.framework.lease.enums.LeaseRuntimeResult;
-import com.team4u.framework.lease.model.LeaseAcquireRequest;
-import com.team4u.framework.lease.model.LeaseCloseRequest;
-import com.team4u.framework.lease.model.LeaseGrant;
-import com.team4u.framework.lease.model.LeaseHandle;
-import com.team4u.framework.lease.model.LeaseReleaseRequest;
+import com.team4u.framework.lease.model.*;
 import com.team4u.framework.lease.runtime.LeaseWorker;
 import com.team4u.framework.lease.runtime.LeaseWorkerPolicy;
-import com.team4u.framework.retry.client.RetryCoordinator;
 import com.team4u.framework.retry.recovery.RecoveryContext;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
-import com.team4u.framework.retry.store.record.RetryRecord;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -24,141 +18,6 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class RetryLeaseWorkerTest {
-
-    /**
-     * 验证完整构造函数会把显式传入的 registry/policy 装配到内部委托对象。
-     */
-    @Test
-    public void testConstructorUsesProvidedRegistryAndPolicy() throws Exception {
-        TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
-        RetryCoordinator coordinator = new NoopRetryCoordinator();
-        RecoveryHandlerRegistry registry = new RecoveryHandlerRegistry();
-        LeaseWorkerPolicy policy = LeaseWorkerPolicy.builder()
-                .workerId("retry-worker")
-                .pollWaitMillis(10L)
-                .heartbeatEnabled(false)
-                .build();
-
-        RetryLeaseWorker worker = new RetryLeaseWorker(runtimeClient, coordinator, registry, policy);
-
-        Assert.assertSame(registry, getField(worker, "registry"));
-
-        LeaseWorker delegate = (LeaseWorker) getField(worker, "delegate");
-        Assert.assertSame(policy, getField(delegate, "policy"));
-
-        RecoveryHandlerRegistryLeaseAdapter adapter =
-                (RecoveryHandlerRegistryLeaseAdapter) getField(delegate, "registry");
-        Assert.assertSame(registry, getField(adapter, "delegate"));
-        Assert.assertSame(coordinator, getField(adapter, "coordinator"));
-        Assert.assertEquals(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE, getField(adapter, "queue"));
-    }
-
-    /**
-     * 验证便捷构造函数会回落到全局 registry 和默认恢复队列。
-     */
-    @Test
-    public void testDefaultConstructorsUseGlobalRegistryAndDefaultQueue() throws Exception {
-        TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
-        RetryCoordinator coordinator = new NoopRetryCoordinator();
-
-        RetryLeaseWorker worker = new RetryLeaseWorker(runtimeClient, coordinator);
-
-        Assert.assertSame(RecoveryHandlerRegistry.global(), getField(worker, "registry"));
-
-        LeaseWorker delegate = (LeaseWorker) getField(worker, "delegate");
-        LeaseWorkerPolicy policy = (LeaseWorkerPolicy) getField(delegate, "policy");
-        Assert.assertNotNull(policy);
-
-        RecoveryHandlerRegistryLeaseAdapter adapter =
-                (RecoveryHandlerRegistryLeaseAdapter) getField(delegate, "registry");
-        Assert.assertSame(RecoveryHandlerRegistry.global(), getField(adapter, "delegate"));
-        Assert.assertEquals(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE, getField(adapter, "queue"));
-    }
-
-    /**
-     * 验证 register 会直接委托给底层 registry。
-     */
-    @Test
-    public void testRegisterDelegatesToRegistry() {
-        TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
-        RecoveryHandlerRegistry registry = new RecoveryHandlerRegistry();
-        RetryLeaseWorker worker = new RetryLeaseWorker(runtimeClient, new NoopRetryCoordinator(), registry);
-        RecoveryHandler<String> handler = new StringRecoveryHandler("payment");
-
-        worker.register(handler);
-
-        Optional<RecoveryHandler<?>> registered = registry.get("payment");
-        Assert.assertTrue(registered.isPresent());
-        Assert.assertSame(handler, registered.get());
-    }
-
-    /**
-     * 验证带线程名的启动和优雅关闭会正确转发到内部 LeaseWorker。
-     */
-    @Test
-    public void testStartWithThreadNameAndShutdownGracefully() throws Exception {
-        TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
-        RetryLeaseWorker worker = new RetryLeaseWorker(
-                runtimeClient,
-                new NoopRetryCoordinator(),
-                new RecoveryHandlerRegistry(),
-                LeaseWorkerPolicy.builder().pollWaitMillis(10L).heartbeatEnabled(false).build());
-
-        worker.start("retry-lease-worker-test");
-        Assert.assertTrue(runtimeClient.awaitAcquire(1_000L));
-
-        LeaseWorker delegate = (LeaseWorker) getField(worker, "delegate");
-        Thread workerThread = (Thread) getField(delegate, "workerThread");
-        Assert.assertNotNull(workerThread);
-        Assert.assertEquals("retry-lease-worker-test", workerThread.getName());
-
-        Assert.assertTrue(worker.shutdownGracefully(1_000L));
-    }
-
-    /**
-     * 验证默认启动路径会沿用 LeaseWorker 的默认线程名。
-     */
-    @Test
-    public void testStartUsesDefaultThreadNameAndShutdown() throws Exception {
-        TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
-        RetryLeaseWorker worker = new RetryLeaseWorker(
-                runtimeClient,
-                new NoopRetryCoordinator(),
-                new RecoveryHandlerRegistry(),
-                LeaseWorkerPolicy.builder().pollWaitMillis(10L).heartbeatEnabled(false).build());
-
-        worker.start();
-        Assert.assertTrue(runtimeClient.awaitAcquire(1_000L));
-
-        LeaseWorker delegate = (LeaseWorker) getField(worker, "delegate");
-        Thread workerThread = (Thread) getField(delegate, "workerThread");
-        Assert.assertNotNull(workerThread);
-        Assert.assertEquals("lease-worker", workerThread.getName());
-
-        worker.shutdown();
-    }
-
-    /**
-     * 验证 run、shutdownNow 和 close 等方法可安全委托到底层实现。
-     */
-    @Test
-    public void testRunShutdownNowAndCloseDelegateToLeaseWorker() {
-        TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
-        RetryLeaseWorker worker = new RetryLeaseWorker(
-                runtimeClient,
-                new NoopRetryCoordinator(),
-                new RecoveryHandlerRegistry(),
-                LeaseWorkerPolicy.builder().pollWaitMillis(10L).heartbeatEnabled(false).build());
-
-        worker.run();
-        Assert.assertEquals(0, runtimeClient.getAcquireCalls());
-
-        worker.start("retry-worker-now");
-        Assert.assertTrue(awaitAcquire(runtimeClient));
-        worker.shutdownNow();
-
-        worker.close();
-    }
 
     private static boolean awaitAcquire(TrackingRuntimeClient runtimeClient) {
         try {
@@ -188,12 +47,132 @@ public class RetryLeaseWorkerTest {
     }
 
     /**
-     * 仅用于隔离测试目标，不提供实际调度行为。
+     * 验证完整构造函数会把显式传入的 registry/policy 装配到内部委托对象。
      */
-    private static class NoopRetryCoordinator implements RetryCoordinator {
-        @Override
-        public void schedule(RetryRecord record, long delayMillis) {
-        }
+    @Test
+    public void testConstructorUsesProvidedRegistryAndPolicy() throws Exception {
+        TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
+        RecoveryHandlerRegistry registry = new RecoveryHandlerRegistry();
+        LeaseWorkerPolicy policy = LeaseWorkerPolicy.builder()
+                .workerId("retry-worker")
+                .pollWaitMillis(10L)
+                .heartbeatEnabled(false)
+                .build();
+
+        RetryLeaseWorker worker = new RetryLeaseWorker(runtimeClient, registry, policy);
+
+        Assert.assertSame(registry, getField(worker, "registry"));
+
+        LeaseWorker delegate = (LeaseWorker) getField(worker, "delegate");
+        Assert.assertSame(policy, getField(delegate, "policy"));
+
+        RecoveryHandlerRegistryLeaseAdapter adapter =
+                (RecoveryHandlerRegistryLeaseAdapter) getField(delegate, "registry");
+        Assert.assertSame(registry, getField(adapter, "delegate"));
+        Assert.assertEquals(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE, getField(adapter, "queue"));
+    }
+
+    /**
+     * 验证便捷构造函数会回落到全局 registry 和默认恢复队列。
+     */
+    @Test
+    public void testDefaultConstructorsUseGlobalRegistryAndDefaultQueue() throws Exception {
+        TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
+
+        RetryLeaseWorker worker = new RetryLeaseWorker(runtimeClient);
+
+        Assert.assertSame(RecoveryHandlerRegistry.global(), getField(worker, "registry"));
+
+        LeaseWorker delegate = (LeaseWorker) getField(worker, "delegate");
+        LeaseWorkerPolicy policy = (LeaseWorkerPolicy) getField(delegate, "policy");
+        Assert.assertNotNull(policy);
+
+        RecoveryHandlerRegistryLeaseAdapter adapter =
+                (RecoveryHandlerRegistryLeaseAdapter) getField(delegate, "registry");
+        Assert.assertSame(RecoveryHandlerRegistry.global(), getField(adapter, "delegate"));
+        Assert.assertEquals(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE, getField(adapter, "queue"));
+    }
+
+    /**
+     * 验证 register 会直接委托给底层 registry。
+     */
+    @Test
+    public void testRegisterDelegatesToRegistry() {
+        TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
+        RecoveryHandlerRegistry registry = new RecoveryHandlerRegistry();
+        RetryLeaseWorker worker = new RetryLeaseWorker(runtimeClient, registry);
+        RecoveryHandler<String> handler = new StringRecoveryHandler("payment");
+
+        worker.register(handler);
+
+        Optional<RecoveryHandler<?>> registered = registry.get("payment");
+        Assert.assertTrue(registered.isPresent());
+        Assert.assertSame(handler, registered.get());
+    }
+
+    /**
+     * 验证带线程名的启动和优雅关闭会正确转发到内部 LeaseWorker。
+     */
+    @Test
+    public void testStartWithThreadNameAndShutdownGracefully() throws Exception {
+        TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
+        RetryLeaseWorker worker = new RetryLeaseWorker(
+                runtimeClient,
+                new RecoveryHandlerRegistry(),
+                LeaseWorkerPolicy.builder().pollWaitMillis(10L).heartbeatEnabled(false).build());
+
+        worker.start("retry-lease-worker-test");
+        Assert.assertTrue(runtimeClient.awaitAcquire(1_000L));
+
+        LeaseWorker delegate = (LeaseWorker) getField(worker, "delegate");
+        Thread workerThread = (Thread) getField(delegate, "workerThread");
+        Assert.assertNotNull(workerThread);
+        Assert.assertEquals("retry-lease-worker-test", workerThread.getName());
+
+        Assert.assertTrue(worker.shutdownGracefully(1_000L));
+    }
+
+    /**
+     * 验证默认启动路径会沿用 LeaseWorker 的默认线程名。
+     */
+    @Test
+    public void testStartUsesDefaultThreadNameAndShutdown() throws Exception {
+        TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
+        RetryLeaseWorker worker = new RetryLeaseWorker(
+                runtimeClient,
+                new RecoveryHandlerRegistry(),
+                LeaseWorkerPolicy.builder().pollWaitMillis(10L).heartbeatEnabled(false).build());
+
+        worker.start();
+        Assert.assertTrue(runtimeClient.awaitAcquire(1_000L));
+
+        LeaseWorker delegate = (LeaseWorker) getField(worker, "delegate");
+        Thread workerThread = (Thread) getField(delegate, "workerThread");
+        Assert.assertNotNull(workerThread);
+        Assert.assertEquals("lease-worker", workerThread.getName());
+
+        worker.shutdown();
+    }
+
+    /**
+     * 验证 run、shutdownNow 和 close 等方法可安全委托到底层实现。
+     */
+    @Test
+    public void testRunShutdownNowAndCloseDelegateToLeaseWorker() {
+        TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
+        RetryLeaseWorker worker = new RetryLeaseWorker(
+                runtimeClient,
+                new RecoveryHandlerRegistry(),
+                LeaseWorkerPolicy.builder().pollWaitMillis(10L).heartbeatEnabled(false).build());
+
+        worker.run();
+        Assert.assertEquals(0, runtimeClient.getAcquireCalls());
+
+        worker.start("retry-worker-now");
+        Assert.assertTrue(awaitAcquire(runtimeClient));
+        worker.shutdownNow();
+
+        worker.close();
     }
 
     /**

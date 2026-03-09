@@ -1,8 +1,8 @@
 package com.team4u.framework.retry;
 
 import com.team4u.framework.retry.backoff.Backoff;
-import com.team4u.framework.retry.backoff.Backoffs;
 import com.team4u.framework.retry.backoff.BackoffRegistry;
+import com.team4u.framework.retry.backoff.Backoffs;
 import com.team4u.framework.retry.config.BackoffConfig;
 import org.junit.Assert;
 import org.junit.Test;
@@ -52,13 +52,19 @@ public class BackoffTest {
                 .build();
 
         BackoffConfig config = new BackoffConfig();
-        config.setType("exponentialJitter");
-        config.setParams(Collections.<String, Object>singletonMap("initialDelay", 100L));
+        config.setType("exponentialjitter");
+        config.setParams(Collections.singletonMap("initialDelay", 100L));
         Backoff configBackoff = BackoffRegistry.global().createBackoff(config);
+
+        BackoffConfig camelCaseConfig = new BackoffConfig();
+        camelCaseConfig.setType("exponentialJitter");
+        camelCaseConfig.setParams(Collections.singletonMap("initialDelay", 100L));
+        Backoff camelCaseBackoff = BackoffRegistry.global().createBackoff(camelCaseConfig);
 
         Assert.assertTrue(builderBackoff.calculateMillis(1) >= 100L);
         Assert.assertTrue(builderBackoff.calculateMillis(1) <= 100L);
         Assert.assertTrue(configBackoff.calculateMillis(1) >= 100L);
+        Assert.assertTrue(camelCaseBackoff.calculateMillis(1) >= 100L);
     }
 
     private void assertIllegalArgument(Runnable runnable) {

@@ -9,16 +9,17 @@ import com.team4u.framework.retry.domain.RetryTaskSpec;
 import com.team4u.framework.retry.domain.store.RetryStatus;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.store.DurableRetryStore;
-import com.team4u.framework.retry.store.record.*;
+import com.team4u.framework.retry.store.record.CancelRecord;
+import com.team4u.framework.retry.store.record.FailureRecord;
+import com.team4u.framework.retry.store.record.RetryRecord;
+import com.team4u.framework.retry.store.record.SuccessRecord;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.io.IOException;
-import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
 import java.util.concurrent.Callable;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -54,7 +55,7 @@ public class DefaultManagedRetryClientTest {
 
         Assert.assertTrue(result instanceof ManagedSubmitResult.Completed);
         Assert.assertEquals("done", ((ManagedSubmitResult.Completed<String>) result).getValue());
-        Assert.assertEquals(list("create", "markRunning", "markSucceeded"), store.operations);
+        Assert.assertEquals(list("create", "markSucceeded"), store.operations);
         Assert.assertNotNull(store.successRecord);
         Assert.assertNull(coordinator.scheduledRecord);
     }
@@ -82,12 +83,13 @@ public class DefaultManagedRetryClientTest {
         Assert.assertEquals(RetryStatus.SCHEDULED.name(), accepted.getState());
         Assert.assertNotNull(accepted.getNextAttemptAt());
         Assert.assertEquals(2, attempts.get());
-        Assert.assertEquals(list("create", "markRunning", "scheduleNext", "markRunning", "scheduleNext"), store.operations);
-        Assert.assertEquals(2, store.scheduledFailures.size());
+        Assert.assertEquals(list("create"), store.operations);
         Assert.assertNotNull(coordinator.scheduledRecord);
-        Assert.assertEquals(store.lastScheduledNextRunAt, accepted.getNextAttemptAt());
         Assert.assertEquals(RetryStatus.SCHEDULED, coordinator.scheduledRecord.getState().getStatus());
         Assert.assertEquals(accepted.getNextAttemptAt(), coordinator.scheduledRecord.getState().getNextRunAt());
+        Assert.assertEquals(2, coordinator.scheduledRecord.getState().getAttempts());
+        Assert.assertEquals("IOException", coordinator.scheduledRecord.getState().getLastErrorCode());
+        Assert.assertEquals("boom", coordinator.scheduledRecord.getState().getLastErrorMessage());
         Assert.assertEquals(0L, coordinator.delayMillis);
         Assert.assertNull(store.failedRecord);
     }
@@ -114,7 +116,7 @@ public class DefaultManagedRetryClientTest {
             Throwable error = ((ManagedSubmitResult.Failed<String>) result).getError();
             Assert.assertTrue(error instanceof InterruptedException);
             Assert.assertTrue(Thread.currentThread().isInterrupted());
-            Assert.assertEquals(list("create", "markRunning", "scheduleNext", "markFailed"), store.operations);
+            Assert.assertEquals(list("create", "markFailed"), store.operations);
             Assert.assertNotNull(store.failedRecord);
             Assert.assertEquals("InterruptedException", store.failedRecord.getErrorCode());
             Assert.assertNull(coordinator.scheduledRecord);
@@ -143,9 +145,8 @@ public class DefaultManagedRetryClientTest {
             Assert.assertEquals("oom", error.getMessage());
         }
 
-        Assert.assertEquals(list("create", "markRunning"), store.operations);
+        Assert.assertEquals(list("create"), store.operations);
         Assert.assertNull(store.failedRecord);
-        Assert.assertTrue(store.scheduledFailures.isEmpty());
         Assert.assertNull(coordinator.scheduledRecord);
     }
 
@@ -200,27 +201,13 @@ public class DefaultManagedRetryClientTest {
 
     private static class RecordingStore implements DurableRetryStore {
         private final List<String> operations = new ArrayList<String>();
-        private final List<FailureRecord> scheduledFailures = new ArrayList<FailureRecord>();
         private SuccessRecord successRecord;
         private FailureRecord failedRecord;
-        private Instant lastScheduledNextRunAt;
 
         @Override
         public String create(RetryRecord initialRecord) {
             operations.add("create");
             return "task-1";
-        }
-
-        @Override
-        public void markRunning(String taskId, AttemptRecord attempt) {
-            operations.add("markRunning");
-        }
-
-        @Override
-        public void scheduleNext(String taskId, AttemptRecord attempt, Instant nextRunAt, FailureRecord failure) {
-            operations.add("scheduleNext");
-            scheduledFailures.add(failure);
-            lastScheduledNextRunAt = nextRunAt;
         }
 
         @Override
@@ -238,11 +225,6 @@ public class DefaultManagedRetryClientTest {
         @Override
         public void cancel(String taskId, CancelRecord cancel) {
             operations.add("cancel");
-        }
-
-        @Override
-        public Optional<RetryRecord> get(String taskId) {
-            return Optional.empty();
         }
     }
 

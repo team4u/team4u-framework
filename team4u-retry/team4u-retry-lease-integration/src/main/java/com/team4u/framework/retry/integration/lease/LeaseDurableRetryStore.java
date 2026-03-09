@@ -11,13 +11,13 @@ import com.team4u.framework.lease.model.LeasePublishRequest;
 import com.team4u.framework.lease.model.LeaseUpdateRequest;
 import com.team4u.framework.retry.client.RetryCoordinator;
 import com.team4u.framework.retry.store.DurableRetryStore;
-import com.team4u.framework.retry.store.record.*;
+import com.team4u.framework.retry.store.record.CancelRecord;
+import com.team4u.framework.retry.store.record.FailureRecord;
+import com.team4u.framework.retry.store.record.RetryRecord;
+import com.team4u.framework.retry.store.record.SuccessRecord;
 import com.team4u.framework.retry.store.serialize.HutoolRetryRecordSerializer;
 import com.team4u.framework.retry.store.serialize.RetryRecordSerializer;
 import lombok.Setter;
-
-import java.time.Instant;
-import java.util.Optional;
 
 /**
  * 基于 team4u-lease 实现的持久化存储与协调器
@@ -61,19 +61,6 @@ public class LeaseDurableRetryStore implements DurableRetryStore, RetryCoordinat
     }
 
     @Override
-    public void markRunning(String taskId, AttemptRecord attempt) {
-        // 如果需要，可以通过管理服务直接更新 Lease 执行状态，
-        // 但通常运行状态由 Lease 在工作节点轮询时自行管理。
-        // 对于前台执行，我们可以强制更新负载（payload）状态。
-    }
-
-    @Override
-    public void scheduleNext(String taskId, AttemptRecord attempt, Instant nextRunAt, FailureRecord failure) {
-        // 在 Lease 后端中，scheduleNext 主要用于记录下一个预期的状态。
-        // 实际的调度是通过协调器的 schedule() 方法完成的。
-    }
-
-    @Override
     public void markSucceeded(String taskId, SuccessRecord success) {
         assertApplied("closeSucceeded", taskId, adminService.close(taskId, LeaseCloseRequest.builder()
                 .outcome(LeaseTaskOutcome.SUCCEEDED)
@@ -95,13 +82,6 @@ public class LeaseDurableRetryStore implements DurableRetryStore, RetryCoordinat
                 .outcome(LeaseTaskOutcome.CANCELLED)
                 .errorMessage(cancel.getReason())
                 .build()));
-    }
-
-    @Override
-    public Optional<RetryRecord> get(String taskId) {
-        // LeaseAdminService 在标准子集中没有直接暴露获取负载（payload）的 get() 方法，
-        // 但如果后续支持，我们可以实现它。目前返回空。
-        return Optional.empty();
     }
 
     @Override

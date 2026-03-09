@@ -1,9 +1,9 @@
 package com.team4u.framework.retry.integration.lease;
+
 import com.team4u.framework.lease.handler.LeaseTaskHandler;
 import com.team4u.framework.lease.handler.LeaseTaskHandlerRegistry;
 import com.team4u.framework.lease.model.LeaseSubscription;
 import com.team4u.framework.lease.runtime.LeaseExecutionContext;
-import com.team4u.framework.retry.client.RetryCoordinator;
 import com.team4u.framework.retry.recovery.RecoveryContext;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
@@ -18,20 +18,17 @@ import java.util.Set;
 public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegistry {
 
     private final RecoveryHandlerRegistry delegate;
-    private final RetryCoordinator coordinator;
     private final String queue;
 
-    public RecoveryHandlerRegistryLeaseAdapter(RetryCoordinator coordinator) {
-        this(coordinator, RecoveryHandlerRegistry.global(), RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE);
+    public RecoveryHandlerRegistryLeaseAdapter() {
+        this(RecoveryHandlerRegistry.global(), RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE);
     }
 
-    public RecoveryHandlerRegistryLeaseAdapter(RetryCoordinator coordinator, RecoveryHandlerRegistry delegate) {
-        this(coordinator, delegate, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE);
+    public RecoveryHandlerRegistryLeaseAdapter(RecoveryHandlerRegistry delegate) {
+        this(delegate, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE);
     }
 
-    public RecoveryHandlerRegistryLeaseAdapter(RetryCoordinator coordinator, RecoveryHandlerRegistry delegate,
-                                               String queue) {
-        this.coordinator = coordinator;
+    public RecoveryHandlerRegistryLeaseAdapter(RecoveryHandlerRegistry delegate, String queue) {
         this.delegate = delegate == null ? RecoveryHandlerRegistry.global() : delegate;
         this.queue = (queue == null || queue.trim().isEmpty()) ? RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE : queue;
     }
@@ -58,7 +55,7 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
             return Optional.empty();
         }
         Optional<RecoveryHandler<?>> handler = delegate.get(taskType);
-        return handler.map(h -> new RecoveryHandlerLeaseTaskHandlerAdapter(h, coordinator));
+        return handler.map(RecoveryHandlerLeaseTaskHandlerAdapter::new);
     }
 
     @Override

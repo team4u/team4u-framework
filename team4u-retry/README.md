@@ -363,7 +363,7 @@ ManagedRetryClient managedRetryClient = DefaultManagedRetryClient.builder()
         .build();
 
 // worker（必须有后台执行者）
-RetryLeaseWorker worker = new RetryLeaseWorker(backend, store, registry);
+RetryLeaseWorker worker = new RetryLeaseWorker(backend, registry);
 worker.start();
 ```
 
@@ -403,15 +403,12 @@ RecoveryHandler
 
 ### `DurableRetryStore`
 
-负责“把任务记下来”，包括：
+负责“把 durable intent 和终态记下来”，包括：
 
 * `create`
-* `markRunning`
-* `scheduleNext`
 * `markSucceeded`
 * `markFailed`
 * `cancel`
-* `get`
 
 ### `RetryCoordinator`
 
@@ -699,11 +696,9 @@ public class RetryManagedConfiguration {
 
     @Bean(initMethod = "start", destroyMethod = "shutdown")
     public RetryLeaseWorker retryLeaseWorker(
-            LeaseBackend backend,
-            LeaseDurableRetryStore store) {
+            LeaseBackend backend) {
         return new RetryLeaseWorker(
                 backend,
-                store,
                 RecoveryHandlerRegistry.global()
         );
     }
@@ -782,9 +777,9 @@ retry.policy.
 ```properties
 retry.policy.order-submit={
 "maxAttempts"=6,
-"localAttempts"=2,
+"foregroundAttempts"=2,
 "backoff"={
-"type"="exponentialJitter",
+"type"="exponentialjitter",
 "params"={
 "initialDelay"=500,
 "multiplier"=2.0,
@@ -797,12 +792,10 @@ retry.policy.order-submit={
 }=
 ```
 
-> 兼容说明：当前配置模型里字段名仍为 `localAttempts`，工厂在构建 `RetryPolicy` 时会映射到 `foregroundAttempts`。
-
 可配置字段包括：
 
 * `maxAttempts`
-* `localAttempts`
+* `foregroundAttempts`
 * `backoff.type`
 * `backoff.params`
 * `retryOnExceptions`

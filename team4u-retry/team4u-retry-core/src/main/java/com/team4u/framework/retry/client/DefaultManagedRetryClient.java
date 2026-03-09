@@ -7,7 +7,6 @@ import com.team4u.framework.retry.domain.store.RetryState;
 import com.team4u.framework.retry.domain.store.RetryStatus;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.store.DurableRetryStore;
-import com.team4u.framework.retry.store.record.AttemptRecord;
 import com.team4u.framework.retry.store.record.FailureRecord;
 import com.team4u.framework.retry.store.record.RetryRecord;
 import com.team4u.framework.retry.store.record.SuccessRecord;
@@ -150,14 +149,12 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
 
         while (true) {
             attempts++;
-            AttemptRecord attemptRecord = createAttemptRecord();
+            markForegroundRunning(record, attempts);
 
             try {
-                store.markRunning(record.getTaskId(), attemptRecord);
-
                 T result = spec.getExecutor().call();
 
-                handleSuccess(record.getTaskId());
+                handleSuccess(record);
                 return new ManagedSubmitResult.Completed<>(result);
 
             } catch (Throwable ex) {
@@ -168,37 +165,23 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
                 boolean canRetry = policy.canRetry(attempts, cause);
                 FailureRecord failureRecord = createFailureRecord(cause);
 
-                // 更新记录中的状态信息
-                updateRecordState(record, attempts, failureRecord);
-
                 if (!canRetry) {
-                    handleFinalFailure(record.getTaskId(), failureRecord);
+                    handleFinalFailure(record, attempts, failureRecord);
                     return new ManagedSubmitResult.Failed<>(cause);
                 }
 
                 if (attempts < foregroundAttempts) {
-                    // 继续前台重试
-                    InterruptedException interrupted = handleForegroundBackoff(
-                            record.getTaskId(), attemptRecord, attempts, policy, failureRecord);
+                    InterruptedException interrupted = handleForegroundBackoff(record, attempts, policy, failureRecord);
                     if (interrupted != null) {
                         FailureRecord interruptedFailure = createFailureRecord(interrupted);
-                        updateRecordState(record, attempts, interruptedFailure);
-                        handleFinalFailure(record.getTaskId(), interruptedFailure);
+                        handleFinalFailure(record, attempts, interruptedFailure);
                         return new ManagedSubmitResult.Failed<>(interrupted);
                     }
                 } else {
-                    // 前台预算耗尽，移交后台
-                    return handleForegroundExhausted(record, attemptRecord, attempts, policy, failureRecord);
+                    return handleForegroundExhausted(record, attempts, policy, failureRecord);
                 }
             }
         }
-    }
-
-    private AttemptRecord createAttemptRecord() {
-        return AttemptRecord.builder()
-                .attemptAt(Instant.now())
-                .workerId("foreground")
-                .build();
     }
 
     private FailureRecord createFailureRecord(Throwable cause) {
@@ -209,33 +192,50 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
                 .build();
     }
 
-    private void updateRecordState(RetryRecord record, int attempts, FailureRecord failureRecord) {
+    private void applyFailureState(
+            RetryRecord record,
+            int attempts,
+            RetryStatus status,
+            Instant nextRunAt,
+            FailureRecord failureRecord) {
         RetryState state = record.getState();
         state.setAttempts(attempts);
+        state.setStatus(status);
+        state.setNextRunAt(nextRunAt);
         state.setLastErrorCode(failureRecord.getErrorCode());
         state.setLastErrorMessage(failureRecord.getErrorMessage());
     }
 
-    private void handleSuccess(String taskId) {
-        store.markSucceeded(taskId, SuccessRecord.builder().succeededAt(Instant.now()).build());
+    private void markForegroundRunning(RetryRecord record, int attempts) {
+        RetryState state = record.getState();
+        state.setAttempts(attempts - 1);
+        state.setStatus(RetryStatus.RUNNING);
+        state.setNextRunAt(null);
     }
 
-    private void handleFinalFailure(String taskId, FailureRecord failureRecord) {
-        store.markFailed(taskId, failureRecord);
+    private void handleSuccess(RetryRecord record) {
+        RetryState state = record.getState();
+        state.setStatus(RetryStatus.SUCCEEDED);
+        state.setNextRunAt(null);
+        store.markSucceeded(record.getTaskId(), SuccessRecord.builder().succeededAt(Instant.now()).build());
+    }
+
+    private void handleFinalFailure(RetryRecord record, int attempts, FailureRecord failureRecord) {
+        applyFailureState(record, attempts, RetryStatus.FAILED, null, failureRecord);
+        store.markFailed(record.getTaskId(), failureRecord);
     }
 
     /**
      * 处理前台重试时的退避逻辑。
      */
     private InterruptedException handleForegroundBackoff(
-            String taskId,
-            AttemptRecord attempt,
+            RetryRecord record,
             int attempts,
             RetryPolicy policy,
             FailureRecord failure) {
         long delayMillis = policy.getDelayMillis(attempts);
         Instant nextRunAt = Instant.now().plusMillis(delayMillis);
-        store.scheduleNext(taskId, attempt, nextRunAt, failure);
+        applyFailureState(record, attempts, RetryStatus.SCHEDULED, nextRunAt, failure);
         try {
             sleepQuietly(delayMillis);
             return null;
@@ -249,14 +249,15 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
     /**
      * 处理前台预算耗尽后的逻辑，进行后台调度移交。
      */
-    private <T> ManagedSubmitResult<T> handleForegroundExhausted(RetryRecord record, AttemptRecord attempt, int attempts, RetryPolicy policy, FailureRecord failure) {
+    private <T> ManagedSubmitResult<T> handleForegroundExhausted(
+            RetryRecord record,
+            int attempts,
+            RetryPolicy policy,
+            FailureRecord failure) {
         long delayMillis = policy.getDelayMillis(attempts);
         Instant nextRunAt = Instant.now().plusMillis(delayMillis);
 
-        store.scheduleNext(record.getTaskId(), attempt, nextRunAt, failure);
-
-        record.getState().setStatus(RetryStatus.SCHEDULED);
-        record.getState().setNextRunAt(nextRunAt);
+        applyFailureState(record, attempts, RetryStatus.SCHEDULED, nextRunAt, failure);
 
         return scheduleToBackground(record, delayMillis);
     }

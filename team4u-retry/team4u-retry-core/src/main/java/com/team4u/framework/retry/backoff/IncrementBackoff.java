@@ -50,7 +50,7 @@ public class IncrementBackoff implements Backoff {
             long stepMillis = 1000L;
             if (params != null) {
                 initialDelay = Convert.toLong(params.get("initialDelay"), 1000L);
-                stepMillis = Convert.toLong(params.get("stepMillis"), Convert.toLong(params.get("multiplier"), 1000L));
+                stepMillis = Convert.toLong(params.get("stepMillis"), 1000L);
             }
             return new IncrementBackoff(initialDelay, stepMillis);
         }

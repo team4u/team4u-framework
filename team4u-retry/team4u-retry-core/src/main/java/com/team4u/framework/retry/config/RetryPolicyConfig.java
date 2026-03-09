@@ -20,9 +20,9 @@ public class RetryPolicyConfig {
      */
     private int maxAttempts = 3;
     /**
-     * 本地进程内尝试次数
+     * 前台进程内尝试次数
      */
-    private Integer localAttempts;
+    private Integer foregroundAttempts;
     /**
      * 退避配置
      */

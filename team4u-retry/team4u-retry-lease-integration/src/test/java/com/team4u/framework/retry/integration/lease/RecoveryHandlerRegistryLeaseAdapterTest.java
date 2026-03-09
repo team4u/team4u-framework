@@ -2,11 +2,9 @@ package com.team4u.framework.retry.integration.lease;
 
 import com.team4u.framework.lease.handler.LeaseTaskHandler;
 import com.team4u.framework.lease.runtime.LeaseExecutionContext;
-import com.team4u.framework.retry.client.RetryCoordinator;
 import com.team4u.framework.retry.recovery.RecoveryContext;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
-import com.team4u.framework.retry.store.record.RetryRecord;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -15,9 +13,7 @@ public class RecoveryHandlerRegistryLeaseAdapterTest {
     @Test
     public void testRegisterLeaseTaskHandlerPreservesStringPayload() throws Exception {
         RecoveryHandlerRegistry registry = new RecoveryHandlerRegistry();
-        RecoveryHandlerRegistryLeaseAdapter adapter = new RecoveryHandlerRegistryLeaseAdapter(
-                new NoopRetryCoordinator(),
-                registry);
+        RecoveryHandlerRegistryLeaseAdapter adapter = new RecoveryHandlerRegistryLeaseAdapter(registry);
         CapturingLeaseTaskHandler handler = new CapturingLeaseTaskHandler();
 
         adapter.register(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE, "payment", handler);
@@ -34,9 +30,7 @@ public class RecoveryHandlerRegistryLeaseAdapterTest {
     @Test
     public void testRegisterLeaseTaskHandlerRejectsNonStringPayload() throws Exception {
         RecoveryHandlerRegistry registry = new RecoveryHandlerRegistry();
-        RecoveryHandlerRegistryLeaseAdapter adapter = new RecoveryHandlerRegistryLeaseAdapter(
-                new NoopRetryCoordinator(),
-                registry);
+        RecoveryHandlerRegistryLeaseAdapter adapter = new RecoveryHandlerRegistryLeaseAdapter(registry);
         CapturingLeaseTaskHandler handler = new CapturingLeaseTaskHandler();
 
         adapter.register(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE, "payment", handler);
@@ -58,12 +52,6 @@ public class RecoveryHandlerRegistryLeaseAdapterTest {
         @Override
         public void handle(LeaseExecutionContext context) {
             this.context = context;
-        }
-    }
-
-    private static class NoopRetryCoordinator implements RetryCoordinator {
-        @Override
-        public void schedule(RetryRecord record, long delayMillis) {
         }
     }
 }

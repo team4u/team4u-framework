@@ -12,7 +12,7 @@ import java.util.Map;
 @Data
 public class BackoffConfig {
     /**
-     * 退避类型：fixed, increment, exponential, exponentialJitter
+     * 退避类型：fixed, increment, exponential, exponentialjitter
      */
     private String type = "fixed";
 
