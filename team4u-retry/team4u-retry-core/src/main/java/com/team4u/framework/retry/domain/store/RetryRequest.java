@@ -14,7 +14,7 @@ import java.time.Instant;
 @Builder
 public class RetryRequest {
     private String taskId;
-    private String taskName;
+    private String handlerTaskType;
     private String idempotencyKey;
     private RecoverySpec recovery;
     private RetryPolicy policy;

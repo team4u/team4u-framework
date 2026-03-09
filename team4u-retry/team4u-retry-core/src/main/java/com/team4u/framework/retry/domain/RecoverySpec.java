@@ -9,21 +9,21 @@ import lombok.Getter;
 @Getter
 public class RecoverySpec {
     /**
-     * 任务名（需与所在环境能识别的 recovery handler 对应）。
+     * 恢复处理器路由类型（需与所在环境能识别的 recovery handler 对应）。
      */
-    private final String taskName;
+    private final String handlerTaskType;
 
     /**
      * 用于恢复执行此任务需要的数据（载荷）。
      */
     private final Object payload;
 
-    public RecoverySpec(String taskName, Object payload) {
-        this.taskName = taskName;
+    public RecoverySpec(String handlerTaskType, Object payload) {
+        this.handlerTaskType = handlerTaskType;
         this.payload = payload;
     }
 
-    public static RecoverySpec of(String taskName, Object payload) {
-        return new RecoverySpec(taskName, payload);
+    public static RecoverySpec of(String handlerTaskType, Object payload) {
+        return new RecoverySpec(handlerTaskType, payload);
     }
 }

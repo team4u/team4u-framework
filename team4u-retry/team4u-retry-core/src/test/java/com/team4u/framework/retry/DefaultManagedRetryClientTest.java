@@ -33,12 +33,10 @@ public class DefaultManagedRetryClientTest {
 
         assertRejected(client.submit(spec("task", "idem", null, RecoverySpec.of("recover", "payload"), policy)),
                 "executor");
-        assertRejected(client.submit(spec(" ", "idem", successTask("ok"), RecoverySpec.of("recover", "payload"), policy)),
-                "taskName");
         assertRejected(client.submit(spec("task", " ", successTask("ok"), RecoverySpec.of("recover", "payload"), policy)),
                 "idempotencyKey");
         assertRejected(client.submit(spec("task", "idem", successTask("ok"), RecoverySpec.of(" ", "payload"), policy)),
-                "valid task name");
+                "handlerTaskType");
     }
 
     @Test
@@ -176,13 +174,12 @@ public class DefaultManagedRetryClientTest {
     }
 
     private RetryTaskSpec<String> spec(
-            String taskName,
+            String ignoredTaskName,
             String idempotencyKey,
             Callable<String> executor,
             RecoverySpec recoverySpec,
             RetryPolicy policy) {
         return RetryTaskSpec.<String>builder()
-                .taskName(taskName)
                 .idempotencyKey(idempotencyKey)
                 .executor(executor)
                 .recovery(recoverySpec)

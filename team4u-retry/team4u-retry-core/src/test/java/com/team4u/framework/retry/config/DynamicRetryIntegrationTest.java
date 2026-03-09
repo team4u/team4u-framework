@@ -32,6 +32,7 @@ public class DynamicRetryIntegrationTest {
         if (context != null) {
             context.destroy();
         }
+        DynamicRetryPolicyRegistry.reset();
     }
 
     @Test
@@ -43,9 +44,6 @@ public class DynamicRetryIntegrationTest {
         context.put(configKey,
                 "{\"maxAttempts\": 2, \"backoff\": {\"type\": \"fixed\", \"params\": {\"delay\": 100}}}");
 
-        // 这里有个难点：DynamicRetryPolicyRegistry 持有了 static 的 REGISTRY
-        // 我们需要一种方式让它使用 context.getManager()
-        // 为了演示，我先通过反射或修改 Registry 来支持测试
         RetryPolicy policy1 = DynamicRetryPolicyRegistry.getPolicy(policyId);
         Assert.assertNotNull(policy1);
         Assert.assertTrue("初始配置应允许第1次重试", policy1.canRetry(1, new RuntimeException()));

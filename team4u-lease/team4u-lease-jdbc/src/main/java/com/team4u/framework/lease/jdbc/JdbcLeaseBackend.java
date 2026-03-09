@@ -7,7 +7,6 @@ import cn.hutool.db.Db;
 import com.team4u.framework.lease.api.LeaseBackend;
 import com.team4u.framework.lease.enums.LeaseAdminResult;
 import com.team4u.framework.lease.enums.LeaseRuntimeResult;
-import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
 import com.team4u.framework.lease.enums.LeaseTaskOutcome;
 import com.team4u.framework.lease.enums.LeaseTaskState;
 import com.team4u.framework.lease.jdbc.codec.LeaseJsonCodec;
@@ -131,6 +130,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
                 handle.getWorkerId(),
                 handle.getLeaseToken(),
                 now + Math.max(0L, request.getDelayMillis()),
+                request.getPayload(),
                 request.getErrorMessage(),
                 now));
     }

@@ -25,6 +25,11 @@ public class LeaseReleaseRequest {
     private Map<String, String> attributes;
 
     /**
+     * 释放时同步更新的任务负载（可选）。
+     */
+    private String payload;
+
+    /**
      * 释放时记录的错误摘要（可选）。
      */
     private String errorMessage;
