@@ -1,8 +1,8 @@
 package com.team4u.framework.retry.proxy;
 
 import cn.hutool.crypto.digest.DigestUtil;
-import com.team4u.framework.retry.RetryPayloadBuilder;
-import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.backend.RetryPayloadBuilder;
+import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.Retryer;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.backend.serialize.HutoolRetryTaskSnapshotSerializer;
@@ -10,8 +10,8 @@ import com.team4u.framework.retry.backend.serialize.RetryTaskSnapshotSerializer;
 import com.team4u.framework.retry.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.config.DynamicRetryPolicyRegistry;
 import com.team4u.framework.retry.backend.RetryBackend;
-import com.team4u.framework.retry.policy.NamedRetryPolicy;
-import com.team4u.framework.retry.policy.RetryPolicyRegistry;
+import com.team4u.framework.retry.policy.RetryPolicyFactory;
+import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
 import com.team4u.framework.retry.proxy.serialize.HutoolRetryContextSerializer;
 import com.team4u.framework.retry.proxy.serialize.RetryContextSerializer;
 import com.team4u.framework.retry.recovery.RecoveryExecutionContext;
@@ -81,8 +81,8 @@ public class RetryDelegate {
         // 解析重试策略
         String policyKey = retryable.policy();
         RetryPolicy policy = Optional.ofNullable(DynamicRetryPolicyRegistry.getPolicy(policyKey))
-                .orElseGet(() -> RetryPolicyRegistry.global().get(policyKey)
-                        .map(NamedRetryPolicy::getPolicy)
+                .orElseGet(() -> RetryPolicyFactoryRegistry.global().get(policyKey)
+                        .map(RetryPolicyFactory::create)
                         .orElseThrow(() -> new IllegalArgumentException("未找到重试策略: " + policyKey)));
 
         // 获取重试后端，判断是否需要持久化

@@ -1,7 +1,6 @@
-package com.team4u.framework.retry;
+package com.team4u.framework.retry.backoff;
 
 import cn.hutool.core.lang.Assert;
-import com.team4u.framework.retry.backoff.BackoffRegistry;
 import com.team4u.framework.retry.config.BackoffConfig;
 import lombok.Setter;
 import lombok.experimental.Accessors;

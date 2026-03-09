@@ -1,6 +1,7 @@
 package com.team4u.framework.retry;
 
 import cn.hutool.core.bean.BeanUtil;
+import com.team4u.framework.retry.policy.RetryPolicy;
 
 public class DebugBeanUtil {
     public static void main(String[] args) {

@@ -3,7 +3,6 @@ package com.team4u.framework.retry.backoff;
 import com.team4u.framework.base.instance.DynamicInstanceProvider;
 import com.team4u.framework.policy.core.KeyedPolicyRegistry;
 import com.team4u.framework.policy.util.PolicyScanner;
-import com.team4u.framework.retry.Backoff;
 import com.team4u.framework.retry.config.BackoffConfig;
 
 /**
@@ -26,11 +25,11 @@ public class BackoffRegistry extends KeyedPolicyRegistry<String, BackoffFactory>
         PolicyScanner.scanAndRegister(this);
     }
 
-    public Backoff createBackoff(BackoffConfig config) {
-        return provider.get(config);
-    }
-
     public static BackoffRegistry global() {
         return INSTANCE;
+    }
+
+    public Backoff createBackoff(BackoffConfig config) {
+        return provider.get(config);
     }
 }

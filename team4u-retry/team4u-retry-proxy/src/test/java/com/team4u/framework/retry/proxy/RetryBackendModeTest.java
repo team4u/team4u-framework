@@ -1,11 +1,11 @@
 package com.team4u.framework.retry.proxy;
 
 import com.team4u.framework.proxy.ProxyBuilder;
-import com.team4u.framework.retry.RetryHandoffException;
-import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.exception.RetryHandoffException;
+import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.TestLeaseBackend;
-import com.team4u.framework.retry.policy.NamedRetryPolicy;
-import com.team4u.framework.retry.policy.RetryPolicyRegistry;
+import com.team4u.framework.retry.policy.RetryPolicyFactory;
+import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -23,15 +23,15 @@ public class RetryBackendModeTest {
 
     @Before
     public void setup() {
-        RetryPolicyRegistry.global().unregisterAll();
-        RetryPolicyRegistry.global().register(new NamedRetryPolicy() {
+        RetryPolicyFactoryRegistry.global().unregisterAll();
+        RetryPolicyFactoryRegistry.global().register(new RetryPolicyFactory() {
             @Override
             public String key() {
                 return "default";
             }
 
             @Override
-            public RetryPolicy getPolicy() {
+            public RetryPolicy create() {
                 return RetryPolicy.builder()
                         .maxAttempts(3)
                         .localAttempts(1)

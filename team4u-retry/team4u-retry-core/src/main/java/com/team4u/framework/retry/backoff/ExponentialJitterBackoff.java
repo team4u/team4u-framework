@@ -1,7 +1,6 @@
 package com.team4u.framework.retry.backoff;
 
 import cn.hutool.core.convert.Convert;
-import com.team4u.framework.retry.Backoff;
 import com.team4u.framework.retry.config.BackoffConfig;
 import lombok.EqualsAndHashCode;
 

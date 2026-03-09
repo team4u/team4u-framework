@@ -1,6 +1,6 @@
-package com.team4u.framework.retry;
+package com.team4u.framework.retry.backend;
 
-import com.team4u.framework.retry.backend.RetryTaskSnapshot;
+import com.team4u.framework.retry.RetryPayloadContext;
 
 /**
  * 重试任务快照构建器

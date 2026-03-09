@@ -4,8 +4,8 @@ import cn.hutool.core.util.ClassUtil;
 import cn.hutool.json.JSONUtil;
 import cn.hutool.log.Log;
 import cn.hutool.log.LogFactory;
-import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.backoff.BackoffRegistry;
+import com.team4u.framework.retry.policy.RetryPolicy;
 
 /**
  * 重试策略工厂类

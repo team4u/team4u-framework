@@ -1,4 +1,4 @@
-package com.team4u.framework.retry;
+package com.team4u.framework.retry.backoff;
 
 /**
  * 失败退避策略接口

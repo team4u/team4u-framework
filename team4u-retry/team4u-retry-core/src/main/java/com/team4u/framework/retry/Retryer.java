@@ -1,12 +1,10 @@
 package com.team4u.framework.retry;
 
-import com.team4u.framework.retry.backend.RetryBackend;
-import com.team4u.framework.retry.backend.RetryCloseReason;
-import com.team4u.framework.retry.backend.RetryCloseRequest;
-import com.team4u.framework.retry.backend.RetryTaskSnapshot;
+import com.team4u.framework.retry.backend.*;
 import com.team4u.framework.retry.concurrent.RetryExecutorManager;
-import com.team4u.framework.retry.policy.NamedRetryPolicy;
-
+import com.team4u.framework.retry.exception.RetryHandoffException;
+import com.team4u.framework.retry.policy.RetryPolicy;
+import com.team4u.framework.retry.policy.RetryPolicyFactory;
 import lombok.Builder;
 
 import java.util.concurrent.Callable;
@@ -56,6 +54,22 @@ public class Retryer {
      */
     public static Retryer with(RetryPolicy policy) {
         return builder().policy(policy).build();
+    }
+
+    private static int resolveLocalAttempts(RetryPolicy policy, RetryBackend persistenceAdapter) {
+        if (persistenceAdapter == null) {
+            if (policy.getMaxAttempts() == -1) {
+                return Integer.MAX_VALUE;
+            }
+            return policy.getMaxAttempts();
+        }
+        int resolved = policy.getLocalAttempts() != null
+                ? policy.getLocalAttempts()
+                : DEFAULT_IN_MEMORY_ATTEMPTS_FOR_PERSISTENCE;
+        if (policy.getMaxAttempts() == -1) {
+            return resolved;
+        }
+        return Math.min(resolved, policy.getMaxAttempts());
     }
 
     /**
@@ -151,22 +165,6 @@ public class Retryer {
             return RetryDecisionType.HANDOFF_TO_BACKEND;
         }
         return RetryDecisionType.FAIL_TERMINAL;
-    }
-
-    private static int resolveLocalAttempts(RetryPolicy policy, RetryBackend persistenceAdapter) {
-        if (persistenceAdapter == null) {
-            if (policy.getMaxAttempts() == -1) {
-                return Integer.MAX_VALUE;
-            }
-            return policy.getMaxAttempts();
-        }
-        int resolved = policy.getLocalAttempts() != null
-                ? policy.getLocalAttempts()
-                : DEFAULT_IN_MEMORY_ATTEMPTS_FOR_PERSISTENCE;
-        if (policy.getMaxAttempts() == -1) {
-            return resolved;
-        }
-        return Math.min(resolved, policy.getMaxAttempts());
     }
 
     private boolean shouldFallbackToPersistence(int executedAttempts) {
@@ -282,10 +280,10 @@ public class Retryer {
     }
 
     private RetryHandoffException handoffToPersistence(String taskType,
-            RetryTaskSnapshot snapshot,
-            RetryPayloadBuilder payloadBuilder,
-            int executedAttempts,
-            Throwable cause) {
+                                                       RetryTaskSnapshot snapshot,
+                                                       RetryPayloadBuilder payloadBuilder,
+                                                       int executedAttempts,
+                                                       Throwable cause) {
         int nextAttempt = executedAttempts + 1;
         RetryTaskSnapshot finalSnapshot = snapshot;
 
@@ -298,7 +296,7 @@ public class Retryer {
         finalSnapshot.setLastError(cause.toString());
 
         finalSnapshot.setMaxAttempts(policy.getMaxAttempts());
-        finalSnapshot.setPolicyKey(policy instanceof NamedRetryPolicy ? ((NamedRetryPolicy) policy).key() : null);
+        finalSnapshot.setPolicyKey(policy instanceof RetryPolicyFactory ? ((RetryPolicyFactory) policy).key() : null);
 
         long delay = policy.getDelayMillis(nextAttempt + 1);
 

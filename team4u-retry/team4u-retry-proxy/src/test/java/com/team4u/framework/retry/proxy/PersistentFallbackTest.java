@@ -1,11 +1,11 @@
 package com.team4u.framework.retry.proxy;
 
 import com.team4u.framework.proxy.ProxyBuilder;
-import com.team4u.framework.retry.RetryHandoffException;
-import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.exception.RetryHandoffException;
+import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.TestLeaseBackend;
-import com.team4u.framework.retry.policy.NamedRetryPolicy;
-import com.team4u.framework.retry.policy.RetryPolicyRegistry;
+import com.team4u.framework.retry.policy.RetryPolicyFactory;
+import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
 import com.team4u.framework.retry.recovery.RetryTaskTypes;
 import org.junit.Assert;
 import org.junit.Test;
@@ -23,14 +23,14 @@ public class PersistentFallbackTest {
     public void testFallbackToBackend() throws Throwable {
         // 1. 设置静态策略：全局最多 3 次，前台仅 1 次，随后交给后端
         String policyId = "fallback-test";
-        RetryPolicyRegistry.global().register(new NamedRetryPolicy() {
+        RetryPolicyFactoryRegistry.global().register(new RetryPolicyFactory() {
             @Override
             public String key() {
                 return policyId;
             }
 
             @Override
-            public RetryPolicy getPolicy() {
+            public RetryPolicy create() {
                 return RetryPolicy.builder().maxAttempts(3).localAttempts(1).build();
             }
         });

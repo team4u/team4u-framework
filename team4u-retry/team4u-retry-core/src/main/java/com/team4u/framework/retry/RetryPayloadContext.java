@@ -1,19 +1,23 @@
 package com.team4u.framework.retry;
 
+import lombok.Data;
+
 /**
  * 重试快照构建上下文
  * <p>
  * 承载在构建任务快照时的阶段性信息。
  */
+@Data
 public final class RetryPayloadContext {
 
+    /**
+     * 当前构建阶段
+     */
     private final Phase phase;
+    /**
+     * 已执行的尝试次数
+     */
     private final int executedAttempts;
-
-    private RetryPayloadContext(Phase phase, int executedAttempts) {
-        this.phase = phase;
-        this.executedAttempts = executedAttempts;
-    }
 
     /**
      * 创建预登记意图阶段的上下文
@@ -32,20 +36,6 @@ public final class RetryPayloadContext {
             throw new IllegalArgumentException("executedAttempts must be >= 1 when handing off to backend");
         }
         return new RetryPayloadContext(Phase.HANDOFF_TO_BACKEND, executedAttempts);
-    }
-
-    /**
-     * 获取当前构建阶段
-     */
-    public Phase getPhase() {
-        return phase;
-    }
-
-    /**
-     * 获取已执行的尝试次数
-     */
-    public int getExecutedAttempts() {
-        return executedAttempts;
     }
 
     /**
