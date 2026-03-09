@@ -17,6 +17,10 @@ public abstract class TestLeaseBackend implements RetryBackend {
     }
 
     @Override
-    public void complete(String taskId) {
+    public void saveProgress(RetryTaskSnapshot snapshot) {
+    }
+
+    @Override
+    public void close(String taskId, com.team4u.framework.retry.backend.RetryCloseRequest request) {
     }
 }

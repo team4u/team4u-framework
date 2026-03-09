@@ -135,7 +135,7 @@ public class RetryBackendModeTest {
         }
 
         @Override
-        public void complete(String taskId) {
+        public void close(String taskId, com.team4u.framework.retry.backend.RetryCloseRequest request) {
             completedIntentId.set(taskId);
             completeLatch.countDown();
         }
