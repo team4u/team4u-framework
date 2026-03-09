@@ -8,29 +8,36 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.function.Supplier;
 
 /**
- * 仅包含内存进程内重试处理能力的客户端。
+ * 进程内重试客户端接口。
+ * <p>
+ * 该客户端专门用于处理应用进程内的内存级重试逻辑，不涉及外部存储的持久化。
+ * 它适用于那些对延迟敏感、执行时间较短且即使应用重启丢失重试状态也可接受的任务。
  */
 public interface InlineRetryClient {
 
     /**
-     * 同步执行重试动作
+     * 同步执行重试操作。
+     * <p>
+     * 该方法会阻塞当前线程，直到任务成功执行、达到最大重试次数或遇到不可重试的异常。
      *
-     * @param policy   重试策略
-     * @param callable 基于进程内的业务回调方法
-     * @param <T>      返回值泛型
-     * @return 最终返回结果
-     * @throws Exception 若达到最大重试次数或碰到终止异常则原样抛出
+     * @param policy   重试策略，定义了何时重试、重试次数及退避时间
+     * @param callable 业务回调逻辑，包含具体的业务执行代码
+     * @param <T>      业务执行结果的类型
+     * @return 业务逻辑执行成功后的返回结果
+     * @throws Exception 如果重试耗尽仍未成功，或遇到策略定义的不可重试异常，则抛出对应的异常
      */
     <T> T execute(RetryPolicy policy, Callable<T> callable) throws Exception;
 
     /**
-     * 异步执行重试动作
+     * 异步执行重试操作。
+     * <p>
+     * 该方法不会阻塞当前线程，任务的后续重试将通过指定的调度器异步执行。
      *
-     * @param policy    重试策略
-     * @param asyncTask 基于进程内的异步业务回调
-     * @param scheduler 定时调度器，用于处理退避重试线程
-     * @param <T>       返回值泛型
-     * @return Future
+     * @param policy    重试策略，定义了何时重试、重试次数及退避时间
+     * @param asyncTask 提供 CompletableFuture 的异步任务函数
+     * @param scheduler 定时调度服务，用于处理具有延迟的退避重试
+     * @param <T>       业务执行结果的类型
+     * @return 包含最终执行结果的 CompletableFuture 实例
      */
     <T> CompletableFuture<T> executeAsync(
             RetryPolicy policy,
