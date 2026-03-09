@@ -20,8 +20,8 @@ import java.lang.reflect.Method;
  */
 public class SpringRetryInterceptor implements MethodInterceptor {
 
-    private volatile RetryDelegate delegate;
     private final BeanFactory beanFactory;
+    private volatile RetryDelegate delegate;
 
     public SpringRetryInterceptor(BeanFactory beanFactory) {
         this.beanFactory = beanFactory;
