@@ -1,10 +1,14 @@
 package com.team4u.framework.retry.spring;
 
 import com.team4u.framework.retry.backoff.Backoffs;
+import com.team4u.framework.retry.client.ManagedRetryClient;
+import com.team4u.framework.retry.domain.ManagedSubmitResult;
+import com.team4u.framework.retry.domain.RetryTaskSpec;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.policy.RetryPolicyFactory;
 import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
 import com.team4u.framework.retry.proxy.InvocationReplay;
+import com.team4u.framework.retry.proxy.RetryMode;
 import com.team4u.framework.retry.proxy.Retryable;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import org.junit.Assert;
@@ -82,6 +86,24 @@ public class RetrySpringTest {
         }
     }
 
+    @Test
+    public void testSpringManagedMethodRejectsNonVoidReturnType() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
+                ManagedConfig.class)) {
+            ManagedConfig config = context.getBean(ManagedConfig.class);
+            ManagedService service = context.getBean(ManagedService.class);
+
+            try {
+                service.notifyPay("M100");
+                Assert.fail("expected IllegalStateException");
+            } catch (IllegalStateException ex) {
+                Assert.assertTrue(ex.getMessage().contains("only supports void return types"));
+            }
+
+            Assert.assertEquals(0, config.managedClient.submitCount.get());
+        }
+    }
+
     public interface OrderService {
         @Retryable(policy = "test-policy")
         String doRetry(String id);
@@ -89,6 +111,10 @@ public class RetrySpringTest {
 
     public interface ImplAnnotatedService {
         String call(String id);
+    }
+
+    public interface ManagedService {
+        String notifyPay(String id);
     }
 
     @Configuration
@@ -164,6 +190,14 @@ public class RetrySpringTest {
         }
     }
 
+    public static class ManagedServiceImpl implements ManagedService {
+        @Override
+        @Retryable(policy = "test-policy", mode = RetryMode.MANAGED)
+        public String notifyPay(String id) {
+            return "managed_" + id;
+        }
+    }
+
     @Configuration
     @EnableRetry
     public static class JdkProxyConfig {
@@ -172,6 +206,33 @@ public class RetrySpringTest {
         @Bean
         public ImplAnnotatedService implAnnotatedService() {
             return implAnnotatedService;
+        }
+    }
+
+    @Configuration
+    @EnableRetry
+    public static class ManagedConfig {
+        private final ManagedRetryClientStub managedClient = new ManagedRetryClientStub();
+        private final ManagedServiceImpl managedService = new ManagedServiceImpl();
+
+        @Bean
+        public ManagedRetryClient managedRetryClient() {
+            return managedClient;
+        }
+
+        @Bean
+        public ManagedService managedService() {
+            return managedService;
+        }
+    }
+
+    private static class ManagedRetryClientStub implements ManagedRetryClient {
+        private final AtomicInteger submitCount = new AtomicInteger();
+
+        @Override
+        public <T> ManagedSubmitResult<T> submit(RetryTaskSpec<T> spec) {
+            submitCount.incrementAndGet();
+            return new ManagedSubmitResult.Accepted<T>("task-1", "SCHEDULED", null);
         }
     }
 }

@@ -656,6 +656,9 @@ public class PayService {
 `@EnableRetry` 不会自动创建 `ManagedRetryClient`。
 如果你希望 `@Retryable(mode = RetryMode.MANAGED)` 真正进入托管模型，需要自己声明对应 Bean。
 
+另外需要注意：代理 / 注解模式下的 MANAGED 只支持 `void` 方法。
+如果方法需要返回业务结果、`CompletableFuture`，或者你希望拿到提交后的 `taskId/state`，不要复用原业务方法签名，改用编程式 `ManagedRetryClient.submit(...)`。
+
 示例：
 
 ```java
@@ -738,6 +741,11 @@ public class RetryManagedConfiguration {
 * 不可序列化对象
 
 可以用 `@RetryIgnore` 标记跳过持久化快照。
+
+限制：
+
+* primitive 参数不能标 `@RetryIgnore`
+* 如果 MANAGED 恢复需要重放该参数，就必须保证它可以被完整快照
 
 示例：
 
@@ -837,6 +845,17 @@ INLINE 的所有尝试都发生在当前进程里，不做持久化，不会跨�
 ### `CompletableFuture` 之外的异步返回值不会自动走异步重试分支
 
 代理/注解模式里，当前只对返回类型是 `CompletableFuture` 的方法走异步重试逻辑。其他返回类型仍按同步路径处理。
+
+### 代理 / 注解模式下，`CompletableFuture` 异步重试仅支持 INLINE
+
+`@Retryable(mode = RetryMode.MANAGED)` 在代理 / Spring AOP 接入下只支持 `void` 方法。
+
+这意味着：
+
+* `CompletableFuture<T>` 返回值不能和 MANAGED 一起使用
+* 其他任何非 `void` 返回值也不能和 MANAGED 一起使用
+* 如果你需要异步结果或业务返回值，改用 `INLINE`
+* 如果你需要提交结果 / 任务元数据，改用编程式 `ManagedRetryClient.submit(...)`
 
 ---
 

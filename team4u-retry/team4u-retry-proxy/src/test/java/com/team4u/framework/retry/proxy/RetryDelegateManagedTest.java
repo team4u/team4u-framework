@@ -8,6 +8,7 @@ import com.team4u.framework.retry.domain.store.InvocationRecoveryData;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.policy.RetryPolicyFactory;
 import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
+import com.team4u.framework.retry.proxy.serialize.RetryIgnore;
 import com.team4u.framework.retry.recovery.RecoveryContext;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import org.junit.Assert;
@@ -15,7 +16,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.lang.reflect.Method;
-import java.util.concurrent.Callable;
+import java.util.concurrent.CompletableFuture;
 
 public class RetryDelegateManagedTest {
 
@@ -41,20 +42,19 @@ public class RetryDelegateManagedTest {
     }
 
     @Test
-    public void testManagedSubmissionBuildsBusinessTaskNameHandlerTypeAndStableIdempotencyKey() throws Throwable {
+    public void testManagedVoidSubmissionBuildsRecoveryDataAndStableIdempotencyKey() throws Throwable {
         CapturingManagedRetryClient managedClient = new CapturingManagedRetryClient();
         RetryDelegate delegate = new RetryDelegate(null, managedClient);
-        ManagedService target = new ManagedService();
-        Method method = ManagedService.class.getMethod("replayPayment", String.class, Integer.class);
+        ManagedVoidService target = new ManagedVoidService();
+        Method method = ManagedVoidService.class.getMethod("replayPayment", String.class, Integer.class);
         Retryable retryable = method.getAnnotation(Retryable.class);
-        Callable<Object> proceedTask = () -> "ok";
 
         Object firstResult = delegate.executeWithRetry(
                 method,
                 target,
                 new Object[]{"order-1", 3},
                 retryable,
-                proceedTask);
+                () -> null);
         String firstKey = managedClient.lastSpec.getIdempotencyKey();
 
         Object secondResult = delegate.executeWithRetry(
@@ -62,42 +62,118 @@ public class RetryDelegateManagedTest {
                 target,
                 new Object[]{"order-1", 3},
                 retryable,
-                proceedTask);
+                () -> null);
 
         Assert.assertNull(firstResult);
         Assert.assertNull(secondResult);
+        Assert.assertEquals(2, managedClient.submitCount);
         Assert.assertNotNull(managedClient.lastSpec);
         Assert.assertEquals(CustomRecoveryHandler.TASK_TYPE, managedClient.lastSpec.getRecovery().getTaskType());
         Assert.assertEquals(firstKey, managedClient.lastSpec.getIdempotencyKey());
         Assert.assertFalse(firstKey.isEmpty());
 
         InvocationRecoveryData payload = (InvocationRecoveryData) managedClient.lastSpec.getRecovery().getPayload();
-        Assert.assertEquals(ManagedService.class.getName(), payload.getBeanName());
+        Assert.assertEquals(ManagedVoidService.class.getName(), payload.getBeanName());
         Assert.assertEquals("replayPayment", payload.getMethodName());
         Assert.assertEquals(2, payload.getArgValues().size());
     }
 
     @Test
-    public void testManagedSubmissionChangesIdempotencyKeyWhenArgumentsChange() throws Throwable {
+    public void testManagedVoidSubmissionChangesIdempotencyKeyWhenArgumentsChange() throws Throwable {
         CapturingManagedRetryClient managedClient = new CapturingManagedRetryClient();
         RetryDelegate delegate = new RetryDelegate(null, managedClient);
-        ManagedService target = new ManagedService();
-        Method method = ManagedService.class.getMethod("replayPayment", String.class, Integer.class);
+        ManagedVoidService target = new ManagedVoidService();
+        Method method = ManagedVoidService.class.getMethod("replayPayment", String.class, Integer.class);
         Retryable retryable = method.getAnnotation(Retryable.class);
 
-        delegate.executeWithRetry(method, target, new Object[]{"order-1", 3}, retryable, () -> "ok");
+        delegate.executeWithRetry(method, target, new Object[]{"order-1", 3}, retryable, () -> null);
         String firstKey = managedClient.lastSpec.getIdempotencyKey();
 
-        delegate.executeWithRetry(method, target, new Object[]{"order-2", 3}, retryable, () -> "ok");
+        delegate.executeWithRetry(method, target, new Object[]{"order-2", 3}, retryable, () -> null);
         String secondKey = managedClient.lastSpec.getIdempotencyKey();
 
         Assert.assertNotEquals(firstKey, secondKey);
     }
 
-    public static class ManagedService {
+    @Test
+    public void testManagedNonVoidMethodRejected() throws Throwable {
+        CapturingManagedRetryClient managedClient = new CapturingManagedRetryClient();
+        RetryDelegate delegate = new RetryDelegate(null, managedClient);
+        ManagedStringService target = new ManagedStringService();
+        Method method = ManagedStringService.class.getMethod("replayPayment", String.class);
+        Retryable retryable = method.getAnnotation(Retryable.class);
+
+        try {
+            delegate.executeWithRetry(method, target, new Object[]{"order-1"}, retryable, () -> "ok");
+            Assert.fail("expected IllegalStateException");
+        } catch (IllegalStateException ex) {
+            Assert.assertTrue(ex.getMessage().contains("only supports void return types"));
+            Assert.assertTrue(ex.getMessage().contains("ManagedRetryClient.submit"));
+        }
+
+        Assert.assertEquals(0, managedClient.submitCount);
+    }
+
+    @Test
+    public void testManagedAsyncMethodRejected() throws Throwable {
+        CapturingManagedRetryClient managedClient = new CapturingManagedRetryClient();
+        RetryDelegate delegate = new RetryDelegate(null, managedClient);
+        ManagedAsyncService target = new ManagedAsyncService();
+        Method method = ManagedAsyncService.class.getMethod("replayPayment", String.class);
+        Retryable retryable = method.getAnnotation(Retryable.class);
+
+        try {
+            delegate.executeWithRetry(method, target, new Object[]{"order-1"}, retryable,
+                    () -> CompletableFuture.completedFuture("ok"));
+            Assert.fail("expected IllegalStateException");
+        } catch (IllegalStateException ex) {
+            Assert.assertTrue(ex.getMessage().contains("only supports void return types"));
+        }
+
+        Assert.assertEquals(0, managedClient.submitCount);
+    }
+
+    @Test
+    public void testManagedRetryIgnorePrimitiveRejectedBeforeSubmit() throws Throwable {
+        CapturingManagedRetryClient managedClient = new CapturingManagedRetryClient();
+        RetryDelegate delegate = new RetryDelegate(null, managedClient);
+        ManagedIgnoredPrimitiveService target = new ManagedIgnoredPrimitiveService();
+        Method method = ManagedIgnoredPrimitiveService.class.getMethod("replayPayment", int.class);
+        Retryable retryable = method.getAnnotation(Retryable.class);
+
+        try {
+            delegate.executeWithRetry(method, target, new Object[]{3}, retryable, () -> null);
+            Assert.fail("expected IllegalStateException");
+        } catch (IllegalStateException ex) {
+            Assert.assertTrue(ex.getMessage().contains("@RetryIgnore cannot be used on primitive parameters"));
+        }
+
+        Assert.assertEquals(0, managedClient.submitCount);
+    }
+
+    public static class ManagedVoidService {
         @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED, recovery = CustomRecoveryHandler.class)
-        public String replayPayment(String orderId, Integer attempts) {
-            return orderId + ":" + attempts;
+        public void replayPayment(String orderId, Integer attempts) {
+        }
+    }
+
+    public static class ManagedStringService {
+        @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED, recovery = CustomRecoveryHandler.class)
+        public String replayPayment(String orderId) {
+            return orderId;
+        }
+    }
+
+    public static class ManagedAsyncService {
+        @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED, recovery = CustomRecoveryHandler.class)
+        public CompletableFuture<String> replayPayment(String orderId) {
+            return CompletableFuture.completedFuture(orderId);
+        }
+    }
+
+    public static class ManagedIgnoredPrimitiveService {
+        @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED, recovery = CustomRecoveryHandler.class)
+        public void replayPayment(@RetryIgnore int attempts) {
         }
     }
 
@@ -116,9 +192,11 @@ public class RetryDelegateManagedTest {
 
     private static class CapturingManagedRetryClient implements ManagedRetryClient {
         private RetryTaskSpec<?> lastSpec;
+        private int submitCount;
 
         @Override
         public <T> ManagedSubmitResult<T> submit(RetryTaskSpec<T> spec) {
+            submitCount++;
             lastSpec = spec;
             return new ManagedSubmitResult.Accepted<T>("task-1", "SCHEDULED", null);
         }
