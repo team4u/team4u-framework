@@ -57,7 +57,7 @@ public class SnapshotRecoveryHandlerTest {
     @Test
     public void testRecoverInvokesBeanWithoutReEnteringRetryPipeline() throws Exception {
         CountingBackend backend = new CountingBackend();
-        RecoveryService target = new RecoveryServiceImpl();
+        RecoveryServiceImpl target = new RecoveryServiceImpl();
         RecoveryService proxy = ProxyBuilder.forClass(RecoveryService.class)
                 .withDelegate(target)
                 .addInterceptor(new RetryInterceptor(backend))
@@ -74,10 +74,9 @@ public class SnapshotRecoveryHandlerTest {
         SnapshotRecoveryHandler handler = new SnapshotRecoveryHandler("recover-task");
         handler.recover(snapshot);
 
-        RecoveryServiceImpl impl = (RecoveryServiceImpl) target;
-        Assert.assertEquals(1, impl.invokeCount.get());
-        Assert.assertEquals("payload", impl.lastValue);
-        Assert.assertEquals(3, impl.lastTimes);
+        Assert.assertEquals(1, target.invokeCount.get());
+        Assert.assertEquals("payload", target.lastValue);
+        Assert.assertEquals(3, target.lastTimes);
         Assert.assertEquals(0, backend.saveCount.get());
         Assert.assertEquals(0, backend.submitCount.get());
     }
@@ -113,10 +112,6 @@ public class SnapshotRecoveryHandlerTest {
         @Override
         public void handoff(String taskId, long delayMillis) {
             submitCount.incrementAndGet();
-        }
-
-        @Override
-        public void close(String taskId, RetryCloseRequest request) {
         }
     }
 }
