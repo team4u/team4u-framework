@@ -1,8 +1,6 @@
 package com.team4u.framework.retry.config;
 
 import lombok.Data;
-import lombok.Getter;
-import lombok.Setter;
 
 import java.util.Map;
 

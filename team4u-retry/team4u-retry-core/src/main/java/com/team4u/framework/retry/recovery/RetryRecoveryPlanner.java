@@ -1,8 +1,9 @@
 package com.team4u.framework.retry.recovery;
 
+import com.team4u.framework.retry.RetryExecutionContext;
 import com.team4u.framework.retry.backend.RetryCloseReason;
 import com.team4u.framework.retry.policy.RetryPolicy;
-import com.team4u.framework.retry.RetryExecutionContext;
+import lombok.Data;
 
 /**
  * 重试恢复计划器
@@ -24,9 +25,9 @@ public class RetryRecoveryPlanner {
      * @return 执行计划，描述是继续进行下一轮重试、移交后端还是关闭任务
      */
     public Plan plan(RetryExecutionContext<?> context,
-            RetryPolicy policy,
-            int localAttempts,
-            boolean hasRetryBackend) {
+                     RetryPolicy policy,
+                     int localAttempts,
+                     boolean hasRetryBackend) {
         int executedAttempts = context.getExecutedAttempts();
         Throwable cause = context.getLastError();
 
@@ -90,25 +91,22 @@ public class RetryRecoveryPlanner {
      * <p>
      * 封装了重试决策的结果，包括决策类型、相关参数（延迟、关闭原因等）。
      */
+    @Data
     public static class Plan {
 
-        public enum Type {
-            /** 内存中重试 */
-            RETRY_IN_MEMORY,
-            /** 移交给后端持久化 */
-            HANDOFF_TO_BACKEND,
-            /** 任务关闭 */
-            CLOSE
-        }
-
         private final Type type;
-        /** 延迟时间（毫秒） */
+        /**
+         * 延迟时间（毫秒）
+         */
         private final long delayMillis;
-        /** 任务关闭的原因 */
+        /**
+         * 任务关闭的原因
+         */
         private final RetryCloseReason reason;
-        /** 失败提示信息 */
+        /**
+         * 失败提示信息
+         */
         private final String errorMessage;
-
         private Plan(Type type, long delayMillis, RetryCloseReason reason, String errorMessage) {
             this.type = type;
             this.delayMillis = delayMillis;
@@ -142,6 +140,21 @@ public class RetryRecoveryPlanner {
 
         public String getErrorMessage() {
             return errorMessage;
+        }
+
+        public enum Type {
+            /**
+             * 内存中重试
+             */
+            RETRY_IN_MEMORY,
+            /**
+             * 移交给后端持久化
+             */
+            HANDOFF_TO_BACKEND,
+            /**
+             * 任务关闭
+             */
+            CLOSE
         }
     }
 }

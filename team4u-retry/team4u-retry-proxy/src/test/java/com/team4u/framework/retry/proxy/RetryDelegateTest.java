@@ -1,15 +1,15 @@
 package com.team4u.framework.retry.proxy;
 
 import cn.hutool.json.JSONUtil;
+import com.team4u.framework.retry.TestLeaseBackend;
+import com.team4u.framework.retry.backend.RetryCloseRequest;
+import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.exception.RetryHandoffException;
 import com.team4u.framework.retry.policy.RetryPolicy;
-import com.team4u.framework.retry.TestLeaseBackend;
 import com.team4u.framework.retry.policy.RetryPolicyFactory;
 import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
 import com.team4u.framework.retry.recovery.RecoveryExecutionContext;
 import com.team4u.framework.retry.recovery.RetryTaskTypes;
-import com.team4u.framework.retry.backend.RetryCloseRequest;
-import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -94,7 +94,7 @@ public class RetryDelegateTest {
         Object result = delegate.executeWithRetry(
                 method,
                 new DelegateApi(),
-                new Object[] { new Object() },
+                new Object[]{new Object()},
                 retryable,
                 () -> "ok",
                 null);
@@ -124,7 +124,7 @@ public class RetryDelegateTest {
             delegate.executeWithRetry(
                     method,
                     new DelegateApi(),
-                    new Object[] { "payload" },
+                    new Object[]{"payload"},
                     retryable,
                     () -> {
                         businessExecuted.set(true);
@@ -158,7 +158,7 @@ public class RetryDelegateTest {
         Object result = delegate.executeWithRetry(
                 method,
                 new DelegateApi(),
-                new Object[] { "a" },
+                new Object[]{"a"},
                 retryable,
                 () -> "ok",
                 null);
@@ -180,7 +180,7 @@ public class RetryDelegateTest {
             delegate.executeWithRetry(
                     method,
                     new DelegateContractImpl(),
-                    new Object[] { args },
+                    new Object[]{args},
                     retryable,
                     () -> {
                         args.clear();
@@ -226,7 +226,7 @@ public class RetryDelegateTest {
             result = (String) delegate.executeWithRetry(
                     method,
                     new DelegateApi(),
-                    new Object[] { "payload" },
+                    new Object[]{"payload"},
                     retryable,
                     () -> {
                         proceedCount.incrementAndGet();

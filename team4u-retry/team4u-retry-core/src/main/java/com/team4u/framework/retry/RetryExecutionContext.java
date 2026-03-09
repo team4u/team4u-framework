@@ -18,17 +18,29 @@ import java.util.concurrent.CompletableFuture;
 @Setter
 public class RetryExecutionContext<T> {
 
-    /** 任务类型标识 */
+    /**
+     * 任务类型标识
+     */
     private final String taskType;
-    /** 重试快照构建器 */
+    /**
+     * 重试快照构建器
+     */
     private final RetryPayloadBuilder payloadBuilder;
-    /** 持久化任务快照（仅在开启持久化模式下存在） */
+    /**
+     * 持久化任务快照（仅在开启持久化模式下存在）
+     */
     private RetryTaskSnapshot snapshot;
-    /** 已执行的尝试次数 */
+    /**
+     * 已执行的尝试次数
+     */
     private int executedAttempts;
-    /** 最后一次发生的异常 */
+    /**
+     * 最后一次发生的异常
+     */
     private Throwable lastError;
-    /** 用于异步结果通知的 Promise */
+    /**
+     * 用于异步结果通知的 Promise
+     */
     private CompletableFuture<T> promise;
 
     public RetryExecutionContext(String taskType, RetryPayloadBuilder payloadBuilder) {

@@ -1,7 +1,7 @@
 package com.team4u.framework.retry;
 
-import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.backend.RetryBackend;
+import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 
 /**
  * 基于 RetryPersistenceAdapter 的测试辅助实现（Proxy 模块冗余副本）。
