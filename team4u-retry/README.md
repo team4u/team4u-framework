@@ -1,155 +1,186 @@
 # team4u-retry
 
-`team4u-retry` 是 Team4u Framework 的统一重试模块，提供两类能力：
+`team4u-retry` 是一个支持进程内重试和持久化托管重试的 Java 重试框架。
 
-* INLINE（进程内重试）：所有重试都在当前进程内完成，适合同步/异步的轻量级失败恢复。
-* MANAGED（托管重试）：任务先写入持久化存储，当前进程做有限次前台尝试，预算耗尽后交给后端调度与恢复执行，适合需要抗进程故障的场景。
+它覆盖两类常见场景：
 
-它适用于支付通知、第三方接口调用、消息补偿、下游短暂不可用等“可重试且需要幂等保障”的业务。
+* INLINE：所有重试都在当前进程内完成，适合短链路、同步调用、当前请求必须立即拿到结果的场景。
+* MANAGED：先在前台尝试有限次数，失败后把任务持久化并交给后台 Worker 接管，适合补偿、回调、通知、恢复任务这类“必须继续做，但不一定要当前线程一直等”的场景。
 
----
+项目当前包含 4 个模块：
 
-## 你可以用它做什么
-
-* 对同步逻辑做阻塞式重试
-* 对 `CompletableFuture` 异步调用做非阻塞重试
-* 通过 `@Retryable` 给接口 / 方法增加声明式重试
-* 在 Spring 项目中通过 `@EnableRetry` 自动织入重试代理
-* 在 MANAGED 模式下，把任务可靠托管到后端，由 Worker 继续恢复执行
-* 通过配置中心动态加载和热更新重试策略
+* `team4u-retry-core`
+* `team4u-retry-proxy`
+* `team4u-retry-spring`
+* `team4u-retry-lease-integration`
 
 ---
 
-## 什么时候适合用重试
+## 先别看细节，先选用法
 
-适合重试的典型场景：
+第一次接入时，建议先按场景选，而不是从全部能力开始看。
 
-* 网络抖动、超时、短暂不可用
-* 下游服务限流后的延迟恢复
-* 第三方接口偶发失败
-* 消息投递、通知回调、补偿执行
+| 你的场景                                 | 推荐方式    | 需要模块                                               |
+| ---------------------------------------- | ----------- | ------------------------------------------------------ |
+| 给一段同步代码加重试                     | INLINE      | `team4u-retry-core`                                    |
+| 给 `CompletableFuture` 加异步重试        | INLINE      | `team4u-retry-core`                                    |
+| 想通过注解给方法加重试                   | 代理模式    | `team4u-retry-proxy`                                   |
+| Spring 项目里启用注解重试                | Spring 集成 | `team4u-retry-spring`                                  |
+| 需要任务持久化、后台接管、进程重启后继续 | MANAGED     | `team4u-retry-core` + `team4u-retry-lease-integration` |
 
-不适合直接重试的场景：
+### 什么时候用 INLINE
 
-* 参数错误
-* 权限错误
-* 幂等冲突
-* 明确的业务拒绝类异常
-* 资源永久不存在
+适合这些场景：
 
-> 提醒：重试只能提高成功率，不能替代幂等设计。
-
----
-
-## 目录
-
-* [模块划分](#模块划分)
-* [两种运行模式](#两种运行模式)
-* [快速开始](#快速开始)
-* [核心概念](#核心概念)
-* [异常与终止规则](#异常与终止规则)
-* [编程式接入](#编程式接入)
-* [注解式接入](#注解式接入)
-* [Spring 接入](#spring-接入)
-* [动态策略配置](#动态策略配置)
-* [基于 Lease 的托管实现](#基于-lease-的托管实现)
-* [注意事项](#注意事项)
-* [FAQ](#faq)
-* [核心类与执行流程](#核心类与执行流程)
-
----
-
-## 模块划分
-
-当前项目包含 4 个子模块：
-
-| 模块                               | 作用                                | 适用场景                 |
-| -------------------------------- | --------------------------------- | -------------------- |
-| `team4u-retry-core`              | 核心重试能力、策略、模式、存储抽象                 | 纯 Java / 基础组件        |
-| `team4u-retry-proxy`             | `@Retryable` 代理增强、参数快照序列化         | 非 Spring 的声明式重试      |
-| `team4u-retry-spring`            | Spring 自动接入、`@EnableRetry`、生命周期管理 | Spring / Spring Boot |
-| `team4u-retry-lease-integration` | 基于 `team4u-lease` 的托管存储与调度实现      | 需要持久化托管与恢复执行         |
-
-一般建议：
-
-* 只需要轻量重试：先用 `core`
-* 想用注解式声明重试：加 `proxy`
-* Spring 项目：加 `spring`
-* 需要托管重试 / 抗进程故障：加 `lease-integration`
-
----
-
-## 两种运行模式
-
-### 1）INLINE
-
-仅当前进程内重试。
+* 第三方 HTTP / RPC 调用
+* 数据库或下游服务短时抖动
+* 当前线程必须直接拿结果
+* 失败后可以直接抛异常给调用方
 
 特点：
 
-* 不依赖持久化存储
-* 失败后立即按退避策略重试
-* 进程退出后不会继续执行
-* 适合快速失败恢复
+* 不持久化
+* 没有后台接管
+* 最终失败后直接抛出异常
+* 不支持配置 `foregroundAttempts`，因为它没有“前台 / 后台拆分”这个概念
 
-### 2）MANAGED
+### 什么时候用 MANAGED
 
-任务先被可靠记录，再由前台 + 后台协同完成重试。
+适合这些场景：
+
+* 支付通知补偿
+* 回调补发
+* MQ 消费失败后的恢复任务
+* 服务重启后仍然希望继续执行的任务
 
 特点：
 
-* 依赖 `DurableRetryStore` 做持久化
-* 当前线程先执行有限次前台尝试
-* 前台预算耗尽后，由 `RetryCoordinator` 调度后台继续执行
-* 适合需要抗宕机、跨进程恢复的场景
-
-### 模式对照
-
-| 维度                            | INLINE  | MANAGED    |
-| ----------------------------- | ------- | ---------- |
-| 是否需要持久化                       | 否       | 是          |
-| 是否支持异步 `CompletableFuture` 重试 | 是       | 需由托管模型自行封装 |
-| 是否需要 `foregroundAttempts`     | 否，且不能配置 | 是，且必须显式配置  |
-| 失败后是否可由后端继续恢复                 | 否       | 是          |
-| 是否适合抗进程故障                     | 否       | 是          |
+* 任务先被持久化
+* 前台尝试失败后可以转后台继续
+* 需要存储、协调器、恢复处理器和 Worker 配合
+* 必须显式配置 `foregroundAttempts`
+* 必须提供有效的 `RecoverySpec.taskName`
 
 ---
 
-## 快速开始
+## 模块与依赖
 
-### Maven 依赖
+### Maven 模块
 
-最小依赖：
+```xml
+<modules>
+    <module>team4u-retry-core</module>
+    <module>team4u-retry-proxy</module>
+    <module>team4u-retry-spring</module>
+    <module>team4u-retry-lease-integration</module>
+</modules>
+```
+
+### 最小依赖组合
+
+#### 只用 INLINE
 
 ```xml
 <dependency>
     <groupId>com.team4u</groupId>
     <artifactId>team4u-retry-core</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>${version}</version>
 </dependency>
 ```
 
-如果需要 Spring 自动接入：
+#### 用注解 / 代理模式
+
+```xml
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-retry-proxy</artifactId>
+    <version>${version}</version>
+</dependency>
+```
+
+#### Spring 项目启用注解重试
 
 ```xml
 <dependency>
     <groupId>com.team4u</groupId>
     <artifactId>team4u-retry-spring</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>${version}</version>
 </dependency>
 ```
 
-如果需要基于 Lease 的托管重试：
+#### 用 MANAGED + Lease 托管
 
 ```xml
 <dependency>
     <groupId>com.team4u</groupId>
+    <artifactId>team4u-retry-core</artifactId>
+    <version>${version}</version>
+</dependency>
+
+<dependency>
+    <groupId>com.team4u</groupId>
     <artifactId>team4u-retry-lease-integration</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>${version}</version>
 </dependency>
 ```
 
-### 示例 1：INLINE 同步重试
+---
+
+## 核心概念
+
+### `maxAttempts`
+
+最大尝试次数，包含首次执行。
+
+例如 `maxAttempts = 3`，表示最多执行 3 次，不是“失败后再重试 3 次”。
+`-1` 表示无限重试。
+
+### `foregroundAttempts`
+
+只在 MANAGED 模式下有意义，表示当前进程内最多同步尝试多少次。
+
+约束如下：
+
+* INLINE 模式下不允许设置
+* MANAGED 模式下必须显式设置
+* 必须大于 0
+* 不能大于 `maxAttempts`
+
+### 退避策略
+
+框架支持多种退避策略：
+
+* 固定延迟 `fixed`
+* 线性递增 `increment`
+* 指数退避 `exponential`
+* 带抖动的指数退避 `exponentialJitter`
+
+默认退避策略是固定 1000ms。
+
+### 异常匹配规则
+
+`RetryPolicy` 的决策顺序可以理解为：
+
+* 如果达到最大尝试次数，不再重试
+* 命中 `abortOnExceptions`，立即停止
+* 如果配置了 `retryOnExceptions`，但当前异常不在其中，不重试
+* 如果配置了 `condition` 且条件不满足，不重试
+* 否则允许继续重试
+
+### 包装异常会被自动剥离
+
+框架会自动剥离常见包装异常，例如：
+
+* `CompletionException`
+* `ExecutionException`
+* `InvocationTargetException`
+* `UndeclaredThrowableException`
+
+---
+
+## 5 分钟快速开始
+
+## INLINE：同步重试
 
 ```java
 import com.team4u.framework.retry.backoff.Backoffs;
@@ -158,45 +189,52 @@ import com.team4u.framework.retry.policy.RetryPolicy;
 
 RetryPolicy policy = RetryPolicy.builder()
         .maxAttempts(3)
-        .backoff(Backoffs.fixed(200))
+        .backoff(Backoffs.fixed(1000))
+        .retryOn(java.io.IOException.class)
+        .abortOn(IllegalArgumentException.class)
         .build();
 
-String result = DefaultInlineRetryClient.getInstance().execute(policy, () -> {
-    // 业务逻辑
-    return "ok";
-});
+String result = DefaultInlineRetryClient.getInstance()
+        .execute(policy, this::remoteCall);
 ```
 
-### 示例 2：INLINE 异步重试
+`DefaultInlineRetryClient` 是开箱即用的单例入口。
+
+---
+
+## INLINE：异步重试
 
 ```java
 import com.team4u.framework.retry.backoff.Backoffs;
 import com.team4u.framework.retry.client.DefaultInlineRetryClient;
+import com.team4u.framework.retry.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.policy.RetryPolicy;
 
 import java.util.concurrent.CompletableFuture;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ScheduledExecutorService;
-
-ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
 
 RetryPolicy policy = RetryPolicy.builder()
         .maxAttempts(3)
-        .backoff(Backoffs.fixed(100))
+        .backoff(Backoffs.exponential(200, 2.0, 3000))
         .build();
 
-CompletableFuture<String> future = DefaultInlineRetryClient.getInstance().executeAsync(
-        policy,
-        this::asyncRemoteCall,
-        scheduler
-);
+CompletableFuture<String> future = DefaultInlineRetryClient.getInstance()
+        .executeAsync(
+                policy,
+                this::asyncRemoteCall,
+                RetryExecutorManager.global().getScheduler()
+        );
 ```
 
-### 示例 3：MANAGED 托管提交
+这里的 `asyncRemoteCall` 需要返回 `CompletableFuture<T>`。
+框架内置全局调度线程池；在 Spring 环境下会自动关闭，非 Spring 环境下建议自行关注生命周期。
+
+---
+
+## MANAGED：前台尝试 + 后台接管
 
 ```java
 import com.team4u.framework.retry.backoff.Backoffs;
-import com.team4u.framework.retry.client.DefaultManagedRetryClient;
+import com.team4u.framework.retry.client.ManagedRetryClient;
 import com.team4u.framework.retry.domain.ManagedSubmitResult;
 import com.team4u.framework.retry.domain.RecoverySpec;
 import com.team4u.framework.retry.domain.RetryTaskSpec;
@@ -205,233 +243,321 @@ import com.team4u.framework.retry.policy.RetryPolicy;
 RetryPolicy policy = RetryPolicy.builder()
         .maxAttempts(5)
         .foregroundAttempts(2)
-        .backoff(Backoffs.exponentialJitter(200, 2.0, 5000))
+        .backoff(Backoffs.fixed(1000))
+        .retryOn(java.io.IOException.class)
         .build();
 
 RetryTaskSpec<String> spec = RetryTaskSpec.<String>builder()
         .taskName("pay-notify")
-        .idempotencyKey("order-A1001")
+        .idempotencyKey("order:1001")
+        .executor(() -> notifyPayment())
+        .recovery(RecoverySpec.of("pay-notify", "{\"orderId\":\"1001\"}"))
         .policy(policy)
-        .recovery(RecoverySpec.of("pay-notify", "{\"orderId\":\"A1001\"}"))
-        .executor(() -> {
-            throw new RuntimeException("downstream timeout");
-        })
         .build();
 
 ManagedSubmitResult<String> result = managedRetryClient.submit(spec);
+```
 
-if (result.isAccepted()) {
-    // 已被可靠托管，后续由后台继续执行
+`RetryTaskSpec` 至少包括：
+
+* `taskName`
+* `idempotencyKey`
+* `executor`
+* `recovery`
+* `policy`
+
+---
+
+## MANAGED 到底是什么
+
+MANAGED 模式不是“把 INLINE 再包一层”，而是一套单独的运行模型。
+
+提交流程大致是：
+
+```text
+提交 RetryTaskSpec
+    ↓
+校验 policy / recovery
+    ↓
+创建持久化 RetryRecord（PREPARED）
+    ↓
+前台按 foregroundAttempts 尝试执行
+    ↓
+成功 -> Completed
+不可再试 -> Failed
+还能再试但前台预算耗尽 -> Accepted，并交给 coordinator 调度后台
+```
+
+### `ManagedSubmitResult` 的含义
+
+MANAGED 提交会返回 4 种终态之一：
+
+* `Completed<T>`：前台已经成功完成
+* `Accepted<T>`：任务已被可靠接收，后续会由后台继续
+* `Rejected<T>`：任务未被接收，例如配置不合法
+* `Failed<T>`：明确失败，不再继续重试
+
+### 一个容易误解的点
+
+`Accepted` 不代表业务已经成功，只代表：
+
+* 任务已经持久化
+* 当前前台阶段已经结束
+* 后续会由后台 Worker 按策略继续执行
+
+---
+
+## `managedRetryClient` 怎么初始化
+
+这是第一次接入最容易卡住的地方。
+
+`managedRetryClient` 不是像 `DefaultInlineRetryClient.getInstance()` 那样直接拿来就能用。
+它要求你自己把依赖组起来：
+
+* `DurableRetryStore`
+* `RecoveryHandlerRegistry`
+* `RetryCoordinator`
+* 可选的默认 `RetryPolicy`
+
+如果缺任何一个，构造时会直接失败。
+
+### 最推荐的初始化方式：基于 lease
+
+`team4u-retry-lease-integration` 已经提供了最省事的一套实现：
+
+* `LeaseDurableRetryStore` 同时实现了 `DurableRetryStore` 和 `RetryCoordinator`
+* `RetryLeaseWorker` 负责后台消费和恢复执行
+
+### 最小初始化代码
+
+```java
+import com.team4u.framework.lease.api.LeaseBackend;
+import com.team4u.framework.lease.api.LeaseRuntimeClient;
+import com.team4u.framework.retry.backoff.Backoffs;
+import com.team4u.framework.retry.client.DefaultManagedRetryClient;
+import com.team4u.framework.retry.client.ManagedRetryClient;
+import com.team4u.framework.retry.integration.lease.LeaseDurableRetryStore;
+import com.team4u.framework.retry.integration.lease.RetryLeaseWorker;
+import com.team4u.framework.retry.policy.RetryPolicy;
+import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
+
+LeaseBackend backend = ...;
+
+// store + coordinator
+LeaseDurableRetryStore store = new LeaseDurableRetryStore(backend);
+
+// recovery registry
+RecoveryHandlerRegistry registry = RecoveryHandlerRegistry.global();
+
+// default policy（可选）
+RetryPolicy defaultPolicy = RetryPolicy.builder()
+        .maxAttempts(5)
+        .foregroundAttempts(2)
+        .backoff(Backoffs.fixed(1000))
+        .build();
+
+// managed client
+ManagedRetryClient managedRetryClient = DefaultManagedRetryClient.builder()
+        .store(store)
+        .recoveryRegistry(registry)
+        .coordinator(store)
+        .defaultPolicy(defaultPolicy)
+        .build();
+
+// worker（必须有后台执行者）
+RetryLeaseWorker worker = new RetryLeaseWorker((LeaseRuntimeClient) backend, store, registry);
+worker.start();
+```
+
+### 初始化时要特别注意
+
+上面这段代码隐含一个前提：
+你的 `backend` 不仅要能作为 `LeaseBackend` 使用，还要能作为 `LeaseRuntimeClient` 使用，否则 `RetryLeaseWorker` 无法启动。
+
+也就是说，在实际接入里，可运行的 lease backend 需要同时覆盖：
+
+* 发布 / 管理任务能力
+* Worker 运行时消费能力
+
+---
+
+## MANAGED 最小可运行链路
+
+如果你只记一件事，就记这条链路：
+
+```text
+LeaseBackend
+   ↓
+LeaseDurableRetryStore
+   ├─ 作为 DurableRetryStore
+   └─ 作为 RetryCoordinator
+
+RecoveryHandlerRegistry
+   ↓
+DefaultManagedRetryClient
+   ↓
+RetryLeaseWorker
+   ↓
+RecoveryHandler
+```
+
+其中：
+
+### `DurableRetryStore`
+
+负责“把任务记下来”，包括：
+
+* `create`
+* `markRunning`
+* `scheduleNext`
+* `markSucceeded`
+* `markFailed`
+* `cancel`
+* `get`
+
+### `RetryCoordinator`
+
+负责“告诉后台系统什么时候执行这个任务”。
+
+核心接口：
+
+```java
+void schedule(RetryRecord record, long delayMillis)
+```
+
+### `RecoveryHandlerRegistry`
+
+负责“恢复时到底调用谁”。
+
+它内部以 `taskName` 为 key 管理 `RecoveryHandler`，支持：
+
+* 全局单例 `RecoveryHandlerRegistry.global()`
+* SPI 自动扫描
+* Spring 启动时的默认扫描注册
+
+### `RetryLeaseWorker`
+
+负责真正从队列取任务并执行恢复逻辑。
+没有 Worker，MANAGED 任务即使被 `Accepted`，也不会有人继续跑。
+
+---
+
+## 恢复处理器怎么写
+
+MANAGED 后台恢复依赖 `RecoveryHandler`，它的 key 就是 `taskName()`。
+
+### 示例：支付通知补偿
+
+```java
+import com.team4u.framework.retry.recovery.RecoveryContext;
+import com.team4u.framework.retry.recovery.RecoveryHandler;
+
+public class PayNotifyRecoveryHandler implements RecoveryHandler<String> {
+
+    @Override
+    public String taskName() {
+        return "pay-notify";
+    }
+
+    @Override
+    public void recover(String payload, RecoveryContext context) throws Exception {
+        doNotify(payload);
+    }
+
+    private void doNotify(String payload) {
+        // 真实补偿逻辑
+    }
 }
 ```
 
----
-
-## 核心概念
-
-### 1. `RetryPolicy`
-
-`RetryPolicy` 定义：
-
-* 是否继续重试
-* 每次重试之间等待多久
-
-常用配置：
-
-* `maxAttempts(int)`：总尝试次数，包含首次执行；`-1` 表示无限重试
-* `foregroundAttempts(int)`：MANAGED 模式下，前台最多执行多少次
-* `backoff(Backoff)`：退避策略
-* `retryOn(...)`：只对指定异常重试
-* `abortOn(...)`：命中后立即终止
-* `condition(String)`：表达式控制是否继续重试
-
-示例：
-
-```java
-RetryPolicy policy = RetryPolicy.builder()
-        .maxAttempts(5)
-        .foregroundAttempts(2)
-        .retryOn(java.io.IOException.class)
-        .abortOn(IllegalArgumentException.class)
-        .backoff(Backoffs.exponentialJitter(100, 2.0, 3000))
-        .condition("message contains 'timeout'")
-        .build();
-```
-
-### 2. `Backoff`
-
-`Backoff` 决定失败后等待多久再执行下一次尝试。
-
-统一通过 `Backoffs` 创建：
-
-* `Backoffs.fixed(delay)`：固定间隔
-* `Backoffs.increment(initialDelay, stepMillis)`：线性递增
-* `Backoffs.exponential(initialDelay, multiplier, maxDelay)`：指数退避
-* `Backoffs.exponentialJitter(initialDelay, multiplier, maxDelay)`：指数退避 + 抖动
-
-高并发失败场景，优先推荐：
-
-```java
-Backoffs.exponentialJitter(...)
-```
-
-也支持 Builder 形式：
-
-```java
-Backoff backoff = Backoffs.exponentialJitterBuilder()
-        .initialDelay(200)
-        .multiplier(2.0)
-        .maxDelay(5000)
-        .build();
-```
-
-以及通用扩展：
-
-```java
-Backoff backoff = Backoffs.builder("myCustomType")
-        .param("foo", 1)
-        .param("bar", "value")
-        .build();
-```
-
-### 3. `ManagedSubmitResult`
-
-MANAGED 模式不会简单地“抛异常表示所有结果”，而是返回明确的提交结果模型：
-
-* `Completed`：前台执行成功
-* `Accepted`：任务已经被可靠托管，后续由后台继续执行
-* `Failed`：明确终态失败，不再重试
-* `Rejected`：参数、配置或依赖不满足要求，任务未被接受
-
-### 4. `RetryTaskSpec`
-
-`RetryTaskSpec` 用于完整描述一个托管任务，包括：
-
-* `taskName`：任务类型
-* `idempotencyKey`：幂等键
-* `executor`：前台执行逻辑
-* `recovery`：后续恢复所需载荷
-* `policy`：任务使用的重试策略
-
-### 5. `RecoverySpec`
-
-`RecoverySpec` 定义托管恢复所需的数据：
-
-* `taskName`：恢复处理器路由键
-* `payload`：恢复执行所需的业务数据
-
----
-
-## 异常与终止规则
-
-| 情况                                                 | 是否重试     | 说明           |
-| -------------------------------------------------- | -------- | ------------ |
-| 命中 `retryOn`                                       | 是        | 按策略继续        |
-| 命中 `abortOn`                                       | 否        | 立即终止         |
-| `CompletionException` / `ExecutionException` 等包装异常 | 看根因      | 框架会先解包       |
-| `InterruptedException`                             | 否        | 立即停止，并恢复中断标记 |
-| `Error`                                            | 否        | 直接透传         |
-| MANAGED 模式前台预算耗尽                                   | 不在当前线程继续 | 任务转入后台调度     |
-
----
-
-## 编程式接入
-
-### INLINE：同步执行
-
-```java
-String result = DefaultInlineRetryClient.getInstance().execute(policy, this::doBusiness);
-```
-
-### INLINE：异步执行
-
-```java
-CompletableFuture<String> future = DefaultInlineRetryClient.getInstance().executeAsync(
-        policy,
-        this::asyncRemoteCall,
-        scheduler
-);
-```
-
-### MANAGED：托管执行
+### 对应提交时要这样写
 
 ```java
 RetryTaskSpec<String> spec = RetryTaskSpec.<String>builder()
-        .taskName("order-submit")
-        .idempotencyKey("order-123")
+        .taskName("pay-notify")
+        .idempotencyKey("order:1001")
+        .executor(() -> notifyPayment())
+        .recovery(RecoverySpec.of("pay-notify", "{\"orderId\":\"1001\"}"))
         .policy(policy)
-        .recovery(RecoverySpec.of("order-submit", "{\"orderId\":\"123\"}"))
-        .executor(this::doBusiness)
         .build();
-
-ManagedSubmitResult<String> submitResult = managedRetryClient.submit(spec);
 ```
 
-### 什么时候会被拒绝
+这里有两个 key 必须对上：
 
-以下情况通常会得到 `Rejected`：
-
-* MANAGED 模式未提供 `DurableRetryStore`
-* 未提供 `RetryCoordinator`
-* 未提供 `RecoveryHandlerRegistry`
-* `RetryPolicy` 未显式设置 `foregroundAttempts`
-* `RecoverySpec` 缺失或 `taskName` 为空
+* `RecoveryHandler.taskName()`
+* `RecoverySpec.taskName`
 
 ---
 
-## 注解式接入
+## MANAGED 的几个关键约束
 
-### 基础用法
+### 必须显式配置 `foregroundAttempts`
+
+MANAGED 下如果策略没有显式设置 `foregroundAttempts`，提交会直接 `Rejected`。
+
+### 必须提供有效的 `RecoverySpec.taskName`
+
+如果没有 `recovery`，或者 `taskName` 为 `null`，也会被 `Rejected`。
+
+### `foregroundAttempts` 不能大于 `maxAttempts`
+
+这个约束在构建 `RetryPolicy` 时就会校验。
+
+### `Accepted` 不代表成功
+
+它只表示任务已进入后台调度，不表示业务已经完成。
+
+---
+
+## 代理 / 注解模式
+
+如果你不想手写 `client.execute(...)`，可以使用 `team4u-retry-proxy` 提供的 `@Retryable`。
+
+### 注解定义
 
 ```java
+import com.team4u.framework.retry.RetryMode;
+import com.team4u.framework.retry.proxy.Retryable;
+
 public interface PayService {
 
-    @Retryable(policy = "pay-policy")
+    @Retryable(policy = "pay-policy", mode = RetryMode.INLINE)
     String notifyPay(String orderId);
 }
 ```
 
-非 Spring 场景下，可以通过代理工厂创建代理对象。
-
-### `@RetryIgnore`
-
-对于以下参数，不建议放入恢复快照：
-
-* `HttpServletRequest`
-* `InputStream`
-* 上下文对象
-* 超大对象
-* 不可序列化对象
-
-此时可以在参数上添加 `@RetryIgnore`，框架会在持久化快照时跳过该参数。
-
-### 注解模式下的恢复数据
-
-注解式调用进入托管模型时，框架通常会保存调用快照，包括：
-
-* `beanName`
-* `methodName`
-* `argTypes`
-* `argValues`
-
-恢复阶段会基于这些信息重新定位方法并执行补偿调用。
-
----
-
-## Spring 接入
-
-### 1）开启自动代理
+### 代理方式创建
 
 ```java
-@Configuration
-@EnableRetry
-public class RetryConfig {
-}
+import com.team4u.framework.retry.client.DefaultInlineRetryClient;
+import com.team4u.framework.retry.proxy.RetryProxyFactory;
+
+PayService target = new PayServiceImpl();
+
+PayService proxy = RetryProxyFactory.createProxy(
+        target,
+        PayService.class,
+        DefaultInlineRetryClient.getInstance(),
+        null
+);
 ```
 
-### 2）注册策略
+### 策略注册
+
+`@Retryable(policy = "...")` 依赖策略名查找。
+查找顺序是：
+
+1. 先从 `DynamicRetryPolicyRegistry` 查动态配置
+2. 查不到再从 `RetryPolicyFactoryRegistry` 查静态注册
+
+示例：
 
 ```java
+import com.team4u.framework.retry.backoff.Backoffs;
+import com.team4u.framework.retry.policy.RetryPolicy;
+import com.team4u.framework.retry.policy.RetryPolicyFactory;
+import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
+
 RetryPolicyFactoryRegistry.global().register(new RetryPolicyFactory() {
     @Override
     public String key() {
@@ -448,11 +574,74 @@ RetryPolicyFactoryRegistry.global().register(new RetryPolicyFactory() {
 });
 ```
 
-### 3）在 Bean 上使用
+---
+
+## Spring 接入
+
+Spring 项目里最简单的启用方式：
 
 ```java
+import com.team4u.framework.retry.spring.EnableRetry;
+import org.springframework.context.annotation.Configuration;
+
+@EnableRetry
+@Configuration
+public class RetryConfig {
+}
+```
+
+### `@EnableRetry` 会做什么
+
+启用后会导入 Spring 配置，注册：
+
+* AOP 自动代理创建器
+* 默认 `InlineRetryClient`
+* `RetryAdvisor`
+* 默认 `RecoveryHandler` 扫描注册器
+
+### 最小 Spring 示例
+
+#### 开启自动代理
+
+```java
+@Configuration
+@EnableRetry
+public class RetryConfig {
+}
+```
+
+#### 注册策略
+
+```java
+import com.team4u.framework.retry.backoff.Backoffs;
+import com.team4u.framework.retry.policy.RetryPolicy;
+import com.team4u.framework.retry.policy.RetryPolicyFactory;
+import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
+
+RetryPolicyFactoryRegistry.global().register(new RetryPolicyFactory() {
+    @Override
+    public String key() {
+        return "pay-policy";
+    }
+
+    @Override
+    public RetryPolicy create() {
+        return RetryPolicy.builder()
+                .maxAttempts(3)
+                .backoff(Backoffs.fixed(100))
+                .build();
+    }
+});
+```
+
+#### 在 Bean 上使用
+
+```java
+import com.team4u.framework.retry.proxy.Retryable;
+import org.springframework.stereotype.Service;
+
 @Service
-public class PayServiceImpl {
+public class PayService {
 
     @Retryable(policy = "pay-policy")
     public String notifyPay(String orderId) {
@@ -461,25 +650,125 @@ public class PayServiceImpl {
 }
 ```
 
-### 4）生命周期管理
+### Spring 中如何接 MANAGED
 
-`team4u-retry-spring` 已内置生命周期配置，会在 Spring 容器销毁时调用线程池关闭逻辑。
+`@EnableRetry` 不会自动创建 `ManagedRetryClient`。
+如果你希望 `@Retryable(mode = RetryMode.MANAGED)` 真正进入托管模型，需要自己声明对应 Bean。
 
-### 5）Spring AOP 边界
+示例：
+
+```java
+import com.team4u.framework.lease.api.LeaseBackend;
+import com.team4u.framework.lease.api.LeaseRuntimeClient;
+import com.team4u.framework.retry.backoff.Backoffs;
+import com.team4u.framework.retry.client.DefaultManagedRetryClient;
+import com.team4u.framework.retry.client.ManagedRetryClient;
+import com.team4u.framework.retry.integration.lease.LeaseDurableRetryStore;
+import com.team4u.framework.retry.integration.lease.RetryLeaseWorker;
+import com.team4u.framework.retry.policy.RetryPolicy;
+import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class RetryManagedConfiguration {
+
+    @Bean
+    public LeaseDurableRetryStore leaseRetryStore(LeaseBackend backend) {
+        return new LeaseDurableRetryStore(backend);
+    }
+
+    @Bean
+    public ManagedRetryClient managedRetryClient(LeaseDurableRetryStore store) {
+        RetryPolicy defaultPolicy = RetryPolicy.builder()
+                .maxAttempts(5)
+                .foregroundAttempts(2)
+                .backoff(Backoffs.fixed(1000))
+                .build();
+
+        return DefaultManagedRetryClient.builder()
+                .store(store)
+                .coordinator(store)
+                .recoveryRegistry(RecoveryHandlerRegistry.global())
+                .defaultPolicy(defaultPolicy)
+                .build();
+    }
+
+    @Bean(initMethod = "start", destroyMethod = "shutdown")
+    public RetryLeaseWorker retryLeaseWorker(
+            LeaseBackend backend,
+            LeaseDurableRetryStore store) {
+        return new RetryLeaseWorker(
+                (LeaseRuntimeClient) backend,
+                store,
+                RecoveryHandlerRegistry.global()
+        );
+    }
+}
+```
+
+### 生命周期管理
+
+`team4u-retry-spring` 已内置生命周期配置，会在 Spring 容器销毁时调用 `RetryExecutorManager.global().shutdown()`。
+
+### Spring AOP 边界
 
 需要注意：
 
 * 同一个 Bean 内部自调用通常不会经过代理
-* `final` 类 / `final` 方法不适合依赖类代理增强
+* `final` 类 / `final` 方法不适合依赖代理增强
 * 与 `@Transactional`、日志、监控等多个 Advisor 共存时，顺序取决于代理链
 
 如果要求“自调用也能触发重试”，建议拆分到独立 Bean，或改用编程式接入。
 
 ---
 
+## 代理 / 注解模式下的恢复说明
+
+代理模式下，框架会为托管任务构造方法恢复数据，后台通过 `InvocationReplay` 反射调用目标 Bean / 方法完成恢复。
+
+恢复执行阶段会通过 `RecoveryExecutionContext` 标识当前线程处于恢复上下文，避免代理再次进入一轮新的重试包装，防止“恢复时再托管、无限套娃”。
+
+### 参数序列化注意事项
+
+如果方法参数中有这些对象：
+
+* `HttpServletRequest`
+* `InputStream`
+* 上下文对象
+* 超大对象
+* 不可序列化对象
+
+可以用 `@RetryIgnore` 标记跳过持久化快照。
+
+示例：
+
+```java
+import com.team4u.framework.retry.proxy.serialize.RetryIgnore;
+
+public String notifyPay(String orderId, @RetryIgnore InputStream bodyStream) {
+    return "ok";
+}
+```
+
+### 注解模式下的恢复数据
+
+注解式调用进入托管模型时，框架通常会保存调用快照，包括：
+
+* `beanName`
+* `methodName`
+* `argTypes`
+* `argValues`
+
+恢复阶段会基于这些信息重新定位方法并执行补偿调用。
+
+---
+
 ## 动态策略配置
 
-动态策略注册表基于配置前缀：
+如果你希望通过配置中心动态下发重试策略，可以使用 `DynamicRetryPolicyRegistry`。
+
+它默认使用前缀：
 
 ```text
 retry.policy.
@@ -519,142 +808,80 @@ retry.policy.order-submit={
 
 ---
 
-## 基于 Lease 的托管实现
-
-如果项目已经使用 `team4u-lease`，可以直接复用：
-
-* `LeaseDurableRetryStore`：实现 `DurableRetryStore` 与 `RetryCoordinator`
-* 默认恢复队列：`retry-recovery`
-
-### 典型职责
-
-* `create(...)`：保存初始托管意图
-* `schedule(...)`：更新任务状态并重新调度
-* `markSucceeded(...)`：标记成功终态
-* `markFailed(...)`：标记失败终态
-* `cancel(...)`：显式取消任务
-
-### 恢复执行
-
-后端 Worker 拿到任务后，会根据 `taskName` 找到对应的 `RecoveryHandler` 执行恢复：
-
-```java
-public class PayNotifyRecoveryHandler implements RecoveryHandler<String> {
-    @Override
-    public String taskName() {
-        return "pay-notify";
-    }
-
-    @Override
-    public void recover(String payload, RecoveryContext context) throws Exception {
-        System.out.println("recover payload = " + payload);
-    }
-}
-```
-
----
-
 ## 注意事项
 
-### 1. `foregroundAttempts` 只属于 MANAGED 模式
+### INLINE 不抗进程退出
 
-* INLINE 模式不能配置 `foregroundAttempts`
-* MANAGED 模式必须显式配置 `foregroundAttempts`
+INLINE 的所有尝试都发生在当前进程里，不做持久化，不会跨进程恢复。
 
-### 2. MANAGED 模式不是“纯抛异常语义”
+### MANAGED 不是自动幂等
 
-托管任务更推荐通过 `ManagedSubmitResult` 判断结果，而不是只依赖异常分支。
+框架会记录 `idempotencyKey`，但业务是否真的幂等，仍然需要接入方自己保证。
 
-### 3. 托管模式必须具备幂等性
+### MANAGED 不等于“只要提交就一定成功”
 
-一旦任务被可靠记录，业务恢复逻辑必须能够接受“至少一次”执行语义。
+它只保证任务可被可靠接收并调度，最终是否成功还取决于：
 
-### 4. `Error` 不会进入重试
+* 恢复处理器是否正确注册
+* Worker 是否启动
+* 任务本身是否仍然满足重试条件
 
-例如 `OutOfMemoryError` 等系统级错误会直接透传，不会做无意义重试。
+### 非 Spring 场景要自己关注线程池生命周期
 
-### 5. 线程中断会立即停止重试
+框架提供了全局线程池和 shutdown hook，但在独立运行环境里，仍建议你显式管理资源关闭。
 
-遇到 `InterruptedException` 时，框架会恢复中断标记并停止后续调度。
+### `Error` 不会进入普通重试逻辑
 
-### 6. 非 Spring 场景记得关闭线程池
+像 `OutOfMemoryError` 这种严重错误会直接抛出，不参与正常重试循环。
 
-应用退出前建议调用：
+### `CompletableFuture` 之外的异步返回值不会自动走异步重试分支
 
-```java
-RetryExecutorManager.global().shutdown();
-```
+代理/注解模式里，当前只对返回类型是 `CompletableFuture` 的方法走异步重试逻辑。其他返回类型仍按同步路径处理。
 
 ---
 
 ## FAQ
 
-### `maxAttempts(3)` 是重试 3 次还是总共 3 次？
+### `maxAttempts = 3` 表示什么？
 
-总共 3 次，包含首次执行。
+表示最多执行 3 次，包含首次执行。
 
-### `foregroundAttempts(2)` 表示什么？
+### 为什么 INLINE 不支持 `foregroundAttempts`？
 
-表示在 MANAGED 模式下，当前进程内最多执行 2 次；如果策略允许继续重试，后续会交给后台调度。
+因为 INLINE 没有后台托管概念，不存在“前台尝试几次再交给后台”。
 
-### 为什么 INLINE 模式配置了 `foregroundAttempts` 会报错？
+### 为什么我初始化了 `managedRetryClient`，任务还是没继续执行？
 
-因为 INLINE 模式只负责当前进程内执行，不存在“前台预算 + 后台接管”的概念。
+大概率是缺了下面某一项：
 
-### 为什么 MANAGED 模式没有配置 `foregroundAttempts` 会被拒绝？
+* 没有注册对应的 `RecoveryHandler`
+* 没有启动 `RetryLeaseWorker`
+* `RecoverySpec.taskName` 和 handler 的 `taskName()` 没对上
+* 你的 lease backend 其实不具备 `LeaseRuntimeClient` 运行时能力
 
-因为托管模型要求明确区分“前台执行多少次”与“什么时候交给后台”，这是模式语义的一部分。
+### `Accepted` 和 `Completed` 的区别是什么？
 
-### `CompletionException` 会直接参与策略判断吗？
+* `Completed`：前台已经执行成功
+* `Accepted`：任务已经被后台接收，但还没最终完成
 
-不会，框架会先解包，再基于根因异常判断是否重试。
+### MANAGED 最小接入集是什么？
 
-### 为什么恢复阶段不会再次进入代理重试？
+最小建议组合：
 
-因为恢复阶段的语义是“补偿执行”，不是重新从业务入口走一遍调用侧重试流程，否则会造成重复托管和递归套娃。
+* `LeaseBackend`
+* `LeaseDurableRetryStore`
+* `RecoveryHandlerRegistry`
+* `DefaultManagedRetryClient`
+* `RetryLeaseWorker`
 
 ---
 
-## 核心类与执行流程
+## 推荐的首次接入顺序
 
-### 主要类
+建议第一次接入按这个顺序走：
 
-* `RetryPolicy`：重试策略定义
-* `Backoff` / `Backoffs`：退避策略与门面
-* `DefaultInlineRetryClient`：INLINE 模式执行器
-* `DefaultManagedRetryClient`：MANAGED 模式执行器
-* `RetryTaskSpec`：托管任务定义
-* `ManagedSubmitResult`：托管提交结果
-* `DurableRetryStore`：持久化存储抽象
-* `RetryCoordinator`：任务调度协调器
-* `RecoveryHandler` / `RecoveryHandlerRegistry`：恢复执行路由
-* `@Retryable`：声明式接入
-* `@EnableRetry`：Spring 自动代理开关
-
-### 执行流程
-
-```mermaid
-graph TD
-  A[业务提交] --> B{选择模式}
-  B -->|INLINE| C[DefaultInlineRetryClient]
-  C --> D[执行任务]
-  D --> E{是否成功}
-  E -->|是| F[返回结果]
-  E -->|否| G[RetryPolicy.canRetry]
-  G -->|可继续| H[Backoff 计算延迟]
-  H --> D
-  G -->|不可继续| I[抛出最终异常]
-
-  B -->|MANAGED| J[DefaultManagedRetryClient]
-  J --> K[DurableRetryStore.create]
-  K --> L[前台执行 foregroundAttempts 次]
-  L --> M{是否成功}
-  M -->|是| N[markSucceeded]
-  M -->|否但可继续| O[RetryCoordinator.schedule]
-  O --> P[后台 Worker 拉起]
-  P --> Q[RecoveryHandlerRegistry 路由恢复]
-  Q --> R{恢复结果}
-  R -->|成功| S[close success]
-  R -->|失败且可继续| O
-  R -->|失败终态| T[close failed]
-```
+* 先用 INLINE 验证 `RetryPolicy` 是否符合预期
+* 再引入 lease 集成，初始化 `managedRetryClient`
+* 写一个最简单的 `RecoveryHandler`
+* 启动 `RetryLeaseWorker`
+* 最后再接注解 / Spring 自动化
