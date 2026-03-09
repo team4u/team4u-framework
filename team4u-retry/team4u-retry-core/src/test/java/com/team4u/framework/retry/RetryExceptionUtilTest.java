@@ -1,5 +1,6 @@
 package com.team4u.framework.retry;
 
+import com.team4u.framework.retry.util.RetryExceptionUtil;
 import org.junit.Assert;
 import org.junit.Test;
 

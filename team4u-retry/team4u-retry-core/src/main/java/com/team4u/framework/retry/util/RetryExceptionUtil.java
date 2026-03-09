@@ -1,4 +1,4 @@
-package com.team4u.framework.retry;
+package com.team4u.framework.retry.util;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.UndeclaredThrowableException;

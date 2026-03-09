@@ -1,4 +1,4 @@
-package com.team4u.framework.retry;
+package com.team4u.framework.retry.proxy;
 
 /**
  * 重试模式。

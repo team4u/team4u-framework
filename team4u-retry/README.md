@@ -515,7 +515,7 @@ MANAGED 下如果策略没有显式设置 `foregroundAttempts`，提交会直接
 ### 注解定义
 
 ```java
-import com.team4u.framework.retry.RetryMode;
+import com.team4u.framework.retry.proxy.RetryMode;
 import com.team4u.framework.retry.proxy.Retryable;
 
 public interface PayService {

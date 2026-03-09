@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.client;
 
-import com.team4u.framework.retry.RetryExceptionUtil;
+import com.team4u.framework.retry.util.RetryExceptionUtil;
 import com.team4u.framework.retry.domain.ManagedSubmitResult;
 import com.team4u.framework.retry.domain.RetryTaskSpec;
 import com.team4u.framework.retry.domain.store.RetryRequest;
