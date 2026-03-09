@@ -1,7 +1,7 @@
 package com.team4u.framework.retry.client;
 
-import com.team4u.framework.retry.util.RetryExceptionUtil;
 import com.team4u.framework.retry.policy.RetryPolicy;
+import com.team4u.framework.retry.util.RetryExceptionUtil;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -33,7 +33,7 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
         // 校验重试策略，进程内模式目前不支持前台重试次数配置，应统一使用最大尝试次数
         if (policy.getForegroundAttempts() != null) {
             throw new IllegalArgumentException(
-                    "进程内模式不支持配置 foregroundAttempts 属性，请改为配置 maxAttempts 属性");
+                    "Inline mode does not support foregroundAttempts, please use maxAttempts instead");
         }
 
         int attempts = 0;
@@ -67,12 +67,12 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
 
     @Override
     public <T> CompletableFuture<T> executeAsync(RetryPolicy policy, Supplier<CompletableFuture<T>> asyncTask,
-            ScheduledExecutorService scheduler) {
+                                                 ScheduledExecutorService scheduler) {
         // 异步执行模式下的重试策略校验
         if (policy.getForegroundAttempts() != null) {
             CompletableFuture<T> future = new CompletableFuture<>();
             future.completeExceptionally(new IllegalArgumentException(
-                    "进程内异步模式不支持配置 foregroundAttempts 属性，请改为配置 maxAttempts 属性"));
+                    "Inline async mode does not support foregroundAttempts, please use maxAttempts instead"));
             return future;
         }
 
@@ -100,7 +100,7 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
         try {
             CompletableFuture<T> future = asyncTask.get();
             if (future == null) {
-                throw new NullPointerException("异步任务回调（asyncTask.get()）返回了空对象");
+                throw new NullPointerException("Async task callback (asyncTask.get()) returned null");
             }
             // 监听异步任务执行完成事件
             future.whenComplete((result, ex) -> {

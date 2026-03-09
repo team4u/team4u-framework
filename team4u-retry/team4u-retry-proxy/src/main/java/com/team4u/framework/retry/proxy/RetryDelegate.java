@@ -31,14 +31,12 @@ import java.util.concurrent.ScheduledExecutorService;
  */
 public class RetryDelegate {
 
-    @Setter
-    private RetryContextSerializer serializer = HutoolRetryContextSerializer.INSTANCE;
-
-    @Setter
-    private ScheduledExecutorService scheduler;
-
     private final InlineRetryClient inlineClient;
     private final ManagedRetryClient managedClient;
+    @Setter
+    private RetryContextSerializer serializer = HutoolRetryContextSerializer.INSTANCE;
+    @Setter
+    private ScheduledExecutorService scheduler;
 
     public RetryDelegate(InlineRetryClient inlineClient, ManagedRetryClient managedClient) {
         this.inlineClient = inlineClient;
@@ -60,7 +58,7 @@ public class RetryDelegate {
         RetryPolicy policy = Optional.ofNullable(DynamicRetryPolicyRegistry.getPolicy(policyKey))
                 .orElseGet(() -> RetryPolicyFactoryRegistry.global().get(policyKey)
                         .map(RetryPolicyFactory::create)
-                        .orElseThrow(() -> new IllegalArgumentException("未找到重试策略: " + policyKey)));
+                        .orElseThrow(() -> new IllegalArgumentException("Retry policy not found: " + policyKey)));
 
         if (retryable.mode() == RetryMode.INLINE || managedClient == null) {
             boolean isAsync = CompletableFuture.class.isAssignableFrom(method.getReturnType());
@@ -86,7 +84,7 @@ public class RetryDelegate {
 
         String specTaskName = resolveBeanName(method, target) + "#" + method.getName();
 
-        RetryTaskSpec<Object> taskSpec = RetryTaskSpec.<Object>builder()
+        RetryTaskSpec<Object> taskSpec = RetryTaskSpec.builder()
                 .taskName(specTaskName)
                 .policy(policy)
                 .recovery(recoverySpec)

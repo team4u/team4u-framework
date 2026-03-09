@@ -1,6 +1,5 @@
 package com.team4u.framework.retry.client;
 
-import com.team4u.framework.retry.util.RetryExceptionUtil;
 import com.team4u.framework.retry.domain.ManagedSubmitResult;
 import com.team4u.framework.retry.domain.RetryTaskSpec;
 import com.team4u.framework.retry.domain.store.RetryRequest;
@@ -12,6 +11,7 @@ import com.team4u.framework.retry.store.record.AttemptRecord;
 import com.team4u.framework.retry.store.record.FailureRecord;
 import com.team4u.framework.retry.store.record.RetryRecord;
 import com.team4u.framework.retry.store.record.SuccessRecord;
+import com.team4u.framework.retry.util.RetryExceptionUtil;
 import lombok.Builder;
 
 import java.time.Instant;
@@ -42,10 +42,10 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
             RetryCoordinator coordinator,
             RetryPolicy defaultPolicy) {
         if (store == null) {
-            throw new IllegalStateException("托管模式下 DurableRetryStore 是必须的");
+            throw new IllegalStateException("DurableRetryStore is required in MANAGED mode");
         }
         if (coordinator == null) {
-            throw new IllegalStateException("托管模式下 RetryCoordinator 是必须的");
+            throw new IllegalStateException("RetryCoordinator is required in MANAGED mode");
         }
 
         this.store = store;
@@ -67,7 +67,7 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
         try {
             record = createAndPersistRecord(spec, policy);
         } catch (Exception e) {
-            return new ManagedSubmitResult.Rejected<>("持久化初始重试意图失败: " + e.getMessage());
+            return new ManagedSubmitResult.Rejected<>("Failed to persist initial retry intent: " + e.getMessage());
         }
 
         // 3. 执行重试逻辑（前台尝试或直接后台调度）
@@ -87,12 +87,12 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
     private <T> ManagedSubmitResult<T> validateSpec(RetryTaskSpec<T> spec, RetryPolicy policy) {
         if (policy == null || policy.getForegroundAttempts() == null) {
             return new ManagedSubmitResult.Rejected<>(
-                    "托管模式要求必须显式配置包含 foregroundAttempts 属性的重试策略");
+                    "MANAGED mode requires a retry policy with foregroundAttempts explicitly configured");
         }
 
         if (spec.getRecovery() == null || spec.getRecovery().getTaskName() == null) {
             return new ManagedSubmitResult.Rejected<>(
-                    "托管模式要求必须提供包含有效任务名称的 RecoverySpec 对象");
+                    "MANAGED mode requires a RecoverySpec with a valid task name");
         }
         return null;
     }
@@ -176,7 +176,7 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
                 if (attempts < foregroundAttempts) {
                     // 继续前台重试
                     if (!handleForegroundBackoff(record.getTaskId(), attemptRecord, attempts, policy, failureRecord)) {
-                        return new ManagedSubmitResult.Failed<>(new InterruptedException("前台退避休眠被中断"));
+                        return new ManagedSubmitResult.Failed<>(new InterruptedException("Foreground backoff sleep was interrupted"));
                     }
                 } else {
                     // 前台预算耗尽，移交后台
