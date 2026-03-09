@@ -4,9 +4,9 @@ import com.team4u.framework.retry.backoff.Backoffs;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.policy.RetryPolicyFactory;
 import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
+import com.team4u.framework.retry.proxy.InvocationReplay;
 import com.team4u.framework.retry.proxy.Retryable;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
-import com.team4u.framework.retry.recovery.RetryTaskTypes;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -77,7 +77,8 @@ public class RetrySpringTest {
     @Test
     public void testEnableRetryShouldAutoRegisterDefaultRecoveryHandler() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(TestConfig.class)) {
-            Assert.assertTrue(RecoveryHandlerRegistry.global().get(RetryTaskTypes.DEFAULT_PROXY_RECOVERY).isPresent());
+            Assert.assertTrue(RecoveryHandlerRegistry.global()
+                    .get(InvocationReplay.TASK_NAME).isPresent());
         }
     }
 

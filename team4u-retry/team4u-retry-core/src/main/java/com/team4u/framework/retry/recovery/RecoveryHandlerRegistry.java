@@ -6,12 +6,12 @@ import com.team4u.framework.policy.util.PolicyScanner;
 /**
  * 全局恢复处理器注册表
  */
-public class RecoveryHandlerRegistry extends KeyedPolicyRegistry<String, RecoveryHandler> {
+public class RecoveryHandlerRegistry extends KeyedPolicyRegistry<String, RecoveryHandler<?>> {
 
     private static final RecoveryHandlerRegistry INSTANCE = new RecoveryHandlerRegistry();
 
     public RecoveryHandlerRegistry() {
-        super(RecoveryHandler.class);
+        super((Class) RecoveryHandler.class);
         autoScan();
     }
 

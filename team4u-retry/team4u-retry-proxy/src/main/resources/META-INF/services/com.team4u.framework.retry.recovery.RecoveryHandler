@@ -1,1 +1,1 @@
-com.team4u.framework.retry.recovery.DefaultProxyRecoveryHandler
+com.team4u.framework.retry.proxy.InvocationReplay

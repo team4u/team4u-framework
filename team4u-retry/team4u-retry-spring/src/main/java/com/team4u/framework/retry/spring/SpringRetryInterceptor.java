@@ -1,30 +1,76 @@
 package com.team4u.framework.retry.spring;
 
-import com.team4u.framework.retry.backend.RetryBackend;
+import cn.hutool.extra.spring.SpringUtil;
+import com.team4u.framework.retry.client.DefaultInlineRetryClient;
+import com.team4u.framework.retry.client.InlineRetryClient;
+import com.team4u.framework.retry.client.ManagedRetryClient;
 import com.team4u.framework.retry.proxy.RetryDelegate;
 import com.team4u.framework.retry.proxy.Retryable;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
 import org.springframework.aop.support.AopUtils;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.BeanFactory;
 import org.springframework.core.annotation.AnnotationUtils;
 
 import java.lang.reflect.Method;
-import java.util.function.Supplier;
 
 /**
  * Spring AOP 体系下的重试拦截器实现。
  */
 public class SpringRetryInterceptor implements MethodInterceptor {
 
-    private final RetryDelegate delegate = new RetryDelegate();
-    private final Supplier<RetryBackend> backendSupplier;
+    private volatile RetryDelegate delegate;
+    private final BeanFactory beanFactory;
 
-    public SpringRetryInterceptor(Supplier<RetryBackend> backendSupplier) {
-        this.backendSupplier = backendSupplier;
+    public SpringRetryInterceptor(BeanFactory beanFactory) {
+        this.beanFactory = beanFactory;
+    }
+
+    /**
+     * 确保重试委托类已初始化。
+     * <p>
+     * 采用双重检查锁定模式（DCL）实现延迟加载，自动从 Spring 容器获取重试客户端。
+     */
+    private void ensureDelegateInitialized() {
+        if (delegate == null) {
+            synchronized (this) {
+                if (delegate == null) {
+                    InlineRetryClient inlineClient = getBean(InlineRetryClient.class,
+                            DefaultInlineRetryClient.getInstance());
+                    ManagedRetryClient managedClient = getBean(ManagedRetryClient.class, null);
+                    delegate = new RetryDelegate(inlineClient, managedClient);
+                }
+            }
+        }
+    }
+
+    /**
+     * 从 BeanFactory 获取指定类型的 Bean。
+     * <p>
+     * 如果当前的 {@code beanFactory} 中不存在，则尝试通过 {@link SpringUtil} 静态查找。
+     *
+     * @param clazz        Bean 类型
+     * @param defaultValue 默认值
+     * @param <T>          泛型类型
+     * @return 找到的 Bean 实例或默认值
+     */
+    private <T> T getBean(Class<T> clazz, T defaultValue) {
+        try {
+            return beanFactory.getBean(clazz);
+        } catch (BeansException e) {
+            try {
+                return SpringUtil.getBean(clazz);
+            } catch (Exception ex) {
+                return defaultValue;
+            }
+        }
     }
 
     @Override
     public Object invoke(MethodInvocation invocation) throws Throwable {
+        ensureDelegateInitialized();
+
         Method method = invocation.getMethod();
         Object target = invocation.getThis();
         Method specificMethod = method;
@@ -54,7 +100,6 @@ public class SpringRetryInterceptor implements MethodInterceptor {
                     } catch (Throwable t) {
                         throw new RuntimeException(t);
                     }
-                },
-                backendSupplier);
+                });
     }
 }

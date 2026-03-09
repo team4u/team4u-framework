@@ -15,7 +15,8 @@ import java.util.Set;
 /**
  * 重试策略配置。
  *
- * <p>Builder 由 Lombok 自动生成，默认值解析和参数校验统一放在构造函数中，
+ * <p>
+ * Builder 由 Lombok 自动生成，默认值解析和参数校验统一放在构造函数中，
  * 避免通过不同构建路径绕过约束。
  */
 @Getter
@@ -26,9 +27,10 @@ public class RetryPolicy {
     private final int maxAttempts;
 
     /**
-     * 本地进程内的最大尝试次数，主要用于接入持久化后端时控制前台重试配额。
+     * 在托管模型下，前台同步执行的最大尝试次数。
+     * INLINE 模式下不可配置该值，MANAGED 模式下必须显式配置。
      */
-    private final Integer localAttempts;
+    private final Integer foregroundAttempts;
 
     /**
      * 每次重试之间的退避策略。
@@ -54,17 +56,17 @@ public class RetryPolicy {
     /**
      * 构造重试策略实例。
      *
-     * @param maxAttempts       最大尝试次数，允许为 {@code null}，此时默认取 3
-     * @param localAttempts     当前进程内的最大尝试次数，允许为 {@code null}
-     * @param backoff           重试退避策略，允许为 {@code null}，此时默认使用固定 1000ms
-     * @param retryOnExceptions 允许触发重试的异常类型集合
-     * @param abortOnExceptions 命中后立即终止重试的异常类型集合
-     * @param condition         额外的表达式条件，允许为 {@code null}，表达式语法可参考 {@link Criteria}
+     * @param maxAttempts        最大尝试次数，允许为 {@code null}，此时默认取 3
+     * @param foregroundAttempts 前台进程内尝试次数，允许为 {@code null}
+     * @param backoff            重试退避策略，允许为 {@code null}，此时默认使用固定 1000ms
+     * @param retryOnExceptions  允许触发重试的异常类型集合
+     * @param abortOnExceptions  命中后立即终止重试的异常类型集合
+     * @param condition          额外的表达式条件，允许为 {@code null}，表达式语法可参考 {@link Criteria}
      */
     @lombok.Builder(builderClassName = "Builder")
     private RetryPolicy(
             Integer maxAttempts,
-            Integer localAttempts,
+            Integer foregroundAttempts,
             Backoff backoff,
             @Singular("retryOn") Set<Class<? extends Throwable>> retryOnExceptions,
             @Singular("abortOn") Set<Class<? extends Throwable>> abortOnExceptions,
@@ -76,15 +78,15 @@ public class RetryPolicy {
         if (resolvedMaxAttempts == 0 || resolvedMaxAttempts < -1) {
             throw new IllegalArgumentException("maxAttempts must be greater than 0 or -1 (infinite retries)");
         }
-        if (localAttempts != null && localAttempts <= 0) {
-            throw new IllegalArgumentException("localAttempts must be greater than 0");
+        if (foregroundAttempts != null && foregroundAttempts <= 0) {
+            throw new IllegalArgumentException("foregroundAttempts must be greater than 0");
         }
-        if (resolvedMaxAttempts != -1 && localAttempts != null && localAttempts > resolvedMaxAttempts) {
-            throw new IllegalArgumentException("localAttempts must not be greater than maxAttempts");
+        if (resolvedMaxAttempts != -1 && foregroundAttempts != null && foregroundAttempts > resolvedMaxAttempts) {
+            throw new IllegalArgumentException("foregroundAttempts must not be greater than maxAttempts");
         }
 
         this.maxAttempts = resolvedMaxAttempts;
-        this.localAttempts = localAttempts;
+        this.foregroundAttempts = foregroundAttempts;
         this.backoff = resolvedBackoff;
         // 在构造阶段完成防御性拷贝，避免后续 Builder 继续修改时影响已生成对象。
         this.retryOnExceptions = immutableCopy(retryOnExceptions);

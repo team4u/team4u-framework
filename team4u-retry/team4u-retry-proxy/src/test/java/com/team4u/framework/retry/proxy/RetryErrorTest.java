@@ -1,6 +1,7 @@
 package com.team4u.framework.retry.proxy;
 
 import com.team4u.framework.proxy.ProxyBuilder;
+import com.team4u.framework.retry.client.DefaultInlineRetryClient;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.policy.RetryPolicyFactory;
 import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
@@ -49,7 +50,8 @@ public class RetryErrorTest {
 
         ErrorService proxy = ProxyBuilder.forClass(ErrorService.class)
                 .withDelegate(errorService)
-                .addInterceptor(new RetryInterceptor())
+                .addInterceptor(new RetryInterceptor(
+                        DefaultInlineRetryClient.getInstance(), null))
                 .build();
 
         try {

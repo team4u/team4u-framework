@@ -6,120 +6,97 @@ import com.team4u.framework.lease.handler.LeaseTaskHandler;
 import com.team4u.framework.lease.model.LeaseCloseRequest;
 import com.team4u.framework.lease.model.LeaseReleaseRequest;
 import com.team4u.framework.lease.runtime.LeaseExecutionContext;
-import com.team4u.framework.lease.runtime.LeaseWorker;
-import com.team4u.framework.retry.RetryExecutionContext;
-import com.team4u.framework.retry.backend.RetryBackend;
-import com.team4u.framework.retry.backend.RetryCloseReason;
-import com.team4u.framework.retry.backend.RetryTaskSnapshot;
-import com.team4u.framework.retry.backend.serialize.HutoolRetryTaskSnapshotSerializer;
-import com.team4u.framework.retry.backend.serialize.RetryTaskSnapshotSerializer;
+import com.team4u.framework.retry.client.RetryCoordinator;
+import com.team4u.framework.retry.domain.store.RetryRequest;
+import com.team4u.framework.retry.domain.store.RetryState;
+import com.team4u.framework.retry.domain.store.RetryStatus;
 import com.team4u.framework.retry.policy.RetryPolicy;
-import com.team4u.framework.retry.policy.RetryPolicyFactory;
-import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
+import com.team4u.framework.retry.recovery.RecoveryContext;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
-import com.team4u.framework.retry.recovery.RetryRecoveryPlanner;
+import com.team4u.framework.retry.store.record.RetryRecord;
+import com.team4u.framework.retry.store.serialize.HutoolRetryRecordSerializer;
+import com.team4u.framework.retry.store.serialize.RetryRecordSerializer;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
+import java.time.Instant;
+import java.util.Optional;
+
 /**
  * 将 {@link RecoveryHandler} 适配为 {@link LeaseTaskHandler} 的包装类。
- * <p>
- * 使得原有的重试恢复逻辑可以无缝接入 {@link LeaseWorker} 的任务执行流程中。
  */
 @Slf4j
 @Getter
 public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler {
 
     private final RecoveryHandler delegate;
-    private final RetryBackend retryBackend;
-    private final RetryPolicyFactoryRegistry policyRegistry;
-    private final RetryRecoveryPlanner planner = new RetryRecoveryPlanner();
+    private final RetryCoordinator coordinator;
 
     @Setter
-    private RetryTaskSnapshotSerializer snapshotSerializer = HutoolRetryTaskSnapshotSerializer.INSTANCE;
+    private RetryRecordSerializer serializer = HutoolRetryRecordSerializer.INSTANCE;
 
-    public RecoveryHandlerLeaseTaskHandlerAdapter(RecoveryHandler delegate, RetryBackend retryBackend) {
-        this(delegate, retryBackend, RetryPolicyFactoryRegistry.global());
-    }
-
-    public RecoveryHandlerLeaseTaskHandlerAdapter(RecoveryHandler delegate, RetryBackend retryBackend,
-                                                  RetryPolicyFactoryRegistry policyRegistry) {
+    public RecoveryHandlerLeaseTaskHandlerAdapter(RecoveryHandler delegate, RetryCoordinator coordinator) {
         this.delegate = delegate;
-        this.retryBackend = retryBackend;
-        this.policyRegistry = policyRegistry;
+        this.coordinator = coordinator;
     }
 
     @Override
     public void handle(LeaseExecutionContext context) throws Exception {
-        RetryTaskSnapshot snapshot = snapshotSerializer.deserialize(context.getPayload());
+        RetryRecord record = serializer.deserialize(context.getPayload());
+
+        RecoveryContext recoveryContext = RecoveryContext.builder()
+                .taskId(record.getTaskId())
+                .attempt(record.getState().getAttempts() + 1)
+                .build();
 
         try {
-            delegate.recover(snapshot);
+            // @SuppressWarnings("unchecked")
+            delegate.recover(record.getRequest().getRecovery().getPayload(), recoveryContext);
+
+            // 成功，通过 coordinator 或者直接 close lease（在 worker 里本身就是 lease 上下文，可以直接 close）
+            LeaseRuntimeResult result = context.getRuntimeClient().close(
+                    context.getHandle(),
+                    LeaseCloseRequest.succeeded());
+            checkResult(result, "closeSucceeded", record.getTaskId());
+
         } catch (Throwable cause) {
-            handleFailure(context, snapshot, cause);
+            handleFailure(context, record, cause);
         }
     }
 
-    private void handleFailure(LeaseExecutionContext context, RetryTaskSnapshot snapshot, Throwable cause) {
-        RetryPolicy policy = resolvePolicy(snapshot);
+    private void handleFailure(LeaseExecutionContext context, RetryRecord record, Throwable cause) {
+        RetryPolicy policy = record.getRequest().getPolicy();
+        int attempts = record.getState().getAttempts() + 1;
+        record.getState().setAttempts(attempts);
+        record.getState().setLastErrorCode(cause.getClass().getSimpleName());
+        record.getState().setLastErrorMessage(cause.getMessage());
 
-        // 创建临时上下文用于决策
-        RetryExecutionContext<Object> retryContext = new RetryExecutionContext<>(
-                snapshot.getTaskType(), null);
-        retryContext.setSnapshot(snapshot);
-        retryContext.setExecutedAttempts(snapshot.getExecutedAttempts());
-        retryContext.setLastError(cause);
+        if (!policy.canRetry(attempts, cause)) {
+            log.error("Task failed closed: {}", record.getTaskId(), cause);
+            LeaseRuntimeResult result = context.getRuntimeClient().close(
+                    context.getHandle(),
+                    LeaseCloseRequest.failed(LeaseTaskFailureReason.RETRY_EXHAUSTED, cause.getMessage()));
+            checkResult(result, "closeFailed", record.getTaskId());
+        } else {
+            long delayMillis = policy.getDelayMillis(attempts);
+            log.info("Task failed, retrying in {}ms: {}", delayMillis, record.getTaskId());
 
-        // 这里 lease 模式通常已经是在后端运行，所以 localAttempts 设为 0，hasRetryBackend 设为 true 确保走持久化逻辑
-        RetryRecoveryPlanner.Plan plan = planner.plan(retryContext, policy, 0, true);
+            record.getState().setStatus(RetryStatus.SCHEDULED);
+            record.getState().setNextRunAt(Instant.now().plusMillis(delayMillis));
 
-        if (plan.getType() != RetryRecoveryPlanner.Plan.Type.CLOSE) {
-            log.info("Task failed, retrying in {}ms: {}", plan.getDelayMillis(), snapshot.getTaskId());
-            // 更新快照进度
-            snapshot.setExecutedAttempts(snapshot.getExecutedAttempts() + 1);
-            snapshot.setLastError(cause.toString());
-            retryBackend.saveProgress(snapshot);
+            // 因为当前已经在 Worker 模型下执行中，可以通过 leaseRelease，并且同时更新 payload 给最新的 record
+            // 但 team4u-lease 的 release 好像只支持传 delayMillis 不持支传新 payload
+            // 所以我们需要先通过 coordinator (它通常会包含 adminService.update) 来更新 payload，再
+            // release/reschedule
+
+            coordinator.schedule(record, delayMillis);
 
             LeaseRuntimeResult result = context.getRuntimeClient().release(
                     context.getHandle(),
-                    LeaseReleaseRequest.of(plan.getDelayMillis(), cause.toString()));
-            checkResult(result, "release", snapshot.getTaskId());
-        } else {
-            log.error("Task failed closed: {}", snapshot.getTaskId(), cause);
-            LeaseRuntimeResult result = context.getRuntimeClient().close(
-                    context.getHandle(),
-                    LeaseCloseRequest.failed(mapFailureReason(plan.getReason()), plan.getErrorMessage()));
-            checkResult(result, "close", snapshot.getTaskId());
+                    LeaseReleaseRequest.of(delayMillis, cause.getMessage()));
+            checkResult(result, "release", record.getTaskId());
         }
-    }
-
-    private LeaseTaskFailureReason mapFailureReason(RetryCloseReason reason) {
-        if (reason == null) {
-            return LeaseTaskFailureReason.ABORTED_BY_POLICY;
-        }
-        switch (reason) {
-            case RETRY_EXHAUSTED:
-                return LeaseTaskFailureReason.RETRY_EXHAUSTED;
-            case ABORTED_BY_POLICY:
-            default:
-                return LeaseTaskFailureReason.ABORTED_BY_POLICY;
-        }
-    }
-
-    private RetryPolicy resolvePolicy(RetryTaskSnapshot snapshot) {
-        if (snapshot.getPolicyKey() != null) {
-            RetryPolicyFactory namedPolicy = policyRegistry.get(snapshot.getPolicyKey()).orElse(null);
-            if (namedPolicy != null) {
-                return namedPolicy.create();
-            }
-        }
-        // 快照中有 maxAttempts 时恢复前台传入的配置，否则使用默认策略
-        RetryPolicy.Builder builder = RetryPolicy.builder();
-        if (snapshot.getMaxAttempts() > 0) {
-            builder.maxAttempts(snapshot.getMaxAttempts());
-        }
-        return builder.build();
     }
 
     private void checkResult(LeaseRuntimeResult result, String operation, String taskId) {

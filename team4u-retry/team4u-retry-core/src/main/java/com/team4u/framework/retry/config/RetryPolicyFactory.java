@@ -32,7 +32,7 @@ public class RetryPolicyFactory {
                 .condition(config.getCondition());
 
         if (config.getLocalAttempts() != null) {
-            builder.localAttempts(config.getLocalAttempts());
+            builder.foregroundAttempts(config.getLocalAttempts());
         }
 
         BackoffConfig backoffCfg = config.getBackoff();
