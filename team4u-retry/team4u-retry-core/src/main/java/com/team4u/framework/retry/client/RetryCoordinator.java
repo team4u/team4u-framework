@@ -1,6 +1,5 @@
 package com.team4u.framework.retry.client;
 
-import com.team4u.framework.retry.domain.store.RetryRequest;
 import com.team4u.framework.retry.store.record.RetryRecord;
 
 /**

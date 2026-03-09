@@ -7,7 +7,6 @@ import com.team4u.framework.retry.domain.store.RetryRequest;
 import com.team4u.framework.retry.domain.store.RetryState;
 import com.team4u.framework.retry.domain.store.RetryStatus;
 import com.team4u.framework.retry.policy.RetryPolicy;
-import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import com.team4u.framework.retry.store.DurableRetryStore;
 import com.team4u.framework.retry.store.TaskHandle;
 import com.team4u.framework.retry.store.record.AttemptRecord;
@@ -22,28 +21,22 @@ import java.util.Optional;
 public class DefaultManagedRetryClient implements ManagedRetryClient {
 
     private final DurableRetryStore store;
-    private final RecoveryHandlerRegistry recoveryRegistry;
     private final RetryCoordinator coordinator;
     private final RetryPolicy defaultPolicy;
 
     @Builder
     public DefaultManagedRetryClient(
             DurableRetryStore store,
-            RecoveryHandlerRegistry recoveryRegistry,
             RetryCoordinator coordinator,
             RetryPolicy defaultPolicy) {
         if (store == null) {
             throw new IllegalStateException("DurableRetryStore is required for MANAGED mode");
-        }
-        if (recoveryRegistry == null) {
-            throw new IllegalStateException("RecoveryHandlerRegistry is required for MANAGED mode");
         }
         if (coordinator == null) {
             throw new IllegalStateException("RetryCoordinator is required for MANAGED mode");
         }
 
         this.store = store;
-        this.recoveryRegistry = recoveryRegistry;
         this.coordinator = coordinator;
         this.defaultPolicy = defaultPolicy;
     }
@@ -102,7 +95,7 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
 
         // 3. Foreground attempt logic
         int attempts = 0;
-        while (attempts < foregroundAttempts) {
+        while (true) {
             attempts++;
             AttemptRecord attemptRecord = AttemptRecord.builder()
                     .attemptAt(Instant.now())
@@ -162,10 +155,6 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
                 }
             }
         }
-
-        // Should not reach here strictly because the loop handles exhaustion and
-        // returns explicitly
-        return new ManagedSubmitResult.Rejected<>("Unexpected evaluation paths exhausted.");
     }
 
     private void sleepQuietly(long delay) throws InterruptedException {
