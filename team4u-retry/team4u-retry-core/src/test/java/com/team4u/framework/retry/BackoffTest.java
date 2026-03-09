@@ -10,19 +10,19 @@ public class BackoffTest {
         assertIllegalArgument(new Runnable() {
             @Override
             public void run() {
-                Backoff.fixed(-1L);
+                Backoffs.fixed(-1L);
             }
         });
         assertIllegalArgument(new Runnable() {
             @Override
             public void run() {
-                Backoff.increment(1L, -1L);
+                Backoffs.increment(1L, -1L);
             }
         });
         assertIllegalArgument(new Runnable() {
             @Override
             public void run() {
-                Backoff.exponential(1L, 0D, 10L);
+                Backoffs.exponential(1L, 0D, 10L);
             }
         });
     }
@@ -30,7 +30,7 @@ public class BackoffTest {
     @Test
     public void testRejectsNonPositiveAttempt() {
         try {
-            Backoff.fixed(10L).calculateMillis(0);
+            Backoffs.fixed(10L).calculateMillis(0);
             Assert.fail("expected IllegalArgumentException");
         } catch (IllegalArgumentException ex) {
             Assert.assertTrue(ex.getMessage().contains("attempt"));

@@ -4,8 +4,8 @@ import cn.hutool.core.util.ClassUtil;
 import cn.hutool.json.JSONUtil;
 import cn.hutool.log.Log;
 import cn.hutool.log.LogFactory;
-import com.team4u.framework.retry.Backoff;
 import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.backoff.BackoffRegistry;
 
 /**
  * 重试策略工厂类
@@ -35,24 +35,12 @@ public class RetryPolicyFactory {
             builder.localAttempts(config.getLocalAttempts());
         }
 
-        String type = config.getBackoffType() == null ? "fixed" : config.getBackoffType().toLowerCase();
-        switch (type) {
-            case "increment":
-                builder.backoff(Backoff.increment(config.getInitialDelay(), (long) config.getMultiplier()));
-                break;
-            case "exponential":
-                builder.backoff(
-                        Backoff.exponential(config.getInitialDelay(), config.getMultiplier(), config.getMaxDelay()));
-                break;
-            case "exponentialjitter":
-                builder.backoff(Backoff.exponentialJitter(config.getInitialDelay(), config.getMultiplier(),
-                        config.getMaxDelay()));
-                break;
-            case "fixed":
-            default:
-                builder.backoff(Backoff.fixed(config.getInitialDelay()));
-                break;
+        BackoffConfig backoffCfg = config.getBackoff();
+        if (backoffCfg == null) {
+            backoffCfg = new BackoffConfig(); // default is fixed
         }
+
+        builder.backoff(BackoffRegistry.global().createBackoff(backoffCfg));
 
         if (config.getRetryOnExceptions() != null) {
             for (String className : config.getRetryOnExceptions()) {

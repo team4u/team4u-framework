@@ -31,7 +31,7 @@ public class RetryerTest {
         // 测试同步执行：失败若干次后成功
         RetryPolicy policy = RetryPolicy.builder()
                 .maxAttempts(3)
-                .backoff(Backoff.fixed(10)) // 为了测试速度，使用很小的延迟
+                .backoff(Backoffs.fixed(10)) // 为了测试速度，使用很小的延迟
                 .build();
 
         Retryer retryer = Retryer.with(policy);
@@ -54,7 +54,7 @@ public class RetryerTest {
         // 测试同步执行：超过全局总尝试次数抛出异常
         RetryPolicy policy = RetryPolicy.builder()
                 .maxAttempts(3)
-                .backoff(Backoff.fixed(5))
+                .backoff(Backoffs.fixed(5))
                 .build();
 
         Retryer retryer = Retryer.with(policy);
@@ -70,7 +70,7 @@ public class RetryerTest {
         // 测试异步执行：失败若干次后成功
         RetryPolicy policy = RetryPolicy.builder()
                 .maxAttempts(3)
-                .backoff(Backoff.fixed(10))
+                .backoff(Backoffs.fixed(10))
                 .build();
 
         Retryer retryer = Retryer.with(policy);
@@ -103,7 +103,7 @@ public class RetryerTest {
         // 测试异步执行：超过全局总尝试次数失败
         RetryPolicy policy = RetryPolicy.builder()
                 .maxAttempts(2)
-                .backoff(Backoff.fixed(5))
+                .backoff(Backoffs.fixed(5))
                 .build();
 
         Retryer retryer = Retryer.with(policy);
@@ -362,7 +362,6 @@ public class RetryerTest {
                 .build();
 
         String taskType = "test-task";
-        String payload = "{\"id\":1}";
 
         // 第一次执行并失败，触发降级
         try {
@@ -441,7 +440,7 @@ public class RetryerTest {
     public void testInterruptedDuringBackoffShouldNotFallbackToPersistence() throws Exception {
         RetryPolicy policy = RetryPolicy.builder()
                 .maxAttempts(3)
-                .backoff(Backoff.fixed(5000))
+                .backoff(Backoffs.fixed(5000))
                 .build();
 
         AtomicInteger handoffCount = new AtomicInteger(0);

@@ -58,12 +58,12 @@
 
 本项目按使用场景拆分为 4 个模块：
 
-| 场景 | 推荐模块 | 说明 |
-|---|---|---|
-| 仅需要在代码里手动包裹重试逻辑 | `team4u-retry-core` | 适合工具类、基础组件、非 Spring 场景 |
-| 希望通过注解给接口 / 类方法增加重试能力 | `team4u-retry-proxy` | 基于代理增强 `@Retryable` 方法 |
-| Spring 项目中自动识别 `@Retryable` | `team4u-retry-spring` | 通过 `@EnableRetry` 自动织入 |
-| 需要在进程退出、服务重启后继续恢复重试 | `team4u-retry-lease-integration` | 提供基于 Lease 的持久化重试后端 |
+| 场景                                    | 推荐模块                         | 说明                                 |
+| --------------------------------------- | -------------------------------- | ------------------------------------ |
+| 仅需要在代码里手动包裹重试逻辑          | `team4u-retry-core`              | 适合工具类、基础组件、非 Spring 场景 |
+| 希望通过注解给接口 / 类方法增加重试能力 | `team4u-retry-proxy`             | 基于代理增强 `@Retryable` 方法       |
+| Spring 项目中自动识别 `@Retryable`      | `team4u-retry-spring`            | 通过 `@EnableRetry` 自动织入         |
+| 需要在进程退出、服务重启后继续恢复重试  | `team4u-retry-lease-integration` | 提供基于 Lease 的持久化重试后端      |
 
 > 一般建议：
 >
@@ -74,11 +74,11 @@
 
 ## 运行模式对照
 
-| 模式         | 是否需要持久化适配器        | 是否需要 payloadBuilder | 本地耗尽后       | 调用方看到什么               | 是否需要 Worker |
-|------------|-------------------|---------------------|-------------|-----------------------|-------------|
-| 纯内存同步/异步   | 否                 | 否                   | 直接结束        | 最终业务异常                | 否           |
-| 持久化降级（编程式） | 是（`RetryBackend`） | 是                   | handoff 到后端 | RetryHandoffException | 是           |
-| 持久化降级（注解式） | 是（`RetryBackend`） | 否（框架快照）             | handoff 到后端 | RetryHandoffException | 是           |
+| 模式                 | 是否需要持久化适配器 | 是否需要 payloadBuilder | 本地耗尽后     | 调用方看到什么        | 是否需要 Worker |
+| -------------------- | -------------------- | ----------------------- | -------------- | --------------------- | --------------- |
+| 纯内存同步/异步      | 否                   | 否                      | 直接结束       | 最终业务异常          | 否              |
+| 持久化降级（编程式） | 是（`RetryBackend`） | 是                      | handoff 到后端 | RetryHandoffException | 是              |
+| 持久化降级（注解式） | 是（`RetryBackend`） | 否（框架快照）          | handoff 到后端 | RetryHandoffException | 是              |
 
 ## 快速开始
 
@@ -157,11 +157,11 @@ String result = retryer.execute(
 ```java
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.Retryer;
-import com.team4u.framework.retry.Backoff;
+import com.team4u.framework.retry.Backoffs;
 
 RetryPolicy policy = RetryPolicy.builder()
         .maxAttempts(3)
-        .backoff(Backoff.fixed(200))
+        .backoff(Backoffs.fixed(200))
         .build();
 
 Retryer retryer = Retryer.with(policy);
@@ -183,7 +183,7 @@ String result = retryer.execute(() -> {
 ```java
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.Retryer;
-import com.team4u.framework.retry.Backoff;
+import com.team4u.framework.retry.Backoffs;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
@@ -193,7 +193,7 @@ ScheduledExecutorService scheduler = Executors.newScheduledThreadPool(2);
 
 RetryPolicy policy = RetryPolicy.builder()
         .maxAttempts(3)
-        .backoff(Backoff.fixed(100))
+        .backoff(Backoffs.fixed(100))
         .build();
 
 Retryer retryer = Retryer.with(policy);
@@ -305,7 +305,7 @@ RetryPolicy policy = RetryPolicy.builder()
         .maxAttempts(5)
         .retryOn(java.io.IOException.class)
         .abortOn(IllegalArgumentException.class)
-        .backoff(Backoff.exponentialJitter(100, 2.0, 3000))
+        .backoff(Backoffs.exponentialJitter(100, 2.0, 3000))
         .condition("message contains 'timeout'")
         .build();
 ```
@@ -315,35 +315,60 @@ RetryPolicy policy = RetryPolicy.builder()
 * 纯内存模式下，`localAttempts` 默认等于 `maxAttempts`
 * 持久化模式下，如果不显式设置 `localAttempts`，当前实现默认只在前台尝试 2 次
 
-### 2. `Backoff`
+### 2. `Backoff` (退避策略)
 
-`Backoff` 决定每次失败后等待多久再重试。
+`Backoff` 决定每次失败后等待多久再重试。统一通过 `Backoffs` 门面类进行创建。
+
+#### 快捷创建方式
 
 内置算法：
 
-* `Backoff.fixed(delay)`：固定间隔
-* `Backoff.increment(initial, step)`：线性递增
-* `Backoff.exponential(initial, multiplier, maxDelay)`：指数退避
-* `Backoff.exponentialJitter(initial, multiplier, maxDelay)`：指数退避 + 抖动
+* `Backoffs.fixed(delay)`：固定间隔
+* `Backoffs.increment(initial, step)`：线性递增
+* `Backoffs.exponential(initial, multiplier, maxDelay)`：指数退避
+* `Backoffs.exponentialJitter(initial, multiplier, maxDelay)`：指数退避 + 抖动
 
 高并发失败场景推荐优先使用：
 
 ```java
-Backoff.exponentialJitter(...)
+Backoffs.exponentialJitter(...)
+```
+
+#### 流式 Builder 接入 (推荐)
+
+对于更复杂的参数控制或更好的代码可读性，推荐使用各策略自带的 Builder：
+
+```java
+Backoff backoff = Backoffs.exponentialJitterBuilder()
+        .initialDelay(200)
+        .multiplier(2.0)
+        .maxDelay(5000)
+        .build();
+```
+
+#### 通用扩展 Builder
+
+支持通过字符串类型加载自定义策略：
+
+```java
+Backoff backoff = Backoffs.builder("myCustomType")
+        .param("foo", 1)
+        .param("bar", "value")
+        .build();
 ```
 
 这样可以减少大量请求同时重试带来的“扎堆”问题。
 
 ## 异常与终止规则
 
-| 情况                                                 | 是否重试     | 说明                               |
-|----------------------------------------------------|----------|----------------------------------|
-| 命中 `retryOn`                                       | 是        | 按策略继续                            |
-| 命中 `abortOn`                                       | 否        | 立即终止                             |
-| `CompletionException` / `ExecutionException` 等包装异常 | 看根因      | 框架会先解包                           |
-| `InterruptedException`                             | 否        | 立即终止并恢复中断标记                      |
-| `Error`                                            | 否        | 直接透传                             |
-| 持久化模式下本地预算耗尽                                       | 不在当前线程继续 | 交给后端，前台抛 `RetryHandoffException` |
+| 情况                                                    | 是否重试         | 说明                                     |
+| ------------------------------------------------------- | ---------------- | ---------------------------------------- |
+| 命中 `retryOn`                                          | 是               | 按策略继续                               |
+| 命中 `abortOn`                                          | 否               | 立即终止                                 |
+| `CompletionException` / `ExecutionException` 等包装异常 | 看根因           | 框架会先解包                             |
+| `InterruptedException`                                  | 否               | 立即终止并恢复中断标记                   |
+| `Error`                                                 | 否               | 直接透传                                 |
+| 持久化模式下本地预算耗尽                                | 不在当前线程继续 | 交给后端，前台抛 `RetryHandoffException` |
 
 ### 3. 内存重试 vs 持久化重试
 
@@ -476,11 +501,8 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), RetryBack
 ### `@Retryable` 参数说明
 
 - `policy`：重试策略标识，对应策略注册表中的 Key
-- `taskType`：持久化恢复时用于定位 `RecoveryHandler` 的任务类型
-- `payload`：预留的附加业务信息字段
 
-> 当前版本中，注解模式下的持久化恢复主要依赖方法调用快照（如 bean、方法名、参数类型、参数值等）。
-> `payload` 可作为补充信息使用，但不建议把它视为注解模式下唯一的恢复依据。
+> **注意**：在注解模式下，框架固定使用 `DEFAULT_PROXY_RECOVERY` 恢复链路，并基于方法调用快照（如 bean、方法名、参数类型、参数值等）自动完成恢复。
 
 ## 注解模式下的持久化快照内容
 
@@ -492,7 +514,7 @@ PayService proxy = RetryProxyFactory.createProxy(new PayServiceImpl(), RetryBack
 - 调用的 `methodName`
 - 参数类型列表 `argTypes`
 - 参数序列化结果 `argJsonValues`
-- `taskType`
+- `taskType` (固定为 `DEFAULT_PROXY_RECOVERY`)
 - 当前策略相关信息（如最大尝试次数）
 - 自动生成或后端分配的 `taskId`
 
@@ -529,7 +551,7 @@ RetryPolicyRegistry.global().register(new NamedRetryPolicy() {
     public RetryPolicy getPolicy() {
         return RetryPolicy.builder()
                 .maxAttempts(3)
-                .backoff(Backoff.fixed(100))
+                .backoff(Backoffs.fixed(100))
                 .build();
     }
 });
@@ -817,10 +839,14 @@ RetryTaskTypes.DEFAULT_PROXY_RECOVERY
 retry.policy.order-submit={
   "maxAttempts"=6,
   "localAttempts"=2,
-  "backoffType"="EXPONENTIAL",
-  "initialDelay"=500,
-  "multiplier"=2.0,
-  "maxDelay"=10000,
+  "backoff"={
+    "type"="exponentialJitter",
+    "params"={
+      "initialDelay"=500,
+      "multiplier"=2.0,
+      "maxDelay"=10000
+    }
+  },
   "retryOnExceptions"=["java.net.SocketTimeoutException", "java.io.IOException"],
   "abortOnExceptions"=["java.lang.IllegalArgumentException"],
   "condition"=""
@@ -831,10 +857,8 @@ retry.policy.order-submit={
 
 * `maxAttempts`
 * `localAttempts`
-* `backoffType`
-* `initialDelay`
-* `multiplier`
-* `maxDelay`
+* `backoff.type`
+* `backoff.params`
 * `retryOnExceptions`
 * `abortOnExceptions`
 * `condition`

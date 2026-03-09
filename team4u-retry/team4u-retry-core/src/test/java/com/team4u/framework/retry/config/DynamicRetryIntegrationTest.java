@@ -24,8 +24,7 @@ public class DynamicRetryIntegrationTest {
         DynamicRetryPolicyRegistry.setRegistry(new ConfigDrivenRegistry<>(
                 context.getManager(),
                 "retry.policy.",
-                RetryPolicyFactory::create
-        ));
+                RetryPolicyFactory::create));
     }
 
     @After
@@ -41,7 +40,8 @@ public class DynamicRetryIntegrationTest {
         String configKey = "retry.policy." + policyId;
 
         // 1. 下发初始配置：全局总尝试 2 次
-        context.put(configKey, "{\"maxAttempts\": 2, \"backoffType\": \"fixed\", \"initialDelay\": 100}");
+        context.put(configKey,
+                "{\"maxAttempts\": 2, \"backoff\": {\"type\": \"fixed\", \"params\": {\"delay\": 100}}}");
 
         // 这里有个难点：DynamicRetryPolicyRegistry 持有了 static 的 REGISTRY
         // 我们需要一种方式让它使用 context.getManager()
@@ -52,7 +52,8 @@ public class DynamicRetryIntegrationTest {
         Assert.assertFalse("初始配置不应允许第2次重试", policy1.canRetry(2, new RuntimeException()));
 
         // 2. 动态修改配置：全局总尝试增加到 5 次
-        context.put(configKey, "{\"maxAttempts\": 5, \"backoffType\": \"fixed\", \"initialDelay\": 200}");
+        context.put(configKey,
+                "{\"maxAttempts\": 5, \"backoff\": {\"type\": \"fixed\", \"params\": {\"delay\": 200}}}");
 
         RetryPolicy policy2 = DynamicRetryPolicyRegistry.getPolicy(policyId);
         Assert.assertNotSame("预期热更新产生了新的策略实例", policy1, policy2);
