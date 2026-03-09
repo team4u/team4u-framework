@@ -1,5 +1,7 @@
 package com.team4u.framework.retry.domain;
 
+import lombok.Data;
+
 import java.time.Instant;
 
 /**
@@ -46,64 +48,26 @@ public interface ManagedSubmitResult<T> {
         return this instanceof Rejected;
     }
 
+    @Data
     class Completed<T> implements ManagedSubmitResult<T> {
         private final T value;
-
-        public Completed(T value) {
-            this.value = value;
-        }
-
-        public T getValue() {
-            return value;
-        }
     }
 
+    @Data
     class Accepted<T> implements ManagedSubmitResult<T> {
         private final String taskId;
         // 先简单用字符串表示状态（例如 "PREPARED", "SCHEDULED"）
         private final String state;
         private final Instant nextAttemptAt;
-
-        public Accepted(String taskId, String state, Instant nextAttemptAt) {
-            this.taskId = taskId;
-            this.state = state;
-            this.nextAttemptAt = nextAttemptAt;
-        }
-
-        public String getTaskId() {
-            return taskId;
-        }
-
-        public String getState() {
-            return state;
-        }
-
-        public Instant getNextAttemptAt() {
-            return nextAttemptAt;
-        }
     }
 
+    @Data
     class Failed<T> implements ManagedSubmitResult<T> {
         private final Throwable error;
-
-        public Failed(Throwable error) {
-            this.error = error;
-        }
-
-        public Throwable getError() {
-            return error;
-        }
     }
 
+    @Data
     class Rejected<T> implements ManagedSubmitResult<T> {
         private final String reason;
-
-        public Rejected(String reason) {
-            this.reason = reason;
-        }
-
-        public String getReason() {
-            return reason;
-        }
     }
 }
