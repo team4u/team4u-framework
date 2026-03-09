@@ -4,9 +4,6 @@ import cn.hutool.core.convert.Convert;
 import cn.hutool.json.JSONUtil;
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
-import com.team4u.framework.retry.backend.serialize.HutoolRetryTaskSnapshotSerializer;
-import com.team4u.framework.retry.backend.serialize.RetryTaskSnapshotSerializer;
-import lombok.Setter;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -25,12 +22,6 @@ public class SnapshotRecoveryHandler implements RecoveryHandler {
      * 该处理器的唯一标识 Key，通常对应某种任务类型
      */
     private final String key;
-
-    /**
-     * 快照序列化器，用于将持久化存储的字符串转换为任务快照对象
-     */
-    @Setter
-    private RetryTaskSnapshotSerializer snapshotSerializer = HutoolRetryTaskSnapshotSerializer.INSTANCE;
 
     /**
      * 构造快照恢复处理器
