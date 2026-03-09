@@ -88,12 +88,12 @@ public class RetryDelegate {
         // 获取重试后端，判断是否需要持久化
         RetryBackend backend = backendSupplier != null ? backendSupplier.get() : null;
         boolean persistent = backend != null;
-        String taskType = resolveTaskType(method, retryable, persistent);
+        String taskType = resolveTaskType(method, persistent);
         boolean isAsync = CompletableFuture.class.isAssignableFrom(method.getReturnType());
 
         // 构建重试任务负载构造器（仅持久化模式需要）
         RetryPayloadBuilder payloadBuilder = createPayloadBuilder(method, target, args, taskType, policy, persistent,
-                retryable.payload());
+                policyKey);
 
         Retryer retryer = Retryer.builder()
                 .policy(policy)
@@ -110,7 +110,7 @@ public class RetryDelegate {
      * 处理异步方法重试
      */
     private Object executeAsync(Callable<Object> proceedTask, Retryer retryer, boolean persistent,
-                                String taskType, RetryPayloadBuilder payloadBuilder) {
+            String taskType, RetryPayloadBuilder payloadBuilder) {
         ScheduledExecutorService executor = scheduler != null ? scheduler
                 : RetryExecutorManager.global().getScheduler();
         if (!persistent) {
@@ -123,7 +123,7 @@ public class RetryDelegate {
      * 处理同步方法重试
      */
     private Object executeSync(Callable<Object> proceedTask, Retryer retryer, boolean persistent,
-                               String taskType, RetryPayloadBuilder payloadBuilder) throws Throwable {
+            String taskType, RetryPayloadBuilder payloadBuilder) throws Throwable {
         if (!persistent) {
             try {
                 return retryer.execute(proceedTask);
@@ -160,11 +160,7 @@ public class RetryDelegate {
     /**
      * 解析任务类型，用于持久化恢复时定位处理器
      */
-    private String resolveTaskType(Method method, Retryable retryable, boolean persistent) {
-        String declaredTaskType = retryable.taskType();
-        if (declaredTaskType != null && !declaredTaskType.trim().isEmpty()) {
-            return declaredTaskType;
-        }
+    private String resolveTaskType(Method method, boolean persistent) {
         if (!persistent) {
             return method.getName();
         }
@@ -175,12 +171,12 @@ public class RetryDelegate {
      * 创建任务负载（Payload）构造器，负责在重试前冻结任务快照
      */
     private RetryPayloadBuilder createPayloadBuilder(Method method,
-                                                     Object target,
-                                                     Object[] args,
-                                                     String taskType,
-                                                     RetryPolicy policy,
-                                                     boolean persistent,
-                                                     String policyKey) {
+            Object target,
+            Object[] args,
+            String taskType,
+            RetryPolicy policy,
+            boolean persistent,
+            String policyKey) {
         if (!persistent) {
             return null;
         }
@@ -194,11 +190,11 @@ public class RetryDelegate {
      * 构建初始任务快照
      */
     private RetryTaskSnapshot buildFrozenSnapshot(Method method,
-                                                  Object target,
-                                                  Object[] args,
-                                                  String taskType,
-                                                  RetryPolicy policy,
-                                                  String policyKey) {
+            Object target,
+            Object[] args,
+            String taskType,
+            RetryPolicy policy,
+            String policyKey) {
         RetryTaskSnapshot snapshot = new RetryTaskSnapshot();
         snapshot.setPolicyKey(policyKey);
         snapshot.setLocalAttempts(policy.getLocalAttempts());

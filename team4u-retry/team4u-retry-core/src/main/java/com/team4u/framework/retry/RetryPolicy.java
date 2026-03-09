@@ -146,7 +146,7 @@ public class RetryPolicy {
         private final Set<Class<? extends Throwable>> abortOnExceptions = new HashSet<>();
         private int maxAttempts = 3;
         private Integer localAttempts;
-        private Backoff backoff = Backoff.fixed(1000);
+        private Backoff backoff = Backoffs.fixed(1000);
         private String conditionExpression;
 
         /**

@@ -213,31 +213,6 @@ public class RetryDelegateTest {
     }
 
     @Test
-    public void testExplicitTaskTypeStillWinsForDurableAnnotation() throws Throwable {
-        RetryDelegate delegate = new RetryDelegate();
-        Method method = DelegateApi.class.getDeclaredMethod("customTaskType", String.class);
-        Retryable retryable = method.getAnnotation(Retryable.class);
-        CapturingBackend backend = new CapturingBackend();
-
-        try {
-            delegate.executeWithRetry(
-                    method,
-                    new DelegateApi(),
-                    new Object[] { "payload" },
-                    retryable,
-                    () -> {
-                        throw new RuntimeException("fail");
-                    },
-                    () -> backend);
-            Assert.fail("expected RetryHandoffException");
-        } catch (RetryHandoffException expected) {
-            // expected
-        }
-
-        Assert.assertEquals("custom-task", JSONUtil.parseObj(backend.savedPayload).getStr("taskType"));
-    }
-
-    @Test
     public void testRecoveringContextSkipsRetryPipeline() throws Throwable {
         RetryDelegate delegate = new RetryDelegate();
         Method method = DelegateApi.class.getDeclaredMethod("persistentCall", Object.class);
@@ -289,7 +264,7 @@ public class RetryDelegateTest {
             return String.valueOf(value);
         }
 
-        @Retryable(policy = "delegate-freeze", taskType = "custom-task")
+        @Retryable(policy = "delegate-freeze")
         public String customTaskType(String value) {
             return value;
         }

@@ -24,21 +24,9 @@ public class RetryPolicyConfig {
      */
     private Integer localAttempts;
     /**
-     * 退避类型：fixed, increment, exponential, exponentialJitter
+     * 退避配置
      */
-    private String backoffType = "fixed";
-    /**
-     * 初始延迟（毫秒）
-     */
-    private long initialDelay = 1000;
-    /**
-     * 乘数或步进值
-     */
-    private double multiplier = 2.0;
-    /**
-     * 最大延迟（毫秒）
-     */
-    private long maxDelay = 30000;
+    private BackoffConfig backoff;
     /**
      * 触发重试的异常列表
      */

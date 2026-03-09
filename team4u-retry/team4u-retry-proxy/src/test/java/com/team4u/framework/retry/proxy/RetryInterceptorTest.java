@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.proxy;
 
-import com.team4u.framework.retry.Backoff;
+import com.team4u.framework.retry.Backoffs;
 import com.team4u.framework.proxy.ProxyBuilder;
 import com.team4u.framework.retry.RetryHandoffException;
 import com.team4u.framework.retry.RetryPolicy;
@@ -41,7 +41,7 @@ public class RetryInterceptorTest {
             public RetryPolicy getPolicy() {
                 return RetryPolicy.builder()
                         .maxAttempts(4)
-                        .backoff(Backoff.fixed(5))
+                        .backoff(Backoffs.fixed(5))
                         .condition("message contains 'timeout' && attempt < 4")
                         .build();
             }

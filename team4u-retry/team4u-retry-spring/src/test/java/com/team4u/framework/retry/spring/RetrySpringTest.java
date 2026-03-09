@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.spring;
 
-import com.team4u.framework.retry.Backoff;
+import com.team4u.framework.retry.Backoffs;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.policy.NamedRetryPolicy;
 import com.team4u.framework.retry.policy.RetryPolicyRegistry;
@@ -33,7 +33,7 @@ public class RetrySpringTest {
             public RetryPolicy getPolicy() {
                 return RetryPolicy.builder()
                         .maxAttempts(3)
-                        .backoff(Backoff.fixed(1))
+                        .backoff(Backoffs.fixed(1))
                         .build();
             }
         });
@@ -63,7 +63,8 @@ public class RetrySpringTest {
 
     @Test
     public void testSpringJdkProxyShouldFindAnnotationOnImplementationMethod() {
-        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(JdkProxyConfig.class)) {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
+                JdkProxyConfig.class)) {
             JdkProxyConfig config = context.getBean(JdkProxyConfig.class);
             ImplAnnotatedService service = context.getBean(ImplAnnotatedService.class);
 
