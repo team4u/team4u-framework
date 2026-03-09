@@ -10,6 +10,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionException;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class DefaultInlineRetryClientTest {
@@ -61,10 +62,77 @@ public class DefaultInlineRetryClientTest {
         Assert.assertEquals(1, attempts.get());
     }
 
+    @Test
+    public void testExecuteAsyncCancellationCancelsInFlightFuture() throws Exception {
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        AtomicInteger attempts = new AtomicInteger();
+        TrackingCompletableFuture<String> childFuture = new TrackingCompletableFuture<String>();
+
+        try {
+            CompletableFuture<String> resultFuture = DefaultInlineRetryClient.getInstance().executeAsync(
+                    retryPolicy(),
+                    () -> {
+                        attempts.incrementAndGet();
+                        return childFuture;
+                    },
+                    scheduler);
+
+            Assert.assertTrue(resultFuture.cancel(true));
+            Thread.sleep(50L);
+
+            Assert.assertTrue(resultFuture.isCancelled());
+            Assert.assertEquals(1, attempts.get());
+            Assert.assertTrue(childFuture.cancelCalled.get());
+            Assert.assertTrue(childFuture.isCancelled());
+        } finally {
+            scheduler.shutdownNow();
+        }
+    }
+
+    @Test
+    public void testExecuteAsyncCancellationSkipsScheduledRetry() throws Exception {
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        AtomicInteger attempts = new AtomicInteger();
+        RetryPolicy policy = RetryPolicy.builder()
+                .maxAttempts(3)
+                .backoff(Backoffs.fixed(200))
+                .build();
+
+        try {
+            CompletableFuture<String> resultFuture = DefaultInlineRetryClient.getInstance().executeAsync(
+                    policy,
+                    () -> {
+                        attempts.incrementAndGet();
+                        CompletableFuture<String> failed = new CompletableFuture<String>();
+                        failed.completeExceptionally(new RuntimeException("fail"));
+                        return failed;
+                    },
+                    scheduler);
+
+            Assert.assertTrue(resultFuture.cancel(true));
+            Thread.sleep(350L);
+
+            Assert.assertTrue(resultFuture.isCancelled());
+            Assert.assertEquals(1, attempts.get());
+        } finally {
+            scheduler.shutdownNow();
+        }
+    }
+
     private RetryPolicy retryPolicy() {
         return RetryPolicy.builder()
                 .maxAttempts(3)
                 .backoff(Backoffs.fixed(0))
                 .build();
+    }
+
+    private static class TrackingCompletableFuture<T> extends CompletableFuture<T> {
+        private final AtomicBoolean cancelCalled = new AtomicBoolean();
+
+        @Override
+        public boolean cancel(boolean mayInterruptIfRunning) {
+            cancelCalled.set(true);
+            return super.cancel(mayInterruptIfRunning);
+        }
     }
 }

@@ -97,13 +97,28 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
             Supplier<CompletableFuture<T>> asyncTask,
             ScheduledExecutorService scheduler,
             CompletableFuture<T> resultFuture) {
+        if (resultFuture.isDone()) {
+            return;
+        }
         try {
             CompletableFuture<T> future = asyncTask.get();
             if (future == null) {
                 throw new NullPointerException("Async task callback (asyncTask.get()) returned null");
             }
+            if (resultFuture.isDone()) {
+                cancelFuture(future);
+                return;
+            }
+            resultFuture.whenComplete((ignored, ex) -> {
+                if (resultFuture.isCancelled()) {
+                    cancelFuture(future);
+                }
+            });
             // 监听异步任务执行完成事件
             future.whenComplete((result, ex) -> {
+                if (resultFuture.isDone()) {
+                    return;
+                }
                 if (ex == null) {
                     // 任务成功完成，填充结果到最终的 Future
                     resultFuture.complete(result);
@@ -114,6 +129,9 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
             });
         } catch (Throwable ex) {
             // 获取异步任务过程中发生异常（如 asyncTask.get() 本身抛错）
+            if (resultFuture.isDone()) {
+                return;
+            }
             handleAsyncFailure(currentAttempt + 1, policy, asyncTask, scheduler, resultFuture, ex);
         }
     }
@@ -135,6 +153,9 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
             ScheduledExecutorService scheduler,
             CompletableFuture<T> resultFuture,
             Throwable ex) {
+        if (resultFuture.isDone()) {
+            return;
+        }
         Throwable cause = normalize(ex);
         if (cause instanceof Error) {
             resultFuture.completeExceptionally(cause);
@@ -149,6 +170,9 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
 
         // 根据策略计算下一次尝试的延迟时间
         long delayMillis = policy.getDelayMillis(attempts);
+        if (resultFuture.isDone()) {
+            return;
+        }
         try {
             if (delayMillis > 0) {
                 // 利用调度器在指定的延迟时间后重新发起任务
@@ -161,6 +185,12 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
         } catch (Exception scheduleEx) {
             // 调度器本身出现异常（如已关闭）时，直接终结任务
             resultFuture.completeExceptionally(scheduleEx);
+        }
+    }
+
+    private void cancelFuture(CompletableFuture<?> future) {
+        if (future != null && !future.isDone()) {
+            future.cancel(true);
         }
     }
 

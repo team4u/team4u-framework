@@ -13,6 +13,7 @@ import com.team4u.framework.retry.policy.RetryPolicyFactory;
 import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
 import com.team4u.framework.retry.proxy.serialize.HutoolRetryContextSerializer;
 import com.team4u.framework.retry.proxy.serialize.RetryContextSerializer;
+import com.team4u.framework.retry.proxy.serialize.RetryIgnore;
 import com.team4u.framework.retry.recovery.RecoveryExecutionContext;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import lombok.Setter;
@@ -75,6 +76,7 @@ public class RetryDelegate {
         }
 
         // MANAGED 模式
+        validateManagedMethod(method);
         InvocationRecoveryData recoveryData = buildRecoveryData(method, target, args);
 
         Class<? extends RecoveryHandler> recoveryClass = retryable.recovery();
@@ -96,10 +98,6 @@ public class RetryDelegate {
         } else if (result instanceof ManagedSubmitResult.Failed) {
             throw ((ManagedSubmitResult.Failed<?>) result).getError();
         } else if (result instanceof ManagedSubmitResult.Accepted) {
-            boolean isAsync = CompletableFuture.class.isAssignableFrom(method.getReturnType());
-            if (isAsync) {
-                return new CompletableFuture<>();
-            }
             return null;
         } else if (result instanceof ManagedSubmitResult.Rejected) {
             throw new IllegalStateException("Task rejected: " + ((ManagedSubmitResult.Rejected<?>) result).getReason());
@@ -144,6 +142,7 @@ public class RetryDelegate {
         Parameter[] parameters = method.getParameters();
         List<String> argValues = new ArrayList<>();
         for (int i = 0; i < parameters.length; i++) {
+            validateManagedSnapshotParameter(method, parameters[i]);
             Object argValue = i < safeArgs.length ? safeArgs[i] : null;
             argValues.add(serializer.serialize(parameters[i], argValue));
         }
@@ -154,6 +153,24 @@ public class RetryDelegate {
                 .argTypes(argTypes)
                 .argValues(argValues)
                 .build();
+    }
+
+    private void validateManagedMethod(Method method) {
+        if (method.getReturnType() != Void.TYPE) {
+            throw new IllegalStateException(
+                    "@Retryable(mode = MANAGED) only supports void return types in proxy/spring interception. "
+                            + "Method: " + method.toGenericString()
+                            + ". Use INLINE or ManagedRetryClient.submit(...) for result-bearing methods.");
+        }
+    }
+
+    private void validateManagedSnapshotParameter(Method method, Parameter parameter) {
+        if (parameter.isAnnotationPresent(RetryIgnore.class) && parameter.getType().isPrimitive()) {
+            throw new IllegalStateException(
+                    "@RetryIgnore cannot be used on primitive parameters in MANAGED mode. "
+                            + "Method: " + method.toGenericString()
+                            + ", Parameter: " + parameter.getName());
+        }
     }
 
     /**
