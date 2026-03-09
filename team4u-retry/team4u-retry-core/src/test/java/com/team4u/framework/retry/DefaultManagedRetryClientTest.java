@@ -36,7 +36,7 @@ public class DefaultManagedRetryClientTest {
         assertRejected(client.submit(spec("task", " ", successTask("ok"), RecoverySpec.of("recover", "payload"), policy)),
                 "idempotencyKey");
         assertRejected(client.submit(spec("task", "idem", successTask("ok"), RecoverySpec.of(" ", "payload"), policy)),
-                "handlerTaskType");
+                "taskType");
     }
 
     @Test

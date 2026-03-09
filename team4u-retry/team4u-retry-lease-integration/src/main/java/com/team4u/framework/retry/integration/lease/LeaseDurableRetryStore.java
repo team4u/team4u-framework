@@ -54,7 +54,7 @@ public class LeaseDurableRetryStore implements DurableRetryStore, RetryCoordinat
     public String create(RetryRecord initialRecord) {
         return producer.publish(LeasePublishRequest.builder()
                 .queue(queue)
-                .taskType(initialRecord.getRequest().getHandlerTaskType())
+                .taskType(initialRecord.getRequest().getTaskType())
                 .payload(serializer.serialize(initialRecord))
                 .delayMillis(PREPARED_INTENT_DELAY_MILLIS) // 故意延迟，以等待调度或前台执行
                 .build());

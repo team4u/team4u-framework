@@ -67,7 +67,7 @@ public class RetryDelegateManagedTest {
         Assert.assertNull(firstResult);
         Assert.assertNull(secondResult);
         Assert.assertNotNull(managedClient.lastSpec);
-        Assert.assertEquals(CustomRecoveryHandler.TASK_TYPE, managedClient.lastSpec.getRecovery().getHandlerTaskType());
+        Assert.assertEquals(CustomRecoveryHandler.TASK_TYPE, managedClient.lastSpec.getRecovery().getTaskType());
         Assert.assertEquals(firstKey, managedClient.lastSpec.getIdempotencyKey());
         Assert.assertFalse(firstKey.isEmpty());
 

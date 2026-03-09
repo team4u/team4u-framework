@@ -59,7 +59,7 @@
 * 前台尝试失败后可以转后台继续
 * 需要存储、协调器、恢复处理器和 Worker 配合
 * 必须显式配置 `foregroundAttempts`
-* 必须提供有效的 `RecoverySpec.handlerTaskType`
+* 必须提供有效的 `RecoverySpec.taskType`
 
 ---
 
@@ -482,7 +482,7 @@ RetryTaskSpec<String> spec = RetryTaskSpec.<String>builder()
 这里的路由 key 必须对上：
 
 * `RecoveryHandler.taskName()`
-* `RecoverySpec.handlerTaskType`
+* `RecoverySpec.taskType`
 
 ## MANAGED 的几个关键约束
 
@@ -497,11 +497,11 @@ MANAGED 下如果策略没有显式设置 `foregroundAttempts`，提交会直接
 
 * `idempotencyKey`
 * `executor`
-* `recovery.handlerTaskType`
+* `recovery.taskType`
 
-### 必须提供有效的 `RecoverySpec.handlerTaskType`
+### 必须提供有效的 `RecoverySpec.taskType`
 
-如果没有 `recovery`，或者 `handlerTaskType` 为空，也会被 `Rejected`。
+如果没有 `recovery`，或者 `taskType` 为空，也会被 `Rejected`。
 
 ### `foregroundAttempts` 不能大于 `maxAttempts`
 
@@ -863,7 +863,7 @@ INLINE 的所有尝试都发生在当前进程里，不做持久化，不会跨�
 
 * 没有注册对应的 `RecoveryHandler`
 * 没有启动 `RetryLeaseWorker`
-* `RecoverySpec.handlerTaskType` 和 handler 的 `taskName()` 没对上
+* `RecoverySpec.taskType` 和 handler 的 `taskName()` 没对上
 * 你的 lease backend 其实不具备 `LeaseRuntimeClient` 运行时能力
 
 ### `Accepted` 和 `Completed` 的区别是什么？
