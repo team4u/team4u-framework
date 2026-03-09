@@ -1,10 +1,11 @@
 package com.team4u.framework.retry.recovery;
 
-import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.backend.RetryCloseOutcome;
 import com.team4u.framework.retry.backend.RetryCloseReason;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
+import com.team4u.framework.retry.policy.RetryPolicy;
 import lombok.AccessLevel;
+import lombok.Data;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 
@@ -61,8 +62,7 @@ public class RetryRecoveryPlanner {
      * <p>
      * 封装了重试决策的结果，包括是否继续重试、重试延迟、任务关闭原因等信息。
      */
-    @Getter
-    @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
+    @Data
     public static class Plan {
         /**
          * 重试延迟时间（毫秒）

@@ -7,13 +7,13 @@ import com.team4u.framework.lease.model.LeaseCloseRequest;
 import com.team4u.framework.lease.model.LeaseReleaseRequest;
 import com.team4u.framework.lease.runtime.LeaseExecutionContext;
 import com.team4u.framework.lease.runtime.LeaseWorker;
-import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.backend.RetryBackend;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.backend.serialize.HutoolRetryTaskSnapshotSerializer;
 import com.team4u.framework.retry.backend.serialize.RetryTaskSnapshotSerializer;
-import com.team4u.framework.retry.policy.NamedRetryPolicy;
-import com.team4u.framework.retry.policy.RetryPolicyRegistry;
+import com.team4u.framework.retry.policy.RetryPolicyFactory;
+import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RetryRecoveryPlanner;
 import lombok.Getter;
@@ -31,18 +31,18 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
 
     private final RecoveryHandler delegate;
     private final RetryBackend retryBackend;
-    private final RetryPolicyRegistry policyRegistry;
+    private final RetryPolicyFactoryRegistry policyRegistry;
     private final RetryRecoveryPlanner planner = new RetryRecoveryPlanner();
 
     @Setter
     private RetryTaskSnapshotSerializer snapshotSerializer = HutoolRetryTaskSnapshotSerializer.INSTANCE;
 
     public RecoveryHandlerLeaseTaskHandlerAdapter(RecoveryHandler delegate, RetryBackend retryBackend) {
-        this(delegate, retryBackend, RetryPolicyRegistry.global());
+        this(delegate, retryBackend, RetryPolicyFactoryRegistry.global());
     }
 
     public RecoveryHandlerLeaseTaskHandlerAdapter(RecoveryHandler delegate, RetryBackend retryBackend,
-                                                  RetryPolicyRegistry policyRegistry) {
+                                                  RetryPolicyFactoryRegistry policyRegistry) {
         this.delegate = delegate;
         this.retryBackend = retryBackend;
         this.policyRegistry = policyRegistry;
@@ -101,9 +101,9 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
 
     private RetryPolicy resolvePolicy(RetryTaskSnapshot snapshot) {
         if (snapshot.getPolicyKey() != null) {
-            NamedRetryPolicy namedPolicy = policyRegistry.get(snapshot.getPolicyKey()).orElse(null);
+            RetryPolicyFactory namedPolicy = policyRegistry.get(snapshot.getPolicyKey()).orElse(null);
             if (namedPolicy != null) {
-                return namedPolicy.getPolicy();
+                return namedPolicy.create();
             }
         }
         // 快照中有 maxAttempts 时恢复前台传入的配置，否则使用默认策略

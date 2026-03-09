@@ -1,6 +1,7 @@
 package com.team4u.framework.retry;
 
 import com.team4u.framework.retry.exception.RetrySerializationException;
+import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.proxy.serialize.HutoolRetryContextSerializer;
 import com.team4u.framework.retry.proxy.serialize.RetryIgnore;
 import org.junit.Assert;

@@ -155,9 +155,9 @@ String result = retryer.execute(
 ### 1）同步重试：最小示例
 
 ```java
-import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.Retryer;
-import com.team4u.framework.retry.Backoffs;
+import com.team4u.framework.retry.backoff.Backoffs;
 
 RetryPolicy policy = RetryPolicy.builder()
         .maxAttempts(3)
@@ -181,9 +181,9 @@ String result = retryer.execute(() -> {
 ### 2）异步重试：最小示例
 
 ```java
-import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.Retryer;
-import com.team4u.framework.retry.Backoffs;
+import com.team4u.framework.retry.backoff.Backoffs;
 
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
@@ -292,7 +292,7 @@ RetryHandoffException ex){
 
 * `maxAttempts(int)`：总尝试次数，包含第一次调用
 * `localAttempts(int)`：持久化模式下，当前进程内最多尝试多少次
-* `infiniteAttempts()`：无限重试
+* `maxAttempts(-1)`：无限重试
 * `backoff(Backoff)`：退避策略
 * `retryOn(...)`：仅对指定异常重试
 * `abortOn(...)`：命中后立即终止
@@ -889,9 +889,9 @@ public class PayNotifyRecoveryHandler implements RecoveryHandler {
 
 ```java
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
-import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.Retryer;
-import com.team4u.framework.retry.Backoff;
+import com.team4u.framework.retry.backoff.Backoff;
 import com.team4u.framework.retry.integration.lease.LeaseRetryBackend;
 import com.team4u.framework.retry.integration.lease.RetryLeaseWorker;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;

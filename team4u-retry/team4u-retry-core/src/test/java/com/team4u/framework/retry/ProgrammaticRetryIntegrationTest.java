@@ -2,6 +2,8 @@ package com.team4u.framework.retry;
 
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import com.team4u.framework.retry.concurrent.RetryExecutorManager;
+import com.team4u.framework.retry.exception.RetryHandoffException;
+import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import org.junit.Assert;

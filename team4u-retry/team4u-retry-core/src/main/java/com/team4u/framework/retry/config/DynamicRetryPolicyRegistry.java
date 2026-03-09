@@ -2,7 +2,7 @@ package com.team4u.framework.retry.config;
 
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
-import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.policy.RetryPolicy;
 import lombok.Getter;
 import lombok.Setter;
 

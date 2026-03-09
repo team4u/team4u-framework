@@ -1,12 +1,12 @@
 package com.team4u.framework.retry.proxy;
 
-import com.team4u.framework.retry.Backoffs;
+import com.team4u.framework.retry.backoff.Backoffs;
 import com.team4u.framework.proxy.ProxyBuilder;
-import com.team4u.framework.retry.RetryHandoffException;
-import com.team4u.framework.retry.RetryPolicy;
+import com.team4u.framework.retry.exception.RetryHandoffException;
+import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.TestLeaseBackend;
-import com.team4u.framework.retry.policy.NamedRetryPolicy;
-import com.team4u.framework.retry.policy.RetryPolicyRegistry;
+import com.team4u.framework.retry.policy.RetryPolicyFactory;
+import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
 import com.team4u.framework.retry.proxy.serialize.RetryIgnore;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import com.team4u.framework.retry.recovery.RetryTaskTypes;
@@ -29,16 +29,16 @@ public class RetryInterceptorTest {
 
     @Before
     public void setup() {
-        RetryPolicyRegistry.global().unregisterAll();
+        RetryPolicyFactoryRegistry.global().unregisterAll();
         RecoveryHandlerRegistry.global().unregisterAll();
-        RetryPolicyRegistry.global().register(new NamedRetryPolicy() {
+        RetryPolicyFactoryRegistry.global().register(new RetryPolicyFactory() {
             @Override
             public String key() {
                 return "rpc-policy";
             }
 
             @Override
-            public RetryPolicy getPolicy() {
+            public RetryPolicy create() {
                 return RetryPolicy.builder()
                         .maxAttempts(4)
                         .backoff(Backoffs.fixed(5))
@@ -46,14 +46,14 @@ public class RetryInterceptorTest {
                         .build();
             }
         });
-        RetryPolicyRegistry.global().register(new NamedRetryPolicy() {
+        RetryPolicyFactoryRegistry.global().register(new RetryPolicyFactory() {
             @Override
             public String key() {
                 return "ignore-policy";
             }
 
             @Override
-            public RetryPolicy getPolicy() {
+            public RetryPolicy create() {
                 return RetryPolicy.builder()
                         .maxAttempts(2)
                         .localAttempts(1)

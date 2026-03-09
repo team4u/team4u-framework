@@ -1,4 +1,4 @@
-package com.team4u.framework.retry;
+package com.team4u.framework.retry.exception;
 
 /**
  * 重试任务移交异常

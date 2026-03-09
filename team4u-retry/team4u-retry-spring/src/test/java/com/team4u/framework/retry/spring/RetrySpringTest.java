@@ -1,9 +1,9 @@
 package com.team4u.framework.retry.spring;
 
-import com.team4u.framework.retry.Backoffs;
-import com.team4u.framework.retry.RetryPolicy;
-import com.team4u.framework.retry.policy.NamedRetryPolicy;
-import com.team4u.framework.retry.policy.RetryPolicyRegistry;
+import com.team4u.framework.retry.backoff.Backoffs;
+import com.team4u.framework.retry.policy.RetryPolicy;
+import com.team4u.framework.retry.policy.RetryPolicyFactory;
+import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
 import com.team4u.framework.retry.proxy.Retryable;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import com.team4u.framework.retry.recovery.RetryTaskTypes;
@@ -21,16 +21,16 @@ public class RetrySpringTest {
 
     @Before
     public void setup() {
-        RetryPolicyRegistry.global().unregisterAll();
+        RetryPolicyFactoryRegistry.global().unregisterAll();
         RecoveryHandlerRegistry.global().unregisterAll();
-        RetryPolicyRegistry.global().register(new NamedRetryPolicy() {
+        RetryPolicyFactoryRegistry.global().register(new RetryPolicyFactory() {
             @Override
             public String key() {
                 return "test-policy";
             }
 
             @Override
-            public RetryPolicy getPolicy() {
+            public RetryPolicy create() {
                 return RetryPolicy.builder()
                         .maxAttempts(3)
                         .backoff(Backoffs.fixed(1))

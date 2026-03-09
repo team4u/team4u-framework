@@ -1,7 +1,6 @@
 package com.team4u.framework.retry.backoff;
 
 import com.team4u.framework.policy.api.KeyedPolicy;
-import com.team4u.framework.retry.Backoff;
 import com.team4u.framework.retry.config.BackoffConfig;
 
 /**
@@ -10,7 +9,7 @@ import com.team4u.framework.retry.config.BackoffConfig;
  * @author jay.wu
  */
 public interface BackoffFactory extends KeyedPolicy<String> {
-    
+
     /**
      * 根据配置创建退避策略实例
      *

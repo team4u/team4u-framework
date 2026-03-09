@@ -1,6 +1,9 @@
 package com.team4u.framework.retry;
 
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
+import com.team4u.framework.retry.backoff.Backoffs;
+import com.team4u.framework.retry.exception.RetryHandoffException;
+import com.team4u.framework.retry.policy.RetryPolicy;
 import org.junit.Assert;
 import org.junit.Test;
 
