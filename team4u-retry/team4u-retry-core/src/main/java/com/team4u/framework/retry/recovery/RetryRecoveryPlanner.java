@@ -61,14 +61,6 @@ public class RetryRecoveryPlanner {
      * @param cause            失败异常
      * @return 如果应结束则返回关闭原因，否则返回 null 表示可继续重试
      */
-    /**
-     * 根据策略对失败原因进行分类，判断是否应结束重试
-     *
-     * @param policy           重试策略
-     * @param executedAttempts 已执行的尝试次数
-     * @param cause            失败异常
-     * @return 如果应结束则返回关闭原因，否则返回 null 表示可继续重试
-     */
     public RetryCloseReason classifyCloseReason(RetryPolicy policy, int executedAttempts, Throwable cause) {
         // 关键系统异常或中断，立即终止重试并标记为策略中断
         if (cause instanceof Error || cause instanceof InterruptedException) {
@@ -107,12 +99,6 @@ public class RetryRecoveryPlanner {
          * 失败提示信息
          */
         private final String errorMessage;
-        private Plan(Type type, long delayMillis, RetryCloseReason reason, String errorMessage) {
-            this.type = type;
-            this.delayMillis = delayMillis;
-            this.reason = reason;
-            this.errorMessage = errorMessage;
-        }
 
         public static Plan retryInMemory(long delayMillis) {
             return new Plan(Type.RETRY_IN_MEMORY, delayMillis, null, null);
@@ -124,22 +110,6 @@ public class RetryRecoveryPlanner {
 
         public static Plan close(RetryCloseReason reason, String errorMessage) {
             return new Plan(Type.CLOSE, 0, reason, errorMessage);
-        }
-
-        public Type getType() {
-            return type;
-        }
-
-        public long getDelayMillis() {
-            return delayMillis;
-        }
-
-        public RetryCloseReason getReason() {
-            return reason;
-        }
-
-        public String getErrorMessage() {
-            return errorMessage;
         }
 
         public enum Type {
