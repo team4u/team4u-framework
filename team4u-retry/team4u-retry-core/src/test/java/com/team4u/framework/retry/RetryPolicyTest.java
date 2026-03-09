@@ -39,12 +39,12 @@ public class RetryPolicyTest {
     }
 
     @Test
-    public void testLocalAttemptsValidation() {
+    public void testForegroundAttemptsValidation() {
         try {
-            RetryPolicy.builder().maxAttempts(3).localAttempts(4).build();
+            RetryPolicy.builder().maxAttempts(3).foregroundAttempts(4).build();
             Assert.fail("Expected IllegalArgumentException");
         } catch (IllegalArgumentException e) {
-            Assert.assertTrue(e.getMessage().contains("localAttempts"));
+            Assert.assertTrue(e.getMessage().contains("foreground"));
         }
     }
 

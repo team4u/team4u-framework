@@ -21,4 +21,14 @@ public interface RetryContextSerializer {
      * @throws RetrySerializationException 遇到无法处理的序列化错误时抛出
      */
     String serialize(Parameter parameter, Object arg) throws RetrySerializationException;
+
+    /**
+     * 将序列化的 JSON 字符串还原为对象
+     *
+     * @param type 目标参数类型
+     * @param json 序列化后的字符串快照
+     * @return 反序列化后的对象实例
+     * @throws RetrySerializationException 遇到无法处理的序列化错误时抛出
+     */
+    Object deserialize(Class<?> type, String json) throws RetrySerializationException;
 }
