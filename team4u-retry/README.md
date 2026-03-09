@@ -359,7 +359,6 @@ RetryPolicy defaultPolicy = RetryPolicy.builder()
 // managed client
 ManagedRetryClient managedRetryClient = DefaultManagedRetryClient.builder()
         .store(store)
-        .recoveryRegistry(registry)
         .coordinator(store)
         .defaultPolicy(defaultPolicy)
         .build();
@@ -689,7 +688,6 @@ public class RetryManagedConfiguration {
         return DefaultManagedRetryClient.builder()
                 .store(store)
                 .coordinator(store)
-                .recoveryRegistry(RecoveryHandlerRegistry.global())
                 .defaultPolicy(defaultPolicy)
                 .build();
     }
