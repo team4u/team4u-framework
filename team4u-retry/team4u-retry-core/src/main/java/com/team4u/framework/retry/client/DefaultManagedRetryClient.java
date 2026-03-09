@@ -56,20 +56,52 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
 
     @Override
     public <T> ManagedSubmitResult<T> submit(RetryTaskSpec<T> spec) {
-        // 确定最终使用的重试策略
-        RetryPolicy policy = Optional.ofNullable(spec.getPolicy()).orElse(defaultPolicy);
+        // 1. 策略与规格校验
+        RetryPolicy policy = resolvePolicy(spec);
+        ManagedSubmitResult<T> validationResult = validateSpec(spec, policy);
+        if (validationResult != null) {
+            return validationResult;
+        }
+
+        // 2. 初始化并持久化重试记录
+        RetryRecord record;
+        try {
+            record = createAndPersistRecord(spec, policy);
+        } catch (Exception e) {
+            return new ManagedSubmitResult.Rejected<>("持久化初始重试意图失败: " + e.getMessage());
+        }
+
+        // 3. 执行重试逻辑（前台尝试或直接后台调度）
+        return processRetry(spec, record, policy);
+    }
+
+    /**
+     * 解析最终使用的重试策略。
+     */
+    private RetryPolicy resolvePolicy(RetryTaskSpec<?> spec) {
+        return Optional.ofNullable(spec.getPolicy()).orElse(defaultPolicy);
+    }
+
+    /**
+     * 校验任务规格是否符合托管模式要求。
+     */
+    private <T> ManagedSubmitResult<T> validateSpec(RetryTaskSpec<T> spec, RetryPolicy policy) {
         if (policy == null || policy.getForegroundAttempts() == null) {
             return new ManagedSubmitResult.Rejected<>(
                     "托管模式要求必须显式配置包含 foregroundAttempts 属性的重试策略");
         }
 
-        // 校验恢复规范，确保任务失败后有明确的处理指向
         if (spec.getRecovery() == null || spec.getRecovery().getTaskName() == null) {
             return new ManagedSubmitResult.Rejected<>(
                     "托管模式要求必须提供包含有效任务名称的 RecoverySpec 对象");
         }
+        return null;
+    }
 
-        // 创建持久化请求记录
+    /**
+     * 创建并持久化初始重试记录。
+     */
+    private RetryRecord createAndPersistRecord(RetryTaskSpec<?> spec, RetryPolicy policy) throws Exception {
         RetryRequest request = RetryRequest.builder()
                 .taskName(spec.getTaskName())
                 .idempotencyKey(spec.getIdempotencyKey())
@@ -78,105 +110,154 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
                 .createdAt(Instant.now())
                 .build();
 
-        // 初始化重试状态
-        RetryState initialState = RetryState.builder()
+        RetryState state = RetryState.builder()
                 .attempts(0)
                 .status(RetryStatus.PREPARED)
                 .nextRunAt(Instant.now())
                 .build();
 
-        // 组合成完整的重试记录
-        RetryRecord initialRecord = RetryRecord.builder()
+        RetryRecord record = RetryRecord.builder()
                 .request(request)
-                .state(initialState)
+                .state(state)
                 .build();
 
-        TaskHandle handle;
-        try {
-            // 将重试意图持久化到存储中
-            handle = store.create(initialRecord);
-            initialRecord.setTaskId(handle.getTaskId());
-            request.setTaskId(handle.getTaskId());
-        } catch (Exception e) {
-            return new ManagedSubmitResult.Rejected<>("持久化初始重试意图失败: " + e.getMessage());
-        }
+        TaskHandle handle = store.create(record);
+        record.setTaskId(handle.getTaskId());
+        request.setTaskId(handle.getTaskId());
+        return record;
+    }
 
+    /**
+     * 处理具体的重试执行流程。
+     */
+    private <T> ManagedSubmitResult<T> processRetry(RetryTaskSpec<T> spec, RetryRecord record, RetryPolicy policy) {
         int foregroundAttempts = policy.getForegroundAttempts();
 
-        // 判断是否需要立即进行后台调度
+        // 如果没有前台重试预算，直接进入后台调度
         if (foregroundAttempts <= 0) {
-            // 如果前台重试次数为 0，则直接移交给协调中心进行后台处理
-            coordinator.schedule(initialRecord, 0);
-            return new ManagedSubmitResult.Accepted<>(handle.getTaskId(), RetryStatus.SCHEDULED.name(), Instant.now());
+            return scheduleToBackground(record, 0);
         }
 
-        // 开始前台重试逻辑
+        // 进入前台执行循环
+        return executeInForeground(spec, record, policy);
+    }
+
+    /**
+     * 在当前线程（前台）执行重试循环。
+     */
+    private <T> ManagedSubmitResult<T> executeInForeground(RetryTaskSpec<T> spec, RetryRecord record, RetryPolicy policy) {
+        int foregroundAttempts = policy.getForegroundAttempts();
         int attempts = 0;
+
         while (true) {
             attempts++;
-            AttemptRecord attemptRecord = AttemptRecord.builder()
-                    .attemptAt(Instant.now())
-                    .workerId("foreground") // 标记为前台执行节点
-                    .build();
+            AttemptRecord attemptRecord = createAttemptRecord();
 
             try {
-                // 更新存储状态为执行中
-                store.markRunning(handle.getTaskId(), attemptRecord);
-                // 调用实际业务逻辑
+                store.markRunning(record.getTaskId(), attemptRecord);
+
                 T result = spec.getExecutor().call();
 
-                // 执行成功，标记任务完成并返回结果
-                store.markSucceeded(handle.getTaskId(), SuccessRecord.builder().succeededAt(Instant.now()).build());
+                handleSuccess(record.getTaskId());
                 return new ManagedSubmitResult.Completed<>(result);
 
             } catch (Throwable ex) {
-                // 异常处理与重试决策
                 Throwable cause = normalize(ex);
                 boolean canRetry = policy.canRetry(attempts, cause);
+                FailureRecord failureRecord = createFailureRecord(cause);
 
-                FailureRecord failureRecord = FailureRecord.builder()
-                        .errorCode(cause.getClass().getSimpleName())
-                        .errorMessage(cause.getMessage() != null ? cause.getMessage() : "")
-                        .failedAt(Instant.now())
-                        .build();
-
-                // 更新内存中的状态对象
-                initialState.setAttempts(attempts);
-                initialState.setLastErrorCode(failureRecord.getErrorCode());
-                initialState.setLastErrorMessage(failureRecord.getErrorMessage());
+                // 更新记录中的状态信息
+                updateRecordState(record, attempts, failureRecord);
 
                 if (!canRetry) {
-                    // 如果达到策略限制或遇到不可重试异常，标记最终失败
-                    store.markFailed(handle.getTaskId(), failureRecord);
+                    handleFinalFailure(record.getTaskId(), failureRecord);
                     return new ManagedSubmitResult.Failed<>(cause);
                 }
 
-                // 判断是否仍处于前台重试预算内
                 if (attempts < foregroundAttempts) {
-                    long delayMillis = policy.getDelayMillis(attempts);
-                    // 在存储中更新下一次尝试时间
-                    store.scheduleNext(handle.getTaskId(), attemptRecord, Instant.now().plusMillis(delayMillis),
-                            failureRecord);
-                    try {
-                        // 在当前线程进行退避休眠
-                        sleepQuietly(delayMillis);
-                    } catch (InterruptedException ie) {
-                        return new ManagedSubmitResult.Failed<>(ie);
+                    // 继续前台重试
+                    if (!handleForegroundBackoff(record.getTaskId(), attemptRecord, attempts, policy, failureRecord)) {
+                        return new ManagedSubmitResult.Failed<>(new InterruptedException("前台退避休眠被中断"));
                     }
                 } else {
-                    // 前台预算已耗尽，但策略允许继续重试，此时移交给后台调度系统
-                    long delayMillis = policy.getDelayMillis(attempts);
-                    Instant nextRunAt = Instant.now().plusMillis(delayMillis);
-                    store.scheduleNext(handle.getTaskId(), attemptRecord, nextRunAt, failureRecord);
-                    initialState.setStatus(RetryStatus.SCHEDULED);
-                    initialState.setNextRunAt(nextRunAt);
-
-                    coordinator.schedule(initialRecord, delayMillis);
-                    return new ManagedSubmitResult.Accepted<>(handle.getTaskId(), RetryStatus.SCHEDULED.name(),
-                            nextRunAt);
+                    // 前台预算耗尽，移交后台
+                    return handleForegroundExhausted(record, attemptRecord, attempts, policy, failureRecord);
                 }
             }
         }
+    }
+
+    private AttemptRecord createAttemptRecord() {
+        return AttemptRecord.builder()
+                .attemptAt(Instant.now())
+                .workerId("foreground")
+                .build();
+    }
+
+    private FailureRecord createFailureRecord(Throwable cause) {
+        return FailureRecord.builder()
+                .errorCode(cause.getClass().getSimpleName())
+                .errorMessage(cause.getMessage() != null ? cause.getMessage() : "")
+                .failedAt(Instant.now())
+                .build();
+    }
+
+    private void updateRecordState(RetryRecord record, int attempts, FailureRecord failureRecord) {
+        RetryState state = record.getState();
+        state.setAttempts(attempts);
+        state.setLastErrorCode(failureRecord.getErrorCode());
+        state.setLastErrorMessage(failureRecord.getErrorMessage());
+    }
+
+    private void handleSuccess(String taskId) {
+        store.markSucceeded(taskId, SuccessRecord.builder().succeededAt(Instant.now()).build());
+    }
+
+    private void handleFinalFailure(String taskId, FailureRecord failureRecord) {
+        store.markFailed(taskId, failureRecord);
+    }
+
+    /**
+     * 处理前台重试时的退避逻辑。
+     *
+     * @return true 表示休眠成功，false 表示休眠被中断
+     */
+    private boolean handleForegroundBackoff(String taskId, AttemptRecord attempt, int attempts, RetryPolicy policy, FailureRecord failure) {
+        long delayMillis = policy.getDelayMillis(attempts);
+        store.scheduleNext(taskId, attempt, Instant.now().plusMillis(delayMillis), failure);
+        try {
+            sleepQuietly(delayMillis);
+            return true;
+        } catch (InterruptedException ie) {
+            return false;
+        }
+    }
+
+    /**
+     * 处理前台预算耗尽后的逻辑，进行后台调度移交。
+     */
+    private <T> ManagedSubmitResult<T> handleForegroundExhausted(RetryRecord record, AttemptRecord attempt, int attempts, RetryPolicy policy, FailureRecord failure) {
+        long delayMillis = policy.getDelayMillis(attempts);
+        Instant nextRunAt = Instant.now().plusMillis(delayMillis);
+
+        store.scheduleNext(record.getTaskId(), attempt, nextRunAt, failure);
+
+        record.getState().setStatus(RetryStatus.SCHEDULED);
+        record.getState().setNextRunAt(nextRunAt);
+
+        return scheduleToBackground(record, delayMillis);
+    }
+
+    /**
+     * 封装后台调度逻辑。
+     */
+    private <T> ManagedSubmitResult<T> scheduleToBackground(RetryRecord record, long delayMillis) {
+        coordinator.schedule(record, delayMillis);
+        return new ManagedSubmitResult.Accepted<>(
+                record.getTaskId(),
+                RetryStatus.SCHEDULED.name(),
+                record.getState().getNextRunAt()
+        );
     }
 
     /**
