@@ -90,7 +90,19 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
                     "MANAGED mode requires a retry policy with foregroundAttempts explicitly configured");
         }
 
-        if (spec.getRecovery() == null || spec.getRecovery().getTaskName() == null) {
+        if (isBlank(spec.getTaskName())) {
+            return new ManagedSubmitResult.Rejected<>(
+                    "MANAGED mode requires RetryTaskSpec.taskName");
+        }
+        if (isBlank(spec.getIdempotencyKey())) {
+            return new ManagedSubmitResult.Rejected<>(
+                    "MANAGED mode requires RetryTaskSpec.idempotencyKey");
+        }
+        if (spec.getExecutor() == null) {
+            return new ManagedSubmitResult.Rejected<>(
+                    "MANAGED mode requires RetryTaskSpec.executor");
+        }
+        if (spec.getRecovery() == null || isBlank(spec.getRecovery().getTaskName())) {
             return new ManagedSubmitResult.Rejected<>(
                     "MANAGED mode requires a RecoverySpec with a valid task name");
         }
@@ -130,14 +142,6 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
      * 处理具体的重试执行流程。
      */
     private <T> ManagedSubmitResult<T> processRetry(RetryTaskSpec<T> spec, RetryRecord record, RetryPolicy policy) {
-        int foregroundAttempts = policy.getForegroundAttempts();
-
-        // 如果没有前台重试预算，直接进入后台调度
-        if (foregroundAttempts <= 0) {
-            return scheduleToBackground(record, 0);
-        }
-
-        // 进入前台执行循环
         return executeInForeground(spec, record, policy);
     }
 
@@ -162,6 +166,9 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
 
             } catch (Throwable ex) {
                 Throwable cause = normalize(ex);
+                if (cause instanceof Error) {
+                    throw (Error) cause;
+                }
                 boolean canRetry = policy.canRetry(attempts, cause);
                 FailureRecord failureRecord = createFailureRecord(cause);
 
@@ -175,8 +182,13 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
 
                 if (attempts < foregroundAttempts) {
                     // 继续前台重试
-                    if (!handleForegroundBackoff(record.getTaskId(), attemptRecord, attempts, policy, failureRecord)) {
-                        return new ManagedSubmitResult.Failed<>(new InterruptedException("Foreground backoff sleep was interrupted"));
+                    InterruptedException interrupted = handleForegroundBackoff(
+                            record.getTaskId(), attemptRecord, attempts, policy, failureRecord);
+                    if (interrupted != null) {
+                        FailureRecord interruptedFailure = createFailureRecord(interrupted);
+                        updateRecordState(record, attempts, interruptedFailure);
+                        handleFinalFailure(record.getTaskId(), interruptedFailure);
+                        return new ManagedSubmitResult.Failed<>(interrupted);
                     }
                 } else {
                     // 前台预算耗尽，移交后台
@@ -218,17 +230,23 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
 
     /**
      * 处理前台重试时的退避逻辑。
-     *
-     * @return true 表示休眠成功，false 表示休眠被中断
      */
-    private boolean handleForegroundBackoff(String taskId, AttemptRecord attempt, int attempts, RetryPolicy policy, FailureRecord failure) {
+    private InterruptedException handleForegroundBackoff(
+            String taskId,
+            AttemptRecord attempt,
+            int attempts,
+            RetryPolicy policy,
+            FailureRecord failure) {
         long delayMillis = policy.getDelayMillis(attempts);
-        store.scheduleNext(taskId, attempt, Instant.now().plusMillis(delayMillis), failure);
+        Instant nextRunAt = Instant.now().plusMillis(delayMillis);
+        store.scheduleNext(taskId, attempt, nextRunAt, failure);
         try {
             sleepQuietly(delayMillis);
-            return true;
+            return null;
         } catch (InterruptedException ie) {
-            return false;
+            InterruptedException interrupted = new InterruptedException("Foreground backoff sleep was interrupted");
+            interrupted.initCause(ie);
+            return interrupted;
         }
     }
 
@@ -289,5 +307,9 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
             Thread.currentThread().interrupt();
         }
         return cause;
+    }
+
+    private boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 }

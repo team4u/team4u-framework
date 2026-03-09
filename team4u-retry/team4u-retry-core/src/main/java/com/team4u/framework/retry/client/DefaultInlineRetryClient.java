@@ -136,6 +136,10 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
             CompletableFuture<T> resultFuture,
             Throwable ex) {
         Throwable cause = normalize(ex);
+        if (cause instanceof Error) {
+            resultFuture.completeExceptionally(cause);
+            return;
+        }
 
         // 如果重试策略判断不再重试，则将异常传播到最终 Future 中
         if (!policy.canRetry(attempts, cause)) {

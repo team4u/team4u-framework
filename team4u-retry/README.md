@@ -285,6 +285,7 @@ MANAGED 模式不是“把 INLINE 再包一层”，而是一套单独的运行�
     ↓
 成功 -> Completed
 不可再试 -> Failed
+前台 backoff 等待被中断 -> Failed
 还能再试但前台预算耗尽 -> Accepted，并交给 coordinator 调度后台
 ```
 
@@ -493,10 +494,20 @@ RetryTaskSpec<String> spec = RetryTaskSpec.<String>builder()
 ### 必须显式配置 `foregroundAttempts`
 
 MANAGED 下如果策略没有显式设置 `foregroundAttempts`，提交会直接 `Rejected`。
+当前也不支持把它设置为 `0`；如需“直接后台”，请在调用侧显式走异步托管流程，而不是依赖特殊值。
+
+### 必须提供完整的 `RetryTaskSpec`
+
+以下字段在提交入口就会校验，不会等到前台执行时再报错：
+
+* `taskName`
+* `idempotencyKey`
+* `executor`
+* `recovery.taskName`
 
 ### 必须提供有效的 `RecoverySpec.taskName`
 
-如果没有 `recovery`，或者 `taskName` 为 `null`，也会被 `Rejected`。
+如果没有 `recovery`，或者 `taskName` 为空，也会被 `Rejected`。
 
 ### `foregroundAttempts` 不能大于 `maxAttempts`
 
@@ -823,6 +834,10 @@ INLINE 的所有尝试都发生在当前进程里，不做持久化，不会跨�
 * 恢复处理器是否正确注册
 * Worker 是否启动
 * 任务本身是否仍然满足重试条件
+
+### `Error` 不会进入重试
+
+无论是 `INLINE` 还是 `MANAGED`，像 `OutOfMemoryError` 这类 `Error` 都会直接 fail-fast，不进入重试循环。
 
 ### 非 Spring 场景要自己关注线程池生命周期
 
