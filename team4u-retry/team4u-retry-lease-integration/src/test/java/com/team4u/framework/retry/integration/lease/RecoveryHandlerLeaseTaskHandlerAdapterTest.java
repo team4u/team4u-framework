@@ -7,7 +7,6 @@ import com.team4u.framework.lease.model.LeaseHandle;
 import com.team4u.framework.lease.model.LeaseReleaseRequest;
 import com.team4u.framework.lease.runtime.LeaseExecutionContext;
 import com.team4u.framework.retry.backoff.Backoffs;
-import com.team4u.framework.retry.client.RetryCoordinator;
 import com.team4u.framework.retry.domain.RecoverySpec;
 import com.team4u.framework.retry.domain.store.RetryRequest;
 import com.team4u.framework.retry.domain.store.RetryState;
@@ -30,16 +29,12 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
     public void testFailureUsesRuntimeReleaseWithUpdatedPayload() {
         RetryRecord record = retryRecord();
         TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
-        CountingCoordinator coordinator = new CountingCoordinator();
-        RecoveryHandlerLeaseTaskHandlerAdapter adapter = new RecoveryHandlerLeaseTaskHandlerAdapter(
-                new FailingHandler(),
-                coordinator);
+        RecoveryHandlerLeaseTaskHandlerAdapter adapter = new RecoveryHandlerLeaseTaskHandlerAdapter(new FailingHandler());
         FixedSerializer serializer = new FixedSerializer(record);
         adapter.setSerializer(serializer);
 
         adapter.handle(executionContext(runtimeClient));
 
-        Assert.assertEquals(0, coordinator.scheduleCalls);
         Assert.assertNotNull(runtimeClient.releaseRequest);
         Assert.assertNull(runtimeClient.closeRequest);
         Assert.assertEquals(250L, runtimeClient.releaseRequest.getDelayMillis());
@@ -56,9 +51,8 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
     public void testRecoveryRunsInsideRecoveryExecutionContext() {
         TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
         AtomicBoolean observedRecovering = new AtomicBoolean(false);
-        RecoveryHandlerLeaseTaskHandlerAdapter adapter = new RecoveryHandlerLeaseTaskHandlerAdapter(
-                new InspectingHandler(observedRecovering),
-                new CountingCoordinator());
+        RecoveryHandlerLeaseTaskHandlerAdapter adapter =
+                new RecoveryHandlerLeaseTaskHandlerAdapter(new InspectingHandler(observedRecovering));
         adapter.setSerializer(new FixedSerializer(retryRecord()));
 
         adapter.handle(executionContext(runtimeClient));
@@ -134,15 +128,6 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
         }
     }
 
-    private static class CountingCoordinator implements RetryCoordinator {
-        private int scheduleCalls;
-
-        @Override
-        public void schedule(RetryRecord record, long delayMillis) {
-            scheduleCalls++;
-        }
-    }
-
     private static class FixedSerializer implements RetryRecordSerializer {
         private final RetryRecord record;
         private int serializeCalls;
@@ -164,9 +149,9 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
     }
 
     private static class TrackingRuntimeClient implements LeaseRuntimeClient {
+        private final LeaseRuntimeResult closeResult = LeaseRuntimeResult.APPLIED;
         private LeaseReleaseRequest releaseRequest;
         private LeaseCloseRequest closeRequest;
-        private final LeaseRuntimeResult closeResult = LeaseRuntimeResult.APPLIED;
 
         @Override
         public com.team4u.framework.lease.model.LeaseGrant acquire(

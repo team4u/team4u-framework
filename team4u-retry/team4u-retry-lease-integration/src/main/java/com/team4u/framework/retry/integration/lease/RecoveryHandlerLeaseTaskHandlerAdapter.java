@@ -6,7 +6,6 @@ import com.team4u.framework.lease.handler.LeaseTaskHandler;
 import com.team4u.framework.lease.model.LeaseCloseRequest;
 import com.team4u.framework.lease.model.LeaseReleaseRequest;
 import com.team4u.framework.lease.runtime.LeaseExecutionContext;
-import com.team4u.framework.retry.client.RetryCoordinator;
 import com.team4u.framework.retry.domain.store.RetryStatus;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.recovery.RecoveryContext;
@@ -30,14 +29,12 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
 
     @SuppressWarnings("rawtypes")
     private final RecoveryHandler delegate;
-    private final RetryCoordinator coordinator;
 
     @Setter
     private RetryRecordSerializer serializer = HutoolRetryRecordSerializer.INSTANCE;
 
-    public RecoveryHandlerLeaseTaskHandlerAdapter(RecoveryHandler<?> delegate, RetryCoordinator coordinator) {
+    public RecoveryHandlerLeaseTaskHandlerAdapter(RecoveryHandler<?> delegate) {
         this.delegate = delegate;
-        this.coordinator = coordinator;
     }
 
     @SuppressWarnings("unchecked")
@@ -54,7 +51,6 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
             RecoveryExecutionContext.run(
                     () -> delegate.recover(record.getRequest().getRecovery().getPayload(), recoveryContext));
 
-            // 成功，通过 coordinator 或者直接 close lease（在 worker 里本身就是 lease 上下文，可以直接 close）
             LeaseRuntimeResult result = context.getRuntimeClient().close(
                     context.getHandle(),
                     LeaseCloseRequest.succeeded());
@@ -84,12 +80,13 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
 
             record.getState().setStatus(RetryStatus.SCHEDULED);
             record.getState().setNextRunAt(Instant.now().plusMillis(delayMillis));
+            String serializedRecord = serializer.serialize(record);
 
             LeaseRuntimeResult result = context.getRuntimeClient().release(
                     context.getHandle(),
                     LeaseReleaseRequest.builder()
                             .delayMillis(delayMillis)
-                            .payload(serializer.serialize(record))
+                            .payload(serializedRecord)
                             .errorMessage(cause.getMessage())
                             .build());
             checkResult(result, "release", record.getTaskId());

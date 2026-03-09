@@ -3,7 +3,6 @@ package com.team4u.framework.retry.integration.lease;
 import com.team4u.framework.lease.api.LeaseRuntimeClient;
 import com.team4u.framework.lease.runtime.LeaseWorker;
 import com.team4u.framework.lease.runtime.LeaseWorkerPolicy;
-import com.team4u.framework.retry.client.RetryCoordinator;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 
@@ -15,24 +14,21 @@ public class RetryLeaseWorker implements Runnable, AutoCloseable {
     private final LeaseWorker delegate;
     private final RecoveryHandlerRegistry registry;
 
-    public RetryLeaseWorker(LeaseRuntimeClient runtimeClient, RetryCoordinator coordinator) {
-        this(runtimeClient, coordinator, RecoveryHandlerRegistry.global(), LeaseWorkerPolicy.builder().build());
+    public RetryLeaseWorker(LeaseRuntimeClient runtimeClient) {
+        this(runtimeClient, RecoveryHandlerRegistry.global(), LeaseWorkerPolicy.builder().build());
+    }
+
+    public RetryLeaseWorker(LeaseRuntimeClient runtimeClient, RecoveryHandlerRegistry registry) {
+        this(runtimeClient, registry, LeaseWorkerPolicy.builder().build());
     }
 
     public RetryLeaseWorker(LeaseRuntimeClient runtimeClient,
-                            RetryCoordinator coordinator,
-                            RecoveryHandlerRegistry registry) {
-        this(runtimeClient, coordinator, registry, LeaseWorkerPolicy.builder().build());
-    }
-
-    public RetryLeaseWorker(LeaseRuntimeClient runtimeClient,
-                            RetryCoordinator coordinator,
                             RecoveryHandlerRegistry registry,
                             LeaseWorkerPolicy policy) {
         this.registry = registry;
         this.delegate = new LeaseWorker(
                 runtimeClient,
-                new RecoveryHandlerRegistryLeaseAdapter(coordinator, registry, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE),
+                new RecoveryHandlerRegistryLeaseAdapter(registry, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE),
                 policy);
     }
 

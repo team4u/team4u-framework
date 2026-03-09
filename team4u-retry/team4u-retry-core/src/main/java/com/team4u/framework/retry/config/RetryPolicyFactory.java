@@ -27,8 +27,8 @@ public class RetryPolicyFactory {
                 .maxAttempts(config.getMaxAttempts())
                 .condition(config.getCondition());
 
-        if (config.getLocalAttempts() != null) {
-            builder.foregroundAttempts(config.getLocalAttempts());
+        if (config.getForegroundAttempts() != null) {
+            builder.foregroundAttempts(config.getForegroundAttempts());
         }
 
         BackoffConfig backoffCfg = config.getBackoff();

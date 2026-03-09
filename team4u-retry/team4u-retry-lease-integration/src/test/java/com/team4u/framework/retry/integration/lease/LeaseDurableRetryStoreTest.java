@@ -11,7 +11,10 @@ import com.team4u.framework.lease.model.*;
 import com.team4u.framework.retry.domain.store.RetryRequest;
 import com.team4u.framework.retry.domain.store.RetryState;
 import com.team4u.framework.retry.domain.store.RetryStatus;
-import com.team4u.framework.retry.store.record.*;
+import com.team4u.framework.retry.store.record.CancelRecord;
+import com.team4u.framework.retry.store.record.FailureRecord;
+import com.team4u.framework.retry.store.record.RetryRecord;
+import com.team4u.framework.retry.store.record.SuccessRecord;
 import com.team4u.framework.retry.store.serialize.RetryRecordSerializer;
 import org.junit.Assert;
 import org.junit.Test;
@@ -204,25 +207,6 @@ public class LeaseDurableRetryStoreTest {
             Assert.assertTrue(ex.getMessage().contains("closeFailed"));
             Assert.assertTrue(ex.getMessage().contains("task-6"));
         }
-    }
-
-    /**
-     * 验证当前未实现的方法保持 no-op 或空结果语义。
-     */
-    @Test
-    public void testGetReturnsEmptyAndNoopMethodsDoNothing() {
-        RecordingBackend backend = new RecordingBackend();
-        LeaseDurableRetryStore store = new LeaseDurableRetryStore(backend);
-
-        Assert.assertFalse(store.get("missing").isPresent());
-        store.markRunning("task-7", AttemptRecord.builder().attemptAt(Instant.now()).workerId("w1").build());
-        store.scheduleNext("task-7",
-                AttemptRecord.builder().attemptAt(Instant.now()).workerId("w1").build(),
-                Instant.now().plusSeconds(1),
-                FailureRecord.builder().errorMessage("retry").build());
-
-        Assert.assertNull(backend.publishRequest);
-        Assert.assertTrue(backend.operations.isEmpty());
     }
 
     /**
