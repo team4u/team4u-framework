@@ -10,6 +10,8 @@ import com.team4u.framework.retry.policy.RetryPolicyRegistry;
 import com.team4u.framework.retry.proxy.serialize.RetryIgnore;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import com.team4u.framework.retry.recovery.RetryTaskTypes;
+import com.team4u.framework.retry.backend.RetryCloseRequest;
+import com.team4u.framework.retry.backend.RetryTaskSnapshot;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -197,13 +199,13 @@ public class RetryInterceptorTest {
         private String submittedPayload;
 
         @Override
-        public void prepare(com.team4u.framework.retry.backend.RetryTaskSnapshot snapshot) {
+        public void prepare(RetryTaskSnapshot snapshot) {
             this.submittedPayload = cn.hutool.json.JSONUtil.toJsonStr(snapshot);
             snapshot.setTaskId("intent");
         }
 
         @Override
-        public void complete(String taskId) {
+        public void close(String taskId, RetryCloseRequest request) {
         }
 
         @Override

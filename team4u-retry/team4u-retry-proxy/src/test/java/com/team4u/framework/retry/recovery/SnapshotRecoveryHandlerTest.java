@@ -4,8 +4,9 @@ import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.proxy.ProxyBuilder;
 import com.team4u.framework.retry.RetryPolicy;
 import com.team4u.framework.retry.TestLeaseBackend;
+import com.team4u.framework.retry.backend.RetryCloseRequest;
+import com.team4u.framework.retry.backend.RetryCloseRequest;
 import com.team4u.framework.retry.backend.RetryTaskSnapshot;
-import com.team4u.framework.retry.backend.serialize.HutoolRetryTaskSnapshotSerializer;
 import com.team4u.framework.retry.policy.NamedRetryPolicy;
 import com.team4u.framework.retry.policy.RetryPolicyRegistry;
 import com.team4u.framework.retry.proxy.RetryInterceptor;
@@ -71,7 +72,7 @@ public class SnapshotRecoveryHandlerTest {
         snapshot.setArgJsonValues(Arrays.asList("\"payload\"", "3"));
 
         SnapshotRecoveryHandler handler = new SnapshotRecoveryHandler("recover-task");
-        handler.recover(HutoolRetryTaskSnapshotSerializer.INSTANCE.serialize(snapshot));
+        handler.recover(snapshot);
 
         RecoveryServiceImpl impl = (RecoveryServiceImpl) target;
         Assert.assertEquals(1, impl.invokeCount.get());
@@ -115,7 +116,7 @@ public class SnapshotRecoveryHandlerTest {
         }
 
         @Override
-        public void complete(String taskId) {
+        public void close(String taskId, RetryCloseRequest request) {
         }
     }
 }

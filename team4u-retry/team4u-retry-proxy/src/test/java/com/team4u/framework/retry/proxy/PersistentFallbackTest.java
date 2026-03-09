@@ -48,7 +48,7 @@ public class PersistentFallbackTest {
             }
 
             @Override
-            public void complete(String taskId) {
+            public void close(String taskId, com.team4u.framework.retry.backend.RetryCloseRequest request) {
             }
 
             @Override
