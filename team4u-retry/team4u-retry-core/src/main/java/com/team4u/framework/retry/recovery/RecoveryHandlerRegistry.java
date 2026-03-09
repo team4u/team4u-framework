@@ -11,7 +11,7 @@ public class RecoveryHandlerRegistry extends KeyedPolicyRegistry<String, Recover
     private static final RecoveryHandlerRegistry INSTANCE = new RecoveryHandlerRegistry();
 
     public RecoveryHandlerRegistry() {
-        super((Class) RecoveryHandler.class);
+        super(RecoveryHandler.class);
         autoScan();
     }
 
