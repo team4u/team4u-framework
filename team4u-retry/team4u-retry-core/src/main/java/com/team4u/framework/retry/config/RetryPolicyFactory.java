@@ -37,7 +37,7 @@ public class RetryPolicyFactory {
 
         BackoffConfig backoffCfg = config.getBackoff();
         if (backoffCfg == null) {
-            backoffCfg = new BackoffConfig(); // default is fixed
+            backoffCfg = new BackoffConfig();
         }
 
         builder.backoff(BackoffRegistry.global().createBackoff(backoffCfg));

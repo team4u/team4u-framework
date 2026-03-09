@@ -1,5 +1,6 @@
 package com.team4u.framework.retry.config;
 
+import lombok.Data;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -10,9 +11,7 @@ import java.util.Map;
  *
  * @author jay.wu
  */
-@Getter
-@Setter
-@lombok.EqualsAndHashCode
+@Data
 public class BackoffConfig {
     /**
      * 退避类型：fixed, increment, exponential, exponentialJitter
