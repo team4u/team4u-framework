@@ -11,19 +11,19 @@ public class RecoverySpec {
     /**
      * 恢复处理器路由类型（需与所在环境能识别的 recovery handler 对应）。
      */
-    private final String handlerTaskType;
+    private final String taskType;
 
     /**
      * 用于恢复执行此任务需要的数据（载荷）。
      */
     private final Object payload;
 
-    public RecoverySpec(String handlerTaskType, Object payload) {
-        this.handlerTaskType = handlerTaskType;
+    public RecoverySpec(String taskType, Object payload) {
+        this.taskType = taskType;
         this.payload = payload;
     }
 
-    public static RecoverySpec of(String handlerTaskType, Object payload) {
-        return new RecoverySpec(handlerTaskType, payload);
+    public static RecoverySpec of(String taskType, Object payload) {
+        return new RecoverySpec(taskType, payload);
     }
 }

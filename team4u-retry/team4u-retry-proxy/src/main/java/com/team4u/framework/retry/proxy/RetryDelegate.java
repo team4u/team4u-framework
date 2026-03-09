@@ -78,9 +78,9 @@ public class RetryDelegate {
         InvocationRecoveryData recoveryData = buildRecoveryData(method, target, args);
 
         Class<? extends RecoveryHandler> recoveryClass = retryable.recovery();
-        String handlerTaskType = resolveHandlerTaskType(retryable.recovery());
+        String taskType = resolveTaskType(retryable.recovery());
 
-        RecoverySpec recoverySpec = RecoverySpec.of(handlerTaskType, recoveryData);
+        RecoverySpec recoverySpec = RecoverySpec.of(taskType, recoveryData);
 
         RetryTaskSpec<Object> taskSpec = RetryTaskSpec.builder()
                 .idempotencyKey(buildIdempotencyKey(recoveryData))
@@ -177,7 +177,7 @@ public class RetryDelegate {
         return targetClass.getName();
     }
 
-    private String resolveHandlerTaskType(Class<? extends RecoveryHandler> recoveryClass) {
+    private String resolveTaskType(Class<? extends RecoveryHandler> recoveryClass) {
         if (recoveryClass == null || recoveryClass == RecoveryHandler.class) {
             return InvocationReplay.TASK_NAME;
         }
@@ -185,7 +185,7 @@ public class RetryDelegate {
             return recoveryClass.getDeclaredConstructor().newInstance().taskName();
         } catch (ReflectiveOperationException e) {
             throw new IllegalStateException(
-                    "Failed to resolve handlerTaskType from recovery handler: " + recoveryClass.getName(), e);
+                    "Failed to resolve taskType from recovery handler: " + recoveryClass.getName(), e);
         }
     }
 

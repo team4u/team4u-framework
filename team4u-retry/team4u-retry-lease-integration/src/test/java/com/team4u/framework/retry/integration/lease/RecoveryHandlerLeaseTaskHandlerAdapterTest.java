@@ -75,7 +75,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
                 .taskId("task-1")
                 .request(RetryRequest.builder()
                         .taskId("task-1")
-                        .handlerTaskType("recover-payment")
+                        .taskType("recover-payment")
                         .idempotencyKey("order-1")
                         .recovery(RecoverySpec.of("recover-payment", "payload"))
                         .policy(RetryPolicy.builder()

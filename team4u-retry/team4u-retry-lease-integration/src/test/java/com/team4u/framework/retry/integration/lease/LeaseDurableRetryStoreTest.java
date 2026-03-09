@@ -26,7 +26,7 @@ public class LeaseDurableRetryStoreTest {
     private static RetryRecord retryRecord(String taskType) {
         return RetryRecord.builder()
                 .request(RetryRequest.builder()
-                        .handlerTaskType(taskType)
+                        .taskType(taskType)
                         .taskId("request-" + taskType)
                         .createdAt(Instant.now())
                         .build())
