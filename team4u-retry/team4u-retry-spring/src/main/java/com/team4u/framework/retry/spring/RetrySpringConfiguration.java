@@ -2,8 +2,8 @@ package com.team4u.framework.retry.spring;
 
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.retry.backend.RetryBackend;
-import com.team4u.framework.retry.proxy.RetryProxyFactory;
 import com.team4u.framework.retry.proxy.Retryable;
+import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import org.springframework.aop.Pointcut;
 import org.springframework.aop.config.AopConfigUtils;
 import org.springframework.aop.framework.autoproxy.DefaultAdvisorAutoProxyCreator;
@@ -63,7 +63,7 @@ public class RetrySpringConfiguration {
 
     public static class DefaultRecoveryHandlerRegistrar {
         public DefaultRecoveryHandlerRegistrar() {
-            RetryProxyFactory.registerDefaultRecoveryHandler();
+            RecoveryHandlerRegistry.global().autoScan();
         }
     }
 }

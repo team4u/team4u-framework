@@ -136,9 +136,12 @@ public class RetryInterceptorTest {
     public void testRetryProxyFactoryCanRegisterDefaultRecoveryHandler() {
         Assert.assertFalse(RecoveryHandlerRegistry.global().get(RetryTaskTypes.DEFAULT_PROXY_RECOVERY).isPresent());
 
-        RetryProxyFactory.registerDefaultRecoveryHandler();
+        RecoveryHandlerRegistry.global().autoScan();
 
         Assert.assertTrue(RecoveryHandlerRegistry.global().get(RetryTaskTypes.DEFAULT_PROXY_RECOVERY).isPresent());
+        Assert.assertEquals("SPI should provide the built-in default handler before fallback registration",
+                "com.team4u.framework.retry.recovery.DefaultProxyRecoveryHandler",
+                RecoveryHandlerRegistry.global().get(RetryTaskTypes.DEFAULT_PROXY_RECOVERY).get().getClass().getName());
     }
 
     public interface OrderService {
