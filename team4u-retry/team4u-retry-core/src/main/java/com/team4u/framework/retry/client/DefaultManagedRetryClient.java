@@ -18,22 +18,35 @@ import lombok.Builder;
 import java.time.Instant;
 import java.util.Optional;
 
+/**
+ * 支持持久化托管的重试客户端默认实现。
+ * <p>
+ * 该客户端实现了重试任务的生命周期管理，包括任务持久化、前台重试尝试以及后台调度移交。
+ * 它依赖 {@link DurableRetryStore} 进行状态存储，并通过 {@link RetryCoordinator} 进行后台任务分发。
+ */
 public class DefaultManagedRetryClient implements ManagedRetryClient {
 
     private final DurableRetryStore store;
     private final RetryCoordinator coordinator;
     private final RetryPolicy defaultPolicy;
 
+    /**
+     * 构建托管重试客户端。
+     *
+     * @param store         持久化存储引擎，不可为空
+     * @param coordinator   重试协调中心，用于后台调度，不可为空
+     * @param defaultPolicy 默认重试策略，当任务未指定策略时使用
+     */
     @Builder
     public DefaultManagedRetryClient(
             DurableRetryStore store,
             RetryCoordinator coordinator,
             RetryPolicy defaultPolicy) {
         if (store == null) {
-            throw new IllegalStateException("DurableRetryStore is required for MANAGED mode");
+            throw new IllegalStateException("托管模式下 DurableRetryStore 是必须的");
         }
         if (coordinator == null) {
-            throw new IllegalStateException("RetryCoordinator is required for MANAGED mode");
+            throw new IllegalStateException("托管模式下 RetryCoordinator 是必须的");
         }
 
         this.store = store;
@@ -43,19 +56,20 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
 
     @Override
     public <T> ManagedSubmitResult<T> submit(RetryTaskSpec<T> spec) {
+        // 确定最终使用的重试策略
         RetryPolicy policy = Optional.ofNullable(spec.getPolicy()).orElse(defaultPolicy);
         if (policy == null || policy.getForegroundAttempts() == null) {
             return new ManagedSubmitResult.Rejected<>(
-                    "MANAGED mode requires a policy with explicitly configured foregroundAttempts.");
+                    "托管模式要求必须显式配置包含 foregroundAttempts 属性的重试策略");
         }
 
-        // Validate Recovery spec existence
+        // 校验恢复规范，确保任务失败后有明确的处理指向
         if (spec.getRecovery() == null || spec.getRecovery().getTaskName() == null) {
             return new ManagedSubmitResult.Rejected<>(
-                    "MANAGED mode requires an explicit RecoverySpec with a valid taskName.");
+                    "托管模式要求必须提供包含有效任务名称的 RecoverySpec 对象");
         }
 
-        // 1. Create durable record
+        // 创建持久化请求记录
         RetryRequest request = RetryRequest.builder()
                 .taskName(spec.getTaskName())
                 .idempotencyKey(spec.getIdempotencyKey())
@@ -64,12 +78,14 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
                 .createdAt(Instant.now())
                 .build();
 
+        // 初始化重试状态
         RetryState initialState = RetryState.builder()
                 .attempts(0)
                 .status(RetryStatus.PREPARED)
                 .nextRunAt(Instant.now())
                 .build();
 
+        // 组合成完整的重试记录
         RetryRecord initialRecord = RetryRecord.builder()
                 .request(request)
                 .state(initialState)
@@ -77,39 +93,44 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
 
         TaskHandle handle;
         try {
+            // 将重试意图持久化到存储中
             handle = store.create(initialRecord);
             initialRecord.setTaskId(handle.getTaskId());
             request.setTaskId(handle.getTaskId());
         } catch (Exception e) {
-            return new ManagedSubmitResult.Rejected<>("Failed to persist initial retry intent: " + e.getMessage());
+            return new ManagedSubmitResult.Rejected<>("持久化初始重试意图失败: " + e.getMessage());
         }
 
         int foregroundAttempts = policy.getForegroundAttempts();
 
-        // 2. Are foreground attempts available?
+        // 判断是否需要立即进行后台调度
         if (foregroundAttempts <= 0) {
-            // Handoff to coordinator immediately without attempting foreground
+            // 如果前台重试次数为 0，则直接移交给协调中心进行后台处理
             coordinator.schedule(initialRecord, 0);
             return new ManagedSubmitResult.Accepted<>(handle.getTaskId(), RetryStatus.SCHEDULED.name(), Instant.now());
         }
 
-        // 3. Foreground attempt logic
+        // 开始前台重试逻辑
         int attempts = 0;
         while (true) {
             attempts++;
             AttemptRecord attemptRecord = AttemptRecord.builder()
                     .attemptAt(Instant.now())
-                    .workerId("foreground") // Can be replaced by actual node ID
+                    .workerId("foreground") // 标记为前台执行节点
                     .build();
 
             try {
+                // 更新存储状态为执行中
                 store.markRunning(handle.getTaskId(), attemptRecord);
+                // 调用实际业务逻辑
                 T result = spec.getExecutor().call();
-                // Success
+
+                // 执行成功，标记任务完成并返回结果
                 store.markSucceeded(handle.getTaskId(), SuccessRecord.builder().succeededAt(Instant.now()).build());
                 return new ManagedSubmitResult.Completed<>(result);
 
             } catch (Throwable ex) {
+                // 异常处理与重试决策
                 Throwable cause = normalize(ex);
                 boolean canRetry = policy.canRetry(attempts, cause);
 
@@ -119,30 +140,31 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
                         .failedAt(Instant.now())
                         .build();
 
+                // 更新内存中的状态对象
                 initialState.setAttempts(attempts);
                 initialState.setLastErrorCode(failureRecord.getErrorCode());
                 initialState.setLastErrorMessage(failureRecord.getErrorMessage());
 
                 if (!canRetry) {
-                    // Final failure
+                    // 如果达到策略限制或遇到不可重试异常，标记最终失败
                     store.markFailed(handle.getTaskId(), failureRecord);
                     return new ManagedSubmitResult.Failed<>(cause);
                 }
 
-                // Wait, do we continue foreground retrying if we haven't exhausted
-                // foregroundAttempts?
+                // 判断是否仍处于前台重试预算内
                 if (attempts < foregroundAttempts) {
                     long delayMillis = policy.getDelayMillis(attempts);
-                    // Update state to schedule next attempt in foreground
+                    // 在存储中更新下一次尝试时间
                     store.scheduleNext(handle.getTaskId(), attemptRecord, Instant.now().plusMillis(delayMillis),
                             failureRecord);
                     try {
+                        // 在当前线程进行退避休眠
                         sleepQuietly(delayMillis);
                     } catch (InterruptedException ie) {
                         return new ManagedSubmitResult.Failed<>(ie);
                     }
                 } else {
-                    // Exhausted foreground budget but overall policy says we can still retry.
+                    // 前台预算已耗尽，但策略允许继续重试，此时移交给后台调度系统
                     long delayMillis = policy.getDelayMillis(attempts);
                     Instant nextRunAt = Instant.now().plusMillis(delayMillis);
                     store.scheduleNext(handle.getTaskId(), attemptRecord, nextRunAt, failureRecord);
@@ -157,6 +179,9 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
         }
     }
 
+    /**
+     * 安静地让当前线程休眠指定的时间。
+     */
     private void sleepQuietly(long delay) throws InterruptedException {
         if (delay > 0) {
             try {
@@ -168,6 +193,9 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
         }
     }
 
+    /**
+     * 规范化异常，提取底层真实原因。
+     */
     private Throwable normalize(Throwable ex) {
         if (ex instanceof InterruptedException) {
             Thread.currentThread().interrupt();
