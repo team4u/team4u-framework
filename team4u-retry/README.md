@@ -359,6 +359,31 @@ Backoff backoff = Backoffs.builder("myCustomType")
 
 这样可以减少大量请求同时重试带来的“扎堆”问题。
 
+#### 注册与扩展自定义策略
+
+退避策略通过 `BackoffRegistry` 进行管理，它支持自动扫描和手动注册。
+
+1. **实现工厂类**：实现 `BackoffFactory` 接口，并指定一个唯一的 `key()`。
+2. **自动注册**：框架会自动扫描类路径下所有 `BackoffFactory` 的实现。
+
+```java
+public class MyBackoffFactory implements BackoffFactory {
+    @Override
+    public String key() {
+        return "myCustomType";
+    }
+
+    @Override
+    public Backoff create(BackoffConfig config) {
+        // 从 config.getParams() 中获取参数并还原策略
+        return new MyBackoff();
+    }
+}
+```
+
+之后，你就可以在配置中通过 `"type": "myCustomType"` 使用它，或者在代码中通过 `Backoffs.builder("myCustomType")` 进行构建。
+
+
 ## 异常与终止规则
 
 | 情况                                                    | 是否重试         | 说明                                     |
