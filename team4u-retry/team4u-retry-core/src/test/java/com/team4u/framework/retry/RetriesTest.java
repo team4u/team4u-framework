@@ -20,8 +20,8 @@ public class RetriesTest {
     public void testManagedDslBuildsSpecFromPolicy() {
         RecordingManagedRetryClient client = new RecordingManagedRetryClient();
         RetryPolicy policy = RetryPolicy.builder()
-                .maxAttempts(5)
-                .foregroundAttempts(2)
+                .maxRetries(4)
+                .foregroundMaxAttempts(2)
                 .backoff(Backoffs.fixed(50L))
                 .build();
 
@@ -51,8 +51,8 @@ public class RetriesTest {
                 .idempotentBy("order-1002")
                 .payload("payload")
                 .policy(RetryPolicy.builder()
-                        .maxAttempts(3)
-                        .foregroundAttempts(1)
+                        .maxRetries(2)
+                        .foregroundMaxAttempts(1)
                         .backoff(Backoffs.fixed(0L))
                         .build())
                 .call(() -> "done");
@@ -71,13 +71,13 @@ public class RetriesTest {
                     .task("pay-notify")
                     .idempotentBy("order-1003")
                     .policy(RetryPolicy.builder()
-                            .maxAttempts(3)
+                            .maxRetries(2)
                             .backoff(Backoffs.fixed(0L))
                             .build())
                     .call(() -> "ignored");
             Assert.fail("expected IllegalStateException");
         } catch (IllegalStateException ex) {
-            Assert.assertTrue(ex.getMessage().contains("foregroundAttempts"));
+            Assert.assertTrue(ex.getMessage().contains("foregroundMaxAttempts"));
         }
 
         Assert.assertNull(client.lastSpec);
@@ -91,7 +91,7 @@ public class RetriesTest {
 
             CompletableFuture<String> future = Retries.inline()
                     .policy(RetryPolicy.builder()
-                            .maxAttempts(2)
+                            .maxRetries(1)
                             .backoff(Backoffs.fixed(0L))
                             .retryOn(IllegalStateException.class)
                             .build())

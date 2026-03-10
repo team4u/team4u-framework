@@ -15,7 +15,7 @@ public class RetryPolicyTest {
     @Test
     public void testTotalAttempts() {
         RetryPolicy policy = RetryPolicy.builder()
-                .maxAttempts(3)
+                .maxRetries(2)
                 .build();
 
         RuntimeException ex = new RuntimeException("test");
@@ -28,7 +28,7 @@ public class RetryPolicyTest {
     @Test
     public void testInfiniteAttempts() {
         RetryPolicy policy = RetryPolicy.builder()
-                .maxAttempts(-1)
+                .maxRetries(-1)
                 .build();
 
         RuntimeException ex = new RuntimeException("test");
@@ -41,7 +41,7 @@ public class RetryPolicyTest {
     @Test
     public void testForegroundAttemptsValidation() {
         try {
-            RetryPolicy.builder().maxAttempts(3).foregroundAttempts(4).build();
+            RetryPolicy.builder().maxRetries(2).foregroundMaxAttempts(4).build();
             Assert.fail("Expected IllegalArgumentException");
         } catch (IllegalArgumentException e) {
             Assert.assertTrue(e.getMessage().contains("foreground"));
@@ -49,10 +49,21 @@ public class RetryPolicyTest {
     }
 
     @Test
+    public void testZeroRetriesAllowsSingleExecutionOnly() {
+        RetryPolicy policy = RetryPolicy.builder()
+                .maxRetries(0)
+                .build();
+
+        RuntimeException ex = new RuntimeException("test");
+
+        Assert.assertFalse(policy.canRetry(1, ex));
+    }
+
+    @Test
     public void testConditionExpression() {
         RetryPolicy policy = RetryPolicy.builder()
-                .maxAttempts(3)
-                .condition("attempt <= 2 && message contains 'timeout'")
+                .maxRetries(2)
+                .condition("retryCount <= 1 && message contains 'timeout'")
                 .build();
 
         assertTrue(policy.canRetry(1, new RuntimeException("connection timeout")));

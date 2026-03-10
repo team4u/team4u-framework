@@ -94,7 +94,7 @@ public class DefaultInlineRetryClientTest {
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         AtomicInteger attempts = new AtomicInteger();
         RetryPolicy policy = RetryPolicy.builder()
-                .maxAttempts(3)
+                .maxRetries(2)
                 .backoff(Backoffs.fixed(200))
                 .build();
 
@@ -121,7 +121,7 @@ public class DefaultInlineRetryClientTest {
 
     private RetryPolicy retryPolicy() {
         return RetryPolicy.builder()
-                .maxAttempts(3)
+                .maxRetries(2)
                 .backoff(Backoffs.fixed(0))
                 .build();
     }

@@ -1,6 +1,7 @@
 package com.team4u.framework.retry.config;
 
 import cn.hutool.core.util.ClassUtil;
+import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.team4u.framework.retry.backoff.BackoffRegistry;
 import com.team4u.framework.retry.policy.RetryPolicy;
@@ -22,13 +23,15 @@ public class RetryPolicyFactory {
      * @return 重试策略实例
      */
     public static RetryPolicy create(String jsonConfig) {
-        RetryPolicyConfig config = JSONUtil.toBean(jsonConfig, RetryPolicyConfig.class);
+        JSONObject jsonObject = JSONUtil.parseObj(jsonConfig);
+        rejectLegacyKeys(jsonObject);
+        RetryPolicyConfig config = jsonObject.toBean(RetryPolicyConfig.class);
         RetryPolicy.Builder builder = RetryPolicy.builder()
-                .maxAttempts(config.getMaxAttempts())
+                .maxRetries(config.getMaxRetries())
                 .condition(config.getCondition());
 
-        if (config.getForegroundAttempts() != null) {
-            builder.foregroundAttempts(config.getForegroundAttempts());
+        if (config.getForegroundMaxAttempts() != null) {
+            builder.foregroundMaxAttempts(config.getForegroundMaxAttempts());
         }
 
         BackoffConfig backoffCfg = config.getBackoff();
@@ -51,6 +54,16 @@ public class RetryPolicyFactory {
         }
 
         return builder.build();
+    }
+
+    private static void rejectLegacyKeys(JSONObject jsonObject) {
+        if (jsonObject.containsKey("maxAttempts")) {
+            throw new IllegalArgumentException("Invalid retry policy config. 'maxAttempts' is no longer supported; use 'maxRetries' instead");
+        }
+        if (jsonObject.containsKey("foregroundAttempts")) {
+            throw new IllegalArgumentException(
+                    "Invalid retry policy config. 'foregroundAttempts' is no longer supported; use 'foregroundMaxAttempts' instead");
+        }
     }
 
     @SuppressWarnings("unchecked")

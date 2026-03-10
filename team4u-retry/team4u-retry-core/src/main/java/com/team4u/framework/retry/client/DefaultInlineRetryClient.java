@@ -33,7 +33,7 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
         // 校验重试策略，进程内模式目前不支持前台重试次数配置，应统一使用最大尝试次数
         if (policy.getForegroundAttempts() != null) {
             throw new IllegalArgumentException(
-                    "Inline mode does not support foregroundAttempts, please use maxAttempts instead");
+                    "Inline mode does not support foregroundMaxAttempts, please use maxRetries instead");
         }
 
         int attempts = 0;
@@ -72,7 +72,7 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
         if (policy.getForegroundAttempts() != null) {
             CompletableFuture<T> future = new CompletableFuture<>();
             future.completeExceptionally(new IllegalArgumentException(
-                    "Inline async mode does not support foregroundAttempts, please use maxAttempts instead"));
+                    "Inline async mode does not support foregroundMaxAttempts, please use maxRetries instead"));
             return future;
         }
 
