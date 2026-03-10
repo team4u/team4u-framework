@@ -29,6 +29,20 @@ public class InvocationReplay implements RecoveryHandler<InvocationRecoveryData>
     @Setter
     private RetryContextSerializer serializer = HutoolRetryContextSerializer.INSTANCE;
 
+    private static Map<String, Class<?>> primitiveTypes() {
+        Map<String, Class<?>> primitiveTypes = new HashMap<String, Class<?>>();
+        primitiveTypes.put(boolean.class.getName(), boolean.class);
+        primitiveTypes.put(byte.class.getName(), byte.class);
+        primitiveTypes.put(char.class.getName(), char.class);
+        primitiveTypes.put(short.class.getName(), short.class);
+        primitiveTypes.put(int.class.getName(), int.class);
+        primitiveTypes.put(long.class.getName(), long.class);
+        primitiveTypes.put(float.class.getName(), float.class);
+        primitiveTypes.put(double.class.getName(), double.class);
+        primitiveTypes.put(void.class.getName(), void.class);
+        return Collections.unmodifiableMap(primitiveTypes);
+    }
+
     @Override
     public String taskName() {
         return TASK_NAME;
@@ -102,20 +116,6 @@ public class InvocationReplay implements RecoveryHandler<InvocationRecoveryData>
             return primitiveType;
         }
         return Class.forName(typeName);
-    }
-
-    private static Map<String, Class<?>> primitiveTypes() {
-        Map<String, Class<?>> primitiveTypes = new HashMap<String, Class<?>>();
-        primitiveTypes.put(boolean.class.getName(), boolean.class);
-        primitiveTypes.put(byte.class.getName(), byte.class);
-        primitiveTypes.put(char.class.getName(), char.class);
-        primitiveTypes.put(short.class.getName(), short.class);
-        primitiveTypes.put(int.class.getName(), int.class);
-        primitiveTypes.put(long.class.getName(), long.class);
-        primitiveTypes.put(float.class.getName(), float.class);
-        primitiveTypes.put(double.class.getName(), double.class);
-        primitiveTypes.put(void.class.getName(), void.class);
-        return Collections.unmodifiableMap(primitiveTypes);
     }
 
     /**

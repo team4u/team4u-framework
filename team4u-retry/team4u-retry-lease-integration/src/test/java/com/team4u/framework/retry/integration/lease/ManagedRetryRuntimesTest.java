@@ -3,16 +3,7 @@ package com.team4u.framework.retry.integration.lease;
 import com.team4u.framework.lease.api.LeaseBackend;
 import com.team4u.framework.lease.enums.LeaseAdminResult;
 import com.team4u.framework.lease.enums.LeaseRuntimeResult;
-import com.team4u.framework.lease.model.LeaseAcquireRequest;
-import com.team4u.framework.lease.model.LeaseCloseRequest;
-import com.team4u.framework.lease.model.LeaseGrant;
-import com.team4u.framework.lease.model.LeaseHandle;
-import com.team4u.framework.lease.model.LeasePublishRequest;
-import com.team4u.framework.lease.model.LeaseQueryRequest;
-import com.team4u.framework.lease.model.LeaseReleaseRequest;
-import com.team4u.framework.lease.model.LeaseTaskPage;
-import com.team4u.framework.lease.model.LeaseTaskRecord;
-import com.team4u.framework.lease.model.LeaseUpdateRequest;
+import com.team4u.framework.lease.model.*;
 import com.team4u.framework.lease.runtime.LeaseWorker;
 import com.team4u.framework.lease.runtime.LeaseWorkerPolicy;
 import com.team4u.framework.retry.TestLeaseBackend;
@@ -29,6 +20,24 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class ManagedRetryRuntimesTest {
+
+    private static Object getField(Object target, String fieldName) throws Exception {
+        Field field = findField(target.getClass(), fieldName);
+        field.setAccessible(true);
+        return field.get(target);
+    }
+
+    private static Field findField(Class<?> type, String fieldName) throws NoSuchFieldException {
+        Class<?> current = type;
+        while (current != null) {
+            try {
+                return current.getDeclaredField(fieldName);
+            } catch (NoSuchFieldException ignored) {
+                current = current.getSuperclass();
+            }
+        }
+        throw new NoSuchFieldException(fieldName);
+    }
 
     @Test
     public void testBuildUsesDefaults() {
@@ -102,24 +111,6 @@ public class ManagedRetryRuntimesTest {
 
         Assert.assertNotNull(runtime.client());
         runtime.close();
-    }
-
-    private static Object getField(Object target, String fieldName) throws Exception {
-        Field field = findField(target.getClass(), fieldName);
-        field.setAccessible(true);
-        return field.get(target);
-    }
-
-    private static Field findField(Class<?> type, String fieldName) throws NoSuchFieldException {
-        Class<?> current = type;
-        while (current != null) {
-            try {
-                return current.getDeclaredField(fieldName);
-            } catch (NoSuchFieldException ignored) {
-                current = current.getSuperclass();
-            }
-        }
-        throw new NoSuchFieldException(fieldName);
     }
 
     private static class CountingRegistry extends RecoveryHandlerRegistry {
