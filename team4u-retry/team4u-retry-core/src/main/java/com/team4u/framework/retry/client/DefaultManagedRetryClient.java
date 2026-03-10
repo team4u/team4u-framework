@@ -28,13 +28,19 @@ import java.util.Optional;
  */
 public class DefaultManagedRetryClient implements ManagedRetryClient {
 
-    /** 持久化存储引擎，用于记录任务状态 */
+    /**
+     * 持久化存储引擎，用于记录任务状态
+     */
     private final DurableRetryStore store;
 
-    /** 重试协调中心，用于处理后台调度 */
+    /**
+     * 重试协调中心，用于处理后台调度
+     */
     private final RetryCoordinator coordinator;
 
-    /** 默认重试策略，在任务未显式指定策略时生效 */
+    /**
+     * 默认重试策略，在任务未显式指定策略时生效
+     */
     private final RetryPolicy defaultPolicy;
 
     /**
@@ -176,7 +182,7 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
      * 逻辑包括循环执行业务任务、处理成功状态、计算退避时间以及在达到前台尝试上限时移交给后台。
      */
     private <T> ManagedSubmitResult<T> executeInForeground(RetryTaskSpec<T> spec, RetryRecord record,
-            RetryPolicy policy) {
+                                                           RetryPolicy policy) {
         int foregroundAttempts = policy.getForegroundAttempts();
         int attempts = 0;
 
