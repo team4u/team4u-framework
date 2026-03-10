@@ -4,6 +4,7 @@ import com.team4u.framework.retry.backoff.Backoffs;
 import com.team4u.framework.retry.client.ManagedRetryClient;
 import com.team4u.framework.retry.domain.ManagedSubmitResult;
 import com.team4u.framework.retry.domain.RetryTaskSpec;
+import com.team4u.framework.retry.domain.store.RetryStatus;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import org.junit.Assert;
 import org.junit.Test;
@@ -113,7 +114,8 @@ public class RetriesTest {
 
     private static class RecordingManagedRetryClient implements ManagedRetryClient {
         private RetryTaskSpec<?> lastSpec;
-        private ManagedSubmitResult<?> result = new ManagedSubmitResult.Accepted<Object>("task-1", "SCHEDULED", null);
+        private ManagedSubmitResult<?> result =
+                new ManagedSubmitResult.Accepted<Object>("task-1", RetryStatus.WAITING_RETRY, null);
 
         @SuppressWarnings("unchecked")
         @Override

@@ -79,6 +79,7 @@
 - 内存版无需额外初始化。
 - JDBC 版需要先创建 `lease_task` 表，初始化脚本见：
   - `team4u-lease-jdbc/src/main/resources/schema/lease_task_mysql.sql`
+- 如果需要按业务键做幂等建档，请确保 schema 已包含 `business_key` 列以及 `(queue_name, business_key)` 唯一约束。
 
 ### 4. 创建 Producer 并发布任务
 
@@ -90,6 +91,20 @@ producer.publish(
         .queue("demo")
         .taskType("demo")
         .payload("hello")
+        .delayMillis(0L)
+        .build()
+);
+```
+
+如需“相同业务请求只建档一次”，可以改用 `publishIfAbsent(...)`：
+
+```java
+LeasePublishResult result = producer.publishIfAbsent(
+    LeasePublishRequest.builder()
+        .queue("demo")
+        .taskType("demo")
+        .payload("hello")
+        .businessKey("demo|order-1001")
         .delayMillis(0L)
         .build()
 );
@@ -246,6 +261,7 @@ stateDiagram-v2
 ### `LeaseProducer` (任务发布)
 业务系统通常通过该接口将待处理任务投递到租约队列中。
 - 创建延迟任务、异步处理任务、未来某时刻执行的任务。
+- 如果需要提交幂等，可传入 `businessKey` 并使用 `publishIfAbsent(...)`。
 
 ### `LeaseRuntimeClient` (运行时处理)
 Worker 执行过程中调用的底层 API。通常只有 Worker 执行链路会直接依赖。
@@ -254,6 +270,7 @@ Worker 执行过程中调用的底层 API。通常只有 Worker 执行链路会�
 ### `LeaseQueryService` (查询服务)
 用于查询任务状态与任务详情。
 - 适合：控制台查询、问题排查、运维巡检、统计分析。
+- 除 `get(taskId)` 外，也支持 `getByBusinessKey(queue, businessKey)`。
 
 ### `LeaseAdminService` (管理服务)
 用于管理任务。
@@ -270,6 +287,9 @@ LeaseTaskPage tasks = queryService.list(
         .taskType("demo")
         .build()
 );
+
+// 通过业务键查询
+Optional<LeaseTaskRecord> task = queryService.getByBusinessKey("demo", "demo|order-1001");
 
 // 延后 5 分钟重新进入可领取状态
 adminService.reschedule(taskId, 300_000L);
@@ -334,12 +354,14 @@ adminService.updateAndReschedule(
 - 数据库初始化：使用前需要创建 `lease_task` 表。脚本位置：`team4u-lease-jdbc/src/main/resources/schema/lease_task_mysql.sql`。
 - 抢占逻辑：采用乐观抢占模型原子竞争。
 - 等待行为：`acquire()` 当前使用短轮询等待，不是数据库原生阻塞获取，更适合轻量任务场景。
+- 幂等建档：支持 `businessKey`、`publishIfAbsent(...)` 和 `getByBusinessKey(...)`。
 - 说明：推荐优先在 MySQL 环境下使用；由于 JDBC 实现面向通用能力，迁移到其他数据库请先验证 SQL 兼容性。
 
 ### 内存后端 (InMemoryLeaseBackend)
 
 基于 `ConcurrentHashMap` 与 `DelayQueue` 实现。
 - 特点：速度极快，进程重启即消失。
+- 行为：同样支持 `businessKey`、`publishIfAbsent(...)` 和 `getByBusinessKey(...)`，适合本地模拟幂等建档语义。
 - 场景：单元测试、本地演示、简单单机应用。
 
 
@@ -413,3 +435,5 @@ worker.shutdownGracefully(5000);
   可以调用 `release(delay)` 稍后重试，或者任务进入失败态后通过 `requeueFailed` 重新入队。
 - 业务处理器需要幂等吗？  
   需要。由于不是 exactly-once 语义，业务侧应自行保证幂等性。
+- `businessKey` 适合做什么？  
+  适合做建档幂等键，例如订单号、请求号、业务流水号。它保证的是“不要重复创建任务”，不保证执行期 exactly-once。

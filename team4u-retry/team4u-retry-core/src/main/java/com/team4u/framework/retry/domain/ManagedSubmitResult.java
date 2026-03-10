@@ -1,5 +1,6 @@
 package com.team4u.framework.retry.domain;
 
+import com.team4u.framework.retry.domain.store.RetryStatus;
 import lombok.Data;
 
 import java.time.Instant;
@@ -48,26 +49,55 @@ public interface ManagedSubmitResult<T> {
         return this instanceof Rejected;
     }
 
+    /**
+     * 已完成：表示任务在前台执行过程中已成功返回结果。
+     */
     @Data
     class Completed<T> implements ManagedSubmitResult<T> {
+        /**
+         * 业务逻辑返回的实际结果值
+         */
         private final T value;
     }
 
+    /**
+     * 已受理：表示任务已被持久化存储并接受托管，可能正在等待后台重试调度。
+     */
     @Data
     class Accepted<T> implements ManagedSubmitResult<T> {
+        /**
+         * 任务在重试系统内的唯一标识 taskId
+         */
         private final String taskId;
-        // 先简单用字符串表示状态（例如 "PREPARED", "SCHEDULED"）
-        private final String state;
+        /**
+         * 任务当前生命周期所处的状态
+         */
+        private final RetryStatus status;
+        /**
+         * 预期的下一次执行（后台重试尝试）时间点
+         */
         private final Instant nextAttemptAt;
     }
 
+    /**
+     * 执行失败：表示任务前台执行失败，且依据策略已确定不再重试。
+     */
     @Data
     class Failed<T> implements ManagedSubmitResult<T> {
+        /**
+         * 导致失败的原始异常或错误对象
+         */
         private final Throwable error;
     }
 
+    /**
+     * 被拒绝：表示任务由于配置不合规、资源受限等原因被重试引擎拒绝下单。
+     */
     @Data
     class Rejected<T> implements ManagedSubmitResult<T> {
+        /**
+         * 拒绝接收该任务的具体原因描述
+         */
         private final String reason;
     }
 }

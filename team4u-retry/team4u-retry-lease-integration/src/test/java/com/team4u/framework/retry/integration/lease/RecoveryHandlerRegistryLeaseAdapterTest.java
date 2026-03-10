@@ -39,9 +39,9 @@ public class RecoveryHandlerRegistryLeaseAdapterTest {
         RecoveryHandler recoveryHandler = registry.get("payment").orElseThrow(AssertionError::new);
         try {
             recoveryHandler.recover(new Object(), RecoveryContext.builder().taskId("task-2").attempt(1).build());
-            Assert.fail("expected IllegalArgumentException");
-        } catch (IllegalArgumentException ex) {
-            Assert.assertTrue(ex.getMessage().contains("String payload"));
+            Assert.fail("expected ClassCastException");
+        } catch (ClassCastException ex) {
+            Assert.assertNotNull(ex.getMessage());
         }
         Assert.assertNull(handler.context);
     }

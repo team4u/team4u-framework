@@ -54,6 +54,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
                 .queue(request.getQueue())
                 .taskType(request.getTaskType())
                 .payload(request.getPayload())
+                .businessKey(request.getBusinessKey())
                 .state(LeaseTaskState.READY)
                 .outcome(null)
                 .failureReason(null)
@@ -74,6 +75,49 @@ public class JdbcLeaseBackend implements LeaseBackend {
             return taskId;
         } catch (SQLException e) {
             throw new IllegalStateException("publish failed: " + taskId, e);
+        }
+    }
+
+    @Override
+    public LeasePublishResult publishIfAbsent(LeasePublishRequest request) {
+        validatePublishRequest(request);
+        if (StrUtil.isBlank(request.getBusinessKey())) {
+            String taskId = publish(request);
+            return LeasePublishResult.builder()
+                    .created(true)
+                    .taskId(taskId)
+                    .record(get(taskId).orElse(null))
+                    .build();
+        }
+        try {
+            LeaseTaskEntity existing = dao.findByBusinessKey(request.getQueue(), request.getBusinessKey());
+            if (existing != null) {
+                return LeasePublishResult.builder()
+                        .created(false)
+                        .taskId(existing.getTaskId())
+                        .record(existing.toRecord())
+                        .build();
+            }
+            String taskId = publish(request);
+            return LeasePublishResult.builder()
+                    .created(true)
+                    .taskId(taskId)
+                    .record(get(taskId).orElse(null))
+                    .build();
+        } catch (SQLException e) {
+            try {
+                LeaseTaskEntity existing = dao.findByBusinessKey(request.getQueue(), request.getBusinessKey());
+                if (existing != null) {
+                    return LeasePublishResult.builder()
+                            .created(false)
+                            .taskId(existing.getTaskId())
+                            .record(existing.toRecord())
+                            .build();
+                }
+            } catch (SQLException ignored) {
+                // fall through and surface original failure
+            }
+            throw new IllegalStateException("publishIfAbsent failed", e);
         }
     }
 
@@ -173,6 +217,19 @@ public class JdbcLeaseBackend implements LeaseBackend {
             return entity == null ? Optional.empty() : Optional.of(entity.toRecord());
         } catch (SQLException e) {
             throw new IllegalStateException("get failed: " + taskId, e);
+        }
+    }
+
+    @Override
+    public Optional<LeaseTaskRecord> getByBusinessKey(String queue, String businessKey) {
+        if (StrUtil.isBlank(queue) || StrUtil.isBlank(businessKey)) {
+            return Optional.empty();
+        }
+        try {
+            LeaseTaskEntity entity = dao.findByBusinessKey(queue, businessKey);
+            return entity == null ? Optional.empty() : Optional.of(entity.toRecord());
+        } catch (SQLException e) {
+            throw new IllegalStateException("getByBusinessKey failed", e);
         }
     }
 

@@ -30,6 +30,10 @@ public class LeasePublishRequest {
      */
     private final String payload;
     /**
+     * 业务幂等键，由 backend 负责保证同 queue 下唯一。
+     */
+    private final String businessKey;
+    /**
      * 任务执行的期望延迟毫秒数（0 表示立即进入可获取状态）
      */
     private final long delayMillis;

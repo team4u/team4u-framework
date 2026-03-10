@@ -74,6 +74,10 @@ public class RetryInterceptorResolutionTest {
         String call(String id);
     }
 
+    public interface GenericService<T> {
+        T call(T value);
+    }
+
     public static class ImplAnnotatedServiceImpl implements ImplAnnotatedService {
         private final AtomicInteger count = new AtomicInteger();
 
@@ -85,10 +89,6 @@ public class RetryInterceptorResolutionTest {
             }
             return "impl-" + id;
         }
-    }
-
-    public interface GenericService<T> {
-        T call(T value);
     }
 
     public static class GenericStringService implements GenericService<String> {

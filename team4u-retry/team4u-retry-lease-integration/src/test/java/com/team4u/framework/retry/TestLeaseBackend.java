@@ -92,6 +92,20 @@ public abstract class TestLeaseBackend implements LeaseBackend {
     }
 
     @Override
+    public LeasePublishResult publishIfAbsent(LeasePublishRequest request) {
+        String taskId = publish(request);
+        return LeasePublishResult.builder()
+                .created(true)
+                .taskId(taskId)
+                .build();
+    }
+
+    @Override
+    public Optional<LeaseTaskRecord> getByBusinessKey(String queue, String businessKey) {
+        return Optional.empty();
+    }
+
+    @Override
     public LeaseTaskPage list(LeaseQueryRequest request) {
         return LeaseTaskPage.builder().total(0).page(0).pageSize(0).build();
     }

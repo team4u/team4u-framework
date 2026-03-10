@@ -54,18 +54,18 @@ public class BackoffRegistry extends KeyedPolicyRegistry<String, BackoffFactory>
             return new BackoffCacheKey(type, params);
         }
 
-        BackoffConfig toConfig() {
-            BackoffConfig config = new BackoffConfig();
-            config.setType(type);
-            config.setParams(params);
-            return config;
-        }
-
         private static Map<String, Object> immutableParams(Map<String, Object> source) {
             if (source == null || source.isEmpty()) {
                 return Collections.emptyMap();
             }
             return Collections.unmodifiableMap(new LinkedHashMap<String, Object>(source));
+        }
+
+        BackoffConfig toConfig() {
+            BackoffConfig config = new BackoffConfig();
+            config.setType(type);
+            config.setParams(params);
+            return config;
         }
     }
 }

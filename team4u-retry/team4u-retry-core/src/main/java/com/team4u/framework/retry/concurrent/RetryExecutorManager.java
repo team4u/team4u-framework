@@ -14,11 +14,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 public class RetryExecutorManager {
 
+    static final String SHUTDOWN_HOOK_ENABLED_PROPERTY = "team4u.retry.executors.shutdownHook.enabled";
     private static final Log log = LogFactory.get();
     private static final RetryExecutorManager INSTANCE = new RetryExecutorManager();
     private static final String DAEMON_PROPERTY = "team4u.retry.executors.daemon";
-    static final String SHUTDOWN_HOOK_ENABLED_PROPERTY = "team4u.retry.executors.shutdownHook.enabled";
-
     private volatile ScheduledExecutorService globalScheduler;
     private volatile ExecutorService globalCleanupExecutor;
     private volatile boolean isShutdown = false;
@@ -51,6 +50,10 @@ public class RetryExecutorManager {
      */
     public static RetryExecutorManager global() {
         return INSTANCE;
+    }
+
+    static boolean isShutdownHookEnabled() {
+        return Boolean.parseBoolean(System.getProperty(SHUTDOWN_HOOK_ENABLED_PROPERTY, "true"));
     }
 
     /**
@@ -135,10 +138,6 @@ public class RetryExecutorManager {
 
     private boolean isDaemonExecutors() {
         return Boolean.parseBoolean(System.getProperty(DAEMON_PROPERTY, "false"));
-    }
-
-    static boolean isShutdownHookEnabled() {
-        return Boolean.parseBoolean(System.getProperty(SHUTDOWN_HOOK_ENABLED_PROPERTY, "true"));
     }
 
     /**

@@ -37,6 +37,10 @@ public class LeaseTaskRecord {
      */
     private final String payload;
     /**
+     * 业务幂等键。
+     */
+    private final String businessKey;
+    /**
      * 当前任务生命周期状态
      */
     private final LeaseTaskState state;

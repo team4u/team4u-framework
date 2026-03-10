@@ -42,7 +42,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
         Assert.assertEquals("serialized-1", runtimeClient.releaseRequest.getPayload());
         Assert.assertEquals("boom", runtimeClient.releaseRequest.getErrorMessage());
         Assert.assertEquals(1, record.getState().getAttempts());
-        Assert.assertEquals(RetryStatus.SCHEDULED, record.getState().getStatus());
+        Assert.assertEquals(RetryStatus.WAITING_RETRY, record.getState().getStatus());
         Assert.assertEquals("RuntimeException", record.getState().getLastErrorCode());
         Assert.assertEquals("boom", record.getState().getLastErrorMessage());
         Assert.assertNotNull(record.getState().getNextRunAt());
@@ -123,7 +123,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
                         .build())
                 .state(RetryState.builder()
                         .attempts(0)
-                        .status(RetryStatus.SCHEDULED)
+                        .status(RetryStatus.WAITING_RETRY)
                         .nextRunAt(Instant.now().plusSeconds(30))
                         .build())
                 .build();
@@ -134,7 +134,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
                 .taskId("task-1")
                 .queue(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE)
                 .taskType("recover-payment")
-                .payload("ignored")
+                .payload("serialized-input")
                 .runtimeClient(runtimeClient)
                 .handle(new LeaseHandle("task-1", "worker-1", "lease-1"))
                 .build();
