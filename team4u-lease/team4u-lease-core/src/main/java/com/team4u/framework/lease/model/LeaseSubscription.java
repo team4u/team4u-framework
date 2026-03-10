@@ -1,6 +1,7 @@
 package com.team4u.framework.lease.model;
 
-import lombok.*;
+import lombok.Builder;
+import lombok.Data;
 
 /**
  * 租约订阅声明

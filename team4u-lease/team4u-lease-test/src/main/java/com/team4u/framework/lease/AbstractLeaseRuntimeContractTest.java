@@ -2,8 +2,8 @@ package com.team4u.framework.lease;
 
 import com.team4u.framework.lease.api.LeaseBackend;
 import com.team4u.framework.lease.enums.LeaseRuntimeResult;
-import com.team4u.framework.lease.enums.LeaseTaskOutcome;
 import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
+import com.team4u.framework.lease.enums.LeaseTaskOutcome;
 import com.team4u.framework.lease.model.*;
 import org.junit.Assert;
 import org.junit.Test;

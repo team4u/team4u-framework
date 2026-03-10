@@ -41,25 +41,6 @@ public class LeaseCloseRequest {
      */
     private Map<String, String> attributes;
 
-    public LeaseCloseRequest normalizeForRuntime() {
-        return validate(outcome, failureReason, errorMessage, payload, attributes);
-    }
-
-    public LeaseCloseRequest normalizeForAdmin() {
-        LeaseTaskFailureReason normalizedReason = failureReason;
-        if (outcome == LeaseTaskOutcome.FAILED && normalizedReason == null) {
-            normalizedReason = LeaseTaskFailureReason.MANUAL_FAIL;
-        }
-        return validate(outcome, normalizedReason, errorMessage, payload, attributes);
-    }
-
-    public Map<String, String> getAttributes() {
-        if (attributes == null) {
-            return Collections.emptyMap();
-        }
-        return Collections.unmodifiableMap(new LinkedHashMap<String, String>(attributes));
-    }
-
     private static LeaseCloseRequest validate(LeaseTaskOutcome outcome,
                                               LeaseTaskFailureReason failureReason,
                                               String errorMessage,
@@ -102,5 +83,24 @@ public class LeaseCloseRequest {
                 .failureReason(failureReason)
                 .errorMessage(errorMessage)
                 .build();
+    }
+
+    public LeaseCloseRequest normalizeForRuntime() {
+        return validate(outcome, failureReason, errorMessage, payload, attributes);
+    }
+
+    public LeaseCloseRequest normalizeForAdmin() {
+        LeaseTaskFailureReason normalizedReason = failureReason;
+        if (outcome == LeaseTaskOutcome.FAILED && normalizedReason == null) {
+            normalizedReason = LeaseTaskFailureReason.MANUAL_FAIL;
+        }
+        return validate(outcome, normalizedReason, errorMessage, payload, attributes);
+    }
+
+    public Map<String, String> getAttributes() {
+        if (attributes == null) {
+            return Collections.emptyMap();
+        }
+        return Collections.unmodifiableMap(new LinkedHashMap<String, String>(attributes));
     }
 }

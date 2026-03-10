@@ -1,6 +1,7 @@
 package com.team4u.framework.lease.model;
 
-import lombok.*;
+import lombok.Builder;
+import lombok.Data;
 
 import java.util.Collections;
 import java.util.List;

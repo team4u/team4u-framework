@@ -3,7 +3,8 @@ package com.team4u.framework.lease.model;
 import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
 import com.team4u.framework.lease.enums.LeaseTaskOutcome;
 import com.team4u.framework.lease.enums.LeaseTaskState;
-import lombok.*;
+import lombok.Builder;
+import lombok.Data;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
