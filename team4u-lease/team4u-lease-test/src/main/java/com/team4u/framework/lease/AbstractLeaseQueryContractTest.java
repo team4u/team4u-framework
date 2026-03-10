@@ -52,18 +52,20 @@ public abstract class AbstractLeaseQueryContractTest extends AbstractLeaseContra
         String cancelledTaskId = publish(backend, "pay", "cancelled");
 
         LeaseGrant failedGrant = acquire(backend, "worker-a", 100L, 200L);
+        String actualFailedTaskId = failedGrant.getTaskId();
+        String actualCancelledTaskId = actualFailedTaskId.equals(failedTaskId) ? cancelledTaskId : failedTaskId;
         Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.close(
                 failedGrant.getHandle(),
                 LeaseCloseRequest.failed(LeaseTaskFailureReason.RETRY_EXHAUSTED, "retry exhausted")));
         Assert.assertEquals(com.team4u.framework.lease.enums.LeaseAdminResult.APPLIED,
-                backend.close(cancelledTaskId, LeaseCloseRequest.cancelled("cancelled")));
+                backend.close(actualCancelledTaskId, LeaseCloseRequest.cancelled("cancelled")));
 
-        Assert.assertEquals(failedTaskId, backend.list(LeaseQueryRequest.builder()
+        Assert.assertEquals(actualFailedTaskId, backend.list(LeaseQueryRequest.builder()
                 .outcome(LeaseTaskOutcome.FAILED)
                 .failureReason(LeaseTaskFailureReason.RETRY_EXHAUSTED)
                 .build()).getItems().get(0).getTaskId());
 
-        Assert.assertEquals(cancelledTaskId, backend.list(LeaseQueryRequest.builder()
+        Assert.assertEquals(actualCancelledTaskId, backend.list(LeaseQueryRequest.builder()
                 .outcome(LeaseTaskOutcome.CANCELLED)
                 .build()).getItems().get(0).getTaskId());
     }

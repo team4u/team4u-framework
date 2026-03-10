@@ -284,6 +284,15 @@ adminService.update(
         .payload(newPayload)
         .build()
 );
+
+// 原子更新任务内容并重新调度
+adminService.updateAndReschedule(
+    LeaseUpdateRequest.builder()
+        .taskId(taskId)
+        .payload(newPayload)
+        .build(),
+    300_000L
+);
 ```
 
 
