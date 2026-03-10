@@ -20,9 +20,9 @@ public class RetryPolicyConfig {
      */
     private int maxRetries = 2;
     /**
-     * 前台进程内最大执行次数
+     * 前台最大重试次数（不包含首次执行）
      */
-    private Integer foregroundMaxAttempts;
+    private Integer foregroundMaxRetries;
     /**
      * 退避配置
      */

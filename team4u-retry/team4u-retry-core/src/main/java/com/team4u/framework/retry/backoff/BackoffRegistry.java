@@ -15,7 +15,7 @@ public class BackoffRegistry extends KeyedPolicyRegistry<String, BackoffFactory>
     private static final BackoffRegistry INSTANCE = new BackoffRegistry();
 
     private final DynamicInstanceProvider<BackoffConfig, BackoffConfig, Backoff> provider = DynamicInstanceProvider
-            .createLru(1024, i -> i, config -> get(normalizeType(config.getType()))
+            .createLru(1024, i -> i, config -> get(config.getType())
                     .orElseGet(() -> get("fixed")
                             .orElseThrow(() -> new IllegalStateException("Missing fixed backoff factory")))
                     .create(config));
@@ -27,13 +27,6 @@ public class BackoffRegistry extends KeyedPolicyRegistry<String, BackoffFactory>
 
     public static BackoffRegistry global() {
         return INSTANCE;
-    }
-
-    static String normalizeType(String type) {
-        if (type == null) {
-            return "";
-        }
-        return type.trim().toLowerCase();
     }
 
     public Backoff createBackoff(BackoffConfig config) {

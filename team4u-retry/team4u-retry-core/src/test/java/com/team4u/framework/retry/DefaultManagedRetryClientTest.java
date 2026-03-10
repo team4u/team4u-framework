@@ -164,7 +164,7 @@ public class DefaultManagedRetryClientTest {
     private RetryPolicy retryPolicy(int maxAttempts, int foregroundAttempts, long delayMillis) {
         return RetryPolicy.builder()
                 .maxRetries(maxAttempts == -1 ? -1 : maxAttempts - 1)
-                .foregroundMaxAttempts(foregroundAttempts)
+                .foregroundMaxRetries(foregroundAttempts - 1)
                 .backoff(Backoffs.fixed(delayMillis))
                 .retryOn(IOException.class)
                 .build();

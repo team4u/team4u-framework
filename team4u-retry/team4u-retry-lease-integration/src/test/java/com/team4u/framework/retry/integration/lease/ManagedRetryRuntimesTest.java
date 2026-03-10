@@ -101,7 +101,7 @@ public class ManagedRetryRuntimesTest {
         NoopLeaseBackend backend = new NoopLeaseBackend();
         RetryPolicy defaultPolicy = RetryPolicy.builder()
                 .maxRetries(3)
-                .foregroundMaxAttempts(2)
+                .foregroundMaxRetries(1)
                 .backoff(Backoffs.fixed(0L))
                 .build();
 

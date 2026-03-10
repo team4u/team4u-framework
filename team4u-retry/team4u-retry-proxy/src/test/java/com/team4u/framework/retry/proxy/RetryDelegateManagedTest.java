@@ -33,7 +33,7 @@ public class RetryDelegateManagedTest {
             public RetryPolicy create() {
                 return RetryPolicy.builder()
                         .maxRetries(2)
-                        .foregroundMaxAttempts(1)
+                        .foregroundMaxRetries(0)
                         .backoff(Backoffs.fixed(0L))
                         .retryOn(RuntimeException.class)
                         .build();

@@ -74,7 +74,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
                         .recovery(RecoverySpec.of("recover-payment", "payload"))
                         .policy(RetryPolicy.builder()
                                 .maxRetries(2)
-                                .foregroundMaxAttempts(1)
+                                .foregroundMaxRetries(0)
                                 .backoff(Backoffs.fixed(250L))
                                 .retryOn(RuntimeException.class)
                                 .build())

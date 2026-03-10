@@ -21,7 +21,7 @@ public class RetriesTest {
         RecordingManagedRetryClient client = new RecordingManagedRetryClient();
         RetryPolicy policy = RetryPolicy.builder()
                 .maxRetries(4)
-                .foregroundMaxAttempts(2)
+                .foregroundMaxRetries(1)
                 .backoff(Backoffs.fixed(50L))
                 .build();
 
@@ -35,8 +35,8 @@ public class RetriesTest {
         Assert.assertEquals("order-1001", spec.getIdempotencyKey());
         Assert.assertEquals("pay-notify", spec.getRecovery().getTaskType());
         Assert.assertEquals("payload", spec.getRecovery().getPayload());
-        Assert.assertEquals(5, spec.getPolicy().getMaxAttempts());
-        Assert.assertEquals(Integer.valueOf(2), spec.getPolicy().getForegroundAttempts());
+        Assert.assertEquals(4, spec.getPolicy().getMaxRetries());
+        Assert.assertEquals(Integer.valueOf(1), spec.getPolicy().getForegroundMaxRetries());
         Assert.assertEquals(50L, spec.getPolicy().getDelayMillis(1));
     }
 
@@ -52,7 +52,7 @@ public class RetriesTest {
                 .payload("payload")
                 .policy(RetryPolicy.builder()
                         .maxRetries(2)
-                        .foregroundMaxAttempts(1)
+                        .foregroundMaxRetries(0)
                         .backoff(Backoffs.fixed(0L))
                         .build())
                 .call(() -> "done");
@@ -77,7 +77,7 @@ public class RetriesTest {
                     .call(() -> "ignored");
             Assert.fail("expected IllegalStateException");
         } catch (IllegalStateException ex) {
-            Assert.assertTrue(ex.getMessage().contains("foregroundMaxAttempts"));
+            Assert.assertTrue(ex.getMessage().contains("foregroundMaxRetries"));
         }
 
         Assert.assertNull(client.lastSpec);

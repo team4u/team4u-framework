@@ -17,9 +17,13 @@ public class RetryPolicyFactoryTest {
     }
 
     @Test
-    public void testCreateMapsForegroundAttempts() {
-        RetryPolicy policy = RetryPolicyFactory.create("{\"foregroundMaxAttempts\":2}");
-        Assert.assertEquals(Integer.valueOf(2), policy.getForegroundAttempts());
+    public void testCreateMapsForegroundRetries() {
+        RetryPolicy policy = RetryPolicyFactory.create("{\"foregroundMaxRetries\":2}");
+        Assert.assertEquals(Integer.valueOf(2), policy.getForegroundMaxRetries());
     }
 
+    @Test(expected = IllegalArgumentException.class)
+    public void testCreateRejectsLegacyForegroundMaxAttemptsField() {
+        RetryPolicyFactory.create("{\"foregroundMaxAttempts\":2}");
+    }
 }
