@@ -36,8 +36,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
     /**
      * 实际执行恢复业务逻辑的处理器
      */
-    @SuppressWarnings("rawtypes")
-    private final RecoveryHandler delegate;
+    private final RecoveryHandler<String> delegate;
 
     /**
      * 用于领域模型序列化与反序列化的组件
@@ -46,10 +45,10 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
     private RetryRecordSerializer serializer = HutoolRetryRecordSerializer.INSTANCE;
 
     public RecoveryHandlerLeaseTaskHandlerAdapter(RecoveryHandler<?> delegate) {
-        this.delegate = delegate;
+        this.delegate = RecoveryHandlerPayloadTypes.requireStringPayload(delegate,
+                "Lease recovery handler adapter");
     }
 
-    @SuppressWarnings("unchecked")
     @Override
     public void handle(LeaseExecutionContext context) {
         // 从租约载荷中还原重试记录快照

@@ -43,6 +43,7 @@ public class HutoolRetryContextSerializer implements RetryContextSerializer {
         try {
             // 处理基本类型及其包装类、字符串等简单类型
             if (isSimpleType(type)) {
+                // 将裸值包成单元素数组后再取出，可同时兼容字符串、数字和布尔值的 JSON 表示。
                 Object value = JSONUtil.parseArray("[" + json + "]").get(0);
                 if (type == char.class || type == Character.class) {
                     String text = Convert.toStr(value);

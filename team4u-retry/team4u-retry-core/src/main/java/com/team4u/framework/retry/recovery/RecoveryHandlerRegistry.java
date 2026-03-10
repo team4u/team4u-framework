@@ -13,7 +13,6 @@ public class RecoveryHandlerRegistry extends KeyedPolicyRegistry<String, Recover
 
     public RecoveryHandlerRegistry() {
         super(RecoveryHandler.class);
-        autoScan();
     }
 
     /**

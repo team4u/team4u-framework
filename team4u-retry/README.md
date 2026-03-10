@@ -161,6 +161,11 @@
 
 默认退避策略是固定 1000ms。
 
+补充说明：
+
+* `type` 为空时会回退到 `fixed`
+* 显式传入未知 `type` 会直接抛错，不会静默回退
+
 ### 异常匹配规则
 
 `RetryPolicy` 的决策顺序可以理解为：
@@ -354,7 +359,9 @@ public class PayNotifyHandler implements RecoveryHandler<String> {
 }
 ```
 
+*   类型约束：lease 集成当前只支持 `RecoveryHandler<String>`。
 *   自动注册：如果你的 `RecoveryHandler` 在类路径下，`ManagedRetryRuntime` 默认会通过 SPI 自动扫描并注册它。
+*   自定义 registry：如果你自己传入 `RecoveryHandlerRegistry`，是否执行 SPI 扫描由 `autoScanRecoveryHandlers(...)` 决定。
 *   Spring 支持：在 Spring 环境下，只需将 Handler 声明为 `@Bean`，`ManagedRetryRuntime` 会自动发现。
 
 ---

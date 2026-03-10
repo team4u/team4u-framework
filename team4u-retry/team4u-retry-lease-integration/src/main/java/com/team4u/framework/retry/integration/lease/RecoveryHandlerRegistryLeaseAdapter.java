@@ -72,7 +72,8 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
         if (!this.queue.equals(queue)) {
             return Optional.empty();
         }
-        return delegate.get(taskType).map(RecoveryHandlerLeaseTaskHandlerAdapter::new);
+        return delegate.get(taskType).map(handler -> new RecoveryHandlerLeaseTaskHandlerAdapter(
+                RecoveryHandlerPayloadTypes.requireStringPayload(handler, "Lease recovery handler registry")));
     }
 
     /**

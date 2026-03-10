@@ -4,7 +4,7 @@ import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
 import com.team4u.framework.retry.client.InlineRetryClient;
 import com.team4u.framework.retry.client.ManagedRetryClient;
-import lombok.NoArgsConstructor;
+import cn.hutool.core.lang.Assert;
 
 import java.lang.reflect.Method;
 
@@ -14,12 +14,12 @@ import java.lang.reflect.Method;
  * 该拦截器负责识别目标方法或类上的 {@link Retryable} 注解，
  * 并委托给 {@link RetryDelegate} 执行具体的重试控制逻辑。
  */
-@NoArgsConstructor
 public class RetryInterceptor implements MethodInterceptor {
 
-    private RetryDelegate delegate;
+    private final RetryDelegate delegate;
 
     public RetryInterceptor(InlineRetryClient inlineClient, ManagedRetryClient managedClient) {
+        Assert.notNull(inlineClient, "InlineRetryClient must not be null");
         this.delegate = new RetryDelegate(inlineClient, managedClient);
     }
 
@@ -28,10 +28,6 @@ public class RetryInterceptor implements MethodInterceptor {
         Method interfaceMethod = invocation.getMethod();
         Class<?> targetClass = invocation.getTarget() == null ? null : invocation.getTarget().getClass();
         RetryMethodResolver.ResolvedRetryMethod resolved = RetryMethodResolver.resolve(interfaceMethod, targetClass);
-
-        if (delegate == null) {
-            throw new IllegalStateException("RetryDelegate is not initialized with clients");
-        }
 
         return delegate.executeWithRetry(
                 interfaceMethod,
