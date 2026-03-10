@@ -1,7 +1,6 @@
 package com.team4u.framework.retry.config;
 
 import cn.hutool.core.util.ClassUtil;
-import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
 import com.team4u.framework.retry.backoff.BackoffRegistry;
 import com.team4u.framework.retry.policy.RetryPolicy;
@@ -23,7 +22,6 @@ public class RetryPolicyFactory {
      * @return 重试策略实例
      */
     public static RetryPolicy create(String jsonConfig) {
-        validateUnsupportedKeys(jsonConfig);
 
         // 将 JSON 字符串解析为重试策略配置对象
         RetryPolicyConfig config = JSONUtil.toBean(jsonConfig, RetryPolicyConfig.class);
@@ -62,19 +60,6 @@ public class RetryPolicyFactory {
         }
 
         return builder.build();
-    }
-
-    private static void validateUnsupportedKeys(String jsonConfig) {
-        JSONObject jsonObject = JSONUtil.parseObj(jsonConfig);
-        rejectLegacyKey(jsonObject, "maxAttempts");
-        rejectLegacyKey(jsonObject, "foregroundAttempts");
-        rejectLegacyKey(jsonObject, "foregroundMaxAttempts");
-    }
-
-    private static void rejectLegacyKey(JSONObject jsonObject, String key) {
-        if (jsonObject.containsKey(key)) {
-            throw new IllegalArgumentException("Invalid retry policy config. Unsupported field: " + key);
-        }
     }
 
     /**

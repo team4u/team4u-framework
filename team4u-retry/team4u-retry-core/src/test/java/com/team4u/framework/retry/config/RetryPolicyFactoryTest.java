@@ -22,8 +22,4 @@ public class RetryPolicyFactoryTest {
         Assert.assertEquals(Integer.valueOf(2), policy.getForegroundMaxRetries());
     }
 
-    @Test(expected = IllegalArgumentException.class)
-    public void testCreateRejectsLegacyForegroundMaxAttemptsField() {
-        RetryPolicyFactory.create("{\"foregroundMaxAttempts\":2}");
-    }
 }
