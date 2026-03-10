@@ -79,10 +79,9 @@ public class RetryDelegate {
         validateManagedMethod(method);
         InvocationRecoveryData recoveryData = buildRecoveryData(method, target, args);
 
-        Class<? extends RecoveryHandler> recoveryClass = retryable.recovery();
-        String taskType = resolveTaskType(retryable.recovery());
+        validateManagedRecovery(retryable.recovery());
 
-        RecoverySpec recoverySpec = RecoverySpec.of(taskType, recoveryData);
+        RecoverySpec recoverySpec = RecoverySpec.of(InvocationReplay.TASK_NAME, recoveryData);
 
         RetryTaskSpec<Object> taskSpec = RetryTaskSpec.builder()
                 .idempotencyKey(buildIdempotencyKey(recoveryData))
@@ -194,16 +193,16 @@ public class RetryDelegate {
         return targetClass.getName();
     }
 
-    private String resolveTaskType(Class<? extends RecoveryHandler> recoveryClass) {
-        if (recoveryClass == null || recoveryClass == RecoveryHandler.class) {
-            return InvocationReplay.TASK_NAME;
+    private void validateManagedRecovery(Class<? extends RecoveryHandler> recoveryClass) {
+        if (recoveryClass == null
+                || recoveryClass == RecoveryHandler.class
+                || recoveryClass == InvocationReplay.class) {
+            return;
         }
-        try {
-            return recoveryClass.getDeclaredConstructor().newInstance().taskName();
-        } catch (ReflectiveOperationException e) {
-            throw new IllegalStateException(
-                    "Failed to resolve taskType from recovery handler: " + recoveryClass.getName(), e);
-        }
+        throw new IllegalStateException(
+                "@Retryable(mode = MANAGED) only supports InvocationReplay in proxy/spring interception. "
+                        + "Configured recovery: " + recoveryClass.getName()
+                        + ". Use ManagedRetryClient.submit(...) for custom taskType/payload recovery.");
     }
 
     private String buildIdempotencyKey(InvocationRecoveryData recoveryData) {

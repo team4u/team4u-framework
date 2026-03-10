@@ -2,6 +2,7 @@ package com.team4u.framework.retry.integration.lease;
 
 import com.team4u.framework.lease.enums.LeaseRuntimeResult;
 import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
+import com.team4u.framework.lease.enums.LeaseTaskOutcome;
 import com.team4u.framework.lease.handler.LeaseTaskHandler;
 import com.team4u.framework.lease.model.LeaseCloseRequest;
 import com.team4u.framework.lease.model.LeaseReleaseRequest;
@@ -26,7 +27,6 @@ import java.time.Instant;
 @Slf4j
 @Getter
 public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler {
-
     @SuppressWarnings("rawtypes")
     private final RecoveryHandler delegate;
 
@@ -41,6 +41,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
     @Override
     public void handle(LeaseExecutionContext context) {
         RetryRecord record = serializer.deserialize(context.getPayload());
+        markRunning(record);
 
         RecoveryContext recoveryContext = RecoveryContext.builder()
                 .taskId(record.getTaskId())
@@ -50,15 +51,27 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
         try {
             RecoveryExecutionContext.run(
                     () -> delegate.recover(record.getRequest().getRecovery().getPayload(), recoveryContext));
+            record.getState().setStatus(RetryStatus.SUCCEEDED);
+            record.getState().setNextRunAt(null);
+            String serializedRecord = serializer.serialize(record);
 
             LeaseRuntimeResult result = context.getRuntimeClient().close(
                     context.getHandle(),
-                    LeaseCloseRequest.succeeded());
-            checkResult(result, "closeSucceeded", record.getTaskId());
+                    LeaseCloseRequest.builder()
+                            .outcome(LeaseTaskOutcome.SUCCEEDED)
+                            .payload(serializedRecord)
+                            .build());
+            assertApplied(result, "closeSucceeded", record.getTaskId());
+            context.markLifecycleHandled();
 
         } catch (Throwable cause) {
             handleFailure(context, record, cause);
         }
+    }
+
+    private void markRunning(RetryRecord record) {
+        record.getState().setStatus(RetryStatus.RUNNING);
+        record.getState().setNextRunAt(null);
     }
 
     private void handleFailure(LeaseExecutionContext context, RetryRecord record, Throwable cause) {
@@ -70,10 +83,19 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
 
         if (!policy.canRetry(attempts, cause)) {
             log.error("Task failed closed: {}", record.getTaskId(), cause);
+            record.getState().setStatus(RetryStatus.FAILED);
+            record.getState().setNextRunAt(null);
+            String serializedRecord = serializer.serialize(record);
             LeaseRuntimeResult result = context.getRuntimeClient().close(
                     context.getHandle(),
-                    LeaseCloseRequest.failed(LeaseTaskFailureReason.RETRY_EXHAUSTED, cause.getMessage()));
-            checkResult(result, "closeFailed", record.getTaskId());
+                    LeaseCloseRequest.builder()
+                            .outcome(LeaseTaskOutcome.FAILED)
+                            .failureReason(LeaseTaskFailureReason.RETRY_EXHAUSTED)
+                            .errorMessage(cause.getMessage())
+                            .payload(serializedRecord)
+                            .build());
+            assertApplied(result, "closeFailed", record.getTaskId());
+            context.markLifecycleHandled();
         } else {
             long delayMillis = policy.getDelayMillis(attempts);
             log.info("Task failed, retrying in {}ms: {}", delayMillis, record.getTaskId());
@@ -89,13 +111,15 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
                             .payload(serializedRecord)
                             .errorMessage(cause.getMessage())
                             .build());
-            checkResult(result, "release", record.getTaskId());
+            assertApplied(result, "release", record.getTaskId());
+            context.markLifecycleHandled();
         }
     }
 
-    private void checkResult(LeaseRuntimeResult result, String operation, String taskId) {
+    private void assertApplied(LeaseRuntimeResult result, String operation, String taskId) {
         if (result != LeaseRuntimeResult.APPLIED) {
-            log.error("Failed to {} lease task: {}, result: {}", operation, taskId, result);
+            throw new IllegalStateException(
+                    "Failed to " + operation + " lease task: " + taskId + ", result: " + result);
         }
     }
 }

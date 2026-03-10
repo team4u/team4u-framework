@@ -169,13 +169,16 @@ public class JdbcLeaseTaskDao {
         return db.execute(
                 "UPDATE " + TABLE_NAME + " SET state = ?, outcome = ?, failure_reason = ?, "
                         + "failure_count = failure_count + ?, worker_id = NULL, lease_token = NULL, lease_expires_at = 0, "
-                        + "error_message = ?, updated_at = ? "
+                        + "error_message = ?, payload = COALESCE(?, payload), attributes_json = COALESCE(?, attributes_json), "
+                        + "updated_at = ? "
                         + "WHERE task_id = ? AND state = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
                 LeaseTaskState.CLOSED.name(),
                 outcome.name(),
                 reason == null ? null : reason.name(),
                 failureIncrement,
                 safeRequest.getErrorMessage(),
+                safeRequest.getPayload(),
+                safeRequest.getAttributes().isEmpty() ? null : jsonCodec.toJson(safeRequest.getAttributes()),
                 now,
                 taskId,
                 LeaseTaskState.RUNNING.name(),
@@ -288,12 +291,15 @@ public class JdbcLeaseTaskDao {
                 "UPDATE " + TABLE_NAME
                         + " SET state = ?, outcome = ?, failure_reason = ?, failure_count = failure_count + ?, "
                         + "worker_id = NULL, lease_token = NULL, lease_expires_at = 0, error_message = ?, "
+                        + "payload = COALESCE(?, payload), attributes_json = COALESCE(?, attributes_json), "
                         + "updated_at = ? WHERE task_id = ? AND state <> ? AND NOT (state = ? AND lease_expires_at >= ?)",
                 LeaseTaskState.CLOSED.name(),
                 outcome.name(),
                 reason == null ? null : reason.name(),
                 failureIncrement,
                 safeRequest.getErrorMessage(),
+                safeRequest.getPayload(),
+                safeRequest.getAttributes().isEmpty() ? null : jsonCodec.toJson(safeRequest.getAttributes()),
                 now,
                 taskId,
                 LeaseTaskState.CLOSED.name(),

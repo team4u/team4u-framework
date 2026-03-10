@@ -518,8 +518,9 @@ public class PayService {
 `@EnableRetry` 不会自动创建 `ManagedRetryClient`。
 如果你希望 `@Retryable(mode = RetryMode.MANAGED)` 真正进入托管模型，需要自己声明对应 Bean。
 
-另外需要注意：代理 / 注解模式下的 MANAGED 只支持 `void` 方法。
+另外需要注意：代理 / 注解模式下的 MANAGED 只支持 `void` 方法，且恢复方式固定为 `InvocationReplay`。
 如果方法需要返回业务结果、`CompletableFuture`，或者你希望拿到提交后的 `taskId/state`，不要复用原业务方法签名，改用编程式 `Retries.managed(managedRetryClient).call(...)`。
+如果你需要自定义 `taskType` / payload 或自定义 `RecoveryHandler`，也不要走 `@Retryable(mode = MANAGED)`，改用编程式提交。
 
 如果你更想用统一入口，也可以改用 `Retries.managed(managedRetryClient)...call(...)`。
 
@@ -590,6 +591,7 @@ public class RetryManagedConfiguration {
 ## 代理 / 注解模式下的恢复说明
 
 代理模式下，框架会为托管任务构造方法恢复数据，后台通过 `InvocationReplay` 反射调用目标 Bean / 方法完成恢复。
+这条链路不支持把注解里的 `recovery` 扩展成任意自定义 handler；注解 MANAGED 的恢复载荷始终是方法快照。
 
 恢复执行阶段会在 lease worker 的统一恢复入口写入 `RecoveryExecutionContext`，避免代理再次进入一轮新的重试包装，防止“恢复时再托管、无限套娃”。
 
@@ -630,6 +632,11 @@ public String notifyPay(String orderId, @RetryIgnore InputStream bodyStream) {
 * `argValues`
 
 恢复阶段会基于这些信息重新定位方法并执行补偿调用。
+
+限制：
+
+* `@Retryable(mode = MANAGED)` 仅支持默认 recovery 或显式 `InvocationReplay`
+* 如果需要自定义恢复载荷或自定义 `taskType`，请改用 `ManagedRetryClient.submit(...)` / `Retries.managed(...)`
 
 ---
 

@@ -68,7 +68,7 @@ public class RetryDelegateManagedTest {
         Assert.assertNull(secondResult);
         Assert.assertEquals(2, managedClient.submitCount);
         Assert.assertNotNull(managedClient.lastSpec);
-        Assert.assertEquals(CustomRecoveryHandler.TASK_TYPE, managedClient.lastSpec.getRecovery().getTaskType());
+        Assert.assertEquals(InvocationReplay.TASK_NAME, managedClient.lastSpec.getRecovery().getTaskType());
         Assert.assertEquals(firstKey, managedClient.lastSpec.getIdempotencyKey());
         Assert.assertFalse(firstKey.isEmpty());
 
@@ -151,29 +151,54 @@ public class RetryDelegateManagedTest {
         Assert.assertEquals(0, managedClient.submitCount);
     }
 
+    @Test
+    public void testManagedCustomRecoveryRejectedBeforeSubmit() throws Throwable {
+        CapturingManagedRetryClient managedClient = new CapturingManagedRetryClient();
+        RetryDelegate delegate = new RetryDelegate(null, managedClient);
+        ManagedCustomRecoveryService target = new ManagedCustomRecoveryService();
+        Method method = ManagedCustomRecoveryService.class.getMethod("replayPayment", String.class);
+        Retryable retryable = method.getAnnotation(Retryable.class);
+
+        try {
+            delegate.executeWithRetry(method, target, new Object[]{"order-1"}, retryable, () -> null);
+            Assert.fail("expected IllegalStateException");
+        } catch (IllegalStateException ex) {
+            Assert.assertTrue(ex.getMessage().contains("only supports InvocationReplay"));
+            Assert.assertTrue(ex.getMessage().contains("ManagedRetryClient.submit"));
+        }
+
+        Assert.assertEquals(0, managedClient.submitCount);
+    }
+
     public static class ManagedVoidService {
-        @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED, recovery = CustomRecoveryHandler.class)
+        @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED)
         public void replayPayment(String orderId, Integer attempts) {
         }
     }
 
     public static class ManagedStringService {
-        @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED, recovery = CustomRecoveryHandler.class)
+        @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED)
         public String replayPayment(String orderId) {
             return orderId;
         }
     }
 
     public static class ManagedAsyncService {
-        @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED, recovery = CustomRecoveryHandler.class)
+        @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED)
         public CompletableFuture<String> replayPayment(String orderId) {
             return CompletableFuture.completedFuture(orderId);
         }
     }
 
     public static class ManagedIgnoredPrimitiveService {
-        @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED, recovery = CustomRecoveryHandler.class)
+        @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED)
         public void replayPayment(@RetryIgnore int attempts) {
+        }
+    }
+
+    public static class ManagedCustomRecoveryService {
+        @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED, recovery = CustomRecoveryHandler.class)
+        public void replayPayment(String orderId) {
         }
     }
 

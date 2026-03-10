@@ -56,4 +56,21 @@ public class LeaseCloseRequestTest {
         Assert.assertEquals(LeaseTaskFailureReason.MANUAL_FAIL, request.getFailureReason());
         Assert.assertEquals("manual", request.getErrorMessage());
     }
+
+    @Test
+    public void testNormalizePreservesPayload() {
+        LeaseCloseRequest runtime = LeaseCloseRequest.builder()
+                .outcome(LeaseTaskOutcome.SUCCEEDED)
+                .payload("payload-v2")
+                .build()
+                .normalizeForRuntime();
+        LeaseCloseRequest admin = LeaseCloseRequest.builder()
+                .outcome(LeaseTaskOutcome.CANCELLED)
+                .payload("payload-v3")
+                .build()
+                .normalizeForAdmin();
+
+        Assert.assertEquals("payload-v2", runtime.getPayload());
+        Assert.assertEquals("payload-v3", admin.getPayload());
+    }
 }

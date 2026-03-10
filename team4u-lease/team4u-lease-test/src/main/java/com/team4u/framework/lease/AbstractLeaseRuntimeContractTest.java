@@ -2,6 +2,7 @@ package com.team4u.framework.lease;
 
 import com.team4u.framework.lease.api.LeaseBackend;
 import com.team4u.framework.lease.enums.LeaseRuntimeResult;
+import com.team4u.framework.lease.enums.LeaseTaskOutcome;
 import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
 import com.team4u.framework.lease.model.*;
 import org.junit.Assert;
@@ -85,6 +86,21 @@ public abstract class AbstractLeaseRuntimeContractTest extends AbstractLeaseCont
         Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.close(
                 grant.getHandle(), LeaseCloseRequest.failed(LeaseTaskFailureReason.HANDLER_EXCEPTION, "boom")));
         Assert.assertNull(acquire(backend, "worker-b", 200L, 100L));
+    }
+
+    @Test
+    public void testCloseCanUpdatePayload() throws Exception {
+        LeaseBackend backend = createBackend();
+        String taskId = publish(backend, "pay", "payload-v1");
+        LeaseGrant grant = acquire(backend, "worker-a", 200L, 500L);
+
+        Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.close(
+                grant.getHandle(),
+                LeaseCloseRequest.builder()
+                        .outcome(LeaseTaskOutcome.SUCCEEDED)
+                        .payload("payload-v2")
+                        .build()));
+        Assert.assertEquals("payload-v2", backend.get(taskId).get().getPayload());
     }
 
     @Test

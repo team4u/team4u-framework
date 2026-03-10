@@ -9,6 +9,7 @@ import lombok.Singular;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 任务执行上下文
@@ -70,6 +71,7 @@ public class LeaseExecutionContext {
      * 租约操作句柄
      */
     private final LeaseHandle handle;
+    private final AtomicBoolean lifecycleHandled = new AtomicBoolean(false);
 
     @Builder
     private LeaseExecutionContext(String taskId,
@@ -113,5 +115,16 @@ public class LeaseExecutionContext {
         if (heartbeatRequester != null) {
             heartbeatRequester.run();
         }
+    }
+
+    /**
+     * 标记当前任务生命周期已由 handler 自行完成写回。
+     */
+    public void markLifecycleHandled() {
+        lifecycleHandled.set(true);
+    }
+
+    public boolean isLifecycleHandled() {
+        return lifecycleHandled.get();
     }
 }

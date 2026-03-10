@@ -30,7 +30,8 @@ public @interface Retryable {
 
     /**
      * 在 MANAGED 模式下，指定的恢复处理器类。
-     * 对于基于切面的反射重试，可指定 InvocationReplay。
+     * 代理 / Spring AOP 接入下仅支持默认值或显式指定 {@code InvocationReplay}。
+     * 若需要自定义 taskType / payload，请改用 {@code ManagedRetryClient.submit(...)}。
      */
     Class<? extends RecoveryHandler> recovery() default RecoveryHandler.class;
 }
