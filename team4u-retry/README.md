@@ -267,37 +267,6 @@ CompletableFuture<String> future = Retries.inline()
 这里的 `asyncRemoteCall` 需要返回 `CompletableFuture<T>`。
 框架内置全局调度线程池，通过 `callAsync` 调用时会默认使用该调度器进行退避等待。
 
----
-
-## MANAGED：前台尝试 + 后台接管
-
-```java
-import com.team4u.framework.retry.Retries;
-import com.team4u.framework.retry.backoff.Backoffs;
-import com.team4u.framework.retry.client.ManagedRetryClient;
-import com.team4u.framework.retry.domain.ManagedSubmitResult;
-import com.team4u.framework.retry.policy.RetryPolicy;
-
-RetryPolicy policy = RetryPolicy.builder()
-        .maxRetries(4)
-        .foregroundMaxRetries(1)
-        .backoff(Backoffs.fixed(1000))
-        .retryOn(java.io.IOException.class)
-        .build();
-
-// 使用 Retries 门面类提交托管任务
-ManagedSubmitResult<String> result = Retries.managed(managedRetryClient)
-        .task("pay-notify")
-        .idempotentBy("order:1001")
-        .payload("{\"orderId\":\"1001\"}")
-        .policy(policy)
-        .call(this::notifyPayment);
-```
-
-通过 `Retries.managed(client)` 可以更清晰地链式编排托管任务的各项规格。
-
----
-
 ## MANAGED 托管模式：前台尝试 + 后台接管
 
 MANAGED 模式的核心在于：“任务高可靠持久化” + “执行权可在进程间/线程间流转”。
@@ -326,8 +295,6 @@ MANAGED 模式的核心在于：“任务高可靠持久化” + “执行权可
 ### 1. 一键组装并启动
 
 ```java
-import com.team4u.framework.lease.api.LeaseBackend;
-import com.team4u.framework.retry.integration.lease.ManagedRetryRuntime;
 
 LeaseBackend backend = ...; // 详见 [team4u-lease 文档](../team4u-lease/README.md)
 
@@ -340,7 +307,23 @@ ManagedRetryRuntime runtime = ManagedRetryRuntime.lease(backend)
 
 // 通过 runtime 获取 client 即可开始使用
 ManagedRetryClient client = runtime.client();
+
+RetryPolicy policy = RetryPolicy.builder()
+        .maxRetries(4)
+        .foregroundMaxRetries(1)
+        .backoff(Backoffs.fixed(1000))
+        .retryOn(java.io.IOException.class)
+        .build();
+
+// 使用 Retries 门面类提交托管任务
+ManagedSubmitResult<String> result = Retries.managed(client)
+        .task("pay-notify")
+        .idempotentBy("order:1001")
+        .payload("{\"orderId\":\"1001\"}")
+        .policy(policy)
+        .call(this::notifyPayment);
 ```
+
 
 `ManagedRetryRuntime` 会帮你完成以下工作：
 *   存储与调度：自动基于 `LeaseBackend` 创建持久化存储和任务调度能力。
