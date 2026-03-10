@@ -787,7 +787,7 @@ retry.policy.
 例如：
 
 ```properties
-retry.policy.order-submit={"maxAttempts":6,"foregroundAttempts":2,"backoff":{"type":"exponentialjitter","params":{"initialDelay":500,"multiplier":2.0,"maxDelay":10000}},"retryOnExceptions":["java.net.SocketTimeoutException","java.io.IOException"],"abortOnExceptions":["java.lang.IllegalArgumentException"],"condition":""}
+retry.policy.order-submit={"maxAttempts":6,"foregroundAttempts":2,"backoff":{"type":"exponentialJitter","params":{"initialDelay":500,"multiplier":2.0,"maxDelay":10000}},"retryOnExceptions":["java.net.SocketTimeoutException","java.io.IOException"],"abortOnExceptions":["java.lang.IllegalArgumentException"],"condition":""}
 ```
 
 也就是说，这里的 value 需要是能被 `RetryPolicyFactory.create(String jsonConfig)` 直接解析的合法 JSON 字符串。
