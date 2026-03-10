@@ -14,6 +14,7 @@ import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -83,6 +84,15 @@ public class RetrySpringTest {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(TestConfig.class)) {
             Assert.assertTrue(RecoveryHandlerRegistry.global()
                     .get(InvocationReplay.TASK_NAME).isPresent());
+        }
+    }
+
+    @Test
+    public void testEnableRetryShouldImportRetryLifecycleConfiguration() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(TestConfig.class)) {
+            Assert.assertNotNull(context.getBean(RetryLifecycleConfiguration.class));
+        } catch (NoSuchBeanDefinitionException ex) {
+            Assert.fail("@EnableRetry should import RetryLifecycleConfiguration");
         }
     }
 

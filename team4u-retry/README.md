@@ -314,11 +314,11 @@ MANAGED 提交会返回 4 种终态之一：
 它要求你自己把依赖组起来：
 
 * `DurableRetryStore`
-* `RecoveryHandlerRegistry`
 * `RetryCoordinator`
 * 可选的默认 `RetryPolicy`
 
-如果缺任何一个，构造时会直接失败。
+如果缺少 `DurableRetryStore` 或 `RetryCoordinator`，构造时会直接失败。
+`RecoveryHandlerRegistry` 不是 `managedRetryClient` 的构造参数，但如果你要跑后台恢复链路，`RetryLeaseWorker` 仍然需要它。
 
 ### 最推荐的初始化方式：基于 lease
 
@@ -326,6 +326,7 @@ MANAGED 提交会返回 4 种终态之一：
 
 * `LeaseDurableRetryStore` 同时实现了 `DurableRetryStore` 和 `RetryCoordinator`
 * `RetryLeaseWorker` 负责后台消费和恢复执行
+* 使用方仍需提供一个同时具备 `LeaseBackend` 与 `LeaseRuntimeClient` 能力的 lease 实现
 
 ### 最小初始化代码
 
@@ -341,6 +342,7 @@ import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 
 LeaseBackend backend = ...;
+LeaseRuntimeClient runtimeClient = (LeaseRuntimeClient) backend;
 
 // store + coordinator
 LeaseDurableRetryStore store = new LeaseDurableRetryStore(backend);
@@ -363,14 +365,14 @@ ManagedRetryClient managedRetryClient = DefaultManagedRetryClient.builder()
         .build();
 
 // worker（必须有后台执行者）
-RetryLeaseWorker worker = new RetryLeaseWorker(backend, registry);
+RetryLeaseWorker worker = new RetryLeaseWorker(runtimeClient, registry);
 worker.start();
 ```
 
 ### 初始化时要特别注意
 
 上面这段代码隐含一个前提：
-你的 `backend` 不仅要能作为 `LeaseBackend` 使用，还要能作为 `LeaseRuntimeClient` 使用，否则 `RetryLeaseWorker` 无法启动。
+你的 lease 实现不仅要能作为 `LeaseBackend` 使用，还要能作为 `LeaseRuntimeClient` 使用，否则 `RetryLeaseWorker` 无法启动。
 
 也就是说，在实际接入里，可运行的 lease backend 需要同时覆盖：
 
@@ -422,7 +424,7 @@ void schedule(RetryRecord record, long delayMillis)
 
 ### `RecoveryHandlerRegistry`
 
-负责“恢复时到底调用谁”。
+它不是 `DefaultManagedRetryClient` 的构造依赖，而是后台恢复执行链路的依赖。
 
 它内部以 handler task type 为 key 管理 `RecoveryHandler`，支持：
 
@@ -599,6 +601,7 @@ public class RetryConfig {
 * 默认 `InlineRetryClient`
 * `RetryAdvisor`
 * 默认 `RecoveryHandler` 扫描注册器
+* 生命周期配置，在容器销毁时调用 `RetryExecutorManager.global().shutdown()`
 
 ### 最小 Spring 示例
 
@@ -699,9 +702,9 @@ public class RetryManagedConfiguration {
 
     @Bean(initMethod = "start", destroyMethod = "shutdown")
     public RetryLeaseWorker retryLeaseWorker(
-            LeaseBackend backend) {
+            LeaseRuntimeClient runtimeClient) {
         return new RetryLeaseWorker(
-                backend,
+                runtimeClient,
                 RecoveryHandlerRegistry.global()
         );
     }
@@ -710,7 +713,8 @@ public class RetryManagedConfiguration {
 
 ### 生命周期管理
 
-`team4u-retry-spring` 已内置生命周期配置，会在 Spring 容器销毁时调用 `RetryExecutorManager.global().shutdown()`。
+仅使用 `@EnableRetry` 时，会自动导入 `RetryLifecycleConfiguration`，在 Spring 容器销毁时调用 `RetryExecutorManager.global().shutdown()`。
+如果你没有走 `@EnableRetry`，则需要自己显式注册这个生命周期配置，或在应用关闭时手动 shutdown。
 
 ### Spring AOP 边界
 
@@ -783,22 +787,10 @@ retry.policy.
 例如：
 
 ```properties
-retry.policy.order-submit={
-"maxAttempts"=6,
-"foregroundAttempts"=2,
-"backoff"={
-"type"="exponentialjitter",
-"params"={
-"initialDelay"=500,
-"multiplier"=2.0,
-"maxDelay"=10000
-}=
-},=
-"retryOnExceptions"=["java.net.SocketTimeoutException", "java.io.IOException"],
-"abortOnExceptions"=["java.lang.IllegalArgumentException"],
-"condition"=""
-}=
+retry.policy.order-submit={"maxAttempts":6,"foregroundAttempts":2,"backoff":{"type":"exponentialjitter","params":{"initialDelay":500,"multiplier":2.0,"maxDelay":10000}},"retryOnExceptions":["java.net.SocketTimeoutException","java.io.IOException"],"abortOnExceptions":["java.lang.IllegalArgumentException"],"condition":""}
 ```
+
+也就是说，这里的 value 需要是能被 `RetryPolicyFactory.create(String jsonConfig)` 直接解析的合法 JSON 字符串。
 
 可配置字段包括：
 
@@ -837,10 +829,6 @@ INLINE 的所有尝试都发生在当前进程里，不做持久化，不会跨�
 ### 非 Spring 场景要自己关注线程池生命周期
 
 框架提供了全局线程池和 shutdown hook，但在独立运行环境里，仍建议你显式管理资源关闭。
-
-### `Error` 不会进入普通重试逻辑
-
-像 `OutOfMemoryError` 这种严重错误会直接抛出，不参与正常重试循环。
 
 ### `CompletableFuture` 之外的异步返回值不会自动走异步重试分支
 

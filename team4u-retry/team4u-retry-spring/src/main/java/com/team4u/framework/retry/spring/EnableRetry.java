@@ -13,6 +13,6 @@ import java.lang.annotation.*;
 @Target(ElementType.TYPE)
 @Retention(RetentionPolicy.RUNTIME)
 @Documented
-@Import(RetrySpringConfiguration.class)
+@Import({RetrySpringConfiguration.class, RetryLifecycleConfiguration.class})
 public @interface EnableRetry {
 }
