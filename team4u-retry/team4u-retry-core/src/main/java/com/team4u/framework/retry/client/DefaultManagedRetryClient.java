@@ -23,7 +23,7 @@ import java.util.Optional;
  * <ul>
  * <li>任务持久化：在重试开始前将任务意图存储到 {@link DurableRetryStore}，确保任务不会因进程崩溃而丢失。</li>
  * <li>前台尝试：在调用者线程中进行初步重试，以降低系统响应延迟。</li>
- * <li>后台调度移交：当前台尝试次数达到上限且任务仍需重试时，通过 {@link RetryCoordinator} 移交给后台调度器。</li>
+ * <li>后台调度移交：当前台尝试次数达到上限且任务仍需重试时，通过 {@link RetryCoordinator} 原子持久化最新状态并移交给后台调度器。</li>
  * </ul>
  */
 public class DefaultManagedRetryClient implements ManagedRetryClient {
@@ -183,12 +183,12 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
      */
     private <T> ManagedSubmitResult<T> executeInForeground(RetryTaskSpec<T> spec, RetryRecord record,
                                                            RetryPolicy policy) {
-        int foregroundAttempts = policy.getForegroundMaxRetries() + 1;
-        int attempts = 0;
+        int maxForegroundExecutions = policy.getForegroundMaxRetries() + 1;
+        int executedAttempts = 0;
 
         while (true) {
-            attempts++;
-            markForegroundRunning(record, attempts);
+            executedAttempts++;
+            markForegroundRunning(record, executedAttempts);
 
             try {
                 T result = spec.getExecutor().call();
@@ -201,23 +201,27 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
                 if (cause instanceof Error) {
                     throw (Error) cause;
                 }
-                boolean canRetry = policy.canRetry(attempts, cause);
+                boolean canRetry = policy.canRetry(executedAttempts, cause);
                 FailureRecord failureRecord = createFailureRecord(cause);
 
                 if (!canRetry) {
-                    handleFinalFailure(record, attempts, failureRecord);
+                    handleFinalFailure(record, executedAttempts, failureRecord);
                     return new ManagedSubmitResult.Failed<>(cause);
                 }
 
-                if (attempts < foregroundAttempts) {
-                    InterruptedException interrupted = handleForegroundBackoff(record, attempts, policy, failureRecord);
+                if (executedAttempts < maxForegroundExecutions) {
+                    InterruptedException interrupted = handleForegroundBackoff(
+                            record,
+                            executedAttempts,
+                            policy,
+                            failureRecord);
                     if (interrupted != null) {
                         FailureRecord interruptedFailure = createFailureRecord(interrupted);
-                        handleFinalFailure(record, attempts, interruptedFailure);
+                        handleFinalFailure(record, executedAttempts, interruptedFailure);
                         return new ManagedSubmitResult.Failed<>(interrupted);
                     }
                 } else {
-                    return handleForegroundExhausted(record, attempts, policy, failureRecord);
+                    return handleForegroundExhausted(record, executedAttempts, policy, failureRecord);
                 }
             }
         }
@@ -285,19 +289,19 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
      * 计算并设置下一次执行时间，并将当前状态标记为“待调度”状态以通知相关方，随后在当前线程阻塞。
      *
      * @param record   当前任务记录
-     * @param attempts 已执行的重试次数
+     * @param executedAttempts 已执行的总尝试次数（包含首次执行）
      * @param policy   重试策略
      * @param failure  本次失败的原因详情
      * @return 若休眠过程被中断则返回中断异常，否则返回 null
      */
     private InterruptedException handleForegroundBackoff(
             RetryRecord record,
-            int attempts,
+            int executedAttempts,
             RetryPolicy policy,
             FailureRecord failure) {
-        long delayMillis = policy.getDelayMillis(attempts);
+        long delayMillis = policy.getDelayMillis(executedAttempts);
         Instant nextRunAt = Instant.now().plusMillis(delayMillis);
-        applyFailureState(record, attempts, RetryStatus.SCHEDULED, nextRunAt, failure);
+        applyFailureState(record, executedAttempts, RetryStatus.SCHEDULED, nextRunAt, failure);
         try {
             sleepQuietly(delayMillis);
             return null;
@@ -314,7 +318,7 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
      * 将任务从前台移交给后台调度系统，以实现更长周期或更稳定的后续重试。
      *
      * @param record   当前任务记录
-     * @param attempts 已完成的前台尝试次数
+     * @param executedAttempts 已完成的前台总尝试次数
      * @param policy   重试策略
      * @param failure  最后一次导致移交的失败详情
      * @param <T>      任务返回值类型
@@ -322,19 +326,21 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
      */
     private <T> ManagedSubmitResult<T> handleForegroundExhausted(
             RetryRecord record,
-            int attempts,
+            int executedAttempts,
             RetryPolicy policy,
             FailureRecord failure) {
-        long delayMillis = policy.getDelayMillis(attempts);
+        long delayMillis = policy.getDelayMillis(executedAttempts);
         Instant nextRunAt = Instant.now().plusMillis(delayMillis);
 
-        applyFailureState(record, attempts, RetryStatus.SCHEDULED, nextRunAt, failure);
+        applyFailureState(record, executedAttempts, RetryStatus.SCHEDULED, nextRunAt, failure);
 
         return scheduleToBackground(record, delayMillis);
     }
 
     /**
      * 调用后台协调中心进行任务调度。
+     * <p>
+     * 协调中心负责将 {@code record} 中最新的 attempts / nextRunAt / error 快照原子持久化并投递。
      *
      * @param record      重试记录
      * @param delayMillis 距离下次运行的延迟毫秒数

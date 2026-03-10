@@ -150,11 +150,21 @@ public class LeaseDurableRetryStoreTest {
         FixedSerializer serializer = new FixedSerializer("serialized-schedule");
         RetryRecord record = retryRecord("payment");
         record.setTaskId("task-4");
+        record.getState().setAttempts(2);
+        record.getState().setStatus(RetryStatus.SCHEDULED);
+        record.getState().setLastErrorCode("IOException");
+        record.getState().setLastErrorMessage("boom");
+        record.getState().setNextRunAt(Instant.now().plusSeconds(5));
 
         store.setSerializer(serializer);
         store.schedule(record, 500L);
 
         Assert.assertSame(record, serializer.lastSerializedRecord);
+        Assert.assertEquals(2, serializer.lastSerializedRecord.getState().getAttempts());
+        Assert.assertEquals(RetryStatus.SCHEDULED, serializer.lastSerializedRecord.getState().getStatus());
+        Assert.assertEquals("IOException", serializer.lastSerializedRecord.getState().getLastErrorCode());
+        Assert.assertEquals("boom", serializer.lastSerializedRecord.getState().getLastErrorMessage());
+        Assert.assertNotNull(serializer.lastSerializedRecord.getState().getNextRunAt());
         Assert.assertEquals(1, adminService.operations.size());
         Assert.assertEquals("updateAndReschedule", adminService.operations.get(0));
         Assert.assertNotNull(adminService.updateRequest);

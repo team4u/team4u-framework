@@ -26,6 +26,23 @@ public class RetryPolicyTest {
     }
 
     @Test
+    public void testRetryBudgetSemanticsForZeroOneTwoRetries() {
+        RuntimeException ex = new RuntimeException("test");
+
+        RetryPolicy zeroRetries = RetryPolicy.builder().maxRetries(0).build();
+        Assert.assertFalse(zeroRetries.canRetry(1, ex));
+
+        RetryPolicy oneRetry = RetryPolicy.builder().maxRetries(1).build();
+        Assert.assertTrue(oneRetry.canRetry(1, ex));
+        Assert.assertFalse(oneRetry.canRetry(2, ex));
+
+        RetryPolicy twoRetries = RetryPolicy.builder().maxRetries(2).build();
+        Assert.assertTrue(twoRetries.canRetry(1, ex));
+        Assert.assertTrue(twoRetries.canRetry(2, ex));
+        Assert.assertFalse(twoRetries.canRetry(3, ex));
+    }
+
+    @Test
     public void testInfiniteAttempts() {
         RetryPolicy policy = RetryPolicy.builder()
                 .maxRetries(-1)

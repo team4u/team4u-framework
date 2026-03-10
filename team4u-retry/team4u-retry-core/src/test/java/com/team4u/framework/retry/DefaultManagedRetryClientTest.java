@@ -75,7 +75,7 @@ public class DefaultManagedRetryClientTest {
                     throw new IOException("boom");
                 },
                 RecoverySpec.of("recover-payment", "payload"),
-                retryPolicy(3, 2)));
+                retryPolicy(2, 1)));
 
         Assert.assertTrue(result instanceof ManagedSubmitResult.Accepted);
         ManagedSubmitResult.Accepted<String> accepted = (ManagedSubmitResult.Accepted<String>) result;
@@ -110,7 +110,7 @@ public class DefaultManagedRetryClientTest {
                         throw new IOException("retry-me");
                     },
                     RecoverySpec.of("recover-payment", "payload"),
-                    retryPolicy(3, 2, 10L)));
+                    retryPolicy(2, 1, 10L)));
 
             Assert.assertTrue(result instanceof ManagedSubmitResult.Failed);
             Throwable error = ((ManagedSubmitResult.Failed<String>) result).getError();
@@ -139,7 +139,7 @@ public class DefaultManagedRetryClientTest {
                         throw new OutOfMemoryError("oom");
                     },
                     RecoverySpec.of("recover-payment", "payload"),
-                    retryPolicy(3, 2)));
+                    retryPolicy(2, 1)));
             Assert.fail("expected OutOfMemoryError");
         } catch (OutOfMemoryError error) {
             Assert.assertEquals("oom", error.getMessage());
@@ -157,14 +157,21 @@ public class DefaultManagedRetryClientTest {
                 .build();
     }
 
-    private RetryPolicy retryPolicy(int maxAttempts, int foregroundAttempts) {
-        return retryPolicy(maxAttempts, foregroundAttempts, 0L);
+    @Test
+    public void testManagedRetryBudgetsMapToExpectedExecutionCounts() {
+        assertManagedExecutionCount(0, 0, 1, ManagedSubmitResult.Failed.class);
+        assertManagedExecutionCount(1, 1, 2, ManagedSubmitResult.Failed.class);
+        assertManagedExecutionCount(2, 1, 2, ManagedSubmitResult.Accepted.class);
     }
 
-    private RetryPolicy retryPolicy(int maxAttempts, int foregroundAttempts, long delayMillis) {
+    private RetryPolicy retryPolicy(int maxRetries, int foregroundMaxRetries) {
+        return retryPolicy(maxRetries, foregroundMaxRetries, 0L);
+    }
+
+    private RetryPolicy retryPolicy(int maxRetries, int foregroundMaxRetries, long delayMillis) {
         return RetryPolicy.builder()
-                .maxRetries(maxAttempts == -1 ? -1 : maxAttempts - 1)
-                .foregroundMaxRetries(foregroundAttempts - 1)
+                .maxRetries(maxRetries)
+                .foregroundMaxRetries(foregroundMaxRetries)
                 .backoff(Backoffs.fixed(delayMillis))
                 .retryOn(IOException.class)
                 .build();
@@ -197,6 +204,30 @@ public class DefaultManagedRetryClientTest {
         List<String> values = new ArrayList<String>();
         Collections.addAll(values, items);
         return values;
+    }
+
+    private void assertManagedExecutionCount(
+            int maxRetries,
+            int foregroundMaxRetries,
+            int expectedAttempts,
+            Class<? extends ManagedSubmitResult> expectedResultType) {
+        RecordingStore store = new RecordingStore();
+        RecordingCoordinator coordinator = new RecordingCoordinator();
+        DefaultManagedRetryClient client = newClient(store, coordinator);
+        AtomicInteger attempts = new AtomicInteger();
+
+        ManagedSubmitResult<String> result = client.submit(spec(
+                "payment",
+                "budget-" + maxRetries + "-" + foregroundMaxRetries,
+                () -> {
+                    attempts.incrementAndGet();
+                    throw new IOException("boom");
+                },
+                RecoverySpec.of("recover-payment", "payload"),
+                retryPolicy(maxRetries, foregroundMaxRetries)));
+
+        Assert.assertTrue(expectedResultType.isInstance(result));
+        Assert.assertEquals(expectedAttempts, attempts.get());
     }
 
     private static class RecordingStore implements DurableRetryStore {
