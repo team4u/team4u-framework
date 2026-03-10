@@ -5,13 +5,12 @@ import com.team4u.framework.retry.client.DefaultInlineRetryClient;
 import com.team4u.framework.retry.client.InlineRetryClient;
 import com.team4u.framework.retry.client.ManagedRetryClient;
 import com.team4u.framework.retry.proxy.RetryDelegate;
-import com.team4u.framework.retry.proxy.Retryable;
+import com.team4u.framework.retry.proxy.RetryMethodResolver;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.aopalliance.intercept.MethodInvocation;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactory;
-import org.springframework.core.annotation.AnnotationUtils;
 
 import java.lang.reflect.Method;
 
@@ -74,24 +73,21 @@ public class SpringRetryInterceptor implements MethodInterceptor {
         Method method = invocation.getMethod();
         Object target = invocation.getThis();
         Method specificMethod = method;
+        Class<?> targetClass = null;
 
         if (target != null) {
-            specificMethod = AopUtils.getMostSpecificMethod(method, target.getClass());
+            targetClass = AopUtils.getTargetClass(target);
+            specificMethod = AopUtils.getMostSpecificMethod(method, targetClass);
         }
-
-        Retryable retryable = AnnotationUtils.findAnnotation(method, Retryable.class);
-        if (retryable == null && specificMethod != method) {
-            retryable = AnnotationUtils.findAnnotation(specificMethod, Retryable.class);
-        }
-        if (retryable == null && target != null) {
-            retryable = AnnotationUtils.findAnnotation(target.getClass(), Retryable.class);
-        }
+        RetryMethodResolver.ResolvedRetryMethod resolved = RetryMethodResolver.resolve(method, targetClass);
 
         return delegate.executeWithRetry(
-                specificMethod,
+                method,
+                resolved.getEffectiveMethod(),
+                resolved.getRecoveryTargetType(),
                 target,
                 invocation.getArguments(),
-                retryable,
+                resolved.getRetryable(),
                 () -> {
                     try {
                         return invocation.proceed();

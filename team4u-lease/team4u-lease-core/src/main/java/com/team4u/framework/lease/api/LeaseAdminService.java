@@ -49,4 +49,13 @@ public interface LeaseAdminService {
      * @return 操作结果状态
      */
     LeaseAdminResult update(LeaseUpdateRequest request);
+
+    /**
+     * 原子更新任务内容并重新调度。
+     *
+     * @param request     任务更新请求
+     * @param delayMillis 期望的延迟执行毫秒数（从当前时间算起）
+     * @return 操作结果状态
+     */
+    LeaseAdminResult updateAndReschedule(LeaseUpdateRequest request, long delayMillis);
 }

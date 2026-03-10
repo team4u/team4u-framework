@@ -7,6 +7,7 @@ import com.team4u.framework.retry.config.DynamicRetryPolicyRegistry;
 import com.team4u.framework.retry.domain.ManagedSubmitResult;
 import com.team4u.framework.retry.domain.RecoverySpec;
 import com.team4u.framework.retry.domain.RetryTaskSpec;
+import com.team4u.framework.retry.domain.store.InvocationArgSnapshot;
 import com.team4u.framework.retry.domain.store.InvocationRecoveryData;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.policy.RetryPolicyFactory;
@@ -53,6 +54,17 @@ public class RetryDelegate {
             Object[] args,
             Retryable retryable,
             Callable<Object> proceedTask) throws Throwable {
+        return executeWithRetry(method, method, method.getDeclaringClass(), target, args, retryable, proceedTask);
+    }
+
+    public Object executeWithRetry(
+            Method invocationMethod,
+            Method effectiveMethod,
+            Class<?> recoveryTargetType,
+            Object target,
+            Object[] args,
+            Retryable retryable,
+            Callable<Object> proceedTask) throws Throwable {
 
         if (retryable == null || RecoveryExecutionContext.isRecovering()) {
             return proceedTask.call();
@@ -65,7 +77,7 @@ public class RetryDelegate {
                         .orElseThrow(() -> new IllegalArgumentException("Retry policy not found: " + policyKey)));
 
         if (retryable.mode() == RetryMode.INLINE || managedClient == null) {
-            boolean isAsync = CompletableFuture.class.isAssignableFrom(method.getReturnType());
+            boolean isAsync = CompletableFuture.class.isAssignableFrom(effectiveMethod.getReturnType());
             if (isAsync) {
                 ScheduledExecutorService executor = scheduler != null ? scheduler
                         : RetryExecutorManager.global().getScheduler();
@@ -76,8 +88,8 @@ public class RetryDelegate {
         }
 
         // MANAGED 模式
-        validateManagedMethod(method);
-        InvocationRecoveryData recoveryData = buildRecoveryData(method, target, args);
+        validateManagedMethod(effectiveMethod);
+        InvocationRecoveryData recoveryData = buildRecoveryData(invocationMethod, effectiveMethod, recoveryTargetType, args);
 
         validateManagedRecovery(retryable.recovery());
 
@@ -131,26 +143,29 @@ public class RetryDelegate {
      * @param args   原始参数
      * @return 包含调用上下文的恢复数据
      */
-    private InvocationRecoveryData buildRecoveryData(Method method, Object target, Object[] args) {
-        List<String> argTypes = new ArrayList<>();
-        for (Class<?> paramType : method.getParameterTypes()) {
-            argTypes.add(paramType.getName());
-        }
-
+    private InvocationRecoveryData buildRecoveryData(
+            Method invocationMethod,
+            Method effectiveMethod,
+            Class<?> recoveryTargetType,
+            Object[] args) {
         Object[] safeArgs = args != null ? args : new Object[0];
-        Parameter[] parameters = method.getParameters();
-        List<String> argValues = new ArrayList<>();
+        Parameter[] parameters = effectiveMethod.getParameters();
+        List<InvocationArgSnapshot> snapshots = new ArrayList<InvocationArgSnapshot>(parameters.length);
         for (int i = 0; i < parameters.length; i++) {
-            validateManagedSnapshotParameter(method, parameters[i]);
+            validateManagedSnapshotParameter(effectiveMethod, parameters[i]);
             Object argValue = i < safeArgs.length ? safeArgs[i] : null;
-            argValues.add(serializer.serialize(parameters[i], argValue));
+            boolean ignored = parameters[i].isAnnotationPresent(RetryIgnore.class);
+            snapshots.add(InvocationArgSnapshot.builder()
+                    .typeName(parameters[i].getType().getName())
+                    .serializedValue(ignored ? null : serializer.serialize(parameters[i], argValue))
+                    .ignored(ignored)
+                    .build());
         }
 
         return InvocationRecoveryData.builder()
-                .beanName(resolveBeanName(method, target))
-                .methodName(method.getName())
-                .argTypes(argTypes)
-                .argValues(argValues)
+                .targetTypeName(resolveTargetTypeName(invocationMethod, effectiveMethod, recoveryTargetType))
+                .methodName(effectiveMethod.getName())
+                .args(snapshots)
                 .build();
     }
 
@@ -172,25 +187,14 @@ public class RetryDelegate {
         }
     }
 
-    /**
-     * 解析 Bean 名称。
-     * <p>
-     * 如果是代理对象，则解析其原始类名。
-     *
-     * @param method 目标方法
-     * @param target 目标对象
-     * @return 解析后的 Bean 名称或类名
-     */
-    private String resolveBeanName(Method method, Object target) {
-        if (target == null) {
-            return method.getDeclaringClass().getName();
+    private String resolveTargetTypeName(Method invocationMethod, Method effectiveMethod, Class<?> recoveryTargetType) {
+        if (recoveryTargetType != null && recoveryTargetType != Object.class) {
+            return recoveryTargetType.getName();
         }
-        Class<?> targetClass = target.getClass();
-        if (targetClass.getName().contains("$$") && targetClass.getSuperclass() != null
-                && targetClass.getSuperclass() != Object.class) {
-            targetClass = targetClass.getSuperclass();
+        if (invocationMethod != null && invocationMethod.getDeclaringClass() != Object.class) {
+            return invocationMethod.getDeclaringClass().getName();
         }
-        return targetClass.getName();
+        return effectiveMethod.getDeclaringClass().getName();
     }
 
     private void validateManagedRecovery(Class<? extends RecoveryHandler> recoveryClass) {
@@ -207,22 +211,25 @@ public class RetryDelegate {
 
     private String buildIdempotencyKey(InvocationRecoveryData recoveryData) {
         StringBuilder source = new StringBuilder();
-        source.append(recoveryData.getBeanName()).append('#').append(recoveryData.getMethodName()).append('|');
-        appendList(source, recoveryData.getArgTypes());
-        source.append('|');
-        appendList(source, recoveryData.getArgValues());
+        source.append(recoveryData.getTargetTypeName()).append('#').append(recoveryData.getMethodName()).append('|');
+        appendSnapshots(source, recoveryData.getArgs());
         return sha256(source.toString());
     }
 
-    private void appendList(StringBuilder builder, List<String> values) {
-        if (values == null) {
+    private void appendSnapshots(StringBuilder builder, List<InvocationArgSnapshot> snapshots) {
+        if (snapshots == null) {
             return;
         }
-        for (int i = 0; i < values.size(); i++) {
+        for (int i = 0; i < snapshots.size(); i++) {
             if (i > 0) {
                 builder.append(',');
             }
-            builder.append(values.get(i));
+            InvocationArgSnapshot snapshot = snapshots.get(i);
+            builder.append(snapshot == null ? "null" : snapshot.getTypeName())
+                    .append(':')
+                    .append(snapshot != null && snapshot.isIgnored())
+                    .append(':')
+                    .append(snapshot == null ? null : snapshot.getSerializedValue());
         }
     }
 

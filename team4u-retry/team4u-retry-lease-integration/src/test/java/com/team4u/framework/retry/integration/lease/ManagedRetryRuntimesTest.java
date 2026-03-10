@@ -144,6 +144,11 @@ public class ManagedRetryRuntimesTest {
         public LeaseAdminResult update(LeaseUpdateRequest request) {
             return LeaseAdminResult.APPLIED;
         }
+
+        @Override
+        public LeaseAdminResult updateAndReschedule(LeaseUpdateRequest request, long delayMillis) {
+            return LeaseAdminResult.APPLIED;
+        }
     }
 
     private static class TrackingLeaseBackend implements LeaseBackend {
@@ -176,6 +181,11 @@ public class ManagedRetryRuntimesTest {
 
         @Override
         public LeaseAdminResult update(LeaseUpdateRequest request) {
+            return LeaseAdminResult.APPLIED;
+        }
+
+        @Override
+        public LeaseAdminResult updateAndReschedule(LeaseUpdateRequest request, long delayMillis) {
             return LeaseAdminResult.APPLIED;
         }
 

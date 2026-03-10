@@ -26,34 +26,20 @@ public class RetryInterceptor implements MethodInterceptor {
     @Override
     public Object invoke(MethodInvocation invocation) throws Throwable {
         Method interfaceMethod = invocation.getMethod();
-        Method effectiveMethod = interfaceMethod;
-
-        if (invocation.getTarget() != null) {
-            try {
-                effectiveMethod = invocation.getTarget().getClass()
-                        .getMethod(interfaceMethod.getName(), interfaceMethod.getParameterTypes());
-            } catch (NoSuchMethodException ignored) {
-                effectiveMethod = interfaceMethod;
-            }
-        }
-
-        Retryable retryable = interfaceMethod.getAnnotation(Retryable.class);
-        if (retryable == null && effectiveMethod != interfaceMethod) {
-            retryable = effectiveMethod.getAnnotation(Retryable.class);
-        }
-        if (retryable == null && invocation.getTarget() != null) {
-            retryable = invocation.getTarget().getClass().getAnnotation(Retryable.class);
-        }
+        Class<?> targetClass = invocation.getTarget() == null ? null : invocation.getTarget().getClass();
+        RetryMethodResolver.ResolvedRetryMethod resolved = RetryMethodResolver.resolve(interfaceMethod, targetClass);
 
         if (delegate == null) {
             throw new IllegalStateException("RetryDelegate is not initialized with clients");
         }
 
         return delegate.executeWithRetry(
-                effectiveMethod,
+                interfaceMethod,
+                resolved.getEffectiveMethod(),
+                resolved.getRecoveryTargetType(),
                 invocation.getTarget(),
                 invocation.getArguments(),
-                retryable,
+                resolved.getRetryable(),
                 () -> {
                     try {
                         return invocation.proceed();

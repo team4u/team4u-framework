@@ -166,6 +166,29 @@ public abstract class AbstractLeaseAdminContractTest extends AbstractLeaseContra
     }
 
     @Test
+    public void testUpdateAndRescheduleAtomicallyAppliesContentAndVisibility() throws Exception {
+        LeaseBackend backend = createBackend();
+        String taskId = publish(backend, "pay", "payload", 200L);
+
+        Thread.sleep(30L);
+        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.updateAndReschedule(LeaseUpdateRequest.builder()
+                .taskId(taskId)
+                .taskType("mail")
+                .payload("changed")
+                .priority(9)
+                .attributes(Collections.singletonMap("traceId", "T-2"))
+                .build(), 20L));
+        Thread.sleep(40L);
+
+        LeaseGrant grant = acquire(backend, "worker-a", 100L, 200L);
+        Assert.assertNotNull(grant);
+        Assert.assertEquals(taskId, grant.getTaskId());
+        Assert.assertEquals("mail", grant.getTaskType());
+        Assert.assertEquals("changed", grant.getPayload());
+        Assert.assertEquals("T-2", grant.getAttributes().get("traceId"));
+    }
+
+    @Test
     public void testAdminOperationsReturnTaskNotFoundForMissingTask() {
         LeaseBackend backend = createBackend();
 
@@ -177,5 +200,9 @@ public abstract class AbstractLeaseAdminContractTest extends AbstractLeaseContra
                 .taskId("missing")
                 .payload("x")
                 .build()));
+        Assert.assertEquals(LeaseAdminResult.TASK_NOT_FOUND, backend.updateAndReschedule(LeaseUpdateRequest.builder()
+                .taskId("missing")
+                .payload("x")
+                .build(), 10L));
     }
 }

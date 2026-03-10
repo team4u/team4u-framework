@@ -219,6 +219,37 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     }
 
     @Override
+    public synchronized LeaseAdminResult updateAndReschedule(LeaseUpdateRequest request, long delayMillis) {
+        if (request == null || isBlank(request.getTaskId())) {
+            return LeaseAdminResult.TASK_NOT_FOUND;
+        }
+        StoredTask current = records.get(request.getTaskId());
+        if (current == null) {
+            return LeaseAdminResult.TASK_NOT_FOUND;
+        }
+        LeaseAdminResult validation = current.validateAdminMutable(System.currentTimeMillis());
+        if (validation != LeaseAdminResult.APPLIED) {
+            return validation;
+        }
+        StoredTask.StoredTaskBuilder builder = current.toBuilder();
+        if (!isBlank(request.getTaskType())) {
+            builder.taskType(request.getTaskType());
+        }
+        if (request.getPayload() != null) {
+            builder.payload(request.getPayload());
+        }
+        if (request.getPriority() != null) {
+            builder.priority(request.getPriority());
+        }
+        if (request.getAttributes() != null) {
+            builder.attributes(request.getAttributes());
+        }
+        long visibleAt = System.currentTimeMillis() + Math.max(0L, delayMillis);
+        store(builder.build().reschedule(visibleAt), true);
+        return LeaseAdminResult.APPLIED;
+    }
+
+    @Override
     public synchronized Optional<LeaseTaskRecord> get(String taskId) {
         StoredTask task = records.get(taskId);
         return task == null ? Optional.empty() : Optional.of(task.toRecord());

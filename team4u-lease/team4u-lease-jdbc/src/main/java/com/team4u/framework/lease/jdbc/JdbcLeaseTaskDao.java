@@ -357,6 +357,39 @@ public class JdbcLeaseTaskDao {
                 buildUpdateParams(entity, request.getTaskId(), now));
     }
 
+    public int updateAndReschedule(
+            com.team4u.framework.lease.model.LeaseUpdateRequest request,
+            long visibleAt,
+            long now) throws SQLException {
+        Entity entity = Entity.create(TABLE_NAME);
+        entity.set("state", LeaseTaskState.READY.name());
+        entity.set("outcome", null);
+        entity.set("failure_reason", null);
+        entity.set("error_message", null);
+        entity.set("visible_at", visibleAt);
+        entity.set("worker_id", null);
+        entity.set("lease_token", null);
+        entity.set("lease_expires_at", 0);
+        if (request.getTaskType() != null) {
+            entity.set("task_type", request.getTaskType());
+        }
+        if (request.getPayload() != null) {
+            entity.set("payload", request.getPayload());
+        }
+        if (request.getPriority() != null) {
+            entity.set("priority", request.getPriority());
+        }
+        if (request.getAttributes() != null) {
+            entity.set("attributes_json", jsonCodec.toJson(request.getAttributes()));
+        }
+        entity.set("updated_at", now);
+        return db.execute(
+                "UPDATE " + TABLE_NAME + " SET "
+                        + buildUpdateAssignments(entity)
+                        + " WHERE task_id = ? AND state <> ? AND NOT (state = ? AND lease_expires_at >= ?)",
+                buildUpdateParams(entity, request.getTaskId(), now));
+    }
+
     private String buildUpdateAssignments(Entity entity) {
         StringBuilder sql = new StringBuilder();
         for (String field : entity.keySet()) {

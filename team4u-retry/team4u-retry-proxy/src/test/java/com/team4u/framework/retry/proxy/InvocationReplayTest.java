@@ -1,12 +1,14 @@
 package com.team4u.framework.retry.proxy;
 
 import com.team4u.framework.bean.BeanManager;
+import com.team4u.framework.retry.domain.store.InvocationArgSnapshot;
 import com.team4u.framework.retry.domain.store.InvocationRecoveryData;
 import com.team4u.framework.retry.recovery.RecoveryContext;
 import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.Collections;
 
 public class InvocationReplayTest {
 
@@ -17,10 +19,13 @@ public class InvocationReplayTest {
 
         InvocationReplay replay = new InvocationReplay();
         replay.recover(InvocationRecoveryData.builder()
-                        .beanName(PrimitiveReplayService.class.getName())
+                        .targetTypeName(PrimitiveReplayService.class.getName())
                         .methodName("replay")
-                        .argTypes(Arrays.asList("int", "long", "boolean", "java.lang.String"))
-                        .argValues(Arrays.asList("3", "4", "true", "\"done\""))
+                        .args(Arrays.asList(
+                                arg(int.class, "3", false),
+                                arg(long.class, "4", false),
+                                arg(boolean.class, "true", false),
+                                arg(String.class, "\"done\"", false)))
                         .build(),
                 RecoveryContext.builder().taskId("task-1").attempt(1).build());
 
@@ -37,15 +42,95 @@ public class InvocationReplayTest {
 
         InvocationReplay replay = new InvocationReplay();
         replay.recover(InvocationRecoveryData.builder()
-                        .beanName(MixedReplayService.class.getName())
+                        .targetTypeName(MixedReplayService.class.getName())
                         .methodName("replay")
-                        .argTypes(Arrays.asList("boolean", "java.lang.Integer"))
-                        .argValues(Arrays.asList("false", "7"))
+                        .args(Arrays.asList(
+                                arg(boolean.class, "false", false),
+                                arg(Integer.class, "7", false)))
                         .build(),
                 RecoveryContext.builder().taskId("task-2").attempt(1).build());
 
         Assert.assertFalse(service.enabled);
         Assert.assertEquals(Integer.valueOf(7), service.retries);
+    }
+
+    @Test
+    public void testRecoverPreservesIgnoredAndNullParameters() throws Exception {
+        IgnoredReplayService service = new IgnoredReplayService();
+        BeanManager.getInstance().registerBean(IgnoredReplayService.class.getName(), service);
+
+        InvocationReplay replay = new InvocationReplay();
+        replay.recover(InvocationRecoveryData.builder()
+                        .targetTypeName(IgnoredReplayService.class.getName())
+                        .methodName("replay")
+                        .args(Arrays.asList(
+                                arg(String.class, "\"order-1\"", false),
+                                arg(Input.class, null, true),
+                                arg(Integer.class, null, false)))
+                        .build(),
+                RecoveryContext.builder().taskId("task-3").attempt(1).build());
+
+        Assert.assertEquals("order-1", service.orderId);
+        Assert.assertNull(service.input);
+        Assert.assertNull(service.attempts);
+    }
+
+    @Test
+    public void testRecoverRejectsMissingSnapshotPayload() {
+        InvocationReplay replay = new InvocationReplay();
+        try {
+            replay.recover(InvocationRecoveryData.builder()
+                            .targetTypeName(PrimitiveReplayService.class.getName())
+                            .methodName("replay")
+                            .build(),
+                    RecoveryContext.builder().taskId("task-4").attempt(1).build());
+            Assert.fail("expected IllegalArgumentException");
+        } catch (Exception ex) {
+            Assert.assertTrue(ex.getMessage().contains("args is required"));
+        }
+    }
+
+    @Test
+    public void testRecoverFailsWhenBeanMissing() {
+        InvocationReplay replay = new InvocationReplay();
+        try {
+            replay.recover(InvocationRecoveryData.builder()
+                            .targetTypeName(MissingReplayService.class.getName())
+                            .methodName("replay")
+                            .args(Collections.singletonList(arg(String.class, "\"x\"", false)))
+                            .build(),
+                    RecoveryContext.builder().taskId("task-5").attempt(1).build());
+            Assert.fail("expected IllegalStateException");
+        } catch (Exception ex) {
+            Assert.assertTrue(ex.getMessage().contains("No managed bean found"));
+        }
+    }
+
+    @Test
+    public void testRecoverRejectsIgnoredPrimitiveParameter() {
+        PrimitiveIgnoredReplayService service = new PrimitiveIgnoredReplayService();
+        BeanManager.getInstance().registerBean(PrimitiveIgnoredReplayService.class.getName(), service);
+
+        InvocationReplay replay = new InvocationReplay();
+        try {
+            replay.recover(InvocationRecoveryData.builder()
+                            .targetTypeName(PrimitiveIgnoredReplayService.class.getName())
+                            .methodName("replay")
+                            .args(Collections.singletonList(arg(int.class, null, true)))
+                            .build(),
+                    RecoveryContext.builder().taskId("task-6").attempt(1).build());
+            Assert.fail("expected IllegalArgumentException");
+        } catch (Exception ex) {
+            Assert.assertTrue(ex.getMessage().contains("Ignored primitive parameter"));
+        }
+    }
+
+    private static InvocationArgSnapshot arg(Class<?> type, String serializedValue, boolean ignored) {
+        return InvocationArgSnapshot.builder()
+                .typeName(type.getName())
+                .serializedValue(serializedValue)
+                .ignored(ignored)
+                .build();
     }
 
     public static class PrimitiveReplayService {
@@ -70,5 +155,31 @@ public class InvocationReplayTest {
             this.enabled = enabled;
             this.retries = retries;
         }
+    }
+
+    public static class IgnoredReplayService {
+        private String orderId;
+        private Input input;
+        private Integer attempts;
+
+        public void replay(String orderId, Input input, Integer attempts) {
+            this.orderId = orderId;
+            this.input = input;
+            this.attempts = attempts;
+        }
+    }
+
+    public static class PrimitiveIgnoredReplayService {
+        public void replay(int attempts) {
+        }
+    }
+
+    public static class MissingReplayService {
+        public void replay(String value) {
+        }
+    }
+
+    public static class Input {
+        private String value;
     }
 }

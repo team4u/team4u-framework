@@ -56,6 +56,17 @@ public abstract class TestLeaseBackend implements LeaseBackend {
     }
 
     @Override
+    public LeaseAdminResult update(LeaseUpdateRequest request) {
+        return LeaseAdminResult.APPLIED;
+    }
+
+    @Override
+    public LeaseAdminResult updateAndReschedule(LeaseUpdateRequest request, long delayMillis) {
+        submitForDelay(request.getTaskId(), request.getTaskType(), request.getPayload(), delayMillis);
+        return LeaseAdminResult.APPLIED;
+    }
+
+    @Override
     public LeaseGrant acquire(LeaseAcquireRequest request) {
         return null;
     }
