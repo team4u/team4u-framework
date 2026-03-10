@@ -57,7 +57,8 @@
 
 * 任务先被持久化
 * 前台尝试失败后可以转后台继续
-* 需要存储、协调器、恢复处理器和 Worker 配合
+* durable source of truth 是 lease task 与 lease payload
+* 需要 lease backend、恢复处理器和 Worker 配合
 * 必须显式配置 `foregroundMaxRetries`
 * 必须提供有效的 `RecoverySpec.taskType`
 
@@ -201,6 +202,9 @@ ManagedRetryRuntime runtime = ManagedRetryRuntime.lease(backend)
                 .build())
         .start();
 
+// MANAGED 幂等建档依赖 lease 的 businessKey 能力；
+// JDBC 后端请按 team4u-lease 文档初始化包含 business_key 的 lease_task schema。
+
 ManagedSubmitResult<String> result = Retries.managed(runtime.client())
         .task("pay-notify")
         .idempotentBy("order:1001")
@@ -276,9 +280,9 @@ MANAGED 模式的核心在于：“任务高可靠持久化” + “执行权可
 
 当你在 MANAGED 模式下执行一个任务时，它的生命周期如下：
 
-1.  持久化：框架首先将任务规格（Payload、策略、恢复信息）存入 `DurableRetryStore`。
+1.  建档：框架先通过 lease 的 `publishIfAbsent(...)` 按 `taskType + idempotencyKey` 建立 durable intent，并把 `RetryRecord` 快照放进 lease payload。
 2.  前台尝试：在当前线程中，按 `foregroundMaxRetries` 指定的“前台重试次数”执行；连同首次执行在内，前台总执行次数等于 `foregroundMaxRetries + 1`。
-3.  后台接管：如果前台次数耗尽但仍允许重试，`RetryCoordinator.schedule(...)` 会先原子持久化最新 `RetryRecord` 快照，再把任务移交给后台 Worker。
+3.  后台接管：如果前台次数耗尽但仍允许重试，框架会把最新 `RetryRecord` 快照写回 lease payload，并通过 `updateAndReschedule(...)` 把任务移交给后台 Worker。
 4.  结果产出：
     *   Completed: 前台尝试中已经成功了。
     *   Accepted: 前台次数用完还没成功，任务已安全进入后台，正等待 Worker 接管继续重试。
@@ -292,7 +296,7 @@ MANAGED 模式的核心在于：“任务高可靠持久化” + “执行权可
 
 ## 官方运行时：`ManagedRetryRuntime`
 
-初始化 MANAGED 模式涉及存储（Store）、协调器（Coordinator）和恢复 Worker 的组合。为了简化接入过程，推荐使用 `ManagedRetryRuntime` 一键配置：
+初始化 MANAGED 模式涉及 lease-backed durable handoff、恢复处理器注册以及恢复 Worker 的组合。为了简化接入过程，推荐使用 `ManagedRetryRuntime` 一键配置：
 
 ### 1. 一键组装并启动
 
@@ -328,7 +332,7 @@ ManagedSubmitResult<String> result = Retries.managed(client)
 
 
 `ManagedRetryRuntime` 会帮你完成以下工作：
-*   存储与调度：自动基于 `LeaseBackend` 创建持久化存储和任务调度能力。
+*   durable handoff：自动基于 `LeaseBackend` 组装提交幂等、payload 持久化和后台接管能力。
 *   注册表：管理所有的 `RecoveryHandler`。
 *   Worker：启动后台线程，定时拉取属于当前节点的任务进行恢复。
 
@@ -645,8 +649,8 @@ public String notifyPay(String orderId, @RetryIgnore InputStream bodyStream) {
 
 注意：
 
-* 这是当前版本的新格式
-* 旧的 `beanName/argTypes/argValues` 持久化 payload 不再兼容，需要在升级前清空或迁移存量 managed 队列
+* 注解 MANAGED 的持久化 payload 是方法调用快照格式
+* durable payload 统一是 `String`；代理 / Spring 接入会在边缘自动做 JSON 编解码，编程式接入则需要业务方自己提供稳定字符串 payload
 
 限制：
 
@@ -703,6 +707,15 @@ INLINE 的所有尝试都发生在当前进程里，不做持久化，不会跨�
 * Worker 是否启动
 * 任务本身是否仍然满足重试条件
 
+### MANAGED 的 durable source of truth 是 lease
+
+这意味着：
+
+* submit 幂等依赖 lease 的 `publishIfAbsent(...)`
+* 状态查询依赖 lease 的 `get(...) / getByBusinessKey(...)`
+* retry 模块不会直接操作 `lease_task` 表
+* lease payload 中保存的是最新 `RetryRecord` 快照
+
 ### `Error` 不会进入重试
 
 无论是 `INLINE` 还是 `MANAGED`，像 `OutOfMemoryError` 这类 `Error` 都会直接 fail-fast，不进入重试循环。
@@ -758,10 +771,15 @@ INLINE 的所有尝试都发生在当前进程里，不做持久化，不会跨�
 最小建议组合：
 
 * `LeaseBackend`
+* `ManagedRetryRuntime.lease(backend)`
+* 至少一个 `RecoveryHandler<String>`
+
+如果你不用 runtime 自带装配，等价的底层组件是：
+
 * `LeaseDurableRetryStore`
-* `RecoveryHandlerRegistry`
 * `DefaultManagedRetryClient`
 * `RetryLeaseWorker`
+* `RecoveryHandlerRegistry`
 
 ---
 

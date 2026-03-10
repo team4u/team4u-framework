@@ -1,11 +1,13 @@
 package com.team4u.framework.retry.proxy;
 
+import cn.hutool.json.JSONUtil;
 import com.team4u.framework.retry.backoff.Backoffs;
 import com.team4u.framework.retry.client.ManagedRetryClient;
 import com.team4u.framework.retry.domain.ManagedSubmitResult;
 import com.team4u.framework.retry.domain.RetryTaskSpec;
 import com.team4u.framework.retry.domain.store.InvocationArgSnapshot;
 import com.team4u.framework.retry.domain.store.InvocationRecoveryData;
+import com.team4u.framework.retry.domain.store.RetryStatus;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.policy.RetryPolicyFactory;
 import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
@@ -73,7 +75,9 @@ public class RetryDelegateManagedTest {
         Assert.assertEquals(firstKey, managedClient.lastSpec.getIdempotencyKey());
         Assert.assertFalse(firstKey.isEmpty());
 
-        InvocationRecoveryData payload = (InvocationRecoveryData) managedClient.lastSpec.getRecovery().getPayload();
+        InvocationRecoveryData payload = JSONUtil.toBean(
+                managedClient.lastSpec.getRecovery().getPayload(),
+                InvocationRecoveryData.class);
         Assert.assertEquals(ManagedVoidService.class.getName(), payload.getTargetTypeName());
         Assert.assertEquals("replayPayment", payload.getMethodName());
         Assert.assertEquals(2, payload.getArgs().size());
@@ -92,7 +96,9 @@ public class RetryDelegateManagedTest {
 
         delegate.executeWithRetry(method, target, new Object[]{"order-1", new Input("stream"), null}, retryable, () -> null);
 
-        InvocationRecoveryData payload = (InvocationRecoveryData) managedClient.lastSpec.getRecovery().getPayload();
+        InvocationRecoveryData payload = JSONUtil.toBean(
+                managedClient.lastSpec.getRecovery().getPayload(),
+                InvocationRecoveryData.class);
         Assert.assertEquals(3, payload.getArgs().size());
 
         InvocationArgSnapshot first = payload.getArgs().get(0);
@@ -240,7 +246,7 @@ public class RetryDelegateManagedTest {
     }
 
     public static class Input {
-        private String value;
+        private final String value;
 
         public Input(String value) {
             this.value = value;
@@ -272,7 +278,7 @@ public class RetryDelegateManagedTest {
         public <T> ManagedSubmitResult<T> submit(RetryTaskSpec<T> spec) {
             submitCount++;
             lastSpec = spec;
-            return new ManagedSubmitResult.Accepted<T>("task-1", "SCHEDULED", null);
+            return new ManagedSubmitResult.Accepted<T>("task-1", RetryStatus.WAITING_RETRY, null);
         }
     }
 }

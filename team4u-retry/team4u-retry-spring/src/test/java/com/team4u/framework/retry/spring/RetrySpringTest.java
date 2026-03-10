@@ -4,6 +4,7 @@ import com.team4u.framework.retry.backoff.Backoffs;
 import com.team4u.framework.retry.client.ManagedRetryClient;
 import com.team4u.framework.retry.domain.ManagedSubmitResult;
 import com.team4u.framework.retry.domain.RetryTaskSpec;
+import com.team4u.framework.retry.domain.store.RetryStatus;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.policy.RetryPolicyFactory;
 import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
@@ -24,10 +25,17 @@ import org.springframework.stereotype.Service;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
+/**
+ * Spring 集成环境下的重试功能测试。
+ * <p>
+ * 涵盖了自动代理创建、注解识别（类级与方法级）、JDK 代理支持、
+ * 托管重试模式约束校验以及 Spring 生命周期集成等核心场景。
+ */
 public class RetrySpringTest {
 
     @Before
     public void setup() {
+        // 环境初始化：注销所有注册中心信息并注册测试专用重试策略
         RetryPolicyFactoryRegistry.global().unregisterAll();
         RecoveryHandlerRegistry.global().unregisterAll();
         RetryPolicyFactoryRegistry.global().register(new RetryPolicyFactory() {
@@ -46,6 +54,9 @@ public class RetrySpringTest {
         });
     }
 
+    /**
+     * 测试 Spring 自动代理是否能正确拦截带有 @Retryable 注解的方法。
+     */
     @Test
     public void testSpringAutoProxy() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(TestConfig.class)) {
@@ -68,6 +79,9 @@ public class RetrySpringTest {
         }
     }
 
+    /**
+     * 测试在 JDK 原生代理环境下，当接口未定义注解但实现类定义了注解时，能否正确解析。
+     */
     @Test
     public void testSpringJdkProxyShouldFindAnnotationOnImplementationMethod() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
@@ -81,6 +95,9 @@ public class RetrySpringTest {
         }
     }
 
+    /**
+     * 测试 @EnableRetry 能否自动注册默认的恢复处理器（如 InvocationReplay）。
+     */
     @Test
     public void testEnableRetryShouldAutoRegisterDefaultRecoveryHandler() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(TestConfig.class)) {
@@ -98,6 +115,9 @@ public class RetrySpringTest {
         }
     }
 
+    /**
+     * 测试托管模式（MANAGED）是否强制要求业务方法返回值为 void。
+     */
     @Test
     public void testSpringManagedMethodRejectsNonVoidReturnType() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
@@ -148,6 +168,9 @@ public class RetrySpringTest {
         void notifyPay(String id);
     }
 
+    /**
+     * Spring 测试配置类，定义了各种类型的 Bean 以验证代理逻辑。
+     */
     @Configuration
     @EnableRetry
     public static class TestConfig {
@@ -295,7 +318,7 @@ public class RetrySpringTest {
         @Override
         public <T> ManagedSubmitResult<T> submit(RetryTaskSpec<T> spec) {
             submitCount.incrementAndGet();
-            return new ManagedSubmitResult.Accepted<T>("task-1", "SCHEDULED", null);
+            return new ManagedSubmitResult.Accepted<T>("task-1", RetryStatus.WAITING_RETRY, null);
         }
     }
 }

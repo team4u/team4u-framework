@@ -21,7 +21,8 @@ import java.util.concurrent.*;
 public class InMemoryLeaseBackend implements LeaseBackend {
 
     private final ConcurrentMap<String, StoredTask> records = new ConcurrentHashMap<String, StoredTask>();
-    private final ConcurrentMap<QueueKey, DelayQueue<AvailabilityRef>> queueStates = new ConcurrentHashMap<QueueKey, DelayQueue<AvailabilityRef>>();
+    private final ConcurrentMap<QueueKey, DelayQueue<AvailabilityRef>> queueStates = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, String> taskIdsByBusinessKey = new ConcurrentHashMap<>();
 
     @Override
     public synchronized String publish(LeasePublishRequest request) {
@@ -33,6 +34,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                 request.getQueue(),
                 request.getTaskType(),
                 request.getPayload(),
+                request.getBusinessKey(),
                 now,
                 now + Math.max(0L, request.getDelayMillis()),
                 request.getPriority(),
@@ -48,6 +50,27 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                 null);
         store(task, true);
         return taskId;
+    }
+
+    @Override
+    public synchronized LeasePublishResult publishIfAbsent(LeasePublishRequest request) {
+        validatePublishRequest(request);
+        if (isBlank(request.getBusinessKey())) {
+            String taskId = publish(request);
+            return LeasePublishResult.builder().created(true).taskId(taskId).record(get(taskId).orElse(null)).build();
+        }
+        String compositeKey = request.getQueue() + "|" + request.getBusinessKey();
+        String existingTaskId = taskIdsByBusinessKey.get(compositeKey);
+        if (existingTaskId != null) {
+            return LeasePublishResult.builder()
+                    .created(false)
+                    .taskId(existingTaskId)
+                    .record(get(existingTaskId).orElse(null))
+                    .build();
+        }
+        String taskId = publish(request);
+        taskIdsByBusinessKey.put(compositeKey, taskId);
+        return LeasePublishResult.builder().created(true).taskId(taskId).record(get(taskId).orElse(null)).build();
     }
 
     @Override
@@ -256,6 +279,12 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     }
 
     @Override
+    public synchronized Optional<LeaseTaskRecord> getByBusinessKey(String queue, String businessKey) {
+        String taskId = taskIdsByBusinessKey.get(queue + "|" + businessKey);
+        return taskId == null ? Optional.empty() : get(taskId);
+    }
+
+    @Override
     public synchronized LeaseTaskPage list(LeaseQueryRequest request) {
         LeaseQueryRequest safeRequest = request == null ? LeaseQueryRequest.builder().build() : request;
         List<LeaseTaskRecord> matches = new ArrayList<>();
@@ -386,6 +415,9 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     private void store(StoredTask task, boolean offerQueue) {
         // records 是状态单一真相源；DelayQueue 只是为了阻塞拉取，不要求严格删除旧引用。
         records.put(task.getTaskId(), task);
+        if (!isBlank(task.getBusinessKey())) {
+            taskIdsByBusinessKey.put(task.getQueue() + "|" + task.getBusinessKey(), task.getTaskId());
+        }
         if (offerQueue) {
             offer(task);
         }
@@ -493,6 +525,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         private final String queue;
         private final String taskType;
         private final String payload;
+        private final String businessKey;
         private final long createdAtMillis;
         private final long visibleAtMillis;
         private final int priority;
@@ -664,6 +697,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                     .queue(queue)
                     .taskType(taskType)
                     .payload(payload)
+                    .businessKey(businessKey)
                     .state(state)
                     .outcome(outcome)
                     .failureReason(failureReason)

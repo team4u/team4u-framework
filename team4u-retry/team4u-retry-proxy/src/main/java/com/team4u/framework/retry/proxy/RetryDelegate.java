@@ -1,6 +1,7 @@
 package com.team4u.framework.retry.proxy;
 
 import cn.hutool.crypto.digest.DigestUtil;
+import cn.hutool.json.JSONUtil;
 import com.team4u.framework.retry.client.InlineRetryClient;
 import com.team4u.framework.retry.client.ManagedRetryClient;
 import com.team4u.framework.retry.concurrent.RetryExecutorManager;
@@ -150,7 +151,7 @@ public class RetryDelegate {
         validateManagedRecovery(retryable.recovery());
 
         // 使用通用调用回放处理器构建恢复规范
-        RecoverySpec recoverySpec = RecoverySpec.of(InvocationReplay.TASK_NAME, recoveryData);
+        RecoverySpec recoverySpec = RecoverySpec.of(InvocationReplay.TASK_NAME, JSONUtil.toJsonStr(recoveryData));
 
         // 构建托管任务 definition
         RetryTaskSpec<Object> taskSpec = RetryTaskSpec.builder()

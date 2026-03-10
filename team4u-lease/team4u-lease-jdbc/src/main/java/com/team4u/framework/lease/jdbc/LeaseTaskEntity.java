@@ -43,6 +43,10 @@ public class LeaseTaskEntity {
      * 业务负载数据
      */
     private final String payload;
+    /**
+     * 业务幂等键。
+     */
+    private final String businessKey;
 
     /**
      * 任务当前状态
@@ -145,6 +149,7 @@ public class LeaseTaskEntity {
                 .queue(queue)
                 .taskType(taskType)
                 .payload(payload)
+                .businessKey(businessKey)
                 .state(state)
                 .outcome(outcome)
                 .failureReason(failureReason)

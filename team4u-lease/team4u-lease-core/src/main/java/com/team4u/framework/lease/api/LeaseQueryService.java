@@ -20,6 +20,11 @@ public interface LeaseQueryService {
     Optional<LeaseTaskRecord> get(String taskId);
 
     /**
+     * 根据队列和业务键查询任务。
+     */
+    Optional<LeaseTaskRecord> getByBusinessKey(String queue, String businessKey);
+
+    /**
      * 根据条件分页查询任务记录
      *
      * @param request 包含过滤条件、分页参数及排序规则的查询请求

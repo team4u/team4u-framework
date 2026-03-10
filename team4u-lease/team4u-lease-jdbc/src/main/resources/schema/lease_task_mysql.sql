@@ -1,10 +1,10 @@
 CREATE TABLE IF NOT EXISTS lease_task
 (
-    task_id
-                     VARCHAR(64)  NOT NULL PRIMARY KEY,
+    task_id          VARCHAR(64)  NOT NULL PRIMARY KEY,
     queue_name       VARCHAR(128) NOT NULL,
     task_type        VARCHAR(128) NOT NULL,
     payload          TEXT,
+    business_key     VARCHAR(256),
     state            VARCHAR(32)  NOT NULL,
     outcome          VARCHAR(32),
     failure_reason   VARCHAR(64),
@@ -22,13 +22,16 @@ CREATE TABLE IF NOT EXISTS lease_task
 );
 
 CREATE INDEX IF NOT EXISTS idx_lease_task_acquire
-    ON lease_task(queue_name, state, visible_at, lease_expires_at, priority, created_at);
+    ON lease_task (queue_name, state, visible_at, lease_expires_at, priority, created_at);
 
 CREATE INDEX IF NOT EXISTS idx_lease_task_worker
-    ON lease_task(worker_id, state);
+    ON lease_task (worker_id, state);
 
 CREATE INDEX IF NOT EXISTS idx_lease_task_type
-    ON lease_task(queue_name, task_type, state);
+    ON lease_task (queue_name, task_type, state);
+
+CREATE UNIQUE INDEX IF NOT EXISTS uk_lease_task_business
+    ON lease_task (queue_name, business_key);
 
 CREATE INDEX IF NOT EXISTS idx_lease_task_closed_reason
-    ON lease_task(state, outcome, failure_reason);
+    ON lease_task (state, outcome, failure_reason);

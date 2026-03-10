@@ -34,7 +34,7 @@ public class JdbcLeaseTaskDao {
     /**
      * 字段列表
      */
-    public static final String COLUMNS = "task_id, queue_name, task_type, payload, state, outcome, failure_reason, "
+    public static final String COLUMNS = "task_id, queue_name, task_type, payload, business_key, state, outcome, failure_reason, "
             + "priority, delivery_count, failure_count, worker_id, lease_token, lease_expires_at, visible_at, "
             + "created_at, updated_at, error_message, attributes_json";
 
@@ -60,6 +60,7 @@ public class JdbcLeaseTaskDao {
                 .set("queue_name", entity.getQueue())
                 .set("task_type", entity.getTaskType())
                 .set("payload", entity.getPayload())
+                .set("business_key", entity.getBusinessKey())
                 .set("state", entity.getState().name())
                 .set("outcome", entity.getOutcome() == null ? null : entity.getOutcome().name())
                 .set("failure_reason", entity.getFailureReason() == null ? null : entity.getFailureReason().name())
@@ -87,6 +88,14 @@ public class JdbcLeaseTaskDao {
         List<Entity> rows = db.query(
                 "SELECT " + COLUMNS + " FROM " + TABLE_NAME + " WHERE task_id = ?",
                 taskId);
+        return rows.isEmpty() ? null : toEntity(rows.get(0));
+    }
+
+    public LeaseTaskEntity findByBusinessKey(String queue, String businessKey) throws SQLException {
+        List<Entity> rows = db.query(
+                "SELECT " + COLUMNS + " FROM " + TABLE_NAME + " WHERE queue_name = ? AND business_key = ?",
+                queue,
+                businessKey);
         return rows.isEmpty() ? null : toEntity(rows.get(0));
     }
 
@@ -573,6 +582,7 @@ public class JdbcLeaseTaskDao {
                 .queue(row.getStr("queue_name"))
                 .taskType(row.getStr("task_type"))
                 .payload(row.getStr("payload"))
+                .businessKey(row.getStr("business_key"))
                 .state(LeaseTaskState.valueOf(row.getStr("state")))
                 .outcome(row.getStr("outcome") == null ? null : LeaseTaskOutcome.valueOf(row.getStr("outcome")))
                 .failureReason(row.getStr("failure_reason") == null ? null

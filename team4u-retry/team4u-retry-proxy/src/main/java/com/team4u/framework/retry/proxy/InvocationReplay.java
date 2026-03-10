@@ -1,6 +1,7 @@
 package com.team4u.framework.retry.proxy;
 
 import cn.hutool.core.util.ReflectUtil;
+import cn.hutool.json.JSONUtil;
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.retry.domain.store.InvocationArgSnapshot;
 import com.team4u.framework.retry.domain.store.InvocationRecoveryData;
@@ -21,7 +22,7 @@ import java.util.Map;
  * <p>
  * 给基于代理注解模式托管的重试任务使用，负责反射调用真实的目标组件。
  */
-public class InvocationReplay implements RecoveryHandler<InvocationRecoveryData> {
+public class InvocationReplay implements RecoveryHandler<String> {
 
     public static final String TASK_NAME = "ProxyInvocationReplay";
     private static final Map<String, Class<?>> PRIMITIVE_TYPES = primitiveTypes();
@@ -50,7 +51,16 @@ public class InvocationReplay implements RecoveryHandler<InvocationRecoveryData>
     }
 
     @Override
-    public void recover(InvocationRecoveryData payload, RecoveryContext context) throws Exception {
+    public void recover(String payload, RecoveryContext context) throws Exception {
+        InvocationRecoveryData recoveryData = deserializePayload(payload);
+        if (recoveryData == null) {
+            throw new IllegalArgumentException("InvocationRecoveryData is null");
+        }
+        validatePayload(recoveryData);
+        doRecover(recoveryData);
+    }
+
+    private void doRecover(InvocationRecoveryData payload) throws Exception {
         if (payload == null) {
             throw new IllegalArgumentException("InvocationRecoveryData is null");
         }
@@ -72,6 +82,13 @@ public class InvocationReplay implements RecoveryHandler<InvocationRecoveryData>
         Object[] args = resolveArgs(payload, paramTypes);
 
         ReflectUtil.invoke(target, method, args);
+    }
+
+    private InvocationRecoveryData deserializePayload(String payload) {
+        if (payload == null || payload.trim().isEmpty()) {
+            return null;
+        }
+        return JSONUtil.toBean(payload, InvocationRecoveryData.class);
     }
 
     /**

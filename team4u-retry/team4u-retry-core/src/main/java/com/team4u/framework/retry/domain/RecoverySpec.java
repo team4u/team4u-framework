@@ -16,14 +16,14 @@ public class RecoverySpec {
     /**
      * 用于恢复执行此任务需要的数据（载荷）。
      */
-    private final Object payload;
+    private final String payload;
 
-    public RecoverySpec(String taskType, Object payload) {
+    public RecoverySpec(String taskType, String payload) {
         this.taskType = taskType;
         this.payload = payload;
     }
 
-    public static RecoverySpec of(String taskType, Object payload) {
+    public static RecoverySpec of(String taskType, String payload) {
         return new RecoverySpec(taskType, payload);
     }
 }

@@ -151,7 +151,7 @@ public final class Retries {
         private final ManagedRetryClient managedClient;
         private String taskType;
         private String idempotencyKey;
-        private Object payload;
+        private String payload;
         private RetryPolicy policy;
 
         private ManagedExecution(ManagedRetryClient managedClient) {
@@ -186,7 +186,7 @@ public final class Retries {
          * @param payload 恢复负载
          * @return 当前执行计划本身
          */
-        public ManagedExecution payload(Object payload) {
+        public ManagedExecution payload(String payload) {
             this.payload = payload;
             return this;
         }
