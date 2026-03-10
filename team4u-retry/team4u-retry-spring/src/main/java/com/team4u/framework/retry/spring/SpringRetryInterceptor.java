@@ -72,12 +72,10 @@ public class SpringRetryInterceptor implements MethodInterceptor {
 
         Method method = invocation.getMethod();
         Object target = invocation.getThis();
-        Method specificMethod = method;
         Class<?> targetClass = null;
 
         if (target != null) {
             targetClass = AopUtils.getTargetClass(target);
-            specificMethod = AopUtils.getMostSpecificMethod(method, targetClass);
         }
         RetryMethodResolver.ResolvedRetryMethod resolved = RetryMethodResolver.resolve(method, targetClass);
 
