@@ -591,6 +591,7 @@ public class RetryManagedConfiguration {
 ## 代理 / 注解模式下的恢复说明
 
 代理模式下，框架会为托管任务构造方法恢复数据，后台通过 `InvocationReplay` 反射调用目标 Bean / 方法完成恢复。
+恢复时只允许从容器 / `BeanManager` 定位目标对象；如果目标 Bean 不存在，会直接失败，不会回退 `newInstance`。
 这条链路不支持把注解里的 `recovery` 扩展成任意自定义 handler；注解 MANAGED 的恢复载荷始终是方法快照。
 
 恢复执行阶段会在 lease worker 的统一恢复入口写入 `RecoveryExecutionContext`，避免代理再次进入一轮新的重试包装，防止“恢复时再托管、无限套娃”。
@@ -610,6 +611,8 @@ public class RetryManagedConfiguration {
 限制：
 
 * primitive 参数不能标 `@RetryIgnore`
+* `@RetryIgnore` 只表示“不持久化该参数”，回放时该位置会以 `null` 参与调用
+* `null` 参数和 `@RetryIgnore` 参数会分别保存，不会再发生参数位置错位
 * 如果 MANAGED 恢复需要重放该参数，就必须保证它可以被完整快照
 
 示例：
@@ -626,12 +629,22 @@ public String notifyPay(String orderId, @RetryIgnore InputStream bodyStream) {
 
 注解式调用进入托管模型时，框架通常会保存调用快照，包括：
 
-* `beanName`
+* `targetTypeName`
 * `methodName`
-* `argTypes`
-* `argValues`
+* `args`
+
+其中 `args` 是逐参数快照列表，每一项包含：
+
+* `typeName`
+* `serializedValue`
+* `ignored`
 
 恢复阶段会基于这些信息重新定位方法并执行补偿调用。
+
+注意：
+
+* 这是当前版本的新格式
+* 旧的 `beanName/argTypes/argValues` 持久化 payload 不再兼容，需要在升级前清空或迁移存量 managed 队列
 
 限制：
 
