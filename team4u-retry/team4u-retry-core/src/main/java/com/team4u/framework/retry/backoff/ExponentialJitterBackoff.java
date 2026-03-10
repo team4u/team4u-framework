@@ -39,7 +39,7 @@ public class ExponentialJitterBackoff implements Backoff {
     public static class Factory implements BackoffFactory {
         @Override
         public String key() {
-            return "exponentialjitter";
+            return "exponentialJitter";
         }
 
         @Override
