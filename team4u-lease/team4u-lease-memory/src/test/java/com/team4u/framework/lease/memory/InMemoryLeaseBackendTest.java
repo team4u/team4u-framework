@@ -1,7 +1,6 @@
 package com.team4u.framework.lease.memory;
 
 import com.team4u.framework.lease.AbstractLeaseContractSupport;
-import com.team4u.framework.lease.enums.LeaseAdminResult;
 import com.team4u.framework.lease.enums.LeaseTaskState;
 import com.team4u.framework.lease.model.LeasePublishRequest;
 import com.team4u.framework.lease.model.LeaseQueryRequest;
