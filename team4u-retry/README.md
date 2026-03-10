@@ -42,7 +42,7 @@
 * 不持久化
 * 没有后台接管
 * 最终失败后直接抛出异常
-* 不支持配置 `foregroundAttempts`，因为它没有“前台 / 后台拆分”这个概念
+* 不支持配置 `foregroundMaxAttempts`，因为它没有“前台 / 后台拆分”这个概念
 
 ### 什么时候用 MANAGED
 
@@ -58,7 +58,7 @@
 * 任务先被持久化
 * 前台尝试失败后可以转后台继续
 * 需要存储、协调器、恢复处理器和 Worker 配合
-* 必须显式配置 `foregroundAttempts`
+* 必须显式配置 `foregroundMaxAttempts`
 * 必须提供有效的 `RecoverySpec.taskType`
 
 ---
@@ -128,23 +128,25 @@
 
 ## 核心概念
 
-### `maxAttempts`
+### `maxRetries`
 
-最大尝试次数，包含首次执行。
+失败后最多重试多少次，不包含首次执行。
 
-例如 `maxAttempts = 3`，表示最多执行 3 次，不是“失败后再重试 3 次”。
+例如 `maxRetries = 2`，表示最多执行 3 次。
 `-1` 表示无限重试。
 
-### `foregroundAttempts`
+总执行次数恒等于 `1 + maxRetries`。
 
-只在 MANAGED 模式下有意义，表示当前进程内最多同步尝试多少次。
+### `foregroundMaxAttempts`
+
+只在 MANAGED 模式下有意义，表示当前进程内最多同步执行多少次。
 
 约束如下：
 
 * INLINE 模式下不允许设置
 * MANAGED 模式下必须显式设置
 * 必须大于 0
-* 不能大于 `maxAttempts`
+* 不能大于 `maxRetries + 1`
 
 ### 退避策略
 
@@ -161,7 +163,7 @@
 
 `RetryPolicy` 的决策顺序可以理解为：
 
-* 如果达到最大尝试次数，不再重试
+* 如果达到最大重试次数，不再重试
 * 命中 `abortOnExceptions`，立即停止
 * 如果配置了 `retryOnExceptions`，但当前异常不在其中，不重试
 * 如果配置了 `condition` 且条件不满足，不重试
@@ -192,8 +194,8 @@ LeaseBackend backend = ...; // 关于 LeaseBackend 的选择与配置，请参�
 
 ManagedRetryRuntime runtime = ManagedRetryRuntime.lease(backend)
         .defaultPolicy(RetryPolicy.builder()
-                .maxAttempts(5)
-                .foregroundAttempts(2)
+                .maxRetries(4)
+                .foregroundMaxAttempts(2)
                 .backoff(Backoffs.fixed(1000))
                 .build())
         .start();
@@ -203,8 +205,8 @@ ManagedSubmitResult<String> result = Retries.managed(runtime.client())
         .idempotentBy("order:1001")
         .payload("{\"orderId\":\"1001\"}")
         .policy(RetryPolicy.builder()
-                .maxAttempts(5)
-                .foregroundAttempts(2)
+                .maxRetries(4)
+                .foregroundMaxAttempts(2)
                 .backoff(Backoffs.fixed(1000))
                 .build())
         .call(this::notifyPayment);
@@ -226,7 +228,7 @@ import com.team4u.framework.retry.backoff.Backoffs;
 import com.team4u.framework.retry.policy.RetryPolicy;
 
 RetryPolicy policy = RetryPolicy.builder()
-        .maxAttempts(3)
+        .maxRetries(2)
         .backoff(Backoffs.fixed(1000))
         .retryOn(java.io.IOException.class)
         .abortOn(IllegalArgumentException.class)
@@ -252,7 +254,7 @@ import com.team4u.framework.retry.policy.RetryPolicy;
 import java.util.concurrent.CompletableFuture;
 
 RetryPolicy policy = RetryPolicy.builder()
-        .maxAttempts(3)
+        .maxRetries(2)
         .backoff(Backoffs.exponential(200, 2.0, 3000))
         .build();
 
@@ -277,8 +279,8 @@ import com.team4u.framework.retry.domain.ManagedSubmitResult;
 import com.team4u.framework.retry.policy.RetryPolicy;
 
 RetryPolicy policy = RetryPolicy.builder()
-        .maxAttempts(5)
-        .foregroundAttempts(2)
+        .maxRetries(4)
+        .foregroundMaxAttempts(2)
         .backoff(Backoffs.fixed(1000))
         .retryOn(java.io.IOException.class)
         .build();
@@ -305,11 +307,11 @@ MANAGED 模式的核心在于：“任务高可靠持久化” + “执行权可
 当你在 MANAGED 模式下执行一个任务时，它的生命周期如下：
 
 1.  持久化：框架首先将任务规格（Payload、策略、恢复信息）存入 `DurableRetryStore`。
-2.  前台尝试：在当前线程中，按 `foregroundAttempts` 指定次数进行同步重试。
+2.  前台尝试：在当前线程中，按 `foregroundMaxAttempts` 指定次数进行同步重试。
 3.  结果产出：
     *   Completed: 前台尝试中已经成功了。
     *   Accepted: 前台次数用完还没成功，任务已安全进入后台，正等待 Worker 接管继续重试。
-    *   Failed: 命中不可重试异常或已达 `maxAttempts`。
+    *   Failed: 命中不可重试异常或已达 `maxRetries` 上限。
     *   Rejected: 参数校验不通过（如缺少持久化必需的 ID 等）。
 
 > [!IMPORTANT]
@@ -331,8 +333,8 @@ LeaseBackend backend = ...; // 详见 [team4u-lease 文档](../team4u-lease/READ
 
 ManagedRetryRuntime runtime = ManagedRetryRuntime.lease(backend)
         .defaultPolicy(RetryPolicy.builder()
-                .maxAttempts(10)
-                .foregroundAttempts(2)
+                .maxRetries(9)
+                .foregroundMaxAttempts(2)
                 .build())
         .start(); 
 
@@ -372,7 +374,7 @@ public class PayNotifyHandler implements RecoveryHandler<String> {
 
 为了保证任务能被可靠地持久化和后台恢复，MANAGED 模式有以下强制要求：
 
-1.  必须显式配置 `foregroundAttempts`：不能为 0，且必须小于等于 `maxAttempts`。
+1.  必须显式配置 `foregroundMaxAttempts`：不能为 0，且必须小于等于 `maxRetries + 1`。
 2.  必须提供幂等键：即 `idempotentBy("...")`，用于去重和状态追踪。
 3.  必须提供任务类型：即 `task("...")`，后台 Worker 依赖它找到对应的 `RecoveryHandler`。
 4.  建议使用 `Retries` 门面：
@@ -444,7 +446,7 @@ RetryPolicyFactoryRegistry.global().register(new RetryPolicyFactory() {
     @Override
     public RetryPolicy create() {
         return RetryPolicy.builder()
-                .maxAttempts(3)
+                .maxRetries(2)
                 .backoff(Backoffs.fixed(100))
                 .build();
     }
@@ -505,7 +507,7 @@ RetryPolicyFactoryRegistry.global().register(new RetryPolicyFactory() {
     @Override
     public RetryPolicy create() {
         return RetryPolicy.builder()
-                .maxAttempts(3)
+                .maxRetries(2)
                 .backoff(Backoffs.fixed(100))
                 .build();
     }
@@ -557,8 +559,8 @@ public class RetryManagedConfiguration {
     public ManagedRetryRuntime managedRetryRuntime(LeaseBackend backend) { // 关于 backend 注入请参考 team4u-lease 文档
         return ManagedRetryRuntime.lease(backend)
                 .defaultPolicy(RetryPolicy.builder()
-                        .maxAttempts(5)
-                        .foregroundAttempts(2)
+                        .maxRetries(4)
+                        .foregroundMaxAttempts(2)
                         .backoff(Backoffs.fixed(1000))
                         .build())
                 .build();
@@ -575,8 +577,8 @@ public class RetryManagedConfiguration {
                 .idempotentBy("order:1001")
                 .payload("{\"orderId\":\"1001\"}")
                 .policy(RetryPolicy.builder()
-                        .maxAttempts(5)
-                        .foregroundAttempts(2)
+                        .maxRetries(4)
+                        .foregroundMaxAttempts(2)
                         .backoff(Backoffs.fixed(1000))
                         .build())
                 .call(() -> "ok")
@@ -661,15 +663,15 @@ retry.policy.
 例如：
 
 ```properties
-retry.policy.order-submit={"maxAttempts":6,"foregroundAttempts":2,"backoff":{"type":"exponentialJitter","params":{"initialDelay":500,"multiplier":2.0,"maxDelay":10000}},"retryOnExceptions":["java.net.SocketTimeoutException","java.io.IOException"],"abortOnExceptions":["java.lang.IllegalArgumentException"],"condition":""}
+retry.policy.order-submit={"maxRetries":5,"foregroundMaxAttempts":2,"backoff":{"type":"exponentialJitter","params":{"initialDelay":500,"multiplier":2.0,"maxDelay":10000}},"retryOnExceptions":["java.net.SocketTimeoutException","java.io.IOException"],"abortOnExceptions":["java.lang.IllegalArgumentException"],"condition":"retryCount <= 2"}
 ```
 
 也就是说，这里的 value 需要是能被 `RetryPolicyFactory.create(String jsonConfig)` 直接解析的合法 JSON 字符串。
 
 可配置字段包括：
 
-* `maxAttempts`
-* `foregroundAttempts`
+* `maxRetries`
+* `foregroundMaxAttempts`
 * `backoff.type`
 * `backoff.params`
 * `retryOnExceptions`
@@ -723,11 +725,11 @@ INLINE 的所有尝试都发生在当前进程里，不做持久化，不会跨�
 
 ## FAQ
 
-### `maxAttempts = 3` 表示什么？
+### `maxRetries = 2` 表示什么？
 
-表示最多执行 3 次，包含首次执行。
+表示失败后最多重试 2 次，因此总共最多执行 3 次。
 
-### 为什么 INLINE 不支持 `foregroundAttempts`？
+### 为什么 INLINE 不支持 `foregroundMaxAttempts`？
 
 因为 INLINE 没有后台托管概念，不存在“前台尝试几次再交给后台”。
 

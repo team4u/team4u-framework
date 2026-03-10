@@ -107,7 +107,7 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
     private <T> ManagedSubmitResult<T> validateSpec(RetryTaskSpec<T> spec, RetryPolicy policy) {
         if (policy == null || policy.getForegroundAttempts() == null) {
             return new ManagedSubmitResult.Rejected<>(
-                    "MANAGED mode requires a retry policy with foregroundAttempts explicitly configured");
+                    "MANAGED mode requires a retry policy with foregroundMaxAttempts explicitly configured");
         }
 
         if (isBlank(spec.getIdempotencyKey())) {

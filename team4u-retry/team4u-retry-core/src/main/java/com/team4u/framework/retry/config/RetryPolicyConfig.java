@@ -16,13 +16,13 @@ import java.util.List;
 @Setter
 public class RetryPolicyConfig {
     /**
-     * 最大尝试次数（包含首次执行）
+     * 最大重试次数（不包含首次执行）
      */
-    private int maxAttempts = 3;
+    private int maxRetries = 2;
     /**
-     * 前台进程内尝试次数
+     * 前台进程内最大执行次数
      */
-    private Integer foregroundAttempts;
+    private Integer foregroundMaxAttempts;
     /**
      * 退避配置
      */

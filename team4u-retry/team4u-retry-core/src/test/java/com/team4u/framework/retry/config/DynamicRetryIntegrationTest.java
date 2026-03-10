@@ -40,18 +40,18 @@ public class DynamicRetryIntegrationTest {
         String policyId = "test-dynamic-policy";
         String configKey = "retry.policy." + policyId;
 
-        // 1. 下发初始配置：全局总尝试 2 次
+        // 1. 下发初始配置：失败后最多重试 1 次，总共执行 2 次
         context.put(configKey,
-                "{\"maxAttempts\": 2, \"backoff\": {\"type\": \"fixed\", \"params\": {\"delay\": 100}}}");
+                "{\"maxRetries\": 1, \"backoff\": {\"type\": \"fixed\", \"params\": {\"delay\": 100}}}");
 
         RetryPolicy policy1 = DynamicRetryPolicyRegistry.getPolicy(policyId);
         Assert.assertNotNull(policy1);
         Assert.assertTrue("初始配置应允许第1次重试", policy1.canRetry(1, new RuntimeException()));
         Assert.assertFalse("初始配置不应允许第2次重试", policy1.canRetry(2, new RuntimeException()));
 
-        // 2. 动态修改配置：全局总尝试增加到 5 次
+        // 2. 动态修改配置：失败后最多重试 4 次，总共执行 5 次
         context.put(configKey,
-                "{\"maxAttempts\": 5, \"backoff\": {\"type\": \"fixed\", \"params\": {\"delay\": 200}}}");
+                "{\"maxRetries\": 4, \"backoff\": {\"type\": \"fixed\", \"params\": {\"delay\": 200}}}");
 
         RetryPolicy policy2 = DynamicRetryPolicyRegistry.getPolicy(policyId);
         Assert.assertNotSame("预期热更新产生了新的策略实例", policy1, policy2);
