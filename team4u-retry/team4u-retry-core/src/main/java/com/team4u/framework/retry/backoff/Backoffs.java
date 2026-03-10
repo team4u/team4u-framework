@@ -170,7 +170,7 @@ public final class Backoffs {
     public static final class ExponentialJitterBuilder extends BaseExponentialBuilder<ExponentialJitterBuilder> {
         @Override
         protected String type() {
-            return "exponentialjitter";
+            return "exponentialJitter";
         }
     }
 
@@ -192,10 +192,9 @@ public final class Backoffs {
 
         public Backoff build() {
             BackoffConfig config = new BackoffConfig();
-            String normalizedType = BackoffRegistry.normalizeType(type);
-            config.setType(normalizedType);
+            config.setType(type);
             config.setParams(params);
-            return BackoffRegistry.global().get(normalizedType)
+            return BackoffRegistry.global().get(type)
                     .map(factory -> factory.create(config))
                     .orElseThrow(() -> new IllegalArgumentException("Unsupported backoff type: " + type));
         }

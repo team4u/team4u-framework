@@ -111,9 +111,9 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
      * @return 验证结果，若通过则返回 null，否则返回包含驳回原因的实例
      */
     private <T> ManagedSubmitResult<T> validateSpec(RetryTaskSpec<T> spec, RetryPolicy policy) {
-        if (policy == null || policy.getForegroundAttempts() == null) {
+        if (policy == null || policy.getForegroundMaxRetries() == null) {
             return new ManagedSubmitResult.Rejected<>(
-                    "MANAGED mode requires a retry policy with foregroundMaxAttempts explicitly configured");
+                    "MANAGED mode requires a retry policy with foregroundMaxRetries explicitly configured");
         }
 
         if (isBlank(spec.getIdempotencyKey())) {
@@ -183,7 +183,7 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
      */
     private <T> ManagedSubmitResult<T> executeInForeground(RetryTaskSpec<T> spec, RetryRecord record,
                                                            RetryPolicy policy) {
-        int foregroundAttempts = policy.getForegroundAttempts();
+        int foregroundAttempts = policy.getForegroundMaxRetries() + 1;
         int attempts = 0;
 
         while (true) {

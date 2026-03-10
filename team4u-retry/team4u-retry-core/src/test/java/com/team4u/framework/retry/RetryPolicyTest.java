@@ -39,13 +39,23 @@ public class RetryPolicyTest {
     }
 
     @Test
-    public void testForegroundAttemptsValidation() {
+    public void testForegroundRetriesValidation() {
         try {
-            RetryPolicy.builder().maxRetries(2).foregroundMaxAttempts(4).build();
+            RetryPolicy.builder().maxRetries(2).foregroundMaxRetries(3).build();
             Assert.fail("Expected IllegalArgumentException");
         } catch (IllegalArgumentException e) {
             Assert.assertTrue(e.getMessage().contains("foreground"));
         }
+    }
+
+    @Test
+    public void testZeroForegroundRetriesIsAllowed() {
+        RetryPolicy policy = RetryPolicy.builder()
+                .maxRetries(2)
+                .foregroundMaxRetries(0)
+                .build();
+
+        Assert.assertEquals(Integer.valueOf(0), policy.getForegroundMaxRetries());
     }
 
     @Test

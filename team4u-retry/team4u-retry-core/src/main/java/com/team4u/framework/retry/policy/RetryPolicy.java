@@ -5,7 +5,6 @@ import com.team4u.framework.criterion.MatchContext;
 import com.team4u.framework.retry.backoff.Backoff;
 import com.team4u.framework.retry.backoff.Backoffs;
 import com.team4u.framework.retry.util.RetryExceptionUtil;
-import lombok.Getter;
 import lombok.Singular;
 
 import java.util.Collections;
@@ -19,7 +18,6 @@ import java.util.Set;
  * Builder 由 Lombok 自动生成，默认值解析和参数校验统一放在构造函数中，
  * 避免通过不同构建路径绕过约束。
  */
-@Getter
 public class RetryPolicy {
     /**
      * 最大尝试次数，包含首次执行，`-1` 表示无限重试。
@@ -56,17 +54,17 @@ public class RetryPolicy {
     /**
      * 构造重试策略实例。
      *
-     * @param maxRetries            最大重试次数，允许为 {@code null}，此时默认取 2
-     * @param foregroundMaxAttempts 前台进程内最大执行次数，允许为 {@code null}
-     * @param backoff               重试退避策略，允许为 {@code null}，此时默认使用固定 1000ms
-     * @param retryOnExceptions     允许触发重试的异常类型集合
-     * @param abortOnExceptions     命中后立即终止重试的异常类型集合
-     * @param condition             额外的表达式条件，允许为 {@code null}，表达式语法可参考 {@link Criteria}
+     * @param maxRetries           最大重试次数，允许为 {@code null}，此时默认取 2
+     * @param foregroundMaxRetries 前台最大重试次数，允许为 {@code null}
+     * @param backoff              重试退避策略，允许为 {@code null}，此时默认使用固定 1000ms
+     * @param retryOnExceptions    允许触发重试的异常类型集合
+     * @param abortOnExceptions    命中后立即终止重试的异常类型集合
+     * @param condition            额外的表达式条件，允许为 {@code null}，表达式语法可参考 {@link Criteria}
      */
     @lombok.Builder(builderClassName = "Builder")
     private RetryPolicy(
             Integer maxRetries,
-            Integer foregroundMaxAttempts,
+            Integer foregroundMaxRetries,
             Backoff backoff,
             @Singular("retryOn") Set<Class<? extends Throwable>> retryOnExceptions,
             @Singular("abortOn") Set<Class<? extends Throwable>> abortOnExceptions,
@@ -79,17 +77,17 @@ public class RetryPolicy {
         if (resolvedMaxRetries < -1) {
             throw new IllegalArgumentException("maxRetries must be greater than or equal to 0, or -1 (infinite retries)");
         }
-        if (foregroundMaxAttempts != null && foregroundMaxAttempts <= 0) {
-            throw new IllegalArgumentException("foregroundMaxAttempts must be greater than 0");
+        if (foregroundMaxRetries != null && foregroundMaxRetries < 0) {
+            throw new IllegalArgumentException("foregroundMaxRetries must be greater than or equal to 0");
         }
-        if (resolvedMaxAttempts != -1
-                && foregroundMaxAttempts != null
-                && foregroundMaxAttempts > resolvedMaxAttempts) {
-            throw new IllegalArgumentException("foregroundMaxAttempts must not be greater than maxRetries + 1");
+        if (resolvedMaxRetries != -1
+                && foregroundMaxRetries != null
+                && foregroundMaxRetries > resolvedMaxRetries) {
+            throw new IllegalArgumentException("foregroundMaxRetries must not be greater than maxRetries");
         }
 
         this.maxAttempts = resolvedMaxAttempts;
-        this.foregroundAttempts = foregroundMaxAttempts;
+        this.foregroundAttempts = foregroundMaxRetries == null ? null : foregroundMaxRetries + 1;
         this.backoff = resolvedBackoff;
         // 在构造阶段完成防御性拷贝，避免后续 Builder 继续修改时影响已生成对象。
         this.retryOnExceptions = immutableCopy(retryOnExceptions);
@@ -121,7 +119,7 @@ public class RetryPolicy {
         }
 
         if (condition != null && !condition.isEmpty()) {
-            RetryContext contextData = new RetryContext(executedAttempts - 1, getMaxAttempts(), cause);
+            RetryContext contextData = new RetryContext(executedAttempts - 1, getMaxRetries(), cause);
             MatchContext ctx = MatchContext.of(contextData);
             return Criteria.global().matches(condition, ctx);
         }
@@ -141,18 +139,57 @@ public class RetryPolicy {
         return RetryExceptionUtil.unwrap(ex);
     }
 
-    @Getter
+    public int getMaxRetries() {
+        return maxAttempts == -1 ? -1 : maxAttempts - 1;
+    }
+
+    public Integer getForegroundMaxRetries() {
+        return foregroundAttempts == null ? null : foregroundAttempts - 1;
+    }
+
+    public Backoff getBackoff() {
+        return backoff;
+    }
+
+    public Set<Class<? extends Throwable>> getRetryOnExceptions() {
+        return retryOnExceptions;
+    }
+
+    public Set<Class<? extends Throwable>> getAbortOnExceptions() {
+        return abortOnExceptions;
+    }
+
+    public String getCondition() {
+        return condition;
+    }
+
     public static class RetryContext {
         private final int retryCount;
         private final int maxRetries;
         private final Throwable cause;
         private final String message;
 
-        public RetryContext(int retryCount, int maxAttempts, Throwable cause) {
+        public RetryContext(int retryCount, int maxRetries, Throwable cause) {
             this.retryCount = retryCount;
-            this.maxRetries = maxAttempts == -1 ? -1 : maxAttempts - 1;
+            this.maxRetries = maxRetries;
             this.cause = cause;
             this.message = cause != null && cause.getMessage() != null ? cause.getMessage() : "";
+        }
+
+        public int getRetryCount() {
+            return retryCount;
+        }
+
+        public int getMaxRetries() {
+            return maxRetries;
+        }
+
+        public Throwable getCause() {
+            return cause;
+        }
+
+        public String getMessage() {
+            return message;
         }
     }
 }

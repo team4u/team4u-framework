@@ -44,27 +44,33 @@ public class BackoffTest {
     }
 
     @Test
-    public void testGenericBuilderNormalizesExponentialJitterType() {
-        Backoff builderBackoff = Backoffs.builder("ExponentialJitter")
+    public void testGenericBuilderUsesExactExponentialJitterType() {
+        Backoff builderBackoff = Backoffs.builder("exponentialJitter")
                 .param("initialDelay", 100L)
                 .param("multiplier", 2.0D)
                 .param("maxDelay", 500L)
                 .build();
 
         BackoffConfig config = new BackoffConfig();
-        config.setType("exponentialjitter");
+        config.setType("exponentialJitter");
         config.setParams(Collections.singletonMap("initialDelay", 100L));
         Backoff configBackoff = BackoffRegistry.global().createBackoff(config);
-
-        BackoffConfig camelCaseConfig = new BackoffConfig();
-        camelCaseConfig.setType("exponentialJitter");
-        camelCaseConfig.setParams(Collections.singletonMap("initialDelay", 100L));
-        Backoff camelCaseBackoff = BackoffRegistry.global().createBackoff(camelCaseConfig);
 
         Assert.assertTrue(builderBackoff.calculateMillis(1) >= 100L);
         Assert.assertTrue(builderBackoff.calculateMillis(1) <= 100L);
         Assert.assertTrue(configBackoff.calculateMillis(1) >= 100L);
-        Assert.assertTrue(camelCaseBackoff.calculateMillis(1) >= 100L);
+    }
+
+    @Test
+    public void testGenericBuilderRejectsCaseMismatchedType() {
+        assertIllegalArgument(new Runnable() {
+            @Override
+            public void run() {
+                Backoffs.builder("ExponentialJitter")
+                        .param("initialDelay", 100L)
+                        .build();
+            }
+        });
     }
 
     private void assertIllegalArgument(Runnable runnable) {

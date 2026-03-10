@@ -256,9 +256,9 @@ public final class Retries {
                 throw new IllegalStateException("MANAGED execution requires a retry policy");
             }
             // 将 DefaultManagedRetryClient 的核心拒绝条件前移到 DSL 层，尽早暴露错误。
-            if (policy.getForegroundAttempts() == null) {
+            if (policy.getForegroundMaxRetries() == null) {
                 throw new IllegalStateException(
-                        "MANAGED execution requires foregroundMaxAttempts to be explicitly configured");
+                        "MANAGED execution requires foregroundMaxRetries to be explicitly configured");
             }
         }
     }
