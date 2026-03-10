@@ -20,13 +20,13 @@
 
 第一次接入时，建议先按场景选，而不是从全部能力开始看。
 
-| 你的场景                        | 推荐方式      | 需要模块                                                   |
-|-----------------------------|-----------|--------------------------------------------------------|
-| 给一段同步代码加重试                  | INLINE    | `team4u-retry-core`                                    |
-| 给 `CompletableFuture` 加异步重试 | INLINE    | `team4u-retry-core`                                    |
-| 想通过注解给方法加重试                 | 代理模式      | `team4u-retry-proxy`                                   |
-| Spring 项目里启用注解重试            | Spring 集成 | `team4u-retry-spring`                                  |
-| 需要任务持久化、后台接管、进程重启后继续        | MANAGED   | `team4u-retry-core` + `team4u-retry-lease-integration` |
+| 你的场景                                 | 推荐方式    | 需要模块                                               |
+| ---------------------------------------- | ----------- | ------------------------------------------------------ |
+| 给一段同步代码加重试                     | INLINE      | `team4u-retry-core`                                    |
+| 给 `CompletableFuture` 加异步重试        | INLINE      | `team4u-retry-core`                                    |
+| 想通过注解给方法加重试                   | 代理模式    | `team4u-retry-proxy`                                   |
+| Spring 项目里启用注解重试                | Spring 集成 | `team4u-retry-spring`                                  |
+| 需要任务持久化、后台接管、进程重启后继续 | MANAGED     | `team4u-retry-core` + `team4u-retry-lease-integration` |
 
 ### 什么时候用 INLINE
 
@@ -180,11 +180,49 @@
 
 ## 5 分钟快速开始
 
+## 推荐写法：统一入口 + 官方 runtime
+
+```java
+import com.team4u.framework.lease.api.LeaseBackend;
+import com.team4u.framework.retry.Retries;
+import com.team4u.framework.retry.backoff.Backoffs;
+import com.team4u.framework.retry.domain.ManagedSubmitResult;
+import com.team4u.framework.retry.integration.lease.ManagedRetryRuntime;
+LeaseBackend backend = ...; // 关于 LeaseBackend 的选择与配置，请参考 [team4u-lease 文档](../team4u-lease/README.md)
+
+ManagedRetryRuntime runtime = ManagedRetryRuntime.lease(backend)
+        .defaultPolicy(RetryPolicy.builder()
+                .maxAttempts(5)
+                .foregroundAttempts(2)
+                .backoff(Backoffs.fixed(1000))
+                .build())
+        .start();
+
+ManagedSubmitResult<String> result = Retries.managed(runtime.client())
+        .task("pay-notify")
+        .idempotentBy("order:1001")
+        .payload("{\"orderId\":\"1001\"}")
+        .policy(RetryPolicy.builder()
+                .maxAttempts(5)
+                .foregroundAttempts(2)
+                .backoff(Backoffs.fixed(1000))
+                .build())
+        .call(this::notifyPayment);
+```
+
+这个写法适合作为默认接入方式：
+
+* `ManagedRetryRuntime.lease(...)` 负责把 MANAGED 运行时组起来
+* `Retries` 负责统一 INLINE / MANAGED 的编程入口
+* 旧的 `DefaultInlineRetryClient` / `ManagedRetryClient.submit(...)` 仍然保留，适合高级场景或底层封装，但推荐优先使用 `Retries` 门面类
+
+---
+
 ## INLINE：同步重试
 
 ```java
+import com.team4u.framework.retry.Retries;
 import com.team4u.framework.retry.backoff.Backoffs;
-import com.team4u.framework.retry.client.DefaultInlineRetryClient;
 import com.team4u.framework.retry.policy.RetryPolicy;
 
 RetryPolicy policy = RetryPolicy.builder()
@@ -194,20 +232,21 @@ RetryPolicy policy = RetryPolicy.builder()
         .abortOn(IllegalArgumentException.class)
         .build();
 
-String result = DefaultInlineRetryClient.getInstance()
-        .execute(policy, this::remoteCall);
+// 使用 Retries 门面类同步执行
+String result = Retries.inline()
+        .policy(policy)
+        .call(this::remoteCall);
 ```
 
-`DefaultInlineRetryClient` 是开箱即用的单例入口。
+`Retries.inline()` 提供了一个流式 API，底层依然通过 `DefaultInlineRetryClient` 单例执行。
 
 ---
 
 ## INLINE：异步重试
 
 ```java
+import com.team4u.framework.retry.Retries;
 import com.team4u.framework.retry.backoff.Backoffs;
-import com.team4u.framework.retry.client.DefaultInlineRetryClient;
-import com.team4u.framework.retry.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.policy.RetryPolicy;
 
 import java.util.concurrent.CompletableFuture;
@@ -217,27 +256,24 @@ RetryPolicy policy = RetryPolicy.builder()
         .backoff(Backoffs.exponential(200, 2.0, 3000))
         .build();
 
-CompletableFuture<String> future = DefaultInlineRetryClient.getInstance()
-        .executeAsync(
-                policy,
-                this::asyncRemoteCall,
-                RetryExecutorManager.global().getScheduler()
-        );
+// 使用 Retries 门面类异步执行
+CompletableFuture<String> future = Retries.inline()
+        .policy(policy)
+        .callAsync(this::asyncRemoteCall);
 ```
 
 这里的 `asyncRemoteCall` 需要返回 `CompletableFuture<T>`。
-框架内置全局调度线程池；在 Spring 环境下会自动关闭，非 Spring 环境下建议自行关注生命周期。
+框架内置全局调度线程池，通过 `callAsync` 调用时会默认使用该调度器进行退避等待。
 
 ---
 
 ## MANAGED：前台尝试 + 后台接管
 
 ```java
+import com.team4u.framework.retry.Retries;
 import com.team4u.framework.retry.backoff.Backoffs;
 import com.team4u.framework.retry.client.ManagedRetryClient;
 import com.team4u.framework.retry.domain.ManagedSubmitResult;
-import com.team4u.framework.retry.domain.RecoverySpec;
-import com.team4u.framework.retry.domain.RetryTaskSpec;
 import com.team4u.framework.retry.policy.RetryPolicy;
 
 RetryPolicy policy = RetryPolicy.builder()
@@ -247,22 +283,16 @@ RetryPolicy policy = RetryPolicy.builder()
         .retryOn(java.io.IOException.class)
         .build();
 
-RetryTaskSpec<String> spec = RetryTaskSpec.<String>builder()
-        .idempotencyKey("order:1001")
-        .executor(() -> notifyPayment())
-        .recovery(RecoverySpec.of("pay-notify", "{\"orderId\":\"1001\"}"))
+// 使用 Retries 门面类提交托管任务
+ManagedSubmitResult<String> result = Retries.managed(managedRetryClient)
+        .task("pay-notify")
+        .idempotentBy("order:1001")
+        .payload("{\"orderId\":\"1001\"}")
         .policy(policy)
-        .build();
-
-ManagedSubmitResult<String> result = managedRetryClient.submit(spec);
+        .call(this::notifyPayment);
 ```
 
-`RetryTaskSpec` 至少包括：
-
-* `idempotencyKey`
-* `executor`
-* `recovery`
-* `policy`
+通过 `Retries.managed(client)` 可以更清晰地链式编排托管任务的各项规格。
 
 ---
 
@@ -326,58 +356,48 @@ MANAGED 提交会返回 4 种终态之一：
 
 * `LeaseDurableRetryStore` 同时实现了 `DurableRetryStore` 和 `RetryCoordinator`
 * `RetryLeaseWorker` 负责后台消费和恢复执行
-* 使用方仍需提供一个同时具备 `LeaseBackend` 与 `LeaseRuntimeClient` 能力的 lease 实现
+* `ManagedRetryRuntimes` 提供官方 runtime 工厂，直接产出可用的 `ManagedRetryClient`
 
-### 最小初始化代码
+### 最小初始化代码（推荐）
 
 ```java
 import com.team4u.framework.lease.api.LeaseBackend;
-import com.team4u.framework.lease.api.LeaseRuntimeClient;
 import com.team4u.framework.retry.backoff.Backoffs;
-import com.team4u.framework.retry.client.DefaultManagedRetryClient;
 import com.team4u.framework.retry.client.ManagedRetryClient;
-import com.team4u.framework.retry.integration.lease.LeaseDurableRetryStore;
-import com.team4u.framework.retry.integration.lease.RetryLeaseWorker;
+import com.team4u.framework.retry.integration.lease.ManagedRetryRuntime;
 import com.team4u.framework.retry.policy.RetryPolicy;
-import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 
-LeaseBackend backend = ...;
-LeaseRuntimeClient runtimeClient = (LeaseRuntimeClient) backend;
+LeaseBackend backend = ...; // 建议根据场景选择 JDBC 或内存实现，详见 [team4u-lease 文档](../team4u-lease/README.md)
 
-// store + coordinator
-LeaseDurableRetryStore store = new LeaseDurableRetryStore(backend);
+ManagedRetryRuntime runtime = ManagedRetryRuntime.lease(backend)
+        .defaultPolicy(RetryPolicy.builder()
+                .maxAttempts(5)
+                .foregroundAttempts(2)
+                .backoff(Backoffs.fixed(1000))
+                .build())
+        .start();
 
-// recovery registry
-RecoveryHandlerRegistry registry = RecoveryHandlerRegistry.global();
+// 获取初始化后的客户端并使用 Retries 门面类
+ManagedRetryClient managedRetryClient = runtime.client();
 
-// default policy（可选）
-RetryPolicy defaultPolicy = RetryPolicy.builder()
-        .maxAttempts(5)
-        .foregroundAttempts(2)
-        .backoff(Backoffs.fixed(1000))
-        .build();
-
-// managed client
-ManagedRetryClient managedRetryClient = DefaultManagedRetryClient.builder()
-        .store(store)
-        .coordinator(store)
-        .defaultPolicy(defaultPolicy)
-        .build();
-
-// worker（必须有后台执行者）
-RetryLeaseWorker worker = new RetryLeaseWorker(runtimeClient, registry);
-worker.start();
+ManagedSubmitResult<String> result = Retries.managed(managedRetryClient)
+        .task("pay-notify")
+        .idempotentBy("order:1001")
+        .payload("{\"orderId\":\"1001\"}")
+        .policy(policy)
+        .call(this::notifyPayment);
 ```
 
-### 初始化时要特别注意
+### 你还能手工装配
 
-上面这段代码隐含一个前提：
-你的 lease 实现不仅要能作为 `LeaseBackend` 使用，还要能作为 `LeaseRuntimeClient` 使用，否则 `RetryLeaseWorker` 无法启动。
+如果你需要自定义 `LeaseDurableRetryStore`、手工接管 `RetryLeaseWorker` 生命周期，或者完全绕开 lease 工厂，仍然可以继续使用原来的手工装配方式。
 
-也就是说，在实际接入里，可运行的 lease backend 需要同时覆盖：
+手工装配仍然需要这些部件：
 
-* 发布 / 管理任务能力
-* Worker 运行时消费能力
+* `DurableRetryStore`
+* `RetryCoordinator`
+* `RecoveryHandlerRegistry`
+* `RetryLeaseWorker`
 
 ---
 
@@ -402,6 +422,13 @@ RecoveryHandler
 ```
 
 其中：
+
+### `LeaseBackend`
+
+它是 MANAGED 模式的核心存储与协调抽象。框架提供了基于 JDBC 和内存的多种实现。
+
+> [!TIP]
+> 欲了解如何初始化 `LeaseBackend` 以及各实现的区别，请务必查看 [team4u-lease README](../team4u-lease/README.md)。
 
 ### `DurableRetryStore`
 
@@ -470,12 +497,13 @@ public class PayNotifyRecoveryHandler implements RecoveryHandler<String> {
 ### 对应提交时要这样写
 
 ```java
-RetryTaskSpec<String> spec = RetryTaskSpec.<String>builder()
-        .idempotencyKey("order:1001")
-        .executor(() -> notifyPayment())
-        .recovery(RecoverySpec.of("pay-notify", "{\"orderId\":\"1001\"}"))
+// 使用 Retries 门面进行链式组装和提交
+ManagedSubmitResult<String> result = Retries.managed(managedRetryClient)
+        .task("pay-notify")
+        .idempotentBy("order:1001")
+        .payload("{\"orderId\":\"1001\"}")
         .policy(policy)
-        .build();
+        .call(this::notifyPayment);
 ```
 
 这里的路由 key 必须对上：
@@ -660,53 +688,53 @@ public class PayService {
 如果你希望 `@Retryable(mode = RetryMode.MANAGED)` 真正进入托管模型，需要自己声明对应 Bean。
 
 另外需要注意：代理 / 注解模式下的 MANAGED 只支持 `void` 方法。
-如果方法需要返回业务结果、`CompletableFuture`，或者你希望拿到提交后的 `taskId/state`，不要复用原业务方法签名，改用编程式 `ManagedRetryClient.submit(...)`。
+如果方法需要返回业务结果、`CompletableFuture`，或者你希望拿到提交后的 `taskId/state`，不要复用原业务方法签名，改用编程式 `Retries.managed(managedRetryClient).call(...)`。
+
+如果你更想用统一入口，也可以改用 `Retries.managed(managedRetryClient)...call(...)`。
 
 示例：
 
 ```java
 import com.team4u.framework.lease.api.LeaseBackend;
-import com.team4u.framework.lease.api.LeaseRuntimeClient;
+import com.team4u.framework.retry.Retries;
 import com.team4u.framework.retry.backoff.Backoffs;
-import com.team4u.framework.retry.client.DefaultManagedRetryClient;
 import com.team4u.framework.retry.client.ManagedRetryClient;
-import com.team4u.framework.retry.integration.lease.LeaseDurableRetryStore;
-import com.team4u.framework.retry.integration.lease.RetryLeaseWorker;
+import com.team4u.framework.retry.integration.lease.ManagedRetryRuntime;
 import com.team4u.framework.retry.policy.RetryPolicy;
-import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class RetryManagedConfiguration {
 
-    @Bean
-    public LeaseDurableRetryStore leaseRetryStore(LeaseBackend backend) {
-        return new LeaseDurableRetryStore(backend);
-    }
-
-    @Bean
-    public ManagedRetryClient managedRetryClient(LeaseDurableRetryStore store) {
-        RetryPolicy defaultPolicy = RetryPolicy.builder()
-                .maxAttempts(5)
-                .foregroundAttempts(2)
-                .backoff(Backoffs.fixed(1000))
-                .build();
-
-        return DefaultManagedRetryClient.builder()
-                .store(store)
-                .coordinator(store)
-                .defaultPolicy(defaultPolicy)
-                .build();
-    }
-
     @Bean(initMethod = "start", destroyMethod = "shutdown")
-    public RetryLeaseWorker retryLeaseWorker(
-            LeaseRuntimeClient runtimeClient) {
-        return new RetryLeaseWorker(
-                runtimeClient,
-                RecoveryHandlerRegistry.global()
-        );
+    public ManagedRetryRuntime managedRetryRuntime(LeaseBackend backend) { // 关于 backend 注入请参考 team4u-lease 文档
+        return ManagedRetryRuntime.lease(backend)
+                .defaultPolicy(RetryPolicy.builder()
+                        .maxAttempts(5)
+                        .foregroundAttempts(2)
+                        .backoff(Backoffs.fixed(1000))
+                        .build())
+                .build();
+    }
+
+    @Bean
+    public ManagedRetryClient managedRetryClient(ManagedRetryRuntime runtime) {
+        return runtime.client();
+    }
+
+    public String submitNotify(ManagedRetryClient managedRetryClient) {
+        return Retries.managed(managedRetryClient)
+                .task("pay-notify")
+                .idempotentBy("order:1001")
+                .payload("{\"orderId\":\"1001\"}")
+                .policy(RetryPolicy.builder()
+                        .maxAttempts(5)
+                        .foregroundAttempts(2)
+                        .backoff(Backoffs.fixed(1000))
+                        .build())
+                .call(() -> "ok")
+                .isCompleted() ? "ok" : "submitted";
     }
 }
 ```
@@ -843,7 +871,7 @@ INLINE 的所有尝试都发生在当前进程里，不做持久化，不会跨�
 * `CompletableFuture<T>` 返回值不能和 MANAGED 一起使用
 * 其他任何非 `void` 返回值也不能和 MANAGED 一起使用
 * 如果你需要异步结果或业务返回值，改用 `INLINE`
-* 如果你需要提交结果 / 任务元数据，改用编程式 `ManagedRetryClient.submit(...)`
+* 如果你需要提交结果 / 任务元数据，改用编程式 `Retries.managed(managedRetryClient).call(...)`
 
 ---
 
@@ -888,7 +916,7 @@ INLINE 的所有尝试都发生在当前进程里，不做持久化，不会跨�
 建议第一次接入按这个顺序走：
 
 * 先用 INLINE 验证 `RetryPolicy` 是否符合预期
-* 再引入 lease 集成，初始化 `managedRetryClient`
+* 再引入 lease 集成，通过 `Retries.managed(client)` 验证托管链路
 * 写一个最简单的 `RecoveryHandler`
 * 启动 `RetryLeaseWorker`
 * 最后再接注解 / Spring 自动化
