@@ -2,6 +2,7 @@ package com.team4u.framework.retry.proxy;
 
 import cn.hutool.core.util.ReflectUtil;
 import com.team4u.framework.bean.BeanManager;
+import com.team4u.framework.retry.domain.store.InvocationArgSnapshot;
 import com.team4u.framework.retry.domain.store.InvocationRecoveryData;
 import com.team4u.framework.retry.proxy.serialize.HutoolRetryContextSerializer;
 import com.team4u.framework.retry.proxy.serialize.RetryContextSerializer;
@@ -53,15 +54,19 @@ public class InvocationReplay implements RecoveryHandler<InvocationRecoveryData>
         if (payload == null) {
             throw new IllegalArgumentException("InvocationRecoveryData is null");
         }
+        validatePayload(payload);
 
         // 定位目标对象
-        Object target = locateTarget(payload.getBeanName());
+        Object target = locateTarget(payload.getTargetTypeName());
 
         Class<?>[] paramTypes = resolveParamTypes(payload);
-        Method method = ReflectUtil.getMethod(target.getClass(), payload.getMethodName(), paramTypes);
+        Method method = RetryMethodResolver.findMostSpecificMethod(
+                ReflectUtil.getMethod(Class.forName(payload.getTargetTypeName()), payload.getMethodName(), paramTypes),
+                target.getClass());
+        method = method == null ? null : RetryMethodResolver.resolve(method, target.getClass()).getEffectiveMethod();
 
         if (method == null) {
-            throw new NoSuchMethodException(payload.getBeanName() + "." + payload.getMethodName());
+            throw new NoSuchMethodException(payload.getTargetTypeName() + "." + payload.getMethodName());
         }
 
         Object[] args = resolveArgs(payload, paramTypes);
@@ -72,24 +77,23 @@ public class InvocationReplay implements RecoveryHandler<InvocationRecoveryData>
     /**
      * 定位目标对象。
      * <p>
-     * 优先从 {@link BeanManager} 获取 Bean 实例，若未找到则尝试通过反射创建新实例。
+     * 仅允许从 {@link BeanManager} 获取 Bean 实例。
      *
-     * @param beanName Bean 名称或完整类名
+     * @param targetTypeName 目标类型名
      * @return 目标对象实例
      * @throws ClassNotFoundException 如果找不到对应的类
      */
-    private Object locateTarget(String beanName) throws ClassNotFoundException {
-        try {
-            // 首先尝试从 BeanManager 获取
-            Class<?> clazz = Class.forName(beanName);
-            Object bean = BeanManager.getInstance().getBean(clazz);
-            if (bean != null) {
-                return bean;
-            }
-        } catch (Exception ignored) {
+    private Object locateTarget(String targetTypeName) throws ClassNotFoundException {
+        Class<?> clazz = Class.forName(targetTypeName);
+        Object bean = BeanManager.getInstance().getBean(clazz);
+        if (bean != null) {
+            return bean;
         }
-        // 回退选项：创建新实例（要求无参构造）
-        return ReflectUtil.newInstance(Class.forName(beanName));
+        bean = BeanManager.getInstance().getBean(targetTypeName);
+        if (bean != null) {
+            return bean;
+        }
+        throw new IllegalStateException("No managed bean found for replay target: " + targetTypeName);
     }
 
     /**
@@ -100,12 +104,16 @@ public class InvocationReplay implements RecoveryHandler<InvocationRecoveryData>
      * @throws ClassNotFoundException 如果参数类型类不存在
      */
     private Class<?>[] resolveParamTypes(InvocationRecoveryData payload) throws ClassNotFoundException {
-        if (payload.getArgTypes() == null || payload.getArgTypes().isEmpty()) {
+        if (payload.getArgs() == null || payload.getArgs().isEmpty()) {
             return new Class<?>[0];
         }
-        Class<?>[] types = new Class<?>[payload.getArgTypes().size()];
-        for (int i = 0; i < payload.getArgTypes().size(); i++) {
-            types[i] = resolveType(payload.getArgTypes().get(i));
+        Class<?>[] types = new Class<?>[payload.getArgs().size()];
+        for (int i = 0; i < payload.getArgs().size(); i++) {
+            InvocationArgSnapshot snapshot = payload.getArgs().get(i);
+            if (snapshot == null || snapshot.getTypeName() == null) {
+                throw new IllegalArgumentException("InvocationRecoveryData.args[" + i + "] missing typeName");
+            }
+            types[i] = resolveType(snapshot.getTypeName());
         }
         return types;
     }
@@ -126,13 +134,39 @@ public class InvocationReplay implements RecoveryHandler<InvocationRecoveryData>
      * @return 反序列化后的参数对象数组
      */
     private Object[] resolveArgs(InvocationRecoveryData payload, Class<?>[] paramTypes) {
-        if (payload.getArgValues() == null || payload.getArgValues().isEmpty()) {
+        if (payload.getArgs() == null || payload.getArgs().isEmpty()) {
             return new Object[0];
         }
-        Object[] args = new Object[payload.getArgValues().size()];
-        for (int i = 0; i < payload.getArgValues().size(); i++) {
-            args[i] = serializer.deserialize(paramTypes[i], payload.getArgValues().get(i));
+        if (payload.getArgs().size() != paramTypes.length) {
+            throw new IllegalArgumentException("InvocationRecoveryData args length mismatch. snapshots="
+                    + payload.getArgs().size() + ", paramTypes=" + paramTypes.length);
+        }
+        Object[] args = new Object[payload.getArgs().size()];
+        for (int i = 0; i < payload.getArgs().size(); i++) {
+            InvocationArgSnapshot snapshot = payload.getArgs().get(i);
+            if (snapshot.isIgnored()) {
+                if (paramTypes[i].isPrimitive()) {
+                    throw new IllegalArgumentException("Ignored primitive parameter cannot be replayed at index " + i);
+                }
+                args[i] = null;
+                continue;
+            }
+            args[i] = serializer.deserialize(paramTypes[i], snapshot.getSerializedValue());
         }
         return args;
+    }
+
+    private void validatePayload(InvocationRecoveryData payload) {
+        if (payload.getTargetTypeName() == null || payload.getTargetTypeName().trim().isEmpty()) {
+            throw new IllegalArgumentException(
+                    "InvocationRecoveryData.targetTypeName is required. Legacy payloads are no longer supported.");
+        }
+        if (payload.getMethodName() == null || payload.getMethodName().trim().isEmpty()) {
+            throw new IllegalArgumentException("InvocationRecoveryData.methodName is required");
+        }
+        if (payload.getArgs() == null) {
+            throw new IllegalArgumentException(
+                    "InvocationRecoveryData.args is required. Legacy argTypes/argValues payloads are no longer supported.");
+        }
     }
 }

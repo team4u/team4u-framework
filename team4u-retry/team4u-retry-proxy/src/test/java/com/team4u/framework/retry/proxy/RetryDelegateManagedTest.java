@@ -4,6 +4,7 @@ import com.team4u.framework.retry.backoff.Backoffs;
 import com.team4u.framework.retry.client.ManagedRetryClient;
 import com.team4u.framework.retry.domain.ManagedSubmitResult;
 import com.team4u.framework.retry.domain.RetryTaskSpec;
+import com.team4u.framework.retry.domain.store.InvocationArgSnapshot;
 import com.team4u.framework.retry.domain.store.InvocationRecoveryData;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.policy.RetryPolicyFactory;
@@ -73,9 +74,39 @@ public class RetryDelegateManagedTest {
         Assert.assertFalse(firstKey.isEmpty());
 
         InvocationRecoveryData payload = (InvocationRecoveryData) managedClient.lastSpec.getRecovery().getPayload();
-        Assert.assertEquals(ManagedVoidService.class.getName(), payload.getBeanName());
+        Assert.assertEquals(ManagedVoidService.class.getName(), payload.getTargetTypeName());
         Assert.assertEquals("replayPayment", payload.getMethodName());
-        Assert.assertEquals(2, payload.getArgValues().size());
+        Assert.assertEquals(2, payload.getArgs().size());
+        Assert.assertEquals(String.class.getName(), payload.getArgs().get(0).getTypeName());
+        Assert.assertEquals("order-1", payload.getArgs().get(0).getSerializedValue());
+    }
+
+    @Test
+    public void testManagedSnapshotPreservesNullAndIgnoredParameterPositions() throws Throwable {
+        CapturingManagedRetryClient managedClient = new CapturingManagedRetryClient();
+        RetryDelegate delegate = new RetryDelegate(null, managedClient);
+        ManagedIgnoredReferenceService target = new ManagedIgnoredReferenceService();
+        Method method = ManagedIgnoredReferenceService.class.getMethod("replayPayment",
+                String.class, Input.class, Integer.class);
+        Retryable retryable = method.getAnnotation(Retryable.class);
+
+        delegate.executeWithRetry(method, target, new Object[]{"order-1", new Input("stream"), null}, retryable, () -> null);
+
+        InvocationRecoveryData payload = (InvocationRecoveryData) managedClient.lastSpec.getRecovery().getPayload();
+        Assert.assertEquals(3, payload.getArgs().size());
+
+        InvocationArgSnapshot first = payload.getArgs().get(0);
+        InvocationArgSnapshot second = payload.getArgs().get(1);
+        InvocationArgSnapshot third = payload.getArgs().get(2);
+
+        Assert.assertFalse(first.isIgnored());
+        Assert.assertEquals("order-1", first.getSerializedValue());
+
+        Assert.assertTrue(second.isIgnored());
+        Assert.assertNull(second.getSerializedValue());
+
+        Assert.assertFalse(third.isIgnored());
+        Assert.assertNull(third.getSerializedValue());
     }
 
     @Test
@@ -199,6 +230,24 @@ public class RetryDelegateManagedTest {
     public static class ManagedCustomRecoveryService {
         @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED, recovery = CustomRecoveryHandler.class)
         public void replayPayment(String orderId) {
+        }
+    }
+
+    public static class ManagedIgnoredReferenceService {
+        @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED)
+        public void replayPayment(String orderId, @RetryIgnore Input body, Integer attempts) {
+        }
+    }
+
+    public static class Input {
+        private String value;
+
+        public Input(String value) {
+            this.value = value;
+        }
+
+        public String getValue() {
+            return value;
         }
     }
 

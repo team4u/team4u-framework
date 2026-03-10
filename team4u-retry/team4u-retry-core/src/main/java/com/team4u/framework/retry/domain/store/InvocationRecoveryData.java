@@ -13,8 +13,7 @@ import java.util.List;
 @Data
 @Builder
 public class InvocationRecoveryData {
-    private String beanName;
+    private String targetTypeName;
     private String methodName;
-    private List<String> argTypes;
-    private List<String> argValues;
+    private List<InvocationArgSnapshot> args;
 }

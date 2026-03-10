@@ -24,11 +24,6 @@ public class HutoolRetryContextSerializer implements RetryContextSerializer {
             return null;
         }
 
-        // 检查参数是否标记了 @RetryIgnore 注解
-        if (parameter != null && parameter.isAnnotationPresent(RetryIgnore.class)) {
-            return null;
-        }
-
         try {
             return JSONUtil.toJsonStr(arg);
         } catch (Exception e) {

@@ -182,6 +182,14 @@ public class JdbcLeaseBackend implements LeaseBackend {
     }
 
     @Override
+    public LeaseAdminResult updateAndReschedule(LeaseUpdateRequest request, long delayMillis) {
+        validateUpdateRequest(request);
+        return applyAdminMutation(
+                request.getTaskId(),
+                now -> dao.updateAndReschedule(request, now + Math.max(0L, delayMillis), now));
+    }
+
+    @Override
     public LeaseTaskPage list(LeaseQueryRequest request) {
         try {
             return dao.query(request);
@@ -263,6 +271,12 @@ public class JdbcLeaseBackend implements LeaseBackend {
             return classifyAdminMutation(latest);
         } catch (SQLException e) {
             throw new IllegalStateException("admin mutation failed: " + taskId, e);
+        }
+    }
+
+    private void validateUpdateRequest(LeaseUpdateRequest request) {
+        if (request == null || StrUtil.isBlank(request.getTaskId())) {
+            throw new IllegalArgumentException("taskId required");
         }
     }
 

@@ -45,8 +45,7 @@ public class LeaseDurableRetryStore implements DurableRetryStore, RetryCoordinat
 
     private void assertApplied(String operation, String taskId, LeaseAdminResult result) {
         if (result != LeaseAdminResult.APPLIED) {
-            throw new IllegalStateException(
-                    "Lease " + operation + " was not applied for taskId=" + taskId + ", result=" + result);
+            throw new LeaseAdminOperationException(operation, taskId, result);
         }
     }
 
@@ -86,13 +85,9 @@ public class LeaseDurableRetryStore implements DurableRetryStore, RetryCoordinat
 
     @Override
     public void schedule(RetryRecord record, long delayMillis) {
-        // 这是协调器接口方法，用于实际告知后端运行任务。
-        // 首先更新负载（payload）
-        assertApplied("updatePayload", record.getTaskId(), adminService.update(LeaseUpdateRequest.builder()
+        assertApplied("updateAndSchedule", record.getTaskId(), adminService.updateAndReschedule(LeaseUpdateRequest.builder()
                 .taskId(record.getTaskId())
                 .payload(serializer.serialize(record))
-                .build()));
-
-        assertApplied("schedule", record.getTaskId(), adminService.reschedule(record.getTaskId(), delayMillis));
+                .build(), delayMillis));
     }
 }

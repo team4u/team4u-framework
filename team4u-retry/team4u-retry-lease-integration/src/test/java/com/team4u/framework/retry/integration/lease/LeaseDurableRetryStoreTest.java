@@ -140,10 +140,10 @@ public class LeaseDurableRetryStoreTest {
     }
 
     /**
-     * 验证 schedule 会先更新 payload，再执行 reschedule。
+     * 验证 schedule 会通过单次原子管理操作更新 payload 并重新调度。
      */
     @Test
-    public void testScheduleUpdatesPayloadThenReschedules() {
+    public void testScheduleUsesAtomicUpdateAndReschedule() {
         RecordingProducer producer = new RecordingProducer();
         RecordingAdminService adminService = new RecordingAdminService();
         LeaseDurableRetryStore store = new LeaseDurableRetryStore(producer, adminService, "retry-q");
@@ -155,24 +155,23 @@ public class LeaseDurableRetryStoreTest {
         store.schedule(record, 500L);
 
         Assert.assertSame(record, serializer.lastSerializedRecord);
-        Assert.assertEquals(2, adminService.operations.size());
-        Assert.assertEquals("update", adminService.operations.get(0));
-        Assert.assertEquals("reschedule", adminService.operations.get(1));
+        Assert.assertEquals(1, adminService.operations.size());
+        Assert.assertEquals("updateAndReschedule", adminService.operations.get(0));
         Assert.assertNotNull(adminService.updateRequest);
         Assert.assertEquals("task-4", adminService.updateRequest.getTaskId());
         Assert.assertEquals("serialized-schedule", adminService.updateRequest.getPayload());
-        Assert.assertEquals("task-4", adminService.rescheduledTaskId);
-        Assert.assertEquals(500L, adminService.rescheduledDelayMillis);
+        Assert.assertEquals("task-4", adminService.updateAndRescheduleTaskId);
+        Assert.assertEquals(500L, adminService.updateAndRescheduleDelayMillis);
     }
 
     /**
-     * 验证 update 未生效时，schedule 会立即抛出异常并停止后续调度。
+     * 验证原子更新未生效时，schedule 会立即抛出带可恢复语义的异常。
      */
     @Test
-    public void testScheduleThrowsWhenUpdateNotApplied() {
+    public void testScheduleThrowsWhenAtomicUpdateNotApplied() {
         RecordingProducer producer = new RecordingProducer();
         RecordingAdminService adminService = new RecordingAdminService();
-        adminService.updateResult = LeaseAdminResult.TASK_NOT_FOUND;
+        adminService.updateAndRescheduleResult = LeaseAdminResult.ACTIVE_LEASE_PRESENT;
         LeaseDurableRetryStore store = new LeaseDurableRetryStore(producer, adminService, "retry-q");
         RetryRecord record = retryRecord("payment");
         record.setTaskId("task-5");
@@ -180,14 +179,15 @@ public class LeaseDurableRetryStoreTest {
         store.setSerializer(new FixedSerializer("payload"));
         try {
             store.schedule(record, 100L);
-            Assert.fail("expected IllegalStateException");
-        } catch (IllegalStateException ex) {
-            Assert.assertTrue(ex.getMessage().contains("updatePayload"));
+            Assert.fail("expected LeaseAdminOperationException");
+        } catch (LeaseAdminOperationException ex) {
+            Assert.assertEquals("updateAndSchedule", ex.getOperation());
+            Assert.assertTrue(ex.isRetriable());
             Assert.assertTrue(ex.getMessage().contains("task-5"));
         }
 
         Assert.assertEquals(1, adminService.operations.size());
-        Assert.assertEquals("update", adminService.operations.get(0));
+        Assert.assertEquals("updateAndReschedule", adminService.operations.get(0));
     }
 
     /**
@@ -253,11 +253,11 @@ public class LeaseDurableRetryStoreTest {
     private static class RecordingAdminService implements LeaseAdminService {
 
         private final List<String> operations = new ArrayList<String>();
-        private final LeaseAdminResult rescheduleResult = LeaseAdminResult.APPLIED;
         private LeaseAdminResult closeResult = LeaseAdminResult.APPLIED;
         private LeaseAdminResult updateResult = LeaseAdminResult.APPLIED;
-        private String rescheduledTaskId;
-        private long rescheduledDelayMillis;
+        private LeaseAdminResult updateAndRescheduleResult = LeaseAdminResult.APPLIED;
+        private String updateAndRescheduleTaskId;
+        private long updateAndRescheduleDelayMillis;
         private String closedTaskId;
         private LeaseCloseRequest closeRequest;
         private LeaseUpdateRequest updateRequest;
@@ -265,9 +265,7 @@ public class LeaseDurableRetryStoreTest {
         @Override
         public LeaseAdminResult reschedule(String taskId, long delayMillis) {
             operations.add("reschedule");
-            rescheduledTaskId = taskId;
-            rescheduledDelayMillis = delayMillis;
-            return rescheduleResult;
+            return LeaseAdminResult.APPLIED;
         }
 
         @Override
@@ -288,6 +286,15 @@ public class LeaseDurableRetryStoreTest {
             operations.add("update");
             updateRequest = request;
             return updateResult;
+        }
+
+        @Override
+        public LeaseAdminResult updateAndReschedule(LeaseUpdateRequest request, long delayMillis) {
+            operations.add("updateAndReschedule");
+            updateRequest = request;
+            updateAndRescheduleTaskId = request.getTaskId();
+            updateAndRescheduleDelayMillis = delayMillis;
+            return updateAndRescheduleResult;
         }
     }
 
@@ -326,6 +333,12 @@ public class LeaseDurableRetryStoreTest {
         @Override
         public LeaseAdminResult update(LeaseUpdateRequest request) {
             operations.add("update");
+            return LeaseAdminResult.APPLIED;
+        }
+
+        @Override
+        public LeaseAdminResult updateAndReschedule(LeaseUpdateRequest request, long delayMillis) {
+            operations.add("updateAndReschedule");
             return LeaseAdminResult.APPLIED;
         }
 
