@@ -75,7 +75,7 @@ public class LeaseWorker implements Runnable, AutoCloseable {
     }
 
     public void shutdown() {
-        shutdownGracefully(0L);
+        shutdownGracefully(policy.getLeaseMillis());
     }
 
     public boolean shutdownGracefully(long timeoutMillis) {

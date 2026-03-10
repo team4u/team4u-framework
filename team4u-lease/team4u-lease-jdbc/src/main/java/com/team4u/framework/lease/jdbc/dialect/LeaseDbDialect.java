@@ -10,15 +10,15 @@ package com.team4u.framework.lease.jdbc.dialect;
 public interface LeaseDbDialect {
 
     /**
-     * 构建查找可抢占任务候选者的 SQL
+     * 构建查找可抢占任务候选者的 SQL 片段
      *
      * @param queueCount 订阅的队列数量
-     * @return 完整的 SQL 语句
+     * @return `WHERE / ORDER BY / LIMIT` 片段
      */
     String buildAcquireCandidateSql(int queueCount);
 
     /**
-     * 构建分页查询任务的 SQL
+     * 构建分页查询任务的 SQL 片段
      *
      * @param filterQueue    是否过滤队列
      * @param filterTaskType 是否过滤任务类型
@@ -26,7 +26,7 @@ public interface LeaseDbDialect {
      * @param outcomeCount   过滤的结束结果数量
      * @param reasonCount    过滤的失败原因数量
      * @param filterWorkerId 是否过滤工作节点 ID
-     * @return 完整的 SQL 语句
+     * @return `WHERE / ORDER BY / LIMIT` 片段
      */
     String buildQuerySql(boolean filterQueue,
                          boolean filterTaskType,

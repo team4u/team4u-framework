@@ -120,7 +120,9 @@ public class JdbcLeaseTaskDao {
         params.add(now);
         params.add(now);
         params.add(limit);
-        return toEntities(db.query(dialect.buildAcquireCandidateSql(subscriptions.size()), params.toArray()));
+        String sql = "SELECT " + COLUMNS + " FROM " + TABLE_NAME + " "
+                + dialect.buildAcquireCandidateSql(subscriptions.size());
+        return toEntities(db.query(sql, params.toArray()));
     }
 
     /**
@@ -457,7 +459,8 @@ public class JdbcLeaseTaskDao {
         boolean filterFailureReasons = !safeRequest.getFailureReasons().isEmpty();
         boolean filterWorkerId = safeRequest.getWorkerId() != null;
 
-        String sql = dialect.buildQuerySql(
+        String sql = "SELECT " + COLUMNS + " FROM " + TABLE_NAME + " "
+                + dialect.buildQuerySql(
                 filterQueue,
                 filterTaskType,
                 filterStates ? safeRequest.getStates().size() : 0,

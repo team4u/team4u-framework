@@ -133,6 +133,7 @@ worker.start();
 worker.shutdown();
 ```
 
+`shutdown()` 会触发优雅停机，默认最多等待一个 `leaseMillis` 周期；如需显式控制等待时长，请使用 `shutdownGracefully(timeoutMillis)`。
 对于长任务，建议启用心跳续租机制，避免任务执行过程中租约过期。
 
 
@@ -355,7 +356,7 @@ adminService.updateAndReschedule(
 - 抢占逻辑：采用乐观抢占模型原子竞争。
 - 等待行为：`acquire()` 当前使用短轮询等待，不是数据库原生阻塞获取，更适合轻量任务场景。
 - 幂等建档：支持 `businessKey`、`publishIfAbsent(...)` 和 `getByBusinessKey(...)`。
-- 说明：推荐优先在 MySQL 环境下使用；由于 JDBC 实现面向通用能力，迁移到其他数据库请先验证 SQL 兼容性。
+- 说明：当前实现按 MySQL schema 与 SQL 语义维护；如需迁移到其他数据库，请先自行完成方言与并发语义验证。
 
 ### 内存后端 (InMemoryLeaseBackend)
 
@@ -406,7 +407,10 @@ backend.publish(LeasePublishRequest.builder()
         .queue("order").taskType("pay").payload("{\"orderId\": 1001}").build());
 
 // 5. 优雅停机
-// shutdownGracefully 会等待当前正在执行的任务结束，停止新任务拉取并关闭心跳线程
+// shutdown() 默认最多等待一个 leaseMillis 周期
+worker.shutdown();
+
+// shutdownGracefully 会按显式超时等待当前正在执行的任务结束，停止新任务拉取并关闭心跳线程
 worker.shutdownGracefully(5000); 
 ```
 

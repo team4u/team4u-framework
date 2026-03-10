@@ -1,0 +1,31 @@
+package com.team4u.framework.lease.model;
+
+import org.junit.Assert;
+import org.junit.Test;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
+
+public class LeaseUpdateRequestTest {
+
+    @Test
+    public void testAttributesAreDefensivelyCopiedAndImmutable() {
+        Map<String, String> attributes = new LinkedHashMap<String, String>();
+        attributes.put("traceId", "trace-1");
+
+        LeaseUpdateRequest request = LeaseUpdateRequest.builder()
+                .taskId("task-1")
+                .attributes(attributes)
+                .build();
+
+        attributes.put("traceId", "trace-2");
+
+        Assert.assertEquals("trace-1", request.getAttributes().get("traceId"));
+        try {
+            request.getAttributes().put("newKey", "newValue");
+            Assert.fail("expected attributes to be immutable");
+        } catch (UnsupportedOperationException expected) {
+            Assert.assertEquals(1, request.getAttributes().size());
+        }
+    }
+}
