@@ -214,7 +214,7 @@ ManagedSubmitResult<String> result = Retries.managed(runtime.client())
 
 * `ManagedRetryRuntime.lease(...)` 负责把 MANAGED 运行时组起来
 * `Retries` 负责统一 INLINE / MANAGED 的编程入口
-* 旧的 `DefaultInlineRetryClient` / `ManagedRetryClient.submit(...)` 仍然保留，适合高级场景或底层封装，但推荐优先使用 `Retries` 门面类
+* 底层的 `DefaultInlineRetryClient` / `ManagedRetryClient.submit(...)` 也可直接使用，适合高级场景或二次封装，但推荐优先使用 `Retries` 门面类
 
 ---
 
@@ -296,247 +296,93 @@ ManagedSubmitResult<String> result = Retries.managed(managedRetryClient)
 
 ---
 
-## MANAGED 到底是什么
+## MANAGED 托管模式：前台尝试 + 后台接管
 
-MANAGED 模式不是“把 INLINE 再包一层”，而是一套单独的运行模型。
+MANAGED 模式的核心在于：“任务高可靠持久化” + “执行权可在进程间/线程间流转”。
 
-提交流程大致是：
+### 核心模型
 
-```text
-提交 RetryTaskSpec
-    ↓
-校验 policy / recovery
-    ↓
-创建持久化 RetryRecord（PREPARED）
-    ↓
-前台按 foregroundAttempts 尝试执行
-    ↓
-成功 -> Completed
-不可再试 -> Failed
-前台 backoff 等待被中断 -> Failed
-还能再试但前台预算耗尽 -> Accepted，并交给 coordinator 调度后台
-```
+当你在 MANAGED 模式下执行一个任务时，它的生命周期如下：
 
-### `ManagedSubmitResult` 的含义
+1.  持久化：框架首先将任务规格（Payload、策略、恢复信息）存入 `DurableRetryStore`。
+2.  前台尝试：在当前线程中，按 `foregroundAttempts` 指定次数进行同步重试。
+3.  结果产出：
+    *   Completed: 前台尝试中已经成功了。
+    *   Accepted: 前台次数用完还没成功，任务已安全进入后台，正等待 Worker 接管继续重试。
+    *   Failed: 命中不可重试异常或已达 `maxAttempts`。
+    *   Rejected: 参数校验不通过（如缺少持久化必需的 ID 等）。
 
-MANAGED 提交会返回 4 种终态之一：
-
-* `Completed<T>`：前台已经成功完成
-* `Accepted<T>`：任务已被可靠接收，后续会由后台继续
-* `Rejected<T>`：任务未被接收，例如配置不合法
-* `Failed<T>`：明确失败，不再继续重试
-
-### 一个容易误解的点
-
-`Accepted` 不代表业务已经成功，只代表：
-
-* 任务已经持久化
-* 当前前台阶段已经结束
-* 后续会由后台 Worker 按策略继续执行
+> [!IMPORTANT]
+> `Accepted` 只代表“接管成功”，不代表“业务已成功”。
 
 ---
 
-## `managedRetryClient` 怎么初始化
+## 官方运行时：`ManagedRetryRuntime`
 
-这是第一次接入最容易卡住的地方。
+初始化 MANAGED 模式涉及存储（Store）、协调器（Coordinator）和恢复 Worker 的组合。为了简化接入过程，推荐使用 `ManagedRetryRuntime` 一键配置：
 
-`managedRetryClient` 不是像 `DefaultInlineRetryClient.getInstance()` 那样直接拿来就能用。
-它要求你自己把依赖组起来：
-
-* `DurableRetryStore`
-* `RetryCoordinator`
-* 可选的默认 `RetryPolicy`
-
-如果缺少 `DurableRetryStore` 或 `RetryCoordinator`，构造时会直接失败。
-`RecoveryHandlerRegistry` 不是 `managedRetryClient` 的构造参数，但如果你要跑后台恢复链路，`RetryLeaseWorker` 仍然需要它。
-
-### 最推荐的初始化方式：基于 lease
-
-`team4u-retry-lease-integration` 已经提供了最省事的一套实现：
-
-* `LeaseDurableRetryStore` 同时实现了 `DurableRetryStore` 和 `RetryCoordinator`
-* `RetryLeaseWorker` 负责后台消费和恢复执行
-* `ManagedRetryRuntimes` 提供官方 runtime 工厂，直接产出可用的 `ManagedRetryClient`
-
-### 最小初始化代码（推荐）
+### 1. 一键组装并启动
 
 ```java
 import com.team4u.framework.lease.api.LeaseBackend;
-import com.team4u.framework.retry.backoff.Backoffs;
-import com.team4u.framework.retry.client.ManagedRetryClient;
 import com.team4u.framework.retry.integration.lease.ManagedRetryRuntime;
-import com.team4u.framework.retry.policy.RetryPolicy;
 
-LeaseBackend backend = ...; // 建议根据场景选择 JDBC 或内存实现，详见 [team4u-lease 文档](../team4u-lease/README.md)
+LeaseBackend backend = ...; // 详见 [team4u-lease 文档](../team4u-lease/README.md)
 
 ManagedRetryRuntime runtime = ManagedRetryRuntime.lease(backend)
         .defaultPolicy(RetryPolicy.builder()
-                .maxAttempts(5)
+                .maxAttempts(10)
                 .foregroundAttempts(2)
-                .backoff(Backoffs.fixed(1000))
                 .build())
-        .start();
+        .start(); 
 
-// 获取初始化后的客户端并使用 Retries 门面类
-ManagedRetryClient managedRetryClient = runtime.client();
-
-ManagedSubmitResult<String> result = Retries.managed(managedRetryClient)
-        .task("pay-notify")
-        .idempotentBy("order:1001")
-        .payload("{\"orderId\":\"1001\"}")
-        .policy(policy)
-        .call(this::notifyPayment);
+// 通过 runtime 获取 client 即可开始使用
+ManagedRetryClient client = runtime.client();
 ```
 
-### 你还能手工装配
+`ManagedRetryRuntime` 会帮你完成以下工作：
+*   存储与调度：自动基于 `LeaseBackend` 创建持久化存储和任务调度能力。
+*   注册表：管理所有的 `RecoveryHandler`。
+*   Worker：启动后台线程，定时拉取属于当前节点的任务进行恢复。
 
-如果你需要自定义 `LeaseDurableRetryStore`、手工接管 `RetryLeaseWorker` 生命周期，或者完全绕开 lease 工厂，仍然可以继续使用原来的手工装配方式。
+### 2. 定义恢复处理器 (`RecoveryHandler`)
 
-手工装配仍然需要这些部件：
-
-* `DurableRetryStore`
-* `RetryCoordinator`
-* `RecoveryHandlerRegistry`
-* `RetryLeaseWorker`
-
----
-
-## MANAGED 最小可运行链路
-
-如果你只记一件事，就记这条链路：
-
-```text
-LeaseBackend
-   ↓
-LeaseDurableRetryStore
-   ├─ 作为 DurableRetryStore
-   └─ 作为 RetryCoordinator
-
-RecoveryHandlerRegistry
-   ↓
-DefaultManagedRetryClient
-   ↓
-RetryLeaseWorker
-   ↓
-RecoveryHandler
-```
-
-其中：
-
-### `LeaseBackend`
-
-它是 MANAGED 模式的核心存储与协调抽象。框架提供了基于 JDBC 和内存的多种实现。
-
-> [!TIP]
-> 欲了解如何初始化 `LeaseBackend` 以及各实现的区别，请务必查看 [team4u-lease README](../team4u-lease/README.md)。
-
-### `DurableRetryStore`
-
-负责“把 durable intent 和终态记下来”，包括：
-
-* `create`
-* `markSucceeded`
-* `markFailed`
-* `cancel`
-
-### `RetryCoordinator`
-
-负责“告诉后台系统什么时候执行这个任务”。
-
-核心接口：
+MANAGED 任务进入后台后，框架不知道该调用哪个方法。你需要提供一个 `RecoveryHandler`：
 
 ```java
-void schedule(RetryRecord record, long delayMillis)
-```
-
-### `RecoveryHandlerRegistry`
-
-它不是 `DefaultManagedRetryClient` 的构造依赖，而是后台恢复执行链路的依赖。
-
-它内部以 handler task type 为 key 管理 `RecoveryHandler`，支持：
-
-* 全局单例 `RecoveryHandlerRegistry.global()`
-* SPI 自动扫描
-* Spring 启动时的默认扫描注册
-
-### `RetryLeaseWorker`
-
-负责真正从队列取任务并执行恢复逻辑。
-没有 Worker，MANAGED 任务即使被 `Accepted`，也不会有人继续跑。
-
----
-
-## 恢复处理器怎么写
-
-MANAGED 后台恢复依赖 `RecoveryHandler`，它的 key 就是 `taskName()`。
-
-### 示例：支付通知补偿
-
-```java
-import com.team4u.framework.retry.recovery.RecoveryContext;
-import com.team4u.framework.retry.recovery.RecoveryHandler;
-
-public class PayNotifyRecoveryHandler implements RecoveryHandler<String> {
-
+public class PayNotifyHandler implements RecoveryHandler<String> {
     @Override
     public String taskName() {
-        return "pay-notify";
+        return "pay-notify"; // 与提交任务时的 taskType 对应
     }
 
     @Override
     public void recover(String payload, RecoveryContext context) throws Exception {
-        doNotify(payload);
-    }
-
-    private void doNotify(String payload) {
-        // 真实补偿逻辑
+        // 后台重试逻辑
     }
 }
 ```
 
-### 对应提交时要这样写
+*   自动注册：如果你的 `RecoveryHandler` 在类路径下，`ManagedRetryRuntime` 默认会通过 SPI 自动扫描并注册它。
+*   Spring 支持：在 Spring 环境下，只需将 Handler 声明为 `@Bean`，`ManagedRetryRuntime` 会自动发现。
 
-```java
-// 使用 Retries 门面进行链式组装和提交
-ManagedSubmitResult<String> result = Retries.managed(managedRetryClient)
-        .task("pay-notify")
-        .idempotentBy("order:1001")
-        .payload("{\"orderId\":\"1001\"}")
-        .policy(policy)
-        .call(this::notifyPayment);
-```
+---
 
-这里的路由 key 必须对上：
+## 使用约束与注意事项
 
-* `RecoveryHandler.taskName()`
-* `RecoverySpec.taskType`
+为了保证任务能被可靠地持久化和后台恢复，MANAGED 模式有以下强制要求：
 
-## MANAGED 的几个关键约束
-
-### 必须显式配置 `foregroundAttempts`
-
-MANAGED 下如果策略没有显式设置 `foregroundAttempts`，提交会直接 `Rejected`。
-当前也不支持把它设置为 `0`；如需“直接后台”，请在调用侧显式走异步托管流程，而不是依赖特殊值。
-
-### 必须提供完整的 `RetryTaskSpec`
-
-以下字段在提交入口就会校验，不会等到前台执行时再报错：
-
-* `idempotencyKey`
-* `executor`
-* `recovery.taskType`
-
-### 必须提供有效的 `RecoverySpec.taskType`
-
-如果没有 `recovery`，或者 `taskType` 为空，也会被 `Rejected`。
-
-### `foregroundAttempts` 不能大于 `maxAttempts`
-
-这个约束在构建 `RetryPolicy` 时就会校验。
-
-### `Accepted` 不代表成功
-
-它只表示任务已进入后台调度，不表示业务已经完成。
+1.  必须显式配置 `foregroundAttempts`：不能为 0，且必须小于等于 `maxAttempts`。
+2.  必须提供幂等键：即 `idempotentBy("...")`，用于去重和状态追踪。
+3.  必须提供任务类型：即 `task("...")`，后台 Worker 依赖它找到对应的 `RecoveryHandler`。
+4.  建议使用 `Retries` 门面：
+    ```java
+    Retries.managed(runtime.client())
+            .task("pay-notify")
+            .idempotentBy("order:1001")
+            .payload("...")
+            .call(() -> ...);
+    ```
 
 ---
 
