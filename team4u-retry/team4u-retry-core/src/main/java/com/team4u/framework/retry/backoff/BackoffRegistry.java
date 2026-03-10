@@ -4,11 +4,13 @@ import com.team4u.framework.base.instance.DynamicInstanceProvider;
 import com.team4u.framework.policy.core.KeyedPolicyRegistry;
 import com.team4u.framework.policy.util.PolicyScanner;
 import com.team4u.framework.retry.config.BackoffConfig;
+import lombok.AccessLevel;
+import lombok.EqualsAndHashCode;
+import lombok.RequiredArgsConstructor;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * 退避策略注册表
@@ -38,14 +40,11 @@ public class BackoffRegistry extends KeyedPolicyRegistry<String, BackoffFactory>
         return provider.get(BackoffCacheKey.of(config));
     }
 
+    @EqualsAndHashCode
+    @RequiredArgsConstructor(access = AccessLevel.PRIVATE)
     static final class BackoffCacheKey {
         private final String type;
         private final Map<String, Object> params;
-
-        private BackoffCacheKey(String type, Map<String, Object> params) {
-            this.type = type;
-            this.params = params;
-        }
 
         static BackoffCacheKey of(BackoffConfig config) {
             String type = config == null || config.getType() == null || config.getType().trim().isEmpty()
@@ -67,23 +66,6 @@ public class BackoffRegistry extends KeyedPolicyRegistry<String, BackoffFactory>
                 return Collections.emptyMap();
             }
             return Collections.unmodifiableMap(new LinkedHashMap<String, Object>(source));
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) {
-                return true;
-            }
-            if (!(o instanceof BackoffCacheKey)) {
-                return false;
-            }
-            BackoffCacheKey that = (BackoffCacheKey) o;
-            return Objects.equals(type, that.type) && Objects.equals(params, that.params);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(type, params);
         }
     }
 }
