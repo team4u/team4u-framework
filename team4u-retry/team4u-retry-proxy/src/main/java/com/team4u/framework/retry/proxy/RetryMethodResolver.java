@@ -1,5 +1,7 @@
 package com.team4u.framework.retry.proxy;
 
+import lombok.Data;
+
 import java.lang.reflect.Method;
 
 /**
@@ -110,27 +112,10 @@ public final class RetryMethodResolver {
         return targetClass;
     }
 
+    @Data
     public static final class ResolvedRetryMethod {
         private final Method effectiveMethod;
         private final Retryable retryable;
         private final Class<?> recoveryTargetType;
-
-        ResolvedRetryMethod(Method effectiveMethod, Retryable retryable, Class<?> recoveryTargetType) {
-            this.effectiveMethod = effectiveMethod;
-            this.retryable = retryable;
-            this.recoveryTargetType = recoveryTargetType;
-        }
-
-        public Method getEffectiveMethod() {
-            return effectiveMethod;
-        }
-
-        public Retryable getRetryable() {
-            return retryable;
-        }
-
-        public Class<?> getRecoveryTargetType() {
-            return recoveryTargetType;
-        }
     }
 }
