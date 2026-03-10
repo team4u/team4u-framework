@@ -55,6 +55,20 @@ public abstract class AbstractLeaseAdminContractTest extends AbstractLeaseContra
     }
 
     @Test
+    public void testAdminCloseCanUpdatePayload() {
+        LeaseBackend backend = createBackend();
+        String taskId = publish(backend, "pay", "payload-v1");
+
+        Assert.assertEquals(LeaseAdminResult.APPLIED,
+                backend.close(taskId, LeaseCloseRequest.builder()
+                        .outcome(LeaseTaskOutcome.CANCELLED)
+                        .errorMessage("cancelled")
+                        .payload("payload-v2")
+                        .build()));
+        Assert.assertEquals("payload-v2", backend.get(taskId).get().getPayload());
+    }
+
+    @Test
     public void testAdminCloseRejectsActiveLease() throws Exception {
         LeaseBackend backend = createBackend();
         String taskId = publish(backend, "pay", "payload");

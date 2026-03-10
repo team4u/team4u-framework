@@ -32,8 +32,9 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
         RecoveryHandlerLeaseTaskHandlerAdapter adapter = new RecoveryHandlerLeaseTaskHandlerAdapter(new FailingHandler());
         FixedSerializer serializer = new FixedSerializer(record);
         adapter.setSerializer(serializer);
+        LeaseExecutionContext context = executionContext(runtimeClient);
 
-        adapter.handle(executionContext(runtimeClient));
+        adapter.handle(context);
 
         Assert.assertNotNull(runtimeClient.releaseRequest);
         Assert.assertNull(runtimeClient.closeRequest);
@@ -45,6 +46,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
         Assert.assertEquals("RuntimeException", record.getState().getLastErrorCode());
         Assert.assertEquals("boom", record.getState().getLastErrorMessage());
         Assert.assertNotNull(record.getState().getNextRunAt());
+        Assert.assertTrue(context.isLifecycleHandled());
     }
 
     @Test
@@ -62,6 +64,45 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
         Assert.assertNotNull(runtimeClient.closeRequest);
         Assert.assertNull(runtimeClient.releaseRequest);
         Assert.assertEquals(LeaseRuntimeResult.APPLIED, runtimeClient.closeResult);
+        Assert.assertEquals("serialized-1", runtimeClient.closeRequest.getPayload());
+    }
+
+    @Test
+    public void testTerminalFailureClosesWithUpdatedPayload() {
+        RetryRecord record = retryRecord();
+        record.getRequest().setPolicy(RetryPolicy.builder()
+                .maxRetries(0)
+                .foregroundMaxRetries(0)
+                .backoff(Backoffs.fixed(0L))
+                .retryOn(RuntimeException.class)
+                .build());
+        TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
+        RecoveryHandlerLeaseTaskHandlerAdapter adapter = new RecoveryHandlerLeaseTaskHandlerAdapter(new FailingHandler());
+        adapter.setSerializer(new FixedSerializer(record));
+
+        adapter.handle(executionContext(runtimeClient));
+
+        Assert.assertNull(runtimeClient.releaseRequest);
+        Assert.assertNotNull(runtimeClient.closeRequest);
+        Assert.assertEquals("serialized-1", runtimeClient.closeRequest.getPayload());
+        Assert.assertEquals("boom", runtimeClient.closeRequest.getErrorMessage());
+    }
+
+    @Test
+    public void testReleaseThrowsWhenRuntimeMutationNotApplied() {
+        RetryRecord record = retryRecord();
+        TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
+        runtimeClient.releaseResult = LeaseRuntimeResult.LEASE_LOST;
+        RecoveryHandlerLeaseTaskHandlerAdapter adapter = new RecoveryHandlerLeaseTaskHandlerAdapter(new FailingHandler());
+        adapter.setSerializer(new FixedSerializer(record));
+
+        try {
+            adapter.handle(executionContext(runtimeClient));
+            Assert.fail("expected IllegalStateException");
+        } catch (IllegalStateException ex) {
+            Assert.assertTrue(ex.getMessage().contains("release"));
+            Assert.assertTrue(ex.getMessage().contains("LEASE_LOST"));
+        }
     }
 
     private RetryRecord retryRecord() {
@@ -82,7 +123,8 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
                         .build())
                 .state(RetryState.builder()
                         .attempts(0)
-                        .status(RetryStatus.RUNNING)
+                        .status(RetryStatus.SCHEDULED)
+                        .nextRunAt(Instant.now().plusSeconds(30))
                         .build())
                 .build();
     }
@@ -150,6 +192,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
 
     private static class TrackingRuntimeClient implements LeaseRuntimeClient {
         private final LeaseRuntimeResult closeResult = LeaseRuntimeResult.APPLIED;
+        private LeaseRuntimeResult releaseResult = LeaseRuntimeResult.APPLIED;
         private LeaseReleaseRequest releaseRequest;
         private LeaseCloseRequest closeRequest;
 
@@ -173,7 +216,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
         @Override
         public LeaseRuntimeResult release(LeaseHandle handle, LeaseReleaseRequest request) {
             releaseRequest = request;
-            return LeaseRuntimeResult.APPLIED;
+            return releaseResult;
         }
     }
 }

@@ -10,6 +10,8 @@ import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
 import com.team4u.framework.retry.proxy.InvocationReplay;
 import com.team4u.framework.retry.proxy.RetryMode;
 import com.team4u.framework.retry.proxy.Retryable;
+import com.team4u.framework.retry.recovery.RecoveryContext;
+import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import org.junit.Assert;
 import org.junit.Before;
@@ -114,6 +116,21 @@ public class RetrySpringTest {
         }
     }
 
+    @Test
+    public void testSpringManagedMethodRejectsCustomRecovery() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
+                ManagedCustomRecoveryConfig.class)) {
+            ManagedCustomRecoveryService service = context.getBean(ManagedCustomRecoveryService.class);
+
+            try {
+                service.notifyPay("M101");
+                Assert.fail("expected IllegalStateException");
+            } catch (IllegalStateException ex) {
+                Assert.assertTrue(ex.getMessage().contains("only supports InvocationReplay"));
+            }
+        }
+    }
+
     public interface OrderService {
         @Retryable(policy = "test-policy")
         String doRetry(String id);
@@ -125,6 +142,10 @@ public class RetrySpringTest {
 
     public interface ManagedService {
         String notifyPay(String id);
+    }
+
+    public interface ManagedCustomRecoveryService {
+        void notifyPay(String id);
     }
 
     @Configuration
@@ -208,6 +229,13 @@ public class RetrySpringTest {
         }
     }
 
+    public static class ManagedCustomRecoveryServiceImpl implements ManagedCustomRecoveryService {
+        @Override
+        @Retryable(policy = "test-policy", mode = RetryMode.MANAGED, recovery = CustomRecoveryHandler.class)
+        public void notifyPay(String id) {
+        }
+    }
+
     @Configuration
     @EnableRetry
     public static class JdkProxyConfig {
@@ -233,6 +261,31 @@ public class RetrySpringTest {
         @Bean
         public ManagedService managedService() {
             return managedService;
+        }
+    }
+
+    @Configuration
+    @EnableRetry
+    public static class ManagedCustomRecoveryConfig {
+        @Bean
+        public ManagedRetryClient managedRetryClient() {
+            return new ManagedRetryClientStub();
+        }
+
+        @Bean
+        public ManagedCustomRecoveryService managedCustomRecoveryService() {
+            return new ManagedCustomRecoveryServiceImpl();
+        }
+    }
+
+    public static class CustomRecoveryHandler implements RecoveryHandler<String> {
+        @Override
+        public String taskName() {
+            return "custom";
+        }
+
+        @Override
+        public void recover(String payload, RecoveryContext context) {
         }
     }
 

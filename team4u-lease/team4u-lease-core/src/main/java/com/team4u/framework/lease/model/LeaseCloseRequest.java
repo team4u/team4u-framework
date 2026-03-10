@@ -32,12 +32,17 @@ public class LeaseCloseRequest {
     private String errorMessage;
 
     /**
+     * 关闭时同步更新的任务负载（可选）。
+     */
+    private String payload;
+
+    /**
      * 附加属性快照。
      */
     private Map<String, String> attributes;
 
     public LeaseCloseRequest normalizeForRuntime() {
-        return validate(outcome, failureReason, errorMessage, attributes);
+        return validate(outcome, failureReason, errorMessage, payload, attributes);
     }
 
     public LeaseCloseRequest normalizeForAdmin() {
@@ -45,7 +50,7 @@ public class LeaseCloseRequest {
         if (outcome == LeaseTaskOutcome.FAILED && normalizedReason == null) {
             normalizedReason = LeaseTaskFailureReason.MANUAL_FAIL;
         }
-        return validate(outcome, normalizedReason, errorMessage, attributes);
+        return validate(outcome, normalizedReason, errorMessage, payload, attributes);
     }
 
     public Map<String, String> getAttributes() {
@@ -58,6 +63,7 @@ public class LeaseCloseRequest {
     private static LeaseCloseRequest validate(LeaseTaskOutcome outcome,
                                               LeaseTaskFailureReason failureReason,
                                               String errorMessage,
+                                              String payload,
                                               Map<String, String> attributes) {
         if (outcome == null) {
             throw new IllegalArgumentException("request.outcome must not be null");
@@ -72,6 +78,7 @@ public class LeaseCloseRequest {
                 .outcome(outcome)
                 .failureReason(failureReason)
                 .errorMessage(errorMessage)
+                .payload(payload)
                 .attributes(attributes)
                 .build();
     }

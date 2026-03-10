@@ -133,11 +133,15 @@ public class LeaseWorker implements Runnable, AutoCloseable {
                         handleMissingHandler(grant);
                         continue;
                     }
+                    LeaseExecutionContext executionContext = toExecutionContext(grant, heartbeatTask);
                     if (heartbeatTask != null) {
                         heartbeatTask.start();
                     }
-                    handler.handle(toExecutionContext(grant, heartbeatTask));
-                    handleWriteResult("close", grant, runtimeClient.close(grant.getHandle(), LeaseCloseRequest.succeeded()));
+                    handler.handle(executionContext);
+                    if (!executionContext.isLifecycleHandled()) {
+                        handleWriteResult("close", grant,
+                                runtimeClient.close(grant.getHandle(), LeaseCloseRequest.succeeded()));
+                    }
                 } catch (Exception ex) {
                     handleFailure(grant, ex);
                 } finally {

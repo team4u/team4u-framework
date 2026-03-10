@@ -552,6 +552,8 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                     .failureReason(outcome == LeaseTaskOutcome.FAILED ? reason : null)
                     .failureCount(nextFailureCount)
                     .errorMessage(request.getErrorMessage())
+                    .payload(request.getPayload() == null ? payload : request.getPayload())
+                    .attributes(request.getAttributes().isEmpty() ? attributes : request.getAttributes())
                     .workerId(null)
                     .leaseToken(null)
                     .leaseExpiresAtMillis(0L)
