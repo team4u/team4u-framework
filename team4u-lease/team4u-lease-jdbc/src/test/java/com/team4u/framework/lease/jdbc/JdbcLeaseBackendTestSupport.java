@@ -4,9 +4,15 @@ import cn.hutool.db.Db;
 import cn.hutool.db.ds.simple.SimpleDataSource;
 
 import javax.sql.DataSource;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.sql.SQLException;
 
 final class JdbcLeaseBackendTestSupport {
+
+    private static final String SCHEMA_RESOURCE = "schema/lease_task_mysql.sql";
 
     private JdbcLeaseBackendTestSupport() {
     }
@@ -17,35 +23,38 @@ final class JdbcLeaseBackendTestSupport {
         DataSource dataSource = new SimpleDataSource(jdbcUrl, "sa", "");
         try {
             Db.use(dataSource).execute("DROP TABLE IF EXISTS lease_task");
-            Db.use(dataSource).execute("CREATE TABLE lease_task ("
-                    + "task_id VARCHAR(64) NOT NULL PRIMARY KEY,"
-                    + "queue_name VARCHAR(128) NOT NULL,"
-                    + "task_type VARCHAR(128) NOT NULL,"
-                    + "payload TEXT,"
-                    + "state VARCHAR(32) NOT NULL,"
-                    + "outcome VARCHAR(32),"
-                    + "failure_reason VARCHAR(64),"
-                    + "priority INT NOT NULL DEFAULT 0,"
-                    + "delivery_count INT NOT NULL DEFAULT 0,"
-                    + "failure_count INT NOT NULL DEFAULT 0,"
-                    + "worker_id VARCHAR(128),"
-                    + "lease_token VARCHAR(128),"
-                    + "lease_expires_at BIGINT NOT NULL DEFAULT 0,"
-                    + "visible_at BIGINT NOT NULL,"
-                    + "created_at BIGINT NOT NULL,"
-                    + "updated_at BIGINT NOT NULL,"
-                    + "error_message TEXT,"
-                    + "attributes_json TEXT"
-                    + ")");
-            Db.use(dataSource).execute(
-                    "CREATE INDEX idx_lease_task_acquire ON lease_task(queue_name, state, visible_at, lease_expires_at, priority, created_at)");
-            Db.use(dataSource).execute(
-                    "CREATE INDEX idx_lease_task_worker ON lease_task(worker_id, state)");
-            Db.use(dataSource).execute(
-                    "CREATE INDEX idx_lease_task_type ON lease_task(queue_name, task_type, state)");
+            initializeSchema(dataSource);
         } catch (SQLException e) {
             throw new IllegalStateException("failed to initialize H2 schema", e);
         }
         return dataSource;
+    }
+
+    private static void initializeSchema(DataSource dataSource) throws SQLException {
+        String schemaSql = loadSchemaSql();
+        for (String statement : schemaSql.split(";")) {
+            String sql = statement.trim();
+            if (!sql.isEmpty()) {
+                Db.use(dataSource).execute(sql);
+            }
+        }
+    }
+
+    private static String loadSchemaSql() {
+        try (InputStream inputStream = JdbcLeaseBackendTestSupport.class.getClassLoader()
+                .getResourceAsStream(SCHEMA_RESOURCE)) {
+            if (inputStream == null) {
+                throw new IllegalStateException("schema resource not found: " + SCHEMA_RESOURCE);
+            }
+            ByteArrayOutputStream outputStream = new ByteArrayOutputStream();
+            byte[] buffer = new byte[1024];
+            int read;
+            while ((read = inputStream.read(buffer)) != -1) {
+                outputStream.write(buffer, 0, read);
+            }
+            return new String(outputStream.toByteArray(), StandardCharsets.UTF_8);
+        } catch (IOException e) {
+            throw new IllegalStateException("failed to load schema resource: " + SCHEMA_RESOURCE, e);
+        }
     }
 }

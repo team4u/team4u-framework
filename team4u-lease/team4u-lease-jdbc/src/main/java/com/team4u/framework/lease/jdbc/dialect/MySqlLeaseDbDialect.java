@@ -9,11 +9,7 @@ public class MySqlLeaseDbDialect implements LeaseDbDialect {
 
     @Override
     public String buildAcquireCandidateSql(int queueCount) {
-        return "SELECT task_id, queue_name, task_type, payload, state, outcome, failure_reason, priority, "
-                + "delivery_count, failure_count, worker_id, lease_token, lease_expires_at, visible_at, created_at, "
-                + "updated_at, error_message, attributes_json "
-                + "FROM lease_task "
-                + "WHERE queue_name IN (" + placeholders(queueCount) + ") "
+        return "WHERE queue_name IN (" + placeholders(queueCount) + ") "
                 + "AND ((state = 'READY' AND visible_at <= ?) OR (state = 'RUNNING' AND lease_expires_at <= ?)) "
                 + "ORDER BY priority DESC, created_at ASC, task_id ASC "
                 + "LIMIT ?";
@@ -26,10 +22,7 @@ public class MySqlLeaseDbDialect implements LeaseDbDialect {
                                 int outcomeCount,
                                 int reasonCount,
                                 boolean filterWorkerId) {
-        StringBuilder sql = new StringBuilder("SELECT task_id, queue_name, task_type, payload, state, outcome, ")
-                .append("failure_reason, priority, delivery_count, failure_count, worker_id, lease_token, ")
-                .append("lease_expires_at, visible_at, created_at, updated_at, error_message, attributes_json ")
-                .append("FROM lease_task WHERE 1=1");
+        StringBuilder sql = new StringBuilder("WHERE 1=1");
         if (filterQueue) {
             sql.append(" AND queue_name = ?");
         }

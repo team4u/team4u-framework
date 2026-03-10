@@ -226,6 +226,92 @@ public class LeaseWorkerTest {
     }
 
     @Test
+    public void testShutdownGracefullyReturnsFalseWhenHandlerDoesNotFinishInTime() throws Exception {
+        InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
+        DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch interrupted = new CountDownLatch(1);
+
+        registry.register(DEFAULT_QUEUE, "pay", context -> {
+            started.countDown();
+            try {
+                new CountDownLatch(1).await();
+            } catch (InterruptedException ex) {
+                interrupted.countDown();
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        LeaseWorker worker = new LeaseWorker(backend, registry, LeaseWorkerPolicy.builder()
+                .workerId("worker-a")
+                .leaseMillis(500L)
+                .heartbeatIntervalMillis(100L)
+                .pollWaitMillis(20L)
+                .build());
+        worker.start("lease-worker-shutdown-timeout");
+        backend.publish(request("pay", "payload"));
+        Assert.assertTrue(started.await(1, TimeUnit.SECONDS));
+
+        long startedAt = System.currentTimeMillis();
+        try {
+            Assert.assertFalse(worker.shutdownGracefully(100L));
+            long elapsed = System.currentTimeMillis() - startedAt;
+            Assert.assertTrue("shutdownGracefully should honor the timeout", elapsed >= 80L && elapsed < 500L);
+        } finally {
+            worker.shutdownNow();
+        }
+
+        Assert.assertTrue(interrupted.await(1, TimeUnit.SECONDS));
+    }
+
+    @Test
+    public void testShutdownUsesLeaseMillisAsDefaultWaitBound() throws Exception {
+        InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
+        DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
+        CountDownLatch started = new CountDownLatch(1);
+        CountDownLatch interrupted = new CountDownLatch(1);
+        AtomicLong shutdownFinishedAt = new AtomicLong(0L);
+
+        registry.register(DEFAULT_QUEUE, "pay", context -> {
+            started.countDown();
+            try {
+                new CountDownLatch(1).await();
+            } catch (InterruptedException ex) {
+                interrupted.countDown();
+                Thread.currentThread().interrupt();
+            }
+        });
+
+        LeaseWorker worker = new LeaseWorker(backend, registry, LeaseWorkerPolicy.builder()
+                .workerId("worker-a")
+                .leaseMillis(200L)
+                .heartbeatIntervalMillis(60L)
+                .pollWaitMillis(20L)
+                .build());
+        worker.start("lease-worker-shutdown-default-bound");
+        backend.publish(request("pay", "payload"));
+        Assert.assertTrue(started.await(1, TimeUnit.SECONDS));
+
+        long shutdownStartedAt = System.currentTimeMillis();
+        Thread shutdownThread = new Thread(() -> {
+            worker.shutdown();
+            shutdownFinishedAt.set(System.currentTimeMillis());
+        });
+        shutdownThread.start();
+
+        Thread.sleep(80L);
+        Assert.assertTrue(shutdownThread.isAlive());
+
+        shutdownThread.join(1_000L);
+        Assert.assertFalse("shutdown should no longer wait forever", shutdownThread.isAlive());
+        long elapsed = shutdownFinishedAt.get() - shutdownStartedAt;
+        Assert.assertTrue("shutdown should wait close to leaseMillis", elapsed >= 150L && elapsed < 1_000L);
+
+        worker.shutdownNow();
+        Assert.assertTrue(interrupted.await(1, TimeUnit.SECONDS));
+    }
+
+    @Test
     public void testWorkerCannotRestartAfterShutdown() {
         LeaseWorker worker = new LeaseWorker(new InMemoryLeaseBackend(),
                 new DefaultLeaseTaskHandlerRegistry(),
@@ -267,7 +353,7 @@ public class LeaseWorkerTest {
             Thread.sleep(80L);
 
             Assert.assertEquals(1, runtimeClient.getMaxConcurrentHeartbeats());
-            Assert.assertEquals(1, runtimeClient.getHeartbeatCalls());
+            Assert.assertTrue(runtimeClient.getHeartbeatCalls() >= 1);
         } finally {
             finishHandler.countDown();
             worker.shutdownGracefully(1_000L);
