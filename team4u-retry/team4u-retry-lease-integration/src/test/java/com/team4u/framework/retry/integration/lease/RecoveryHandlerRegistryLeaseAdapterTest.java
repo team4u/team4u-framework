@@ -28,22 +28,26 @@ public class RecoveryHandlerRegistryLeaseAdapterTest {
     }
 
     @Test
-    public void testRegisterLeaseTaskHandlerRejectsNonStringPayload() throws Exception {
+    public void testGetRejectsNonStringRecoveryHandler() {
         RecoveryHandlerRegistry registry = new RecoveryHandlerRegistry();
         RecoveryHandlerRegistryLeaseAdapter adapter = new RecoveryHandlerRegistryLeaseAdapter(registry);
-        CapturingLeaseTaskHandler handler = new CapturingLeaseTaskHandler();
-
-        adapter.register(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE, "payment", handler);
-
-        @SuppressWarnings("rawtypes")
-        RecoveryHandler recoveryHandler = registry.get("payment").orElseThrow(AssertionError::new);
+        registry.register(new ObjectPayloadRecoveryHandler());
         try {
-            recoveryHandler.recover(new Object(), RecoveryContext.builder().taskId("task-2").attempt(1).build());
-            Assert.fail("expected ClassCastException");
-        } catch (ClassCastException ex) {
-            Assert.assertNotNull(ex.getMessage());
+            adapter.get(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE, "payment");
+            Assert.fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException ex) {
+            Assert.assertTrue(ex.getMessage().contains("RecoveryHandler<String>"));
         }
-        Assert.assertNull(handler.context);
+    }
+
+    @Test
+    public void testAdapterRejectsNonStringRecoveryHandlerAtConstruction() {
+        try {
+            new RecoveryHandlerLeaseTaskHandlerAdapter(new ObjectPayloadRecoveryHandler());
+            Assert.fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException ex) {
+            Assert.assertTrue(ex.getMessage().contains("RecoveryHandler<String>"));
+        }
     }
 
     private static class CapturingLeaseTaskHandler implements LeaseTaskHandler {
@@ -52,6 +56,17 @@ public class RecoveryHandlerRegistryLeaseAdapterTest {
         @Override
         public void handle(LeaseExecutionContext context) {
             this.context = context;
+        }
+    }
+
+    private static class ObjectPayloadRecoveryHandler implements RecoveryHandler<Object> {
+        @Override
+        public String taskName() {
+            return "payment";
+        }
+
+        @Override
+        public void recover(Object payload, RecoveryContext context) {
         }
     }
 }

@@ -32,7 +32,7 @@ public final class RetryMethodResolver {
         // 按照优先级顺序查找到最匹配的重试注解（方法级优先于类级，具体类优先于接口）
         Retryable retryable = findRetryable(invocationMethod, effectiveMethod, targetClass);
         // 确定异常恢复逻辑所需的目标上下文类型
-        Class<?> recoveryTargetType = resolveRecoveryTargetType(invocationMethod, targetClass);
+        Class<?> recoveryTargetType = resolveRecoveryTargetType(invocationMethod, effectiveMethod, targetClass);
         return new ResolvedRetryMethod(effectiveMethod, retryable, recoveryTargetType);
     }
 
@@ -162,13 +162,20 @@ public final class RetryMethodResolver {
     /**
      * 解析用于异常发生后寻找恢复执行点的目标类型
      */
-    private static Class<?> resolveRecoveryTargetType(Method invocationMethod, Class<?> targetClass) {
-        // 如果该方法属于用户定义的类，则优先使用其申报所属类
+    private static Class<?> resolveRecoveryTargetType(
+            Method invocationMethod,
+            Method effectiveMethod,
+            Class<?> targetClass) {
+        if (effectiveMethod != null && effectiveMethod.getDeclaringClass() != Object.class) {
+            return effectiveMethod.getDeclaringClass();
+        }
+        if (targetClass != null) {
+            return targetClass;
+        }
         if (invocationMethod != null && invocationMethod.getDeclaringClass() != Object.class) {
             return invocationMethod.getDeclaringClass();
         }
-        // 否则使用目标实现类作为上下文引用点
-        return targetClass;
+        return null;
     }
 
     /**

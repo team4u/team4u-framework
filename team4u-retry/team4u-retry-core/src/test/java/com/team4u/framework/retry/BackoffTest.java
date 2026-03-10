@@ -76,6 +76,29 @@ public class BackoffTest {
     }
 
     @Test
+    public void testCreateBackoffFallsBackToFixedForBlankType() {
+        BackoffConfig config = new BackoffConfig();
+        config.setType("  ");
+        config.setParams(Collections.<String, Object>singletonMap("delay", 123L));
+
+        Backoff backoff = BackoffRegistry.global().createBackoff(config);
+
+        Assert.assertEquals(123L, backoff.calculateMillis(1));
+    }
+
+    @Test
+    public void testCreateBackoffRejectsUnknownType() {
+        assertIllegalArgument(new Runnable() {
+            @Override
+            public void run() {
+                BackoffConfig config = new BackoffConfig();
+                config.setType("unknown");
+                BackoffRegistry.global().createBackoff(config);
+            }
+        });
+    }
+
+    @Test
     public void testEquivalentConfigsReuseCachedBackoffInstance() {
         BackoffRegistry registry = new BackoffRegistry();
 

@@ -23,8 +23,7 @@ public class BackoffRegistry extends KeyedPolicyRegistry<String, BackoffFactory>
 
     private final DynamicInstanceProvider<BackoffCacheKey, BackoffConfig, Backoff> provider = DynamicInstanceProvider
             .createLru(1024, BackoffCacheKey::toConfig, config -> get(config.getType())
-                    .orElseGet(() -> get("fixed")
-                            .orElseThrow(() -> new IllegalStateException("Missing fixed backoff factory")))
+                    .orElseThrow(() -> new IllegalArgumentException("Unsupported backoff type: " + config.getType()))
                     .create(config));
 
     public BackoffRegistry() {

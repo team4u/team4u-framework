@@ -18,6 +18,7 @@ import com.team4u.framework.retry.store.serialize.HutoolRetryRecordSerializer;
 import com.team4u.framework.retry.store.serialize.RetryRecordSerializer;
 import lombok.Setter;
 
+import java.time.Duration;
 import java.util.Optional;
 
 /**
@@ -25,7 +26,7 @@ import java.util.Optional;
  */
 public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, RetryQueryService {
 
-    private static final long PREPARED_INTENT_DELAY_MILLIS = 3650L * 24L * 60L * 60L * 1000L;
+    private static final long PREPARED_INTENT_DELAY_MILLIS = Duration.ofDays(3650L).toMillis();
 
     private final LeaseProducer producer;
     private final LeaseAdminService adminService;

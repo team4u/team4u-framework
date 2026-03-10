@@ -53,7 +53,7 @@ public class ManagedRetryRuntimesTest {
     }
 
     @Test
-    public void testAutoScanFlagControlsAdditionalScanInvocation() {
+    public void testAutoScanFlagControlsExplicitScanInvocation() {
         NoopLeaseBackend backend = new NoopLeaseBackend();
         CountingRegistry disabledRegistry = new CountingRegistry();
         CountingRegistry enabledRegistry = new CountingRegistry();
@@ -67,8 +67,8 @@ public class ManagedRetryRuntimesTest {
                 .autoScanRecoveryHandlers(true)
                 .build();
 
-        Assert.assertEquals(1, disabledRegistry.autoScanCalls());
-        Assert.assertEquals(2, enabledRegistry.autoScanCalls());
+        Assert.assertEquals(0, disabledRegistry.autoScanCalls());
+        Assert.assertEquals(1, enabledRegistry.autoScanCalls());
 
         disabledRuntime.close();
         enabledRuntime.close();

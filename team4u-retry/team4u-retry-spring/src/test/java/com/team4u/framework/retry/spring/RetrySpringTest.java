@@ -17,7 +17,11 @@ import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
+import org.springframework.aop.config.AopConfigUtils;
+import org.springframework.aop.framework.autoproxy.InfrastructureAdvisorAutoProxyCreator;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
+import org.springframework.beans.factory.support.RootBeanDefinition;
+import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -112,6 +116,22 @@ public class RetrySpringTest {
             Assert.assertNotNull(context.getBean(RetryLifecycleConfiguration.class));
         } catch (NoSuchBeanDefinitionException ex) {
             Assert.fail("@EnableRetry should import RetryLifecycleConfiguration");
+        }
+    }
+
+    @Test
+    public void testEnableRetryCoexistsWithExistingAutoProxyCreator() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext()) {
+            RootBeanDefinition beanDefinition = new RootBeanDefinition(InfrastructureAdvisorAutoProxyCreator.class);
+            beanDefinition.setRole(BeanDefinition.ROLE_INFRASTRUCTURE);
+            context.registerBeanDefinition(AopConfigUtils.AUTO_PROXY_CREATOR_BEAN_NAME, beanDefinition);
+            context.register(TestConfig.class);
+            context.refresh();
+            Object creator = context.getBean(AopConfigUtils.AUTO_PROXY_CREATOR_BEAN_NAME);
+            Assert.assertEquals(InfrastructureAdvisorAutoProxyCreator.class, creator.getClass());
+
+            OrderService orderService = context.getBean(OrderService.class);
+            Assert.assertEquals("ok_A100", orderService.doRetry("A100"));
         }
     }
 

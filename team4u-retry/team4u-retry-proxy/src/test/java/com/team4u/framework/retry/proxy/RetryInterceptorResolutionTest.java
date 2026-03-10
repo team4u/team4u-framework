@@ -10,6 +10,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Method;
 import java.util.concurrent.atomic.AtomicInteger;
 
 public class RetryInterceptorResolutionTest {
@@ -68,6 +70,34 @@ public class RetryInterceptorResolutionTest {
 
         Assert.assertEquals("class-C300", proxy.call("C300"));
         Assert.assertEquals(3, target.count.get());
+    }
+
+    @Test
+    public void testRetryInterceptorRequiresInlineClient() {
+        try {
+            new RetryInterceptor(null, null);
+            Assert.fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException ex) {
+            Assert.assertTrue(ex.getMessage().contains("InlineRetryClient"));
+        }
+    }
+
+    @Test
+    public void testRetryInterceptorDoesNotExposeNoArgsConstructor() {
+        for (Constructor<?> constructor : RetryInterceptor.class.getDeclaredConstructors()) {
+            Assert.assertTrue(constructor.getParameterCount() > 0);
+        }
+    }
+
+    @Test
+    public void testResolverUsesImplementationClassAsRecoveryTarget() throws Exception {
+        Method invocationMethod = ImplAnnotatedService.class.getMethod("call", String.class);
+
+        RetryMethodResolver.ResolvedRetryMethod resolved =
+                RetryMethodResolver.resolve(invocationMethod, ImplAnnotatedServiceImpl.class);
+
+        Assert.assertEquals(ImplAnnotatedServiceImpl.class, resolved.getEffectiveMethod().getDeclaringClass());
+        Assert.assertEquals(ImplAnnotatedServiceImpl.class, resolved.getRecoveryTargetType());
     }
 
     public interface ImplAnnotatedService {

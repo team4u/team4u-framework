@@ -25,7 +25,7 @@ public class RetryLeaseWorker implements Runnable, AutoCloseable {
     private final RecoveryHandlerRegistry registry;
 
     public RetryLeaseWorker(LeaseRuntimeClient runtimeClient) {
-        this(runtimeClient, RecoveryHandlerRegistry.global(), LeaseWorkerPolicy.builder().build());
+        this(runtimeClient, resolveGlobalRegistry(), LeaseWorkerPolicy.builder().build());
     }
 
     public RetryLeaseWorker(LeaseRuntimeClient runtimeClient, RecoveryHandlerRegistry registry) {
@@ -42,6 +42,12 @@ public class RetryLeaseWorker implements Runnable, AutoCloseable {
                 runtimeClient,
                 new RecoveryHandlerRegistryLeaseAdapter(registry, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE),
                 policy);
+    }
+
+    private static RecoveryHandlerRegistry resolveGlobalRegistry() {
+        RecoveryHandlerRegistry registry = RecoveryHandlerRegistry.global();
+        registry.autoScan();
+        return registry;
     }
 
     /**
