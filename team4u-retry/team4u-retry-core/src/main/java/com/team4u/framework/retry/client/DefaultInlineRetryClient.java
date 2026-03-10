@@ -5,8 +5,10 @@ import com.team4u.framework.retry.util.RetryExceptionUtil;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 import java.util.function.Supplier;
 
 /**
@@ -77,8 +79,11 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
         }
 
         CompletableFuture<T> resultFuture = new CompletableFuture<>();
+        AtomicReference<CompletableFuture<?>> inFlightFutureRef = new AtomicReference<CompletableFuture<?>>();
+        AtomicReference<ScheduledFuture<?>> scheduledRetryRef = new AtomicReference<ScheduledFuture<?>>();
+        registerCancellationBridge(resultFuture, inFlightFutureRef, scheduledRetryRef);
         // 发起初次异步尝试
-        attemptAsync(0, policy, asyncTask, scheduler, resultFuture);
+        attemptAsync(0, policy, asyncTask, scheduler, resultFuture, inFlightFutureRef, scheduledRetryRef);
         return resultFuture;
     }
 
@@ -96,26 +101,27 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
             RetryPolicy policy,
             Supplier<CompletableFuture<T>> asyncTask,
             ScheduledExecutorService scheduler,
-            CompletableFuture<T> resultFuture) {
+            CompletableFuture<T> resultFuture,
+            AtomicReference<CompletableFuture<?>> inFlightFutureRef,
+            AtomicReference<ScheduledFuture<?>> scheduledRetryRef) {
         if (resultFuture.isDone()) {
             return;
         }
+        scheduledRetryRef.set(null);
         try {
             CompletableFuture<T> future = asyncTask.get();
             if (future == null) {
                 throw new NullPointerException("Async task callback (asyncTask.get()) returned null");
             }
+            inFlightFutureRef.set(future);
             if (resultFuture.isDone()) {
+                inFlightFutureRef.compareAndSet(future, null);
                 cancelFuture(future);
                 return;
             }
-            resultFuture.whenComplete((ignored, ex) -> {
-                if (resultFuture.isCancelled()) {
-                    cancelFuture(future);
-                }
-            });
             // 监听异步任务执行完成事件
             future.whenComplete((result, ex) -> {
+                inFlightFutureRef.compareAndSet(future, null);
                 if (resultFuture.isDone()) {
                     return;
                 }
@@ -124,7 +130,15 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
                     resultFuture.complete(result);
                 } else {
                     // 任务执行失败，进入失败处理流程
-                    handleAsyncFailure(currentAttempt + 1, policy, asyncTask, scheduler, resultFuture, ex);
+                    handleAsyncFailure(
+                            currentAttempt + 1,
+                            policy,
+                            asyncTask,
+                            scheduler,
+                            resultFuture,
+                            inFlightFutureRef,
+                            scheduledRetryRef,
+                            ex);
                 }
             });
         } catch (Throwable ex) {
@@ -132,7 +146,16 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
             if (resultFuture.isDone()) {
                 return;
             }
-            handleAsyncFailure(currentAttempt + 1, policy, asyncTask, scheduler, resultFuture, ex);
+            inFlightFutureRef.set(null);
+            handleAsyncFailure(
+                    currentAttempt + 1,
+                    policy,
+                    asyncTask,
+                    scheduler,
+                    resultFuture,
+                    inFlightFutureRef,
+                    scheduledRetryRef,
+                    ex);
         }
     }
 
@@ -152,6 +175,8 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
             Supplier<CompletableFuture<T>> asyncTask,
             ScheduledExecutorService scheduler,
             CompletableFuture<T> resultFuture,
+            AtomicReference<CompletableFuture<?>> inFlightFutureRef,
+            AtomicReference<ScheduledFuture<?>> scheduledRetryRef,
             Throwable ex) {
         if (resultFuture.isDone()) {
             return;
@@ -176,11 +201,24 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
         try {
             if (delayMillis > 0) {
                 // 利用调度器在指定的延迟时间后重新发起任务
-                scheduler.schedule(() -> attemptAsync(attempts, policy, asyncTask, scheduler, resultFuture),
-                        delayMillis, TimeUnit.MILLISECONDS);
+                ScheduledFuture<?> scheduledFuture = scheduler.schedule(
+                        () -> attemptAsync(
+                                attempts,
+                                policy,
+                                asyncTask,
+                                scheduler,
+                                resultFuture,
+                                inFlightFutureRef,
+                                scheduledRetryRef),
+                        delayMillis,
+                        TimeUnit.MILLISECONDS);
+                replaceScheduledRetry(scheduledRetryRef, scheduledFuture);
+                if (resultFuture.isDone() && scheduledRetryRef.compareAndSet(scheduledFuture, null)) {
+                    cancelScheduledFuture(scheduledFuture);
+                }
             } else {
                 // 如果没有延迟，则立即发起下一次尝试
-                attemptAsync(attempts, policy, asyncTask, scheduler, resultFuture);
+                attemptAsync(attempts, policy, asyncTask, scheduler, resultFuture, inFlightFutureRef, scheduledRetryRef);
             }
         } catch (Exception scheduleEx) {
             // 调度器本身出现异常（如已关闭）时，直接终结任务
@@ -188,9 +226,36 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
         }
     }
 
+    private void registerCancellationBridge(
+            CompletableFuture<?> resultFuture,
+            AtomicReference<CompletableFuture<?>> inFlightFutureRef,
+            AtomicReference<ScheduledFuture<?>> scheduledRetryRef) {
+        resultFuture.whenComplete((ignored, ex) -> {
+            if (resultFuture.isCancelled()) {
+                cancelFuture(inFlightFutureRef.getAndSet(null));
+                cancelScheduledFuture(scheduledRetryRef.getAndSet(null));
+            }
+        });
+    }
+
+    private void replaceScheduledRetry(
+            AtomicReference<ScheduledFuture<?>> scheduledRetryRef,
+            ScheduledFuture<?> scheduledFuture) {
+        ScheduledFuture<?> previous = scheduledRetryRef.getAndSet(scheduledFuture);
+        if (previous != null && previous != scheduledFuture) {
+            cancelScheduledFuture(previous);
+        }
+    }
+
     private void cancelFuture(CompletableFuture<?> future) {
         if (future != null && !future.isDone()) {
             future.cancel(true);
+        }
+    }
+
+    private void cancelScheduledFuture(ScheduledFuture<?> future) {
+        if (future != null && !future.isDone()) {
+            future.cancel(false);
         }
     }
 

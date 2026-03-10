@@ -17,6 +17,7 @@ public class RetryExecutorManager {
     private static final Log log = LogFactory.get();
     private static final RetryExecutorManager INSTANCE = new RetryExecutorManager();
     private static final String DAEMON_PROPERTY = "team4u.retry.executors.daemon";
+    static final String SHUTDOWN_HOOK_ENABLED_PROPERTY = "team4u.retry.executors.shutdownHook.enabled";
 
     private volatile ScheduledExecutorService globalScheduler;
     private volatile ExecutorService globalCleanupExecutor;
@@ -38,7 +39,9 @@ public class RetryExecutorManager {
                     log.warn("Retry cleanup task rejected! Queue is full. Relying on background recovery.");
                 });
 
-        Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown));
+        if (isShutdownHookEnabled()) {
+            Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown, "team4u-retry-shutdown"));
+        }
     }
 
     /**
@@ -132,6 +135,10 @@ public class RetryExecutorManager {
 
     private boolean isDaemonExecutors() {
         return Boolean.parseBoolean(System.getProperty(DAEMON_PROPERTY, "false"));
+    }
+
+    static boolean isShutdownHookEnabled() {
+        return Boolean.parseBoolean(System.getProperty(SHUTDOWN_HOOK_ENABLED_PROPERTY, "true"));
     }
 
     /**

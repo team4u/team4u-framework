@@ -8,6 +8,8 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Collections;
+import java.util.HashMap;
+import java.util.Map;
 
 public class BackoffTest {
 
@@ -71,6 +73,46 @@ public class BackoffTest {
                         .build();
             }
         });
+    }
+
+    @Test
+    public void testEquivalentConfigsReuseCachedBackoffInstance() {
+        BackoffRegistry registry = new BackoffRegistry();
+
+        BackoffConfig config1 = new BackoffConfig();
+        config1.setType("fixed");
+        config1.setParams(Collections.<String, Object>singletonMap("delay", 100L));
+        BackoffConfig config2 = new BackoffConfig();
+        config2.setType("fixed");
+        config2.setParams(Collections.<String, Object>singletonMap("delay", 100L));
+
+        Backoff backoff1 = registry.createBackoff(config1);
+        Backoff backoff2 = registry.createBackoff(config2);
+
+        Assert.assertSame(backoff1, backoff2);
+    }
+
+    @Test
+    public void testMutatingOriginalConfigDoesNotPoisonExistingCacheKey() {
+        BackoffRegistry registry = new BackoffRegistry();
+        BackoffConfig original = new BackoffConfig();
+        Map<String, Object> params = new HashMap<String, Object>();
+        params.put("delay", 100L);
+        original.setType("fixed");
+        original.setParams(params);
+
+        Backoff backoff1 = registry.createBackoff(original);
+
+        params.put("delay", 200L);
+
+        BackoffConfig sameAsOriginal = new BackoffConfig();
+        sameAsOriginal.setType("fixed");
+        sameAsOriginal.setParams(Collections.<String, Object>singletonMap("delay", 100L));
+
+        Backoff backoff2 = registry.createBackoff(sameAsOriginal);
+
+        Assert.assertSame(backoff1, backoff2);
+        Assert.assertEquals(100L, backoff2.calculateMillis(1));
     }
 
     private void assertIllegalArgument(Runnable runnable) {

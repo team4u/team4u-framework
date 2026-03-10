@@ -136,6 +136,7 @@
 `-1` 表示无限重试。
 
 总执行次数恒等于 `1 + maxRetries`。
+内部判定时，`RetryPolicy.canRetry(executedAttempts, ex)` 里的 `executedAttempts` 表示“已经执行且失败的总尝试次数”，包含首次执行。
 
 ### `foregroundMaxRetries`
 
@@ -277,7 +278,8 @@ MANAGED 模式的核心在于：“任务高可靠持久化” + “执行权可
 
 1.  持久化：框架首先将任务规格（Payload、策略、恢复信息）存入 `DurableRetryStore`。
 2.  前台尝试：在当前线程中，按 `foregroundMaxRetries` 指定的“前台重试次数”执行；连同首次执行在内，前台总执行次数等于 `foregroundMaxRetries + 1`。
-3.  结果产出：
+3.  后台接管：如果前台次数耗尽但仍允许重试，`RetryCoordinator.schedule(...)` 会先原子持久化最新 `RetryRecord` 快照，再把任务移交给后台 Worker。
+4.  结果产出：
     *   Completed: 前台尝试中已经成功了。
     *   Accepted: 前台次数用完还没成功，任务已安全进入后台，正等待 Worker 接管继续重试。
     *   Failed: 命中不可重试异常或已达 `maxRetries` 上限。
@@ -708,6 +710,7 @@ INLINE 的所有尝试都发生在当前进程里，不做持久化，不会跨�
 ### 非 Spring 场景要自己关注线程池生命周期
 
 框架提供了全局线程池和 shutdown hook，但在独立运行环境里，仍建议你显式管理资源关闭。
+如果不希望库自动注册 JVM shutdown hook，可以设置 `-Dteam4u.retry.executors.shutdownHook.enabled=false`。
 
 ### `CompletableFuture` 之外的异步返回值不会自动走异步重试分支
 

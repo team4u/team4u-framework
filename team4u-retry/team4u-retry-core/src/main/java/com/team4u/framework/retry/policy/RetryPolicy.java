@@ -15,7 +15,7 @@ import java.util.Set;
 @Getter
 public class RetryPolicy {
     /**
-     * 最大重试次数，`-1` 表示无限重试。
+     * 最大重试次数（不包含首次执行），`-1` 表示无限重试。
      */
     private final int maxRetries;
 
@@ -49,8 +49,8 @@ public class RetryPolicy {
     /**
      * 构造重试策略实例。
      *
-     * @param maxRetries           最大重试次数，允许为 {@code null}，此时默认取 2
-     * @param foregroundMaxRetries 前台最大重试次数，允许为 {@code null}
+     * @param maxRetries           最大重试次数（不包含首次执行），允许为 {@code null}，此时默认取 2
+     * @param foregroundMaxRetries 前台最大重试次数（不包含首次执行），允许为 {@code null}
      * @param backoff              重试退避策略，允许为 {@code null}，此时默认使用固定 1000ms
      * @param retryOnExceptions    允许触发重试的异常类型集合
      * @param abortOnExceptions    命中后立即终止重试的异常类型集合
@@ -100,13 +100,14 @@ public class RetryPolicy {
     /**
      * 判断是否可以继续重试。
      *
-     * @param executedAttempts 已执行的尝试次数（包含首次执行）
+     * @param executedAttempts 已执行且失败的总尝试次数（包含首次执行）
      * @param ex               本次尝试抛出的异常
      * @return true 表示允许继续重试
      */
     public boolean canRetry(int executedAttempts, Throwable ex) {
-        // 检查是否已达到最大尝试次数（初始 1 次 + maxRetries 次重试）
-        if (maxRetries != -1 && executedAttempts > maxRetries) {
+        // maxRetries 表示“首次执行之后最多还能失败多少次并继续重试”。
+        int consumedRetries = Math.max(0, executedAttempts - 1);
+        if (maxRetries != -1 && consumedRetries >= maxRetries) {
             return false;
         }
 
