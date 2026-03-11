@@ -1,7 +1,9 @@
 package com.team4u.framework.retry.spring;
 
+import com.team4u.framework.bean.provider.SpringBeanContainer;
 import com.team4u.framework.retry.client.DefaultInlineRetryClient;
 import com.team4u.framework.retry.client.InlineRetryClient;
+import com.team4u.framework.retry.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.proxy.Retryable;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import org.springframework.aop.Pointcut;
@@ -9,6 +11,7 @@ import org.springframework.aop.support.AbstractBeanFactoryPointcutAdvisor;
 import org.springframework.aop.support.ComposablePointcut;
 import org.springframework.aop.support.annotation.AnnotationMatchingPointcut;
 import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -42,11 +45,23 @@ public class RetrySpringConfiguration {
      */
     @Bean
     @Role(BeanDefinition.ROLE_INFRASTRUCTURE)
-    public RetryAdvisor retryAdvisor(BeanFactory beanFactory) {
+    public RetryAdvisor retryAdvisor(BeanFactory beanFactory,
+                                     ListableBeanFactory listableBeanFactory,
+                                     RetryExecutorManager retryExecutorManager) {
         RetryAdvisor advisor = new RetryAdvisor();
-        advisor.setAdvice(new SpringRetryInterceptor(beanFactory));
+        advisor.setAdvice(new SpringRetryInterceptor(beanFactory, listableBeanFactory, retryExecutorManager));
         advisor.setOrder(org.springframework.core.Ordered.LOWEST_PRECEDENCE - 1);
         return advisor;
+    }
+
+    @Bean(destroyMethod = "shutdown")
+    public RetryExecutorManager retryExecutorManager() {
+        return new RetryExecutorManager(false);
+    }
+
+    @Bean
+    public SpringBeanContainer springBeanContainer() {
+        return new SpringBeanContainer();
     }
 
     /**

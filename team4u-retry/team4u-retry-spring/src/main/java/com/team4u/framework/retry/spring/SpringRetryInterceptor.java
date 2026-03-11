@@ -4,6 +4,7 @@ import cn.hutool.extra.spring.SpringUtil;
 import com.team4u.framework.retry.client.DefaultInlineRetryClient;
 import com.team4u.framework.retry.client.InlineRetryClient;
 import com.team4u.framework.retry.client.ManagedRetryClient;
+import com.team4u.framework.retry.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.proxy.RetryDelegate;
 import com.team4u.framework.retry.proxy.RetryMethodResolver;
 import org.aopalliance.intercept.MethodInterceptor;
@@ -11,8 +12,10 @@ import org.aopalliance.intercept.MethodInvocation;
 import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.BeansException;
 import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.ListableBeanFactory;
 
 import java.lang.reflect.Method;
+import java.util.Map;
 
 /**
  * Spring AOP 体系下的重试拦截器实现。
@@ -20,10 +23,17 @@ import java.lang.reflect.Method;
 public class SpringRetryInterceptor implements MethodInterceptor {
 
     private final BeanFactory beanFactory;
+    private final ListableBeanFactory listableBeanFactory;
+    private final RetryExecutorManager retryExecutorManager;
     private volatile RetryDelegate delegate;
 
-    public SpringRetryInterceptor(BeanFactory beanFactory) {
+    public SpringRetryInterceptor(
+            BeanFactory beanFactory,
+            ListableBeanFactory listableBeanFactory,
+            RetryExecutorManager retryExecutorManager) {
         this.beanFactory = beanFactory;
+        this.listableBeanFactory = listableBeanFactory;
+        this.retryExecutorManager = retryExecutorManager;
     }
 
     /**
@@ -39,6 +49,7 @@ public class SpringRetryInterceptor implements MethodInterceptor {
                             DefaultInlineRetryClient.getInstance());
                     ManagedRetryClient managedClient = getBean(ManagedRetryClient.class, null);
                     delegate = new RetryDelegate(inlineClient, managedClient);
+                    delegate.setScheduler(retryExecutorManager.getScheduler());
                 }
             }
         }
@@ -83,7 +94,7 @@ public class SpringRetryInterceptor implements MethodInterceptor {
                 method,
                 resolved.getEffectiveMethod(),
                 resolved.getRecoveryTargetType(),
-                target,
+                resolveRecoveryTargetBeanName(invocation.getThis(), resolved.getRecoveryTargetType()),
                 invocation.getArguments(),
                 resolved.getRetryable(),
                 () -> {
@@ -95,5 +106,30 @@ public class SpringRetryInterceptor implements MethodInterceptor {
                         throw new RuntimeException(t);
                     }
                 });
+    }
+
+    private String resolveRecoveryTargetBeanName(Object proxy, Class<?> recoveryTargetType) {
+        if (proxy == null) {
+            return null;
+        }
+        for (String beanName : listableBeanFactory.getBeanDefinitionNames()) {
+            Object candidate;
+            try {
+                candidate = listableBeanFactory.getBean(beanName);
+            } catch (BeansException ex) {
+                continue;
+            }
+            if (candidate == proxy) {
+                return beanName;
+            }
+        }
+        if (recoveryTargetType == null) {
+            return null;
+        }
+        Map<String, ?> candidates = listableBeanFactory.getBeansOfType(recoveryTargetType);
+        if (candidates.size() == 1) {
+            return candidates.keySet().iterator().next();
+        }
+        return null;
     }
 }

@@ -67,7 +67,7 @@ public class InvocationReplay implements RecoveryHandler<String> {
         validatePayload(payload);
 
         // 定位目标对象
-        Object target = locateTarget(payload.getTargetTypeName());
+        Object target = locateTarget(payload.getTargetTypeName(), payload.getTargetBeanName());
 
         Class<?>[] paramTypes = resolveParamTypes(payload);
         Method method = RetryMethodResolver.findMostSpecificMethod(
@@ -100,13 +100,26 @@ public class InvocationReplay implements RecoveryHandler<String> {
      * @return 目标对象实例
      * @throws ClassNotFoundException 如果找不到对应的类
      */
-    private Object locateTarget(String targetTypeName) throws ClassNotFoundException {
-        Class<?> clazz = Class.forName(targetTypeName);
-        Object bean = BeanManager.getInstance().getBean(clazz);
-        if (bean != null) {
-            return bean;
+    private Object locateTarget(String targetTypeName, String targetBeanName) throws ClassNotFoundException {
+        if (targetBeanName != null && !targetBeanName.trim().isEmpty()) {
+            Object namedBean = BeanManager.getInstance().getBean(targetBeanName);
+            if (namedBean != null) {
+                return namedBean;
+            }
+            throw new IllegalStateException("No managed bean found for replay target beanName: " + targetBeanName);
         }
-        bean = BeanManager.getInstance().getBean(targetTypeName);
+
+        Class<?> clazz = Class.forName(targetTypeName);
+        Map<String, ?> beans = BeanManager.getInstance().getBeansOfType(clazz);
+        if (beans.size() == 1) {
+            return beans.values().iterator().next();
+        }
+        if (beans.size() > 1) {
+            throw new IllegalStateException(
+                    "Multiple managed beans found for replay target type: "
+                            + targetTypeName + ", candidates=" + beans.keySet());
+        }
+        Object bean = BeanManager.getInstance().getBean(targetTypeName);
         if (bean != null) {
             return bean;
         }

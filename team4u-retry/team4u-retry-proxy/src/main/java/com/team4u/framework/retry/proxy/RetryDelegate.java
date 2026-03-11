@@ -88,7 +88,14 @@ public class RetryDelegate {
             Object[] args,
             Retryable retryable,
             Callable<Object> proceedTask) throws Throwable {
-        return executeWithRetry(method, method, method.getDeclaringClass(), target, args, retryable, proceedTask);
+        return executeWithRetry(
+                method,
+                method,
+                method.getDeclaringClass(),
+                null,
+                args,
+                retryable,
+                proceedTask);
     }
 
     /**
@@ -97,7 +104,6 @@ public class RetryDelegate {
      * @param invocationMethod   触发重试的入口方法（通常是接口方法）
      * @param effectiveMethod    实际带有注解或需要被恢复的方法（通常是实现类方法）
      * @param recoveryTargetType 恢复时的目标类型
-     * @param target             当前目标实例
      * @param args               当前调用参数
      * @param retryable          重试注解配置
      * @param proceedTask        业务执行任务
@@ -108,7 +114,7 @@ public class RetryDelegate {
             Method invocationMethod,
             Method effectiveMethod,
             Class<?> recoveryTargetType,
-            Object target,
+            String recoveryTargetBeanName,
             Object[] args,
             Retryable retryable,
             Callable<Object> proceedTask) throws Throwable {
@@ -125,8 +131,15 @@ public class RetryDelegate {
                         .map(RetryPolicyFactory::create)
                         .orElseThrow(() -> new IllegalArgumentException("Retry policy not found: " + policyKey)));
 
-        // 处理 INLINE 模式或未配置托管客户端的情况
-        if (retryable.mode() == RetryMode.INLINE || managedClient == null) {
+        if (retryable.mode() == RetryMode.MANAGED && managedClient == null) {
+            throw new IllegalStateException(
+                    "@Retryable(mode = MANAGED) requires ManagedRetryClient to be configured. "
+                            + "Use INLINE or register a ManagedRetryClient bean/client before invoking "
+                            + effectiveMethod.toGenericString());
+        }
+
+        // 处理 INLINE 模式
+        if (retryable.mode() == RetryMode.INLINE) {
             // 识别是否为异步调用（返回类型为 CompletableFuture）
             boolean isAsync = CompletableFuture.class.isAssignableFrom(effectiveMethod.getReturnType());
             if (isAsync) {
@@ -144,7 +157,11 @@ public class RetryDelegate {
         validateManagedMethod(effectiveMethod);
 
         // 构建调用快照数据，用于持久化和后续恢复
-        InvocationRecoveryData recoveryData = buildRecoveryData(invocationMethod, effectiveMethod, recoveryTargetType,
+        InvocationRecoveryData recoveryData = buildRecoveryData(
+                invocationMethod,
+                effectiveMethod,
+                recoveryTargetType,
+                recoveryTargetBeanName,
                 args);
 
         // 验证托管模式下的恢复处理器配置
@@ -216,6 +233,7 @@ public class RetryDelegate {
             Method invocationMethod,
             Method effectiveMethod,
             Class<?> recoveryTargetType,
+            String recoveryTargetBeanName,
             Object[] args) {
         Object[] safeArgs = args != null ? args : new Object[0];
         Parameter[] parameters = effectiveMethod.getParameters();
@@ -238,6 +256,7 @@ public class RetryDelegate {
 
         return InvocationRecoveryData.builder()
                 .targetTypeName(resolveTargetTypeName(invocationMethod, effectiveMethod, recoveryTargetType))
+                .targetBeanName(recoveryTargetBeanName)
                 .methodName(effectiveMethod.getName())
                 .args(snapshots)
                 .build();

@@ -1,9 +1,13 @@
 package com.team4u.framework.retry.spring;
 
+import cn.hutool.json.JSONUtil;
 import com.team4u.framework.retry.backoff.Backoffs;
 import com.team4u.framework.retry.client.ManagedRetryClient;
+import com.team4u.framework.retry.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.domain.ManagedSubmitResult;
 import com.team4u.framework.retry.domain.RetryTaskSpec;
+import com.team4u.framework.retry.domain.store.InvocationArgSnapshot;
+import com.team4u.framework.retry.domain.store.InvocationRecoveryData;
 import com.team4u.framework.retry.domain.store.RetryStatus;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.policy.RetryPolicyFactory;
@@ -19,7 +23,6 @@ import org.junit.Before;
 import org.junit.Test;
 import org.springframework.aop.config.AopConfigUtils;
 import org.springframework.aop.framework.autoproxy.InfrastructureAdvisorAutoProxyCreator;
-import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
@@ -111,11 +114,9 @@ public class RetrySpringTest {
     }
 
     @Test
-    public void testEnableRetryShouldImportRetryLifecycleConfiguration() {
+    public void testEnableRetryShouldProvideContextScopedRetryExecutorManager() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(TestConfig.class)) {
-            Assert.assertNotNull(context.getBean(RetryLifecycleConfiguration.class));
-        } catch (NoSuchBeanDefinitionException ex) {
-            Assert.fail("@EnableRetry should import RetryLifecycleConfiguration");
+            Assert.assertNotNull(context.getBean(RetryExecutorManager.class));
         }
     }
 
@@ -171,6 +172,68 @@ public class RetrySpringTest {
         }
     }
 
+    @Test
+    public void testSpringManagedModeWithoutManagedClientFailsFast() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
+                ManagedWithoutClientConfig.class)) {
+            ManagedWithoutClientConfig config = context.getBean(ManagedWithoutClientConfig.class);
+            ManagedVoidOnlyService service = context.getBean(ManagedVoidOnlyService.class);
+
+            try {
+                service.notifyPay("M102");
+                Assert.fail("expected IllegalStateException");
+            } catch (IllegalStateException ex) {
+                Assert.assertTrue(ex.getMessage().contains("requires ManagedRetryClient"));
+            }
+
+            Assert.assertEquals(0, config.managedService.count.get());
+        }
+    }
+
+    @Test
+    public void testRetryExecutorManagerIsContextOwned() {
+        AnnotationConfigApplicationContext first = new AnnotationConfigApplicationContext(TestConfig.class);
+        AnnotationConfigApplicationContext second = new AnnotationConfigApplicationContext(TestConfig.class);
+        try {
+            RetryExecutorManager firstManager = first.getBean(RetryExecutorManager.class);
+            RetryExecutorManager secondManager = second.getBean(RetryExecutorManager.class);
+
+            Assert.assertNotSame(firstManager, secondManager);
+            first.close();
+
+            Assert.assertTrue(firstManager.getScheduler().isShutdown());
+            Assert.assertFalse(secondManager.getScheduler().isShutdown());
+        } finally {
+            if (second.isActive()) {
+                second.close();
+            }
+        }
+    }
+
+    @Test
+    public void testInvocationReplayUsesTargetBeanNameInSpringContext() throws Exception {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(ReplayConfig.class)) {
+            NamedReplayBean primary = (NamedReplayBean) context.getBean("primaryReplayBean");
+            NamedReplayBean secondary = (NamedReplayBean) context.getBean("secondaryReplayBean");
+
+            InvocationReplay replay = new InvocationReplay();
+            replay.recover(JSONUtil.toJsonStr(InvocationRecoveryData.builder()
+                            .targetTypeName(ReplayHandler.class.getName())
+                            .targetBeanName("secondaryReplayBean")
+                            .methodName("replay")
+                            .args(java.util.Collections.singletonList(InvocationArgSnapshot.builder()
+                                    .typeName(String.class.getName())
+                                    .serializedValue("\"spring-order\"")
+                                    .ignored(false)
+                                    .build()))
+                            .build()),
+                    RecoveryContext.builder().taskId("task-replay").attempt(1).build());
+
+            Assert.assertNull(primary.lastOrderId);
+            Assert.assertEquals("spring-order", secondary.lastOrderId);
+        }
+    }
+
     public interface OrderService {
         @Retryable(policy = "test-policy")
         String doRetry(String id);
@@ -186,6 +249,14 @@ public class RetrySpringTest {
 
     public interface ManagedCustomRecoveryService {
         void notifyPay(String id);
+    }
+
+    public interface ManagedVoidOnlyService {
+        void notifyPay(String id);
+    }
+
+    public interface ReplayHandler {
+        void replay(String id);
     }
 
     /**
@@ -279,6 +350,25 @@ public class RetrySpringTest {
         }
     }
 
+    public static class ManagedVoidOnlyServiceImpl implements ManagedVoidOnlyService {
+        private final AtomicInteger count = new AtomicInteger();
+
+        @Override
+        @Retryable(policy = "test-policy", mode = RetryMode.MANAGED)
+        public void notifyPay(String id) {
+            count.incrementAndGet();
+        }
+    }
+
+    public static class NamedReplayBean implements ReplayHandler {
+        private String lastOrderId;
+
+        @Override
+        public void replay(String id) {
+            this.lastOrderId = id;
+        }
+    }
+
     @Configuration
     @EnableRetry
     public static class JdkProxyConfig {
@@ -318,6 +408,31 @@ public class RetrySpringTest {
         @Bean
         public ManagedCustomRecoveryService managedCustomRecoveryService() {
             return new ManagedCustomRecoveryServiceImpl();
+        }
+    }
+
+    @Configuration
+    @EnableRetry
+    public static class ManagedWithoutClientConfig {
+        private final ManagedVoidOnlyServiceImpl managedService = new ManagedVoidOnlyServiceImpl();
+
+        @Bean
+        public ManagedVoidOnlyService managedVoidOnlyService() {
+            return managedService;
+        }
+    }
+
+    @Configuration
+    @EnableRetry
+    public static class ReplayConfig {
+        @Bean
+        public ReplayHandler primaryReplayBean() {
+            return new NamedReplayBean();
+        }
+
+        @Bean
+        public ReplayHandler secondaryReplayBean() {
+            return new NamedReplayBean();
         }
     }
 

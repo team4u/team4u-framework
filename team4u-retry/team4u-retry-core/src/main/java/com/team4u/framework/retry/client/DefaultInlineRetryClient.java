@@ -217,8 +217,10 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
                 attemptAsync(attempts, policy, asyncTask, scheduler, resultFuture, inFlightFutureRef, scheduledRetryRef);
             }
         } catch (Exception scheduleEx) {
-            // 调度器本身出现异常（如已关闭）时，直接终结任务
-            resultFuture.completeExceptionally(scheduleEx);
+            // 调度器本身出现异常（如已关闭）时，保留原始业务异常作为主异常，
+            // 避免调度问题掩盖真实失败原因。
+            cause.addSuppressed(scheduleEx);
+            resultFuture.completeExceptionally(cause);
         }
     }
 

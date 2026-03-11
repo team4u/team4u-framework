@@ -38,7 +38,7 @@ public interface RetryStore {
      * 标记任务执行成功，并记录成功详情。
      *
      * @param taskId  内部任务 ID
-     * @param success 成功反馈记录
+     * @param success 成功反馈记录，不能为空
      */
     void markSucceeded(String taskId, SuccessRecord success);
 
@@ -46,7 +46,7 @@ public interface RetryStore {
      * 标记任务为最终失败，并记录失败原因。
      *
      * @param taskId  内部任务 ID
-     * @param failure 失败详情记录
+     * @param failure 失败详情记录，不能为空
      */
     void markFailed(String taskId, FailureRecord failure);
 
@@ -54,7 +54,7 @@ public interface RetryStore {
      * 标记任务已被取消。
      *
      * @param taskId 内部任务 ID
-     * @param cancel 取消详情记录
+     * @param cancel 取消详情记录，不能为空
      */
     void markCancelled(String taskId, CancelRecord cancel);
 

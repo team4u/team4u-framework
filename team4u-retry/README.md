@@ -536,6 +536,7 @@ public class PayService {
 
 `@EnableRetry` 不会自动创建 `ManagedRetryClient`。
 如果你希望 `@Retryable(mode = RetryMode.MANAGED)` 真正进入托管模型，需要自己声明对应 Bean。
+如果业务方法声明了 `MANAGED`，但运行时没有可用的 `ManagedRetryClient`，框架会直接 fail-fast 抛异常，不会再静默退化为 INLINE。
 
 另外需要注意：代理 / 注解模式下的 MANAGED 只支持 `void` 方法，且恢复方式固定为 `InvocationReplay`。
 如果方法需要返回业务结果、`CompletableFuture`，或者你希望拿到提交后的 `taskId/state`，不要复用原业务方法签名，改用编程式 `Retries.managed(managedRetryClient).call(...)`。
@@ -592,8 +593,9 @@ public class RetryManagedConfiguration {
 
 ### 生命周期管理
 
-仅使用 `@EnableRetry` 时，会自动导入 `RetryLifecycleConfiguration`，在 Spring 容器销毁时调用 `RetryExecutorManager.global().shutdown()`。
-如果你没有走 `@EnableRetry`，则需要自己显式注册这个生命周期配置，或在应用关闭时手动 shutdown。
+仅使用 `@EnableRetry` 时，框架会为当前 Spring 容器自动注册独立的 `RetryExecutorManager` Bean，并在该容器销毁时只关闭这组容器级 executors。
+这意味着多 `ApplicationContext` 场景下，不会再因为一个 context 关闭而把另一个 context 仍在使用的全局 retry 调度器关掉。
+如果你没有走 `@EnableRetry`，则可以继续使用默认全局 executors，或自行注入/管理调度器。
 
 ### Spring AOP 边界
 
@@ -649,6 +651,7 @@ public String notifyPay(String orderId, @RetryIgnore InputStream bodyStream) {
 注解式调用进入托管模型时，框架通常会保存调用快照，包括：
 
 * `targetTypeName`
+* `targetBeanName`
 * `methodName`
 * `args`
 
@@ -669,6 +672,7 @@ public String notifyPay(String orderId, @RetryIgnore InputStream bodyStream) {
 
 * `@Retryable(mode = MANAGED)` 仅支持默认 recovery 或显式 `InvocationReplay`
 * 如果需要自定义恢复载荷或自定义 `taskType`，请改用 `ManagedRetryClient.submit(...)` / `Retries.managed(...)`
+* `@RetryIgnore` 只会把该参数位置写成固定的 ignored 标记，不会把真实值纳入幂等键；如果两个调用仅 ignored 参数不同，它们仍可能命中同一个 MANAGED 幂等任务
 
 ---
 

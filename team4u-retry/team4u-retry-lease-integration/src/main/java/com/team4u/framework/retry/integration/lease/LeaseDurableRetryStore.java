@@ -19,6 +19,7 @@ import com.team4u.framework.retry.store.serialize.RetryRecordSerializer;
 import lombok.Setter;
 
 import java.time.Duration;
+import java.util.Objects;
 import java.util.Optional;
 
 /**
@@ -98,9 +99,11 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
 
     @Override
     public void markSucceeded(String taskId, SuccessRecord success) {
+        Objects.requireNonNull(success, "SuccessRecord must not be null");
         RetryRecord record = required(taskId);
         record.getState().setStatus(RetryStatus.SUCCEEDED);
         record.getState().setNextRunAt(null);
+        record.getState().setSucceededAt(success.getSucceededAt());
         // 执行成功后，通过 admin 服务正常关闭租约任务，并持久化最终状态
         assertApplied("closeSucceeded", taskId, adminService.close(taskId, LeaseCloseRequest.builder()
                 .outcome(LeaseTaskOutcome.SUCCEEDED)
@@ -110,11 +113,13 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
 
     @Override
     public void markFailed(String taskId, FailureRecord failure) {
+        Objects.requireNonNull(failure, "FailureRecord must not be null");
         RetryRecord record = required(taskId);
         record.getState().setStatus(RetryStatus.FAILED);
         record.getState().setNextRunAt(null);
         record.getState().setLastErrorCode(failure.getErrorCode());
         record.getState().setLastErrorMessage(failure.getErrorMessage());
+        record.getState().setFailedAt(failure.getFailedAt());
         // 标记为重试耗尽导致的任务终结
         assertApplied("closeFailed", taskId, adminService.close(taskId, LeaseCloseRequest.builder()
                 .outcome(LeaseTaskOutcome.FAILED)
@@ -126,10 +131,12 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
 
     @Override
     public void markCancelled(String taskId, CancelRecord cancel) {
+        Objects.requireNonNull(cancel, "CancelRecord must not be null");
         RetryRecord record = required(taskId);
         record.getState().setStatus(RetryStatus.CANCELLED);
         record.getState().setNextRunAt(null);
         record.getState().setLastErrorMessage(cancel.getReason());
+        record.getState().setCancelledAt(cancel.getCancelledAt());
         // 标记为用户取消
         assertApplied("cancel", taskId, adminService.close(taskId, LeaseCloseRequest.builder()
                 .outcome(LeaseTaskOutcome.CANCELLED)

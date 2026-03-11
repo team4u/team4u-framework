@@ -32,6 +32,18 @@ public class RetryState {
      */
     private String lastErrorMessage;
     /**
+     * 最终成功完成时间
+     */
+    private Instant succeededAt;
+    /**
+     * 最终失败时间
+     */
+    private Instant failedAt;
+    /**
+     * 取消时间
+     */
+    private Instant cancelledAt;
+    /**
      * 后台调度引擎返回的关联任务 ID（用于在分布式调度系统中跟踪任务状态）
      */
     private String backendTaskId;

@@ -20,6 +20,7 @@ import org.junit.Test;
 
 import java.lang.reflect.Method;
 import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 public class RetryDelegateManagedTest {
 
@@ -224,6 +225,31 @@ public class RetryDelegateManagedTest {
 
         Assert.assertNull(result);
         Assert.assertEquals(1, managedClient.submitCount);
+    }
+
+    @Test
+    public void testManagedModeWithoutManagedClientFailsFast() throws Throwable {
+        RetryDelegate delegate = new RetryDelegate(null, null);
+        ManagedVoidService target = new ManagedVoidService();
+        Method method = ManagedVoidService.class.getMethod("replayPayment", String.class, Integer.class);
+        AtomicBoolean proceeded = new AtomicBoolean(false);
+
+        try {
+            delegate.executeWithRetry(
+                    method,
+                    target,
+                    new Object[]{"order-1", 1},
+                    method.getAnnotation(Retryable.class),
+                    () -> {
+                        proceeded.set(true);
+                        return null;
+                    });
+            Assert.fail("expected IllegalStateException");
+        } catch (IllegalStateException ex) {
+            Assert.assertTrue(ex.getMessage().contains("requires ManagedRetryClient"));
+        }
+
+        Assert.assertFalse(proceeded.get());
     }
 
     public static class ManagedVoidService {
