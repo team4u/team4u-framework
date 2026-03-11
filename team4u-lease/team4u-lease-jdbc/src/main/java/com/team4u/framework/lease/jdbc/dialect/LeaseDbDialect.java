@@ -18,20 +18,11 @@ public interface LeaseDbDialect {
     String buildAcquireCandidateSql(int queueCount);
 
     /**
-     * 构建分页查询任务的 SQL 片段
+     * 构建分页查询的排序和分页 SQL 后缀
+     * <p>
+     * WHERE 条件由 DAO 统一构建，方言只负责提供排序规则和分页语法。
      *
-     * @param filterQueue    是否过滤队列
-     * @param filterTaskType 是否过滤任务类型
-     * @param stateCount     过滤的生命周期状态数量
-     * @param outcomeCount   过滤的结束结果数量
-     * @param reasonCount    过滤的失败原因数量
-     * @param filterWorkerId 是否过滤工作节点 ID
-     * @return `WHERE / ORDER BY / LIMIT` 片段
+     * @return `ORDER BY / LIMIT / OFFSET` 片段
      */
-    String buildQuerySql(boolean filterQueue,
-                         boolean filterTaskType,
-                         int stateCount,
-                         int outcomeCount,
-                         int reasonCount,
-                         boolean filterWorkerId);
+    String buildQuerySuffix();
 }
