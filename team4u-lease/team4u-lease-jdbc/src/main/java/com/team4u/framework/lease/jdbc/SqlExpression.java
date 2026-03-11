@@ -24,10 +24,6 @@ public class SqlExpression {
         this.expression = expression;
     }
 
-    public String getExpression() {
-        return expression;
-    }
-
     /**
      * 创建一个字段自增表达式
      * <p>
@@ -58,5 +54,9 @@ public class SqlExpression {
             builder.append("?");
         }
         return builder.toString();
+    }
+
+    public String getExpression() {
+        return expression;
     }
 }

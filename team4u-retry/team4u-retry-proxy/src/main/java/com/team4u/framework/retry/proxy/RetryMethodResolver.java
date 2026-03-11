@@ -68,6 +68,7 @@ public final class RetryMethodResolver {
             }
         }
         // 如果在类继承路径中未查找到，则递归遍历该类型实现的所有接口进行查找
+        assert type != null;
         for (Class<?> interfaceType : type.getInterfaces()) {
             Method method = findMethodInHierarchy(interfaceType, name, parameterTypes);
             if (method != null) {

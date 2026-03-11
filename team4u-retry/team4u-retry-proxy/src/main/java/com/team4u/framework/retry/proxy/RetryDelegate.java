@@ -282,6 +282,7 @@ public class RetryDelegate {
     /**
      * 校验恢复处理器配置
      */
+    @SuppressWarnings("rawtypes")
     private void validateManagedRecovery(Class<? extends RecoveryHandler> recoveryClass) {
         if (recoveryClass == null
                 || recoveryClass == RecoveryHandler.class

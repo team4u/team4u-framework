@@ -37,16 +37,14 @@ public class JdbcLeaseTaskDao {
     public static final String COLUMNS = "task_id, queue_name, task_type, payload, business_key, state, outcome, failure_reason, "
             + "priority, delivery_count, failure_count, worker_id, lease_token, lease_expires_at, visible_at, "
             + "created_at, updated_at, version, error_message, attributes_json";
-
-    private final Db db;
-    private final LeaseDbDialect dialect;
-    private final LeaseJsonCodec jsonCodec;
-
     /**
      * 通用的管理面操作过滤条件占位符
      * 用于确保状态非 CLOSED，且如果处于 RUNNING 状态则必须已过期
      */
     private static final String WHERE_UNLOCKED_OR_EXPIRED = "task_id = ? AND state <> ? AND NOT (state = ? AND lease_expires_at >= ?)";
+    private final Db db;
+    private final LeaseDbDialect dialect;
+    private final LeaseJsonCodec jsonCodec;
 
     public JdbcLeaseTaskDao(Db db, LeaseDbDialect dialect, LeaseJsonCodec jsonCodec) {
         this.db = db;
@@ -146,11 +144,11 @@ public class JdbcLeaseTaskDao {
      * <p>
      * 同时引入了 `version` 校验，确保抢占操作是基于查找到的那个版本的快照，避免并发场景下的状态漂移。
      *
-     * @param taskId            任务 ID
-     * @param workerId          抢占该租约的工作节点 ID
-     * @param leaseToken        本次授权的唯一令牌
-     * @param leaseExpiresAt    设定的租约过期时间戳
-     * @param now               当前时间戳，用于可见性与过期判定
+     * @param taskId          任务 ID
+     * @param workerId        抢占该租约的工作节点 ID
+     * @param leaseToken      本次授权的唯一令牌
+     * @param leaseExpiresAt  设定的租约过期时间戳
+     * @param now             当前时间戳，用于可见性与过期判定
      * @param expectedVersion 期待的行版本号，用于乐观锁冲突检测
      * @return 更新行数，1 表示抢占成功，0 表示已被其他节点抢占
      * @throws SQLException SQL 异常
@@ -197,6 +195,15 @@ public class JdbcLeaseTaskDao {
                 ? LeaseCloseRequest.succeeded()
                 : request.normalizeForRuntime();
 
+        Entity entity = newEntity(now, safeRequest);
+
+        return db.execute(
+                "UPDATE " + TABLE_NAME + " SET " + buildUpdateAssignments(entity)
+                        + " WHERE task_id = ? AND state = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
+                buildRuntimeReleaseParams(entity, taskId, workerId, leaseToken, now));
+    }
+
+    private Entity newEntity(long now, LeaseCloseRequest safeRequest) {
         Entity entity = Entity.create(TABLE_NAME);
         entity.set("state", LeaseTaskState.CLOSED.name());
         applyCloseRequest(entity, safeRequest);
@@ -205,11 +212,7 @@ public class JdbcLeaseTaskDao {
         entity.set("lease_expires_at", 0);
         entity.set("updated_at", now);
         entity.set("version", SqlExpression.increment("version"));
-
-        return db.execute(
-                "UPDATE " + TABLE_NAME + " SET " + buildUpdateAssignments(entity)
-                        + " WHERE task_id = ? AND state = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
-                buildRuntimeReleaseParams(entity, taskId, workerId, leaseToken, now));
+        return entity;
     }
 
     /**
@@ -314,14 +317,7 @@ public class JdbcLeaseTaskDao {
                 ? LeaseCloseRequest.cancelled(null)
                 : request.normalizeForAdmin();
 
-        Entity entity = Entity.create(TABLE_NAME);
-        entity.set("state", LeaseTaskState.CLOSED.name());
-        applyCloseRequest(entity, safeRequest);
-        entity.set("worker_id", null);
-        entity.set("lease_token", null);
-        entity.set("lease_expires_at", 0);
-        entity.set("updated_at", now);
-        entity.set("version", SqlExpression.increment("version"));
+        Entity entity = newEntity(now, safeRequest);
 
         return db.execute(
                 "UPDATE " + TABLE_NAME + " SET " + buildUpdateAssignments(entity)
@@ -408,7 +404,7 @@ public class JdbcLeaseTaskDao {
         }
         entity.set("outcome", request.getOutcome().name());
         entity.set("error_message", request.getErrorMessage());
-        
+
         if (request.getPayload() != null) {
             entity.set("payload", request.getPayload());
         }
