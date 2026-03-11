@@ -28,4 +28,25 @@ public class LeaseWorkerPolicyTest {
             Assert.assertTrue(ex.getMessage().contains("heartbeatIntervalMillis"));
         }
     }
+
+    @Test
+    public void testMissingHandlerRetryDelayDefaultsToPollWait() {
+        LeaseWorkerPolicy policy = LeaseWorkerPolicy.builder()
+                .pollWaitMillis(250L)
+                .build();
+
+        Assert.assertEquals(250L, policy.getMissingHandlerRetryDelayMillis());
+    }
+
+    @Test
+    public void testMissingHandlerRetryDelayRejectsNegativeValue() {
+        try {
+            LeaseWorkerPolicy.builder()
+                    .missingHandlerRetryDelayMillis(-1L)
+                    .build();
+            Assert.fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException ex) {
+            Assert.assertTrue(ex.getMessage().contains("missingHandlerRetryDelayMillis"));
+        }
+    }
 }

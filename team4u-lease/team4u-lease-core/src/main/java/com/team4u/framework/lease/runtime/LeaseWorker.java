@@ -4,6 +4,7 @@ import com.team4u.framework.lease.api.LeaseRuntimeClient;
 import com.team4u.framework.lease.enums.LeaseRuntimeResult;
 import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
 import com.team4u.framework.lease.enums.MissingHandlerStrategy;
+import com.team4u.framework.lease.handler.LeaseLifecycleAwareTaskHandler;
 import com.team4u.framework.lease.handler.LeaseTaskHandler;
 import com.team4u.framework.lease.handler.LeaseTaskHandlerRegistry;
 import com.team4u.framework.lease.model.*;
@@ -133,12 +134,16 @@ public class LeaseWorker implements Runnable, AutoCloseable {
                         handleMissingHandler(grant);
                         continue;
                     }
-                    LeaseExecutionContext executionContext = toExecutionContext(grant, heartbeatTask);
+                    LeaseExecutionContext executionContext = toExecutionContext(handler, grant, heartbeatTask);
                     if (heartbeatTask != null) {
                         heartbeatTask.start();
                     }
-                    handler.handle(executionContext);
-                    if (!executionContext.isLifecycleHandled()) {
+                    if (handler instanceof LeaseLifecycleAwareTaskHandler) {
+                        executeLifecycleAwareHandler((LeaseLifecycleAwareTaskHandler) handler,
+                                grant,
+                                (LeaseLifecycleExecutionContext) executionContext);
+                    } else {
+                        handler.handle(executionContext);
                         handleWriteResult("close", grant,
                                 runtimeClient.close(grant.getHandle(), LeaseCloseRequest.succeeded()));
                     }
@@ -192,8 +197,22 @@ public class LeaseWorker implements Runnable, AutoCloseable {
         }
     }
 
-    private LeaseExecutionContext toExecutionContext(LeaseGrant grant, HeartbeatTask heartbeatTask) {
+    /**
+     * 将租约授予凭据转换为业务执行上下文
+     * <p>
+     * 根据处理器的类型（普通型或生命周期感知型）返回不同实现的 Context。
+     */
+    private LeaseExecutionContext toExecutionContext(LeaseTaskHandler handler,
+                                                     LeaseGrant grant,
+                                                     HeartbeatTask heartbeatTask) {
         Runnable heartbeatRequester = heartbeatTask == null ? null : heartbeatTask::requestNow;
+
+        // 如果处理器支持显式生命周期管理，构造增强型的上下文实例
+        if (handler instanceof LeaseLifecycleAwareTaskHandler) {
+            return new LeaseLifecycleExecutionContext(grant, heartbeatRequester, runtimeClient);
+        }
+
+        // 普通处理器使用基础执行上下文
         return LeaseExecutionContext.builder()
                 .taskId(grant.getTaskId())
                 .queue(grant.getQueue())
@@ -206,9 +225,26 @@ public class LeaseWorker implements Runnable, AutoCloseable {
                 .visibleAtMillis(grant.getVisibleAtMillis())
                 .leaseExpiresAtMillis(grant.getLeaseExpiresAtMillis())
                 .heartbeatRequester(heartbeatRequester)
-                .runtimeClient(runtimeClient)
-                .handle(grant.getHandle())
                 .build();
+    }
+
+    private void executeLifecycleAwareHandler(LeaseLifecycleAwareTaskHandler handler,
+                                              LeaseGrant grant,
+                                              LeaseLifecycleExecutionContext context) throws Exception {
+        // 执行具备生命周期感知能力的业务逻辑
+        handler.handleLifecycle(context);
+
+        // 如果处理器在方法内部已调用了 context.close() 或 context.release()，则直接返回
+        if (context.isLifecycleHandled()) {
+            return;
+        }
+
+        // 契约保护：如果处理器未显式声明生命周期结束，强制将其标记为失败，避免任务僵死
+        handleWriteResult("close", grant,
+                runtimeClient.close(grant.getHandle(),
+                        LeaseCloseRequest.failed(
+                                LeaseTaskFailureReason.HANDLER_CONTRACT_VIOLATION,
+                                "LeaseLifecycleAwareTaskHandler executed without close/release")));
     }
 
     private void handleMissingHandler(LeaseGrant grant) {
@@ -219,7 +255,8 @@ public class LeaseWorker implements Runnable, AutoCloseable {
                     grant.getTaskId(), grant.getQueue(), grant.getTaskType());
             try {
                 handleWriteResult("release", grant,
-                        runtimeClient.release(grant.getHandle(), LeaseReleaseRequest.of(policy.getPollWaitMillis())));
+                        runtimeClient.release(grant.getHandle(),
+                                LeaseReleaseRequest.of(policy.getMissingHandlerRetryDelayMillis())));
             } catch (Exception writeEx) {
                 log.error("Lease worker release failed. taskId={}", grant.getTaskId(), writeEx);
             }

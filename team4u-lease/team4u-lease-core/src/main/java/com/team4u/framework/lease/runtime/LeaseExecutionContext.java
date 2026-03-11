@@ -1,92 +1,79 @@
 package com.team4u.framework.lease.runtime;
 
-import com.team4u.framework.lease.api.LeaseRuntimeClient;
-import com.team4u.framework.lease.model.LeaseHandle;
 import lombok.Builder;
-import lombok.Data;
+import lombok.Getter;
 import lombok.Singular;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * 任务执行上下文
  * <p>
- * 封装了任务在处理期间所需的全部信息，并提供了与运行时（如主动心跳续约）交互的接口。
+ * 封装了租约任务在执行期间的所有上下文信息，包括任务元数据、业务载荷及扩展属性。
+ * 同时提供了与运行时环境交互的接口（如手动触发心跳续约）。
  */
-@Data
+@Getter
 public class LeaseExecutionContext {
 
     /**
-     * 任务 ID
+     * 任务唯一标识符
      */
     private final String taskId;
     /**
-     * 所属队列
+     * 任务所属的逻辑队列名称
      */
     private final String queue;
     /**
-     * 业务定义的任务类型
+     * 业务定义的任务类型，用于路由到对应的处理器
      */
     private final String taskType;
     /**
-     * 业务载荷（JSON 等序列化内容）
+     * 业务数据载荷（通常为 JSON 序列化字符串）
      */
     private final String payload;
     /**
-     * 累计投递次数
+     * 该任务被投递给 Worker 的累计次数
      */
     private final int deliveryCount;
     /**
-     * 累计失败次数
+     * 该任务历史执行失败的累计次数
      */
     private final int failureCount;
     /**
-     * 扩展参数
+     * 任务携带的扩展属性快照
      */
     private final Map<String, String> attributes;
     /**
-     * 任务创建时间
+     * 任务最初创建的时间戳（毫秒）
      */
     private final long createdAtMillis;
     /**
-     * 任务最近可见时间
+     * 任务在队列中最近一次可见（可被抢占）的时间戳（毫秒）
      */
     private final long visibleAtMillis;
     /**
-     * 当前租约过期截止时间
+     * 当前持有租约的过期截止时间戳（毫秒）
      */
     private final long leaseExpiresAtMillis;
     /**
-     * 主动触发心跳的操作回调
+     * 触发即时心跳续约的回调句柄
      */
     private final Runnable heartbeatRequester;
-    /**
-     * 运行时租约客户端接口
-     */
-    private final LeaseRuntimeClient runtimeClient;
-    /**
-     * 租约操作句柄
-     */
-    private final LeaseHandle handle;
-    private final AtomicBoolean lifecycleHandled = new AtomicBoolean(false);
 
     @Builder
-    private LeaseExecutionContext(String taskId,
-                                  String queue,
-                                  String taskType,
-                                  String payload,
-                                  int deliveryCount,
-                                  int failureCount,
-                                  @Singular Map<String, String> attributes,
-                                  long createdAtMillis,
-                                  long visibleAtMillis,
-                                  long leaseExpiresAtMillis,
-                                  Runnable heartbeatRequester,
-                                  LeaseRuntimeClient runtimeClient,
-                                  LeaseHandle handle) {
+    protected LeaseExecutionContext(String taskId,
+                                    String queue,
+                                    String taskType,
+                                    String payload,
+                                    int deliveryCount,
+                                    int failureCount,
+                                    @Singular Map<String, String> attributes,
+                                    long createdAtMillis,
+                                    long visibleAtMillis,
+                                    long leaseExpiresAtMillis,
+                                    Runnable heartbeatRequester) {
         this.taskId = taskId;
         this.queue = queue;
         this.taskType = taskType;
@@ -102,8 +89,6 @@ public class LeaseExecutionContext {
         this.visibleAtMillis = visibleAtMillis;
         this.leaseExpiresAtMillis = leaseExpiresAtMillis;
         this.heartbeatRequester = heartbeatRequester;
-        this.runtimeClient = runtimeClient;
-        this.handle = handle;
     }
 
     /**
@@ -115,16 +100,5 @@ public class LeaseExecutionContext {
         if (heartbeatRequester != null) {
             heartbeatRequester.run();
         }
-    }
-
-    /**
-     * 标记当前任务生命周期已由 handler 自行完成写回。
-     */
-    public void markLifecycleHandled() {
-        lifecycleHandled.set(true);
-    }
-
-    public boolean isLifecycleHandled() {
-        return lifecycleHandled.get();
     }
 }
