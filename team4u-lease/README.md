@@ -180,11 +180,11 @@ worker.shutdown();
 
 任务通过三个维度表达其当前处境：
 
-| 状态 | 说明 |
-| --- | --- |
-| `READY` | 待命状态，可供 Worker 获取执行（包含延迟生效的任务）。 |
-| `RUNNING` | 已被某个 Worker 成功抢占，正在执行中。 |
-| `CLOSED` | 终局状态，任务已结束，不再自动流转。 |
+| 状态      | 说明                                                   |
+| --------- | ------------------------------------------------------ |
+| `READY`   | 待命状态，可供 Worker 获取执行（包含延迟生效的任务）。 |
+| `RUNNING` | 已被某个 Worker 成功抢占，正在执行中。                 |
+| `CLOSED`  | 终局状态，任务已结束，不再自动流转。                   |
 
 ### 结束结果：`LeaseTaskOutcome`
 
@@ -322,14 +322,14 @@ adminService.updateAndReschedule(
 
 ### `LeaseWorkerPolicy` 配置表
 
-| 参数 | 说明 | 默认值 | 校验规则 |
-| --- | --- | --- | --- |
-| `workerId` | 唯一身份标识 | 随机 UUID | 不能为空 |
-| `leaseMillis` | 租赁（锁定）时长 | 30,000 ms | > 0 |
-| `pollWaitMillis` | 轮询阻塞等待时长 | 1,000 ms | >= 0 |
-| `heartbeatEnabled` | 是否开启自动心跳 | `true` | - |
-| `heartbeatIntervalMillis` | 心跳间隔 | `leaseMillis / 3` | > 0 且 < `leaseMillis` |
-| `missingHandlerStrategy` | 缺失处理器策略 | `FAIL_FAST` | - |
+| 参数                      | 说明             | 默认值            | 校验规则               |
+| ------------------------- | ---------------- | ----------------- | ---------------------- |
+| `workerId`                | 唯一身份标识     | 随机 UUID         | 不能为空               |
+| `leaseMillis`             | 租赁（锁定）时长 | 30,000 ms         | > 0                    |
+| `pollWaitMillis`          | 轮询阻塞等待时长 | 1,000 ms          | >= 0                   |
+| `heartbeatEnabled`        | 是否开启自动心跳 | `true`            | -                      |
+| `heartbeatIntervalMillis` | 心跳间隔         | `leaseMillis / 3` | > 0 且 < `leaseMillis` |
+| `missingHandlerStrategy`  | 缺失处理器策略   | `FAIL_FAST`       | -                      |
 
 ### 关键配置建议
 
@@ -356,6 +356,9 @@ adminService.updateAndReschedule(
 - 抢占逻辑：采用乐观抢占模型原子竞争。
 - 等待行为：`acquire()` 当前使用短轮询等待，不是数据库原生阻塞获取，更适合轻量任务场景。
 - 幂等建档：支持 `businessKey`、`publishIfAbsent(...)` 和 `getByBusinessKey(...)`。
+- 并发控制：JDBC 实现使用独立 `version` 列做乐观锁，`updated_at` 只保留审计时间语义。
+- 索引建议：`acquire` 已按 `READY/visible_at` 与过期 `RUNNING/lease_expires_at` 分成两组索引。
+- 升级已有库：除索引调整外，还需要为 `lease_task` 补充 `version BIGINT NOT NULL DEFAULT 0`。
 - 说明：当前实现按 MySQL schema 与 SQL 语义维护；如需迁移到其他数据库，请先自行完成方言与并发语义验证。
 
 ### 内存后端 (InMemoryLeaseBackend)
@@ -418,12 +421,12 @@ worker.shutdownGracefully(5000);
 
 ## 适用与局限
 
-| 推荐场景 | 不太适合 |
-| --- | --- |
-| 中小规模异步任务执行 | 每秒数万次的超大规模消息吞吐 |
-| 需要强单节点执行语义 | 需要 Topic 广播、Consumer Group 等 MQ 特性 |
-| 需要高可见性与人工干预 | 复杂的 DAG 编排与大型工作流 |
-| 现有数据库架构，希望低成本引入任务系统 | 纯内存毫秒级超高性能场景 |
+| 推荐场景                               | 不太适合                                   |
+| -------------------------------------- | ------------------------------------------ |
+| 中小规模异步任务执行                   | 每秒数万次的超大规模消息吞吐               |
+| 需要强单节点执行语义                   | 需要 Topic 广播、Consumer Group 等 MQ 特性 |
+| 需要高可见性与人工干预                 | 复杂的 DAG 编排与大型工作流                |
+| 现有数据库架构，希望低成本引入任务系统 | 纯内存毫秒级超高性能场景                   |
 
 
 

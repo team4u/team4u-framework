@@ -101,6 +101,11 @@ public class LeaseTaskEntity {
     private final long updatedAtMillis;
 
     /**
+     * 行版本号，用于乐观锁。
+     */
+    private final long version;
+
+    /**
      * 最后一次执行的错误摘要
      */
     private final String errorMessage;
