@@ -8,6 +8,14 @@ import java.util.List;
 
 /**
  * 任务分页查询结果包装类
+ * <p>
+ * 封装分页查询任务的响应数据，包含符合条件的总记录数、当前页码、页大小及当前页的任务列表。
+ * <p>
+ * <b>分页说明：</b>
+ * <ul>
+ *     <li>页码从 0 开始计数</li>
+ *     <li>总记录数可用于计算总页数：{@code totalPages = (total + pageSize - 1) / pageSize}</li>
+ * </ul>
  */
 @Data
 @Builder
