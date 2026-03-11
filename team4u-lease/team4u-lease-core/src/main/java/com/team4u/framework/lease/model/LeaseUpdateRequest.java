@@ -8,7 +8,20 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 租约修改请求
+ * 租约任务更新请求模型
+ * <p>
+ * 用于管理面运维操作，支持对已存在任务的元数据进行修改。
+ * 可更新任务类型、负载内容、优先级及扩展属性。
+ * <p>
+ * 该操作通常用于：
+ * <ul>
+ *     <li>修正错误配置的任务参数</li>
+ *     <li>更新任务负载内容以适配新的业务逻辑</li>
+ *     <li>调整任务优先级以改变执行顺序</li>
+ * </ul>
+ * <p>
+ * <b>注意：</b>更新操作要求任务处于非终态（非 CLOSED）或租约已过期状态，
+ * 若任务当前持有有效租约，更新将失败。
  */
 @Data
 public class LeaseUpdateRequest {
@@ -19,22 +32,22 @@ public class LeaseUpdateRequest {
     private final String taskId;
 
     /**
-     * 任务类型
+     * 新的任务类型（可选）
      */
     private final String taskType;
 
     /**
-     * 业务执行载荷
+     * 新的业务执行载荷（可选）
      */
     private final String payload;
 
     /**
-     * 任务优先级
+     * 新的任务优先级（可选）
      */
     private final Integer priority;
 
     /**
-     * 任务扩展属性
+     * 新的扩展属性（可选）
      */
     private final Map<String, String> attributes;
 
