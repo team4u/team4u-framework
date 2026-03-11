@@ -16,8 +16,10 @@ import com.team4u.framework.lease.model.*;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
+import java.sql.SQLIntegrityConstraintViolationException;
 import java.util.Objects;
 import java.util.Optional;
+import java.util.function.LongSupplier;
 
 /**
  * 基于 JDBC 的任务租赁后端实现
@@ -35,76 +37,44 @@ public class JdbcLeaseBackend implements LeaseBackend {
     private static final long DEFAULT_WAIT_POLL_MILLIS = 50L;
 
     private final JdbcLeaseTaskDao dao;
+    private final LongSupplier clock;
 
     public JdbcLeaseBackend(DataSource dataSource) {
-        this(dataSource, new MySqlLeaseDbDialect());
+        this(dataSource, new MySqlLeaseDbDialect(), System::currentTimeMillis);
     }
 
     public JdbcLeaseBackend(DataSource dataSource, LeaseDbDialect dialect) {
+        this(dataSource, dialect, System::currentTimeMillis);
+    }
+
+    JdbcLeaseBackend(DataSource dataSource, LeaseDbDialect dialect, LongSupplier clock) {
         this.dao = new JdbcLeaseTaskDao(Db.use(dataSource), dialect, new LeaseJsonCodec());
+        this.clock = Objects.requireNonNull(clock, "clock");
     }
 
     @Override
     public String publish(LeasePublishRequest request) {
         validatePublishRequest(request);
-        long now = System.currentTimeMillis();
-        String taskId = nextTaskId();
-        LeaseTaskEntity entity = LeaseTaskEntity.builder()
-                .taskId(taskId)
-                .queue(request.getQueue())
-                .taskType(request.getTaskType())
-                .payload(request.getPayload())
-                .businessKey(request.getBusinessKey())
-                .state(LeaseTaskState.READY)
-                .outcome(null)
-                .failureReason(null)
-                .priority(request.getPriority())
-                .deliveryCount(0)
-                .failureCount(0)
-                .workerId(null)
-                .leaseToken(null)
-                .leaseExpiresAtMillis(0L)
-                .visibleAtMillis(now + Math.max(0L, request.getDelayMillis()))
-                .createdAtMillis(now)
-                .updatedAtMillis(now)
-                .errorMessage(null)
-                .attributes(request.getAttributes())
-                .build();
-        try {
-            dao.insert(entity);
-            return taskId;
-        } catch (SQLException e) {
-            throw new IllegalStateException("publish failed: " + taskId, e);
-        }
+        LeaseTaskEntity entity = newPublishedEntity(request);
+        insert(entity);
+        return entity.getTaskId();
     }
 
     @Override
     public LeasePublishResult publishIfAbsent(LeasePublishRequest request) {
         validatePublishRequest(request);
-        if (StrUtil.isBlank(request.getBusinessKey())) {
-            String taskId = publish(request);
-            return LeasePublishResult.builder()
-                    .created(true)
-                    .taskId(taskId)
-                    .record(get(taskId).orElse(null))
-                    .build();
-        }
+        LeaseTaskEntity entity = newPublishedEntity(request);
         try {
-            LeaseTaskEntity existing = dao.findByBusinessKey(request.getQueue(), request.getBusinessKey());
-            if (existing != null) {
-                return LeasePublishResult.builder()
-                        .created(false)
-                        .taskId(existing.getTaskId())
-                        .record(existing.toRecord())
-                        .build();
-            }
-            String taskId = publish(request);
+            dao.insert(entity);
             return LeasePublishResult.builder()
                     .created(true)
-                    .taskId(taskId)
-                    .record(get(taskId).orElse(null))
+                    .taskId(entity.getTaskId())
+                    .record(entity.toRecord())
                     .build();
         } catch (SQLException e) {
+            if (StrUtil.isBlank(request.getBusinessKey()) || !isDuplicateKey(e)) {
+                throw new IllegalStateException("publishIfAbsent failed", e);
+            }
             try {
                 LeaseTaskEntity existing = dao.findByBusinessKey(request.getQueue(), request.getBusinessKey());
                 if (existing != null) {
@@ -134,7 +104,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
     public LeaseGrant acquire(LeaseAcquireRequest request) throws InterruptedException {
         validateAcquireRequest(request);
         long timeout = Math.max(0L, request.getWaitTimeoutMillis());
-        long deadline = System.currentTimeMillis() + timeout;
+        long deadline = now() + timeout;
         while (true) {
             LeaseGrant grant = tryAcquireOnce(request);
             if (grant != null) {
@@ -143,11 +113,11 @@ public class JdbcLeaseBackend implements LeaseBackend {
             if (timeout == 0L) {
                 return null;
             }
-            long now = System.currentTimeMillis();
-            if (now >= deadline) {
+            long current = now();
+            if (current >= deadline) {
                 return null;
             }
-            Thread.sleep(Math.min(DEFAULT_WAIT_POLL_MILLIS, deadline - now));
+            Thread.sleep(Math.min(DEFAULT_WAIT_POLL_MILLIS, deadline - current));
         }
     }
 
@@ -200,7 +170,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
             if (current.getState() != LeaseTaskState.CLOSED || current.getOutcome() != LeaseTaskOutcome.FAILED) {
                 return LeaseAdminResult.CLOSED;
             }
-            long now = System.currentTimeMillis();
+            long now = now();
             return dao.requeueFailed(taskId, now + Math.max(0L, delayMillis), now) == 1
                     ? LeaseAdminResult.APPLIED
                     : LeaseAdminResult.CLOSED;
@@ -260,10 +230,10 @@ public class JdbcLeaseBackend implements LeaseBackend {
      * <p>
      * 1. 根据订阅信息扫描候选任务。
      * 2. 利用数据库的主键+版本/状态乐观锁 {@link JdbcLeaseTaskDao#tryAcquire} 进行原子性写回。
-     * 3. 校验更新结果，确保当前 Worker 确实持有了该任务。
+     * 3. 通过 version 乐观锁避免返回过期快照，并在成功后直接组装授权结果。
      */
     private LeaseGrant tryAcquireOnce(LeaseAcquireRequest request) {
-        long now = System.currentTimeMillis();
+        long now = now();
         try {
             for (LeaseTaskEntity candidate : dao.findAcquirableTasks(request.getSubscriptions(), now,
                     ACQUIRE_BATCH_SIZE)) {
@@ -274,15 +244,19 @@ public class JdbcLeaseBackend implements LeaseBackend {
                         request.getWorkerId(),
                         leaseToken,
                         leaseExpiresAt,
-                        now);
+                        now,
+                        candidate.getVersion());
                 if (updated == 1) {
-                    LeaseTaskEntity claimed = dao.findById(candidate.getTaskId());
-                    if (claimed != null
-                            && claimed.getState() == LeaseTaskState.RUNNING
-                            && Objects.equals(claimed.getWorkerId(), request.getWorkerId())
-                            && Objects.equals(claimed.getLeaseToken(), leaseToken)) {
-                        return claimed.toGrant();
-                    }
+                    return candidate.toBuilder()
+                            .state(LeaseTaskState.RUNNING)
+                            .workerId(request.getWorkerId())
+                            .leaseToken(leaseToken)
+                            .leaseExpiresAtMillis(leaseExpiresAt)
+                            .deliveryCount(candidate.getDeliveryCount() + 1)
+                            .updatedAtMillis(now)
+                            .version(candidate.getVersion() + 1)
+                            .build()
+                            .toGrant();
                 }
             }
             return null;
@@ -293,7 +267,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
 
     private LeaseRuntimeResult applyRuntimeMutation(LeaseHandle handle, RuntimeMutation mutation) {
         validateHandle(handle);
-        long now = System.currentTimeMillis();
+        long now = now();
         try {
             int updated = mutation.apply(now);
             if (updated == 1) {
@@ -319,13 +293,13 @@ public class JdbcLeaseBackend implements LeaseBackend {
     private LeaseAdminResult applyAdminMutation(String taskId, AdminMutation mutation) {
         validateTaskId(taskId);
         try {
-            long now = System.currentTimeMillis();
+            long now = now();
             int updated = mutation.apply(now);
             if (updated == 1) {
                 return LeaseAdminResult.APPLIED;
             }
             LeaseTaskEntity latest = dao.findById(taskId);
-            return classifyAdminMutation(latest);
+            return classifyAdminMutation(latest, now);
         } catch (SQLException e) {
             throw new IllegalStateException("admin mutation failed: " + taskId, e);
         }
@@ -337,22 +311,22 @@ public class JdbcLeaseBackend implements LeaseBackend {
         }
     }
 
-    private LeaseAdminResult classifyAdminMutation(LeaseTaskEntity current) {
+    private LeaseAdminResult classifyAdminMutation(LeaseTaskEntity current, long now) {
         if (current == null) {
             return LeaseAdminResult.TASK_NOT_FOUND;
         }
         if (isTerminal(current)) {
             return LeaseAdminResult.CLOSED;
         }
-        if (hasActiveLease(current)) {
+        if (hasActiveLease(current, now)) {
             return LeaseAdminResult.ACTIVE_LEASE_PRESENT;
         }
         return LeaseAdminResult.APPLIED;
     }
 
-    private boolean hasActiveLease(LeaseTaskEntity task) {
+    private boolean hasActiveLease(LeaseTaskEntity task, long now) {
         return task.getState() == LeaseTaskState.RUNNING
-                && task.getLeaseExpiresAtMillis() >= System.currentTimeMillis();
+                && task.getLeaseExpiresAtMillis() >= now;
     }
 
     private boolean isTerminal(LeaseTaskEntity task) {
@@ -416,6 +390,83 @@ public class JdbcLeaseBackend implements LeaseBackend {
 
     private String nextLeaseToken() {
         return "lease-token-" + IdUtil.fastSimpleUUID();
+    }
+
+    /**
+     * 根据发布请求创建初始态的任务实体
+     *
+     * @param request 发布请求
+     * @return 初始化的任务实体，其状态为 READY
+     */
+    private LeaseTaskEntity newPublishedEntity(LeasePublishRequest request) {
+        long now = now();
+        return LeaseTaskEntity.builder()
+                .taskId(nextTaskId())
+                .queue(request.getQueue())
+                .taskType(request.getTaskType())
+                .payload(request.getPayload())
+                .businessKey(request.getBusinessKey())
+                .state(LeaseTaskState.READY)
+                .outcome(null)
+                .failureReason(null)
+                .priority(request.getPriority())
+                .deliveryCount(0)
+                .failureCount(0)
+                .workerId(null)
+                .leaseToken(null)
+                .leaseExpiresAtMillis(0L)
+                .visibleAtMillis(now + Math.max(0L, request.getDelayMillis()))
+                .createdAtMillis(now)
+                .updatedAtMillis(now)
+                .version(0L)
+                .errorMessage(null)
+                .attributes(request.getAttributes())
+                .build();
+    }
+
+    /**
+     * 将任务实体持久化至数据库
+     *
+     * @param entity 待插入的任务实体
+     */
+    private void insert(LeaseTaskEntity entity) {
+        try {
+            dao.insert(entity);
+        } catch (SQLException e) {
+            throw new IllegalStateException("publish failed: " + entity.getTaskId(), e);
+        }
+    }
+
+    /**
+     * 判定 SQL 异常是否由唯一键冲突导致
+     * <p>
+     * 通过递归检查异常链，匹配标准 SQL 状态码（23 开头代表完整性约束异常）或特定异常类型。
+     *
+     * @param e 捕获到的 SQL 异常
+     * @return 如果判定为重复键冲突则返回 true
+     */
+    private boolean isDuplicateKey(SQLException e) {
+        SQLException current = e;
+        while (current != null) {
+            if (current instanceof SQLIntegrityConstraintViolationException) {
+                return true;
+            }
+            String sqlState = current.getSQLState();
+            if (sqlState != null && sqlState.startsWith("23")) {
+                return true;
+            }
+            current = current.getNextException();
+        }
+        return false;
+    }
+
+    /**
+     * 获取系统当前时间戳
+     *
+     * @return 毫秒级时间戳
+     */
+    private long now() {
+        return clock.getAsLong();
     }
 
     @FunctionalInterface

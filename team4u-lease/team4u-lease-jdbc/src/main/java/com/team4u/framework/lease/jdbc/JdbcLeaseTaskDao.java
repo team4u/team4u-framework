@@ -36,7 +36,7 @@ public class JdbcLeaseTaskDao {
      */
     public static final String COLUMNS = "task_id, queue_name, task_type, payload, business_key, state, outcome, failure_reason, "
             + "priority, delivery_count, failure_count, worker_id, lease_token, lease_expires_at, visible_at, "
-            + "created_at, updated_at, error_message, attributes_json";
+            + "created_at, updated_at, version, error_message, attributes_json";
 
     private final Db db;
     private final LeaseDbDialect dialect;
@@ -79,6 +79,7 @@ public class JdbcLeaseTaskDao {
                 .set("visible_at", entity.getVisibleAtMillis())
                 .set("created_at", entity.getCreatedAtMillis())
                 .set("updated_at", entity.getUpdatedAtMillis())
+                .set("version", entity.getVersion())
                 .set("error_message", entity.getErrorMessage())
                 .set("attributes_json", jsonCodec.toJson(entity.getAttributes())));
     }
@@ -120,14 +121,19 @@ public class JdbcLeaseTaskDao {
             return Collections.emptyList();
         }
         List<Object> params = new ArrayList<Object>();
+        // 对应 UNION ALL 的第一部分：查找所有 READY 状态且已过可见时间的任务
         for (LeaseSubscription subscription : subscriptions) {
             params.add(subscription.getQueue());
         }
         params.add(now);
+        // 对应 UNION ALL 的第二部分：查找所有 RUNNING 状态且租约已过期的任务（故障接管）
+        for (LeaseSubscription subscription : subscriptions) {
+            params.add(subscription.getQueue());
+        }
         params.add(now);
         params.add(limit);
-        String sql = "SELECT " + COLUMNS + " FROM " + TABLE_NAME + " "
-                + dialect.buildAcquireCandidateSql(subscriptions.size());
+        // 委托方言构建具体的 SQL 结构，通常利用 UNION ALL 分别命中 READY 和 RUNNING 的专用索引
+        String sql = dialect.buildAcquireCandidateSql(TABLE_NAME, COLUMNS, subscriptions.size());
         return toEntities(db.query(sql, params.toArray()));
     }
 
@@ -137,21 +143,30 @@ public class JdbcLeaseTaskDao {
      * 该 SQL 确保只有满足以下条件之一的任务才能被抢占：
      * 1. 任务处于 READY 状态且已过可见时间（visible_at）。
      * 2. 任务处于 RUNNING 状态但租约已过期（lease_expires_at），即原持有节点疑似宕机或执行超时。
+     * <p>
+     * 同时引入了 `version` 校验，确保抢占操作是基于查找到的那个版本的快照，避免并发场景下的状态漂移。
      *
-     * @param taskId         任务 ID
-     * @param workerId       抢占该租约的工作节点 ID
-     * @param leaseToken     本次授权的唯一令牌
-     * @param leaseExpiresAt 设定的租约过期时间戳
-     * @param now            当前时间戳，用于可见性与过期判定
+     * @param taskId            任务 ID
+     * @param workerId          抢占该租约的工作节点 ID
+     * @param leaseToken        本次授权的唯一令牌
+     * @param leaseExpiresAt    设定的租约过期时间戳
+     * @param now               当前时间戳，用于可见性与过期判定
+     * @param expectedVersion 期待的行版本号，用于乐观锁冲突检测
      * @return 更新行数，1 表示抢占成功，0 表示已被其他节点抢占
      * @throws SQLException SQL 异常
      */
-    public int tryAcquire(String taskId, String workerId, String leaseToken, long leaseExpiresAt, long now)
+    public int tryAcquire(String taskId,
+                          String workerId,
+                          String leaseToken,
+                          long leaseExpiresAt,
+                          long now,
+                          long expectedVersion)
             throws SQLException {
         return db.execute(
                 "UPDATE " + TABLE_NAME + " SET state = ?, worker_id = ?, lease_token = ?, lease_expires_at = ?, "
-                        + "delivery_count = delivery_count + 1, updated_at = ? "
+                        + "delivery_count = delivery_count + 1, updated_at = ?, version = version + 1 "
                         + "WHERE task_id = ? "
+                        + "AND version = ? "
                         + "AND ((state = ? AND visible_at <= ?) OR (state = ? AND lease_expires_at <= ?))",
                 LeaseTaskState.RUNNING.name(),
                 workerId,
@@ -159,6 +174,7 @@ public class JdbcLeaseTaskDao {
                 leaseExpiresAt,
                 now,
                 taskId,
+                expectedVersion,
                 LeaseTaskState.READY.name(),
                 now,
                 LeaseTaskState.RUNNING.name(),
@@ -188,6 +204,7 @@ public class JdbcLeaseTaskDao {
         entity.set("lease_token", null);
         entity.set("lease_expires_at", 0);
         entity.set("updated_at", now);
+        entity.set("version", SqlExpression.increment("version"));
 
         return db.execute(
                 "UPDATE " + TABLE_NAME + " SET " + buildUpdateAssignments(entity)
@@ -209,7 +226,7 @@ public class JdbcLeaseTaskDao {
     public int heartbeat(String taskId, String workerId, String leaseToken, long leaseExpiresAt, long now)
             throws SQLException {
         return db.execute(
-                "UPDATE " + TABLE_NAME + " SET lease_expires_at = ?, updated_at = ? "
+                "UPDATE " + TABLE_NAME + " SET lease_expires_at = ?, updated_at = ?, version = version + 1 "
                         + "WHERE task_id = ? AND state = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
                 leaseExpiresAt,
                 now,
@@ -249,6 +266,7 @@ public class JdbcLeaseTaskDao {
         entity.set("lease_token", null);
         entity.set("lease_expires_at", 0);
         entity.set("error_message", errorMessage);
+        entity.set("version", SqlExpression.increment("version"));
         if (payload != null) {
             entity.set("payload", payload);
         }
@@ -280,6 +298,7 @@ public class JdbcLeaseTaskDao {
         entity.set("lease_token", null);
         entity.set("lease_expires_at", 0);
         entity.set("updated_at", now);
+        entity.set("version", SqlExpression.increment("version"));
 
         return db.execute(
                 "UPDATE " + TABLE_NAME + " SET " + buildUpdateAssignments(entity)
@@ -302,6 +321,7 @@ public class JdbcLeaseTaskDao {
         entity.set("lease_token", null);
         entity.set("lease_expires_at", 0);
         entity.set("updated_at", now);
+        entity.set("version", SqlExpression.increment("version"));
 
         return db.execute(
                 "UPDATE " + TABLE_NAME + " SET " + buildUpdateAssignments(entity)
@@ -323,6 +343,7 @@ public class JdbcLeaseTaskDao {
         entity.set("lease_token", null);
         entity.set("lease_expires_at", 0);
         entity.set("updated_at", now);
+        entity.set("version", SqlExpression.increment("version"));
 
         List<Object> params = collectEntityParams(entity);
         params.add(taskId);
@@ -350,6 +371,7 @@ public class JdbcLeaseTaskDao {
             return 0;
         }
         entity.set("updated_at", now);
+        entity.set("version", SqlExpression.increment("version"));
         return db.execute(
                 "UPDATE " + TABLE_NAME + " SET " + buildUpdateAssignments(entity)
                         + " WHERE " + WHERE_UNLOCKED_OR_EXPIRED,
@@ -371,6 +393,7 @@ public class JdbcLeaseTaskDao {
         entity.set("lease_expires_at", 0);
         applyUpdateRequest(entity, request);
         entity.set("updated_at", now);
+        entity.set("version", SqlExpression.increment("version"));
         return db.execute(
                 "UPDATE " + TABLE_NAME + " SET " + buildUpdateAssignments(entity)
                         + " WHERE " + WHERE_UNLOCKED_OR_EXPIRED,
@@ -595,6 +618,7 @@ public class JdbcLeaseTaskDao {
                 .visibleAtMillis(Convert.toLong(row.get("visible_at"), 0L))
                 .createdAtMillis(Convert.toLong(row.get("created_at"), 0L))
                 .updatedAtMillis(Convert.toLong(row.get("updated_at"), 0L))
+                .version(Convert.toLong(row.get("version"), 0L))
                 .errorMessage(row.getStr("error_message"))
                 .attributes(jsonCodec.fromJson(row.getStr("attributes_json")))
                 .build();
