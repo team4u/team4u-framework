@@ -12,7 +12,8 @@ import java.time.Instant;
  * 分为以下几种可能的结果：
  * <ul>
  * <li>{@link Completed}: 前台执行成功完成</li>
- * <li>{@link Accepted}: 任务已经被可靠托管接受，可能进行了部分重试，但被放入后台调度</li>
+ * <li>{@link Accepted}: 新任务已经被可靠托管接受，并被移交至后台调度</li>
+ * <li>{@link Existing}: 命中了已存在的幂等任务，返回当前持久化快照</li>
  * <li>{@link Rejected}: 任务被拒绝（例如：配置错误、资源不足等）</li>
  * <li>{@link Failed}: 明确的终端失败，不再重试也不会被托管</li>
  * </ul>
@@ -33,6 +34,13 @@ public interface ManagedSubmitResult<T> {
      */
     default boolean isAccepted() {
         return this instanceof Accepted;
+    }
+
+    /**
+     * 判断是否命中了已有幂等任务
+     */
+    default boolean isExisting() {
+        return this instanceof Existing;
     }
 
     /**
@@ -61,7 +69,7 @@ public interface ManagedSubmitResult<T> {
     }
 
     /**
-     * 已受理：表示任务已被持久化存储并接受托管，可能正在等待后台重试调度。
+     * 已受理：表示新任务已被持久化并移交给后台调度。
      */
     @Data
     class Accepted<T> implements ManagedSubmitResult<T> {
@@ -75,6 +83,25 @@ public interface ManagedSubmitResult<T> {
         private final RetryStatus status;
         /**
          * 预期的下一次执行（后台重试尝试）时间点
+         */
+        private final Instant nextAttemptAt;
+    }
+
+    /**
+     * 已存在：表示本次提交命中了幂等任务，返回其当前持久化状态。
+     */
+    @Data
+    class Existing<T> implements ManagedSubmitResult<T> {
+        /**
+         * 任务在重试系统内的唯一标识 taskId
+         */
+        private final String taskId;
+        /**
+         * 任务当前生命周期所处的状态
+         */
+        private final RetryStatus status;
+        /**
+         * 若任务尚未终结，预期的下一次执行时间点
          */
         private final Instant nextAttemptAt;
     }

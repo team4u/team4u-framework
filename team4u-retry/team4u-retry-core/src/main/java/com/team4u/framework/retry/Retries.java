@@ -214,7 +214,7 @@ public final class Retries {
          * @param task 要执行的任务
          * @param <T>  任务返回值类型
          * @return 底层任务规格对象
-         * @throws IllegalStateException    当 taskType、idempotencyKey 或 policy 不合法时抛出
+         * @throws IllegalStateException    当 taskType 或 idempotencyKey 不合法时抛出
          * @throws IllegalArgumentException 当 {@code task} 为空时抛出
          */
         public <T> RetryTaskSpec<T> toSpec(Callable<T> task) {
@@ -234,7 +234,7 @@ public final class Retries {
          * @param task 要执行的任务
          * @param <T>  任务返回值类型
          * @return 托管提交结果
-         * @throws IllegalStateException    当 taskType、idempotencyKey 或 policy 不合法时抛出
+         * @throws IllegalStateException    当 taskType 或 idempotencyKey 不合法时抛出
          * @throws IllegalArgumentException 当 {@code task} 为空时抛出
          */
         public <T> ManagedSubmitResult<T> call(Callable<T> task) {
@@ -251,14 +251,6 @@ public final class Retries {
             }
             if (task == null) {
                 throw new IllegalArgumentException("Task must not be null");
-            }
-            if (policy == null) {
-                throw new IllegalStateException("MANAGED execution requires a retry policy");
-            }
-            // 将 DefaultManagedRetryClient 的核心拒绝条件前移到 DSL 层，尽早暴露错误。
-            if (policy.getForegroundMaxRetries() == null) {
-                throw new IllegalStateException(
-                        "MANAGED execution requires foregroundMaxRetries to be explicitly configured");
             }
         }
     }

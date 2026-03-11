@@ -20,8 +20,8 @@ import org.junit.Test;
 import org.springframework.aop.config.AopConfigUtils;
 import org.springframework.aop.framework.autoproxy.InfrastructureAdvisorAutoProxyCreator;
 import org.springframework.beans.factory.NoSuchBeanDefinitionException;
-import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.beans.factory.config.BeanDefinition;
+import org.springframework.beans.factory.support.RootBeanDefinition;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -338,7 +338,7 @@ public class RetrySpringTest {
         @Override
         public <T> ManagedSubmitResult<T> submit(RetryTaskSpec<T> spec) {
             submitCount.incrementAndGet();
-            return new ManagedSubmitResult.Accepted<T>("task-1", RetryStatus.WAITING_RETRY, null);
+            return new ManagedSubmitResult.Existing<T>("task-1", RetryStatus.WAITING_RETRY, null);
         }
     }
 }

@@ -44,6 +44,18 @@ public class RetryExceptionUtilTest {
         Assert.assertTrue(result instanceof ExecutionException);
     }
 
+    @Test
+    public void testUnwrapAndRestoreInterruptPreservesFlag() {
+        try {
+            Throwable result = RetryExceptionUtil.unwrapAndRestoreInterrupt(
+                    new ExecutionException(new InterruptedException("stop")));
+            Assert.assertTrue(result instanceof InterruptedException);
+            Assert.assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
     private static class CustomException extends ExecutionException {
         private Throwable cause;
 

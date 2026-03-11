@@ -15,6 +15,7 @@ import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.store.record.RetryRecord;
 import com.team4u.framework.retry.store.serialize.HutoolRetryRecordSerializer;
 import com.team4u.framework.retry.store.serialize.RetryRecordSerializer;
+import com.team4u.framework.retry.util.RetryExceptionUtil;
 import lombok.Getter;
 import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
@@ -84,7 +85,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseTaskHandler 
             context.markLifecycleHandled();
         } catch (Throwable cause) {
             // 业务执行抛出异常，进入失败退避处理逻辑
-            handleFailure(context, record, cause);
+            handleFailure(context, record, RetryExceptionUtil.unwrapAndRestoreInterrupt(cause));
         }
     }
 

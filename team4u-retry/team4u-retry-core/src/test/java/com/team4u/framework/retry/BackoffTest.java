@@ -79,11 +79,20 @@ public class BackoffTest {
     public void testCreateBackoffFallsBackToFixedForBlankType() {
         BackoffConfig config = new BackoffConfig();
         config.setType("  ");
-        config.setParams(Collections.<String, Object>singletonMap("delay", 123L));
+        config.setParams(Collections.singletonMap("delay", 123L));
 
         Backoff backoff = BackoffRegistry.global().createBackoff(config);
 
         Assert.assertEquals(123L, backoff.calculateMillis(1));
+    }
+
+    @Test
+    public void testGenericBuilderFallsBackToFixedForBlankType() {
+        Backoff backoff = Backoffs.builder("  ")
+                .param("delay", 321L)
+                .build();
+
+        Assert.assertEquals(321L, backoff.calculateMillis(1));
     }
 
     @Test
@@ -104,10 +113,10 @@ public class BackoffTest {
 
         BackoffConfig config1 = new BackoffConfig();
         config1.setType("fixed");
-        config1.setParams(Collections.<String, Object>singletonMap("delay", 100L));
+        config1.setParams(Collections.singletonMap("delay", 100L));
         BackoffConfig config2 = new BackoffConfig();
         config2.setType("fixed");
-        config2.setParams(Collections.<String, Object>singletonMap("delay", 100L));
+        config2.setParams(Collections.singletonMap("delay", 100L));
 
         Backoff backoff1 = registry.createBackoff(config1);
         Backoff backoff2 = registry.createBackoff(config2);
@@ -130,7 +139,7 @@ public class BackoffTest {
 
         BackoffConfig sameAsOriginal = new BackoffConfig();
         sameAsOriginal.setType("fixed");
-        sameAsOriginal.setParams(Collections.<String, Object>singletonMap("delay", 100L));
+        sameAsOriginal.setParams(Collections.singletonMap("delay", 100L));
 
         Backoff backoff2 = registry.createBackoff(sameAsOriginal);
 
