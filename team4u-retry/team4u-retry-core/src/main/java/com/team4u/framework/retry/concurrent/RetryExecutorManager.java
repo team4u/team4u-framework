@@ -16,29 +16,19 @@ public class RetryExecutorManager {
 
     static final String SHUTDOWN_HOOK_ENABLED_PROPERTY = "team4u.retry.executors.shutdownHook.enabled";
     private static final Log log = LogFactory.get();
-    private static final RetryExecutorManager INSTANCE = new RetryExecutorManager();
+    private static final RetryExecutorManager INSTANCE = new RetryExecutorManager(isShutdownHookEnabled());
     private static final String DAEMON_PROPERTY = "team4u.retry.executors.daemon";
     private volatile ScheduledExecutorService globalScheduler;
     private volatile ExecutorService globalCleanupExecutor;
     private volatile boolean isShutdown = false;
 
-    private RetryExecutorManager() {
-        boolean daemon = isDaemonExecutors();
+    public RetryExecutorManager() {
+        this(isShutdownHookEnabled());
+    }
 
-        this.globalScheduler = Executors.newScheduledThreadPool(
-                Math.max(2, Runtime.getRuntime().availableProcessors()),
-                new NamedThreadFactory("retry-scheduler-", daemon));
-
-        this.globalCleanupExecutor = new ThreadPoolExecutor(
-                2, Math.max(4, Runtime.getRuntime().availableProcessors()),
-                60L, TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(2000),
-                new NamedThreadFactory("retry-cleanup-", daemon),
-                (r, executor) -> {
-                    log.warn("Retry cleanup task rejected! Queue is full. Relying on background recovery.");
-                });
-
-        if (isShutdownHookEnabled()) {
+    public RetryExecutorManager(boolean registerShutdownHook) {
+        initializeExecutors();
+        if (registerShutdownHook) {
             Runtime.getRuntime().addShutdownHook(new Thread(this::shutdown, "team4u-retry-shutdown"));
         }
     }
@@ -65,18 +55,7 @@ public class RetryExecutorManager {
         if (!isShutdown) {
             return;
         }
-        boolean daemon = isDaemonExecutors();
-        this.globalScheduler = Executors.newScheduledThreadPool(
-                Math.max(2, Runtime.getRuntime().availableProcessors()),
-                new NamedThreadFactory("retry-scheduler-", daemon));
-        this.globalCleanupExecutor = new ThreadPoolExecutor(
-                2, Math.max(4, Runtime.getRuntime().availableProcessors()),
-                60L, TimeUnit.SECONDS,
-                new LinkedBlockingQueue<>(2000),
-                new NamedThreadFactory("retry-cleanup-", daemon),
-                (r, executor) -> {
-                    log.warn("Retry cleanup task rejected! Queue is full. Relying on background recovery.");
-                });
+        initializeExecutors();
         isShutdown = false;
         log.info("team4u-retry executors reset and ready.");
     }
@@ -138,6 +117,21 @@ public class RetryExecutorManager {
 
     private boolean isDaemonExecutors() {
         return Boolean.parseBoolean(System.getProperty(DAEMON_PROPERTY, "false"));
+    }
+
+    private void initializeExecutors() {
+        boolean daemon = isDaemonExecutors();
+
+        this.globalScheduler = Executors.newScheduledThreadPool(
+                Math.max(2, Runtime.getRuntime().availableProcessors()),
+                new NamedThreadFactory("retry-scheduler-", daemon));
+
+        this.globalCleanupExecutor = new ThreadPoolExecutor(
+                2, Math.max(4, Runtime.getRuntime().availableProcessors()),
+                60L, TimeUnit.SECONDS,
+                new LinkedBlockingQueue<>(2000),
+                new NamedThreadFactory("retry-cleanup-", daemon),
+                (r, executor) -> log.warn("Retry cleanup task rejected! Queue is full. Relying on background recovery."));
     }
 
     /**

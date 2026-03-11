@@ -171,7 +171,10 @@ public class DefaultInlineRetryClientTest {
             future.join();
             Assert.fail("expected CompletionException");
         } catch (CompletionException ex) {
-            Assert.assertTrue(ex.getCause() instanceof RejectedExecutionException);
+            Assert.assertTrue(ex.getCause() instanceof IllegalStateException);
+            Assert.assertEquals("boom", ex.getCause().getMessage());
+            Assert.assertEquals(1, ex.getCause().getSuppressed().length);
+            Assert.assertTrue(ex.getCause().getSuppressed()[0] instanceof RejectedExecutionException);
         }
         Assert.assertEquals(1, attempts.get());
     }

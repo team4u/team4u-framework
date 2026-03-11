@@ -14,6 +14,7 @@ import java.util.List;
 @Builder
 public class InvocationRecoveryData {
     private String targetTypeName;
+    private String targetBeanName;
     private String methodName;
     private List<InvocationArgSnapshot> args;
 }

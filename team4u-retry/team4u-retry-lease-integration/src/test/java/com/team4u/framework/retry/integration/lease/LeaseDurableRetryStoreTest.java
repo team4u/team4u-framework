@@ -112,12 +112,81 @@ public class LeaseDurableRetryStoreTest {
         LeaseDurableRetryStore store = new LeaseDurableRetryStore(api, api, api, "retry-q");
         RetryRecord record = retryRecord("task-1", RetryStatus.ACCEPTED);
         store.setSerializer(new FixedSerializer("serialized-success", record));
+        Instant succeededAt = Instant.now();
 
-        store.markSucceeded("task-1", null);
+        store.markSucceeded("task-1", SuccessRecord.builder().succeededAt(succeededAt).build());
 
         Assert.assertNotNull(api.closeRequest);
         Assert.assertEquals(LeaseTaskOutcome.SUCCEEDED, api.closeRequest.getOutcome());
         Assert.assertEquals("serialized-success", api.closeRequest.getPayload());
+        Assert.assertEquals(succeededAt, record.getState().getSucceededAt());
+    }
+
+    @Test
+    public void testMarkFailedPersistsFailureDetails() {
+        RecordingLeaseApi api = new RecordingLeaseApi();
+        api.getResult = LeaseTaskRecord.builder()
+                .taskId("task-1")
+                .queue("retry-q")
+                .taskType("payment")
+                .payload("serialized-before")
+                .state(LeaseTaskState.READY)
+                .build();
+        LeaseDurableRetryStore store = new LeaseDurableRetryStore(api, api, api, "retry-q");
+        RetryRecord record = retryRecord("task-1", RetryStatus.ACCEPTED);
+        store.setSerializer(new FixedSerializer("serialized-failed", record));
+        Instant failedAt = Instant.now();
+
+        store.markFailed("task-1", FailureRecord.builder()
+                .errorCode("IOException")
+                .errorMessage("boom")
+                .failedAt(failedAt)
+                .build());
+
+        Assert.assertEquals(LeaseTaskOutcome.FAILED, api.closeRequest.getOutcome());
+        Assert.assertEquals("IOException", record.getState().getLastErrorCode());
+        Assert.assertEquals("boom", record.getState().getLastErrorMessage());
+        Assert.assertEquals(failedAt, record.getState().getFailedAt());
+    }
+
+    @Test
+    public void testMarkCancelledPersistsCancelDetails() {
+        RecordingLeaseApi api = new RecordingLeaseApi();
+        api.getResult = LeaseTaskRecord.builder()
+                .taskId("task-1")
+                .queue("retry-q")
+                .taskType("payment")
+                .payload("serialized-before")
+                .state(LeaseTaskState.READY)
+                .build();
+        LeaseDurableRetryStore store = new LeaseDurableRetryStore(api, api, api, "retry-q");
+        RetryRecord record = retryRecord("task-1", RetryStatus.ACCEPTED);
+        store.setSerializer(new FixedSerializer("serialized-cancelled", record));
+        Instant cancelledAt = Instant.now();
+
+        store.markCancelled("task-1", CancelRecord.builder()
+                .reason("manual stop")
+                .cancelledAt(cancelledAt)
+                .build());
+
+        Assert.assertEquals(LeaseTaskOutcome.CANCELLED, api.closeRequest.getOutcome());
+        Assert.assertEquals("manual stop", record.getState().getLastErrorMessage());
+        Assert.assertEquals(cancelledAt, record.getState().getCancelledAt());
+    }
+
+    @Test(expected = NullPointerException.class)
+    public void testMarkSucceededRejectsNullSuccessRecord() {
+        RecordingLeaseApi api = new RecordingLeaseApi();
+        api.getResult = LeaseTaskRecord.builder()
+                .taskId("task-1")
+                .queue("retry-q")
+                .taskType("payment")
+                .payload("serialized-before")
+                .state(LeaseTaskState.READY)
+                .build();
+        LeaseDurableRetryStore store = new LeaseDurableRetryStore(api, api, api, "retry-q");
+
+        store.markSucceeded("task-1", null);
     }
 
     private RetryRecord retryRecord(String taskId, RetryStatus status) {

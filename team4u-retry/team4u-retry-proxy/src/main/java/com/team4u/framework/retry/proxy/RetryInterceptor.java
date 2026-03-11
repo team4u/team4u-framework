@@ -1,10 +1,10 @@
 package com.team4u.framework.retry.proxy;
 
+import cn.hutool.core.lang.Assert;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
 import com.team4u.framework.retry.client.InlineRetryClient;
 import com.team4u.framework.retry.client.ManagedRetryClient;
-import cn.hutool.core.lang.Assert;
 
 import java.lang.reflect.Method;
 
@@ -33,7 +33,7 @@ public class RetryInterceptor implements MethodInterceptor {
                 interfaceMethod,
                 resolved.getEffectiveMethod(),
                 resolved.getRecoveryTargetType(),
-                invocation.getTarget(),
+                null,
                 invocation.getArguments(),
                 resolved.getRetryable(),
                 () -> {

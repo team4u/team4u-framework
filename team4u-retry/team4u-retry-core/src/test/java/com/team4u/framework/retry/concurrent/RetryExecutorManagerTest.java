@@ -27,6 +27,17 @@ public class RetryExecutorManagerTest {
         }
     }
 
+    @Test
+    public void testInstanceManagerCanBeCreatedWithoutShutdownHook() {
+        RetryExecutorManager manager = new RetryExecutorManager(false);
+        try {
+            Assert.assertNotNull(manager.getScheduler());
+            Assert.assertNotNull(manager.getCleanupExecutor());
+        } finally {
+            manager.shutdown();
+        }
+    }
+
     private void restore(String previous) {
         if (previous == null) {
             System.clearProperty(RetryExecutorManager.SHUTDOWN_HOOK_ENABLED_PROPERTY);

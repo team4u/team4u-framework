@@ -85,6 +85,45 @@ public class InvocationReplayTest {
     }
 
     @Test
+    public void testRecoverPrefersBeanNameWhenProvided() throws Exception {
+        ReplayContract primary = new NamedReplayService("primary");
+        ReplayContract secondary = new NamedReplayService("secondary");
+        BeanManager.getInstance().registerBean("primaryReplayService", primary);
+        BeanManager.getInstance().registerBean("secondaryReplayService", secondary);
+
+        InvocationReplay replay = new InvocationReplay();
+        replay.recover(JSONUtil.toJsonStr(InvocationRecoveryData.builder()
+                        .targetTypeName(ReplayContract.class.getName())
+                        .targetBeanName("secondaryReplayService")
+                        .methodName("replay")
+                        .args(Collections.singletonList(arg(String.class, "\"order-9\"", false)))
+                        .build()),
+                RecoveryContext.builder().taskId("task-bean-name").attempt(1).build());
+
+        Assert.assertNull(((NamedReplayService) primary).lastOrderId);
+        Assert.assertEquals("order-9", ((NamedReplayService) secondary).lastOrderId);
+    }
+
+    @Test
+    public void testRecoverRejectsAmbiguousBeansWithoutBeanName() {
+        BeanManager.getInstance().registerBean("ambiguousReplayServiceA", new NamedReplayService("A"));
+        BeanManager.getInstance().registerBean("ambiguousReplayServiceB", new NamedReplayService("B"));
+
+        InvocationReplay replay = new InvocationReplay();
+        try {
+            replay.recover(JSONUtil.toJsonStr(InvocationRecoveryData.builder()
+                            .targetTypeName(ReplayContract.class.getName())
+                            .methodName("replay")
+                            .args(Collections.singletonList(arg(String.class, "\"x\"", false)))
+                            .build()),
+                    RecoveryContext.builder().taskId("task-ambiguous").attempt(1).build());
+            Assert.fail("expected IllegalStateException");
+        } catch (Exception ex) {
+            Assert.assertTrue(ex.getMessage().contains("Multiple managed beans found"));
+        }
+    }
+
+    @Test
     public void testRecoverRejectsMissingSnapshotPayload() {
         InvocationReplay replay = new InvocationReplay();
         try {
@@ -134,6 +173,10 @@ public class InvocationReplayTest {
         }
     }
 
+    public interface ReplayContract {
+        void replay(String orderId);
+    }
+
     public static class PrimitiveReplayService {
         private int count;
         private long total;
@@ -177,6 +220,18 @@ public class InvocationReplayTest {
 
     public static class MissingReplayService {
         public void replay(String value) {
+        }
+    }
+
+    public static class NamedReplayService implements ReplayContract {
+        private String lastOrderId;
+
+        public NamedReplayService(String name) {
+        }
+
+        @Override
+        public void replay(String orderId) {
+            this.lastOrderId = orderId;
         }
     }
 
