@@ -15,7 +15,6 @@ import com.team4u.framework.retry.domain.store.RetryStatus;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.recovery.RecoveryContext;
 import com.team4u.framework.retry.recovery.RecoveryExecutionContext;
-import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.store.record.RetryRecord;
 import com.team4u.framework.retry.store.serialize.RetryRecordSerializer;
 import org.junit.Assert;
@@ -164,7 +163,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
                 runtimeClient);
     }
 
-    private static class FailingHandler implements RecoveryHandler<String> {
+    private static class FailingHandler implements StringRecoveryHandler {
         @Override
         public String taskName() {
             return "recover-payment";
@@ -176,7 +175,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
         }
     }
 
-    private static class InspectingHandler implements RecoveryHandler<String> {
+    private static class InspectingHandler implements StringRecoveryHandler {
         private final AtomicBoolean observedRecovering;
 
         private InspectingHandler(AtomicBoolean observedRecovering) {
@@ -194,7 +193,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
         }
     }
 
-    private static class InterruptedHandler implements RecoveryHandler<String> {
+    private static class InterruptedHandler implements StringRecoveryHandler {
         @Override
         public String taskName() {
             return "recover-payment";

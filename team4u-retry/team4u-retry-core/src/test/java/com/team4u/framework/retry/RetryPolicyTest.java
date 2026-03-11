@@ -44,6 +44,32 @@ public class RetryPolicyTest {
     }
 
     @Test
+    public void testRetryPolicyAttemptCountingMatchesDocumentation() {
+        RuntimeException ex = new RuntimeException("test");
+
+        RetryPolicy zeroRetries = RetryPolicy.builder()
+                .maxRetries(0)
+                .foregroundMaxRetries(0)
+                .build();
+        Assert.assertFalse(zeroRetries.canRetry(1, ex));
+
+        RetryPolicy foregroundEqualsMax = RetryPolicy.builder()
+                .maxRetries(2)
+                .foregroundMaxRetries(2)
+                .build();
+        Assert.assertTrue(foregroundEqualsMax.canRetry(1, ex));
+        Assert.assertTrue(foregroundEqualsMax.canRetry(2, ex));
+        Assert.assertFalse(foregroundEqualsMax.canRetry(3, ex));
+
+        RetryPolicy infiniteRetries = RetryPolicy.builder()
+                .maxRetries(-1)
+                .foregroundMaxRetries(1)
+                .build();
+        Assert.assertTrue(infiniteRetries.canRetry(2, ex));
+        Assert.assertTrue(infiniteRetries.canRetry(200, ex));
+    }
+
+    @Test
     public void testInfiniteAttempts() {
         RetryPolicy policy = RetryPolicy.builder()
                 .maxRetries(-1)

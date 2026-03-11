@@ -134,6 +134,24 @@ public class RetryDelegateManagedTest {
     }
 
     @Test
+    public void testManagedIdempotencyKeyIgnoresRetryIgnoreArgumentValue() throws Throwable {
+        CapturingManagedRetryClient managedClient = new CapturingManagedRetryClient();
+        RetryDelegate delegate = new RetryDelegate(null, managedClient);
+        ManagedIgnoredReferenceService target = new ManagedIgnoredReferenceService();
+        Method method = ManagedIgnoredReferenceService.class.getMethod("replayPayment",
+                String.class, Input.class, Integer.class);
+        Retryable retryable = method.getAnnotation(Retryable.class);
+
+        delegate.executeWithRetry(method, target, new Object[]{"order-1", new Input("stream-1"), 3}, retryable, () -> null);
+        String firstKey = managedClient.lastSpec.getIdempotencyKey();
+
+        delegate.executeWithRetry(method, target, new Object[]{"order-1", new Input("stream-2"), 3}, retryable, () -> null);
+        String secondKey = managedClient.lastSpec.getIdempotencyKey();
+
+        Assert.assertEquals(firstKey, secondKey);
+    }
+
+    @Test
     public void testManagedNonVoidMethodRejected() throws Throwable {
         CapturingManagedRetryClient managedClient = new CapturingManagedRetryClient();
         RetryDelegate delegate = new RetryDelegate(null, managedClient);

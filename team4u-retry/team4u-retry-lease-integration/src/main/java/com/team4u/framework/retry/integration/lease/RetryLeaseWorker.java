@@ -3,13 +3,12 @@ package com.team4u.framework.retry.integration.lease;
 import com.team4u.framework.lease.api.LeaseRuntimeClient;
 import com.team4u.framework.lease.runtime.LeaseWorker;
 import com.team4u.framework.lease.runtime.LeaseWorkerPolicy;
-import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 
 /**
  * 重试恢复执行器（Retry Lease Worker）。
  * <p>
- * 该类负责启动后台轮询线程，从租约队列中抢占待重试的任务，并分发给对应的 {@link RecoveryHandler} 执行。
+ * 该类负责启动后台轮询线程，从租约队列中抢占待重试的任务，并分发给对应的 {@link StringRecoveryHandler} 执行。
  * 它本质上是对租约系统 {@link LeaseWorker} 的薄包装，并预置了重试专属的处理器适配逻辑。
  * </p>
  */
@@ -101,7 +100,7 @@ public class RetryLeaseWorker implements Runnable, AutoCloseable {
     /**
      * 向该工作者注册一个新的恢复处理器。
      */
-    public void register(RecoveryHandler<?> handler) {
+    public void register(StringRecoveryHandler handler) {
         registry.register(handler);
     }
 }

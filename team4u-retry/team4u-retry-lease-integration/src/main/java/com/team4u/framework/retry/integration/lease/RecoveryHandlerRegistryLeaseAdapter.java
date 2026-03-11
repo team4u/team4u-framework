@@ -5,7 +5,6 @@ import com.team4u.framework.lease.handler.LeaseTaskHandlerRegistry;
 import com.team4u.framework.lease.model.LeaseSubscription;
 import com.team4u.framework.lease.runtime.LeaseExecutionContext;
 import com.team4u.framework.retry.recovery.RecoveryContext;
-import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 
 import java.util.LinkedHashSet;
@@ -72,8 +71,14 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
         if (!this.queue.equals(queue)) {
             return Optional.empty();
         }
-        return delegate.get(taskType).map(handler -> new RecoveryHandlerLeaseTaskHandlerAdapter(
-                RecoveryHandlerPayloadTypes.requireStringPayload(handler, "Lease recovery handler registry")));
+        return delegate.get(taskType).map(handler -> {
+            if (!(handler instanceof StringRecoveryHandler)) {
+                throw new IllegalArgumentException(
+                        "Lease recovery handler registry requires StringRecoveryHandler. taskType="
+                                + taskType + ", handler=" + handler.getClass().getName());
+            }
+            return new RecoveryHandlerLeaseTaskHandlerAdapter((StringRecoveryHandler) handler);
+        });
     }
 
     /**
@@ -89,7 +94,7 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
     /**
      * 内部包装类：将普通的 LeaseTaskHandler 适配为 RecoveryHandler，用于反向集成。
      */
-    private static class LeaseTaskHandlerRecoveryHandlerAdapter implements RecoveryHandler<String> {
+    private static class LeaseTaskHandlerRecoveryHandlerAdapter implements StringRecoveryHandler {
         private final String taskType;
         private final LeaseTaskHandler delegate;
 

@@ -249,6 +249,13 @@ public final class Retries {
             if (isBlank(idempotencyKey)) {
                 throw new IllegalStateException("Managed idempotencyKey must not be blank");
             }
+            if (policy == null) {
+                throw new IllegalStateException("Managed RetryPolicy must be configured before calling task");
+            }
+            if (policy.getForegroundMaxRetries() == null) {
+                throw new IllegalStateException(
+                        "Managed RetryPolicy must configure foregroundMaxRetries before calling task");
+            }
             if (task == null) {
                 throw new IllegalArgumentException("Task must not be null");
             }

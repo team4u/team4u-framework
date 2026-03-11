@@ -2,6 +2,7 @@ package com.team4u.framework.retry;
 
 import com.team4u.framework.retry.backoff.Backoffs;
 import com.team4u.framework.retry.client.DefaultManagedRetryClient;
+import com.team4u.framework.retry.client.DurableSuccessWriteException;
 import com.team4u.framework.retry.domain.ManagedSubmitResult;
 import com.team4u.framework.retry.domain.RecoverySpec;
 import com.team4u.framework.retry.domain.RetryTaskSpec;
@@ -188,7 +189,7 @@ public class DefaultManagedRetryClientTest {
     }
 
     @Test
-    public void testForegroundSuccessThrowsWhenDurableSuccessWriteFails() {
+    public void testForegroundSuccessThrowsDurableSuccessWriteExceptionWhenSuccessMarkFails() {
         RecordingStore store = new RecordingStore();
         store.markSucceededException = new IllegalStateException("close failed");
         RecordingDispatcher dispatcher = new RecordingDispatcher();
@@ -200,13 +201,46 @@ public class DefaultManagedRetryClientTest {
                     successTask("done"),
                     RecoverySpec.of("recover-payment", "payload"),
                     retryPolicy(3, 1)));
-            Assert.fail("expected IllegalStateException");
-        } catch (IllegalStateException ex) {
-            Assert.assertEquals("close failed", ex.getMessage());
+            Assert.fail("expected DurableSuccessWriteException");
+        } catch (DurableSuccessWriteException ex) {
+            Assert.assertEquals("task-1", ex.getTaskId());
+            Assert.assertTrue(ex.getMessage().contains("Business execution succeeded"));
+            Assert.assertTrue(ex.getCause() instanceof IllegalStateException);
+            Assert.assertEquals("close failed", ex.getCause().getMessage());
         }
 
         Assert.assertEquals(list("createIfAbsent", "markSucceeded"), store.operations);
         Assert.assertNull(dispatcher.command);
+    }
+
+    @Test
+    public void testManagedInfiniteRetryWithFiniteForegroundBudget() {
+        RecordingStore store = new RecordingStore();
+        RecordingDispatcher dispatcher = new RecordingDispatcher();
+        dispatcher.result = DispatchResult.builder()
+                .taskId("task-1")
+                .backendTaskId("backend-1")
+                .nextRunAt(Instant.now().plusSeconds(1))
+                .build();
+        DefaultManagedRetryClient client = newClient(store, dispatcher);
+        AtomicInteger attempts = new AtomicInteger();
+
+        ManagedSubmitResult<String> result = client.submit(spec(
+                "order-infinite-foreground-1",
+                () -> {
+                    attempts.incrementAndGet();
+                    throw new IOException("boom");
+                },
+                RecoverySpec.of("recover-payment", "payload"),
+                RetryPolicy.builder()
+                        .maxRetries(-1)
+                        .foregroundMaxRetries(1)
+                        .backoff(Backoffs.fixed(0L))
+                        .retryOn(IOException.class)
+                        .build()));
+
+        Assert.assertTrue(result instanceof ManagedSubmitResult.Accepted);
+        Assert.assertEquals(2, attempts.get());
     }
 
     @Test

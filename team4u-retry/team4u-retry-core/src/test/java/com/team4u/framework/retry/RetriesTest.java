@@ -63,36 +63,41 @@ public class RetriesTest {
     }
 
     @Test
-    public void testManagedDslAllowsPolicyWithoutForegroundAttemptsAndDefersValidation() {
+    public void testManagedDslRejectsPolicyWithoutForegroundMaxRetries() {
         RecordingManagedRetryClient client = new RecordingManagedRetryClient();
-        ManagedSubmitResult<String> result = Retries.managed(client)
-                .task("pay-notify")
-                .idempotentBy("order-1003")
-                .policy(RetryPolicy.builder()
-                        .maxRetries(2)
-                        .backoff(Backoffs.fixed(0L))
-                        .build())
-                .call(() -> "ignored");
+        try {
+            Retries.managed(client)
+                    .task("pay-notify")
+                    .idempotentBy("order-1003")
+                    .policy(RetryPolicy.builder()
+                            .maxRetries(2)
+                            .backoff(Backoffs.fixed(0L))
+                            .build())
+                    .call(() -> "ignored");
+            Assert.fail("expected IllegalStateException");
+        } catch (IllegalStateException ex) {
+            Assert.assertTrue(ex.getMessage().contains("foregroundMaxRetries"));
+        }
 
-        Assert.assertSame(client.result, result);
-        Assert.assertNotNull(client.lastSpec);
-        Assert.assertEquals(2, client.lastSpec.getPolicy().getMaxRetries());
-        Assert.assertNull(client.lastSpec.getPolicy().getForegroundMaxRetries());
+        Assert.assertNull(client.lastSpec);
     }
 
     @Test
-    public void testManagedDslAllowsOmittedPolicyAndLeavesSpecPolicyNull() {
+    public void testManagedDslRejectsMissingPolicy() {
         RecordingManagedRetryClient client = new RecordingManagedRetryClient();
 
-        ManagedSubmitResult<String> actual = Retries.managed(client)
-                .task("pay-notify")
-                .idempotentBy("order-1004")
-                .payload("payload")
-                .call(() -> "done");
+        try {
+            Retries.managed(client)
+                    .task("pay-notify")
+                    .idempotentBy("order-1004")
+                    .payload("payload")
+                    .call(() -> "done");
+            Assert.fail("expected IllegalStateException");
+        } catch (IllegalStateException ex) {
+            Assert.assertTrue(ex.getMessage().contains("RetryPolicy"));
+        }
 
-        Assert.assertSame(client.result, actual);
-        Assert.assertNotNull(client.lastSpec);
-        Assert.assertNull(client.lastSpec.getPolicy());
+        Assert.assertNull(client.lastSpec);
     }
 
     @Test
