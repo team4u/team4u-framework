@@ -286,11 +286,7 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
         if (ex instanceof Error) {
             return ex;
         }
-        Throwable cause = RetryExceptionUtil.unwrap(ex);
-        if (cause instanceof InterruptedException) {
-            Thread.currentThread().interrupt();
-        }
-        return cause;
+        return RetryExceptionUtil.unwrapAndRestoreInterrupt(ex);
     }
 
     /**

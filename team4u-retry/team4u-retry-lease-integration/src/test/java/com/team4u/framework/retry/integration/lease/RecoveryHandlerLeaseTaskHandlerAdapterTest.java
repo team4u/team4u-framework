@@ -21,6 +21,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.time.Instant;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
@@ -105,6 +106,26 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
         }
     }
 
+    @Test
+    public void testInterruptedFailureClosesAndPreservesInterruptFlag() {
+        RetryRecord record = retryRecord();
+        TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
+        RecoveryHandlerLeaseTaskHandlerAdapter adapter =
+                new RecoveryHandlerLeaseTaskHandlerAdapter(new InterruptedHandler());
+        adapter.setSerializer(new FixedSerializer(record));
+
+        try {
+            adapter.handle(executionContext(runtimeClient));
+            Assert.assertNull(runtimeClient.releaseRequest);
+            Assert.assertNotNull(runtimeClient.closeRequest);
+            Assert.assertEquals("stop", runtimeClient.closeRequest.getErrorMessage());
+            Assert.assertEquals(RetryStatus.FAILED, record.getState().getStatus());
+            Assert.assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
     private RetryRecord retryRecord() {
         return RetryRecord.builder()
                 .taskId("task-1")
@@ -167,6 +188,18 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
         @Override
         public void recover(String payload, RecoveryContext context) {
             observedRecovering.set(RecoveryExecutionContext.isRecovering());
+        }
+    }
+
+    private static class InterruptedHandler implements RecoveryHandler<String> {
+        @Override
+        public String taskName() {
+            return "recover-payment";
+        }
+
+        @Override
+        public void recover(String payload, RecoveryContext context) throws Exception {
+            throw new ExecutionException(new InterruptedException("stop"));
         }
     }
 

@@ -35,6 +35,10 @@ public class BackoffRegistry extends KeyedPolicyRegistry<String, BackoffFactory>
         return INSTANCE;
     }
 
+    static String normalizeType(String type) {
+        return type == null || type.trim().isEmpty() ? "fixed" : type.trim();
+    }
+
     public Backoff createBackoff(BackoffConfig config) {
         return provider.get(BackoffCacheKey.of(config));
     }
@@ -46,9 +50,7 @@ public class BackoffRegistry extends KeyedPolicyRegistry<String, BackoffFactory>
         private final Map<String, Object> params;
 
         static BackoffCacheKey of(BackoffConfig config) {
-            String type = config == null || config.getType() == null || config.getType().trim().isEmpty()
-                    ? "fixed"
-                    : config.getType().trim();
+            String type = normalizeType(config == null ? null : config.getType());
             Map<String, Object> params = immutableParams(config == null ? null : config.getParams());
             return new BackoffCacheKey(type, params);
         }

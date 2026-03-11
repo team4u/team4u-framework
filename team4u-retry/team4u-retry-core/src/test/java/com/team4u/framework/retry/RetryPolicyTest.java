@@ -6,6 +6,7 @@ import org.junit.Test;
 
 import java.io.IOException;
 import java.util.concurrent.CompletionException;
+import java.util.concurrent.ExecutionException;
 
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
@@ -125,6 +126,21 @@ public class RetryPolicyTest {
     }
 
     @Test
+    public void testAbortOnWinsOverRetryOnAndCondition() {
+        RetryPolicy policy = RetryPolicy.builder()
+                .maxRetries(3)
+                .retryOn(IOException.class)
+                .abortOn(java.io.FileNotFoundException.class)
+                .condition("retryCount <= 1")
+                .build();
+
+        Assert.assertFalse(policy.canRetry(1, new java.io.FileNotFoundException("missing")));
+        Assert.assertTrue(policy.canRetry(1, new IOException("io error")));
+        Assert.assertTrue(policy.canRetry(2, new IOException("io error")));
+        Assert.assertFalse(policy.canRetry(1, new RuntimeException("wrong type")));
+    }
+
+    @Test
     public void testExtractCompletionExceptionCause() {
         RetryPolicy policy = RetryPolicy.builder()
                 .abortOn(IllegalArgumentException.class)
@@ -134,6 +150,21 @@ public class RetryPolicyTest {
         CompletionException wrappedEx = new CompletionException(realCause);
 
         Assert.assertFalse(policy.canRetry(1, wrappedEx));
+    }
+
+    @Test
+    public void testInterruptedExceptionIsNeverRetried() {
+        RetryPolicy policy = RetryPolicy.builder()
+                .maxRetries(3)
+                .retryOn(Exception.class)
+                .build();
+
+        try {
+            Assert.assertFalse(policy.canRetry(1, new ExecutionException(new InterruptedException("stop"))));
+            Assert.assertTrue(Thread.currentThread().isInterrupted());
+        } finally {
+            Thread.interrupted();
+        }
     }
 
     @Test

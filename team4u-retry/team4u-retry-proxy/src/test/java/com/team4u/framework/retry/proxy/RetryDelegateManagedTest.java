@@ -207,6 +207,25 @@ public class RetryDelegateManagedTest {
         Assert.assertEquals(0, managedClient.submitCount);
     }
 
+    @Test
+    public void testManagedExistingResultReturnsNullForVoidMethods() throws Throwable {
+        CapturingManagedRetryClient managedClient = new CapturingManagedRetryClient();
+        managedClient.result = new ManagedSubmitResult.Existing<Object>("task-1", RetryStatus.SUCCEEDED, null);
+        RetryDelegate delegate = new RetryDelegate(null, managedClient);
+        ManagedVoidService target = new ManagedVoidService();
+        Method method = ManagedVoidService.class.getMethod("replayPayment", String.class, Integer.class);
+
+        Object result = delegate.executeWithRetry(
+                method,
+                target,
+                new Object[]{"order-1", 3},
+                method.getAnnotation(Retryable.class),
+                () -> null);
+
+        Assert.assertNull(result);
+        Assert.assertEquals(1, managedClient.submitCount);
+    }
+
     public static class ManagedVoidService {
         @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED)
         public void replayPayment(String orderId, Integer attempts) {
@@ -273,12 +292,15 @@ public class RetryDelegateManagedTest {
     private static class CapturingManagedRetryClient implements ManagedRetryClient {
         private RetryTaskSpec<?> lastSpec;
         private int submitCount;
+        private ManagedSubmitResult<?> result = new ManagedSubmitResult.Accepted<Object>("task-1",
+                RetryStatus.WAITING_RETRY, null);
 
         @Override
+        @SuppressWarnings("unchecked")
         public <T> ManagedSubmitResult<T> submit(RetryTaskSpec<T> spec) {
             submitCount++;
             lastSpec = spec;
-            return new ManagedSubmitResult.Accepted<T>("task-1", RetryStatus.WAITING_RETRY, null);
+            return (ManagedSubmitResult<T>) result;
         }
     }
 }

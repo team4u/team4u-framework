@@ -133,11 +133,14 @@
 
 失败后最多重试多少次，不包含首次执行。
 
+默认值是 `0`，也就是如果你没有显式配置 `maxRetries`，框架不会发生任何重试。
+
 例如 `maxRetries = 2`，表示最多执行 3 次。
 `-1` 表示无限重试。
 
 总执行次数恒等于 `1 + maxRetries`。
 内部判定时，`RetryPolicy.canRetry(executedAttempts, ex)` 里的 `executedAttempts` 表示“已经执行且失败的总尝试次数”，包含首次执行。
+例如 `maxRetries = 2` 时，`canRetry(1, ex)` 与 `canRetry(2, ex)` 返回 `true`，`canRetry(3, ex)` 返回 `false`。
 
 ### `foregroundMaxRetries`
 
@@ -159,7 +162,8 @@
 * 指数退避 `exponential`
 * 带抖动的指数退避 `exponentialJitter`
 
-默认退避策略是固定 1000ms。
+当你显式开启重试但没有配置 backoff 时，默认退避策略是固定 1000ms。
+如果 `maxRetries` 没配而保持默认值 `0`，则不会进入重试，自然也不会用到 backoff。
 
 补充说明：
 
@@ -289,13 +293,15 @@ MANAGED 模式的核心在于：“任务高可靠持久化” + “执行权可
 2.  前台尝试：在当前线程中，按 `foregroundMaxRetries` 指定的“前台重试次数”执行；连同首次执行在内，前台总执行次数等于 `foregroundMaxRetries + 1`。
 3.  后台接管：如果前台次数耗尽但仍允许重试，框架会把最新 `RetryRecord` 快照写回 lease payload，并通过 `updateAndReschedule(...)` 把任务移交给后台 Worker。
 4.  结果产出：
-    *   Completed: 前台尝试中已经成功了。
+    *   Completed: 前台尝试中已经成功，且 durable `SUCCEEDED` 状态已写入成功。
     *   Accepted: 前台次数用完还没成功，任务已安全进入后台，正等待 Worker 接管继续重试。
+    *   Existing: 命中了已存在的幂等任务，返回当前持久化状态快照；它可能已经是 `SUCCEEDED / FAILED / CANCELLED`。
     *   Failed: 命中不可重试异常或已达 `maxRetries` 上限。
     *   Rejected: 参数校验不通过（如缺少持久化必需的 ID 等）。
 
 > [!IMPORTANT]
 > `Accepted` 只代表“接管成功”，不代表“业务已成功”。
+> `Completed` 只在成功结果已经 durable 落库后才会返回；如果前台业务成功但 `markSucceeded(...)` 持久化失败，`submit()` 会直接抛异常。
 
 ---
 
@@ -331,7 +337,7 @@ ManagedSubmitResult<String> result = Retries.managed(client)
         .task("pay-notify")
         .idempotentBy("order:1001")
         .payload("{\"orderId\":\"1001\"}")
-        .policy(policy)
+        .policy(policy) // 如果 client 配置了 defaultPolicy，这里也可以省略
         .call(this::notifyPayment);
 ```
 
@@ -370,7 +376,7 @@ public class PayNotifyHandler implements RecoveryHandler<String> {
 
 为了保证任务能被可靠地持久化和后台恢复，MANAGED 模式有以下强制要求：
 
-1.  必须显式配置 `foregroundMaxRetries`：不能小于 0，且必须小于等于 `maxRetries`。
+1.  必须存在有效的 `foregroundMaxRetries`：不能小于 0，且必须小于等于 `maxRetries`。它可以来自本次显式 `.policy(...)`，也可以来自 `ManagedRetryClient` 的 `defaultPolicy`。
 2.  必须提供幂等键：即 `idempotentBy("...")`，用于去重和状态追踪。
 3.  必须提供任务类型：即 `task("...")`，后台 Worker 依赖它找到对应的 `RecoveryHandler`。
 4.  建议使用 `Retries` 门面：
@@ -770,8 +776,9 @@ INLINE 的所有尝试都发生在当前进程里，不做持久化，不会跨�
 
 ### `Accepted` 和 `Completed` 的区别是什么？
 
-* `Completed`：前台已经执行成功
+* `Completed`：前台已经执行成功，而且 `SUCCEEDED` 状态已经 durable 写入完成
 * `Accepted`：任务已经被后台接收，但还没最终完成
+* `Existing`：这次提交没有新建任务，而是命中了已有幂等记录，返回其当前状态
 
 ### MANAGED 最小接入集是什么？
 

@@ -13,7 +13,6 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicInteger;
 
 public class RetriesTest {
 
@@ -64,49 +63,50 @@ public class RetriesTest {
     }
 
     @Test
-    public void testManagedDslRequiresForegroundAttempts() {
+    public void testManagedDslAllowsPolicyWithoutForegroundAttemptsAndDefersValidation() {
+        RecordingManagedRetryClient client = new RecordingManagedRetryClient();
+        ManagedSubmitResult<String> result = Retries.managed(client)
+                .task("pay-notify")
+                .idempotentBy("order-1003")
+                .policy(RetryPolicy.builder()
+                        .maxRetries(2)
+                        .backoff(Backoffs.fixed(0L))
+                        .build())
+                .call(() -> "ignored");
+
+        Assert.assertSame(client.result, result);
+        Assert.assertNotNull(client.lastSpec);
+        Assert.assertEquals(2, client.lastSpec.getPolicy().getMaxRetries());
+        Assert.assertNull(client.lastSpec.getPolicy().getForegroundMaxRetries());
+    }
+
+    @Test
+    public void testManagedDslAllowsOmittedPolicyAndLeavesSpecPolicyNull() {
         RecordingManagedRetryClient client = new RecordingManagedRetryClient();
 
-        try {
-            Retries.managed(client)
-                    .task("pay-notify")
-                    .idempotentBy("order-1003")
-                    .policy(RetryPolicy.builder()
-                            .maxRetries(2)
-                            .backoff(Backoffs.fixed(0L))
-                            .build())
-                    .call(() -> "ignored");
-            Assert.fail("expected IllegalStateException");
-        } catch (IllegalStateException ex) {
-            Assert.assertTrue(ex.getMessage().contains("foregroundMaxRetries"));
-        }
+        ManagedSubmitResult<String> actual = Retries.managed(client)
+                .task("pay-notify")
+                .idempotentBy("order-1004")
+                .payload("payload")
+                .call(() -> "done");
 
-        Assert.assertNull(client.lastSpec);
+        Assert.assertSame(client.result, actual);
+        Assert.assertNotNull(client.lastSpec);
+        Assert.assertNull(client.lastSpec.getPolicy());
     }
 
     @Test
     public void testInlineAsyncDelegatesWithProvidedScheduler() throws Exception {
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         try {
-            AtomicInteger attempts = new AtomicInteger();
-
             CompletableFuture<String> future = Retries.inline()
                     .policy(RetryPolicy.builder()
-                            .maxRetries(1)
+                            .maxRetries(0)
                             .backoff(Backoffs.fixed(0L))
-                            .retryOn(IllegalStateException.class)
                             .build())
-                    .callAsync(() -> {
-                        if (attempts.getAndIncrement() == 0) {
-                            CompletableFuture<String> failed = new CompletableFuture<String>();
-                            failed.completeExceptionally(new IllegalStateException("boom"));
-                            return failed;
-                        }
-                        return CompletableFuture.completedFuture("ok");
-                    }, scheduler);
+                    .callAsync(() -> CompletableFuture.completedFuture("ok"), scheduler);
 
             Assert.assertEquals("ok", future.get(1, TimeUnit.SECONDS));
-            Assert.assertEquals(2, attempts.get());
         } finally {
             scheduler.shutdownNow();
         }

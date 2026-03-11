@@ -22,6 +22,7 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 import java.util.concurrent.Callable;
+import java.util.concurrent.ExecutionException;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -80,24 +81,13 @@ public class DefaultManagedRetryClientTest {
      * 验证重复提交相同幂等键的任务时，能否直接返回已有的任务状态而非重新执行。
      */
     @Test
-    public void testDuplicateSubmitReturnsAcceptedExistingState() {
-        RecordingStore store = new RecordingStore();
-        store.created = false;
-        store.existingRecord = retryRecord("task-existing", RetryStatus.PROCESSING, null, 1);
-        RecordingDispatcher dispatcher = new RecordingDispatcher();
-        DefaultManagedRetryClient client = newClient(store, dispatcher);
-
-        ManagedSubmitResult<String> result = client.submit(spec(
-                "order-dup",
-                successTask("ignored"),
-                RecoverySpec.of("recover-payment", "payload"),
-                retryPolicy(3, 1)));
-
-        Assert.assertTrue(result instanceof ManagedSubmitResult.Accepted);
-        ManagedSubmitResult.Accepted<String> accepted = (ManagedSubmitResult.Accepted<String>) result;
-        Assert.assertEquals("task-existing", accepted.getTaskId());
-        Assert.assertEquals(RetryStatus.PROCESSING, accepted.getStatus());
-        Assert.assertNull(dispatcher.command);
+    public void testDuplicateSubmitReturnsExistingSnapshotForAnyExistingState() {
+        assertExistingDuplicateStatus(RetryStatus.ACCEPTED);
+        assertExistingDuplicateStatus(RetryStatus.WAITING_RETRY);
+        assertExistingDuplicateStatus(RetryStatus.PROCESSING);
+        assertExistingDuplicateStatus(RetryStatus.SUCCEEDED);
+        assertExistingDuplicateStatus(RetryStatus.FAILED);
+        assertExistingDuplicateStatus(RetryStatus.CANCELLED);
     }
 
     /**
@@ -168,6 +158,75 @@ public class DefaultManagedRetryClientTest {
         } finally {
             Thread.interrupted();
         }
+    }
+
+    @Test
+    public void testInterruptedCallableMarksFailedAndPreservesInterruptFlag() {
+        RecordingStore store = new RecordingStore();
+        RecordingDispatcher dispatcher = new RecordingDispatcher();
+        DefaultManagedRetryClient client = newClient(store, dispatcher);
+
+        try {
+            ManagedSubmitResult<String> result = client.submit(spec(
+                    "order-4",
+                    () -> {
+                        throw new ExecutionException(new InterruptedException("stop"));
+                    },
+                    RecoverySpec.of("recover-payment", "payload"),
+                    retryPolicy(2, 1)));
+
+            Assert.assertTrue(result instanceof ManagedSubmitResult.Failed);
+            Throwable error = ((ManagedSubmitResult.Failed<String>) result).getError();
+            Assert.assertTrue(error instanceof InterruptedException);
+            Assert.assertTrue(Thread.currentThread().isInterrupted());
+            Assert.assertEquals(list("createIfAbsent", "markFailed"), store.operations);
+            Assert.assertEquals("InterruptedException", store.failedRecord.getErrorCode());
+            Assert.assertNull(dispatcher.command);
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    public void testForegroundSuccessThrowsWhenDurableSuccessWriteFails() {
+        RecordingStore store = new RecordingStore();
+        store.markSucceededException = new IllegalStateException("close failed");
+        RecordingDispatcher dispatcher = new RecordingDispatcher();
+        DefaultManagedRetryClient client = newClient(store, dispatcher);
+
+        try {
+            client.submit(spec(
+                    "order-success-fail",
+                    successTask("done"),
+                    RecoverySpec.of("recover-payment", "payload"),
+                    retryPolicy(3, 1)));
+            Assert.fail("expected IllegalStateException");
+        } catch (IllegalStateException ex) {
+            Assert.assertEquals("close failed", ex.getMessage());
+        }
+
+        Assert.assertEquals(list("createIfAbsent", "markSucceeded"), store.operations);
+        Assert.assertNull(dispatcher.command);
+    }
+
+    @Test
+    public void testSubmitUsesDefaultPolicyWhenSpecPolicyMissing() {
+        RecordingStore store = new RecordingStore();
+        RecordingDispatcher dispatcher = new RecordingDispatcher();
+        DefaultManagedRetryClient client = DefaultManagedRetryClient.builder()
+                .store(store)
+                .dispatcher(dispatcher)
+                .defaultPolicy(retryPolicy(2, 1))
+                .build();
+
+        ManagedSubmitResult<String> result = client.submit(RetryTaskSpec.<String>builder()
+                .idempotencyKey("order-default")
+                .executor(successTask("done"))
+                .recovery(RecoverySpec.of("recover-payment", "payload"))
+                .build());
+
+        Assert.assertTrue(result instanceof ManagedSubmitResult.Completed);
+        Assert.assertEquals(list("createIfAbsent", "markSucceeded"), store.operations);
     }
 
     @Test
@@ -272,11 +331,32 @@ public class DefaultManagedRetryClientTest {
                 .build();
     }
 
+    private void assertExistingDuplicateStatus(RetryStatus status) {
+        RecordingStore store = new RecordingStore();
+        store.created = false;
+        store.existingRecord = retryRecord("task-" + status.name(), status, Instant.now().plusSeconds(5), 1);
+        RecordingDispatcher dispatcher = new RecordingDispatcher();
+        DefaultManagedRetryClient client = newClient(store, dispatcher);
+
+        ManagedSubmitResult<String> result = client.submit(spec(
+                "order-dup-" + status.name(),
+                successTask("ignored"),
+                RecoverySpec.of("recover-payment", "payload"),
+                retryPolicy(3, 1)));
+
+        Assert.assertTrue(result instanceof ManagedSubmitResult.Existing);
+        ManagedSubmitResult.Existing<String> existing = (ManagedSubmitResult.Existing<String>) result;
+        Assert.assertEquals("task-" + status.name(), existing.getTaskId());
+        Assert.assertEquals(status, existing.getStatus());
+        Assert.assertNull(dispatcher.command);
+    }
+
     private static class RecordingStore implements RetryStore {
         private final List<String> operations = new ArrayList<String>();
         private boolean created = true;
         private RetryRecord existingRecord;
         private FailureRecord failedRecord;
+        private RuntimeException markSucceededException;
 
         @Override
         public SubmitRecord createIfAbsent(RetryCreateRequest request) {
@@ -306,6 +386,9 @@ public class DefaultManagedRetryClientTest {
         @Override
         public void markSucceeded(String taskId, SuccessRecord success) {
             operations.add("markSucceeded");
+            if (markSucceededException != null) {
+                throw markSucceededException;
+            }
         }
 
         @Override

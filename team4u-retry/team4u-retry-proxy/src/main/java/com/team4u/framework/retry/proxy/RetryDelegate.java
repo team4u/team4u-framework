@@ -172,6 +172,9 @@ public class RetryDelegate {
         } else if (result instanceof ManagedSubmitResult.Accepted) {
             // 任务已被接受进入异步执行队列，代理层返回 null
             return null;
+        } else if (result instanceof ManagedSubmitResult.Existing) {
+            // MANAGED 代理当前只支持 void 返回值，命中幂等记录时也无需向调用方暴露值。
+            return null;
         } else if (result instanceof ManagedSubmitResult.Rejected) {
             throw new IllegalStateException("Task rejected: " + ((ManagedSubmitResult.Rejected<?>) result).getReason());
         } else {

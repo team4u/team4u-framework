@@ -84,9 +84,9 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
         }
 
         RetryRecord record = submitRecord.getRecord();
-        // 如果记录已存在（非本次创建），则直接返回当前的接受状态
+        // 如果记录已存在（非本次创建），则返回当前持久化快照，避免把终态误报为 Accepted
         if (!submitRecord.isCreated()) {
-            return new ManagedSubmitResult.Accepted<T>(
+            return new ManagedSubmitResult.Existing<T>(
                     record.getTaskId(),
                     record.getState().getStatus(),
                     record.getState().getNextRunAt());
@@ -180,15 +180,10 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
 
         while (true) {
             executedAttempts++;
+            T result;
             try {
                 // 执行业务逻辑
-                T result = spec.getExecutor().call();
-                // 执行成功，更新存储状态
-                store.markSucceeded(record.getTaskId(), SuccessRecord.builder().succeededAt(Instant.now()).build());
-                record.getState().setStatus(RetryStatus.SUCCEEDED);
-                record.getState().setNextRunAt(null);
-                record.getState().setAttempts(executedAttempts);
-                return new ManagedSubmitResult.Completed<T>(result);
+                result = spec.getExecutor().call();
             } catch (Throwable ex) {
                 Throwable cause = normalize(ex);
                 if (cause instanceof Error) {
@@ -214,6 +209,12 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
                 // 达到前台上限，移交给后台处理
                 return dispatchToBackground(record, executedAttempts, failure, policy);
             }
+            // Completed 只在 durable SUCCEEDED 写入成功后才成立。
+            store.markSucceeded(record.getTaskId(), SuccessRecord.builder().succeededAt(Instant.now()).build());
+            record.getState().setStatus(RetryStatus.SUCCEEDED);
+            record.getState().setNextRunAt(null);
+            record.getState().setAttempts(executedAttempts);
+            return new ManagedSubmitResult.Completed<T>(result);
         }
     }
 
@@ -309,7 +310,7 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
      * 标准化异常对象，尝试剥离包装层。
      */
     private Throwable normalize(Throwable throwable) {
-        return RetryExceptionUtil.unwrap(throwable);
+        return RetryExceptionUtil.unwrapAndRestoreInterrupt(throwable);
     }
 
     /**

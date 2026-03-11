@@ -55,6 +55,17 @@ public class RetryExceptionUtil {
     }
 
     /**
+     * 剥离包装异常，并在命中中断异常时恢复线程中断标记。
+     */
+    public static Throwable unwrapAndRestoreInterrupt(Throwable ex) {
+        Throwable cause = unwrap(ex);
+        if (cause instanceof InterruptedException) {
+            Thread.currentThread().interrupt();
+        }
+        return cause;
+    }
+
+    /**
      * 判断指定异常是否为已知的包装类型
      */
     private static boolean isWrapper(Throwable cause) {

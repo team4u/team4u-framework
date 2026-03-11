@@ -105,13 +105,14 @@ public class RetryPolicy {
      * @return true 表示允许继续重试
      */
     public boolean canRetry(int executedAttempts, Throwable ex) {
-        // maxRetries 表示“首次执行之后最多还能失败多少次并继续重试”。
-        int consumedRetries = Math.max(0, executedAttempts - 1);
-        if (maxRetries != -1 && consumedRetries >= maxRetries) {
+        if (maxRetries != -1 && executedAttempts > maxRetries) {
             return false;
         }
 
         Throwable cause = extractCause(ex);
+        if (cause instanceof InterruptedException) {
+            return false;
+        }
 
         // 如果异常命中终止列表，立即停止
         if (!abortOnExceptions.isEmpty() && matches(cause, abortOnExceptions)) {
@@ -148,7 +149,7 @@ public class RetryPolicy {
     }
 
     private Throwable extractCause(Throwable ex) {
-        return RetryExceptionUtil.unwrap(ex);
+        return RetryExceptionUtil.unwrapAndRestoreInterrupt(ex);
     }
 
     /**

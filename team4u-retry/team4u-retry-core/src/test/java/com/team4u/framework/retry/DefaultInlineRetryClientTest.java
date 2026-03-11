@@ -124,6 +124,59 @@ public class DefaultInlineRetryClientTest {
     }
 
     @Test
+    public void testExecuteStopsOnWrappedInterruptedException() {
+        try {
+            DefaultInlineRetryClient.getInstance().execute(
+                    RetryPolicy.builder()
+                            .maxRetries(2)
+                            .backoff(Backoffs.fixed(0L))
+                            .retryOn(Exception.class)
+                            .build(),
+                    () -> {
+                        throw new ExecutionException(new InterruptedException("stop"));
+                    });
+            Assert.fail("expected InterruptedException");
+        } catch (InterruptedException ex) {
+            Assert.assertEquals("stop", ex.getMessage());
+            Assert.assertTrue(Thread.currentThread().isInterrupted());
+        } catch (Exception ex) {
+            Assert.fail("expected InterruptedException, but got " + ex.getClass().getName());
+        } finally {
+            Thread.interrupted();
+        }
+    }
+
+    @Test
+    public void testExecuteAsyncPropagatesSchedulerRejectionWithoutRetrying() {
+        ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+        scheduler.shutdownNow();
+        AtomicInteger attempts = new AtomicInteger();
+        RetryPolicy policy = RetryPolicy.builder()
+                .maxRetries(2)
+                .backoff(Backoffs.fixed(10L))
+                .retryOn(IllegalStateException.class)
+                .build();
+
+        CompletableFuture<String> future = DefaultInlineRetryClient.getInstance().executeAsync(
+                policy,
+                () -> {
+                    attempts.incrementAndGet();
+                    CompletableFuture<String> failed = new CompletableFuture<String>();
+                    failed.completeExceptionally(new IllegalStateException("boom"));
+                    return failed;
+                },
+                scheduler);
+
+        try {
+            future.join();
+            Assert.fail("expected CompletionException");
+        } catch (CompletionException ex) {
+            Assert.assertTrue(ex.getCause() instanceof RejectedExecutionException);
+        }
+        Assert.assertEquals(1, attempts.get());
+    }
+
+    @Test
     public void testExecuteAsyncCancellationCancelsQueuedScheduledRetry() throws Exception {
         TrackingScheduledExecutorService scheduler = new TrackingScheduledExecutorService();
         AtomicInteger attempts = new AtomicInteger();
