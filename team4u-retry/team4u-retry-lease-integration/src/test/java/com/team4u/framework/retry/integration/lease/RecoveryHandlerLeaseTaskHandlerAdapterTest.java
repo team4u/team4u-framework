@@ -3,9 +3,10 @@ package com.team4u.framework.retry.integration.lease;
 import com.team4u.framework.lease.api.LeaseRuntimeClient;
 import com.team4u.framework.lease.enums.LeaseRuntimeResult;
 import com.team4u.framework.lease.model.LeaseCloseRequest;
+import com.team4u.framework.lease.model.LeaseGrant;
 import com.team4u.framework.lease.model.LeaseHandle;
 import com.team4u.framework.lease.model.LeaseReleaseRequest;
-import com.team4u.framework.lease.runtime.LeaseExecutionContext;
+import com.team4u.framework.lease.runtime.LeaseLifecycleExecutionContext;
 import com.team4u.framework.retry.backoff.Backoffs;
 import com.team4u.framework.retry.domain.RecoverySpec;
 import com.team4u.framework.retry.domain.store.RetryRequest;
@@ -27,15 +28,15 @@ import java.util.concurrent.atomic.AtomicBoolean;
 public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
 
     @Test
-    public void testFailureUsesRuntimeReleaseWithUpdatedPayload() {
+    public void testFailureUsesRuntimeReleaseWithUpdatedPayload() throws Exception {
         RetryRecord record = retryRecord();
         TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
         RecoveryHandlerLeaseTaskHandlerAdapter adapter = new RecoveryHandlerLeaseTaskHandlerAdapter(new FailingHandler());
         FixedSerializer serializer = new FixedSerializer(record);
         adapter.setSerializer(serializer);
-        LeaseExecutionContext context = executionContext(runtimeClient);
+        LeaseLifecycleExecutionContext context = executionContext(runtimeClient);
 
-        adapter.handle(context);
+        adapter.handleLifecycle(context);
 
         Assert.assertNotNull(runtimeClient.releaseRequest);
         Assert.assertNull(runtimeClient.closeRequest);
@@ -47,18 +48,17 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
         Assert.assertEquals("RuntimeException", record.getState().getLastErrorCode());
         Assert.assertEquals("boom", record.getState().getLastErrorMessage());
         Assert.assertNotNull(record.getState().getNextRunAt());
-        Assert.assertTrue(context.isLifecycleHandled());
     }
 
     @Test
-    public void testRecoveryRunsInsideRecoveryExecutionContext() {
+    public void testRecoveryRunsInsideRecoveryExecutionContext() throws Exception {
         TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
         AtomicBoolean observedRecovering = new AtomicBoolean(false);
         RecoveryHandlerLeaseTaskHandlerAdapter adapter =
                 new RecoveryHandlerLeaseTaskHandlerAdapter(new InspectingHandler(observedRecovering));
         adapter.setSerializer(new FixedSerializer(retryRecord()));
 
-        adapter.handle(executionContext(runtimeClient));
+        adapter.handleLifecycle(executionContext(runtimeClient));
 
         Assert.assertTrue(observedRecovering.get());
         Assert.assertFalse(RecoveryExecutionContext.isRecovering());
@@ -69,7 +69,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
     }
 
     @Test
-    public void testTerminalFailureClosesWithUpdatedPayload() {
+    public void testTerminalFailureClosesWithUpdatedPayload() throws Exception {
         RetryRecord record = retryRecord();
         record.getRequest().setPolicy(RetryPolicy.builder()
                 .maxRetries(0)
@@ -81,7 +81,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
         RecoveryHandlerLeaseTaskHandlerAdapter adapter = new RecoveryHandlerLeaseTaskHandlerAdapter(new FailingHandler());
         adapter.setSerializer(new FixedSerializer(record));
 
-        adapter.handle(executionContext(runtimeClient));
+        adapter.handleLifecycle(executionContext(runtimeClient));
 
         Assert.assertNull(runtimeClient.releaseRequest);
         Assert.assertNotNull(runtimeClient.closeRequest);
@@ -90,7 +90,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
     }
 
     @Test
-    public void testReleaseThrowsWhenRuntimeMutationNotApplied() {
+    public void testReleaseThrowsWhenRuntimeMutationNotApplied() throws Exception {
         RetryRecord record = retryRecord();
         TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
         runtimeClient.releaseResult = LeaseRuntimeResult.LEASE_LOST;
@@ -98,7 +98,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
         adapter.setSerializer(new FixedSerializer(record));
 
         try {
-            adapter.handle(executionContext(runtimeClient));
+            adapter.handleLifecycle(executionContext(runtimeClient));
             Assert.fail("expected IllegalStateException");
         } catch (IllegalStateException ex) {
             Assert.assertTrue(ex.getMessage().contains("release"));
@@ -107,7 +107,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
     }
 
     @Test
-    public void testInterruptedFailureClosesAndPreservesInterruptFlag() {
+    public void testInterruptedFailureClosesAndPreservesInterruptFlag() throws Exception {
         RetryRecord record = retryRecord();
         TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
         RecoveryHandlerLeaseTaskHandlerAdapter adapter =
@@ -115,7 +115,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
         adapter.setSerializer(new FixedSerializer(record));
 
         try {
-            adapter.handle(executionContext(runtimeClient));
+            adapter.handleLifecycle(executionContext(runtimeClient));
             Assert.assertNull(runtimeClient.releaseRequest);
             Assert.assertNotNull(runtimeClient.closeRequest);
             Assert.assertEquals("stop", runtimeClient.closeRequest.getErrorMessage());
@@ -150,15 +150,18 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
                 .build();
     }
 
-    private LeaseExecutionContext executionContext(TrackingRuntimeClient runtimeClient) {
-        return LeaseExecutionContext.builder()
-                .taskId("task-1")
-                .queue(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE)
-                .taskType("recover-payment")
-                .payload("serialized-input")
-                .runtimeClient(runtimeClient)
-                .handle(new LeaseHandle("task-1", "worker-1", "lease-1"))
-                .build();
+    private LeaseLifecycleExecutionContext executionContext(TrackingRuntimeClient runtimeClient) {
+        return new LeaseLifecycleExecutionContext(
+                LeaseGrant.builder()
+                        .taskId("task-1")
+                        .workerId("worker-1")
+                        .leaseToken("lease-1")
+                        .queue(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE)
+                        .taskType("recover-payment")
+                        .payload("serialized-input")
+                        .build(),
+                null,
+                runtimeClient);
     }
 
     private static class FailingHandler implements RecoveryHandler<String> {

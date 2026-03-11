@@ -404,6 +404,35 @@ public class LeaseWorkerTest {
         }
     }
 
+    @Test
+    public void testMissingHandlerRetryLaterUsesDedicatedDelay() throws Exception {
+        InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
+        DefaultLeaseTaskHandlerRegistry registry = new DefaultLeaseTaskHandlerRegistry();
+        registry.register(DEFAULT_QUEUE, "known", context -> {
+        });
+        String taskId = backend.publish(request("missing", "payload"));
+
+        LeaseWorker worker = new LeaseWorker(backend, registry, LeaseWorkerPolicy.builder()
+                .workerId("worker-a")
+                .pollWaitMillis(20L)
+                .missingHandlerRetryDelayMillis(180L)
+                .leaseMillis(100L)
+                .heartbeatEnabled(false)
+                .missingHandlerStrategy(MissingHandlerStrategy.RETRY_LATER)
+                .build());
+        long startedAt = System.currentTimeMillis();
+        worker.start("lease-worker-missing-handler-delay");
+        try {
+            InMemoryLeaseBackend.StoredTask released = awaitReleasedTask(taskId, backend);
+            Assert.assertNotNull(released);
+            Assert.assertTrue(released.getDeliveryCount() >= 1);
+            long visibleDelay = released.getVisibleAtMillis() - startedAt;
+            Assert.assertTrue("expected dedicated retry delay to be applied", visibleDelay >= 120L);
+        } finally {
+            worker.shutdown();
+        }
+    }
+
     private InMemoryLeaseBackend.StoredTask awaitTask(String taskId,
                                                       InMemoryLeaseBackend backend,
                                                       LeaseTaskState state) throws Exception {

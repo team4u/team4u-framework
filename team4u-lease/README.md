@@ -238,6 +238,8 @@ stateDiagram-v2
 - 获取与抢占 (Acquire)：Worker 只能从 `READY` 状态或租约已过期的 `RUNNING` 状态中抢占任务。抢占成功后，任务进入 `RUNNING`，且 `deliveryCount` 自增。
 - 释放 (Release)：主动交还执行权，任务回到 `READY` 状态，不增加 `failureCount`。常用于 Worker 优雅停机或本地资源不足时。
 - 心跳续约 (Heartbeat)：刷新租约过期时间为 `now + leaseMillis`。业务代码可通过 `LeaseExecutionContext.requestHeartbeat()` 手动触发立即续约。
+- 普通 `LeaseTaskHandler` 只处理业务逻辑；成功返回后由 `LeaseWorker` 默认执行 `close(SUCCEEDED)`。
+- 如需在 handler 内显式 `close(...)` 或 `release(...)`，请实现 `LeaseLifecycleAwareTaskHandler`，并通过 `LeaseLifecycleExecutionContext` 的受控方法写回生命周期。
 
 ### 失败与重试语义
 
@@ -251,7 +253,7 @@ stateDiagram-v2
 
 当 Worker 抢占到某个任务后，如果本地未注册该 `taskType` 对应的处理器：
 - `FAIL_FAST`：直接将任务按失败处理。适用于配置错误需要尽快暴露的场景。
-- `RETRY_LATER`：释放任务，在稍后重新进入可竞争状态。适用于灰度发布或多集群异步升级场景。
+- `RETRY_LATER`：释放任务，在稍后重新进入可竞争状态。适用于灰度发布或多集群异步升级场景，延迟由 `missingHandlerRetryDelayMillis` 控制。
 
 
 

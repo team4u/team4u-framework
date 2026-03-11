@@ -2,10 +2,12 @@ package com.team4u.framework.lease;
 
 import com.team4u.framework.lease.api.LeaseRuntimeClient;
 import com.team4u.framework.lease.enums.LeaseRuntimeResult;
+import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
+import com.team4u.framework.lease.handler.LeaseLifecycleAwareTaskHandler;
 import com.team4u.framework.lease.handler.LeaseTaskHandler;
 import com.team4u.framework.lease.handler.LeaseTaskHandlerRegistry;
 import com.team4u.framework.lease.model.*;
-import com.team4u.framework.lease.runtime.LeaseExecutionContext;
+import com.team4u.framework.lease.runtime.LeaseLifecycleExecutionContext;
 import com.team4u.framework.lease.runtime.LeaseWorker;
 import com.team4u.framework.lease.runtime.LeaseWorkerPolicy;
 import org.junit.Assert;
@@ -23,10 +25,10 @@ public class LeaseWorkerLifecycleTest {
     public void testWorkerSkipsDefaultCloseWhenHandlerManagesLifecycle() throws Exception {
         TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
         CountDownLatch handled = new CountDownLatch(1);
-        LeaseTaskHandler handler = new LeaseTaskHandler() {
+        LeaseTaskHandler handler = new LeaseLifecycleAwareTaskHandler() {
             @Override
-            public void handle(LeaseExecutionContext context) {
-                context.markLifecycleHandled();
+            public void handleLifecycle(LeaseLifecycleExecutionContext context) {
+                context.close(LeaseCloseRequest.succeeded());
                 handled.countDown();
             }
         };
@@ -39,7 +41,32 @@ public class LeaseWorkerLifecycleTest {
 
         Assert.assertTrue(handled.await(1, TimeUnit.SECONDS));
         Assert.assertTrue(runtimeClient.awaitCloseCheck(1, TimeUnit.SECONDS));
-        Assert.assertEquals(0, runtimeClient.closeCalls);
+        Assert.assertEquals(1, runtimeClient.closeCalls);
+
+        worker.shutdownNow();
+    }
+
+    @Test
+    public void testLifecycleAwareHandlerMustCompleteLifecycle() throws Exception {
+        TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
+        CountDownLatch handled = new CountDownLatch(1);
+        LeaseTaskHandler handler = new LeaseLifecycleAwareTaskHandler() {
+            @Override
+            public void handleLifecycle(LeaseLifecycleExecutionContext context) {
+                handled.countDown();
+            }
+        };
+        LeaseWorker worker = new LeaseWorker(
+                runtimeClient,
+                new SingleHandlerRegistry(handler),
+                LeaseWorkerPolicy.builder().pollWaitMillis(10L).heartbeatEnabled(false).build());
+
+        worker.start("lease-worker-lifecycle-missing-close");
+
+        Assert.assertTrue(handled.await(1, TimeUnit.SECONDS));
+        Assert.assertTrue(runtimeClient.awaitCloseCheck(1, TimeUnit.SECONDS));
+        Assert.assertEquals(1, runtimeClient.closeCalls);
+        Assert.assertEquals(LeaseTaskFailureReason.HANDLER_CONTRACT_VIOLATION, runtimeClient.lastCloseRequest.getFailureReason());
 
         worker.shutdownNow();
     }
@@ -70,6 +97,7 @@ public class LeaseWorkerLifecycleTest {
         private final CountDownLatch closeCheckLatch = new CountDownLatch(1);
         private volatile boolean granted;
         private int closeCalls;
+        private LeaseCloseRequest lastCloseRequest;
 
         @Override
         public LeaseGrant acquire(LeaseAcquireRequest request) throws InterruptedException {
@@ -94,6 +122,7 @@ public class LeaseWorkerLifecycleTest {
         @Override
         public LeaseRuntimeResult close(LeaseHandle handle, LeaseCloseRequest request) {
             closeCalls++;
+            lastCloseRequest = request;
             return LeaseRuntimeResult.APPLIED;
         }
 
