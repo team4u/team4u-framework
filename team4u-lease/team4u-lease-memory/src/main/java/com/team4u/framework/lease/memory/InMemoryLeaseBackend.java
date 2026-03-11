@@ -59,7 +59,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
             String taskId = publish(request);
             return LeasePublishResult.builder().created(true).taskId(taskId).record(get(taskId).orElse(null)).build();
         }
-        String compositeKey = request.getQueue() + "|" + request.getBusinessKey();
+        String compositeKey = businessKey(request.getQueue(), request.getBusinessKey());
         String existingTaskId = taskIdsByBusinessKey.get(compositeKey);
         if (existingTaskId != null) {
             return LeasePublishResult.builder()
@@ -114,9 +114,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     @Override
     public synchronized LeaseRuntimeResult close(LeaseHandle handle, LeaseCloseRequest request) {
         StoredTask current = records.get(taskId(handle));
-        LeaseRuntimeResult result = current == null
-                ? LeaseRuntimeResult.TASK_NOT_FOUND
-                : current.validateRuntimeMutation(handle, System.currentTimeMillis());
+        LeaseRuntimeResult result = validateRuntimeMutation(current, handle);
         if (result != LeaseRuntimeResult.APPLIED) {
             return result;
         }
@@ -127,9 +125,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     @Override
     public synchronized LeaseRuntimeResult heartbeat(LeaseHandle handle, long extendMillis) {
         StoredTask current = records.get(taskId(handle));
-        LeaseRuntimeResult result = current == null
-                ? LeaseRuntimeResult.TASK_NOT_FOUND
-                : current.validateRuntimeMutation(handle, System.currentTimeMillis());
+        LeaseRuntimeResult result = validateRuntimeMutation(current, handle);
         if (result != LeaseRuntimeResult.APPLIED) {
             return result;
         }
@@ -142,9 +138,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     @Override
     public synchronized LeaseRuntimeResult release(LeaseHandle handle, LeaseReleaseRequest request) {
         StoredTask current = records.get(taskId(handle));
-        LeaseRuntimeResult result = current == null
-                ? LeaseRuntimeResult.TASK_NOT_FOUND
-                : current.validateRuntimeMutation(handle, System.currentTimeMillis());
+        LeaseRuntimeResult result = validateRuntimeMutation(current, handle);
         if (result != LeaseRuntimeResult.APPLIED) {
             return result;
         }
@@ -161,9 +155,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     @Override
     public synchronized LeaseAdminResult reschedule(String taskId, long delayMillis) {
         StoredTask current = records.get(taskId);
-        LeaseAdminResult validation = current == null
-                ? LeaseAdminResult.TASK_NOT_FOUND
-                : current.validateAdminMutable(System.currentTimeMillis());
+        LeaseAdminResult validation = validateAdminMutation(current);
         if (validation != LeaseAdminResult.APPLIED) {
             return validation;
         }
@@ -179,16 +171,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
             return LeaseAdminResult.TASK_NOT_FOUND;
         }
         StoredTask current = records.get(taskId);
-        LeaseAdminResult validation;
-        if (current == null) {
-            validation = LeaseAdminResult.TASK_NOT_FOUND;
-        } else if (current.getState() == LeaseTaskState.RUNNING && current.hasActiveLease(System.currentTimeMillis())) {
-            validation = LeaseAdminResult.ACTIVE_LEASE_PRESENT;
-        } else if (current.getState() == LeaseTaskState.CLOSED) {
-            validation = LeaseAdminResult.CLOSED;
-        } else {
-            validation = LeaseAdminResult.APPLIED;
-        }
+        LeaseAdminResult validation = validateAdminClose(current);
         if (validation != LeaseAdminResult.APPLIED) {
             return validation;
         }
@@ -213,62 +196,24 @@ public class InMemoryLeaseBackend implements LeaseBackend {
 
     @Override
     public synchronized LeaseAdminResult update(LeaseUpdateRequest request) {
-        if (request == null || isBlank(request.getTaskId())) {
-            return LeaseAdminResult.TASK_NOT_FOUND;
-        }
-        StoredTask current = records.get(request.getTaskId());
-        if (current == null) {
-            return LeaseAdminResult.TASK_NOT_FOUND;
-        }
-        LeaseAdminResult validation = current.validateAdminMutable(System.currentTimeMillis());
+        StoredTask current = findTaskForUpdate(request);
+        LeaseAdminResult validation = validateAdminMutation(current);
         if (validation != LeaseAdminResult.APPLIED) {
             return validation;
         }
-        StoredTask.StoredTaskBuilder builder = current.toBuilder();
-        if (!isBlank(request.getTaskType())) {
-            builder.taskType(request.getTaskType());
-        }
-        if (request.getPayload() != null) {
-            builder.payload(request.getPayload());
-        }
-        if (request.getPriority() != null) {
-            builder.priority(request.getPriority());
-        }
-        if (request.getAttributes() != null) {
-            builder.attributes(request.getAttributes());
-        }
-        store(builder.build(), false);
+        store(current.update(request), false);
         return LeaseAdminResult.APPLIED;
     }
 
     @Override
     public synchronized LeaseAdminResult updateAndReschedule(LeaseUpdateRequest request, long delayMillis) {
-        if (request == null || isBlank(request.getTaskId())) {
-            return LeaseAdminResult.TASK_NOT_FOUND;
-        }
-        StoredTask current = records.get(request.getTaskId());
-        if (current == null) {
-            return LeaseAdminResult.TASK_NOT_FOUND;
-        }
-        LeaseAdminResult validation = current.validateAdminMutable(System.currentTimeMillis());
+        StoredTask current = findTaskForUpdate(request);
+        LeaseAdminResult validation = validateAdminMutation(current);
         if (validation != LeaseAdminResult.APPLIED) {
             return validation;
         }
-        StoredTask.StoredTaskBuilder builder = current.toBuilder();
-        if (!isBlank(request.getTaskType())) {
-            builder.taskType(request.getTaskType());
-        }
-        if (request.getPayload() != null) {
-            builder.payload(request.getPayload());
-        }
-        if (request.getPriority() != null) {
-            builder.priority(request.getPriority());
-        }
-        if (request.getAttributes() != null) {
-            builder.attributes(request.getAttributes());
-        }
         long visibleAt = System.currentTimeMillis() + Math.max(0L, delayMillis);
-        store(builder.build().reschedule(visibleAt), true);
+        store(current.update(request).reschedule(visibleAt), true);
         return LeaseAdminResult.APPLIED;
     }
 
@@ -280,7 +225,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
 
     @Override
     public synchronized Optional<LeaseTaskRecord> getByBusinessKey(String queue, String businessKey) {
-        String taskId = taskIdsByBusinessKey.get(queue + "|" + businessKey);
+        String taskId = taskIdsByBusinessKey.get(businessKey(queue, businessKey));
         return taskId == null ? Optional.empty() : get(taskId);
     }
 
@@ -375,6 +320,31 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         return request.getWorkerId() == null || request.getWorkerId().equals(task.getWorkerId());
     }
 
+    private StoredTask findTaskForUpdate(LeaseUpdateRequest request) {
+        if (request == null || isBlank(request.getTaskId())) {
+            return null;
+        }
+        return records.get(request.getTaskId());
+    }
+
+    private LeaseRuntimeResult validateRuntimeMutation(StoredTask current, LeaseHandle handle) {
+        return current == null
+                ? LeaseRuntimeResult.TASK_NOT_FOUND
+                : current.validateRuntimeMutation(handle, System.currentTimeMillis());
+    }
+
+    private LeaseAdminResult validateAdminMutation(StoredTask current) {
+        return current == null
+                ? LeaseAdminResult.TASK_NOT_FOUND
+                : current.validateAdminMutable(System.currentTimeMillis());
+    }
+
+    private LeaseAdminResult validateAdminClose(StoredTask current) {
+        return current == null
+                ? LeaseAdminResult.TASK_NOT_FOUND
+                : current.validateAdminClose(System.currentTimeMillis());
+    }
+
     private void validatePublishRequest(LeasePublishRequest request) {
         if (request == null) {
             throw new IllegalArgumentException("request must not be null");
@@ -416,7 +386,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         // records 是状态单一真相源；DelayQueue 只是为了阻塞拉取，不要求严格删除旧引用。
         records.put(task.getTaskId(), task);
         if (!isBlank(task.getBusinessKey())) {
-            taskIdsByBusinessKey.put(task.getQueue() + "|" + task.getBusinessKey(), task.getTaskId());
+            taskIdsByBusinessKey.put(businessKey(task.getQueue(), task.getBusinessKey()), task.getTaskId());
         }
         if (offerQueue) {
             offer(task);
@@ -437,8 +407,8 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         return "lease-token-" + UUID.randomUUID().toString().replace("-", "");
     }
 
-    private String errorMessage(Throwable cause) {
-        return cause == null ? null : String.valueOf(cause);
+    private String businessKey(String queue, String businessKey) {
+        return queue + "|" + businessKey;
     }
 
     private void validateHandle(LeaseHandle handle) {
@@ -461,7 +431,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         return handle.getTaskId();
     }
 
-    private boolean isBlank(String value) {
+    private static boolean isBlank(String value) {
         return value == null || value.trim().isEmpty();
     }
 
@@ -603,6 +573,23 @@ public class InMemoryLeaseBackend implements LeaseBackend {
             return toClosedTask(safeRequest, true);
         }
 
+        private StoredTask update(LeaseUpdateRequest request) {
+            StoredTask.StoredTaskBuilder builder = toBuilder();
+            if (!isBlank(request.getTaskType())) {
+                builder.taskType(request.getTaskType());
+            }
+            if (request.getPayload() != null) {
+                builder.payload(request.getPayload());
+            }
+            if (request.getPriority() != null) {
+                builder.priority(request.getPriority());
+            }
+            if (request.getAttributes() != null) {
+                builder.attributes(request.getAttributes());
+            }
+            return builder.build();
+        }
+
         private StoredTask toClosedTask(LeaseCloseRequest request, boolean adminOperation) {
             LeaseTaskOutcome outcome = request.getOutcome();
             int nextFailureCount = outcome == LeaseTaskOutcome.FAILED ? failureCount + 1 : failureCount;
@@ -665,6 +652,16 @@ public class InMemoryLeaseBackend implements LeaseBackend {
 
         private LeaseAdminResult validateAdminMutable(long now) {
             // 管理操作不能覆盖终态任务，也不能打断仍有效的租约。
+            if (isTerminal()) {
+                return LeaseAdminResult.CLOSED;
+            }
+            if (hasActiveLease(now)) {
+                return LeaseAdminResult.ACTIVE_LEASE_PRESENT;
+            }
+            return LeaseAdminResult.APPLIED;
+        }
+
+        private LeaseAdminResult validateAdminClose(long now) {
             if (isTerminal()) {
                 return LeaseAdminResult.CLOSED;
             }
