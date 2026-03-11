@@ -337,7 +337,7 @@ ManagedSubmitResult<String> result = Retries.managed(client)
         .task("pay-notify")
         .idempotentBy("order:1001")
         .payload("{\"orderId\":\"1001\"}")
-        .policy(policy) // 如果 client 配置了 defaultPolicy，这里也可以省略
+        .policy(policy)
         .call(this::notifyPayment);
 ```
 
@@ -349,10 +349,10 @@ ManagedSubmitResult<String> result = Retries.managed(client)
 
 ### 2. 定义恢复处理器 (`RecoveryHandler`)
 
-MANAGED 任务进入后台后，框架不知道该调用哪个方法。你需要提供一个 `RecoveryHandler`：
+MANAGED 任务进入后台后，框架不知道该调用哪个方法。你需要提供一个 `StringRecoveryHandler`：
 
 ```java
-public class PayNotifyHandler implements RecoveryHandler<String> {
+public class PayNotifyHandler implements StringRecoveryHandler {
     @Override
     public String taskName() {
         return "pay-notify"; // 与提交任务时的 taskType 对应
@@ -365,7 +365,7 @@ public class PayNotifyHandler implements RecoveryHandler<String> {
 }
 ```
 
-*   类型约束：lease 集成当前只支持 `RecoveryHandler<String>`。
+*   类型约束：lease 集成当前只支持 `StringRecoveryHandler`。
 *   自动注册：如果你的 `RecoveryHandler` 在类路径下，`ManagedRetryRuntime` 默认会通过 SPI 自动扫描并注册它。
 *   自定义 registry：如果你自己传入 `RecoveryHandlerRegistry`，是否执行 SPI 扫描由 `autoScanRecoveryHandlers(...)` 决定。
 *   Spring 支持：在 Spring 环境下，只需将 Handler 声明为 `@Bean`，`ManagedRetryRuntime` 会自动发现。
@@ -376,7 +376,7 @@ public class PayNotifyHandler implements RecoveryHandler<String> {
 
 为了保证任务能被可靠地持久化和后台恢复，MANAGED 模式有以下强制要求：
 
-1.  必须存在有效的 `foregroundMaxRetries`：不能小于 0，且必须小于等于 `maxRetries`。它可以来自本次显式 `.policy(...)`，也可以来自 `ManagedRetryClient` 的 `defaultPolicy`。
+1.  `Retries.managed(...)` 必须显式提供 `.policy(...)`，且 `foregroundMaxRetries` 不能小于 0，也必须小于等于 `maxRetries`。
 2.  必须提供幂等键：即 `idempotentBy("...")`，用于去重和状态追踪。
 3.  必须提供任务类型：即 `task("...")`，后台 Worker 依赖它找到对应的 `RecoveryHandler`。
 4.  建议使用 `Retries` 门面：
@@ -634,6 +634,7 @@ public class RetryManagedConfiguration {
 * primitive 参数不能标 `@RetryIgnore`
 * `@RetryIgnore` 只表示“不持久化该参数”，回放时该位置会以 `null` 参与调用
 * `null` 参数和 `@RetryIgnore` 参数会分别保存，不会再发生参数位置错位
+* `@RetryIgnore` 参数的真实值不会纳入 MANAGED 幂等键；如果两个调用只在 ignored 参数上不同，它们仍可能命中同一个幂等任务
 * 如果 MANAGED 恢复需要重放该参数，就必须保证它可以被完整快照
 
 示例：
@@ -790,7 +791,7 @@ INLINE 的所有尝试都发生在当前进程里，不做持久化，不会跨�
 
 * `LeaseBackend`
 * `ManagedRetryRuntime.lease(backend)`
-* 至少一个 `RecoveryHandler<String>`
+* 至少一个 `StringRecoveryHandler`
 
 如果你不用 runtime 自带装配，等价的底层组件是：
 

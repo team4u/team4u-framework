@@ -6,7 +6,6 @@ import com.team4u.framework.lease.model.*;
 import com.team4u.framework.lease.runtime.LeaseWorker;
 import com.team4u.framework.lease.runtime.LeaseWorkerPolicy;
 import com.team4u.framework.retry.recovery.RecoveryContext;
-import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
 import org.junit.Assert;
 import org.junit.Test;
@@ -101,11 +100,11 @@ public class RetryLeaseWorkerTest {
         TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
         RecoveryHandlerRegistry registry = new RecoveryHandlerRegistry();
         RetryLeaseWorker worker = new RetryLeaseWorker(runtimeClient, registry);
-        RecoveryHandler<String> handler = new StringRecoveryHandler("payment");
+        TestStringRecoveryHandler handler = new TestStringRecoveryHandler("payment");
 
         worker.register(handler);
 
-        Optional<RecoveryHandler<?>> registered = registry.get("payment");
+        Optional<?> registered = registry.get("payment");
         Assert.assertTrue(registered.isPresent());
         Assert.assertSame(handler, registered.get());
     }
@@ -178,11 +177,11 @@ public class RetryLeaseWorkerTest {
     /**
      * 仅用于验证注册链路，不执行真实恢复逻辑。
      */
-    private static class StringRecoveryHandler implements RecoveryHandler<String> {
+    private static class TestStringRecoveryHandler implements StringRecoveryHandler {
 
         private final String taskName;
 
-        private StringRecoveryHandler(String taskName) {
+        private TestStringRecoveryHandler(String taskName) {
             this.taskName = taskName;
         }
 

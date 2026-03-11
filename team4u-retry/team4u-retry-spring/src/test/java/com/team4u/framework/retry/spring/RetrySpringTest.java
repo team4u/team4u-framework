@@ -30,6 +30,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.stereotype.Service;
 
+import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
@@ -158,6 +159,24 @@ public class RetrySpringTest {
     }
 
     @Test
+    public void testSpringManagedMethodRejectsCompletableFutureReturnType() {
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
+                ManagedAsyncConfig.class)) {
+            ManagedAsyncConfig config = context.getBean(ManagedAsyncConfig.class);
+            ManagedAsyncService service = context.getBean(ManagedAsyncService.class);
+
+            try {
+                service.notifyPay("M100-async");
+                Assert.fail("expected IllegalStateException");
+            } catch (IllegalStateException ex) {
+                Assert.assertTrue(ex.getMessage().contains("only supports void return types"));
+            }
+
+            Assert.assertEquals(0, config.managedClient.submitCount.get());
+        }
+    }
+
+    @Test
     public void testSpringManagedMethodRejectsCustomRecovery() {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
                 ManagedCustomRecoveryConfig.class)) {
@@ -249,6 +268,10 @@ public class RetrySpringTest {
 
     public interface ManagedCustomRecoveryService {
         void notifyPay(String id);
+    }
+
+    public interface ManagedAsyncService {
+        CompletableFuture<String> notifyPay(String id);
     }
 
     public interface ManagedVoidOnlyService {
@@ -350,6 +373,14 @@ public class RetrySpringTest {
         }
     }
 
+    public static class ManagedAsyncServiceImpl implements ManagedAsyncService {
+        @Override
+        @Retryable(policy = "test-policy", mode = RetryMode.MANAGED)
+        public CompletableFuture<String> notifyPay(String id) {
+            return CompletableFuture.completedFuture("managed_" + id);
+        }
+    }
+
     public static class ManagedVoidOnlyServiceImpl implements ManagedVoidOnlyService {
         private final AtomicInteger count = new AtomicInteger();
 
@@ -408,6 +439,22 @@ public class RetrySpringTest {
         @Bean
         public ManagedCustomRecoveryService managedCustomRecoveryService() {
             return new ManagedCustomRecoveryServiceImpl();
+        }
+    }
+
+    @Configuration
+    @EnableRetry
+    public static class ManagedAsyncConfig {
+        private final ManagedRetryClientStub managedClient = new ManagedRetryClientStub();
+
+        @Bean
+        public ManagedRetryClient managedRetryClient() {
+            return managedClient;
+        }
+
+        @Bean
+        public ManagedAsyncService managedAsyncService() {
+            return new ManagedAsyncServiceImpl();
         }
     }
 

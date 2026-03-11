@@ -210,7 +210,11 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
                 return dispatchToBackground(record, executedAttempts, failure, policy);
             }
             // Completed 只在 durable SUCCEEDED 写入成功后才成立。
-            store.markSucceeded(record.getTaskId(), SuccessRecord.builder().succeededAt(Instant.now()).build());
+            try {
+                store.markSucceeded(record.getTaskId(), SuccessRecord.builder().succeededAt(Instant.now()).build());
+            } catch (RuntimeException ex) {
+                throw new DurableSuccessWriteException(record.getTaskId(), ex);
+            }
             record.getState().setStatus(RetryStatus.SUCCEEDED);
             record.getState().setNextRunAt(null);
             record.getState().setAttempts(executedAttempts);

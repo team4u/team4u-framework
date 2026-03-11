@@ -4,7 +4,6 @@ import com.team4u.framework.lease.enums.LeaseRuntimeResult;
 import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
 import com.team4u.framework.lease.enums.LeaseTaskOutcome;
 import com.team4u.framework.lease.handler.LeaseLifecycleAwareTaskHandler;
-import com.team4u.framework.lease.handler.LeaseTaskHandler;
 import com.team4u.framework.lease.model.LeaseCloseRequest;
 import com.team4u.framework.lease.model.LeaseReleaseRequest;
 import com.team4u.framework.lease.runtime.LeaseLifecycleExecutionContext;
@@ -12,7 +11,6 @@ import com.team4u.framework.retry.domain.store.RetryStatus;
 import com.team4u.framework.retry.policy.RetryPolicy;
 import com.team4u.framework.retry.recovery.RecoveryContext;
 import com.team4u.framework.retry.recovery.RecoveryExecutionContext;
-import com.team4u.framework.retry.recovery.RecoveryHandler;
 import com.team4u.framework.retry.store.record.RetryRecord;
 import com.team4u.framework.retry.store.serialize.HutoolRetryRecordSerializer;
 import com.team4u.framework.retry.store.serialize.RetryRecordSerializer;
@@ -26,7 +24,7 @@ import java.time.Instant;
 /**
  * 业务恢复处理器到租约任务处理器的适配器
  * <p>
- * 此适配器通过实现 {@link LeaseLifecycleAwareTaskHandler}，将重试框架的业务恢复逻辑（{@link RecoveryHandler}）
+ * 此适配器通过实现 {@link LeaseLifecycleAwareTaskHandler}，将重试框架的业务恢复逻辑（{@link StringRecoveryHandler}）
  * 映射为租约系统的任务执行逻辑。它负责处理重试状态的持久化映射，并根据 {@link RetryPolicy} 显式控制
  * 租约任务的闭环（SUCCEEDED/FAILED）或带有退避延迟的释放（RELEASE）。
  */
@@ -37,7 +35,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseLifecycleAwa
     /**
      * 实际执行恢复业务逻辑的代理处理器
      */
-    private final RecoveryHandler<String> delegate;
+    private final StringRecoveryHandler delegate;
 
     /**
      * 用于重试记录领域模型的序列化组件
@@ -45,9 +43,11 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseLifecycleAwa
     @Setter
     private RetryRecordSerializer serializer = HutoolRetryRecordSerializer.INSTANCE;
 
-    public RecoveryHandlerLeaseTaskHandlerAdapter(RecoveryHandler<?> delegate) {
-        this.delegate = RecoveryHandlerPayloadTypes.requireStringPayload(delegate,
-                "Lease recovery handler adapter");
+    public RecoveryHandlerLeaseTaskHandlerAdapter(StringRecoveryHandler delegate) {
+        if (delegate == null) {
+            throw new IllegalArgumentException("Lease recovery handler adapter requires StringRecoveryHandler");
+        }
+        this.delegate = delegate;
     }
 
     @Override

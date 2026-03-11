@@ -36,17 +36,19 @@ public class RecoveryHandlerRegistryLeaseAdapterTest {
             adapter.get(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE, "payment");
             Assert.fail("expected IllegalArgumentException");
         } catch (IllegalArgumentException ex) {
-            Assert.assertTrue(ex.getMessage().contains("RecoveryHandler<String>"));
+            Assert.assertTrue(ex.getMessage().contains("StringRecoveryHandler"));
+            Assert.assertTrue(ex.getMessage().contains("taskType=payment"));
+            Assert.assertTrue(ex.getMessage().contains(ObjectPayloadRecoveryHandler.class.getName()));
         }
     }
 
     @Test
     public void testAdapterRejectsNonStringRecoveryHandlerAtConstruction() {
         try {
-            new RecoveryHandlerLeaseTaskHandlerAdapter(new ObjectPayloadRecoveryHandler());
+            new RecoveryHandlerLeaseTaskHandlerAdapter(null);
             Assert.fail("expected IllegalArgumentException");
         } catch (IllegalArgumentException ex) {
-            Assert.assertTrue(ex.getMessage().contains("RecoveryHandler<String>"));
+            Assert.assertTrue(ex.getMessage().contains("StringRecoveryHandler"));
         }
     }
 
