@@ -95,7 +95,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                     nextVisibleAt = Math.min(nextVisibleAt, head.getAvailableAtMillis());
                 }
             }
-            if (timeout <= 0L) {
+            if (timeout == 0L) {
                 return null;
             }
             long remaining = deadline - now;
