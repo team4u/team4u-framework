@@ -23,15 +23,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  */
 final class ObservedDataSource {
 
-    interface SqlInterceptor {
-        void beforeExecute(String normalizedSql) throws SQLException;
-    }
-
     private final DataSource dataSource;
     private final AtomicInteger executionCount = new AtomicInteger();
     private final List<SqlInterceptor> interceptors = new CopyOnWriteArrayList<SqlInterceptor>();
     private final List<String> executedSql = new CopyOnWriteArrayList<String>();
-
     private ObservedDataSource(DataSource delegate) {
         this.dataSource = proxyDataSource(delegate);
     }
@@ -135,5 +130,9 @@ final class ObservedDataSource {
     @SuppressWarnings("unchecked")
     private <T> T proxy(Class<T> type, InvocationHandler handler) {
         return (T) Proxy.newProxyInstance(type.getClassLoader(), new Class<?>[]{type}, handler);
+    }
+
+    interface SqlInterceptor {
+        void beforeExecute(String normalizedSql) throws SQLException;
     }
 }
