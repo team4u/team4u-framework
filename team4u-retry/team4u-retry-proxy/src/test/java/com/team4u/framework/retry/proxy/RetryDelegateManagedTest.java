@@ -2,19 +2,19 @@ package com.team4u.framework.retry.proxy;
 
 import cn.hutool.json.JSONUtil;
 import com.team4u.framework.bean.BeanManager;
-import com.team4u.framework.retry.backoff.Backoffs;
-import com.team4u.framework.retry.client.ManagedRetryClient;
-import com.team4u.framework.retry.domain.ManagedSubmitResult;
-import com.team4u.framework.retry.domain.RetryTaskSpec;
-import com.team4u.framework.retry.domain.store.InvocationArgSnapshot;
-import com.team4u.framework.retry.domain.store.InvocationRecoveryData;
-import com.team4u.framework.retry.domain.store.RetryStatus;
-import com.team4u.framework.retry.policy.RetryPolicy;
-import com.team4u.framework.retry.policy.RetryPolicyFactory;
-import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
+import com.team4u.framework.retry.common.backoff.Backoffs;
+import com.team4u.framework.retry.managed.client.ManagedRetryClient;
+import com.team4u.framework.retry.api.ManagedSubmitResult;
+import com.team4u.framework.retry.managed.submit.RetryTaskSpec;
+import com.team4u.framework.retry.proxy.invocation.InvocationArgSnapshot;
+import com.team4u.framework.retry.proxy.invocation.InvocationRecoveryData;
+import com.team4u.framework.retry.managed.model.RetryStatus;
+import com.team4u.framework.retry.api.RetryPolicy;
+import com.team4u.framework.retry.api.NamedRetryPolicyFactory;
+import com.team4u.framework.retry.api.NamedRetryPolicyRegistry;
 import com.team4u.framework.retry.proxy.serialize.RetryIgnore;
-import com.team4u.framework.retry.recovery.RecoveryContext;
-import com.team4u.framework.retry.recovery.RecoveryHandler;
+import com.team4u.framework.retry.managed.recovery.RecoveryContext;
+import com.team4u.framework.retry.managed.recovery.RecoveryHandler;
 import lombok.Data;
 import org.junit.Assert;
 import org.junit.Before;
@@ -30,8 +30,8 @@ public class RetryDelegateManagedTest {
 
     @Before
     public void setUp() {
-        RetryPolicyFactoryRegistry.global().unregisterAll();
-        RetryPolicyFactoryRegistry.global().register(new RetryPolicyFactory() {
+        NamedRetryPolicyRegistry.global().unregisterAll();
+        NamedRetryPolicyRegistry.global().register(new NamedRetryPolicyFactory() {
             @Override
             public String key() {
                 return "managed-policy";

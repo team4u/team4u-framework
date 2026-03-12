@@ -1,8 +1,8 @@
 package com.team4u.framework.retry.proxy;
 
 import com.team4u.framework.proxy.ProxyBuilder;
-import com.team4u.framework.retry.client.InlineRetryClient;
-import com.team4u.framework.retry.client.ManagedRetryClient;
+import com.team4u.framework.retry.inline.InlineRetryClient;
+import com.team4u.framework.retry.managed.client.ManagedRetryClient;
 
 /**
  * 重试代理对象工厂

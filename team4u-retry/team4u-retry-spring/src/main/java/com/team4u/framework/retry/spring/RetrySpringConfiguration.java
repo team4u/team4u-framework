@@ -1,11 +1,11 @@
 package com.team4u.framework.retry.spring;
 
 import com.team4u.framework.bean.provider.SpringBeanContainer;
-import com.team4u.framework.retry.client.DefaultInlineRetryClient;
-import com.team4u.framework.retry.client.InlineRetryClient;
-import com.team4u.framework.retry.concurrent.RetryExecutorManager;
+import com.team4u.framework.retry.inline.DefaultInlineRetryClient;
+import com.team4u.framework.retry.inline.InlineRetryClient;
+import com.team4u.framework.retry.common.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.proxy.Retryable;
-import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
+import com.team4u.framework.retry.managed.recovery.RecoveryHandlerRegistry;
 import org.springframework.aop.Pointcut;
 import org.springframework.aop.support.AbstractBeanFactoryPointcutAdvisor;
 import org.springframework.aop.support.ComposablePointcut;

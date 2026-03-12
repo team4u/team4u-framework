@@ -3,8 +3,8 @@ package com.team4u.framework.retry.proxy;
 import cn.hutool.core.lang.Assert;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
-import com.team4u.framework.retry.client.InlineRetryClient;
-import com.team4u.framework.retry.client.ManagedRetryClient;
+import com.team4u.framework.retry.inline.InlineRetryClient;
+import com.team4u.framework.retry.managed.client.ManagedRetryClient;
 
 import java.lang.reflect.Method;
 

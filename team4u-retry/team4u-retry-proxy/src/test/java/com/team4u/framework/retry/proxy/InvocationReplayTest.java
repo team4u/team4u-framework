@@ -2,9 +2,9 @@ package com.team4u.framework.retry.proxy;
 
 import cn.hutool.json.JSONUtil;
 import com.team4u.framework.bean.BeanManager;
-import com.team4u.framework.retry.domain.store.InvocationArgSnapshot;
-import com.team4u.framework.retry.domain.store.InvocationRecoveryData;
-import com.team4u.framework.retry.recovery.RecoveryContext;
+import com.team4u.framework.retry.proxy.invocation.InvocationArgSnapshot;
+import com.team4u.framework.retry.proxy.invocation.InvocationRecoveryData;
+import com.team4u.framework.retry.managed.recovery.RecoveryContext;
 import org.junit.Assert;
 import org.junit.Test;
 

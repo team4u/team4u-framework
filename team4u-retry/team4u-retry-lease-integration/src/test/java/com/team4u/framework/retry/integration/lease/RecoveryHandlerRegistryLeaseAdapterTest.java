@@ -2,9 +2,9 @@ package com.team4u.framework.retry.integration.lease;
 
 import com.team4u.framework.lease.handler.LeaseTaskHandler;
 import com.team4u.framework.lease.runtime.LeaseExecutionContext;
-import com.team4u.framework.retry.recovery.RecoveryContext;
-import com.team4u.framework.retry.recovery.RecoveryHandler;
-import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
+import com.team4u.framework.retry.managed.recovery.RecoveryContext;
+import com.team4u.framework.retry.managed.recovery.RecoveryHandler;
+import com.team4u.framework.retry.managed.recovery.RecoveryHandlerRegistry;
 import org.junit.Assert;
 import org.junit.Test;
 

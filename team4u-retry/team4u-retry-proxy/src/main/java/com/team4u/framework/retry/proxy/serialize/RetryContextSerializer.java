@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.proxy.serialize;
 
-import com.team4u.framework.retry.exception.RetrySerializationException;
+import com.team4u.framework.retry.proxy.serialize.RetrySerializationException;
 
 import java.lang.reflect.Type;
 

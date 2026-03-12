@@ -1,23 +1,23 @@
 package com.team4u.framework.retry.spring;
 
 import cn.hutool.json.JSONUtil;
-import com.team4u.framework.retry.backoff.Backoffs;
-import com.team4u.framework.retry.client.ManagedRetryClient;
-import com.team4u.framework.retry.concurrent.RetryExecutorManager;
-import com.team4u.framework.retry.domain.ManagedSubmitResult;
-import com.team4u.framework.retry.domain.RetryTaskSpec;
-import com.team4u.framework.retry.domain.store.InvocationArgSnapshot;
-import com.team4u.framework.retry.domain.store.InvocationRecoveryData;
-import com.team4u.framework.retry.domain.store.RetryStatus;
-import com.team4u.framework.retry.policy.RetryPolicy;
-import com.team4u.framework.retry.policy.RetryPolicyFactory;
-import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
+import com.team4u.framework.retry.common.backoff.Backoffs;
+import com.team4u.framework.retry.managed.client.ManagedRetryClient;
+import com.team4u.framework.retry.common.concurrent.RetryExecutorManager;
+import com.team4u.framework.retry.api.ManagedSubmitResult;
+import com.team4u.framework.retry.managed.submit.RetryTaskSpec;
+import com.team4u.framework.retry.proxy.invocation.InvocationArgSnapshot;
+import com.team4u.framework.retry.proxy.invocation.InvocationRecoveryData;
+import com.team4u.framework.retry.managed.model.RetryStatus;
+import com.team4u.framework.retry.api.RetryPolicy;
+import com.team4u.framework.retry.api.NamedRetryPolicyFactory;
+import com.team4u.framework.retry.api.NamedRetryPolicyRegistry;
 import com.team4u.framework.retry.proxy.InvocationReplay;
 import com.team4u.framework.retry.proxy.RetryMode;
 import com.team4u.framework.retry.proxy.Retryable;
-import com.team4u.framework.retry.recovery.RecoveryContext;
-import com.team4u.framework.retry.recovery.RecoveryHandler;
-import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
+import com.team4u.framework.retry.managed.recovery.RecoveryContext;
+import com.team4u.framework.retry.managed.recovery.RecoveryHandler;
+import com.team4u.framework.retry.managed.recovery.RecoveryHandlerRegistry;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -44,9 +44,9 @@ public class RetrySpringTest {
     @Before
     public void setup() {
         // 环境初始化：注销所有注册中心信息并注册测试专用重试策略
-        RetryPolicyFactoryRegistry.global().unregisterAll();
+        NamedRetryPolicyRegistry.global().unregisterAll();
         RecoveryHandlerRegistry.global().unregisterAll();
-        RetryPolicyFactoryRegistry.global().register(new RetryPolicyFactory() {
+        NamedRetryPolicyRegistry.global().register(new NamedRetryPolicyFactory() {
             @Override
             public String key() {
                 return "test-policy";

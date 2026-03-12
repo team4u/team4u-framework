@@ -1,7 +1,7 @@
 package com.team4u.framework.retry;
 
-import com.team4u.framework.retry.backoff.Backoff;
-import com.team4u.framework.retry.backoff.Backoffs;
+import com.team4u.framework.retry.common.backoff.Backoff;
+import com.team4u.framework.retry.common.backoff.Backoffs;
 import org.junit.Assert;
 import org.junit.Test;
 

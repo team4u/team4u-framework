@@ -1,10 +1,10 @@
 package com.team4u.framework.retry.spring;
 
 import cn.hutool.extra.spring.SpringUtil;
-import com.team4u.framework.retry.client.DefaultInlineRetryClient;
-import com.team4u.framework.retry.client.InlineRetryClient;
-import com.team4u.framework.retry.client.ManagedRetryClient;
-import com.team4u.framework.retry.concurrent.RetryExecutorManager;
+import com.team4u.framework.retry.inline.DefaultInlineRetryClient;
+import com.team4u.framework.retry.inline.InlineRetryClient;
+import com.team4u.framework.retry.managed.client.ManagedRetryClient;
+import com.team4u.framework.retry.common.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.proxy.RetryDelegate;
 import com.team4u.framework.retry.proxy.RetryMethodResolver;
 import org.aopalliance.intercept.MethodInterceptor;
