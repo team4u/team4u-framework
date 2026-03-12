@@ -146,11 +146,6 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
     }
 
     @Override
-    public void markWaitingRetry(String taskId, RetryTransition transition) {
-        // 注意：WAITING_RETRY 状态切换通常由 dispatch / release 携带 payload 自动完成，此处不做额外控制面写入。
-    }
-
-    @Override
     public void markProcessing(String taskId, ProcessingRecord record) {
         // 注意：分布式环境下的 PROCESSING 状态由 Lease 系统自身的 RUNNING 状态隐含表达，减少写放大。
     }

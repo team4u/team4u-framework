@@ -14,7 +14,7 @@ import java.time.Instant;
  * <li>{@link Completed}: 前台执行成功完成</li>
  * <li>{@link Accepted}: 新任务已经被可靠托管接受，并被移交至后台调度</li>
  * <li>{@link Existing}: 命中了已存在的幂等任务，返回当前持久化快照</li>
- * <li>{@link Rejected}: 任务被拒绝（例如：配置错误、资源不足等）</li>
+ * <li>{@link Rejected}: 任务因运行期环境原因未能被 durable 接受</li>
  * <li>{@link Failed}: 明确的终端失败，不再重试也不会被托管</li>
  * </ul>
  *
@@ -118,7 +118,7 @@ public interface ManagedSubmitResult<T> {
     }
 
     /**
-     * 被拒绝：表示任务由于配置不合规、资源受限等原因被重试引擎拒绝下单。
+     * 被拒绝：表示任务因运行期环境原因未能被重试引擎 durable 接受。
      */
     @Data
     class Rejected<T> implements ManagedSubmitResult<T> {

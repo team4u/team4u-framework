@@ -230,6 +230,19 @@ public class RetrySpringTest {
     }
 
     @Test
+    public void testClosingContextOwnedManagerDoesNotShutdownGlobalManager() {
+        RetryExecutorManager globalManager = RetryExecutorManager.global();
+        globalManager.reset();
+
+        try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(TestConfig.class)) {
+            RetryExecutorManager contextManager = context.getBean(RetryExecutorManager.class);
+            Assert.assertNotSame(globalManager, contextManager);
+        }
+
+        Assert.assertFalse(globalManager.getScheduler().isShutdown());
+    }
+
+    @Test
     public void testInvocationReplayUsesTargetBeanNameInSpringContext() throws Exception {
         try (AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(ReplayConfig.class)) {
             NamedReplayBean primary = (NamedReplayBean) context.getBean("primaryReplayBean");

@@ -297,7 +297,7 @@ MANAGED 模式的核心在于：“任务高可靠持久化” + “执行权可
     *   Accepted: 前台次数用完还没成功，任务已安全进入后台，正等待 Worker 接管继续重试。
     *   Existing: 命中了已存在的幂等任务，返回当前持久化状态快照；它可能已经是 `SUCCEEDED / FAILED / CANCELLED`。
     *   Failed: 命中不可重试异常或已达 `maxRetries` 上限。
-    *   Rejected: 参数校验不通过（如缺少持久化必需的 ID 等）。
+    *   Rejected: 运行期未能 durable 接受任务（如初始持久化失败、后台 handoff 失败）。
 
 > [!IMPORTANT]
 > `Accepted` 只代表“接管成功”，不代表“业务已成功”。
@@ -423,6 +423,9 @@ PayService proxy = RetryProxyFactory.createProxy(
 );
 ```
 
+`RetryProxyFactory` 只保留显式 `targetClass` 入口。
+如果你希望拿到接口代理，就传接口类型；如果你希望拿到类代理，就显式传目标类。
+
 ### 策略注册
 
 `@Retryable(policy = "...")` 依赖策略名查找。
@@ -479,7 +482,7 @@ public class RetryConfig {
 * 默认 `InlineRetryClient`
 * `RetryAdvisor`
 * 默认 `RecoveryHandler` 扫描注册器
-* 生命周期配置，在容器销毁时调用 `RetryExecutorManager.global().shutdown()`
+* 生命周期配置，为当前 Spring 容器注册独立的 `RetryExecutorManager`，并在容器销毁时关闭这组容器级 executors
 
 ### 最小 Spring 示例
 
@@ -602,7 +605,7 @@ public class RetryManagedConfiguration {
 需要注意：
 
 * 同一个 Bean 内部自调用通常不会经过代理
-* `final` 类 / `final` 方法不适合依赖代理增强
+* `final` 类不支持代理创建；`final` 方法不会被代理拦截，因此不适合承载 `@Retryable`
 * 与 `@Transactional`、日志、监控等多个 Advisor 共存时，顺序取决于代理链
 
 如果要求“自调用也能触发重试”，建议拆分到独立 Bean，或改用编程式接入。

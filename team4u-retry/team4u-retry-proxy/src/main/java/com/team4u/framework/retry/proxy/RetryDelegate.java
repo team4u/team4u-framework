@@ -249,7 +249,7 @@ public class RetryDelegate {
             // 构建参数快照，对于被忽略的参数不进行序列化
             snapshots.add(InvocationArgSnapshot.builder()
                     .typeName(parameter.getType().getName())
-                    .serializedValue(ignored ? null : serializer.serialize(parameter, argValue))
+                    .serializedValue(ignored ? null : serializer.serialize(argValue))
                     .ignored(ignored)
                     .build());
         }

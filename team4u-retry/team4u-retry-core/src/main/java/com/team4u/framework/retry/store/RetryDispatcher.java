@@ -5,6 +5,9 @@ import com.team4u.framework.retry.store.record.RetryDispatchCommand;
 
 /**
  * 重试分发器接口，负责将前台尝试失败的任务移交给后台调度系统（Durable Handoff）。
+ * <p>
+ * {@link #dispatch(RetryDispatchCommand)} 成功返回即表示任务已被 durable 地推进到
+ * {@code WAITING_RETRY} 并完成后台调度；失败则表示 handoff 未完成。
  */
 public interface RetryDispatcher {
 

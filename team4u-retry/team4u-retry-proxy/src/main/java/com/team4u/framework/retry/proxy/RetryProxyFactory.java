@@ -12,20 +12,6 @@ import com.team4u.framework.retry.client.ManagedRetryClient;
 public class RetryProxyFactory {
 
     /**
-     * 为目标对象创建支持指定重试客户端的代理
-     *
-     * @param target        原始目标对象
-     * @param inlineClient  内存重试客户端
-     * @param managedClient 托管重试客户端
-     * @param <T>           目标对象类型
-     * @return 增强后的代理对象
-     */
-    @SuppressWarnings("unchecked")
-    public static <T> T createProxy(T target, InlineRetryClient inlineClient, ManagedRetryClient managedClient) {
-        return createProxy(target, (Class<T>) target.getClass(), inlineClient, managedClient);
-    }
-
-    /**
      * 显式指定类型并创建重试代理
      *
      * @param target        原始目标对象

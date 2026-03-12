@@ -59,14 +59,6 @@ public interface RetryStore {
     void markCancelled(String taskId, CancelRecord cancel);
 
     /**
-     * 标记任务进入“等待下一次重试”状态。
-     *
-     * @param taskId     内部任务 ID
-     * @param transition 状态流转快照，包含下一次运行时间及尝试次数更新
-     */
-    void markWaitingRetry(String taskId, RetryTransition transition);
-
-    /**
      * 标记任务当前正在处理中。
      *
      * @param taskId 内部任务 ID

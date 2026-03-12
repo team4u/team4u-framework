@@ -1,6 +1,7 @@
 package com.team4u.framework.retry.proxy;
 
 import cn.hutool.json.JSONUtil;
+import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.retry.backoff.Backoffs;
 import com.team4u.framework.retry.client.ManagedRetryClient;
 import com.team4u.framework.retry.domain.ManagedSubmitResult;
@@ -18,6 +19,8 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Arrays;
+import java.util.List;
 import java.lang.reflect.Method;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -149,6 +152,35 @@ public class RetryDelegateManagedTest {
         String secondKey = managedClient.lastSpec.getIdempotencyKey();
 
         Assert.assertEquals(firstKey, secondKey);
+    }
+
+    @Test
+    public void testManagedSnapshotRoundTripsGenericArgumentsThroughInvocationReplay() throws Throwable {
+        CapturingManagedRetryClient managedClient = new CapturingManagedRetryClient();
+        RetryDelegate delegate = new RetryDelegate(null, managedClient);
+        ManagedGenericReplayService target = new ManagedGenericReplayService();
+        Method method = ManagedGenericReplayService.class.getMethod("replayPayment",
+                String.class, Level.class, List.class, Character.class);
+        Retryable retryable = method.getAnnotation(Retryable.class);
+
+        delegate.executeWithRetry(
+                method,
+                target,
+                new Object[]{"order-1", Level.HIGH, Arrays.asList(new Input("x"), new Input("y")), Character.valueOf('A')},
+                retryable,
+                () -> null);
+
+        BeanManager.getInstance().registerBean(ManagedGenericReplayService.class.getName(), target);
+        new InvocationReplay().recover(
+                managedClient.lastSpec.getRecovery().getPayload(),
+                RecoveryContext.builder().taskId("task-roundtrip").attempt(1).build());
+
+        Assert.assertEquals("order-1", target.orderId);
+        Assert.assertEquals(Level.HIGH, target.level);
+        Assert.assertEquals(Character.valueOf('A'), target.initial);
+        Assert.assertEquals(2, target.inputs.size());
+        Assert.assertEquals("x", target.inputs.get(0).getValue());
+        Assert.assertEquals("y", target.inputs.get(1).getValue());
     }
 
     @Test
@@ -308,6 +340,21 @@ public class RetryDelegateManagedTest {
         }
     }
 
+    public static class ManagedGenericReplayService {
+        private String orderId;
+        private Level level;
+        private List<Input> inputs;
+        private Character initial;
+
+        @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED)
+        public void replayPayment(String orderId, Level level, List<Input> inputs, Character initial) {
+            this.orderId = orderId;
+            this.level = level;
+            this.inputs = inputs;
+            this.initial = initial;
+        }
+    }
+
     public static class Input {
         private final String value;
 
@@ -318,6 +365,10 @@ public class RetryDelegateManagedTest {
         public String getValue() {
             return value;
         }
+    }
+
+    public enum Level {
+        HIGH
     }
 
     public static class CustomRecoveryHandler implements RecoveryHandler<InvocationRecoveryData> {

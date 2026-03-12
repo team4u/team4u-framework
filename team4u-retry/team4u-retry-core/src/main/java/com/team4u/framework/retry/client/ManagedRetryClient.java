@@ -22,6 +22,8 @@ public interface ManagedRetryClient {
      * @param spec 完整的重试任务规格定义，包含业务逻辑、恢复策略及重试设置
      * @param <T>  业务执行结果的类型
      * @return 包含任务唯一标识、当前状态及其它上下文信息的提交结果
+     * @throws IllegalArgumentException 当 {@code spec} 为空时抛出
+     * @throws IllegalStateException    当 MANAGED 所需的调用参数缺失时抛出
      */
     <T> ManagedSubmitResult<T> submit(RetryTaskSpec<T> spec);
 }

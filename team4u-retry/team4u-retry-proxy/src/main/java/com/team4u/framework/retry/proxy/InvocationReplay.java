@@ -13,6 +13,7 @@ import lombok.Getter;
 import lombok.Setter;
 
 import java.lang.reflect.Method;
+import java.lang.reflect.Type;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -79,7 +80,7 @@ public class InvocationReplay implements RecoveryHandler<String> {
             throw new NoSuchMethodException(payload.getTargetTypeName() + "." + payload.getMethodName());
         }
 
-        Object[] args = resolveArgs(payload, paramTypes);
+        Object[] args = resolveArgs(payload, method);
 
         ReflectUtil.invoke(target, method, args);
     }
@@ -159,14 +160,16 @@ public class InvocationReplay implements RecoveryHandler<String> {
     /**
      * 解析并反序列化参数值列表。
      *
-     * @param payload    恢复数据负载
-     * @param paramTypes 参数类型数组
+     * @param payload 恢复数据负载
+     * @param method  目标方法
      * @return 反序列化后的参数对象数组
      */
-    private Object[] resolveArgs(InvocationRecoveryData payload, Class<?>[] paramTypes) {
+    private Object[] resolveArgs(InvocationRecoveryData payload, Method method) {
         if (payload.getArgs() == null || payload.getArgs().isEmpty()) {
             return new Object[0];
         }
+        Class<?>[] paramTypes = method.getParameterTypes();
+        Type[] genericParamTypes = method.getGenericParameterTypes();
         if (payload.getArgs().size() != paramTypes.length) {
             throw new IllegalArgumentException("InvocationRecoveryData args length mismatch. snapshots="
                     + payload.getArgs().size() + ", paramTypes=" + paramTypes.length);
@@ -181,7 +184,7 @@ public class InvocationReplay implements RecoveryHandler<String> {
                 args[i] = null;
                 continue;
             }
-            args[i] = serializer.deserialize(paramTypes[i], snapshot.getSerializedValue());
+            args[i] = serializer.deserialize(genericParamTypes[i], snapshot.getSerializedValue());
         }
         return args;
     }
