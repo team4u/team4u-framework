@@ -12,6 +12,7 @@ import java.util.Map;
  * <p>
  * 用于向调度系统释放当前持有的任务执行权，并定义任务下次可被抢占的时间。
  * 支持在释放的同时更新任务载荷（payload）及扩展属性。
+ * attributes 采用 patch-only 语义：空 map 表示不修改现有属性。
  */
 @Getter
 public class LeaseReleaseRequest {
@@ -27,6 +28,7 @@ public class LeaseReleaseRequest {
      * 附加属性快照（可选）
      * <p>
      * 用于在释放时同步更新任务的动态属性，通常用于保存中间处理状态。
+     * 空 map 表示不修改现有属性。
      */
     private final Map<String, String> attributes;
 

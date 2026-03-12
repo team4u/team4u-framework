@@ -26,7 +26,7 @@ public interface LeaseRuntimeClient {
      *
      * @param handle  租约操作句柄
      * @param request 关闭请求
-     * @return 关闭结果
+     * @return 非空的关闭结果
      */
     LeaseRuntimeResult close(LeaseHandle handle, LeaseCloseRequest request);
 
@@ -37,7 +37,7 @@ public interface LeaseRuntimeClient {
      *
      * @param handle       租约操作句柄
      * @param extendMillis 期望延长的毫秒数
-     * @return 操作结果状态
+     * @return 非空的操作结果状态
      */
     LeaseRuntimeResult heartbeat(LeaseHandle handle, long extendMillis);
 
@@ -48,7 +48,7 @@ public interface LeaseRuntimeClient {
      *
      * @param handle  租约操作句柄
      * @param request 释放请求详情
-     * @return 操作结果状态
+     * @return 非空的操作结果状态
      */
     LeaseRuntimeResult release(LeaseHandle handle, LeaseReleaseRequest request);
 }

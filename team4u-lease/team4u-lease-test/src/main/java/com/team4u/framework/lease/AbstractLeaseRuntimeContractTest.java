@@ -8,6 +8,7 @@ import com.team4u.framework.lease.model.*;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
@@ -190,6 +191,78 @@ public abstract class AbstractLeaseRuntimeContractTest extends AbstractLeaseCont
         Assert.assertEquals("payload-v2", nextGrant.getPayload());
         Assert.assertEquals("payload-v2", backend.get(taskId).get().getPayload());
         Assert.assertEquals("retry", backend.get(taskId).get().getErrorMessage());
+    }
+
+    @Test
+    public void testReleaseCanUpdateAttributes() throws Exception {
+        LeaseBackend backend = createBackend();
+        String taskId = backend.publish(LeasePublishRequest.builder()
+                .queue(DEFAULT_QUEUE)
+                .taskType("pay")
+                .payload("payload-v1")
+                .attributes(Collections.singletonMap("traceId", "T-1"))
+                .build());
+        LeaseGrant grant = acquire(backend, "worker-a", 80L, 500L);
+
+        Assert.assertEquals(
+                LeaseRuntimeResult.APPLIED,
+                backend.release(grant.getHandle(), LeaseReleaseRequest.builder()
+                        .delayMillis(50L)
+                        .attributes(Collections.singletonMap("traceId", "T-2"))
+                        .build()));
+
+        Thread.sleep(70L);
+        LeaseGrant nextGrant = acquire(backend, "worker-b", 80L, 200L);
+        Assert.assertNotNull(nextGrant);
+        Assert.assertEquals("T-2", nextGrant.getAttributes().get("traceId"));
+        Assert.assertEquals("T-2", backend.get(taskId).get().getAttributes().get("traceId"));
+    }
+
+    @Test
+    public void testReleaseWithoutAttributesKeepsOriginalAttributes() throws Exception {
+        LeaseBackend backend = createBackend();
+        String taskId = backend.publish(LeasePublishRequest.builder()
+                .queue(DEFAULT_QUEUE)
+                .taskType("pay")
+                .payload("payload-v1")
+                .attributes(Collections.singletonMap("traceId", "T-1"))
+                .build());
+        LeaseGrant grant = acquire(backend, "worker-a", 80L, 500L);
+
+        Assert.assertEquals(
+                LeaseRuntimeResult.APPLIED,
+                backend.release(grant.getHandle(), LeaseReleaseRequest.of(50L)));
+
+        Thread.sleep(70L);
+        LeaseGrant nextGrant = acquire(backend, "worker-b", 80L, 200L);
+        Assert.assertNotNull(nextGrant);
+        Assert.assertEquals("T-1", nextGrant.getAttributes().get("traceId"));
+        Assert.assertEquals("T-1", backend.get(taskId).get().getAttributes().get("traceId"));
+    }
+
+    @Test
+    public void testReleaseWithEmptyAttributesKeepsOriginalAttributes() throws Exception {
+        LeaseBackend backend = createBackend();
+        String taskId = backend.publish(LeasePublishRequest.builder()
+                .queue(DEFAULT_QUEUE)
+                .taskType("pay")
+                .payload("payload-v1")
+                .attributes(Collections.singletonMap("traceId", "T-1"))
+                .build());
+        LeaseGrant grant = acquire(backend, "worker-a", 80L, 500L);
+
+        Assert.assertEquals(
+                LeaseRuntimeResult.APPLIED,
+                backend.release(grant.getHandle(), LeaseReleaseRequest.builder()
+                        .delayMillis(50L)
+                        .attributes(Collections.emptyMap())
+                        .build()));
+
+        Thread.sleep(70L);
+        LeaseGrant nextGrant = acquire(backend, "worker-b", 80L, 200L);
+        Assert.assertNotNull(nextGrant);
+        Assert.assertEquals("T-1", nextGrant.getAttributes().get("traceId"));
+        Assert.assertEquals("T-1", backend.get(taskId).get().getAttributes().get("traceId"));
     }
 
     @Test

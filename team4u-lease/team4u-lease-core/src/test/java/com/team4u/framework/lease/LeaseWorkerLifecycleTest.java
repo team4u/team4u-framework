@@ -3,6 +3,7 @@ package com.team4u.framework.lease;
 import com.team4u.framework.lease.api.LeaseRuntimeClient;
 import com.team4u.framework.lease.enums.LeaseRuntimeResult;
 import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
+import com.team4u.framework.lease.enums.LeaseTaskOutcome;
 import com.team4u.framework.lease.handler.LeaseLifecycleAwareTaskHandler;
 import com.team4u.framework.lease.handler.LeaseTaskHandler;
 import com.team4u.framework.lease.handler.LeaseTaskHandlerRegistry;
@@ -71,6 +72,35 @@ public class LeaseWorkerLifecycleTest {
         worker.shutdownNow();
     }
 
+    @Test
+    public void testLifecycleNullCloseResultTriggersContractFallback() throws Exception {
+        TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
+        runtimeClient.closeResults = new LeaseRuntimeResult[]{null, LeaseRuntimeResult.APPLIED};
+        CountDownLatch handled = new CountDownLatch(1);
+        LeaseTaskHandler handler = new LeaseLifecycleAwareTaskHandler() {
+            @Override
+            public void handleLifecycle(LeaseLifecycleExecutionContext context) {
+                context.close(LeaseCloseRequest.succeeded());
+                handled.countDown();
+            }
+        };
+        LeaseWorker worker = new LeaseWorker(
+                runtimeClient,
+                new SingleHandlerRegistry(handler),
+                LeaseWorkerPolicy.builder().pollWaitMillis(10L).heartbeatEnabled(false).build());
+
+        worker.start("lease-worker-lifecycle-null-close");
+
+        Assert.assertTrue(handled.await(1, TimeUnit.SECONDS));
+        Assert.assertTrue(runtimeClient.awaitCloseCheck(1, TimeUnit.SECONDS));
+        Assert.assertEquals(2, runtimeClient.closeCalls);
+        Assert.assertEquals(LeaseTaskOutcome.SUCCEEDED, runtimeClient.closeRequests[0].getOutcome());
+        Assert.assertEquals(LeaseTaskFailureReason.HANDLER_CONTRACT_VIOLATION,
+                runtimeClient.closeRequests[1].getFailureReason());
+
+        worker.shutdownNow();
+    }
+
     private static class SingleHandlerRegistry implements LeaseTaskHandlerRegistry {
         private final LeaseTaskHandler handler;
 
@@ -95,7 +125,9 @@ public class LeaseWorkerLifecycleTest {
 
     private static class TrackingRuntimeClient implements LeaseRuntimeClient {
         private final CountDownLatch closeCheckLatch = new CountDownLatch(1);
+        private final LeaseCloseRequest[] closeRequests = new LeaseCloseRequest[4];
         private volatile boolean granted;
+        private LeaseRuntimeResult[] closeResults = new LeaseRuntimeResult[]{LeaseRuntimeResult.APPLIED};
         private int closeCalls;
         private LeaseCloseRequest lastCloseRequest;
 
@@ -123,7 +155,13 @@ public class LeaseWorkerLifecycleTest {
         public LeaseRuntimeResult close(LeaseHandle handle, LeaseCloseRequest request) {
             closeCalls++;
             lastCloseRequest = request;
-            return LeaseRuntimeResult.APPLIED;
+            if (closeCalls <= closeRequests.length) {
+                closeRequests[closeCalls - 1] = request;
+            }
+            if (closeCalls <= closeResults.length) {
+                return closeResults[closeCalls - 1];
+            }
+            return closeResults[closeResults.length - 1];
         }
 
         @Override

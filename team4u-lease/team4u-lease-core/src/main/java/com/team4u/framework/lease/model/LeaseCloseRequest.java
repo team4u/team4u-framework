@@ -38,6 +38,7 @@ public class LeaseCloseRequest {
 
     /**
      * 附加属性快照。
+     * 空 map 表示不修改现有属性。
      */
     private Map<String, String> attributes;
 

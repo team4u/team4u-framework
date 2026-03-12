@@ -75,8 +75,7 @@ public class LeaseLifecycleExecutionContext extends LeaseExecutionContext {
     }
 
     private void markLifecycleHandled(LeaseRuntimeResult result) {
-        // 当租约操作成功应用（APPLIED）或因某些特殊情况返回 null 时，标记生命周期已完成
-        if (result == null || result == LeaseRuntimeResult.APPLIED) {
+        if (result == LeaseRuntimeResult.APPLIED) {
             lifecycleHandled.set(true);
         }
     }
