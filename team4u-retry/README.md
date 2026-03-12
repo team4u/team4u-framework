@@ -12,7 +12,7 @@
 * `team4u-retry-core`
 * `team4u-retry-proxy`
 * `team4u-retry-spring`
-* `team4u-retry-lease-integration`
+* `team4u-retry-lease-runtime`
 
 ---
 
@@ -26,7 +26,7 @@
 | 给 `CompletableFuture` 加异步重试        | INLINE      | `team4u-retry-core`                                    |
 | 想通过注解给方法加重试                   | 代理模式    | `team4u-retry-proxy`                                   |
 | Spring 项目里启用注解重试                | Spring 集成 | `team4u-retry-spring`                                  |
-| 需要任务持久化、后台接管、进程重启后继续 | MANAGED     | `team4u-retry-core` + `team4u-retry-lease-integration` |
+| 需要任务持久化、后台接管、进程重启后继续 | MANAGED     | `team4u-retry-core` + `team4u-retry-lease-runtime` |
 
 ### 什么时候用 INLINE
 
@@ -73,7 +73,7 @@
     <module>team4u-retry-core</module>
     <module>team4u-retry-proxy</module>
     <module>team4u-retry-spring</module>
-    <module>team4u-retry-lease-integration</module>
+    <module>team4u-retry-lease-runtime</module>
 </modules>
 ```
 
@@ -120,7 +120,7 @@
 
 <dependency>
     <groupId>com.team4u</groupId>
-    <artifactId>team4u-retry-lease-integration</artifactId>
+    <artifactId>team4u-retry-lease-runtime</artifactId>
     <version>${version}</version>
 </dependency>
 ```
