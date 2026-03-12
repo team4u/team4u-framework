@@ -200,7 +200,7 @@ import com.team4u.framework.lease.api.LeaseBackend;
 import com.team4u.framework.retry.api.Retries;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 import com.team4u.framework.retry.api.ManagedSubmitResult;
-import com.team4u.framework.retry.integration.lease.ManagedRetryRuntime;
+import com.team4u.framework.retry.runtime.lease.ManagedRetryRuntime;
 LeaseBackend backend = ...; // 关于 LeaseBackend 的选择与配置，请参考 [team4u-lease 文档](../team4u-lease/README.md)
 
 ManagedRetryRuntime runtime = ManagedRetryRuntime.lease(backend)
@@ -554,7 +554,7 @@ import com.team4u.framework.lease.api.LeaseBackend;
 import com.team4u.framework.retry.api.Retries;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 import com.team4u.framework.retry.managed.client.ManagedRetryClient;
-import com.team4u.framework.retry.integration.lease.ManagedRetryRuntime;
+import com.team4u.framework.retry.runtime.lease.ManagedRetryRuntime;
 import com.team4u.framework.retry.api.RetryPolicy;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;

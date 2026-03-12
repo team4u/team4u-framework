@@ -17,6 +17,6 @@
         <module>team4u-retry-core</module>
         <module>team4u-retry-proxy</module>
         <module>team4u-retry-spring</module>
-        <module>team4u-retry-lease-integration</module>
+        <module>team4u-retry-lease-runtime</module>
     </modules>
 </project>
