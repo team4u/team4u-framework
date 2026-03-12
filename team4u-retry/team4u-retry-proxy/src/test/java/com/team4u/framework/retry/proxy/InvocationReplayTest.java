@@ -198,6 +198,10 @@ public class InvocationReplayTest {
         }
     }
 
+    public enum Level {
+        HIGH
+    }
+
     public interface ReplayContract {
         void replay(String orderId);
     }
@@ -274,9 +278,5 @@ public class InvocationReplayTest {
 
     public static class Input {
         private String value;
-    }
-
-    public enum Level {
-        HIGH
     }
 }

@@ -446,6 +446,10 @@ public class DefaultManagedRetryClientTest {
         Assert.assertNull(dispatcher.command);
     }
 
+    private interface ThrowingRunnable {
+        void run() throws Exception;
+    }
+
     private static class RecordingStore implements RetryStore {
         private final List<String> operations = new ArrayList<String>();
         private boolean created = true;
@@ -521,9 +525,5 @@ public class DefaultManagedRetryClientTest {
             command.getRecord().getState().setBackendTaskId(result.getBackendTaskId());
             return result;
         }
-    }
-
-    private interface ThrowingRunnable {
-        void run() throws Exception;
     }
 }

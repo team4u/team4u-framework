@@ -10,7 +10,10 @@ import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
 import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
-import java.util.*;
+import java.util.ArrayList;
+import java.util.Collection;
+import java.util.LinkedHashSet;
+import java.util.Set;
 
 /**
  * 基于 Hutool 的 {@link JSONUtil} 实现的重试上下文序列化器。
@@ -135,6 +138,7 @@ public class HutoolRetryContextSerializer implements RetryContextSerializer {
     /**
      * 执行基础简单值的转换逻辑。
      */
+    @SuppressWarnings({"rawtypes", "unchecked"})
     private Object deserializeBasicValue(Class<?> rawType, String json) {
         // 利用数组嵌套方式解析原始 JSON 值，增强解析器的兼容性（适配带或不带引号的情况）
         Object value = JSONUtil.parseArray("[" + json + "]").get(0);
@@ -143,9 +147,7 @@ public class HutoolRetryContextSerializer implements RetryContextSerializer {
             return text == null || text.isEmpty() ? '\0' : text.charAt(0);
         }
         if (rawType.isEnum()) {
-            @SuppressWarnings({"unchecked", "rawtypes"})
-            Class enumType = (Class) rawType;
-            return java.lang.Enum.valueOf(enumType, Convert.toStr(value));
+            return Enum.valueOf((Class) rawType, Convert.toStr(value));
         }
         return Convert.convert(rawType, value);
     }

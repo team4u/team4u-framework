@@ -19,9 +19,9 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.lang.reflect.Method;
 import java.util.Arrays;
 import java.util.List;
-import java.lang.reflect.Method;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -302,6 +302,10 @@ public class RetryDelegateManagedTest {
         Assert.assertFalse(proceeded.get());
     }
 
+    public enum Level {
+        HIGH
+    }
+
     public static class ManagedVoidService {
         @Retryable(policy = "managed-policy", mode = RetryMode.MANAGED)
         public void replayPayment(String orderId, Integer attempts) {
@@ -365,10 +369,6 @@ public class RetryDelegateManagedTest {
         public String getValue() {
             return value;
         }
-    }
-
-    public enum Level {
-        HIGH
     }
 
     public static class CustomRecoveryHandler implements RecoveryHandler<InvocationRecoveryData> {
