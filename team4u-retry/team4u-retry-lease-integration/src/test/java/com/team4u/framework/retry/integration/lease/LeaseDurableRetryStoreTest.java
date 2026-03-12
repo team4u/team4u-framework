@@ -24,8 +24,12 @@ public class LeaseDurableRetryStoreTest {
     @Test
     public void testCreateIfAbsentUsesPublishIfAbsentWithBusinessKey() {
         RecordingLeaseApi api = new RecordingLeaseApi();
-        LeaseDurableRetryStore store = new LeaseDurableRetryStore(api, api, api, "retry-q");
-        store.setSerializer(new FixedSerializer("serialized", retryRecord("task-created", RetryStatus.ACCEPTED)));
+        LeaseDurableRetryStore store = new LeaseDurableRetryStore(
+                api,
+                api,
+                api,
+                "retry-q",
+                new FixedSerializer("serialized", retryRecord("task-created", RetryStatus.ACCEPTED)));
 
         SubmitRecord result = store.createIfAbsent(RetryCreateRequest.builder()
                 .request(RetryRequest.builder()
@@ -55,8 +59,12 @@ public class LeaseDurableRetryStoreTest {
                 .businessKey("payment|order-1")
                 .state(LeaseTaskState.RUNNING)
                 .build();
-        LeaseDurableRetryStore store = new LeaseDurableRetryStore(api, api, api, "retry-q");
-        store.setSerializer(new FixedSerializer("ignored", retryRecord("task-existing", RetryStatus.WAITING_RETRY)));
+        LeaseDurableRetryStore store = new LeaseDurableRetryStore(
+                api,
+                api,
+                api,
+                "retry-q",
+                new FixedSerializer("ignored", retryRecord("task-existing", RetryStatus.WAITING_RETRY)));
 
         Optional<RetryRecord> result = store.findByIdempotencyKey("payment", "order-1");
 
@@ -75,10 +83,9 @@ public class LeaseDurableRetryStoreTest {
                 .payload("serialized-before")
                 .state(LeaseTaskState.READY)
                 .build();
-        LeaseDurableRetryStore store = new LeaseDurableRetryStore(api, api, api, "retry-q");
         RetryRecord record = retryRecord("task-1", RetryStatus.ACCEPTED);
         FixedSerializer serializer = new FixedSerializer("serialized-after", record);
-        store.setSerializer(serializer);
+        LeaseDurableRetryStore store = new LeaseDurableRetryStore(api, api, api, "retry-q", serializer);
 
         DispatchResult result = store.dispatch(RetryDispatchCommand.builder()
                 .record(record)
@@ -109,9 +116,13 @@ public class LeaseDurableRetryStoreTest {
                 .payload("serialized-before")
                 .state(LeaseTaskState.READY)
                 .build();
-        LeaseDurableRetryStore store = new LeaseDurableRetryStore(api, api, api, "retry-q");
         RetryRecord record = retryRecord("task-1", RetryStatus.ACCEPTED);
-        store.setSerializer(new FixedSerializer("serialized-success", record));
+        LeaseDurableRetryStore store = new LeaseDurableRetryStore(
+                api,
+                api,
+                api,
+                "retry-q",
+                new FixedSerializer("serialized-success", record));
         Instant succeededAt = Instant.now();
 
         store.markSucceeded("task-1", SuccessRecord.builder().succeededAt(succeededAt).build());
@@ -132,9 +143,13 @@ public class LeaseDurableRetryStoreTest {
                 .payload("serialized-before")
                 .state(LeaseTaskState.READY)
                 .build();
-        LeaseDurableRetryStore store = new LeaseDurableRetryStore(api, api, api, "retry-q");
         RetryRecord record = retryRecord("task-1", RetryStatus.ACCEPTED);
-        store.setSerializer(new FixedSerializer("serialized-failed", record));
+        LeaseDurableRetryStore store = new LeaseDurableRetryStore(
+                api,
+                api,
+                api,
+                "retry-q",
+                new FixedSerializer("serialized-failed", record));
         Instant failedAt = Instant.now();
 
         store.markFailed("task-1", FailureRecord.builder()
@@ -159,9 +174,13 @@ public class LeaseDurableRetryStoreTest {
                 .payload("serialized-before")
                 .state(LeaseTaskState.READY)
                 .build();
-        LeaseDurableRetryStore store = new LeaseDurableRetryStore(api, api, api, "retry-q");
         RetryRecord record = retryRecord("task-1", RetryStatus.ACCEPTED);
-        store.setSerializer(new FixedSerializer("serialized-cancelled", record));
+        LeaseDurableRetryStore store = new LeaseDurableRetryStore(
+                api,
+                api,
+                api,
+                "retry-q",
+                new FixedSerializer("serialized-cancelled", record));
         Instant cancelledAt = Instant.now();
 
         store.markCancelled("task-1", CancelRecord.builder()

@@ -100,12 +100,12 @@ public class RetryPolicy {
     /**
      * 判断是否可以继续重试。
      *
-     * @param executedAttempts 已执行且失败的总尝试次数（包含首次执行）
-     * @param ex               本次尝试抛出的异常
+     * @param failedAttemptsSoFar 已执行且失败的总尝试次数（包含首次执行）
+     * @param ex                  本次尝试抛出的异常
      * @return true 表示允许继续重试
      */
-    public boolean canRetry(int executedAttempts, Throwable ex) {
-        if (maxRetries != -1 && executedAttempts > maxRetries) {
+    public boolean canRetry(int failedAttemptsSoFar, Throwable ex) {
+        if (maxRetries != -1 && failedAttemptsSoFar > maxRetries) {
             return false;
         }
 
@@ -126,7 +126,7 @@ public class RetryPolicy {
 
         // 执行额外的表达式条件判断
         if (condition != null && !condition.isEmpty()) {
-            RetryContext contextData = new RetryContext(executedAttempts - 1, maxRetries, cause);
+            RetryContext contextData = new RetryContext(failedAttemptsSoFar - 1, maxRetries, cause);
             MatchContext ctx = MatchContext.of(contextData);
             return Criteria.global().matches(condition, ctx);
         }

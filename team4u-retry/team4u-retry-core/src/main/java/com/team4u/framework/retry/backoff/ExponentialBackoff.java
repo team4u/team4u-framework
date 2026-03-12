@@ -36,8 +36,11 @@ public class ExponentialBackoff implements Backoff {
     @Override
     public long calculateMillis(int attempt) {
         Backoff.validateAttempt(attempt);
-        long delay = (long) (initialDelayMillis * Math.pow(multiplier, attempt - 1));
-        return Math.min(delay, maxDelayMillis);
+        double calculatedDelay = initialDelayMillis * Math.pow(multiplier, attempt - 1);
+        if (Double.isNaN(calculatedDelay) || Double.isInfinite(calculatedDelay) || calculatedDelay >= maxDelayMillis) {
+            return maxDelayMillis;
+        }
+        return (long) calculatedDelay;
     }
 
     /**

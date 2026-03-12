@@ -16,7 +16,6 @@ import com.team4u.framework.retry.store.serialize.HutoolRetryRecordSerializer;
 import com.team4u.framework.retry.store.serialize.RetryRecordSerializer;
 import com.team4u.framework.retry.util.RetryExceptionUtil;
 import lombok.Getter;
-import lombok.Setter;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Instant;
@@ -40,14 +39,21 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseLifecycleAwa
     /**
      * 用于重试记录领域模型的序列化组件
      */
-    @Setter
-    private RetryRecordSerializer serializer = HutoolRetryRecordSerializer.INSTANCE;
+    private final RetryRecordSerializer serializer;
 
     public RecoveryHandlerLeaseTaskHandlerAdapter(StringRecoveryHandler delegate) {
+        this(delegate, HutoolRetryRecordSerializer.INSTANCE);
+    }
+
+    public RecoveryHandlerLeaseTaskHandlerAdapter(StringRecoveryHandler delegate, RetryRecordSerializer serializer) {
         if (delegate == null) {
             throw new IllegalArgumentException("Lease recovery handler adapter requires StringRecoveryHandler");
         }
+        if (serializer == null) {
+            throw new IllegalArgumentException("RetryRecordSerializer must not be null");
+        }
         this.delegate = delegate;
+        this.serializer = serializer;
     }
 
     @Override
@@ -94,15 +100,15 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseLifecycleAwa
      */
     private void handleFailure(LeaseLifecycleExecutionContext context, RetryRecord record, Throwable cause) {
         RetryPolicy policy = record.getRequest().getPolicy();
-        int attempts = record.getState().getAttempts() + 1;
+        int failedAttemptsSoFar = record.getState().getAttempts() + 1;
 
         // 更新失败元数据摘要
-        record.getState().setAttempts(attempts);
+        record.getState().setAttempts(failedAttemptsSoFar);
         record.getState().setLastErrorCode(cause.getClass().getSimpleName());
         record.getState().setLastErrorMessage(cause.getMessage());
 
         // 检查策略：判断是否已达到最大重试次数或触发了不可重试异常
-        if (!policy.canRetry(attempts, cause)) {
+        if (!policy.canRetry(failedAttemptsSoFar, cause)) {
             log.error("Task failed closed (retries exhausted): {}", record.getTaskId(), cause);
             record.getState().setStatus(RetryStatus.FAILED);
             record.getState().setNextRunAt(null);
@@ -120,7 +126,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseLifecycleAwa
         }
 
         // 策略决定继续重试：计算下一次运行的退避延迟（Backoff）
-        long delayMillis = policy.getDelayMillis(attempts);
+        long delayMillis = policy.getDelayMillis(failedAttemptsSoFar);
         record.getState().setStatus(RetryStatus.WAITING_RETRY);
         record.getState().setNextRunAt(Instant.now().plusMillis(delayMillis));
 

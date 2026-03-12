@@ -25,23 +25,23 @@ public class RetryExceptionUtilTest {
         a.setCause(b);
         b.setCause(a);
 
-        // unwrap 应该在达到最大深度后停止，而不是死循环
+        // unwrap 应该依赖 seen 终止，而不是死循环
         Throwable result = RetryExceptionUtil.unwrap(a);
         Assert.assertNotNull(result);
     }
 
     @Test
     public void testUnwrapDeepChain() {
-        // 创建超过最大深度的异常链
+        // 创建深层异常链
         Throwable current = new RuntimeException("root");
         for (int i = 0; i < 20; i++) {
             current = new ExecutionException(current);
         }
 
-        // unwrap 应该在达到最大深度后停止
+        // unwrap 应该能继续解到最终根因
         Throwable result = RetryExceptionUtil.unwrap(current);
-        Assert.assertNotNull(result);
-        Assert.assertTrue(result instanceof ExecutionException);
+        Assert.assertEquals("root", result.getMessage());
+        Assert.assertTrue(result instanceof RuntimeException);
     }
 
     @Test

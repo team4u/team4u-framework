@@ -34,7 +34,7 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
                     "Inline mode does not support foregroundMaxRetries, please use maxRetries instead");
         }
 
-        int attempts = 0;
+        int failedAttemptsSoFar = 0;
         while (true) {
             try {
                 // 执行具体的业务逻辑回调
@@ -49,15 +49,15 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
                     throw (Error) cause;
                 }
 
-                attempts++;
+                failedAttemptsSoFar++;
 
-                // 根据策略判断当前已尝试次数和异常类型是否允许继续重试
-                if (!policy.canRetry(attempts, cause)) {
+                // 这里只在失败后进入 canRetry，因此传入的是“截至当前已失败的次数”。
+                if (!policy.canRetry(failedAttemptsSoFar, cause)) {
                     throw wrap(cause);
                 }
 
                 // 获取当前重试批次对应的退避延迟时间，并进行休眠等待
-                long delayMillis = policy.getDelayMillis(attempts);
+                long delayMillis = policy.getDelayMillis(failedAttemptsSoFar);
                 sleepQuietly(delayMillis);
             }
         }
@@ -86,7 +86,7 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
     /**
      * 递归执行异步任务尝试。
      *
-     * @param currentAttempt 当前已重试的次数
+     * @param currentAttempt 当前已失败的次数
      * @param policy         重试策略
      * @param asyncTask      异步任务生成器
      * @param scheduler      执行退避调度的调度器
@@ -158,7 +158,7 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
     /**
      * 处理异步任务失败时的逻辑，决定是否继续调度下一次重试。
      *
-     * @param attempts     当前尝试的次数
+     * @param failedAttemptsSoFar 当前已失败的次数
      * @param policy       重试策略
      * @param asyncTask    异步任务生成器
      * @param scheduler    调度器
@@ -166,7 +166,7 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
      * @param ex           本次尝试发生的异常
      */
     private <T> void handleAsyncFailure(
-            int attempts,
+            int failedAttemptsSoFar,
             RetryPolicy policy,
             Supplier<CompletableFuture<T>> asyncTask,
             ScheduledExecutorService scheduler,
@@ -184,13 +184,13 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
         }
 
         // 如果重试策略判断不再重试，则将异常传播到最终 Future 中
-        if (!policy.canRetry(attempts, cause)) {
+        if (!policy.canRetry(failedAttemptsSoFar, cause)) {
             resultFuture.completeExceptionally(cause);
             return;
         }
 
         // 根据策略计算下一次尝试的延迟时间
-        long delayMillis = policy.getDelayMillis(attempts);
+        long delayMillis = policy.getDelayMillis(failedAttemptsSoFar);
         if (resultFuture.isDone()) {
             return;
         }
@@ -199,7 +199,7 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
                 // 利用调度器在指定的延迟时间后重新发起任务
                 ScheduledFuture<?> scheduledFuture = scheduler.schedule(
                         () -> attemptAsync(
-                                attempts,
+                                failedAttemptsSoFar,
                                 policy,
                                 asyncTask,
                                 scheduler,
@@ -214,7 +214,14 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
                 }
             } else {
                 // 如果没有延迟，则立即发起下一次尝试
-                attemptAsync(attempts, policy, asyncTask, scheduler, resultFuture, inFlightFutureRef, scheduledRetryRef);
+                attemptAsync(
+                        failedAttemptsSoFar,
+                        policy,
+                        asyncTask,
+                        scheduler,
+                        resultFuture,
+                        inFlightFutureRef,
+                        scheduledRetryRef);
             }
         } catch (Exception scheduleEx) {
             // 调度器本身出现异常（如已关闭）时，保留原始业务异常作为主异常，

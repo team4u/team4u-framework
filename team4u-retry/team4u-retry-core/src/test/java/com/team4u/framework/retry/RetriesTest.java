@@ -119,7 +119,7 @@ public class RetriesTest {
     }
 
     @Test
-    public void testInlineDefaultPolicyDoesNotRetryWhenMaxRetriesOmitted() {
+    public void testInlineDefaultPolicyRetriesUsingDefaultMaxRetries() {
         AtomicInteger attempts = new AtomicInteger();
 
         try {
@@ -132,9 +132,11 @@ public class RetriesTest {
             Assert.fail("expected IllegalStateException");
         } catch (IllegalStateException ex) {
             Assert.assertEquals("boom", ex.getMessage());
+        } catch (Exception ex) {
+            Assert.fail("expected IllegalStateException, but got " + ex.getClass().getName());
         }
 
-        Assert.assertEquals(1, attempts.get());
+        Assert.assertEquals(3, attempts.get());
     }
 
     private static class RecordingManagedRetryClient implements ManagedRetryClient {

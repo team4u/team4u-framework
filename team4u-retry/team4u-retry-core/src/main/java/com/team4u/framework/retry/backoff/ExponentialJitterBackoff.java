@@ -8,7 +8,11 @@ import java.util.Map;
 import java.util.concurrent.ThreadLocalRandom;
 
 /**
- * 带随机抖动（Jitter）的指数级退避策略
+ * 带随机抖动（Jitter）的指数级退避策略。
+ * <p>
+ * 当前实现使用固定下界的随机区间算法：每次返回值都落在
+ * [{@code initialDelayMillis}, 当前指数退避上界] 之间。
+ * 这不是 equal jitter，也不是 decorrelated jitter。
  *
  * @author jay.wu
  */
@@ -30,6 +34,7 @@ public class ExponentialJitterBackoff implements Backoff {
         if (maxCalculatedDelay <= initialDelayMillis) {
             return maxCalculatedDelay;
         }
+        // 固定下界随机区间：[initialDelayMillis, maxCalculatedDelay]
         return ThreadLocalRandom.current().nextLong(initialDelayMillis, maxCalculatedDelay + 1L);
     }
 
