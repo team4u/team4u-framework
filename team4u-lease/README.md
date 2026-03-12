@@ -247,7 +247,7 @@ stateDiagram-v2
 
 - `close(SUCCEEDED)`：任务处理成功，进入终态。
 - `close(FAILED)`：任务处理失败，进入失败终态。该任务不会自动再次执行，除非后续手动重新入队。
-- `release(delay)`：主动释放租约并设置任务在未来某个时间点重新可见。这是一种“延期重试”的手段。
+- `release(delay)`：主动释放租约并设置任务在未来某个时间点重新可见。这是一种“延期重试”的手段。若同时携带 `payload` 或非空 `attributes`，会一并写回；空 `attributes` 不会清空原值。
 
 ### 缺失处理器策略 (MissingHandlerStrategy)
 
@@ -269,6 +269,7 @@ stateDiagram-v2
 ### `LeaseRuntimeClient` (运行时处理)
 Worker 执行过程中调用的底层 API。通常只有 Worker 执行链路会直接依赖。
 - 获取任务、维护心跳、完成/释放/标记失败。
+- `close(...)` / `release(...)` / `heartbeat(...)` 应返回非空 `LeaseRuntimeResult`；框架只把 `APPLIED` 视为成功。
 
 ### `LeaseQueryService` (查询服务)
 用于查询任务状态与任务详情。
@@ -307,6 +308,8 @@ adminService.update(
         .payload(newPayload)
         .build()
 );
+
+// attributes 为 patch-only：省略或传空 map 都表示保持原值
 
 // 原子更新任务内容并重新调度
 adminService.updateAndReschedule(
@@ -358,6 +361,7 @@ adminService.updateAndReschedule(
 - 抢占逻辑：采用乐观抢占模型原子竞争。
 - 等待行为：`acquire()` 当前使用短轮询等待，不是数据库原生阻塞获取，更适合轻量任务场景。
 - 幂等建档：支持 `businessKey`、`publishIfAbsent(...)` 和 `getByBusinessKey(...)`。
+- `update(...)` / `close(...)` / `release(...)` 中的 `attributes` 为 patch-only 语义，当前版本不支持显式清空全部 attributes。
 - 并发控制：JDBC 实现使用独立 `version` 列做乐观锁，`updated_at` 只保留审计时间语义。
 - 索引建议：`acquire` 已按 `READY/visible_at` 与过期 `RUNNING/lease_expires_at` 分成两组索引。
 - 升级已有库：除索引调整外，还需要为 `lease_task` 补充 `version BIGINT NOT NULL DEFAULT 0`。

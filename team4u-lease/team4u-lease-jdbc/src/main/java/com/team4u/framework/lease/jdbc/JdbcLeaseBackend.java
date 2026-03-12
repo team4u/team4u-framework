@@ -145,6 +145,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
                 handle.getLeaseToken(),
                 now + Math.max(0L, request.getDelayMillis()),
                 request.getPayload(),
+                request.getAttributes(),
                 request.getErrorMessage(),
                 now));
     }

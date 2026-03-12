@@ -257,6 +257,7 @@ public class JdbcLeaseTaskDao {
             String leaseToken,
             long visibleAt,
             String payload,
+            java.util.Map<String, String> attributes,
             String errorMessage,
             long now)
             throws SQLException {
@@ -272,6 +273,9 @@ public class JdbcLeaseTaskDao {
         entity.set("version", SqlExpression.increment("version"));
         if (payload != null) {
             entity.set("payload", payload);
+        }
+        if (attributes != null && !attributes.isEmpty()) {
+            entity.set("attributes_json", jsonCodec.toJson(attributes));
         }
         entity.set("updated_at", now);
         return db.execute(

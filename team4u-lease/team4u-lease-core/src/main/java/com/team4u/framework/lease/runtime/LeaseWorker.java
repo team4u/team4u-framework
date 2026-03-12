@@ -306,7 +306,12 @@ public class LeaseWorker implements Runnable, AutoCloseable {
     }
 
     private void handleWriteResult(String operation, LeaseGrant grant, LeaseRuntimeResult result) {
-        if (result == null || result == LeaseRuntimeResult.APPLIED) {
+        if (result == LeaseRuntimeResult.APPLIED) {
+            return;
+        }
+        if (result == null) {
+            log.error("Lease worker {} returned null result. taskId={}, workerId={}",
+                    operation, grant.getTaskId(), policy.getWorkerId());
             return;
         }
         if (result == LeaseRuntimeResult.LEASE_LOST) {

@@ -125,6 +125,62 @@ public abstract class AbstractLeaseAdminContractTest extends AbstractLeaseContra
     }
 
     @Test
+    public void testUpdateWithoutAttributesKeepsOriginalAttributes() {
+        LeaseBackend backend = createBackend();
+        String taskId = backend.publish(com.team4u.framework.lease.model.LeasePublishRequest.builder()
+                .queue(DEFAULT_QUEUE)
+                .taskType("pay")
+                .payload("payload")
+                .attributes(Collections.singletonMap("traceId", "T-1"))
+                .build());
+
+        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.update(LeaseUpdateRequest.builder()
+                .taskId(taskId)
+                .payload("changed")
+                .build()));
+
+        Assert.assertEquals("changed", backend.get(taskId).get().getPayload());
+        Assert.assertEquals("T-1", backend.get(taskId).get().getAttributes().get("traceId"));
+    }
+
+    @Test
+    public void testUpdateWithEmptyAttributesKeepsOriginalAttributes() {
+        LeaseBackend backend = createBackend();
+        String taskId = backend.publish(com.team4u.framework.lease.model.LeasePublishRequest.builder()
+                .queue(DEFAULT_QUEUE)
+                .taskType("pay")
+                .payload("payload")
+                .attributes(Collections.singletonMap("traceId", "T-1"))
+                .build());
+
+        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.update(LeaseUpdateRequest.builder()
+                .taskId(taskId)
+                .attributes(Collections.emptyMap())
+                .build()));
+
+        Assert.assertEquals("payload", backend.get(taskId).get().getPayload());
+        Assert.assertEquals("T-1", backend.get(taskId).get().getAttributes().get("traceId"));
+    }
+
+    @Test
+    public void testAdminCloseWithEmptyAttributesKeepsOriginalAttributes() {
+        LeaseBackend backend = createBackend();
+        String taskId = backend.publish(com.team4u.framework.lease.model.LeasePublishRequest.builder()
+                .queue(DEFAULT_QUEUE)
+                .taskType("pay")
+                .payload("payload")
+                .attributes(Collections.singletonMap("traceId", "T-1"))
+                .build());
+
+        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.close(taskId, LeaseCloseRequest.builder()
+                .outcome(LeaseTaskOutcome.CANCELLED)
+                .attributes(Collections.emptyMap())
+                .build()));
+
+        Assert.assertEquals("T-1", backend.get(taskId).get().getAttributes().get("traceId"));
+    }
+
+    @Test
     public void testUpdateRejectsActiveLease() throws Exception {
         LeaseBackend backend = createBackend();
         String taskId = publish(backend, "pay", "payload");

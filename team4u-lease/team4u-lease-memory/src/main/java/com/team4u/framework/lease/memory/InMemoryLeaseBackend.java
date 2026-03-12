@@ -24,6 +24,10 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     private final ConcurrentMap<QueueKey, DelayQueue<AvailabilityRef>> queueStates = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, String> taskIdsByBusinessKey = new ConcurrentHashMap<>();
 
+    private static boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
+    }
+
     @Override
     public synchronized String publish(LeasePublishRequest request) {
         validatePublishRequest(request);
@@ -431,10 +435,6 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         return handle.getTaskId();
     }
 
-    private static boolean isBlank(String value) {
-        return value == null || value.trim().isEmpty();
-    }
-
     @Getter
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
     private static class AvailabilityRef implements Delayed {
@@ -543,7 +543,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
             if (payload != null) {
                 next = next.toBuilder().payload(payload).build();
             }
-            if (attributes != null) {
+            if (attributes != null && !attributes.isEmpty()) {
                 next = next.toBuilder().attributes(attributes).build();
             }
             return next;
@@ -584,7 +584,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
             if (request.getPriority() != null) {
                 builder.priority(request.getPriority());
             }
-            if (request.getAttributes() != null) {
+            if (request.getAttributes() != null && !request.getAttributes().isEmpty()) {
                 builder.attributes(request.getAttributes());
             }
             return builder.build();

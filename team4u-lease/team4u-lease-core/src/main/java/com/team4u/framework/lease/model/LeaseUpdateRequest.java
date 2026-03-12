@@ -47,7 +47,8 @@ public class LeaseUpdateRequest {
     private final Integer priority;
 
     /**
-     * 新的扩展属性（可选）
+     * 新的扩展属性（可选）。
+     * 空 map 表示不修改现有属性。
      */
     private final Map<String, String> attributes;
 
