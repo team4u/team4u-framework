@@ -50,11 +50,39 @@ public class DefaultManagedRetryClientTest {
         DefaultManagedRetryClient client = newClient(store, dispatcher);
         RetryPolicy policy = retryPolicy(2, 1);
 
-        assertRejected(client.submit(spec("idem", null, RecoverySpec.of("recover", "payload"), policy)), "executor");
-        assertRejected(client.submit(spec(" ", successTask("ok"), RecoverySpec.of("recover", "payload"), policy)),
+        assertIllegalState(() -> client.submit(spec("idem", null, RecoverySpec.of("recover", "payload"), policy)),
+                "executor");
+        assertIllegalState(() -> client.submit(spec(" ", successTask("ok"), RecoverySpec.of("recover", "payload"), policy)),
                 "idempotencyKey");
-        assertRejected(client.submit(spec("idem", successTask("ok"), RecoverySpec.of(" ", "payload"), policy)),
+        assertIllegalState(() -> client.submit(spec("idem", successTask("ok"), RecoverySpec.of(" ", "payload"), policy)),
                 "taskType");
+    }
+
+    @Test
+    public void testSubmitRejectsMissingPolicyByException() {
+        RecordingStore store = new RecordingStore();
+        RecordingDispatcher dispatcher = new RecordingDispatcher();
+        DefaultManagedRetryClient client = newClient(store, dispatcher);
+
+        assertIllegalState(() -> client.submit(spec(
+                "idem",
+                successTask("ok"),
+                RecoverySpec.of("recover", "payload"),
+                null)), "foregroundMaxRetries");
+    }
+
+    @Test
+    public void testSubmitRejectsNullSpecByException() {
+        RecordingStore store = new RecordingStore();
+        RecordingDispatcher dispatcher = new RecordingDispatcher();
+        DefaultManagedRetryClient client = newClient(store, dispatcher);
+
+        try {
+            client.submit(null);
+            Assert.fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException ex) {
+            Assert.assertTrue(ex.getMessage().contains("RetryTaskSpec"));
+        }
     }
 
     /**
@@ -128,6 +156,33 @@ public class DefaultManagedRetryClientTest {
         Assert.assertEquals("boom", dispatcher.command.getTransition().getLastErrorMessage());
         Assert.assertEquals("backend-1", dispatcher.command.getRecord().getState().getBackendTaskId());
         Assert.assertNull(store.failedRecord);
+    }
+
+    @Test
+    public void testDispatchFailureReturnsRejectedWithoutMutatingWaitingRetryState() {
+        RecordingStore store = new RecordingStore();
+        RecordingDispatcher dispatcher = new RecordingDispatcher();
+        dispatcher.dispatchException = new IllegalStateException("queue unavailable");
+        DefaultManagedRetryClient client = newClient(store, dispatcher);
+        AtomicInteger attempts = new AtomicInteger();
+
+        ManagedSubmitResult<String> result = client.submit(spec(
+                "order-2-dispatch-fail",
+                () -> {
+                    attempts.incrementAndGet();
+                    throw new IOException("boom");
+                },
+                RecoverySpec.of("recover-payment", "payload"),
+                retryPolicy(2, 1)));
+
+        Assert.assertTrue(result instanceof ManagedSubmitResult.Rejected);
+        Assert.assertTrue(((ManagedSubmitResult.Rejected<String>) result).getReason().contains("queue unavailable"));
+        Assert.assertEquals(2, attempts.get());
+        Assert.assertEquals(list("createIfAbsent"), store.operations);
+        Assert.assertNotNull(dispatcher.command);
+        Assert.assertEquals(RetryStatus.ACCEPTED, dispatcher.command.getRecord().getState().getStatus());
+        Assert.assertEquals(0, dispatcher.command.getRecord().getState().getAttempts());
+        Assert.assertNull(dispatcher.command.getRecord().getState().getNextRunAt());
     }
 
     /**
@@ -307,9 +362,15 @@ public class DefaultManagedRetryClientTest {
                 .build();
     }
 
-    private void assertRejected(ManagedSubmitResult<String> result, String reasonPart) {
-        Assert.assertTrue(result instanceof ManagedSubmitResult.Rejected);
-        Assert.assertTrue(((ManagedSubmitResult.Rejected<String>) result).getReason().contains(reasonPart));
+    private void assertIllegalState(ThrowingRunnable runnable, String messagePart) {
+        try {
+            runnable.run();
+            Assert.fail("expected IllegalStateException");
+        } catch (IllegalStateException ex) {
+            Assert.assertTrue(ex.getMessage().contains(messagePart));
+        } catch (Exception ex) {
+            Assert.fail("expected IllegalStateException but got " + ex.getClass().getName());
+        }
     }
 
     private List<String> list(String... items) {
@@ -437,11 +498,6 @@ public class DefaultManagedRetryClientTest {
         }
 
         @Override
-        public void markWaitingRetry(String taskId, RetryTransition transition) {
-            operations.add("markWaitingRetry");
-        }
-
-        @Override
         public void markProcessing(String taskId, ProcessingRecord record) {
             operations.add("markProcessing");
         }
@@ -449,6 +505,7 @@ public class DefaultManagedRetryClientTest {
 
     private static class RecordingDispatcher implements RetryDispatcher {
         private RetryDispatchCommand command;
+        private RuntimeException dispatchException;
         private DispatchResult result = DispatchResult.builder()
                 .taskId("task-1")
                 .backendTaskId("backend-1")
@@ -458,8 +515,15 @@ public class DefaultManagedRetryClientTest {
         @Override
         public DispatchResult dispatch(RetryDispatchCommand command) {
             this.command = command;
+            if (dispatchException != null) {
+                throw dispatchException;
+            }
             command.getRecord().getState().setBackendTaskId(result.getBackendTaskId());
             return result;
         }
+    }
+
+    private interface ThrowingRunnable {
+        void run() throws Exception;
     }
 }

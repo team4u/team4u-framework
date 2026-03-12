@@ -13,6 +13,7 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicInteger;
 
 public class RetriesTest {
 
@@ -115,6 +116,25 @@ public class RetriesTest {
         } finally {
             scheduler.shutdownNow();
         }
+    }
+
+    @Test
+    public void testInlineDefaultPolicyDoesNotRetryWhenMaxRetriesOmitted() {
+        AtomicInteger attempts = new AtomicInteger();
+
+        try {
+            Retries.inline()
+                    .policy(RetryPolicy.builder().build())
+                    .call(() -> {
+                        attempts.incrementAndGet();
+                        throw new IllegalStateException("boom");
+                    });
+            Assert.fail("expected IllegalStateException");
+        } catch (IllegalStateException ex) {
+            Assert.assertEquals("boom", ex.getMessage());
+        }
+
+        Assert.assertEquals(1, attempts.get());
     }
 
     private static class RecordingManagedRetryClient implements ManagedRetryClient {

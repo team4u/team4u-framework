@@ -8,8 +8,10 @@ import com.team4u.framework.retry.recovery.RecoveryContext;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
+import java.util.List;
 
 public class InvocationReplayTest {
 
@@ -61,6 +63,29 @@ public class InvocationReplayTest {
 
         Assert.assertFalse(service.enabled);
         Assert.assertEquals(Integer.valueOf(7), service.retries);
+    }
+
+    @Test
+    public void testRecoverSupportsEnumCharAndGenericCollection() throws Exception {
+        GenericReplayService service = new GenericReplayService();
+        BeanManager.getInstance().registerBean(GenericReplayService.class.getName(), service);
+
+        InvocationReplay replay = new InvocationReplay();
+        replay.recover(JSONUtil.toJsonStr(InvocationRecoveryData.builder()
+                        .targetTypeName(GenericReplayService.class.getName())
+                        .methodName("replay")
+                        .args(Arrays.asList(
+                                arg(Level.class, "\"HIGH\"", false),
+                                arg(char.class, "\"A\"", false),
+                                arg(List.class, "[{\"value\":\"x\"},{\"value\":\"y\"}]", false)))
+                        .build()),
+                RecoveryContext.builder().taskId("task-generic").attempt(1).build());
+
+        Assert.assertEquals(Level.HIGH, service.level);
+        Assert.assertEquals('A', service.grade);
+        Assert.assertEquals(2, service.inputs.size());
+        Assert.assertEquals("x", service.inputs.get(0).value);
+        Assert.assertEquals("y", service.inputs.get(1).value);
     }
 
     @Test
@@ -223,6 +248,18 @@ public class InvocationReplayTest {
         }
     }
 
+    public static class GenericReplayService {
+        private Level level;
+        private char grade;
+        private List<Input> inputs = new ArrayList<Input>();
+
+        public void replay(Level level, char grade, List<Input> inputs) {
+            this.level = level;
+            this.grade = grade;
+            this.inputs = inputs;
+        }
+    }
+
     public static class NamedReplayService implements ReplayContract {
         private String lastOrderId;
 
@@ -237,5 +274,9 @@ public class InvocationReplayTest {
 
     public static class Input {
         private String value;
+    }
+
+    public enum Level {
+        HIGH
     }
 }

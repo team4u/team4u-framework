@@ -67,13 +67,13 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
 
     @Override
     public <T> ManagedSubmitResult<T> submit(RetryTaskSpec<T> spec) {
+        if (spec == null) {
+            throw new IllegalArgumentException("RetryTaskSpec must not be null");
+        }
         // 解析待执行的重试策略
         RetryPolicy policy = resolvePolicy(spec);
         // 校验任务规格是否满足托管模式的要求
-        ManagedSubmitResult<T> validationResult = validateSpec(spec, policy);
-        if (validationResult != null) {
-            return validationResult;
-        }
+        validateSpec(spec, policy);
 
         SubmitRecord submitRecord;
         try {
@@ -114,25 +114,22 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
      *
      * @param spec   任务规格
      * @param policy 待验证的策略
-     * @param <T>    任务返回值类型
-     * @return 验证结果，若通过则返回 null
      */
-    private <T> ManagedSubmitResult<T> validateSpec(RetryTaskSpec<T> spec, RetryPolicy policy) {
+    private void validateSpec(RetryTaskSpec<?> spec, RetryPolicy policy) {
         if (policy == null || policy.getForegroundMaxRetries() == null) {
-            return new ManagedSubmitResult.Rejected<>(
+            throw new IllegalStateException(
                     "MANAGED mode requires a retry policy with foregroundMaxRetries explicitly configured");
         }
         if (isBlank(spec.getIdempotencyKey())) {
-            return new ManagedSubmitResult.Rejected<>("MANAGED mode requires RetryTaskSpec.idempotencyKey");
+            throw new IllegalStateException("MANAGED mode requires RetryTaskSpec.idempotencyKey");
         }
         if (spec.getExecutor() == null) {
-            return new ManagedSubmitResult.Rejected<>("MANAGED mode requires RetryTaskSpec.executor");
+            throw new IllegalStateException("MANAGED mode requires RetryTaskSpec.executor");
         }
         if (spec.getRecovery() == null || isBlank(spec.getRecovery().getTaskType())) {
-            return new ManagedSubmitResult.Rejected<>(
+            throw new IllegalStateException(
                     "MANAGED mode requires a RecoverySpec with a valid taskType");
         }
-        return null;
     }
 
     /**
@@ -247,11 +244,17 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
                 .build();
 
         // 通过分发器移交任务
-        DispatchResult dispatchResult = dispatcher.dispatch(RetryDispatchCommand.builder()
-                .record(record)
-                .transition(transition)
-                .delayMillis(delayMillis)
-                .build());
+        DispatchResult dispatchResult;
+        try {
+            dispatchResult = dispatcher.dispatch(RetryDispatchCommand.builder()
+                    .record(record)
+                    .transition(transition)
+                    .delayMillis(delayMillis)
+                    .build());
+        } catch (RuntimeException ex) {
+            return new ManagedSubmitResult.Rejected<T>(
+                    "Failed to hand off retry task to background dispatcher: " + ex.getMessage());
+        }
 
         // 同步更新内存中的记录状态
         record.getState().setStatus(RetryStatus.WAITING_RETRY);
