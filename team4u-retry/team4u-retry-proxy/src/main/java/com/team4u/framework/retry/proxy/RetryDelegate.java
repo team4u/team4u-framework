@@ -2,23 +2,23 @@ package com.team4u.framework.retry.proxy;
 
 import cn.hutool.crypto.digest.DigestUtil;
 import cn.hutool.json.JSONUtil;
-import com.team4u.framework.retry.client.InlineRetryClient;
-import com.team4u.framework.retry.client.ManagedRetryClient;
-import com.team4u.framework.retry.concurrent.RetryExecutorManager;
+import com.team4u.framework.retry.inline.InlineRetryClient;
+import com.team4u.framework.retry.managed.client.ManagedRetryClient;
+import com.team4u.framework.retry.common.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.config.DynamicRetryPolicyRegistry;
-import com.team4u.framework.retry.domain.ManagedSubmitResult;
-import com.team4u.framework.retry.domain.RecoverySpec;
-import com.team4u.framework.retry.domain.RetryTaskSpec;
-import com.team4u.framework.retry.domain.store.InvocationArgSnapshot;
-import com.team4u.framework.retry.domain.store.InvocationRecoveryData;
-import com.team4u.framework.retry.policy.RetryPolicy;
-import com.team4u.framework.retry.policy.RetryPolicyFactory;
-import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
+import com.team4u.framework.retry.api.ManagedSubmitResult;
+import com.team4u.framework.retry.api.RecoverySpec;
+import com.team4u.framework.retry.managed.submit.RetryTaskSpec;
+import com.team4u.framework.retry.proxy.invocation.InvocationArgSnapshot;
+import com.team4u.framework.retry.proxy.invocation.InvocationRecoveryData;
+import com.team4u.framework.retry.api.RetryPolicy;
+import com.team4u.framework.retry.api.NamedRetryPolicyFactory;
+import com.team4u.framework.retry.api.NamedRetryPolicyRegistry;
 import com.team4u.framework.retry.proxy.serialize.HutoolRetryContextSerializer;
 import com.team4u.framework.retry.proxy.serialize.RetryContextSerializer;
 import com.team4u.framework.retry.proxy.serialize.RetryIgnore;
-import com.team4u.framework.retry.recovery.RecoveryExecutionContext;
-import com.team4u.framework.retry.recovery.RecoveryHandler;
+import com.team4u.framework.retry.managed.recovery.RecoveryExecutionContext;
+import com.team4u.framework.retry.managed.recovery.RecoveryHandler;
 import lombok.Setter;
 
 import java.lang.reflect.Method;
@@ -127,8 +127,8 @@ public class RetryDelegate {
         // 解析重试策略，优先从动态注册中心获取，其次从全局工厂注册中心获取
         String policyKey = retryable.policy();
         RetryPolicy policy = Optional.ofNullable(DynamicRetryPolicyRegistry.getPolicy(policyKey))
-                .orElseGet(() -> RetryPolicyFactoryRegistry.global().get(policyKey)
-                        .map(RetryPolicyFactory::create)
+                .orElseGet(() -> NamedRetryPolicyRegistry.global().get(policyKey)
+                        .map(NamedRetryPolicyFactory::create)
                         .orElseThrow(() -> new IllegalArgumentException("Retry policy not found: " + policyKey)));
 
         if (retryable.mode() == RetryMode.MANAGED && managedClient == null) {

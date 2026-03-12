@@ -1,10 +1,10 @@
 package com.team4u.framework.retry.proxy;
 
 import com.team4u.framework.proxy.ProxyBuilder;
-import com.team4u.framework.retry.client.DefaultInlineRetryClient;
-import com.team4u.framework.retry.policy.RetryPolicy;
-import com.team4u.framework.retry.policy.RetryPolicyFactory;
-import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
+import com.team4u.framework.retry.inline.DefaultInlineRetryClient;
+import com.team4u.framework.retry.api.RetryPolicy;
+import com.team4u.framework.retry.api.NamedRetryPolicyFactory;
+import com.team4u.framework.retry.api.NamedRetryPolicyRegistry;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -19,8 +19,8 @@ public class RetryErrorTest {
 
     @Before
     public void setup() {
-        RetryPolicyFactoryRegistry.global().unregisterAll();
-        RetryPolicyFactoryRegistry.global().register(new RetryPolicyFactory() {
+        NamedRetryPolicyRegistry.global().unregisterAll();
+        NamedRetryPolicyRegistry.global().register(new NamedRetryPolicyFactory() {
             @Override
             public String key() {
                 return "error-policy";

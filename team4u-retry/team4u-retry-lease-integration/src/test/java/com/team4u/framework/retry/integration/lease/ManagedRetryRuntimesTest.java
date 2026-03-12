@@ -7,9 +7,9 @@ import com.team4u.framework.lease.model.*;
 import com.team4u.framework.lease.runtime.LeaseWorker;
 import com.team4u.framework.lease.runtime.LeaseWorkerPolicy;
 import com.team4u.framework.retry.TestLeaseBackend;
-import com.team4u.framework.retry.backoff.Backoffs;
-import com.team4u.framework.retry.policy.RetryPolicy;
-import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
+import com.team4u.framework.retry.common.backoff.Backoffs;
+import com.team4u.framework.retry.api.RetryPolicy;
+import com.team4u.framework.retry.managed.recovery.RecoveryHandlerRegistry;
 import org.junit.Assert;
 import org.junit.Test;
 

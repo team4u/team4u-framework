@@ -4,8 +4,8 @@ import com.team4u.framework.lease.handler.LeaseTaskHandler;
 import com.team4u.framework.lease.handler.LeaseTaskHandlerRegistry;
 import com.team4u.framework.lease.model.LeaseSubscription;
 import com.team4u.framework.lease.runtime.LeaseExecutionContext;
-import com.team4u.framework.retry.recovery.RecoveryContext;
-import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
+import com.team4u.framework.retry.managed.recovery.RecoveryContext;
+import com.team4u.framework.retry.managed.recovery.RecoveryHandlerRegistry;
 
 import java.util.LinkedHashSet;
 import java.util.Optional;

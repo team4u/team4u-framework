@@ -197,9 +197,9 @@
 
 ```java
 import com.team4u.framework.lease.api.LeaseBackend;
-import com.team4u.framework.retry.Retries;
-import com.team4u.framework.retry.backoff.Backoffs;
-import com.team4u.framework.retry.domain.ManagedSubmitResult;
+import com.team4u.framework.retry.api.Retries;
+import com.team4u.framework.retry.common.backoff.Backoffs;
+import com.team4u.framework.retry.api.ManagedSubmitResult;
 import com.team4u.framework.retry.integration.lease.ManagedRetryRuntime;
 LeaseBackend backend = ...; // 关于 LeaseBackend 的选择与配置，请参考 [team4u-lease 文档](../team4u-lease/README.md)
 
@@ -237,9 +237,9 @@ ManagedSubmitResult<String> result = Retries.managed(runtime.client())
 ## INLINE：同步重试
 
 ```java
-import com.team4u.framework.retry.Retries;
-import com.team4u.framework.retry.backoff.Backoffs;
-import com.team4u.framework.retry.policy.RetryPolicy;
+import com.team4u.framework.retry.api.Retries;
+import com.team4u.framework.retry.common.backoff.Backoffs;
+import com.team4u.framework.retry.api.RetryPolicy;
 
 RetryPolicy policy = RetryPolicy.builder()
         .maxRetries(2)
@@ -261,9 +261,9 @@ String result = Retries.inline()
 ## INLINE：异步重试
 
 ```java
-import com.team4u.framework.retry.Retries;
-import com.team4u.framework.retry.backoff.Backoffs;
-import com.team4u.framework.retry.policy.RetryPolicy;
+import com.team4u.framework.retry.api.Retries;
+import com.team4u.framework.retry.common.backoff.Backoffs;
+import com.team4u.framework.retry.api.RetryPolicy;
 
 import java.util.concurrent.CompletableFuture;
 
@@ -410,7 +410,7 @@ public interface PayService {
 ### 代理方式创建
 
 ```java
-import com.team4u.framework.retry.client.DefaultInlineRetryClient;
+import com.team4u.framework.retry.inline.DefaultInlineRetryClient;
 import com.team4u.framework.retry.proxy.RetryProxyFactory;
 
 PayService target = new PayServiceImpl();
@@ -432,17 +432,17 @@ PayService proxy = RetryProxyFactory.createProxy(
 查找顺序是：
 
 1. 先从 `DynamicRetryPolicyRegistry` 查动态配置
-2. 查不到再从 `RetryPolicyFactoryRegistry` 查静态注册
+2. 查不到再从 `NamedRetryPolicyRegistry` 查静态注册
 
 示例：
 
 ```java
-import com.team4u.framework.retry.backoff.Backoffs;
-import com.team4u.framework.retry.policy.RetryPolicy;
-import com.team4u.framework.retry.policy.RetryPolicyFactory;
-import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
+import com.team4u.framework.retry.common.backoff.Backoffs;
+import com.team4u.framework.retry.api.RetryPolicy;
+import com.team4u.framework.retry.api.NamedRetryPolicyFactory;
+import com.team4u.framework.retry.api.NamedRetryPolicyRegistry;
 
-RetryPolicyFactoryRegistry.global().register(new RetryPolicyFactory() {
+NamedRetryPolicyRegistry.global().register(new NamedRetryPolicyFactory() {
     @Override
     public String key() {
         return "pay-policy";
@@ -498,12 +498,12 @@ public class RetryConfig {
 #### 注册策略
 
 ```java
-import com.team4u.framework.retry.backoff.Backoffs;
-import com.team4u.framework.retry.policy.RetryPolicy;
-import com.team4u.framework.retry.policy.RetryPolicyFactory;
-import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
+import com.team4u.framework.retry.common.backoff.Backoffs;
+import com.team4u.framework.retry.api.RetryPolicy;
+import com.team4u.framework.retry.api.NamedRetryPolicyFactory;
+import com.team4u.framework.retry.api.NamedRetryPolicyRegistry;
 
-RetryPolicyFactoryRegistry.global().register(new RetryPolicyFactory() {
+NamedRetryPolicyRegistry.global().register(new NamedRetryPolicyFactory() {
     @Override
     public String key() {
         return "pay-policy";
@@ -551,11 +551,11 @@ public class PayService {
 
 ```java
 import com.team4u.framework.lease.api.LeaseBackend;
-import com.team4u.framework.retry.Retries;
-import com.team4u.framework.retry.backoff.Backoffs;
-import com.team4u.framework.retry.client.ManagedRetryClient;
+import com.team4u.framework.retry.api.Retries;
+import com.team4u.framework.retry.common.backoff.Backoffs;
+import com.team4u.framework.retry.managed.client.ManagedRetryClient;
 import com.team4u.framework.retry.integration.lease.ManagedRetryRuntime;
-import com.team4u.framework.retry.policy.RetryPolicy;
+import com.team4u.framework.retry.api.RetryPolicy;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
@@ -696,7 +696,7 @@ retry.policy.
 retry.policy.order-submit={"maxRetries":5,"foregroundMaxRetries":2,"backoff":{"type":"exponentialJitter","params":{"initialDelay":500,"multiplier":2.0,"maxDelay":10000}},"retryOnExceptions":["java.net.SocketTimeoutException","java.io.IOException"],"abortOnExceptions":["java.lang.IllegalArgumentException"],"condition":"retryCount <= 2"}
 ```
 
-也就是说，这里的 value 需要是能被 `RetryPolicyFactory.create(String jsonConfig)` 直接解析的合法 JSON 字符串。
+也就是说，这里的 value 需要是能被 `NamedRetryPolicyFactory.create(String jsonConfig)` 直接解析的合法 JSON 字符串。
 
 可配置字段包括：
 

@@ -5,8 +5,8 @@ import com.team4u.framework.lease.enums.LeaseRuntimeResult;
 import com.team4u.framework.lease.model.*;
 import com.team4u.framework.lease.runtime.LeaseWorker;
 import com.team4u.framework.lease.runtime.LeaseWorkerPolicy;
-import com.team4u.framework.retry.recovery.RecoveryContext;
-import com.team4u.framework.retry.recovery.RecoveryHandlerRegistry;
+import com.team4u.framework.retry.managed.recovery.RecoveryContext;
+import com.team4u.framework.retry.managed.recovery.RecoveryHandlerRegistry;
 import org.junit.Assert;
 import org.junit.Test;
 

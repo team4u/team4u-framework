@@ -2,7 +2,7 @@ package com.team4u.framework.retry.config;
 
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
-import com.team4u.framework.retry.policy.RetryPolicy;
+import com.team4u.framework.retry.api.RetryPolicy;
 import lombok.Getter;
 
 /**
@@ -23,7 +23,7 @@ public class DynamicRetryPolicyRegistry {
     private static ConfigDrivenRegistry<RetryPolicy> registry = new ConfigDrivenRegistry<>(
             ConfigManager.global(),
             DEFAULT_PREFIX,
-            RetryPolicyFactory::create
+            RetryPolicyParser::create
     );
 
     /**
@@ -43,7 +43,7 @@ public class DynamicRetryPolicyRegistry {
         registry = new ConfigDrivenRegistry<>(
                 ConfigManager.global(),
                 DEFAULT_PREFIX,
-                RetryPolicyFactory::create
+                RetryPolicyParser::create
         );
     }
 

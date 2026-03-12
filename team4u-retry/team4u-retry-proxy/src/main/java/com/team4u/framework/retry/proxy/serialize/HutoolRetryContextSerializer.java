@@ -4,7 +4,7 @@ import cn.hutool.core.convert.Convert;
 import cn.hutool.json.JSONArray;
 import cn.hutool.json.JSONObject;
 import cn.hutool.json.JSONUtil;
-import com.team4u.framework.retry.exception.RetrySerializationException;
+import com.team4u.framework.retry.proxy.serialize.RetrySerializationException;
 
 import java.lang.reflect.Constructor;
 import java.lang.reflect.Field;
