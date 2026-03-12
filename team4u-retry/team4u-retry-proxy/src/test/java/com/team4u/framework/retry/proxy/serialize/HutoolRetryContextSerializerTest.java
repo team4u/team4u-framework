@@ -1,6 +1,7 @@
 package com.team4u.framework.retry.proxy.serialize;
 
 import cn.hutool.core.lang.TypeReference;
+import lombok.Data;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -20,7 +21,7 @@ public class HutoolRetryContextSerializerTest {
     public void testDeserializePrimitiveWrapperAndChar() {
         Assert.assertEquals(7, serializer.deserialize(int.class, "7"));
         Assert.assertEquals(Boolean.TRUE, serializer.deserialize(Boolean.class, "true"));
-        Assert.assertEquals(Character.valueOf('A'), serializer.deserialize(Character.class, "\"A\""));
+        Assert.assertEquals('A', serializer.deserialize(Character.class, "\"A\""));
     }
 
     @Test
@@ -64,27 +65,13 @@ public class HutoolRetryContextSerializerTest {
         HIGH
     }
 
+    @Data
     public static class Item {
         private String value;
-
-        public String getValue() {
-            return value;
-        }
-
-        public void setValue(String value) {
-            this.value = value;
-        }
     }
 
+    @Data
     public static class Envelope<T> {
         private T payload;
-
-        public T getPayload() {
-            return payload;
-        }
-
-        public void setPayload(T payload) {
-            this.payload = payload;
-        }
     }
 }

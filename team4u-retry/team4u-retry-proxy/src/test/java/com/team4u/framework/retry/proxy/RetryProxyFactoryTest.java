@@ -135,7 +135,7 @@ public class RetryProxyFactoryTest {
         private static final AtomicInteger invocations = new AtomicInteger();
 
         @Retryable(policy = "proxy-factory-policy")
-        public final String call(String id) {
+        public final void call(String id) {
             invocations.incrementAndGet();
             throw new RuntimeException("fail");
         }

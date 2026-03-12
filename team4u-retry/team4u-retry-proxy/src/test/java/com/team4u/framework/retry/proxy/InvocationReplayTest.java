@@ -111,8 +111,8 @@ public class InvocationReplayTest {
 
     @Test
     public void testRecoverPrefersBeanNameWhenProvided() throws Exception {
-        ReplayContract primary = new NamedReplayService("primary");
-        ReplayContract secondary = new NamedReplayService("secondary");
+        NamedReplayService primary = new NamedReplayService("primary");
+        NamedReplayService secondary = new NamedReplayService("secondary");
         BeanManager.getInstance().registerBean("primaryReplayService", primary);
         BeanManager.getInstance().registerBean("secondaryReplayService", secondary);
 
@@ -125,8 +125,8 @@ public class InvocationReplayTest {
                         .build()),
                 RecoveryContext.builder().taskId("task-bean-name").attempt(1).build());
 
-        Assert.assertNull(((NamedReplayService) primary).lastOrderId);
-        Assert.assertEquals("order-9", ((NamedReplayService) secondary).lastOrderId);
+        Assert.assertNull(primary.lastOrderId);
+        Assert.assertEquals("order-9", secondary.lastOrderId);
     }
 
     @Test

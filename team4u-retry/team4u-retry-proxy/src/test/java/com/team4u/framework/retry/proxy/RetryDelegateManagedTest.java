@@ -15,6 +15,7 @@ import com.team4u.framework.retry.policy.RetryPolicyFactoryRegistry;
 import com.team4u.framework.retry.proxy.serialize.RetryIgnore;
 import com.team4u.framework.retry.recovery.RecoveryContext;
 import com.team4u.framework.retry.recovery.RecoveryHandler;
+import lombok.Data;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -166,7 +167,7 @@ public class RetryDelegateManagedTest {
         delegate.executeWithRetry(
                 method,
                 target,
-                new Object[]{"order-1", Level.HIGH, Arrays.asList(new Input("x"), new Input("y")), Character.valueOf('A')},
+                new Object[]{"order-1", Level.HIGH, Arrays.asList(new Input("x"), new Input("y")), 'A'},
                 retryable,
                 () -> null);
 
@@ -359,16 +360,9 @@ public class RetryDelegateManagedTest {
         }
     }
 
+    @Data
     public static class Input {
         private final String value;
-
-        public Input(String value) {
-            this.value = value;
-        }
-
-        public String getValue() {
-            return value;
-        }
     }
 
     public static class CustomRecoveryHandler implements RecoveryHandler<InvocationRecoveryData> {

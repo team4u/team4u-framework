@@ -48,6 +48,7 @@ public class RetryInterceptorResolutionTest {
         Assert.assertEquals(3, target.count.get());
     }
 
+    @SuppressWarnings("unchecked")
     @Test
     public void testProxyResolvesBridgeMethodToUserMethod() {
         GenericStringService target = new GenericStringService();
