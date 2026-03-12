@@ -1,13 +1,11 @@
 package com.team4u.framework.retry.api;
 
+import com.team4u.framework.retry.common.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.inline.DefaultInlineRetryClient;
 import com.team4u.framework.retry.inline.InlineRetryClient;
 import com.team4u.framework.retry.managed.client.ManagedRetryClient;
-import com.team4u.framework.retry.common.concurrent.RetryExecutorManager;
-import com.team4u.framework.retry.api.ManagedSubmitResult;
-import com.team4u.framework.retry.api.RecoverySpec;
 import com.team4u.framework.retry.managed.submit.RetryTaskSpec;
-import com.team4u.framework.retry.api.RetryPolicy;
+import lombok.Builder;
 
 import java.util.concurrent.Callable;
 import java.util.concurrent.CompletableFuture;
@@ -41,8 +39,8 @@ public final class Retries {
      * @return 一个绑定了指定客户端的 MANAGED 执行计划
      * @throws IllegalArgumentException 当 {@code managedClient} 为空时抛出
      */
-    public static ManagedExecution managed(ManagedRetryClient managedClient) {
-        return new ManagedExecution(requireManagedClient(managedClient));
+    public static ManagedExecution.Builder managed(ManagedRetryClient managedClient) {
+        return ManagedExecution.builder().managedClient(requireManagedClient(managedClient));
     }
 
     private static ManagedRetryClient requireManagedClient(ManagedRetryClient managedClient) {
@@ -147,66 +145,30 @@ public final class Retries {
     /**
      * MANAGED 执行计划。
      */
+    @Builder(builderClassName = "Builder")
     public static final class ManagedExecution {
+        /**
+         * MANAGED 重试客户端。
+         */
         private final ManagedRetryClient managedClient;
-        private String taskType;
-        private String idempotencyKey;
-        private String payload;
-        private RetryPolicy policy;
-
-        private ManagedExecution(ManagedRetryClient managedClient) {
-            this.managedClient = managedClient;
-        }
-
         /**
-         * 设置恢复任务类型，对应底层 {@link RecoverySpec#getTaskType()}。
-         *
-         * @param taskType 恢复任务类型
-         * @return 当前执行计划本身
+         * 恢复任务类型，对应底层 {@link RecoverySpec#getTaskType()}。
          */
-        public ManagedExecution task(String taskType) {
-            this.taskType = taskType;
-            return this;
-        }
-
+        private final String taskType;
         /**
-         * 设置业务幂等键。
-         *
-         * @param key 业务幂等键
-         * @return 当前执行计划本身
+         * 业务幂等键。
          */
-        public ManagedExecution idempotentBy(String key) {
-            this.idempotencyKey = key;
-            return this;
-        }
-
+        private final String idempotencyKey;
         /**
-         * 设置后台恢复所需的负载。
-         *
-         * @param payload 恢复负载
-         * @return 当前执行计划本身
+         * 后台恢复所需的负载。
          */
-        public ManagedExecution payload(String payload) {
-            this.payload = payload;
-            return this;
-        }
-
+        private final String payload;
         /**
-         * 设置完整 MANAGED 策略。
+         * 完整重试策略。
          * <p>
          * 当前 DSL 只接受完整的 {@link RetryPolicy}，不再提供分项策略拼装能力。
-         *
-         * @param policy 完整重试策略
-         * @return 当前执行计划本身
-         * @throws IllegalArgumentException 当 {@code policy} 为空时抛出
          */
-        public ManagedExecution policy(RetryPolicy policy) {
-            if (policy == null) {
-                throw new IllegalArgumentException("RetryPolicy must not be null");
-            }
-            this.policy = policy;
-            return this;
-        }
+        private final RetryPolicy policy;
 
         /**
          * 仅构建底层 {@link RetryTaskSpec}，不触发提交。
@@ -258,6 +220,30 @@ public final class Retries {
             }
             if (task == null) {
                 throw new IllegalArgumentException("Task must not be null");
+            }
+        }
+
+        public static class Builder {
+            /**
+             * 构建并提交 MANAGED 任务。
+             *
+             * @param task 要执行的任务
+             * @param <T>  任务返回值类型
+             * @return 托管提交结果
+             */
+            public <T> ManagedSubmitResult<T> call(Callable<T> task) {
+                return build().call(task);
+            }
+
+            /**
+             * 仅构建底层 {@link RetryTaskSpec}，不触发提交。
+             *
+             * @param task 要执行的任务
+             * @param <T>  任务返回值类型
+             * @return 底层任务规格对象
+             */
+            public <T> RetryTaskSpec<T> toSpec(Callable<T> task) {
+                return build().toSpec(task);
             }
         }
     }

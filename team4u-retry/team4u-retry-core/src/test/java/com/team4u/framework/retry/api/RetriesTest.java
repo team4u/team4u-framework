@@ -2,10 +2,8 @@ package com.team4u.framework.retry.api;
 
 import com.team4u.framework.retry.common.backoff.Backoffs;
 import com.team4u.framework.retry.managed.client.ManagedRetryClient;
-import com.team4u.framework.retry.api.ManagedSubmitResult;
-import com.team4u.framework.retry.managed.submit.RetryTaskSpec;
 import com.team4u.framework.retry.managed.model.RetryStatus;
-import com.team4u.framework.retry.api.RetryPolicy;
+import com.team4u.framework.retry.managed.submit.RetryTaskSpec;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -27,8 +25,8 @@ public class RetriesTest {
                 .build();
 
         RetryTaskSpec<String> spec = Retries.managed(client)
-                .task("pay-notify")
-                .idempotentBy("order-1001")
+                .taskType("pay-notify")
+                .idempotencyKey("order-1001")
                 .payload("payload")
                 .policy(policy)
                 .toSpec(() -> "ok");
@@ -48,8 +46,8 @@ public class RetriesTest {
         client.result = expected;
 
         ManagedSubmitResult<String> actual = Retries.managed(client)
-                .task("pay-notify")
-                .idempotentBy("order-1002")
+                .taskType("pay-notify")
+                .idempotencyKey("order-1002")
                 .payload("payload")
                 .policy(RetryPolicy.builder()
                         .maxRetries(2)
@@ -68,8 +66,8 @@ public class RetriesTest {
         RecordingManagedRetryClient client = new RecordingManagedRetryClient();
         try {
             Retries.managed(client)
-                    .task("pay-notify")
-                    .idempotentBy("order-1003")
+                    .taskType("pay-notify")
+                    .idempotencyKey("order-1003")
                     .policy(RetryPolicy.builder()
                             .maxRetries(2)
                             .backoff(Backoffs.fixed(0L))
@@ -89,8 +87,8 @@ public class RetriesTest {
 
         try {
             Retries.managed(client)
-                    .task("pay-notify")
-                    .idempotentBy("order-1004")
+                    .taskType("pay-notify")
+                    .idempotencyKey("order-1004")
                     .payload("payload")
                     .call(() -> "done");
             Assert.fail("expected IllegalStateException");
