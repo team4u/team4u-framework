@@ -16,7 +16,6 @@ public class RetryExecutorManager {
 
     static final String SHUTDOWN_HOOK_ENABLED_PROPERTY = "team4u.retry.executors.shutdownHook.enabled";
     private static final Log log = LogFactory.get();
-    private static final RetryExecutorManager INSTANCE = new RetryExecutorManager(isShutdownHookEnabled());
     private static final String DAEMON_PROPERTY = "team4u.retry.executors.daemon";
     private volatile ScheduledExecutorService globalScheduler;
     private volatile ExecutorService globalCleanupExecutor;
@@ -39,7 +38,7 @@ public class RetryExecutorManager {
      * @return 线程池管理器实例
      */
     public static RetryExecutorManager global() {
-        return INSTANCE;
+        return GlobalHolder.INSTANCE;
     }
 
     static boolean isShutdownHookEnabled() {
@@ -155,6 +154,13 @@ public class RetryExecutorManager {
                 t.setPriority(Thread.NORM_PRIORITY);
             }
             return t;
+        }
+    }
+
+    private static final class GlobalHolder {
+        private static final RetryExecutorManager INSTANCE = new RetryExecutorManager(isShutdownHookEnabled());
+
+        private GlobalHolder() {
         }
     }
 }

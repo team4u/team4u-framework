@@ -50,7 +50,7 @@ public class BackoffTest {
         Backoff builderBackoff = Backoffs.builder("exponentialJitter")
                 .param("initialDelay", 100L)
                 .param("multiplier", 2.0D)
-                .param("maxDelay", 500L)
+                .param("maxDelay", 100L)
                 .build();
 
         BackoffConfig config = new BackoffConfig();
@@ -61,6 +61,21 @@ public class BackoffTest {
         Assert.assertTrue(builderBackoff.calculateMillis(1) >= 100L);
         Assert.assertTrue(builderBackoff.calculateMillis(1) <= 100L);
         Assert.assertTrue(configBackoff.calculateMillis(1) >= 100L);
+    }
+
+    @Test
+    public void testGenericBuilderReusesRegistryCacheForEquivalentConfig() {
+        Backoff builderBackoff = Backoffs.builder("fixed")
+                .param("delay", 88L)
+                .build();
+
+        BackoffConfig config = new BackoffConfig();
+        config.setType("fixed");
+        config.setParams(Collections.singletonMap("delay", 88L));
+
+        Backoff configBackoff = BackoffRegistry.global().createBackoff(config);
+
+        Assert.assertSame(builderBackoff, configBackoff);
     }
 
     @Test
@@ -145,6 +160,13 @@ public class BackoffTest {
 
         Assert.assertSame(backoff1, backoff2);
         Assert.assertEquals(100L, backoff2.calculateMillis(1));
+    }
+
+    @Test
+    public void testExponentialBackoffSaturatesAtMaxDelayForHugeAttempt() {
+        Backoff backoff = Backoffs.exponential(100L, 10D, 500L);
+
+        Assert.assertEquals(500L, backoff.calculateMillis(1000));
     }
 
     private void assertIllegalArgument(Runnable runnable) {

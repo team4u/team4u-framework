@@ -30,9 +30,9 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
     public void testFailureUsesRuntimeReleaseWithUpdatedPayload() throws Exception {
         RetryRecord record = retryRecord();
         TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
-        RecoveryHandlerLeaseTaskHandlerAdapter adapter = new RecoveryHandlerLeaseTaskHandlerAdapter(new FailingHandler());
         FixedSerializer serializer = new FixedSerializer(record);
-        adapter.setSerializer(serializer);
+        RecoveryHandlerLeaseTaskHandlerAdapter adapter =
+                new RecoveryHandlerLeaseTaskHandlerAdapter(new FailingHandler(), serializer);
         LeaseLifecycleExecutionContext context = executionContext(runtimeClient);
 
         adapter.handleLifecycle(context);
@@ -54,8 +54,9 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
         TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
         AtomicBoolean observedRecovering = new AtomicBoolean(false);
         RecoveryHandlerLeaseTaskHandlerAdapter adapter =
-                new RecoveryHandlerLeaseTaskHandlerAdapter(new InspectingHandler(observedRecovering));
-        adapter.setSerializer(new FixedSerializer(retryRecord()));
+                new RecoveryHandlerLeaseTaskHandlerAdapter(
+                        new InspectingHandler(observedRecovering),
+                        new FixedSerializer(retryRecord()));
 
         adapter.handleLifecycle(executionContext(runtimeClient));
 
@@ -77,8 +78,8 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
                 .retryOn(RuntimeException.class)
                 .build());
         TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
-        RecoveryHandlerLeaseTaskHandlerAdapter adapter = new RecoveryHandlerLeaseTaskHandlerAdapter(new FailingHandler());
-        adapter.setSerializer(new FixedSerializer(record));
+        RecoveryHandlerLeaseTaskHandlerAdapter adapter =
+                new RecoveryHandlerLeaseTaskHandlerAdapter(new FailingHandler(), new FixedSerializer(record));
 
         adapter.handleLifecycle(executionContext(runtimeClient));
 
@@ -93,8 +94,8 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
         RetryRecord record = retryRecord();
         TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
         runtimeClient.releaseResult = LeaseRuntimeResult.LEASE_LOST;
-        RecoveryHandlerLeaseTaskHandlerAdapter adapter = new RecoveryHandlerLeaseTaskHandlerAdapter(new FailingHandler());
-        adapter.setSerializer(new FixedSerializer(record));
+        RecoveryHandlerLeaseTaskHandlerAdapter adapter =
+                new RecoveryHandlerLeaseTaskHandlerAdapter(new FailingHandler(), new FixedSerializer(record));
 
         try {
             adapter.handleLifecycle(executionContext(runtimeClient));
@@ -110,8 +111,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
         RetryRecord record = retryRecord();
         TrackingRuntimeClient runtimeClient = new TrackingRuntimeClient();
         RecoveryHandlerLeaseTaskHandlerAdapter adapter =
-                new RecoveryHandlerLeaseTaskHandlerAdapter(new InterruptedHandler());
-        adapter.setSerializer(new FixedSerializer(record));
+                new RecoveryHandlerLeaseTaskHandlerAdapter(new InterruptedHandler(), new FixedSerializer(record));
 
         try {
             adapter.handleLifecycle(executionContext(runtimeClient));

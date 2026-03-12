@@ -182,7 +182,7 @@ public class DefaultManagedRetryClientTest {
         Assert.assertNotNull(dispatcher.command);
         Assert.assertEquals(RetryStatus.ACCEPTED, dispatcher.command.getRecord().getState().getStatus());
         Assert.assertEquals(0, dispatcher.command.getRecord().getState().getAttempts());
-        Assert.assertNull(dispatcher.command.getRecord().getState().getNextRunAt());
+        Assert.assertNotNull(dispatcher.command.getRecord().getState().getNextRunAt());
     }
 
     /**

@@ -137,7 +137,7 @@
 `-1` 表示无限重试。
 
 总执行次数恒等于 `1 + maxRetries`。
-内部判定时，`RetryPolicy.canRetry(executedAttempts, ex)` 里的 `executedAttempts` 表示“已经执行且失败的总尝试次数”，包含首次执行。
+内部判定时，`RetryPolicy.canRetry(failedAttemptsSoFar, ex)` 里的 `failedAttemptsSoFar` 表示“已经执行且失败的总尝试次数”，包含首次执行。
 例如 `maxRetries = 2` 时，`canRetry(1, ex)` 与 `canRetry(2, ex)` 返回 `true`，`canRetry(3, ex)` 返回 `false`。
 
 ### `foregroundMaxRetries`
@@ -161,12 +161,14 @@
 * 带抖动的指数退避 `exponentialJitter`
 
 当你显式开启重试但没有配置 backoff 时，默认退避策略是固定 1000ms。
-如果 `maxRetries` 没配而保持默认值 `0`，则不会进入重试，自然也不会用到 backoff。
+如果 `maxRetries` 没配，默认值是 `2`。
 
 补充说明：
 
 * `type` 为空时会回退到 `fixed`
+* `type` 大小写敏感，`exponentialJitter` 可以，`ExponentialJitter` 不可以
 * 显式传入未知 `type` 会直接抛错，不会静默回退
+* `exponentialJitter` 当前使用固定下界随机区间算法，返回值落在 `[initialDelay, exponentialDelay]` 内
 
 ### 异常匹配规则
 

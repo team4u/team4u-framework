@@ -29,6 +29,11 @@ public class HutoolRetryContextSerializerTest {
     }
 
     @Test
+    public void testSerializeEnumUsesName() {
+        Assert.assertEquals("HIGH", serializer.serialize(Level.HIGH));
+    }
+
+    @Test
     public void testDeserializeParameterizedCollection() {
         Type listType = new TypeReference<List<Item>>() { }.getType();
 

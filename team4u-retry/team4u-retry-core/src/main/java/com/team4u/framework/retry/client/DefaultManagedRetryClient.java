@@ -173,38 +173,38 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
             RetryRecord record,
             RetryPolicy policy) {
         int maxForegroundExecutions = policy.getForegroundMaxRetries() + 1;
-        int executedAttempts = 0;
+        int failedAttemptsSoFar = 0;
 
         while (true) {
-            executedAttempts++;
             T result;
             try {
                 // 执行业务逻辑
                 result = spec.getExecutor().call();
             } catch (Throwable ex) {
+                failedAttemptsSoFar++;
                 Throwable cause = normalize(ex);
                 if (cause instanceof Error) {
                     throw (Error) cause;
                 }
                 FailureRecord failure = createFailureRecord(cause);
-                boolean canRetry = policy.canRetry(executedAttempts, cause);
+                boolean canRetry = policy.canRetry(failedAttemptsSoFar, cause);
                 // 若策略决定不再重试，则标记为最终失败
                 if (!canRetry) {
-                    markFinalFailure(record, executedAttempts, failure);
+                    markFinalFailure(record, failedAttemptsSoFar, failure);
                     return new ManagedSubmitResult.Failed<T>(cause);
                 }
                 // 若未达到前台重试上限，则在当前线程休眠退避后继续尝试
-                if (executedAttempts < maxForegroundExecutions) {
-                    InterruptedException interrupted = sleepBeforeNextAttempt(policy, executedAttempts);
+                if (failedAttemptsSoFar < maxForegroundExecutions) {
+                    InterruptedException interrupted = sleepBeforeNextAttempt(policy, failedAttemptsSoFar);
                     if (interrupted != null) {
-                        markFinalFailure(record, executedAttempts, createFailureRecord(interrupted));
+                        markFinalFailure(record, failedAttemptsSoFar, createFailureRecord(interrupted));
                         Thread.currentThread().interrupt();
                         return new ManagedSubmitResult.Failed<T>(interrupted);
                     }
                     continue;
                 }
                 // 达到前台上限，移交给后台处理
-                return dispatchToBackground(record, executedAttempts, failure, policy);
+                return dispatchToBackground(record, failedAttemptsSoFar, failure, policy);
             }
             // Completed 只在 durable SUCCEEDED 写入成功后才成立。
             try {
@@ -214,7 +214,7 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
             }
             record.getState().setStatus(RetryStatus.SUCCEEDED);
             record.getState().setNextRunAt(null);
-            record.getState().setAttempts(executedAttempts);
+            record.getState().setAttempts(failedAttemptsSoFar + 1);
             return new ManagedSubmitResult.Completed<T>(result);
         }
     }
@@ -222,22 +222,22 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
     /**
      * 将重试任务分发给后台调度系统。
      *
-     * @param record           当前任务记录
-     * @param executedAttempts 已执行的总尝试次数
-     * @param failure          最后一次失败的详细信息
-     * @param policy           重试策略
-     * @param <T>              任务返回值类型
+     * @param record              当前任务记录
+     * @param failedAttemptsSoFar 截至当前已失败的次数
+     * @param failure             最后一次失败的详细信息
+     * @param policy              重试策略
+     * @param <T>                 任务返回值类型
      * @return 标记为已接受（等待后台重试）的结果
      */
     private <T> ManagedSubmitResult<T> dispatchToBackground(
             RetryRecord record,
-            int executedAttempts,
+            int failedAttemptsSoFar,
             FailureRecord failure,
             RetryPolicy policy) {
-        long delayMillis = policy.getDelayMillis(executedAttempts);
+        long delayMillis = policy.getDelayMillis(failedAttemptsSoFar);
         Instant nextRunAt = Instant.now().plusMillis(delayMillis);
         RetryTransition transition = RetryTransition.builder()
-                .attempts(executedAttempts)
+                .attempts(failedAttemptsSoFar)
                 .nextRunAt(nextRunAt)
                 .lastErrorCode(failure.getErrorCode())
                 .lastErrorMessage(failure.getErrorMessage())
@@ -258,7 +258,7 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
 
         // 同步更新内存中的记录状态
         record.getState().setStatus(RetryStatus.WAITING_RETRY);
-        record.getState().setAttempts(executedAttempts);
+        record.getState().setAttempts(failedAttemptsSoFar);
         record.getState().setNextRunAt(dispatchResult.getNextRunAt());
         record.getState().setLastErrorCode(failure.getErrorCode());
         record.getState().setLastErrorMessage(failure.getErrorMessage());

@@ -16,7 +16,6 @@ import com.team4u.framework.retry.store.RetryStore;
 import com.team4u.framework.retry.store.record.*;
 import com.team4u.framework.retry.store.serialize.HutoolRetryRecordSerializer;
 import com.team4u.framework.retry.store.serialize.RetryRecordSerializer;
-import lombok.Setter;
 
 import java.time.Duration;
 import java.util.Objects;
@@ -33,12 +32,14 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
     private final LeaseAdminService adminService;
     private final LeaseQueryService queryService;
     private final String queue;
-
-    @Setter
-    private RetryRecordSerializer serializer = HutoolRetryRecordSerializer.INSTANCE;
+    private final RetryRecordSerializer serializer;
 
     public LeaseDurableRetryStore(LeaseBackend backend) {
-        this(backend, backend, backend, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE);
+        this(backend, HutoolRetryRecordSerializer.INSTANCE);
+    }
+
+    public LeaseDurableRetryStore(LeaseBackend backend, RetryRecordSerializer serializer) {
+        this(backend, backend, backend, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE, serializer);
     }
 
     public LeaseDurableRetryStore(
@@ -46,10 +47,23 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
             LeaseAdminService adminService,
             LeaseQueryService queryService,
             String queue) {
+        this(producer, adminService, queryService, queue, HutoolRetryRecordSerializer.INSTANCE);
+    }
+
+    public LeaseDurableRetryStore(
+            LeaseProducer producer,
+            LeaseAdminService adminService,
+            LeaseQueryService queryService,
+            String queue,
+            RetryRecordSerializer serializer) {
+        if (serializer == null) {
+            throw new IllegalArgumentException("RetryRecordSerializer must not be null");
+        }
         this.producer = producer;
         this.adminService = adminService;
         this.queryService = queryService;
         this.queue = (queue == null || queue.trim().isEmpty()) ? RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE : queue;
+        this.serializer = serializer;
     }
 
     @Override
