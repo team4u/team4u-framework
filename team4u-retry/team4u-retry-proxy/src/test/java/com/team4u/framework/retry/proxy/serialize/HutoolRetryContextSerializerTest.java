@@ -35,7 +35,8 @@ public class HutoolRetryContextSerializerTest {
 
     @Test
     public void testDeserializeParameterizedCollection() {
-        Type listType = new TypeReference<List<Item>>() { }.getType();
+        Type listType = new TypeReference<List<Item>>() {
+        }.getType();
 
         @SuppressWarnings("unchecked")
         List<Item> items = (List<Item>) serializer.deserialize(listType,
@@ -48,7 +49,8 @@ public class HutoolRetryContextSerializerTest {
 
     @Test
     public void testDeserializeParameterizedContainer() {
-        Type containerType = new TypeReference<Envelope<Item>>() { }.getType();
+        Type containerType = new TypeReference<Envelope<Item>>() {
+        }.getType();
 
         @SuppressWarnings("unchecked")
         Envelope<Item> envelope = (Envelope<Item>) serializer.deserialize(containerType,

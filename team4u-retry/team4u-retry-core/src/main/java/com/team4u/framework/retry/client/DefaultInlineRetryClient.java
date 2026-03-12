@@ -159,11 +159,11 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
      * 处理异步任务失败时的逻辑，决定是否继续调度下一次重试。
      *
      * @param failedAttemptsSoFar 当前已失败的次数
-     * @param policy       重试策略
-     * @param asyncTask    异步任务生成器
-     * @param scheduler    调度器
-     * @param resultFuture 最终 Future
-     * @param ex           本次尝试发生的异常
+     * @param policy              重试策略
+     * @param asyncTask           异步任务生成器
+     * @param scheduler           调度器
+     * @param resultFuture        最终 Future
+     * @param ex                  本次尝试发生的异常
      */
     private <T> void handleAsyncFailure(
             int failedAttemptsSoFar,
