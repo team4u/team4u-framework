@@ -1,9 +1,7 @@
 package com.team4u.framework.router;
 
-import com.team4u.framework.base.util.StringUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.team4u.framework.base.util.ServiceLoaderUtil;
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.policy.util.PolicyScanner;
@@ -21,6 +19,9 @@ import com.team4u.framework.router.factory.RouterFactoryRegistry;
 import com.team4u.framework.router.parser.DefaultRoutePolicyParser;
 import com.team4u.framework.router.spi.RoutePolicyParser;
 import com.team4u.framework.router.spi.RouterFactory;
+import lombok.Getter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
@@ -28,16 +29,24 @@ import java.util.List;
  * 路由管理器
  * 统一门面，负责工厂发现与路由实例注册管理
  */
+@Getter
 public class RoutingManager {
 
     private static final Logger log = LoggerFactory.getLogger(RoutingManager.class);
 
     private static volatile RoutingManager GLOBAL = builder().build();
 
+    /**
+     * 路由工厂注册器，可供外部手工补充注册自定义工厂
+     */
     private final RouterFactoryRegistry factoryRegistry;
+    /**
+     * 拦截器注册中心
+     */
+    private final RouteInterceptorRegistry interceptorRegistry;
+
     private final RoutePolicyParser configParser;
     private final String configPrefix;
-    private final RouteInterceptorRegistry interceptorRegistry;
 
     /**
      * 配置驱动的路由器注册表
@@ -78,13 +87,6 @@ public class RoutingManager {
      */
     public static Builder builder() {
         return new Builder();
-    }
-
-    /**
-     * 获取路由工厂注册器，可供外部手工补充注册自定义工厂
-     */
-    public RouterFactoryRegistry getFactoryRegistry() {
-        return factoryRegistry;
     }
 
     /**
@@ -153,13 +155,6 @@ public class RoutingManager {
         RouteTrace<T> trace = new RouteTrace<>();
         trace.setResult(RouteResult.unmatch());
         return trace;
-    }
-
-    /**
-     * 获取拦截器注册中心
-     */
-    public RouteInterceptorRegistry interceptorRegistry() {
-        return interceptorRegistry;
     }
 
     /**
