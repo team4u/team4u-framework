@@ -10,18 +10,6 @@ import org.junit.Test;
  */
 public class TypeUtilTest {
 
-    // 定义带泛型的父类
-    static class Base<T> {
-    }
-
-    // 子类显式声明泛型为 String
-    static class Sub extends Base<String> {
-    }
-
-    // 子类未声明具体泛型
-    static class RawSub extends Base {
-    }
-
     @Test
     public void testGetTypeArgument() {
         // 测试获取泛型参数
@@ -41,5 +29,17 @@ public class TypeUtilTest {
         // 测试普通类获取泛型参数，应返回 null
         Class<?> argument = TypeUtil.getTypeArgument(Object.class);
         Assert.assertNull("普通类应返回 null", argument);
+    }
+
+    // 定义带泛型的父类
+    static class Base<T> {
+    }
+
+    // 子类显式声明泛型为 String
+    static class Sub extends Base<String> {
+    }
+
+    // 子类未声明具体泛型
+    static class RawSub extends Base {
     }
 }

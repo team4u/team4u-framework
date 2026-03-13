@@ -1,9 +1,7 @@
 package com.team4u.framework.criterion.compiler.impl;
 
-import com.team4u.framework.base.util.ConvertUtil;
+import com.team4u.framework.base.convert.ConvertUtil;
 import com.team4u.framework.base.util.StringUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.team4u.framework.criterion.MatchPredicate;
 import com.team4u.framework.criterion.compiler.AbstractCriterionCompiler;
 import com.team4u.framework.criterion.model.CompareOperators;
@@ -13,6 +11,8 @@ import com.team4u.framework.criterion.model.value.FixedValue;
 import com.team4u.framework.criterion.model.value.Value;
 import com.team4u.framework.criterion.util.FastNumberUtil;
 import com.team4u.framework.criterion.util.ObjectCompareUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.function.IntPredicate;
 
@@ -82,7 +82,7 @@ public class SmartCompareCriterionCompiler extends AbstractCriterionCompiler<Sma
     /**
      * 智能比较核心逻辑
      */
-    @SuppressWarnings({ "unchecked", "rawtypes" })
+    @SuppressWarnings({"unchecked", "rawtypes"})
     private int smartCompare(boolean isStrictMode, Object actual, Object expected) {
         // 快速判断：完全相同的对象
         if (actual == expected || actual.equals(expected)) {
@@ -105,7 +105,7 @@ public class SmartCompareCriterionCompiler extends AbstractCriterionCompiler<Sma
         // 同类型 Comparable 策略 (例如两个 Date，或两个实现了 Comparable 的自定义对象，支持继承)
         if (actual instanceof Comparable && expected instanceof Comparable
                 && (actual.getClass().isAssignableFrom(expected.getClass())
-                        || expected.getClass().isAssignableFrom(actual.getClass()))) {
+                || expected.getClass().isAssignableFrom(actual.getClass()))) {
             return ((Comparable) actual).compareTo(expected);
         }
 

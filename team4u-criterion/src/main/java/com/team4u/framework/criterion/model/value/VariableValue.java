@@ -1,9 +1,9 @@
 package com.team4u.framework.criterion.model.value;
 
-import com.team4u.framework.base.util.ConvertUtil;
+import com.team4u.framework.base.convert.ConvertUtil;
+import com.team4u.framework.criterion.MatchContext;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
-import com.team4u.framework.criterion.MatchContext;
 
 /**
  * 动态变量实现

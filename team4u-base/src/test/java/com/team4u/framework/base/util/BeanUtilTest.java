@@ -18,7 +18,7 @@ public class BeanUtilTest {
         Map<String, Object> map = new HashMap<>();
         map.put("userName", "testUser");
         map.put("userAge", 18);
-        
+
         // 1. 正常精确匹配测试
         TestUser bean = BeanUtil.toBean(map, TestUser.class, new CopyOptions());
         Assert.assertNotNull(bean);
@@ -29,10 +29,10 @@ public class BeanUtilTest {
         Map<String, Object> fuzzyMap = new HashMap<>();
         fuzzyMap.put("user_name", "fuzzyUser");
         fuzzyMap.put("USER-AGE", 20);
-        
+
         CopyOptions ignoreCaseOptions = new CopyOptions().ignoreCase();
         TestUser fuzzyBean = BeanUtil.toBean(fuzzyMap, TestUser.class, ignoreCaseOptions);
-        
+
         Assert.assertNotNull(fuzzyBean);
         Assert.assertEquals("fuzzyUser", fuzzyBean.getUserName());
         Assert.assertEquals(20, fuzzyBean.getUserAge());
@@ -42,7 +42,7 @@ public class BeanUtilTest {
     public void testGetProperty() {
         TestUser user = new TestUser();
         user.setUserName("propUser");
-        
+
         // 1. 获取直接属性
         Object userName = BeanUtil.getProperty(user, "userName");
         Assert.assertEquals("propUser", userName);

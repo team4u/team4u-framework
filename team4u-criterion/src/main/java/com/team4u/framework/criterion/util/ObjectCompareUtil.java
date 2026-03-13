@@ -1,6 +1,6 @@
 package com.team4u.framework.criterion.util;
 
-import com.team4u.framework.base.util.ConvertUtil;
+import com.team4u.framework.base.convert.ConvertUtil;
 import com.team4u.framework.base.util.ObjectUtil;
 
 /**

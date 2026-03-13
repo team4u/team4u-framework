@@ -1,8 +1,8 @@
 package com.team4u.framework.config.core.internal;
 
+import com.team4u.framework.base.convert.ConvertUtil;
 import com.team4u.framework.base.util.BeanUtil;
 import com.team4u.framework.base.util.CopyOptions;
-import com.team4u.framework.base.util.ConvertUtil;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import com.team4u.framework.config.core.spi.ConfigBinder;
 

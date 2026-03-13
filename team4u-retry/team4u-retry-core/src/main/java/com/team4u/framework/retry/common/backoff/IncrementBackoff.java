@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.common.backoff;
 
-import com.team4u.framework.base.util.ConvertUtil;
+import com.team4u.framework.base.convert.ConvertUtil;
 import com.team4u.framework.retry.config.BackoffConfig;
 import lombok.EqualsAndHashCode;
 
@@ -14,9 +14,21 @@ import java.util.Map;
 @EqualsAndHashCode
 public class IncrementBackoff implements Backoff {
 
+    /**
+     * 初始延迟时间（毫秒）
+     */
     private final long initialDelayMillis;
+    /**
+     * 递增步长（毫秒）
+     */
     private final long stepMillis;
 
+    /**
+     * 构造等差递增延迟退避策略
+     *
+     * @param initialDelayMillis 初始延迟时间（毫秒）
+     * @param stepMillis         递增步长（毫秒）
+     */
     public IncrementBackoff(long initialDelayMillis, long stepMillis) {
         if (initialDelayMillis < 0L) {
             throw new IllegalArgumentException("initialDelayMillis must be greater than or equal to 0");

@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.common.backoff;
 
-import com.team4u.framework.base.util.ConvertUtil;
+import com.team4u.framework.base.convert.ConvertUtil;
 import com.team4u.framework.retry.config.BackoffConfig;
 import lombok.EqualsAndHashCode;
 
@@ -19,9 +19,22 @@ import java.util.concurrent.ThreadLocalRandom;
 @EqualsAndHashCode
 public class ExponentialJitterBackoff implements Backoff {
 
+    /**
+     * 底层的指数退避策略，用于计算延迟上限
+     */
     private final ExponentialBackoff exponentialBackoff;
+    /**
+     * 初始延迟时间（毫秒），同时也作为随机抖动的下界
+     */
     private final long initialDelayMillis;
 
+    /**
+     * 构造带随机抖动的指数级退避策略
+     *
+     * @param initialDelayMillis 初始延迟时间（毫秒）
+     * @param multiplier         指数倍数
+     * @param maxDelayMillis     最大延迟时间（毫秒）
+     */
     public ExponentialJitterBackoff(long initialDelayMillis, double multiplier, long maxDelayMillis) {
         this.exponentialBackoff = new ExponentialBackoff(initialDelayMillis, multiplier, maxDelayMillis);
         this.initialDelayMillis = initialDelayMillis;

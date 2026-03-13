@@ -31,7 +31,7 @@ public class JdbcUtil {
     public static List<Map<String, Object>> query(DataSource dataSource, String sql, Object... params)
             throws SQLException {
         try (Connection conn = dataSource.getConnection();
-                PreparedStatement ps = conn.prepareStatement(sql)) {
+             PreparedStatement ps = conn.prepareStatement(sql)) {
             setParameters(ps, params);
             try (ResultSet rs = ps.executeQuery()) {
                 List<Map<String, Object>> result = new ArrayList<>();
@@ -63,7 +63,7 @@ public class JdbcUtil {
      */
     public static int execute(DataSource dataSource, String sql, Object... params) throws SQLException {
         try (Connection conn = dataSource.getConnection();
-                PreparedStatement ps = conn.prepareStatement(sql)) {
+             PreparedStatement ps = conn.prepareStatement(sql)) {
             setParameters(ps, params);
             return ps.executeUpdate();
         }

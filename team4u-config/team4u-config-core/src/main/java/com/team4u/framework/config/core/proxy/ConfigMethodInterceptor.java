@@ -1,6 +1,6 @@
 package com.team4u.framework.config.core.proxy;
 
-import com.team4u.framework.base.util.ConvertUtil;
+import com.team4u.framework.base.convert.ConvertUtil;
 import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.config.core.annotation.ConfigConverter;
 import com.team4u.framework.config.core.annotation.ConfigKey;

@@ -36,7 +36,7 @@ public class ReflectUtilTest {
     @Test
     public void testSetFieldValue() {
         TestChildClass obj = new TestChildClass();
-        
+
         // 1. 设置当前类的私有字段
         ReflectUtil.setFieldValue(obj, "childField", "newChildValue");
         Assert.assertEquals("newChildValue", obj.getChildField());
@@ -48,7 +48,7 @@ public class ReflectUtilTest {
 
     // 测试用的辅助类
     static class TestParentClass {
-        private String parentField = "parent";
+        private final String parentField = "parent";
 
         public String getParentField() {
             return parentField;
@@ -56,7 +56,7 @@ public class ReflectUtilTest {
     }
 
     static class TestChildClass extends TestParentClass {
-        private String childField = "child";
+        private final String childField = "child";
 
         public String getChildField() {
             return childField;
