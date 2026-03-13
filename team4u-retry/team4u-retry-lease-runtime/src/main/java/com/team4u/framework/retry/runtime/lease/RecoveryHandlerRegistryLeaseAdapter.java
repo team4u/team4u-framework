@@ -2,7 +2,7 @@ package com.team4u.framework.retry.runtime.lease;
 
 import com.team4u.framework.lease.handler.LeaseTaskHandler;
 import com.team4u.framework.lease.handler.LeaseTaskHandlerRegistry;
-import com.team4u.framework.lease.model.LeaseSubscription;
+import com.team4u.framework.lease.model.LeaseTaskGroupSubscription;
 import com.team4u.framework.lease.runtime.LeaseExecutionContext;
 import com.team4u.framework.retry.managed.recovery.RecoveryContext;
 import com.team4u.framework.retry.managed.recovery.RecoveryHandlerRegistry;
@@ -16,7 +16,7 @@ import java.util.Set;
  * <p>
  * 该类跨接了重试领域的 {@link RecoveryHandlerRegistry} 与租约系统的
  * {@link LeaseTaskHandlerRegistry}。
- * 它能够将传统的恢复处理器透明地转化为租约任务处理器，并统一管理租约队列（Queue）与任务类型（TaskType）的映射关系。
+ * 它能够将传统的恢复处理器透明地转化为租约任务处理器，并统一管理租约任务分组（TaskGroup）与任务类型（TaskType）的映射关系。
  * </p>
  */
 public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegistry {
@@ -26,17 +26,19 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
      */
     private final RecoveryHandlerRegistry delegate;
     /**
-     * 该运行时所监听的租约队列名称
+     * 该运行时所监听的租约任务分组名称
      */
-    private final String queue;
+    private final String taskGroup;
 
     public RecoveryHandlerRegistryLeaseAdapter(RecoveryHandlerRegistry delegate) {
-        this(delegate, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE);
+        this(delegate, RetryLeaseTaskGroups.DEFAULT_RECOVERY_TASK_GROUP);
     }
 
-    public RecoveryHandlerRegistryLeaseAdapter(RecoveryHandlerRegistry delegate, String queue) {
+    public RecoveryHandlerRegistryLeaseAdapter(RecoveryHandlerRegistry delegate, String taskGroup) {
         this.delegate = delegate == null ? RecoveryHandlerRegistry.global() : delegate;
-        this.queue = (queue == null || queue.trim().isEmpty()) ? RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE : queue;
+        this.taskGroup = (taskGroup == null || taskGroup.trim().isEmpty())
+                ? RetryLeaseTaskGroups.DEFAULT_RECOVERY_TASK_GROUP
+                : taskGroup;
     }
 
     /**
@@ -48,13 +50,13 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
      * </p>
      */
     @Override
-    public void register(String queue, String taskType, LeaseTaskHandler handler) {
+    public void register(String taskGroup, String taskType, LeaseTaskHandler handler) {
         if (handler == null) {
             return;
         }
-        if (!this.queue.equals(queue)) {
+        if (!this.taskGroup.equals(taskGroup)) {
             throw new IllegalArgumentException(
-                    "Recovery handler queue mismatch. expected=" + this.queue + ", actual=" + queue);
+                    "Recovery handler taskGroup mismatch. expected=" + this.taskGroup + ", actual=" + taskGroup);
         }
         if (handler instanceof RecoveryHandlerLeaseTaskHandlerAdapter) {
             delegate.register(((RecoveryHandlerLeaseTaskHandlerAdapter) handler).getDelegate());
@@ -67,8 +69,8 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
      * 根据租约标识获取对应的适配处理器。
      */
     @Override
-    public Optional<LeaseTaskHandler> get(String queue, String taskType) {
-        if (!this.queue.equals(queue)) {
+    public Optional<LeaseTaskHandler> get(String taskGroup, String taskType) {
+        if (!this.taskGroup.equals(taskGroup)) {
             return Optional.empty();
         }
         return delegate.get(taskType).map(handler -> {
@@ -82,12 +84,12 @@ public class RecoveryHandlerRegistryLeaseAdapter implements LeaseTaskHandlerRegi
     }
 
     /**
-     * 获取当前运行时需要订阅的租约队列集合。
+     * 获取当前运行时需要订阅的租约任务分组集合。
      */
     @Override
-    public Set<LeaseSubscription> subscriptions() {
-        Set<LeaseSubscription> subscriptions = new LinkedHashSet<LeaseSubscription>();
-        subscriptions.add(LeaseSubscription.builder().queue(queue).build());
+    public Set<LeaseTaskGroupSubscription> subscriptions() {
+        Set<LeaseTaskGroupSubscription> subscriptions = new LinkedHashSet<LeaseTaskGroupSubscription>();
+        subscriptions.add(LeaseTaskGroupSubscription.builder().taskGroup(taskGroup).build());
         return subscriptions;
     }
 

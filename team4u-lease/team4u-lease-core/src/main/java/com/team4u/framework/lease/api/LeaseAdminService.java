@@ -32,7 +32,7 @@ public interface LeaseAdminService {
     LeaseAdminResult close(String taskId, LeaseCloseRequest request);
 
     /**
-     * 将失败任务重新放回就绪队列
+     * 将失败任务重新调度到就绪状态
      * <p>
      * 针对已关闭且结果为失败的任务，修正其环境后重新触发执行。
      *
@@ -40,7 +40,7 @@ public interface LeaseAdminService {
      * @param delayMillis 期望的延迟执行毫秒数
      * @return 操作结果状态
      */
-    LeaseAdminResult requeueFailed(String taskId, long delayMillis);
+    LeaseAdminResult rescheduleFailed(String taskId, long delayMillis);
 
     /**
      * 更新任务内容

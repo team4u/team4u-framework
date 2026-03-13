@@ -28,7 +28,7 @@ public abstract class AbstractLeaseStateSemanticsContractTest extends AbstractLe
         Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.close(
                 firstGrant.getHandle(), LeaseCloseRequest.failed(LeaseTaskFailureReason.HANDLER_EXCEPTION, "boom")));
         // [2] 管理员将其重新入队
-        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.requeueFailed(taskId, 0L));
+        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.rescheduleFailed(taskId, 0L));
 
         Thread.sleep(20L);
         // [3] 模拟任务第二次执行成功
@@ -90,7 +90,7 @@ public abstract class AbstractLeaseStateSemanticsContractTest extends AbstractLe
 
         Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.close(
                 grant.getHandle(), LeaseCloseRequest.failed(LeaseTaskFailureReason.RETRY_EXHAUSTED, "boom")));
-        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.requeueFailed(taskId, 0L));
+        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.rescheduleFailed(taskId, 0L));
 
         Assert.assertEquals(LeaseTaskState.READY, backend.get(taskId).get().getState());
         Assert.assertNull(backend.get(taskId).get().getOutcome());

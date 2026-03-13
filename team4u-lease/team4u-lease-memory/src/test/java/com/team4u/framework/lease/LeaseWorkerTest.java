@@ -130,7 +130,7 @@ public class LeaseWorkerTest {
                 .build());
         worker.start("lease-worker-context");
         String taskId = backend.publish(LeasePublishRequest.builder()
-                .queue(DEFAULT_QUEUE)
+                .taskGroup(DEFAULT_QUEUE)
                 .taskType("pay")
                 .payload("payload")
                 .attribute("traceId", "T-1")
@@ -139,7 +139,7 @@ public class LeaseWorkerTest {
             Assert.assertTrue(started.await(1, TimeUnit.SECONDS));
             LeaseExecutionContext context = contextRef.get();
             Assert.assertNotNull(context);
-            Assert.assertEquals(DEFAULT_QUEUE, context.getQueue());
+            Assert.assertEquals(DEFAULT_QUEUE, context.getTaskGroup());
             Assert.assertEquals("pay", context.getTaskType());
             Assert.assertEquals("payload", context.getPayload());
             Assert.assertEquals("T-1", context.getAttributes().get("traceId"));
@@ -465,7 +465,7 @@ public class LeaseWorkerTest {
 
     private LeasePublishRequest request(String taskType, String payload) {
         return LeasePublishRequest.builder()
-                .queue(DEFAULT_QUEUE)
+                .taskGroup(DEFAULT_QUEUE)
                 .taskType(taskType)
                 .payload(payload)
                 .build();
@@ -476,7 +476,7 @@ public class LeaseWorkerTest {
                 .taskId("task-1")
                 .workerId("worker-a")
                 .leaseToken("lease-1")
-                .queue(DEFAULT_QUEUE)
+                .taskGroup(DEFAULT_QUEUE)
                 .taskType("pay")
                 .payload("payload")
                 .deliveryCount(1)

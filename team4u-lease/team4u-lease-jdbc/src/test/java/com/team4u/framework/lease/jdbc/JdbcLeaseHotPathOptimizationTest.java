@@ -36,7 +36,7 @@ public class JdbcLeaseHotPathOptimizationTest {
         JdbcLeaseBackend backend = new JdbcLeaseBackend(observed.dataSource());
 
         LeasePublishResult result = backend.publishIfAbsent(LeasePublishRequest.builder()
-                .queue("retry-q")
+                .taskGroup("retry-q")
                 .taskType("recover-payment")
                 .payload("{\"attempt\":1}")
                 .attribute("traceId", "trace-1")
@@ -58,7 +58,7 @@ public class JdbcLeaseHotPathOptimizationTest {
         JdbcLeaseBackend backend = new JdbcLeaseBackend(observed.dataSource());
 
         LeasePublishResult result = backend.publishIfAbsent(LeasePublishRequest.builder()
-                .queue("retry-q")
+                .taskGroup("retry-q")
                 .taskType("recover-payment")
                 .payload("{\"attempt\":1}")
                 .businessKey("recover-payment|order-1001")
@@ -77,7 +77,7 @@ public class JdbcLeaseHotPathOptimizationTest {
         ObservedDataSource observed = ObservedDataSource.wrap(JdbcLeaseBackendTestSupport.newDataSource());
         JdbcLeaseBackend backend = new JdbcLeaseBackend(observed.dataSource());
         LeasePublishRequest request = LeasePublishRequest.builder()
-                .queue("retry-q")
+                .taskGroup("retry-q")
                 .taskType("recover-payment")
                 .payload("{\"attempt\":1}")
                 .businessKey("recover-payment|order-1001")
@@ -101,7 +101,7 @@ public class JdbcLeaseHotPathOptimizationTest {
         ObservedDataSource observed = ObservedDataSource.wrap(JdbcLeaseBackendTestSupport.newDataSource());
         JdbcLeaseBackend backend = new JdbcLeaseBackend(observed.dataSource());
         backend.publish(LeasePublishRequest.builder()
-                .queue("pay")
+                .taskGroup("pay")
                 .taskType("charge")
                 .payload("payload")
                 .build());
@@ -111,7 +111,7 @@ public class JdbcLeaseHotPathOptimizationTest {
                 .workerId("worker-a")
                 .leaseMillis(200L)
                 .waitTimeoutMillis(100L)
-                .subscription(LeaseSubscription.builder().queue("pay").build())
+                .subscription(LeaseTaskGroupSubscription.builder().taskGroup("pay").build())
                 .build());
 
         Assert.assertNotNull(grant);
@@ -138,7 +138,7 @@ public class JdbcLeaseHotPathOptimizationTest {
                     try {
                         start.await(1, TimeUnit.SECONDS);
                         LeasePublishResult result = backend.publishIfAbsent(LeasePublishRequest.builder()
-                                .queue("retry-q")
+                                .taskGroup("retry-q")
                                 .taskType("recover-payment")
                                 .payload("{\"attempt\":1}")
                                 .businessKey("recover-payment|order-1001")
@@ -188,7 +188,7 @@ public class JdbcLeaseHotPathOptimizationTest {
                 new MySqlLeaseDbDialect(),
                 new FixedClock(0L));
         String taskId = backend.publish(LeasePublishRequest.builder()
-                .queue("pay")
+                .taskGroup("pay")
                 .taskType("charge")
                 .payload("payload")
                 .build());
@@ -196,7 +196,7 @@ public class JdbcLeaseHotPathOptimizationTest {
                 .workerId("worker-a")
                 .leaseMillis(100L)
                 .waitTimeoutMillis(100L)
-                .subscription(LeaseSubscription.builder().queue("pay").build())
+                .subscription(LeaseTaskGroupSubscription.builder().taskGroup("pay").build())
                 .build());
         Assert.assertNotNull(grant);
 
@@ -219,7 +219,7 @@ public class JdbcLeaseHotPathOptimizationTest {
                 new MySqlLeaseDbDialect(),
                 new FixedClock(0L));
         String taskId = backend.publish(LeasePublishRequest.builder()
-                .queue("pay")
+                .taskGroup("pay")
                 .taskType("charge")
                 .payload("payload")
                 .build());
@@ -227,7 +227,7 @@ public class JdbcLeaseHotPathOptimizationTest {
                 .workerId("worker-a")
                 .leaseMillis(100L)
                 .waitTimeoutMillis(100L)
-                .subscription(LeaseSubscription.builder().queue("pay").build())
+                .subscription(LeaseTaskGroupSubscription.builder().taskGroup("pay").build())
                 .build());
         Assert.assertNotNull(grant);
 
@@ -253,13 +253,13 @@ public class JdbcLeaseHotPathOptimizationTest {
         JdbcLeaseBackend backend = new JdbcLeaseBackend(dataSource);
         JdbcLeaseTaskDao dao = new JdbcLeaseTaskDao(Db.use(dataSource), new MySqlLeaseDbDialect(), new LeaseJsonCodec());
         String taskId = backend.publish(LeasePublishRequest.builder()
-                .queue("pay")
+                .taskGroup("pay")
                 .taskType("charge")
                 .payload("payload-v1")
                 .build());
         long now = System.currentTimeMillis();
         LeaseTaskEntity staleCandidate = dao.findAcquirableTasks(
-                Collections.singleton(LeaseSubscription.builder().queue("pay").build()),
+                Collections.singleton(LeaseTaskGroupSubscription.builder().taskGroup("pay").build()),
                 now,
                 10).get(0);
 
@@ -280,7 +280,7 @@ public class JdbcLeaseHotPathOptimizationTest {
                 .workerId("worker-a")
                 .leaseMillis(200L)
                 .waitTimeoutMillis(500L)
-                .subscription(LeaseSubscription.builder().queue("pay").build())
+                .subscription(LeaseTaskGroupSubscription.builder().taskGroup("pay").build())
                 .build());
         Assert.assertNotNull(grant);
         Assert.assertEquals("payload-v2", grant.getPayload());
@@ -294,7 +294,7 @@ public class JdbcLeaseHotPathOptimizationTest {
     public void testAcquireOrderingStillWorksAcrossReadyAndExpiredCandidates() throws Exception {
         JdbcLeaseBackend backend = new JdbcLeaseBackend(JdbcLeaseBackendTestSupport.newDataSource());
         String expiredTaskId = backend.publish(LeasePublishRequest.builder()
-                .queue("pay")
+                .taskGroup("pay")
                 .taskType("charge")
                 .payload("expired")
                 .priority(5)
@@ -303,13 +303,13 @@ public class JdbcLeaseHotPathOptimizationTest {
                 .workerId("worker-a")
                 .leaseMillis(30L)
                 .waitTimeoutMillis(100L)
-                .subscription(LeaseSubscription.builder().queue("pay").build())
+                .subscription(LeaseTaskGroupSubscription.builder().taskGroup("pay").build())
                 .build());
         Assert.assertEquals(expiredTaskId, first.getTaskId());
         Thread.sleep(50L);
 
         String readyTaskId = backend.publish(LeasePublishRequest.builder()
-                .queue("pay")
+                .taskGroup("pay")
                 .taskType("charge")
                 .payload("ready")
                 .priority(10)
@@ -319,7 +319,7 @@ public class JdbcLeaseHotPathOptimizationTest {
                 .workerId("worker-b")
                 .leaseMillis(100L)
                 .waitTimeoutMillis(100L)
-                .subscription(LeaseSubscription.builder().queue("pay").build())
+                .subscription(LeaseTaskGroupSubscription.builder().taskGroup("pay").build())
                 .build());
 
         Assert.assertNotNull(next);
@@ -332,7 +332,7 @@ public class JdbcLeaseHotPathOptimizationTest {
         JdbcLeaseBackend backend = new JdbcLeaseBackend(dataSource);
         JdbcLeaseTaskDao dao = new JdbcLeaseTaskDao(Db.use(dataSource), new MySqlLeaseDbDialect(), new LeaseJsonCodec());
         String taskId = backend.publish(LeasePublishRequest.builder()
-                .queue("pay")
+                .taskGroup("pay")
                 .taskType("charge")
                 .payload("payload")
                 .build());
@@ -343,7 +343,7 @@ public class JdbcLeaseHotPathOptimizationTest {
                 .workerId("worker-a")
                 .leaseMillis(200L)
                 .waitTimeoutMillis(100L)
-                .subscription(LeaseSubscription.builder().queue("pay").build())
+                .subscription(LeaseTaskGroupSubscription.builder().taskGroup("pay").build())
                 .build());
         Assert.assertNotNull(grant);
         Assert.assertEquals(1L, dao.findById(taskId).getVersion());

@@ -55,7 +55,7 @@ public class LeaseDurableRetryStoreTest {
         RecordingLeaseApi api = new RecordingLeaseApi();
         api.queryResult = LeaseTaskRecord.builder()
                 .taskId("task-existing")
-                .queue("retry-q")
+                .taskGroup("retry-q")
                 .taskType("payment")
                 .payload("serialized-existing")
                 .businessKey("payment|order-1")
@@ -80,7 +80,7 @@ public class LeaseDurableRetryStoreTest {
         RecordingLeaseApi api = new RecordingLeaseApi();
         api.getResult = LeaseTaskRecord.builder()
                 .taskId("task-1")
-                .queue("retry-q")
+                .taskGroup("retry-q")
                 .taskType("payment")
                 .payload("serialized-before")
                 .state(LeaseTaskState.READY)
@@ -113,7 +113,7 @@ public class LeaseDurableRetryStoreTest {
         RecordingLeaseApi api = new RecordingLeaseApi();
         api.getResult = LeaseTaskRecord.builder()
                 .taskId("task-1")
-                .queue("retry-q")
+                .taskGroup("retry-q")
                 .taskType("payment")
                 .payload("serialized-before")
                 .state(LeaseTaskState.READY)
@@ -140,7 +140,7 @@ public class LeaseDurableRetryStoreTest {
         RecordingLeaseApi api = new RecordingLeaseApi();
         api.getResult = LeaseTaskRecord.builder()
                 .taskId("task-1")
-                .queue("retry-q")
+                .taskGroup("retry-q")
                 .taskType("payment")
                 .payload("serialized-before")
                 .state(LeaseTaskState.READY)
@@ -171,7 +171,7 @@ public class LeaseDurableRetryStoreTest {
         RecordingLeaseApi api = new RecordingLeaseApi();
         api.getResult = LeaseTaskRecord.builder()
                 .taskId("task-1")
-                .queue("retry-q")
+                .taskGroup("retry-q")
                 .taskType("payment")
                 .payload("serialized-before")
                 .state(LeaseTaskState.READY)
@@ -200,7 +200,7 @@ public class LeaseDurableRetryStoreTest {
         RecordingLeaseApi api = new RecordingLeaseApi();
         api.getResult = LeaseTaskRecord.builder()
                 .taskId("task-1")
-                .queue("retry-q")
+                .taskGroup("retry-q")
                 .taskType("payment")
                 .payload("serialized-before")
                 .state(LeaseTaskState.READY)
@@ -284,7 +284,7 @@ public class LeaseDurableRetryStoreTest {
         }
 
         @Override
-        public LeaseAdminResult requeueFailed(String taskId, long delayMillis) {
+        public LeaseAdminResult rescheduleFailed(String taskId, long delayMillis) {
             return LeaseAdminResult.APPLIED;
         }
 
@@ -307,7 +307,7 @@ public class LeaseDurableRetryStoreTest {
         }
 
         @Override
-        public Optional<LeaseTaskRecord> getByBusinessKey(String queue, String businessKey) {
+        public Optional<LeaseTaskRecord> getByBusinessKey(String taskGroup, String businessKey) {
             businessKeyQueried = businessKey;
             return Optional.ofNullable(queryResult);
         }

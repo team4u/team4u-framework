@@ -4,7 +4,7 @@ import com.team4u.framework.lease.api.LeaseBackend;
 import com.team4u.framework.lease.model.LeaseAcquireRequest;
 import com.team4u.framework.lease.model.LeaseGrant;
 import com.team4u.framework.lease.model.LeasePublishRequest;
-import com.team4u.framework.lease.model.LeaseSubscription;
+import com.team4u.framework.lease.model.LeaseTaskGroupSubscription;
 
 public abstract class AbstractLeaseContractSupport {
 
@@ -18,7 +18,7 @@ public abstract class AbstractLeaseContractSupport {
 
     protected String publish(LeaseBackend backend, String taskType, String payload, long delayMillis) {
         return backend.publish(LeasePublishRequest.builder()
-                .queue(DEFAULT_QUEUE)
+                .taskGroup(DEFAULT_QUEUE)
                 .taskType(taskType)
                 .payload(payload)
                 .delayMillis(delayMillis)
@@ -31,7 +31,7 @@ public abstract class AbstractLeaseContractSupport {
                 .workerId(workerId)
                 .leaseMillis(leaseMillis)
                 .waitTimeoutMillis(waitTimeoutMillis)
-                .subscription(LeaseSubscription.builder().queue(DEFAULT_QUEUE).build())
+                .subscription(LeaseTaskGroupSubscription.builder().taskGroup(DEFAULT_QUEUE).build())
                 .build());
     }
 

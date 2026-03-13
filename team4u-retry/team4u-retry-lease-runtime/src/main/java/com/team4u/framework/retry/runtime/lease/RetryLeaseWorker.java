@@ -39,7 +39,7 @@ public class RetryLeaseWorker implements Runnable, AutoCloseable {
         // 构建适配器，将 RecoveryHandlerRegistry 转化为 Lease 系统能识别的 HandlerRegistry
         this.delegate = new LeaseWorker(
                 runtimeClient,
-                new RecoveryHandlerRegistryLeaseAdapter(registry, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE),
+                new RecoveryHandlerRegistryLeaseAdapter(registry, RetryLeaseTaskGroups.DEFAULT_RECOVERY_TASK_GROUP),
                 policy);
     }
 

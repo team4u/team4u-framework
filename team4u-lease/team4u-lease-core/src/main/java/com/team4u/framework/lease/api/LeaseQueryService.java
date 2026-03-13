@@ -20,9 +20,9 @@ public interface LeaseQueryService {
     Optional<LeaseTaskRecord> get(String taskId);
 
     /**
-     * 根据队列和业务键查询任务。
+     * 根据任务分组和业务键查询任务。
      */
-    Optional<LeaseTaskRecord> getByBusinessKey(String queue, String businessKey);
+    Optional<LeaseTaskRecord> getByBusinessKey(String taskGroup, String businessKey);
 
     /**
      * 根据条件分页查询任务记录

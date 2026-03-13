@@ -32,7 +32,7 @@ public abstract class AbstractLeaseRuntimeContractTest extends AbstractLeaseCont
 
         Assert.assertNotNull(grant);
         Assert.assertEquals(taskId, grant.getTaskId());
-        Assert.assertEquals(DEFAULT_QUEUE, grant.getQueue());
+        Assert.assertEquals(DEFAULT_QUEUE, grant.getTaskGroup());
         Assert.assertEquals("pay", grant.getTaskType());
         Assert.assertEquals("{\"id\":1}", grant.getPayload());
         Assert.assertEquals(1, grant.getDeliveryCount());
@@ -197,7 +197,7 @@ public abstract class AbstractLeaseRuntimeContractTest extends AbstractLeaseCont
     public void testReleaseCanUpdateAttributes() throws Exception {
         LeaseBackend backend = createBackend();
         String taskId = backend.publish(LeasePublishRequest.builder()
-                .queue(DEFAULT_QUEUE)
+                .taskGroup(DEFAULT_QUEUE)
                 .taskType("pay")
                 .payload("payload-v1")
                 .attributes(Collections.singletonMap("traceId", "T-1"))
@@ -222,7 +222,7 @@ public abstract class AbstractLeaseRuntimeContractTest extends AbstractLeaseCont
     public void testReleaseWithoutAttributesKeepsOriginalAttributes() throws Exception {
         LeaseBackend backend = createBackend();
         String taskId = backend.publish(LeasePublishRequest.builder()
-                .queue(DEFAULT_QUEUE)
+                .taskGroup(DEFAULT_QUEUE)
                 .taskType("pay")
                 .payload("payload-v1")
                 .attributes(Collections.singletonMap("traceId", "T-1"))
@@ -244,7 +244,7 @@ public abstract class AbstractLeaseRuntimeContractTest extends AbstractLeaseCont
     public void testReleaseWithEmptyAttributesKeepsOriginalAttributes() throws Exception {
         LeaseBackend backend = createBackend();
         String taskId = backend.publish(LeasePublishRequest.builder()
-                .queue(DEFAULT_QUEUE)
+                .taskGroup(DEFAULT_QUEUE)
                 .taskType("pay")
                 .payload("payload-v1")
                 .attributes(Collections.singletonMap("traceId", "T-1"))
@@ -279,7 +279,7 @@ public abstract class AbstractLeaseRuntimeContractTest extends AbstractLeaseCont
     public void testAcquireOnlyReturnsSubscribedQueue() throws Exception {
         LeaseBackend backend = createBackend();
         backend.publish(com.team4u.framework.lease.model.LeasePublishRequest.builder()
-                .queue("mail")
+                .taskGroup("mail")
                 .taskType("send")
                 .payload("payload")
                 .build());
@@ -289,7 +289,7 @@ public abstract class AbstractLeaseRuntimeContractTest extends AbstractLeaseCont
                 .workerId("worker-a")
                 .leaseMillis(100L)
                 .waitTimeoutMillis(200L)
-                .subscription(LeaseSubscription.builder().queue("mail").build())
+                .subscription(LeaseTaskGroupSubscription.builder().taskGroup("mail").build())
                 .build()));
     }
 

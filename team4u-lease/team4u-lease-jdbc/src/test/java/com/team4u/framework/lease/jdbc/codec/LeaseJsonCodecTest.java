@@ -13,7 +13,7 @@ public class LeaseJsonCodecTest {
     @Test
     public void testRoundTrip() {
         Map<String, String> attributes = new LinkedHashMap<String, String>();
-        attributes.put("queue", "pay");
+        attributes.put("taskGroup", "pay");
         attributes.put("message", "hello \"jdbc\"");
 
         String json = codec.toJson(attributes);

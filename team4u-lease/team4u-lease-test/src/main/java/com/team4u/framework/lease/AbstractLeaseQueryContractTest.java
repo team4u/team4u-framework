@@ -35,11 +35,11 @@ public abstract class AbstractLeaseQueryContractTest extends AbstractLeaseContra
     @Test
     public void testListCanFilterByQueueTaskTypeAndState() {
         LeaseBackend backend = createBackend();
-        backend.publish(LeasePublishRequest.builder().queue("queue-a").taskType("pay").payload("a").priority(5).build());
-        backend.publish(LeasePublishRequest.builder().queue("queue-b").taskType("mail").payload("b").build());
+        backend.publish(LeasePublishRequest.builder().taskGroup("group-a").taskType("pay").payload("a").priority(5).build());
+        backend.publish(LeasePublishRequest.builder().taskGroup("group-b").taskType("mail").payload("b").build());
 
         Assert.assertEquals(1, backend.list(LeaseQueryRequest.builder()
-                .queue("queue-a")
+                .taskGroup("group-a")
                 .taskType("pay")
                 .state(LeaseTaskState.READY)
                 .build()).getItems().size());

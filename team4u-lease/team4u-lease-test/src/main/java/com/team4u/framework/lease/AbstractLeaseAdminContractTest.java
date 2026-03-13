@@ -86,14 +86,14 @@ public abstract class AbstractLeaseAdminContractTest extends AbstractLeaseContra
 
         Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.close(
                 grant.getHandle(), LeaseCloseRequest.failed(LeaseTaskFailureReason.HANDLER_EXCEPTION, "boom")));
-        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.requeueFailed(taskId, 10L));
+        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.rescheduleFailed(taskId, 10L));
 
         Thread.sleep(20L);
         LeaseGrant next = acquire(backend, "worker-b", 100L, 200L);
         Assert.assertNotNull(next);
         Assert.assertEquals(1, next.getFailureCount());
         Assert.assertEquals(2, next.getDeliveryCount());
-        Assert.assertEquals(LeaseAdminResult.CLOSED, backend.requeueFailed(next.getTaskId(), 0L));
+        Assert.assertEquals(LeaseAdminResult.CLOSED, backend.rescheduleFailed(next.getTaskId(), 0L));
     }
 
     @Test
@@ -102,7 +102,7 @@ public abstract class AbstractLeaseAdminContractTest extends AbstractLeaseContra
         String taskId = publish(backend, "pay", "payload");
 
         Assert.assertEquals(LeaseAdminResult.APPLIED, backend.close(taskId, LeaseCloseRequest.cancelled("cancelled")));
-        Assert.assertEquals(LeaseAdminResult.CLOSED, backend.requeueFailed(taskId, 0L));
+        Assert.assertEquals(LeaseAdminResult.CLOSED, backend.rescheduleFailed(taskId, 0L));
     }
 
     @Test
@@ -128,7 +128,7 @@ public abstract class AbstractLeaseAdminContractTest extends AbstractLeaseContra
     public void testUpdateWithoutAttributesKeepsOriginalAttributes() {
         LeaseBackend backend = createBackend();
         String taskId = backend.publish(com.team4u.framework.lease.model.LeasePublishRequest.builder()
-                .queue(DEFAULT_QUEUE)
+                .taskGroup(DEFAULT_QUEUE)
                 .taskType("pay")
                 .payload("payload")
                 .attributes(Collections.singletonMap("traceId", "T-1"))
@@ -147,7 +147,7 @@ public abstract class AbstractLeaseAdminContractTest extends AbstractLeaseContra
     public void testUpdateWithEmptyAttributesKeepsOriginalAttributes() {
         LeaseBackend backend = createBackend();
         String taskId = backend.publish(com.team4u.framework.lease.model.LeasePublishRequest.builder()
-                .queue(DEFAULT_QUEUE)
+                .taskGroup(DEFAULT_QUEUE)
                 .taskType("pay")
                 .payload("payload")
                 .attributes(Collections.singletonMap("traceId", "T-1"))
@@ -166,7 +166,7 @@ public abstract class AbstractLeaseAdminContractTest extends AbstractLeaseContra
     public void testAdminCloseWithEmptyAttributesKeepsOriginalAttributes() {
         LeaseBackend backend = createBackend();
         String taskId = backend.publish(com.team4u.framework.lease.model.LeasePublishRequest.builder()
-                .queue(DEFAULT_QUEUE)
+                .taskGroup(DEFAULT_QUEUE)
                 .taskType("pay")
                 .payload("payload")
                 .attributes(Collections.singletonMap("traceId", "T-1"))
@@ -251,7 +251,7 @@ public abstract class AbstractLeaseAdminContractTest extends AbstractLeaseContra
         Assert.assertEquals(LeaseAdminResult.TASK_NOT_FOUND, backend.reschedule("missing", 10L));
         Assert.assertEquals(LeaseAdminResult.TASK_NOT_FOUND,
                 backend.close("missing", LeaseCloseRequest.cancelled("cancelled")));
-        Assert.assertEquals(LeaseAdminResult.TASK_NOT_FOUND, backend.requeueFailed("missing", 10L));
+        Assert.assertEquals(LeaseAdminResult.TASK_NOT_FOUND, backend.rescheduleFailed("missing", 10L));
         Assert.assertEquals(LeaseAdminResult.TASK_NOT_FOUND, backend.update(LeaseUpdateRequest.builder()
                 .taskId("missing")
                 .payload("x")

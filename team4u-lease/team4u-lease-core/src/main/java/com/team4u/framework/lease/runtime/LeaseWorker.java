@@ -129,7 +129,7 @@ public class LeaseWorker implements Runnable, AutoCloseable {
                 processingTask.set(true);
                 HeartbeatTask heartbeatTask = createHeartbeatTask(grant);
                 try {
-                    LeaseTaskHandler handler = registry.get(grant.getQueue(), grant.getTaskType()).orElse(null);
+                    LeaseTaskHandler handler = registry.get(grant.getTaskGroup(), grant.getTaskType()).orElse(null);
                     if (handler == null) {
                         handleMissingHandler(grant);
                         continue;
@@ -176,7 +176,7 @@ public class LeaseWorker implements Runnable, AutoCloseable {
      */
     private LeaseGrant acquireNextGrant() {
         try {
-            Set<LeaseSubscription> subscriptions = registry.subscriptions();
+            Set<LeaseTaskGroupSubscription> subscriptions = registry.subscriptions();
             if (subscriptions.isEmpty()) {
                 sleepQuietly(policy.getPollWaitMillis());
                 return null;
@@ -215,7 +215,7 @@ public class LeaseWorker implements Runnable, AutoCloseable {
         // 普通处理器使用基础执行上下文
         return LeaseExecutionContext.builder()
                 .taskId(grant.getTaskId())
-                .queue(grant.getQueue())
+                .taskGroup(grant.getTaskGroup())
                 .taskType(grant.getTaskType())
                 .payload(grant.getPayload())
                 .deliveryCount(grant.getDeliveryCount())
@@ -248,11 +248,11 @@ public class LeaseWorker implements Runnable, AutoCloseable {
     }
 
     private void handleMissingHandler(LeaseGrant grant) {
-        IllegalStateException ex = new IllegalStateException("LeaseTaskHandler not found. queue="
-                + grant.getQueue() + ", taskType=" + grant.getTaskType());
+        IllegalStateException ex = new IllegalStateException("LeaseTaskHandler not found. taskGroup="
+                + grant.getTaskGroup() + ", taskType=" + grant.getTaskType());
         if (policy.getMissingHandlerStrategy() == MissingHandlerStrategy.RETRY_LATER) {
-            log.warn("Lease worker released task because handler was not found. taskId={}, queue={}, taskType={}",
-                    grant.getTaskId(), grant.getQueue(), grant.getTaskType());
+            log.warn("Lease worker released task because handler was not found. taskId={}, taskGroup={}, taskType={}",
+                    grant.getTaskId(), grant.getTaskGroup(), grant.getTaskType());
             try {
                 handleWriteResult("release", grant,
                         runtimeClient.release(grant.getHandle(),
@@ -276,8 +276,8 @@ public class LeaseWorker implements Runnable, AutoCloseable {
     }
 
     private void handleFailure(LeaseGrant grant, Exception ex, LeaseTaskFailureReason reason) {
-        log.error("Lease worker handle failed. taskId={}, queue={}, taskType={}",
-                grant.getTaskId(), grant.getQueue(), grant.getTaskType(), ex);
+        log.error("Lease worker handle failed. taskId={}, taskGroup={}, taskType={}",
+                grant.getTaskId(), grant.getTaskGroup(), grant.getTaskType(), ex);
         try {
             handleWriteResult("close", grant,
                     runtimeClient.close(grant.getHandle(), LeaseCloseRequest.failed(reason, String.valueOf(ex))));

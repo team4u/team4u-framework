@@ -11,16 +11,16 @@ import java.util.Map;
 /**
  * 任务发布请求模型
  * <p>
- * 封装了发布任务所需的全部元数据，包括目标队列、任务类型以及执行参数。
+ * 封装了发布任务所需的全部元数据，包括目标任务分组、任务类型以及执行参数。
  */
 @Data
 @Builder
 public class LeasePublishRequest {
 
     /**
-     * 目标任务队列名称
+     * 目标任务分组名称
      */
-    private final String queue;
+    private final String taskGroup;
     /**
      * 具体的任务业务类型
      */
@@ -30,7 +30,7 @@ public class LeasePublishRequest {
      */
     private final String payload;
     /**
-     * 业务幂等键，由 backend 负责保证同 queue 下唯一。
+     * 业务幂等键，由 backend 负责保证同 taskGroup 下唯一。
      */
     private final String businessKey;
     /**

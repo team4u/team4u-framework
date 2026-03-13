@@ -17,7 +17,7 @@ public class JdbcLeasePartialUpdateTest {
     @Test
     public void testRuntimeCloseWithNullPayloadKeepsOriginal() throws Exception {
         String taskId = backend.publish(com.team4u.framework.lease.model.LeasePublishRequest.builder()
-                .queue("q1")
+                .taskGroup("q1")
                 .taskType("t1")
                 .payload("original-payload")
                 .build());
@@ -26,7 +26,7 @@ public class JdbcLeasePartialUpdateTest {
                 .workerId("w1")
                 .leaseMillis(1000L)
                 .waitTimeoutMillis(1000L)
-                .subscription(com.team4u.framework.lease.model.LeaseSubscription.builder().queue("q1").build())
+                .subscription(com.team4u.framework.lease.model.LeaseTaskGroupSubscription.builder().taskGroup("q1").build())
                 .build());
 
         Assert.assertNotNull(grant);
@@ -44,7 +44,7 @@ public class JdbcLeasePartialUpdateTest {
     @Test
     public void testAdminCloseWithNullPayloadKeepsOriginal() throws Exception {
         String taskId = backend.publish(com.team4u.framework.lease.model.LeasePublishRequest.builder()
-                .queue("q1")
+                .taskGroup("q1")
                 .taskType("t1")
                 .payload("original-payload")
                 .build());
@@ -62,7 +62,7 @@ public class JdbcLeasePartialUpdateTest {
     @Test
     public void testUpdateWithNullFieldsKeepsOriginal() throws Exception {
         String taskId = backend.publish(com.team4u.framework.lease.model.LeasePublishRequest.builder()
-                .queue("q1")
+                .taskGroup("q1")
                 .taskType("t1")
                 .payload("original-payload")
                 .attributes(Collections.singletonMap("k1", "v1"))

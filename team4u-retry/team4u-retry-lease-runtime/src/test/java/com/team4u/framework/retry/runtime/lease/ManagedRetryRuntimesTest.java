@@ -174,7 +174,7 @@ public class ManagedRetryRuntimesTest {
         }
 
         @Override
-        public LeaseAdminResult requeueFailed(String taskId, long delayMillis) {
+        public LeaseAdminResult rescheduleFailed(String taskId, long delayMillis) {
             return LeaseAdminResult.APPLIED;
         }
 
@@ -228,7 +228,7 @@ public class ManagedRetryRuntimesTest {
         }
 
         @Override
-        public Optional<LeaseTaskRecord> getByBusinessKey(String queue, String businessKey) {
+        public Optional<LeaseTaskRecord> getByBusinessKey(String taskGroup, String businessKey) {
             return Optional.empty();
         }
 

@@ -21,7 +21,7 @@ import java.util.concurrent.*;
 public class InMemoryLeaseBackend implements LeaseBackend {
 
     private final ConcurrentMap<String, StoredTask> records = new ConcurrentHashMap<String, StoredTask>();
-    private final ConcurrentMap<QueueKey, DelayQueue<AvailabilityRef>> queueStates = new ConcurrentHashMap<>();
+    private final ConcurrentMap<String, DelayQueue<AvailabilityRef>> taskGroupStates = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, String> taskIdsByBusinessKey = new ConcurrentHashMap<>();
 
     private static boolean isBlank(String value) {
@@ -35,7 +35,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         String taskId = nextTaskId();
         StoredTask task = new StoredTask(
                 taskId,
-                request.getQueue(),
+                request.getTaskGroup(),
                 request.getTaskType(),
                 request.getPayload(),
                 request.getBusinessKey(),
@@ -63,7 +63,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
             String taskId = publish(request);
             return LeasePublishResult.builder().created(true).taskId(taskId).record(get(taskId).orElse(null)).build();
         }
-        String compositeKey = businessKey(request.getQueue(), request.getBusinessKey());
+        String compositeKey = businessKey(request.getTaskGroup(), request.getBusinessKey());
         String existingTaskId = taskIdsByBusinessKey.get(compositeKey);
         if (existingTaskId != null) {
             return LeasePublishResult.builder()
@@ -89,12 +89,12 @@ public class InMemoryLeaseBackend implements LeaseBackend {
             if (grant != null) {
                 return grant;
             }
-            for (LeaseSubscription subscription : request.getSubscriptions()) {
-                DelayQueue<AvailabilityRef> queue = queueStates.get(new QueueKey(subscription.getQueue()));
-                if (queue == null) {
+            for (LeaseTaskGroupSubscription subscription : request.getSubscriptions()) {
+                DelayQueue<AvailabilityRef> taskGroupQueue = taskGroupStates.get(subscription.getTaskGroup());
+                if (taskGroupQueue == null) {
                     continue;
                 }
-                AvailabilityRef head = queue.peek();
+                AvailabilityRef head = taskGroupQueue.peek();
                 if (head != null) {
                     nextVisibleAt = Math.min(nextVisibleAt, head.getAvailableAtMillis());
                 }
@@ -184,7 +184,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     }
 
     @Override
-    public synchronized LeaseAdminResult requeueFailed(String taskId, long delayMillis) {
+    public synchronized LeaseAdminResult rescheduleFailed(String taskId, long delayMillis) {
         StoredTask current = records.get(taskId);
         if (current == null) {
             return LeaseAdminResult.TASK_NOT_FOUND;
@@ -228,8 +228,8 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     }
 
     @Override
-    public synchronized Optional<LeaseTaskRecord> getByBusinessKey(String queue, String businessKey) {
-        String taskId = taskIdsByBusinessKey.get(businessKey(queue, businessKey));
+    public synchronized Optional<LeaseTaskRecord> getByBusinessKey(String taskGroup, String businessKey) {
+        String taskId = taskIdsByBusinessKey.get(businessKey(taskGroup, businessKey));
         return taskId == null ? Optional.empty() : get(taskId);
     }
 
@@ -266,17 +266,17 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     }
 
     private LeaseGrant tryAcquire(LeaseAcquireRequest request, long now) {
-        for (LeaseSubscription subscription : request.getSubscriptions()) {
-            DelayQueue<AvailabilityRef> queue = queueStates.get(new QueueKey(subscription.getQueue()));
-            if (queue == null) {
+        for (LeaseTaskGroupSubscription subscription : request.getSubscriptions()) {
+            DelayQueue<AvailabilityRef> taskGroupQueue = taskGroupStates.get(subscription.getTaskGroup());
+            if (taskGroupQueue == null) {
                 continue;
             }
             while (true) {
-                AvailabilityRef ref = queue.peek();
+                AvailabilityRef ref = taskGroupQueue.peek();
                 if (ref == null || ref.getAvailableAtMillis() > now) {
                     break;
                 }
-                queue.poll();
+                taskGroupQueue.poll();
                 LeaseGrant grant = claim(ref, request.getWorkerId(), request.getLeaseMillis());
                 if (grant != null) {
                     return grant;
@@ -292,7 +292,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
             return null;
         }
         long now = System.currentTimeMillis();
-        // 队列里可能保留旧的可见性引用，因此领取前必须再和当前任务状态对齐一次。
+        // 任务分组索引里可能保留旧的可见性引用，因此领取前必须再和当前任务状态对齐一次。
         if (!current.isClaimable(ref.availableAtMillis, now)) {
             return null;
         }
@@ -305,7 +305,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
     }
 
     private boolean matches(LeaseQueryRequest request, StoredTask task) {
-        if (request.getQueue() != null && !request.getQueue().equals(task.getQueue())) {
+        if (request.getTaskGroup() != null && !request.getTaskGroup().equals(task.getTaskGroup())) {
             return false;
         }
         if (request.getTaskType() != null && !request.getTaskType().equals(task.getTaskType())) {
@@ -353,8 +353,8 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         if (request == null) {
             throw new IllegalArgumentException("request must not be null");
         }
-        if (isBlank(request.getQueue())) {
-            throw new IllegalArgumentException("request.queue must not be blank");
+        if (isBlank(request.getTaskGroup())) {
+            throw new IllegalArgumentException("request.taskGroup must not be blank");
         }
         if (isBlank(request.getTaskType())) {
             throw new IllegalArgumentException("request.taskType must not be blank");
@@ -374,15 +374,15 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         if (request.getSubscriptions().isEmpty()) {
             throw new IllegalArgumentException("request.subscriptions must not be empty");
         }
-        for (LeaseSubscription subscription : request.getSubscriptions()) {
-            if (subscription == null || isBlank(subscription.getQueue())) {
-                throw new IllegalArgumentException("subscription.queue must not be blank");
+        for (LeaseTaskGroupSubscription subscription : request.getSubscriptions()) {
+            if (subscription == null || isBlank(subscription.getTaskGroup())) {
+                throw new IllegalArgumentException("subscription.taskGroup must not be blank");
             }
         }
     }
 
     private void offer(StoredTask task) {
-        queueState(task.getQueue()).offer(new AvailabilityRef(
+        taskGroupState(task.getTaskGroup()).offer(new AvailabilityRef(
                 task.getTaskId(), task.nextAvailableAt(), task.getPriority(), task.getCreatedAtMillis()));
     }
 
@@ -390,7 +390,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         // records 是状态单一真相源；DelayQueue 只是为了阻塞拉取，不要求严格删除旧引用。
         records.put(task.getTaskId(), task);
         if (!isBlank(task.getBusinessKey())) {
-            taskIdsByBusinessKey.put(businessKey(task.getQueue(), task.getBusinessKey()), task.getTaskId());
+            taskIdsByBusinessKey.put(businessKey(task.getTaskGroup(), task.getBusinessKey()), task.getTaskId());
         }
         if (offerQueue) {
             offer(task);
@@ -398,9 +398,8 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         notifyAll();
     }
 
-    private DelayQueue<AvailabilityRef> queueState(String queue) {
-        return queueStates.computeIfAbsent(new QueueKey(queue),
-                ignored -> new DelayQueue<AvailabilityRef>());
+    private DelayQueue<AvailabilityRef> taskGroupState(String taskGroup) {
+        return taskGroupStates.computeIfAbsent(taskGroup, ignored -> new DelayQueue<AvailabilityRef>());
     }
 
     private String nextTaskId() {
@@ -411,8 +410,8 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         return "lease-token-" + UUID.randomUUID().toString().replace("-", "");
     }
 
-    private String businessKey(String queue, String businessKey) {
-        return queue + "|" + businessKey;
+    private String businessKey(String taskGroup, String businessKey) {
+        return taskGroup + "|" + businessKey;
     }
 
     private void validateHandle(LeaseHandle handle) {
@@ -464,35 +463,13 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         }
     }
 
-    @AllArgsConstructor
-    private static class QueueKey {
-        private final String queue;
-
-        @Override
-        public boolean equals(Object obj) {
-            if (this == obj) {
-                return true;
-            }
-            if (!(obj instanceof QueueKey)) {
-                return false;
-            }
-            QueueKey that = (QueueKey) obj;
-            return Objects.equals(queue, that.queue);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(queue);
-        }
-    }
-
     @Getter
     @Builder(toBuilder = true)
     @AllArgsConstructor(access = AccessLevel.PRIVATE)
     public static final class StoredTask {
         // 该模型同时承载任务快照和状态机规则，backend 只负责并发与存储编排。
         private final String taskId;
-        private final String queue;
+        private final String taskGroup;
         private final String taskType;
         private final String payload;
         private final String businessKey;
@@ -676,7 +653,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                     .taskId(taskId)
                     .workerId(workerId)
                     .leaseToken(leaseToken)
-                    .queue(queue)
+                    .taskGroup(taskGroup)
                     .taskType(taskType)
                     .payload(payload)
                     .deliveryCount(deliveryCount)
@@ -691,7 +668,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         private LeaseTaskRecord toRecord() {
             return LeaseTaskRecord.builder()
                     .taskId(taskId)
-                    .queue(queue)
+                    .taskGroup(taskGroup)
                     .taskType(taskType)
                     .payload(payload)
                     .businessKey(businessKey)

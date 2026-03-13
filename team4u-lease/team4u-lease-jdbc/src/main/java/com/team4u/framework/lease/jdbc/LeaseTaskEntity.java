@@ -30,9 +30,9 @@ public class LeaseTaskEntity {
     private final String taskId;
 
     /**
-     * 任务所属队列
+     * 任务所属任务分组
      */
-    private final String queue;
+    private final String taskGroup;
 
     /**
      * 任务类型
@@ -133,7 +133,7 @@ public class LeaseTaskEntity {
                 .taskId(taskId)
                 .workerId(workerId)
                 .leaseToken(leaseToken)
-                .queue(queue)
+                .taskGroup(taskGroup)
                 .taskType(taskType)
                 .payload(payload)
                 .deliveryCount(deliveryCount)
@@ -151,7 +151,7 @@ public class LeaseTaskEntity {
     public LeaseTaskRecord toRecord() {
         return LeaseTaskRecord.builder()
                 .taskId(taskId)
-                .queue(queue)
+                .taskGroup(taskGroup)
                 .taskType(taskType)
                 .payload(payload)
                 .businessKey(businessKey)

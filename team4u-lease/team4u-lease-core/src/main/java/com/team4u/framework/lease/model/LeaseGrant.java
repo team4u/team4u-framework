@@ -25,9 +25,9 @@ public class LeaseGrant {
      */
     private final String taskId;
     /**
-     * 任务所属队列
+     * 任务所属任务分组
      */
-    private final String queue;
+    private final String taskGroup;
     /**
      * 任务业务类型
      */
@@ -73,7 +73,7 @@ public class LeaseGrant {
     public LeaseGrant(String taskId,
                       String workerId,
                       String leaseToken,
-                      String queue,
+                      String taskGroup,
                       String taskType,
                       String payload,
                       int deliveryCount,
@@ -85,7 +85,7 @@ public class LeaseGrant {
                       long leaseExpiresAtMillis) {
         this.handle = new LeaseHandle(taskId, workerId, leaseToken);
         this.taskId = taskId;
-        this.queue = queue;
+        this.taskGroup = taskGroup;
         this.taskType = taskType;
         this.payload = payload;
         this.deliveryCount = deliveryCount;

@@ -15,7 +15,7 @@ import java.util.Set;
  * 任务查询请求模型
  * <p>
  * 封装了分页查询任务记录时的所有过滤条件和分页参数。
- * 支持按队列、任务类型、生命周期状态、执行结果、失败原因及 Worker ID 进行多维度筛选。
+ * 支持按任务分组、任务类型、生命周期状态、执行结果、失败原因及 Worker ID 进行多维度筛选。
  * 该请求通常用于管理后台或运维 API 获取任务列表。
  */
 @Data
@@ -23,9 +23,9 @@ import java.util.Set;
 public class LeaseQueryRequest {
 
     /**
-     * 按队列名称过滤
+     * 按任务分组名称过滤
      */
-    private final String queue;
+    private final String taskGroup;
     /**
      * 按任务类型过滤
      */

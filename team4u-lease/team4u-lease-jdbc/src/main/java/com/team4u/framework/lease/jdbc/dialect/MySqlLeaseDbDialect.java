@@ -18,11 +18,11 @@ public class MySqlLeaseDbDialect implements LeaseDbDialect {
         // 避免在单个查询中使用复杂的 OR 条件导致索引失效。
         return "SELECT " + columns + " FROM ("
                 + "SELECT " + columns + " FROM " + tableName + " "
-                + "WHERE queue_name IN (" + readyQueues + ") "
+                + "WHERE task_group IN (" + readyQueues + ") "
                 + "AND state = 'READY' AND visible_at <= ? "
                 + "UNION ALL "
                 + "SELECT " + columns + " FROM " + tableName + " "
-                + "WHERE queue_name IN (" + expiredQueues + ") "
+                + "WHERE task_group IN (" + expiredQueues + ") "
                 + "AND state = 'RUNNING' AND lease_expires_at <= ?"
                 + ") acquire_candidates "
                 + "ORDER BY priority DESC, created_at ASC, task_id ASC "

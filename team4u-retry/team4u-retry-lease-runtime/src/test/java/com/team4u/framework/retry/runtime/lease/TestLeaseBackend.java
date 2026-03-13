@@ -50,7 +50,7 @@ public abstract class TestLeaseBackend implements LeaseBackend {
     }
 
     @Override
-    public LeaseAdminResult requeueFailed(String taskId, long delayMillis) {
+    public LeaseAdminResult rescheduleFailed(String taskId, long delayMillis) {
         submitForDelay(taskId, null, null, delayMillis);
         return LeaseAdminResult.APPLIED;
     }
@@ -101,7 +101,7 @@ public abstract class TestLeaseBackend implements LeaseBackend {
     }
 
     @Override
-    public Optional<LeaseTaskRecord> getByBusinessKey(String queue, String businessKey) {
+    public Optional<LeaseTaskRecord> getByBusinessKey(String taskGroup, String businessKey) {
         return Optional.empty();
     }
 

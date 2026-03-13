@@ -3,13 +3,13 @@ package com.team4u.framework.retry.runtime.lease;
 /**
  * retry 模块使用的租约队列常量定义。
  */
-public final class RetryLeaseQueues {
+public final class RetryLeaseTaskGroups {
 
     /**
      * 默认的恢复任务队列名称
      */
-    public static final String DEFAULT_RECOVERY_QUEUE = "retry-recovery";
+    public static final String DEFAULT_RECOVERY_TASK_GROUP = "retry-recovery";
 
-    private RetryLeaseQueues() {
+    private RetryLeaseTaskGroups() {
     }
 }

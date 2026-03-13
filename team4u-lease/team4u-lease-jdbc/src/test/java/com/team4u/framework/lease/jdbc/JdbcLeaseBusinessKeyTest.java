@@ -14,7 +14,7 @@ public class JdbcLeaseBusinessKeyTest {
     public void testPublishIfAbsentOnlyCreatesOneTaskPerQueueAndBusinessKey() {
         JdbcLeaseBackend backend = new JdbcLeaseBackend(JdbcLeaseBackendTestSupport.newDataSource());
         LeasePublishRequest request = LeasePublishRequest.builder()
-                .queue("retry-q")
+                .taskGroup("retry-q")
                 .taskType("recover-payment")
                 .payload("{\"attempt\":1}")
                 .businessKey("recover-payment|order-1001")
@@ -22,7 +22,7 @@ public class JdbcLeaseBusinessKeyTest {
 
         LeasePublishResult created = backend.publishIfAbsent(request);
         LeasePublishResult existing = backend.publishIfAbsent(LeasePublishRequest.builder()
-                .queue("retry-q")
+                .taskGroup("retry-q")
                 .taskType("recover-payment")
                 .payload("{\"attempt\":2}")
                 .businessKey("recover-payment|order-1001")
@@ -39,7 +39,7 @@ public class JdbcLeaseBusinessKeyTest {
     public void testGetByBusinessKeyReturnsMatchingTask() {
         JdbcLeaseBackend backend = new JdbcLeaseBackend(JdbcLeaseBackendTestSupport.newDataSource());
         LeasePublishResult publishResult = backend.publishIfAbsent(LeasePublishRequest.builder()
-                .queue("retry-q")
+                .taskGroup("retry-q")
                 .taskType("recover-payment")
                 .payload("{\"attempt\":1}")
                 .businessKey("recover-payment|order-2002")
