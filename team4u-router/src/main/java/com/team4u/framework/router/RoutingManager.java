@@ -2,6 +2,7 @@ package com.team4u.framework.router;
 
 import com.team4u.framework.base.util.ServiceLoaderUtil;
 import com.team4u.framework.base.util.StringUtil;
+import com.team4u.framework.base.util.TypeReference;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.policy.util.PolicyScanner;
@@ -23,6 +24,7 @@ import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.lang.reflect.Type;
 import java.util.List;
 
 /**
@@ -166,7 +168,8 @@ public class RoutingManager {
      * @return 路由结果
      */
     public <T> RouteResult<T> route(String routerId, Object request) {
-        return route(routerId, request, null);
+        Router router = getRouter(routerId);
+        return doRoute(routerId, router, request, null);
     }
 
     /**
@@ -179,6 +182,19 @@ public class RoutingManager {
      * @return 路由结果
      */
     public <T> RouteResult<T> route(String routerId, Object request, Class<T> targetType) {
+        return route(routerId, request, (Type) targetType);
+    }
+
+    /**
+     * 执行路由并转换结果类型（通过路由唯一标识）
+     *
+     * @param routerId   路由唯一标识
+     * @param request    路由请求对象
+     * @param targetType 期望转换的目标类型
+     * @param <T>        结果类型
+     * @return 路由结果
+     */
+    public <T> RouteResult<T> route(String routerId, Object request, Type targetType) {
         Router router = getRouter(routerId);
         return doRoute(routerId, router, request, targetType);
     }
@@ -186,7 +202,14 @@ public class RoutingManager {
     /**
      * 统一路由执行逻辑，支持拦截器链
      */
-    private <T> RouteResult<T> doRoute(String routerId, Router router, Object request, Class<T> targetType) {
+    public <T> RouteResult<T> route(String routerId, Object request, TypeReference<T> typeReference) {
+        return route(routerId, request, typeReference != null ? typeReference.getType() : null);
+    }
+
+    /**
+     * 统一路由执行逻辑，支持拦截器链
+     */
+    private <T> RouteResult<T> doRoute(String routerId, Router router, Object request, Type targetType) {
         List<RouteInterceptor> interceptors = interceptorRegistry.getPolicies();
         if (interceptors == null || interceptors.isEmpty()) {
             if (router == null) {
@@ -235,7 +258,8 @@ public class RoutingManager {
      * @return 路由结果
      */
     public <T> RouteResult<T> routeByConfig(String rawConfig, Object request) {
-        return routeByConfig(rawConfig, request, null);
+        Router router = getRouterByConfig(rawConfig);
+        return doRoute("raw-config", router, request, null);
     }
 
     /**
@@ -248,8 +272,28 @@ public class RoutingManager {
      * @return 路由结果
      */
     public <T> RouteResult<T> routeByConfig(String rawConfig, Object request, Class<T> targetType) {
+        return routeByConfig(rawConfig, request, (Type) targetType);
+    }
+
+    /**
+     * 执行路由并转换结果类型（针对原始配置）
+     *
+     * @param rawConfig  配置字符串
+     * @param request    路由请求对象
+     * @param targetType 期望转换的目标类型
+     * @param <T>        结果类型
+     * @return 路由结果
+     */
+    public <T> RouteResult<T> routeByConfig(String rawConfig, Object request, Type targetType) {
         Router router = getRouterByConfig(rawConfig);
         return doRoute("raw-config", router, request, targetType);
+    }
+
+    /**
+     * 执行路由并转换结果类型（针对原始配置）
+     */
+    public <T> RouteResult<T> routeByConfig(String rawConfig, Object request, TypeReference<T> typeReference) {
+        return routeByConfig(rawConfig, request, typeReference != null ? typeReference.getType() : null);
     }
 
     /**
@@ -308,6 +352,34 @@ public class RoutingManager {
     public <T> RouteResult<T> routeByPolicy(RoutePolicy policy, Object request) {
         Router router = getRouter(policy);
         return doRoute(policy.getId(), router, request, null);
+    }
+
+    /**
+     * 执行路由并转换结果类型（针对编程式构建的 RoutePolicy）
+     *
+     * @param policy     路由策略对象
+     * @param request    请求对象
+     * @param targetType 目标类型
+     * @param <T>        结果类型
+     * @return 路由结果
+     */
+    public <T> RouteResult<T> routeByPolicy(RoutePolicy policy, Object request, Class<T> targetType) {
+        return routeByPolicy(policy, request, (Type) targetType);
+    }
+
+    /**
+     * 执行路由并转换结果类型（针对编程式构建的 RoutePolicy）
+     */
+    public <T> RouteResult<T> routeByPolicy(RoutePolicy policy, Object request, Type targetType) {
+        Router router = getRouter(policy);
+        return doRoute(policy != null ? policy.getId() : null, router, request, targetType);
+    }
+
+    /**
+     * 执行路由并转换结果类型（针对编程式构建的 RoutePolicy）
+     */
+    public <T> RouteResult<T> routeByPolicy(RoutePolicy policy, Object request, TypeReference<T> typeReference) {
+        return routeByPolicy(policy, request, typeReference != null ? typeReference.getType() : null);
     }
 
     /**

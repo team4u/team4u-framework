@@ -5,6 +5,7 @@ import com.team4u.framework.router.api.model.RouteResult;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.lang.reflect.Type;
 import java.util.List;
 
 /**
@@ -17,6 +18,7 @@ public class DefaultRouteInvocation<T> implements RouteInvocation<T> {
     private final String routerId;
     private final Router router;
     private final Class<T> targetType;
+    private final Type targetGenericType;
     private final List<RouteInterceptor> interceptors;
     @Setter
     private Object request;
@@ -25,12 +27,13 @@ public class DefaultRouteInvocation<T> implements RouteInvocation<T> {
     public DefaultRouteInvocation(String routerId,
                                   Router router,
                                   Object request,
-                                  Class<T> targetType,
+                                  Type targetGenericType,
                                   List<RouteInterceptor> interceptors) {
         this.routerId = routerId;
         this.router = router;
         this.request = request;
-        this.targetType = targetType;
+        this.targetGenericType = targetGenericType;
+        this.targetType = targetGenericType instanceof Class ? (Class<T>) targetGenericType : null;
         this.interceptors = interceptors;
     }
 
@@ -47,6 +50,6 @@ public class DefaultRouteInvocation<T> implements RouteInvocation<T> {
             return RouteResult.unmatch();
         }
 
-        return targetType != null ? router.route(request, targetType) : router.route(request);
+        return targetGenericType != null ? router.route(request, targetGenericType) : router.route(request);
     }
 }

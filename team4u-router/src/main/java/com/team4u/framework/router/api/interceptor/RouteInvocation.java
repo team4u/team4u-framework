@@ -3,6 +3,8 @@ package com.team4u.framework.router.api.interceptor;
 import com.team4u.framework.router.api.Router;
 import com.team4u.framework.router.api.model.RouteResult;
 
+import java.lang.reflect.Type;
+
 /**
  * 路由执行链上下文
  * <p>
@@ -39,6 +41,11 @@ public interface RouteInvocation<T> {
      * 获取目标转换类型
      */
     Class<T> getTargetType();
+
+    /**
+     * 获取目标泛型类型
+     */
+    Type getTargetGenericType();
 
     /**
      * 将请求传递给下一个拦截器；如果已经是最后一个，则执行真正的 Router 逻辑

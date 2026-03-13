@@ -1,5 +1,6 @@
 package com.team4u.framework.serializer.json;
 
+import com.team4u.framework.base.util.TypeReference;
 import com.team4u.framework.serializer.json.jackson.JacksonSerializerPolicy;
 import org.junit.Assert;
 import org.junit.Test;

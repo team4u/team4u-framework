@@ -1,11 +1,13 @@
 package com.team4u.framework.router;
 
+import com.team4u.framework.base.util.TypeReference;
 import com.team4u.framework.router.api.interceptor.RouteInterceptor;
 import com.team4u.framework.router.api.interceptor.RouteInvocation;
 import com.team4u.framework.router.api.model.RouteResult;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.List;
 
@@ -138,5 +140,53 @@ public class RouteInterceptorTest {
 
         RouteResult<String> result = routingManager.routeByConfig("{\"type\":\"map\"}", "k");
         Assert.assertFalse(result.isMatch());
+    }
+
+    @Test
+    public void testTargetTypeMetadataCompatibility() {
+        List<String> logs = new ArrayList<>();
+
+        RouteInterceptor inspector = new RouteInterceptor() {
+            @Override
+            public <T> RouteResult<T> intercept(RouteInvocation<T> invocation) {
+                Type genericType = invocation.getTargetGenericType();
+                logs.add("class=" + invocation.getTargetType());
+                logs.add("generic=" + genericType);
+                return invocation.proceed();
+            }
+        };
+
+        RoutingManager routingManager = RoutingManager.builder()
+                .addInterceptor(inspector)
+                .build();
+
+        String classConfig = "{\"type\":\"map\", \"rules\":[{\"condition\":\"bean\", \"value\":{\"value\":\"ok\"}}]}";
+        RouteResult<TestBean> classResult = routingManager.routeByConfig(classConfig, "bean", TestBean.class);
+        Assert.assertTrue(classResult.isMatch());
+        Assert.assertEquals("class=class " + TestBean.class.getName(), logs.get(0));
+        Assert.assertEquals("generic=class " + TestBean.class.getName(), logs.get(1));
+
+        String listConfig = "{\"type\":\"map\", \"rules\":[{\"condition\":\"list\", \"value\":[{\"value\":\"a\"}]}]}";
+        RouteResult<List<TestBean>> listResult = routingManager.routeByConfig(
+                listConfig,
+                "list",
+                new TypeReference<List<TestBean>>() {
+                });
+        Assert.assertTrue(listResult.isMatch());
+        Assert.assertEquals("a", listResult.getValue().get(0).getValue());
+        Assert.assertEquals("class=null", logs.get(2));
+        Assert.assertTrue(logs.get(3).contains("java.util.List"));
+    }
+
+    public static class TestBean {
+        private String value;
+
+        public String getValue() {
+            return value;
+        }
+
+        public void setValue(String value) {
+            this.value = value;
+        }
     }
 }

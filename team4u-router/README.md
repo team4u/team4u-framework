@@ -401,10 +401,16 @@ service.process(myRequest);
 }
 ```
 
-在调用端，通过显式指定 `List.class` 即可获得类型转换后的匹配列表：
+在调用端，通过 `TypeReference` 即可获得保留元素泛型的匹配列表：
 
 ```java
-RouteResult<List<String>> result = manager.route("coupon-router", request, List.class);
+import com.team4u.framework.base.util.TypeReference;
+
+RouteResult<List<String>> result = manager.route(
+        "coupon-router",
+        request,
+        new TypeReference<List<String>>() {}
+);
 if (result.isMatch()) {
     List<String> matchedCoupons = result.getValue();
     // 多重匹配模式下，建议使用 getMatchedConditions() 获取全量条件列表
