@@ -30,12 +30,14 @@
 1. 并发控制：同一时刻只有一个合法持有者能更新任务状态。
 2. 异常接管：Worker 故障后，任务会在租约过期后自动重新变得可抢占。
 
-### 队列与任务类型
+### 任务分组与任务类型
 
-- Queue (队列)：决定任务会被哪一类 Worker 节点订阅和拉取，是调度边界。
-- TaskType (类型)：决定同一个队列内由哪个具体的本地 `Handler` 处理，是路由标识。
+- `taskGroup`（任务分组）：决定任务会被哪一类 Worker 节点订阅和拉取，是任务归类、路由隔离与订阅筛选边界。
+- `taskType`（任务类型）：决定同一个任务分组内由哪个具体的本地 `Handler` 处理，是组内路由标识。
 
-简单来说：Queue 解决“谁能拿到任务”，TaskType 解决“拿到后怎么处理”。
+简单来说：`taskGroup` 解决“谁能拿到任务”，`taskType` 解决“拿到后怎么处理”。
+
+需要注意：`taskGroup` 不是 MQ 里的 FIFO queue 语义承诺，它只表达任务分组与处理能力隔离。
 
 
 
@@ -246,7 +248,7 @@ stateDiagram-v2
 框架关注的是“租约驱动执行”和“状态流转”，业务方需要根据场景选择合适的失败处理方式：
 
 - `close(SUCCEEDED)`：任务处理成功，进入终态。
-- `close(FAILED)`：任务处理失败，进入失败终态。该任务不会自动再次执行，除非后续手动重新入队。
+- `close(FAILED)`：任务处理失败，进入失败终态。该任务不会自动再次执行，除非后续手动重新调度。
 - `release(delay)`：主动释放租约并设置任务在未来某个时间点重新可见。这是一种“延期重试”的手段。若同时携带 `payload` 或非空 `attributes`，会一并写回；空 `attributes` 不会清空原值。
 
 ### 缺失处理器策略 (MissingHandlerStrategy)
@@ -298,7 +300,7 @@ Optional<LeaseTaskRecord> task = queryService.getByBusinessKey("demo", "demo|ord
 // 延后 5 分钟重新进入可领取状态
 adminService.reschedule(taskId, 300_000L);
 
-// 重新入队失败任务
+// 重新调度失败任务
 adminService.rescheduleFailed(taskId, 0L);
 
 // 更新任务内容
@@ -445,7 +447,7 @@ worker.shutdownGracefully(5000);
 - 内存版可以用于生产吗？  
   不建议。内存版重启数据丢失，且不适合多实例协同。
 - 任务失败后如何再次执行？  
-  可以调用 `release(delay)` 稍后重试，或者任务进入失败态后通过 `rescheduleFailed` 重新入队。
+  可以调用 `release(delay)` 稍后重试，或者任务进入失败态后通过 `rescheduleFailed` 重新调度。
 - 业务处理器需要幂等吗？  
   需要。由于不是 exactly-once 语义，业务侧应自行保证幂等性。
 - `businessKey` 适合做什么？  
