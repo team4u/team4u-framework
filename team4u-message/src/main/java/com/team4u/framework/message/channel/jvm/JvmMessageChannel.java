@@ -1,6 +1,6 @@
 package com.team4u.framework.message.channel.jvm;
 
-import cn.hutool.core.lang.Assert;
+import com.team4u.framework.base.util.Assert;
 import com.team4u.framework.message.channel.MessageChannel;
 import com.team4u.framework.message.core.Message;
 import com.team4u.framework.message.core.MessageDispatcher;

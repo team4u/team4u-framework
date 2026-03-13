@@ -7,6 +7,7 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.util.Arrays;
+import java.util.Collection;
 import java.util.Collections;
 
 /**
@@ -56,7 +57,7 @@ public class KeyedPolicyRegistryTest {
         KeyedPolicyRegistry<String, TestPolicy> registry = new KeyedPolicyRegistry<>(TestPolicy.class);
 
         // 添加 null 集合应当静默忽略
-        registry.addAll((java.util.Collection<? extends TestPolicy>) null);
+        registry.addAll((Collection<? extends TestPolicy>) null);
 
         Assert.assertTrue("添加 null 后应当为空", registry.getPolicies().isEmpty());
     }
@@ -169,11 +170,11 @@ public class KeyedPolicyRegistryTest {
         registry.register(new TestPolicyImpl("WXPAY"));
 
         // 精准路由 O(1)
-        org.junit.Assert.assertTrue("应当成功匹配到指定的策略", registry.get("ALIPAY").isPresent());
-        org.junit.Assert.assertSame("匹配到的对象应与注册的相同", aliPay, registry.get("ALIPAY").get());
+        Assert.assertTrue("应当成功匹配到指定的策略", registry.get("ALIPAY").isPresent());
+        Assert.assertSame("匹配到的对象应与注册的相同", aliPay, registry.get("ALIPAY").get());
 
         // 获取不存在的 Key
-        org.junit.Assert.assertFalse("不应匹配不存在的 Key", registry.get("UNKNOWN").isPresent());
+        Assert.assertFalse("不应匹配不存在的 Key", registry.get("UNKNOWN").isPresent());
     }
 
     @Test
@@ -285,8 +286,8 @@ public class KeyedPolicyRegistryTest {
 
         registry.register(new TestPolicyImpl("E001"));
 
-        org.junit.Assert.assertTrue("应当成功匹配到指定的错误码策略", registry.get("E001").isPresent());
-        org.junit.Assert.assertEquals("匹配到的 Key 应当正确", "E001", registry.get("E001").get().key());
+        Assert.assertTrue("应当成功匹配到指定的错误码策略", registry.get("E001").isPresent());
+        Assert.assertEquals("匹配到的 Key 应当正确", "E001", registry.get("E001").get().key());
     }
 
     // --- 模拟测试类 ---

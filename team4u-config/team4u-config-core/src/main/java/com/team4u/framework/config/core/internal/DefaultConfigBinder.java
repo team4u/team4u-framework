@@ -1,8 +1,8 @@
 package com.team4u.framework.config.core.internal;
 
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.bean.copier.CopyOptions;
-import cn.hutool.core.convert.Convert;
+import com.team4u.framework.base.util.BeanUtil;
+import com.team4u.framework.base.util.CopyOptions;
+import com.team4u.framework.base.util.ConvertUtil;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import com.team4u.framework.config.core.spi.ConfigBinder;
 
@@ -12,7 +12,7 @@ import java.util.Map;
 /**
  * 默认配置绑定器实现
  * <p>
- * 基于 Hutool 的 {@link BeanUtil} 和 {@link Convert} 实现配置到 Java 对象的映射。
+ * 基于 Hutool 的 {@link BeanUtil} 和 {@link ConvertUtil} 实现配置到 Java 对象的映射。
  * 支持松散绑定（自动处理驼峰、下划线、中划线等命名风格差异）以及深层嵌套对象的绑定。
  * </p>
  */
@@ -34,7 +34,7 @@ public class DefaultConfigBinder implements ConfigBinder {
 
         // 如果获取到的值直接对应一个基础类型或字符串，则执行简单类型转换
         if (unflattenedValue instanceof String) {
-            return Convert.convert(type, unflattenedValue);
+            return ConvertUtil.convert(type, unflattenedValue);
         }
 
         // 处理嵌套的 Map 结构映射

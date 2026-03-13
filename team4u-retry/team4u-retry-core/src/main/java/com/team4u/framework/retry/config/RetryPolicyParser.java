@@ -1,7 +1,7 @@
 package com.team4u.framework.retry.config;
 
-import cn.hutool.core.util.ClassUtil;
-import cn.hutool.json.JSONUtil;
+import com.team4u.framework.base.util.ClassUtil;
+import com.team4u.framework.serializer.json.JsonUtil;
 import com.team4u.framework.retry.common.backoff.BackoffRegistry;
 import com.team4u.framework.retry.api.RetryPolicy;
 
@@ -24,7 +24,7 @@ public class RetryPolicyParser {
     public static RetryPolicy create(String jsonConfig) {
 
         // 将 JSON 字符串解析为重试策略配置对象
-        RetryPolicyConfig config = JSONUtil.toBean(jsonConfig, RetryPolicyConfig.class);
+        RetryPolicyConfig config = JsonUtil.toBean(jsonConfig, RetryPolicyConfig.class);
 
         // 初始化策略构建器并配置基础重试次数与条件
         RetryPolicy.Builder builder = RetryPolicy.builder()

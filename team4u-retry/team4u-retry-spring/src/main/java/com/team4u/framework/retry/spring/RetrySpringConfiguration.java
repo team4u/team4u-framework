@@ -16,6 +16,7 @@ import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Role;
+import org.springframework.core.Ordered;
 
 /**
  * 重试组件 Spring 自动化配置类
@@ -50,7 +51,7 @@ public class RetrySpringConfiguration {
                                      RetryExecutorManager retryExecutorManager) {
         RetryAdvisor advisor = new RetryAdvisor();
         advisor.setAdvice(new SpringRetryInterceptor(beanFactory, listableBeanFactory, retryExecutorManager));
-        advisor.setOrder(org.springframework.core.Ordered.LOWEST_PRECEDENCE - 1);
+        advisor.setOrder(Ordered.LOWEST_PRECEDENCE - 1);
         return advisor;
     }
 

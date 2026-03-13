@@ -1,6 +1,6 @@
 package com.team4u.framework.config.core;
 
-import cn.hutool.core.thread.ThreadUtil;
+import com.team4u.framework.base.util.ThreadUtil;
 import com.team4u.framework.config.core.convert.PropertyConverterRegistry;
 import com.team4u.framework.config.core.domain.ConfigEntry;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;

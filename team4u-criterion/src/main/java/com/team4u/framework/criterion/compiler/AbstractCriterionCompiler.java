@@ -1,7 +1,8 @@
 package com.team4u.framework.criterion.compiler;
 
-import cn.hutool.core.util.TypeUtil;
-import cn.hutool.log.Log;
+import com.team4u.framework.base.util.TypeUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.criterion.MatchContext;
 import com.team4u.framework.criterion.MatchPredicate;
 import com.team4u.framework.criterion.model.Criterion;
@@ -17,6 +18,8 @@ import java.util.function.Function;
  * @author jay.wu
  */
 public abstract class AbstractCriterionCompiler<C extends Criterion> implements CriterionCompiler<C> {
+
+    protected final Logger log = LoggerFactory.getLogger(getClass());
 
     private final Class<C> criterionType;
 
@@ -39,7 +42,7 @@ public abstract class AbstractCriterionCompiler<C extends Criterion> implements 
             throw new CriterionEvaluationException(e.getMessage(), e);
         }
 
-        Log.get().error("{}|evaluate|fail|msg={}", this.getClass().getSimpleName(), e.getMessage(), e);
+        log.error("{}|evaluate|fail|msg={}", this.getClass().getSimpleName(), e.getMessage(), e);
         return false;
     }
 

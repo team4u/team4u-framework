@@ -1,7 +1,7 @@
 package com.team4u.framework.retry.proxy;
 
-import cn.hutool.crypto.digest.DigestUtil;
-import cn.hutool.json.JSONUtil;
+import com.team4u.framework.base.util.DigestUtil;
+import com.team4u.framework.serializer.json.JsonUtil;
 import com.team4u.framework.retry.inline.InlineRetryClient;
 import com.team4u.framework.retry.managed.client.ManagedRetryClient;
 import com.team4u.framework.retry.common.concurrent.RetryExecutorManager;
@@ -14,7 +14,7 @@ import com.team4u.framework.retry.proxy.invocation.InvocationRecoveryData;
 import com.team4u.framework.retry.api.RetryPolicy;
 import com.team4u.framework.retry.api.NamedRetryPolicyFactory;
 import com.team4u.framework.retry.api.NamedRetryPolicyRegistry;
-import com.team4u.framework.retry.proxy.serialize.HutoolRetryContextSerializer;
+import com.team4u.framework.retry.proxy.serialize.JacksonRetryContextSerializer;
 import com.team4u.framework.retry.proxy.serialize.RetryContextSerializer;
 import com.team4u.framework.retry.proxy.serialize.RetryIgnore;
 import com.team4u.framework.retry.managed.recovery.RecoveryExecutionContext;
@@ -52,7 +52,7 @@ public class RetryDelegate {
      * 重试上下文序列化器，用于在 MANAGED 模式下对方法调用参数进行快照
      */
     @Setter
-    private RetryContextSerializer serializer = HutoolRetryContextSerializer.INSTANCE;
+    private RetryContextSerializer serializer = JacksonRetryContextSerializer.INSTANCE;
 
     /**
      * 调度执行器，用于处理异步重试任务的延迟执行
@@ -168,7 +168,7 @@ public class RetryDelegate {
         validateManagedRecovery(retryable.recovery());
 
         // 使用通用调用回放处理器构建恢复规范
-        RecoverySpec recoverySpec = RecoverySpec.of(InvocationReplay.TASK_NAME, JSONUtil.toJsonStr(recoveryData));
+        RecoverySpec recoverySpec = RecoverySpec.of(InvocationReplay.TASK_NAME, JsonUtil.toJsonStr(recoveryData));
 
         // 构建托管任务 definition
         RetryTaskSpec<Object> taskSpec = RetryTaskSpec.builder()

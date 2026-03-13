@@ -8,7 +8,7 @@ import java.util.regex.Pattern;
 /**
  * 通用的文本模板解析器
  * <p>
- * 支持 ${property} 占位符解析。数据由调用方通过 Map 或值提供者函数传入，
+ * 支持 {@code ${property}} 格式的占位符解析。数据由调用方通过 {@link Map} 或值提供者函数传入。
  * </p>
  *
  * @author jay.wu
@@ -22,9 +22,9 @@ public class TextTemplate {
     private final Set<String> variableNames;
 
     /**
-     * 构建模板
+     * 构造文本模板
      *
-     * @param template 原始字符串
+     * @param template 原始模板字符串
      */
     public TextTemplate(String template) {
         this.template = template;
@@ -33,7 +33,9 @@ public class TextTemplate {
     }
 
     /**
-     * 判断是否为动态模板（包含占位符）
+     * 判断是否为动态模板
+     *
+     * @return 若包含占位符则返回 {@code true}
      */
     public boolean isDynamic() {
         return !variableNames.isEmpty();
@@ -51,8 +53,8 @@ public class TextTemplate {
     /**
      * 通过 Map 渲染模板
      *
-     * @param context 包含变量的 Map
-     * @return 渲染后的文本
+     * @param context 包含变量名与对应值的 Map
+     * @return 渲染后的文本内容
      */
     public String render(Map<String, ?> context) {
         return render(context == null ? null : context::get);
@@ -62,7 +64,7 @@ public class TextTemplate {
      * 通过自定义值提供者渲染模板
      *
      * @param valueProvider 根据变量名返回对应值的函数
-     * @return 渲染后的文本
+     * @return 渲染后的文本内容
      */
     public String render(Function<String, Object> valueProvider) {
         if (!isDynamic() || valueProvider == null) {
@@ -77,7 +79,10 @@ public class TextTemplate {
     }
 
     /**
-     * 解析文本段
+     * 将模板解析为多个文本段（静态或动态）
+     *
+     * @param template 原始模板
+     * @return 解析后的段列表
      */
     private List<Segment> parseSegments(String template) {
         List<Segment> segments = new ArrayList<>();
@@ -112,11 +117,17 @@ public class TextTemplate {
      * 模板段接口
      */
     private interface Segment {
+        /**
+         * 获取当前段的渲染值
+         *
+         * @param valueProvider 值提供者
+         * @return 渲染后的字符串
+         */
         String getValue(Function<String, Object> valueProvider);
     }
 
     /**
-     * 静态文本段
+     * 静态文本段实现
      */
     private static class LiteralSegment implements Segment {
         private final String text;
@@ -132,7 +143,7 @@ public class TextTemplate {
     }
 
     /**
-     * 动态占位符段
+     * 动态占位符段实现
      */
     private static class PlaceholderSegment implements Segment {
         private final String propertyName;
@@ -146,6 +157,7 @@ public class TextTemplate {
         @Override
         public String getValue(Function<String, Object> valueProvider) {
             Object value = valueProvider.apply(propertyName);
+            // 若找不到对应值，则保留原始占位符文本
             return value != null ? value.toString() : originalText;
         }
     }

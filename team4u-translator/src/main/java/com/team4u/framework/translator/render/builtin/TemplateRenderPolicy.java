@@ -1,6 +1,6 @@
 package com.team4u.framework.translator.render.builtin;
 
-import cn.hutool.core.util.StrUtil;
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.base.util.TextTemplate;
 import com.team4u.framework.translator.model.RenderContext;
 import com.team4u.framework.translator.render.RenderPolicy;
@@ -18,7 +18,7 @@ public class TemplateRenderPolicy implements RenderPolicy {
     @Override
     public boolean supports(RenderContext context) {
         // 如果 FinalMessage 中包含我们关注的模板标识（例如文本里带有 $），才启动模板渲染
-        return StrUtil.isNotEmpty(context.getFinalMessage()) && context.getFinalMessage().contains("$");
+        return StringUtil.isNotEmpty(context.getFinalMessage()) && context.getFinalMessage().contains("$");
     }
 
     @Override

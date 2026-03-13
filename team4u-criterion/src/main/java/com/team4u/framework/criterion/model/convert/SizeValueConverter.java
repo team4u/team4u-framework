@@ -1,6 +1,6 @@
 package com.team4u.framework.criterion.model.convert;
 
-import cn.hutool.core.collection.CollUtil;
+import com.team4u.framework.base.util.CollectionUtil;
 
 /**
  * 大小/长度转换器
@@ -27,7 +27,7 @@ public class SizeValueConverter implements ValueConverter {
         }
 
         try {
-            return CollUtil.size(obj);
+            return CollectionUtil.size(obj);
         } catch (Exception e) {
             return 0;
         }

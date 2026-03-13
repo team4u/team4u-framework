@@ -1,6 +1,7 @@
 package com.team4u.framework.lease.memory;
 
 import com.team4u.framework.lease.AbstractLeaseContractSupport;
+import com.team4u.framework.lease.api.LeaseBackend;
 import com.team4u.framework.lease.enums.LeaseTaskState;
 import com.team4u.framework.lease.model.LeasePublishRequest;
 import com.team4u.framework.lease.model.LeaseQueryRequest;
@@ -12,7 +13,7 @@ import java.util.Map;
 public class InMemoryLeaseBackendTest extends AbstractLeaseContractSupport {
 
     @Override
-    protected com.team4u.framework.lease.api.LeaseBackend createBackend() {
+    protected LeaseBackend createBackend() {
         return new InMemoryLeaseBackend();
     }
 

@@ -1,6 +1,6 @@
 package com.team4u.framework.criterion.model.value;
 
-import cn.hutool.core.convert.Convert;
+import com.team4u.framework.base.util.ConvertUtil;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
 import com.team4u.framework.criterion.MatchContext;
@@ -34,7 +34,7 @@ public class VariableValue<T> implements Value<T> {
         }
         // 从上下文属性中获取变量值
         Object raw = context.getAttribute(variableName);
-        return Convert.convert(targetType, raw, null);
+        return ConvertUtil.convert(targetType, raw, null);
     }
 
     @Override

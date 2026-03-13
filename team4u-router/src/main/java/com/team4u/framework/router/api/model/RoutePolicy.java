@@ -1,6 +1,6 @@
 package com.team4u.framework.router.api.model;
 
-import cn.hutool.core.convert.Convert;
+import com.team4u.framework.base.util.ConvertUtil;
 import lombok.Data;
 
 import java.util.ArrayList;
@@ -76,6 +76,6 @@ public class RoutePolicy {
         if (type == null) {
             return (T) value;
         }
-        return Convert.convert(type, value);
+        return ConvertUtil.convert(type, value);
     }
 }

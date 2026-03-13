@@ -1,6 +1,6 @@
 package com.team4u.framework.criterion.compiler.impl;
 
-import cn.hutool.core.convert.Convert;
+import com.team4u.framework.base.util.ConvertUtil;
 import com.team4u.framework.criterion.MatchPredicate;
 import com.team4u.framework.criterion.compiler.AbstractCriterionCompiler;
 import com.team4u.framework.criterion.model.CriterionVisitor;
@@ -23,7 +23,7 @@ public class RegexCriterionCompiler extends AbstractCriterionCompiler<RegexCrite
         }
 
         return safe(context -> {
-            String actual = Convert.toStr(context.getActual(), "");
+            String actual = ConvertUtil.toStr(context.getActual(), "");
             return pattern.matcher(actual).matches();
         });
     }

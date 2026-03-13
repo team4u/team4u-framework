@@ -1,8 +1,8 @@
 package com.team4u.framework.config.core.domain;
 
-import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.map.MapUtil;
-import cn.hutool.core.util.StrUtil;
+import com.team4u.framework.base.util.CollectionUtil;
+import com.team4u.framework.base.util.MapUtil;
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.config.core.internal.PlaceholderResolver;
 import lombok.Getter;
 
@@ -64,7 +64,7 @@ public class ConfigSnapshot {
      * 构建松散匹配所需的归一化索引
      */
     private Map<String, String> buildLooseIndex(Set<String> originalKeys) {
-        if (CollUtil.isEmpty(originalKeys)) {
+        if (CollectionUtil.isEmpty(originalKeys)) {
             return Collections.emptyMap();
         }
         Map<String, String> index = new HashMap<>(originalKeys.size());
@@ -180,7 +180,7 @@ public class ConfigSnapshot {
      * @return 对应的子树对象（Map 或 String），若前缀不存在则返回 null
      */
     public Object getUnflattenedValue(String prefix) {
-        if (StrUtil.isEmpty(prefix)) {
+        if (StringUtil.isEmpty(prefix)) {
             return unflattenedMap();
         }
 
@@ -241,7 +241,7 @@ public class ConfigSnapshot {
      * @return 剥离前缀后的键值映射表
      */
     public Map<String, String> getByPrefix(String prefix) {
-        if (CollUtil.isEmpty(entries) || StrUtil.isBlank(prefix)) {
+        if (CollectionUtil.isEmpty(entries) || StringUtil.isBlank(prefix)) {
             return Collections.emptyMap();
         }
 

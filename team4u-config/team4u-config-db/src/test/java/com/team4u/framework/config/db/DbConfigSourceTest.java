@@ -1,11 +1,10 @@
 package com.team4u.framework.config.db;
 
-import cn.hutool.core.thread.ThreadUtil;
-import cn.hutool.db.Db;
-import cn.hutool.db.Entity;
-import cn.hutool.db.ds.simple.SimpleDataSource;
+import com.team4u.framework.base.util.JdbcUtil;
+import com.team4u.framework.base.util.ThreadUtil;
 import com.team4u.framework.config.core.domain.ConfigEntry;
 import com.team4u.framework.config.core.spi.ConfigSource;
+import org.h2.jdbcx.JdbcDataSource;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -31,7 +30,11 @@ public class DbConfigSourceTest {
     public void setUp() throws SQLException {
         // 初始化 H2 内存数据库，开启 MySQL 兼容模式
         String jdbcUrl = "jdbc:h2:mem:testdb;MODE=MySQL;DB_CLOSE_DELAY=-1";
-        dataSource = new SimpleDataSource(jdbcUrl, "sa", "");
+        JdbcDataSource ds = new JdbcDataSource();
+        ds.setURL(jdbcUrl);
+        ds.setUser("sa");
+        ds.setPassword("");
+        dataSource = ds;
 
         // 建表 DDL
         String ddl = "DROP TABLE IF EXISTS system_config;\n" +
@@ -48,26 +51,20 @@ public class DbConfigSourceTest {
                 "    PRIMARY KEY (id),\n" +
                 "    UNIQUE INDEX uniq_config_id (config_type, config_key)\n" +
                 ");";
-        Db.use(dataSource).execute(ddl);
+        JdbcUtil.execute(dataSource, ddl);
 
         // 插入初始测试数据
-        Db.use(dataSource).insert(Entity.create("system_config")
-                .set("config_type", "app")
-                .set("config_key", "name")
-                .set("config_value", "Team4uApp"));
-        Db.use(dataSource).insert(Entity.create("system_config")
-                .set("config_type", "app")
-                .set("config_key", "port")
-                .set("config_value", "8080"));
-        Db.use(dataSource).insert(Entity.create("system_config")
-                .set("config_type", "db")
-                .set("config_key", "url")
-                .set("config_value", "jdbc:mysql://localhost:3306/test"));
+        JdbcUtil.execute(dataSource, "insert into system_config(config_type, config_key, config_value) values (?, ?, ?)",
+                "app", "name", "Team4uApp");
+        JdbcUtil.execute(dataSource, "insert into system_config(config_type, config_key, config_value) values (?, ?, ?)",
+                "app", "port", "8080");
+        JdbcUtil.execute(dataSource, "insert into system_config(config_type, config_key, config_value) values (?, ?, ?)",
+                "db", "url", "jdbc:mysql://localhost:3306/test");
     }
 
     @After
     public void tearDown() throws SQLException {
-        Db.use(dataSource).execute("DROP TABLE IF EXISTS system_config");
+        JdbcUtil.execute(dataSource, "DROP TABLE IF EXISTS system_config");
     }
 
     /**
@@ -93,7 +90,7 @@ public class DbConfigSourceTest {
         DbConfigSource source = new DbConfigSource("DB-All", 100, dataSource);
 
         // 将 app.port 软删除
-        Db.use(dataSource).execute("UPDATE system_config SET enabled = 0 WHERE config_key = 'port'");
+        JdbcUtil.execute(dataSource, "UPDATE system_config SET enabled = 0 WHERE config_key = 'port'");
 
         Map<String, ConfigEntry> config = source.load();
 
@@ -120,13 +117,11 @@ public class DbConfigSourceTest {
         ThreadUtil.sleep(1100);
 
         // 新增一条记录
-        Db.use(dataSource).insert(Entity.create("system_config")
-                .set("config_type", "app")
-                .set("config_key", "timeout")
-                .set("config_value", "3000"));
+        JdbcUtil.execute(dataSource, "insert into system_config(config_type, config_key, config_value) values (?, ?, ?)",
+                "app", "timeout", "3000");
 
         // 修改一条已有记录
-        Db.use(dataSource).execute("UPDATE system_config SET config_value = '9090' WHERE config_key = 'port'");
+        JdbcUtil.execute(dataSource, "UPDATE system_config SET config_value = '9090' WHERE config_key = 'port'");
 
         // 执行增量加载，只应返回新增和修改的两条
         Map<String, ConfigEntry> changes = source.loadSince(snapshotTime);
@@ -152,12 +147,10 @@ public class DbConfigSourceTest {
                 "    my_status TINYINT DEFAULT 1,\n" +
                 "    my_time  TIMESTAMP DEFAULT CURRENT_TIMESTAMP\n" +
                 ");";
-        Db.use(dataSource).execute(customDdl);
+        JdbcUtil.execute(dataSource, customDdl);
 
-        Db.use(dataSource).insert(Entity.create("my_custom_config")
-                .set("my_type", "custom")
-                .set("my_key", "foo")
-                .set("my_value", "bar"));
+        JdbcUtil.execute(dataSource, "insert into my_custom_config(my_type, my_key, my_value) values (?, ?, ?)",
+                "custom", "foo", "bar");
 
         // 配置映射选项
         DbConfigOptions options = new DbConfigOptions()
@@ -174,7 +167,7 @@ public class DbConfigSourceTest {
         assertEquals(1, config.size());
         assertEquals("bar", config.get("custom.foo").getValue());
 
-        Db.use(dataSource).execute("DROP TABLE my_custom_config");
+        JdbcUtil.execute(dataSource, "DROP TABLE my_custom_config");
     }
 
     /**
@@ -193,7 +186,7 @@ public class DbConfigSourceTest {
         assertFalse("初始化阶段不应触发 changeSignal", triggered.get());
 
         // 修改数据库中的配置值
-        Db.use(dataSource).execute("UPDATE system_config SET config_value = '9090' WHERE config_key = 'port'");
+        JdbcUtil.execute(dataSource, "UPDATE system_config SET config_value = '9090' WHERE config_key = 'port'");
 
         // 等待下一轮轮询完成
         ThreadUtil.sleep(1500);

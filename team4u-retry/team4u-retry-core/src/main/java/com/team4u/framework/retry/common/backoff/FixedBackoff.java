@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.common.backoff;
 
-import cn.hutool.core.convert.Convert;
+import com.team4u.framework.base.util.ConvertUtil;
 import com.team4u.framework.retry.config.BackoffConfig;
 import lombok.EqualsAndHashCode;
 
@@ -43,7 +43,7 @@ public class FixedBackoff implements Backoff {
             Map<String, Object> params = config.getParams();
             long delay = 1000L;
             if (params != null) {
-                delay = Convert.toLong(params.get("delay"), Convert.toLong(params.get("initialDelay"), 1000L));
+                delay = ConvertUtil.toLong(params.get("delay"), ConvertUtil.toLong(params.get("initialDelay"), 1000L));
             }
             return new FixedBackoff(delay);
         }

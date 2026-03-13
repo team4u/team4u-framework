@@ -1,8 +1,9 @@
 package com.team4u.framework.mask.config;
 
-import cn.hutool.core.lang.TypeReference;
-import cn.hutool.json.JSONUtil;
-import cn.hutool.log.Log;
+import com.team4u.framework.serializer.json.TypeReference;
+import com.team4u.framework.serializer.json.JsonUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 
@@ -15,7 +16,7 @@ import java.util.Map;
  * 维护第三方类或 Map 的脱敏规则，支持快速检索。
  */
 public class MaskRuleRepository {
-    private static final Log log = Log.get();
+    private static final Logger log = LoggerFactory.getLogger(MaskRuleRepository.class);
     private static final MaskRuleRepository INSTANCE = new MaskRuleRepository();
 
     // 配置中心的 Key 变更为 team4u.mask.rules
@@ -49,7 +50,7 @@ public class MaskRuleRepository {
                 if (json == null || json.trim().isEmpty()) {
                     return new HashMap<>();
                 }
-                Map<String, Map<String, String>> rules = JSONUtil.toBean(
+                Map<String, Map<String, String>> rules = JsonUtil.toBean(
                         json,
                         new TypeReference<Map<String, Map<String, String>>>() {
                         },

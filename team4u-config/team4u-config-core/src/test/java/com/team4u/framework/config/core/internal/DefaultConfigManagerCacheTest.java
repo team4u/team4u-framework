@@ -2,6 +2,7 @@ package com.team4u.framework.config.core.internal;
 
 import com.team4u.framework.config.core.convert.PropertyConverterRegistry;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
+import com.team4u.framework.config.core.proxy.SnapshotAware;
 import com.team4u.framework.config.core.spi.*;
 import org.junit.Assert;
 import org.junit.Test;
@@ -63,7 +64,7 @@ public class DefaultConfigManagerCacheTest {
         Assert.assertSame("多次调用 createProxy 绑定对象应返回同一实例", result1, result2);
         // 由于现在默认使用代理，ConfigBinder 不再被调用
         Assert.assertEquals("由于使用了代理，ConfigBinder.bind 不应被调用", 0, bindCount.get());
-        Assert.assertTrue("结果应该是代理对象", result1 instanceof com.team4u.framework.config.core.proxy.SnapshotAware);
+        Assert.assertTrue("结果应该是代理对象", result1 instanceof SnapshotAware);
     }
 
     public static class TestConfig {

@@ -1,6 +1,6 @@
 package com.team4u.framework.message.core;
 
-import cn.hutool.core.collection.CollUtil;
+import com.team4u.framework.base.util.CollectionUtil;
 import com.team4u.framework.message.core.interceptor.MessageInterceptor;
 import com.team4u.framework.policy.core.OrderedPolicyChain;
 import lombok.extern.slf4j.Slf4j;
@@ -90,7 +90,7 @@ public class MessageDispatcher {
         }
 
         List<MessageHandler<?>> matchedHandlers = handlerChain.allMatches(message);
-        if (CollUtil.isEmpty(matchedHandlers)) {
+        if (CollectionUtil.isEmpty(matchedHandlers)) {
             if (log.isDebugEnabled()) {
                 log.debug("No MessageHandler found for message type: [{}]", message.getMessageType());
             }

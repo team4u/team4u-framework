@@ -1,6 +1,9 @@
 package com.team4u.framework.retry.proxy;
 
-import cn.hutool.json.JSONUtil;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
+
+import com.team4u.framework.serializer.json.JsonUtil;
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 import com.team4u.framework.retry.managed.client.ManagedRetryClient;
@@ -80,14 +83,14 @@ public class RetryDelegateManagedTest {
         Assert.assertEquals(firstKey, managedClient.lastSpec.getIdempotencyKey());
         Assert.assertFalse(firstKey.isEmpty());
 
-        InvocationRecoveryData payload = JSONUtil.toBean(
+        InvocationRecoveryData payload = JsonUtil.toBean(
                 managedClient.lastSpec.getRecovery().getPayload(),
                 InvocationRecoveryData.class);
         Assert.assertEquals(ManagedVoidService.class.getName(), payload.getTargetTypeName());
         Assert.assertEquals("replayPayment", payload.getMethodName());
         Assert.assertEquals(2, payload.getArgs().size());
         Assert.assertEquals(String.class.getName(), payload.getArgs().get(0).getTypeName());
-        Assert.assertEquals("order-1", payload.getArgs().get(0).getSerializedValue());
+        Assert.assertEquals("\"order-1\"", payload.getArgs().get(0).getSerializedValue());
     }
 
     @Test
@@ -101,7 +104,7 @@ public class RetryDelegateManagedTest {
 
         delegate.executeWithRetry(method, target, new Object[]{"order-1", new Input("stream"), null}, retryable, () -> null);
 
-        InvocationRecoveryData payload = JSONUtil.toBean(
+        InvocationRecoveryData payload = JsonUtil.toBean(
                 managedClient.lastSpec.getRecovery().getPayload(),
                 InvocationRecoveryData.class);
         Assert.assertEquals(3, payload.getArgs().size());
@@ -111,7 +114,7 @@ public class RetryDelegateManagedTest {
         InvocationArgSnapshot third = payload.getArgs().get(2);
 
         Assert.assertFalse(first.isIgnored());
-        Assert.assertEquals("order-1", first.getSerializedValue());
+        Assert.assertEquals("\"order-1\"", first.getSerializedValue());
 
         Assert.assertTrue(second.isIgnored());
         Assert.assertNull(second.getSerializedValue());
@@ -361,8 +364,10 @@ public class RetryDelegateManagedTest {
     }
 
     @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class Input {
-        private final String value;
+        private String value;
     }
 
     public static class CustomRecoveryHandler implements RecoveryHandler<InvocationRecoveryData> {

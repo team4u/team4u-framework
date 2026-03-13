@@ -12,7 +12,7 @@ import com.team4u.framework.retry.api.RetryPolicy;
 import com.team4u.framework.retry.managed.recovery.RecoveryContext;
 import com.team4u.framework.retry.managed.recovery.RecoveryExecutionContext;
 import com.team4u.framework.retry.managed.store.record.RetryRecord;
-import com.team4u.framework.retry.managed.store.serialize.HutoolRetryRecordSerializer;
+import com.team4u.framework.retry.managed.store.serialize.JsonRetryRecordSerializer;
 import com.team4u.framework.retry.managed.store.serialize.RetryRecordSerializer;
 import com.team4u.framework.retry.common.util.RetryExceptionUtil;
 import lombok.Getter;
@@ -42,7 +42,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapter implements LeaseLifecycleAwa
     private final RetryRecordSerializer serializer;
 
     public RecoveryHandlerLeaseTaskHandlerAdapter(StringRecoveryHandler delegate) {
-        this(delegate, HutoolRetryRecordSerializer.INSTANCE);
+        this(delegate, JsonRetryRecordSerializer.INSTANCE);
     }
 
     public RecoveryHandlerLeaseTaskHandlerAdapter(StringRecoveryHandler delegate, RetryRecordSerializer serializer) {

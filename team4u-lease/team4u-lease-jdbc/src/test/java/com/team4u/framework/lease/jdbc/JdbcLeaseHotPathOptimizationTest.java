@@ -1,6 +1,5 @@
 package com.team4u.framework.lease.jdbc;
 
-import cn.hutool.db.Db;
 import com.team4u.framework.lease.enums.LeaseAdminResult;
 import com.team4u.framework.lease.jdbc.codec.LeaseJsonCodec;
 import com.team4u.framework.lease.jdbc.dialect.MySqlLeaseDbDialect;
@@ -251,7 +250,7 @@ public class JdbcLeaseHotPathOptimizationTest {
     public void testAcquireRetriesWhenTaskChangesBetweenReadAndClaim() throws Exception {
         DataSource dataSource = JdbcLeaseBackendTestSupport.newDataSource();
         JdbcLeaseBackend backend = new JdbcLeaseBackend(dataSource);
-        JdbcLeaseTaskDao dao = new JdbcLeaseTaskDao(Db.use(dataSource), new MySqlLeaseDbDialect(), new LeaseJsonCodec());
+        JdbcLeaseTaskDao dao = new JdbcLeaseTaskDao(dataSource, new MySqlLeaseDbDialect(), new LeaseJsonCodec());
         String taskId = backend.publish(LeasePublishRequest.builder()
                 .taskGroup("pay")
                 .taskType("charge")
@@ -330,7 +329,7 @@ public class JdbcLeaseHotPathOptimizationTest {
     public void testVersionStartsAtZeroAndIncrementsAcrossMutations() throws Exception {
         DataSource dataSource = JdbcLeaseBackendTestSupport.newDataSource();
         JdbcLeaseBackend backend = new JdbcLeaseBackend(dataSource);
-        JdbcLeaseTaskDao dao = new JdbcLeaseTaskDao(Db.use(dataSource), new MySqlLeaseDbDialect(), new LeaseJsonCodec());
+        JdbcLeaseTaskDao dao = new JdbcLeaseTaskDao(dataSource, new MySqlLeaseDbDialect(), new LeaseJsonCodec());
         String taskId = backend.publish(LeasePublishRequest.builder()
                 .taskGroup("pay")
                 .taskType("charge")

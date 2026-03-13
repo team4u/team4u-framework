@@ -1,5 +1,6 @@
 package com.team4u.framework.lease.model;
 
+import com.team4u.framework.lease.api.LeaseProducer;
 import lombok.Builder;
 import lombok.Data;
 

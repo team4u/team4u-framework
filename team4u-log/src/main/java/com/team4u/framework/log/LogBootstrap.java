@@ -1,6 +1,7 @@
 package com.team4u.framework.log;
 
-import cn.hutool.log.Log;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.log.config.FinOpsConfigRepository;
@@ -17,7 +18,7 @@ import com.team4u.framework.mask.MaskBootstrap;
  */
 public class LogBootstrap {
 
-    private static final Log log = Log.get();
+    private static final Logger log = LoggerFactory.getLogger(LogBootstrap.class);
 
     private static final LogBootstrap INSTANCE = new LogBootstrap();
 

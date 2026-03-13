@@ -1,6 +1,6 @@
 package com.team4u.framework.criterion.model.convert;
 
-import cn.hutool.core.date.DateUtil;
+import com.team4u.framework.base.util.DateUtil;
 
 import java.util.Date;
 

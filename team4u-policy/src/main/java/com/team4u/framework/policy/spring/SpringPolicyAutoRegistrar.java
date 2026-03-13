@@ -1,6 +1,7 @@
 package com.team4u.framework.policy.spring;
 
-import cn.hutool.log.Log;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.policy.api.PolicyRegistry;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.context.ApplicationContext;
@@ -19,7 +20,7 @@ import java.util.Map;
  */
 public class SpringPolicyAutoRegistrar implements SmartInitializingSingleton, ApplicationContextAware {
 
-    private static final Log log = Log.get();
+    private static final Logger log = LoggerFactory.getLogger(SpringPolicyAutoRegistrar.class);
     private ApplicationContext context;
 
     @Override

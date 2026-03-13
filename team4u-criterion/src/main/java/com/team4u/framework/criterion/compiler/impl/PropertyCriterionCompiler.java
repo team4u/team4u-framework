@@ -1,7 +1,8 @@
 package com.team4u.framework.criterion.compiler.impl;
 
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.log.Log;
+import com.team4u.framework.base.util.BeanUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.criterion.MatchPredicate;
 import com.team4u.framework.criterion.compiler.CriterionCompiler;
 import com.team4u.framework.criterion.model.Criterion;
@@ -14,7 +15,7 @@ import com.team4u.framework.criterion.model.PropertyCriterion;
  */
 public class PropertyCriterionCompiler implements CriterionCompiler<PropertyCriterion> {
 
-    private final Log log = Log.get();
+    private final Logger log = LoggerFactory.getLogger(PropertyCriterionCompiler.class);
 
     @Override
     public MatchPredicate compile(PropertyCriterion criterion, CriterionVisitor<MatchPredicate> visitor) {

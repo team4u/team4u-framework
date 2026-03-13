@@ -1,6 +1,6 @@
 package com.team4u.framework.criterion.parser.handler;
 
-import cn.hutool.core.util.NumberUtil;
+import com.team4u.framework.base.util.NumberUtil;
 import com.team4u.framework.criterion.model.Criterion;
 import com.team4u.framework.criterion.model.SmartCompareCriterion;
 import com.team4u.framework.criterion.model.value.FixedValue;

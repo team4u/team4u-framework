@@ -1,7 +1,8 @@
 package com.team4u.framework.criterion.compiler.impl;
 
-import cn.hutool.core.util.RandomUtil;
-import cn.hutool.log.Log;
+import java.util.concurrent.ThreadLocalRandom;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.criterion.MatchPredicate;
 import com.team4u.framework.criterion.compiler.AbstractCriterionCompiler;
 import com.team4u.framework.criterion.compiler.CompiledValue;
@@ -14,7 +15,7 @@ import com.team4u.framework.criterion.model.ProbabilityCriterion;
  */
 public class ProbabilityCriterionCompiler extends AbstractCriterionCompiler<ProbabilityCriterion> {
 
-    private final Log log = Log.get();
+    private final Logger log = LoggerFactory.getLogger(ProbabilityCriterionCompiler.class);
 
     @Override
     public MatchPredicate compile(ProbabilityCriterion criterion,
@@ -31,7 +32,7 @@ public class ProbabilityCriterionCompiler extends AbstractCriterionCompiler<Prob
                 return false;
             }
 
-            return RandomUtil.randomDouble(0, 1) <= threshold;
+            return ThreadLocalRandom.current().nextDouble() <= threshold;
         });
     }
 }

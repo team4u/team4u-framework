@@ -1,8 +1,9 @@
 package com.team4u.framework.criterion.compiler.impl;
 
-import cn.hutool.core.convert.Convert;
-import cn.hutool.core.util.StrUtil;
-import cn.hutool.log.Log;
+import com.team4u.framework.base.util.ConvertUtil;
+import com.team4u.framework.base.util.StringUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.criterion.MatchPredicate;
 import com.team4u.framework.criterion.compiler.AbstractCriterionCompiler;
 import com.team4u.framework.criterion.model.CompareOperators;
@@ -19,7 +20,7 @@ import java.util.function.IntPredicate;
  * 智能比较规则编译器
  */
 public class SmartCompareCriterionCompiler extends AbstractCriterionCompiler<SmartCompareCriterion> {
-    private final Log log = Log.get();
+    private final Logger log = LoggerFactory.getLogger(SmartCompareCriterionCompiler.class);
 
     @Override
     public MatchPredicate compile(SmartCompareCriterion criterion, CriterionVisitor<MatchPredicate> visitor) {
@@ -124,8 +125,8 @@ public class SmartCompareCriterionCompiler extends AbstractCriterionCompiler<Sma
             return Integer.MIN_VALUE;
         }
 
-        String actualStr = Convert.toStr(actual, "");
-        String expectedStr = Convert.toStr(expected, "");
+        String actualStr = ConvertUtil.toStr(actual, "");
+        String expectedStr = ConvertUtil.toStr(expected, "");
         return actualStr.compareTo(expectedStr);
     }
 
@@ -193,7 +194,7 @@ public class SmartCompareCriterionCompiler extends AbstractCriterionCompiler<Sma
                 case "!=":
                     return !ObjectCompareUtil.looseEquals(actualObj, expected);
                 case "contains":
-                    return StrUtil.contains(actual, expected);
+                    return StringUtil.contains(actual, expected);
                 default:
                     // 针对字符串的比较运算，如果不是等于或者不等于，则采用默认字典序回调
                     if (actual == null) {

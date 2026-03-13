@@ -1,7 +1,8 @@
 package com.team4u.framework.message.core;
 
-import cn.hutool.core.util.TypeUtil;
-import cn.hutool.log.Log;
+import com.team4u.framework.base.util.TypeUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -19,7 +20,7 @@ import java.util.concurrent.Executor;
  */
 public abstract class AbstractMessageHandler<T> implements MessageHandler<T> {
 
-    protected final Log log = Log.get(this.getClass());
+    protected final Logger log = LoggerFactory.getLogger(this.getClass());
 
     /**
      * 自动从类定义中推断出的业务载荷类型

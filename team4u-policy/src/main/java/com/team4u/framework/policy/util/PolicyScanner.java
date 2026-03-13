@@ -1,8 +1,10 @@
 package com.team4u.framework.policy.util;
 
-import cn.hutool.core.util.ClassUtil;
-import cn.hutool.core.util.ReflectUtil;
-import cn.hutool.log.Log;
+import com.team4u.framework.base.util.ClassUtil;
+import com.team4u.framework.base.util.ReflectUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import com.team4u.framework.base.util.ServiceLoaderUtil;
 import com.team4u.framework.policy.api.PolicyRegistry;
 
@@ -16,7 +18,7 @@ import java.util.Objects;
  */
 public class PolicyScanner {
 
-    private static final Log log = Log.get();
+    private static final Logger log = LoggerFactory.getLogger(PolicyScanner.class);
 
     /**
      * 通过 ServiceLoader 注册策略
@@ -46,11 +48,11 @@ public class PolicyScanner {
     /**
      * 将指定包、指定策略类型下扫描到的策略注入到注册表中
      */
-    @SuppressWarnings({"unchecked", "rawtypes"})
+    @SuppressWarnings({ "unchecked" })
     public static <P> void scanAndRegister(
             PolicyRegistry<P> registry,
             String packageName,
-            Class policyClass) {
+            Class<?> policyClass) {
 
         ClassUtil.scanPackageBySuper(packageName, policyClass).stream()
                 .filter(it -> {

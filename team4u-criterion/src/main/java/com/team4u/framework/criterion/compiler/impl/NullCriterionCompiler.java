@@ -1,6 +1,6 @@
 package com.team4u.framework.criterion.compiler.impl;
 
-import cn.hutool.core.util.ObjectUtil;
+import com.team4u.framework.base.util.ObjectUtil;
 import com.team4u.framework.criterion.MatchPredicate;
 import com.team4u.framework.criterion.compiler.AbstractCriterionCompiler;
 import com.team4u.framework.criterion.model.CriterionVisitor;

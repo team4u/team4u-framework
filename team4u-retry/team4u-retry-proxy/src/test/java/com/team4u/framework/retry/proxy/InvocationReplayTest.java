@@ -1,6 +1,9 @@
 package com.team4u.framework.retry.proxy;
 
-import cn.hutool.json.JSONUtil;
+import lombok.AllArgsConstructor;
+import lombok.NoArgsConstructor;
+
+import com.team4u.framework.serializer.json.JsonUtil;
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.retry.proxy.invocation.InvocationArgSnapshot;
 import com.team4u.framework.retry.proxy.invocation.InvocationRecoveryData;
@@ -29,7 +32,7 @@ public class InvocationReplayTest {
         BeanManager.getInstance().registerBean(PrimitiveReplayService.class.getName(), service);
 
         InvocationReplay replay = new InvocationReplay();
-        replay.recover(JSONUtil.toJsonStr(InvocationRecoveryData.builder()
+        replay.recover(JsonUtil.toJsonStr(InvocationRecoveryData.builder()
                         .targetTypeName(PrimitiveReplayService.class.getName())
                         .methodName("replay")
                         .args(Arrays.asList(
@@ -52,7 +55,7 @@ public class InvocationReplayTest {
         BeanManager.getInstance().registerBean(MixedReplayService.class.getName(), service);
 
         InvocationReplay replay = new InvocationReplay();
-        replay.recover(JSONUtil.toJsonStr(InvocationRecoveryData.builder()
+        replay.recover(JsonUtil.toJsonStr(InvocationRecoveryData.builder()
                         .targetTypeName(MixedReplayService.class.getName())
                         .methodName("replay")
                         .args(Arrays.asList(
@@ -71,7 +74,7 @@ public class InvocationReplayTest {
         BeanManager.getInstance().registerBean(GenericReplayService.class.getName(), service);
 
         InvocationReplay replay = new InvocationReplay();
-        replay.recover(JSONUtil.toJsonStr(InvocationRecoveryData.builder()
+        replay.recover(JsonUtil.toJsonStr(InvocationRecoveryData.builder()
                         .targetTypeName(GenericReplayService.class.getName())
                         .methodName("replay")
                         .args(Arrays.asList(
@@ -94,7 +97,7 @@ public class InvocationReplayTest {
         BeanManager.getInstance().registerBean(IgnoredReplayService.class.getName(), service);
 
         InvocationReplay replay = new InvocationReplay();
-        replay.recover(JSONUtil.toJsonStr(InvocationRecoveryData.builder()
+        replay.recover(JsonUtil.toJsonStr(InvocationRecoveryData.builder()
                         .targetTypeName(IgnoredReplayService.class.getName())
                         .methodName("replay")
                         .args(Arrays.asList(
@@ -117,7 +120,7 @@ public class InvocationReplayTest {
         BeanManager.getInstance().registerBean("secondaryReplayService", secondary);
 
         InvocationReplay replay = new InvocationReplay();
-        replay.recover(JSONUtil.toJsonStr(InvocationRecoveryData.builder()
+        replay.recover(JsonUtil.toJsonStr(InvocationRecoveryData.builder()
                         .targetTypeName(ReplayContract.class.getName())
                         .targetBeanName("secondaryReplayService")
                         .methodName("replay")
@@ -136,7 +139,7 @@ public class InvocationReplayTest {
 
         InvocationReplay replay = new InvocationReplay();
         try {
-            replay.recover(JSONUtil.toJsonStr(InvocationRecoveryData.builder()
+            replay.recover(JsonUtil.toJsonStr(InvocationRecoveryData.builder()
                             .targetTypeName(ReplayContract.class.getName())
                             .methodName("replay")
                             .args(Collections.singletonList(arg(String.class, "\"x\"", false)))
@@ -152,7 +155,7 @@ public class InvocationReplayTest {
     public void testRecoverRejectsMissingSnapshotPayload() {
         InvocationReplay replay = new InvocationReplay();
         try {
-            replay.recover(JSONUtil.toJsonStr(InvocationRecoveryData.builder()
+            replay.recover(JsonUtil.toJsonStr(InvocationRecoveryData.builder()
                             .targetTypeName(PrimitiveReplayService.class.getName())
                             .methodName("replay")
                             .build()),
@@ -167,7 +170,7 @@ public class InvocationReplayTest {
     public void testRecoverFailsWhenBeanMissing() {
         InvocationReplay replay = new InvocationReplay();
         try {
-            replay.recover(JSONUtil.toJsonStr(InvocationRecoveryData.builder()
+            replay.recover(JsonUtil.toJsonStr(InvocationRecoveryData.builder()
                             .targetTypeName(MissingReplayService.class.getName())
                             .methodName("replay")
                             .args(Collections.singletonList(arg(String.class, "\"x\"", false)))
@@ -186,7 +189,7 @@ public class InvocationReplayTest {
 
         InvocationReplay replay = new InvocationReplay();
         try {
-            replay.recover(JSONUtil.toJsonStr(InvocationRecoveryData.builder()
+            replay.recover(JsonUtil.toJsonStr(InvocationRecoveryData.builder()
                             .targetTypeName(PrimitiveIgnoredReplayService.class.getName())
                             .methodName("replay")
                             .args(Collections.singletonList(arg(int.class, null, true)))
@@ -276,6 +279,9 @@ public class InvocationReplayTest {
         }
     }
 
+    @lombok.Data
+    @NoArgsConstructor
+    @AllArgsConstructor
     public static class Input {
         private String value;
     }

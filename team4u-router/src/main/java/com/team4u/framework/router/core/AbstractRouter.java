@@ -1,6 +1,6 @@
 package com.team4u.framework.router.core;
 
-import cn.hutool.core.convert.Convert;
+import com.team4u.framework.base.util.ConvertUtil;
 import com.team4u.framework.router.api.Router;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
@@ -38,7 +38,7 @@ public abstract class AbstractRouter implements Router {
         }
 
         if (targetType != null && !targetType.isInstance(rawValue)) {
-            T convertedValue = Convert.convert(targetType, rawValue);
+            T convertedValue = ConvertUtil.convert(targetType, rawValue);
             return RouteResult.matched(convertedValue, result.getMatchedConditions());
         }
 

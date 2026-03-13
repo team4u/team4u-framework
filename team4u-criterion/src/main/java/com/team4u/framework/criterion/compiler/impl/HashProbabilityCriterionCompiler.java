@@ -1,7 +1,8 @@
 package com.team4u.framework.criterion.compiler.impl;
 
-import cn.hutool.core.util.HashUtil;
-import cn.hutool.log.Log;
+import com.team4u.framework.base.util.HashUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.criterion.MatchContext;
 import com.team4u.framework.criterion.MatchPredicate;
 import com.team4u.framework.criterion.compiler.AbstractCriterionCompiler;
@@ -15,7 +16,7 @@ import com.team4u.framework.criterion.model.HashProbabilityCriterion;
  */
 public class HashProbabilityCriterionCompiler extends AbstractCriterionCompiler<HashProbabilityCriterion> {
 
-    private final Log log = Log.get();
+    private final Logger log = LoggerFactory.getLogger(HashProbabilityCriterionCompiler.class);
 
     @Override
     public MatchPredicate compile(HashProbabilityCriterion criterion,

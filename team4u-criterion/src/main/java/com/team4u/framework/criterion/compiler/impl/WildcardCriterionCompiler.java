@@ -1,8 +1,9 @@
 package com.team4u.framework.criterion.compiler.impl;
 
-import cn.hutool.core.convert.Convert;
-import cn.hutool.core.text.AntPathMatcher;
-import cn.hutool.log.Log;
+import com.team4u.framework.base.util.ConvertUtil;
+import org.springframework.util.AntPathMatcher;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.criterion.MatchPredicate;
 import com.team4u.framework.criterion.compiler.AbstractCriterionCompiler;
 import com.team4u.framework.criterion.model.CriterionVisitor;
@@ -13,7 +14,7 @@ import com.team4u.framework.criterion.model.WildcardCriterion;
  */
 public class WildcardCriterionCompiler extends AbstractCriterionCompiler<WildcardCriterion> {
 
-    private final Log log = Log.get();
+    private final Logger log = LoggerFactory.getLogger(WildcardCriterionCompiler.class);
     private final AntPathMatcher matcher = new AntPathMatcher();
 
     @Override
@@ -32,7 +33,7 @@ public class WildcardCriterionCompiler extends AbstractCriterionCompiler<Wildcar
                     return false;
                 }
 
-                return matcher.match(pattern, Convert.toStr(context.getActual()));
+                return matcher.match(pattern, ConvertUtil.toStr(context.getActual()));
             } catch (Exception e) {
                 return handleException(e, context);
             }

@@ -1,7 +1,7 @@
 package com.team4u.framework.config.core.support;
 
-import cn.hutool.log.Log;
-import cn.hutool.log.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.config.core.ConfigManager;
 import lombok.Getter;
 
@@ -19,7 +19,7 @@ import java.util.function.Function;
  */
 public class ConfigDrivenRegistry<T> {
 
-    private static final Log log = LogFactory.get();
+    private static final Logger log = LoggerFactory.getLogger(ConfigDrivenRegistry.class);
 
     @Getter
     private final ConfigManager configManager;
@@ -81,7 +81,7 @@ public class ConfigDrivenRegistry<T> {
             }
         } catch (Exception e) {
             // 热更新构建失败时保留旧实例，确保服务连续性
-            log.error(e, "Failed to hot-reload instance for key [{}]. Keeping the old instance.", key);
+            log.error("Failed to hot-reload instance for key [{}]. Keeping the old instance.", key, e);
         }
     }
 
@@ -112,7 +112,7 @@ public class ConfigDrivenRegistry<T> {
             try {
                 ((AutoCloseable) instance).close();
             } catch (Exception e) {
-                log.warn(e, "Error occurred while closing old instance.");
+                log.warn("Error occurred while closing old instance.", e);
             }
         }
     }

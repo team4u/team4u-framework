@@ -11,9 +11,15 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.Supplier;
 
 /**
- * 配置代理核心功能单元测试
+ * 配置代理核心功能单元测试。
+ * <p>
+ * 验证配置代理的动态绑定、二级缓存失效机制、命名兼容性以及嵌套 Bean 代理等功能。
+ * </p>
+ *
+ * @author team4u
  */
 public class ConfigProxyTest {
 
@@ -109,7 +115,7 @@ public class ConfigProxyTest {
         Assert.assertEquals("jdbc:mysql://localhost:3306/nested", config.getDb().getUrl());
     }
 
-    private ConfigManager createMockManager(java.util.function.Supplier<ConfigSnapshot> snapshotSupplier) {
+    private ConfigManager createMockManager(Supplier<ConfigSnapshot> snapshotSupplier) {
         return new ConfigManager() {
             private final PropertyConverterRegistry converterRegistry = new PropertyConverterRegistry();
 

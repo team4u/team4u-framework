@@ -1,6 +1,6 @@
 package com.team4u.framework.log.core;
 
-import cn.hutool.core.util.ReflectUtil;
+import com.team4u.framework.base.util.ReflectUtil;
 import com.team4u.framework.log.config.FinOpsConfigRepository;
 import com.team4u.framework.log.pipeline.LogInterceptor;
 import com.team4u.framework.log.pipeline.LogInterceptorManager;

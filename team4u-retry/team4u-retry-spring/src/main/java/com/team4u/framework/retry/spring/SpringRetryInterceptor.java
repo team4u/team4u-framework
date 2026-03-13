@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.spring;
 
-import cn.hutool.extra.spring.SpringUtil;
+import com.team4u.framework.base.util.SpringUtil;
 import com.team4u.framework.retry.inline.DefaultInlineRetryClient;
 import com.team4u.framework.retry.inline.InlineRetryClient;
 import com.team4u.framework.retry.managed.client.ManagedRetryClient;

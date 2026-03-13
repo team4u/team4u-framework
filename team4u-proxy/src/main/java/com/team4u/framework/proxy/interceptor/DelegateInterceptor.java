@@ -1,6 +1,6 @@
 package com.team4u.framework.proxy.interceptor;
 
-import cn.hutool.core.util.ReflectUtil;
+import com.team4u.framework.base.util.ReflectUtil;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
 import com.team4u.framework.proxy.core.ProxyException;

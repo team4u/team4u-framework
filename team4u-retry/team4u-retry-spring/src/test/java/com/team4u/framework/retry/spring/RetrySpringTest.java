@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.spring;
 
-import cn.hutool.json.JSONUtil;
+import com.team4u.framework.serializer.json.JsonUtil;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 import com.team4u.framework.retry.managed.client.ManagedRetryClient;
 import com.team4u.framework.retry.common.concurrent.RetryExecutorManager;
@@ -30,6 +30,7 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.stereotype.Service;
 
+import java.util.Collections;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -249,11 +250,11 @@ public class RetrySpringTest {
             NamedReplayBean secondary = (NamedReplayBean) context.getBean("secondaryReplayBean");
 
             InvocationReplay replay = new InvocationReplay();
-            replay.recover(JSONUtil.toJsonStr(InvocationRecoveryData.builder()
+            replay.recover(JsonUtil.toJsonStr(InvocationRecoveryData.builder()
                             .targetTypeName(ReplayHandler.class.getName())
                             .targetBeanName("secondaryReplayBean")
                             .methodName("replay")
-                            .args(java.util.Collections.singletonList(InvocationArgSnapshot.builder()
+                            .args(Collections.singletonList(InvocationArgSnapshot.builder()
                                     .typeName(String.class.getName())
                                     .serializedValue("\"spring-order\"")
                                     .ignored(false)

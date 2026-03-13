@@ -1,7 +1,7 @@
 package com.team4u.framework.config.core;
 
-import cn.hutool.core.util.StrUtil;
-import cn.hutool.crypto.SecureUtil;
+
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.config.core.annotation.ConfigConverter;
 import com.team4u.framework.config.core.convert.JsonPropertyConverter;
 import com.team4u.framework.config.core.convert.PropertyConverter;
@@ -11,14 +11,17 @@ import com.team4u.framework.config.core.spi.ConfigSource;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 /**
  * 自定义转换器单元测试
  */
 public class ConfigConverterTest {
+
 
     @Test
     public void testConverters() {
@@ -29,8 +32,8 @@ public class ConfigConverterTest {
         entries.put("app.whiteList", new ConfigEntry("app.whiteList", "a,b,c", "mock", now));
         // JSON To Bean
         entries.put("app.adminUser", new ConfigEntry("app.adminUser", "{\"name\":\"jay\",\"age\":18}", "mock", now));
-        // Decrypt
-        String encrypted = SecureUtil.aes("1234567812345678".getBytes()).encryptHex("secret_pwd");
+        // Mock Encrypt (模拟加密)
+        String encrypted = "fake_encrypt_" + "secret_pwd";
         entries.put("app.password", new ConfigEntry("app.password", encrypted, "mock", now));
 
         ConfigSnapshot snapshot = new ConfigSnapshot(1L, entries);
@@ -95,7 +98,12 @@ public class ConfigConverterTest {
     public static class CsvToListConverter implements PropertyConverter<List<String>> {
         @Override
         public List<String> convert(String source, Class<List<String>> targetType) {
-            return StrUtil.split(source, ',');
+            if (StringUtil.isEmpty(source)) {
+                return null;
+            }
+            return Arrays.stream(source.split(","))
+                    .map(String::trim)
+                    .collect(Collectors.toList());
         }
     }
 
@@ -105,7 +113,11 @@ public class ConfigConverterTest {
     public static class DecryptConverter implements PropertyConverter<String> {
         @Override
         public String convert(String source, Class<String> targetType) {
-            return SecureUtil.aes("1234567812345678".getBytes()).decryptStr(source);
+            // Mock Decrypt (模拟解密：去除前缀)
+            if (source != null && source.startsWith("fake_encrypt_")) {
+                return source.substring("fake_encrypt_".length());
+            }
+            return source;
         }
     }
 

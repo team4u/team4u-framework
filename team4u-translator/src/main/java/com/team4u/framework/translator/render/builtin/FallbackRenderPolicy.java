@@ -1,6 +1,6 @@
 package com.team4u.framework.translator.render.builtin;
 
-import cn.hutool.core.util.StrUtil;
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.translator.model.RenderContext;
 import com.team4u.framework.translator.render.RenderPolicy;
 
@@ -24,12 +24,12 @@ public class FallbackRenderPolicy implements RenderPolicy {
     @Override
     public void render(RenderContext context) {
         // 如果最终码为空字符串或 null，则使用 source 的原始 code 覆盖
-        if (StrUtil.isEmpty(context.getFinalCode())) {
+        if (StringUtil.isEmpty(context.getFinalCode())) {
             context.setFinalCode(context.getSource().getCode());
         }
 
         // 如果最终文案为空字符串或 null，则使用 source 的原始 message 覆盖
-        if (StrUtil.isEmpty(context.getFinalMessage())) {
+        if (StringUtil.isEmpty(context.getFinalMessage())) {
             context.setFinalMessage(context.getSource().getMessage());
         }
     }

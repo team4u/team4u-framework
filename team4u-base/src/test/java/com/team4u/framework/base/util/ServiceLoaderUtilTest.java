@@ -6,20 +6,20 @@ import org.junit.Test;
 import java.util.List;
 
 /**
- * ServiceLoaderUtil 单元测试
+ * {@link ServiceLoaderUtil} 单元测试
  */
 public class ServiceLoaderUtilTest {
 
     @Test
     public void testLoadAvailableList() {
         // 测试加载 java.sql.Driver（SPI 的常见用法）
-        // 如果环境中没有特殊的 SPI 实现，至少不应该报错并返回一个列表
+        // 若当前环境中无特定 SPI 实现，应至少返回空列表而非报错
         try {
             Class<?> clazz = Class.forName("java.sql.Driver");
             List<?> list = ServiceLoaderUtil.loadAvailableList(clazz);
             Assert.assertNotNull("加载结果不应为 null", list);
         } catch (ClassNotFoundException e) {
-            // 如果 java.sql.Driver 不存在，测试加载自身的类以确保不会崩溃
+            // 若 java.sql.Driver 不存在，则测试加载当前类以确保基础逻辑正常
             List<ServiceLoaderUtil> list = ServiceLoaderUtil.loadAvailableList(ServiceLoaderUtil.class);
             Assert.assertNotNull("加载结果不应为 null", list);
         }

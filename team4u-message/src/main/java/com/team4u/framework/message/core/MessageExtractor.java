@@ -1,7 +1,8 @@
 package com.team4u.framework.message.core;
 
-import cn.hutool.core.lang.Dict;
-import cn.hutool.json.JSONUtil;
+import java.util.Map;
+import com.team4u.framework.base.util.MapUtil;
+import com.team4u.framework.serializer.json.JsonUtil;
 
 /**
  * 消息载荷属性提取器
@@ -40,9 +41,9 @@ public interface MessageExtractor {
         @Override
         public String extractType(Object rawPayload) {
             if (rawPayload instanceof String) {
-                // 将原始文本转换为字典结构，支持深层嵌套属性的自动寻址
-                Dict dict = JSONUtil.toBean((String) rawPayload, Dict.class);
-                return dict.getByPath(typePropertyPath, String.class);
+                // 将原始文本转换为字典结构
+                Map<String, Object> dict = JsonUtil.toBean((String) rawPayload, Map.class);
+                return MapUtil.getByPath(dict, typePropertyPath, String.class);
             }
             return null;
         }

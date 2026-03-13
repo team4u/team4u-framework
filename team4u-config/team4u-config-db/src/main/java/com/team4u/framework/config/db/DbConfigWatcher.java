@@ -1,13 +1,14 @@
 package com.team4u.framework.config.db;
 
-import cn.hutool.db.Db;
-import cn.hutool.db.Entity;
+import com.team4u.framework.base.util.JdbcUtil;
 import com.team4u.framework.config.core.spi.ConfigWatcher;
 import lombok.extern.slf4j.Slf4j;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
+import java.sql.Timestamp;
 import java.util.List;
+import java.util.Map;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
@@ -18,6 +19,8 @@ import java.util.concurrent.TimeUnit;
  * 通过周期性检测 {@code system_config} 表的 {@code update_time} 最大值，
  * 实现低开销的配置变更探测。
  * </p>
+ *
+ * @author team4u
  */
 @Slf4j
 public class DbConfigWatcher implements ConfigWatcher {
@@ -150,7 +153,7 @@ public class DbConfigWatcher implements ConfigWatcher {
     private long queryMaxTimestamp() {
         try {
             String sql = "SELECT MAX(" + options.getUpdateTimeColumn() + ") AS max_time FROM " + options.getTableName();
-            List<Entity> rows = Db.use(dataSource).query(sql);
+            List<Map<String, Object>> rows = JdbcUtil.query(dataSource, sql);
             if (rows.isEmpty()) {
                 return 0L;
             }
@@ -160,9 +163,9 @@ public class DbConfigWatcher implements ConfigWatcher {
                 return 0L;
             }
 
-            // 映射数据库时间类型为毫秒时间戳
-            if (maxTime instanceof java.sql.Timestamp) {
-                return ((java.sql.Timestamp) maxTime).getTime();
+            // 映射数据库时间类型为毫秒级时间戳
+            if (maxTime instanceof Timestamp) {
+                return ((Timestamp) maxTime).getTime();
             }
 
             return Long.parseLong(maxTime.toString());

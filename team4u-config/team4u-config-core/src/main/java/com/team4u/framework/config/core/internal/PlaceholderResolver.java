@@ -1,6 +1,6 @@
 package com.team4u.framework.config.core.internal;
 
-import cn.hutool.core.util.StrUtil;
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
 
 import java.util.HashSet;
@@ -61,7 +61,7 @@ public class PlaceholderResolver {
                     "Maximum recursion depth reached for placeholder resolution: " + MAX_DEPTH);
         }
 
-        if (StrUtil.isBlank(value) || !value.contains(PREFIX)) {
+        if (StringUtil.isBlank(value) || !value.contains(PREFIX)) {
             return value;
         }
 
