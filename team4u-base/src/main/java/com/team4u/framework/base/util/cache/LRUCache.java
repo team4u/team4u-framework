@@ -26,6 +26,9 @@ public class LRUCache<K, V> implements Cache<K, V> {
      * @param capacity 最大允许存储的缓存项数量
      */
     public LRUCache(int capacity) {
+        if (capacity <= 0) {
+            throw new IllegalArgumentException("capacity must be greater than 0");
+        }
         this.capacity = capacity;
         this.map = new LinkedHashMap<K, V>(capacity, 0.75f, true) {
             @Override

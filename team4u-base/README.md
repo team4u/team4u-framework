@@ -3,12 +3,13 @@
 `team4u-base` 是整个 Team4u Framework 的基石模块。它不仅定义了框架底层的核心抽象，还提供了一系列高性能、健壮的工具类和实例管理机制，旨在为上层业务模块提供统一且可靠的支撑。
 
 ## 目录
+
 - [核心特性](#核心特性)
 - [关键组件详解](#关键组件详解)
-  - [文本模板解析器 (TextTemplate)](#文本模板解析器-texttemplate)
-  - [动态实例提供者 (DynamicInstanceProvider)](#动态实例提供者-dynamicinstanceprovider)
-  - [单例工厂 (SingletonFactory)](#单例工厂-singletonfactory)
-  - [健壮的服务加载器 (ServiceLoaderUtil)](#健壮的服务加载器-serviceloaderutil)
+    - [文本模板解析器 (TextTemplate)](#文本模板解析器-texttemplate)
+    - [动态实例提供者 (DynamicInstanceProvider)](#动态实例提供者-dynamicinstanceprovider)
+    - [单例工厂 (SingletonFactory)](#单例工厂-singletonfactory)
+    - [健壮的服务加载器 (ServiceLoaderUtil)](#健壮的服务加载器-serviceloaderutil)
 - [配置解析体系](#配置解析体系)
 - [依赖说明](#依赖说明)
 
@@ -29,9 +30,10 @@
 
 高性能的通用文本模板引擎，支持 `${property}` 格式占位符。专为高性能路由、动态配置和消息模板场景设计。
 
-*   **极致性能**：采用“预解析 + 运行时拼接”模式。在构造模板时将字符串拆分为静态段（Literal）和变量段（Placeholder），渲染时仅需简单的 `StringBuilder` 拼接，彻底避开正则表达式的运行开销。
-*   **灵活渲染**：支持通过 `Map` 或 `Function`（值提供者函数）进行渲染。
-*   **变量自发现**：支持提取模板中定义的所有变量名，并保持其出现的顺序。
+* **极致性能**：采用“预解析 + 运行时拼接”模式。在构造模板时将字符串拆分为静态段（Literal）和变量段（Placeholder），渲染时仅需简单的
+  `StringBuilder` 拼接，彻底避开正则表达式的运行开销。
+* **灵活渲染**：支持通过 `Map` 或 `Function`（值提供者函数）进行渲染。
+* **变量自发现**：支持提取模板中定义的所有变量名，并保持其出现的顺序。
 
 #### 基本用法
 
@@ -61,10 +63,10 @@ String result2 = template.render(prop -> {
 
 * **分段锁设计**：内部维护 128 个锁桶，根据 Key 的哈希值动态路由，极大提升并发吞吐量。
 * **流程透明**：
-  1. 查缓存（命中则直接返回）。
-  2. 未命中时解析配置 (Input -> Config)。
-  3. 通过工厂创建实例 (Config -> Instance)。
-  4. 存入缓存。
+    1. 查缓存（命中则直接返回）。
+    2. 未命中时解析配置 (Input -> Config)。
+    3. 通过工厂创建实例 (Config -> Instance)。
+    4. 存入缓存。
 
 ### 单例工厂 (SingletonFactory)
 
@@ -99,7 +101,7 @@ List<MyPlugin> plugins = ServiceLoaderUtil.loadAvailableList(MyPlugin.class);
 
 为了保持核心的轻量与高效，`team4u-base` 仅依赖于以下极简的技术栈：
 
-* **Hutool (Core/Cache)**：利用其成熟的工具函数和缓存算法（LRU/LFU）。
+* **自研缓存工具**：内置轻量级的 LRU、LFU 与定时过期缓存实现，避免核心模块引入额外缓存依赖。
 * **Lombok**：简化冗长的 POJO 代码。
 * **JUnit**：完备的单元测试支撑。
 

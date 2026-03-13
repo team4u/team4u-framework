@@ -41,4 +41,9 @@ public class LRUCacheTest {
         cache.clear();
         Assert.assertEquals("清空后大小应为 0", 0, cache.size());
     }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testRejectInvalidCapacity() {
+        new LRUCache<String, String>(0);
+    }
 }
