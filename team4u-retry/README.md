@@ -788,6 +788,47 @@ INLINE 的所有尝试都发生在当前进程里，不做持久化，不会跨�
 * `Accepted`：任务已经被后台接收，但还没最终完成
 * `Existing`：这次提交没有新建任务，而是命中了已有幂等记录，返回其当前状态
 
+### 注解 + MANAGED 模式下，如果“业务主键重复”会发生什么？
+
+本质上，这意味着命中了同一个幂等任务。
+MANAGED 提交是按 `taskType + idempotencyKey` 建档的；如果命中已有记录，`DefaultManagedRetryClient.submit(...)` 不会新建任务，而是直接返回 `ManagedSubmitResult.Existing`，其状态可能是：
+
+* `ACCEPTED`
+* `WAITING_RETRY`
+* `PROCESSING`
+* `SUCCEEDED`
+* `FAILED`
+* `CANCELLED`
+
+对代理 / 注解层来说，这个行为会更“安静”一些：
+
+* `Completed` 才返回真正结果
+* `Failed` 才抛业务异常
+* `Accepted` 返回 `null`
+* `Existing` 也返回 `null`
+
+这是因为代理层的 MANAGED 拦截当前只支持 `void` 返回值；命中已有幂等记录时，不会把已有任务的结果重新暴露给调用方。
+
+可以这样理解：
+
+* 如果第一次提交还在执行中，第二次会命中 `Existing`，不会再次执行业务方法；当前状态通常是 `ACCEPTED`、`WAITING_RETRY` 或 `PROCESSING`
+* 如果第一次已经成功，第二次仍然命中同一任务；状态可能是 `SUCCEEDED`，但注解模式依旧只返回 `null`
+* 如果第一次已经失败或取消，第二次也不会自动新建新任务；而是返回已有快照，状态可能是 `FAILED` 或 `CANCELLED`
+
+另外，注解模式下的幂等键不是手动传入的，而是代理基于方法调用快照自动生成的稳定 key。
+`@RetryIgnore` 参数的真实值不会纳入幂等键，所以如果两个调用只有 ignored 参数不同，它们仍可能命中同一个 MANAGED 幂等任务。
+
+因此，注解 MANAGED 遇到“业务主键重复”时，通常不会表现为“重复主键异常”，而是会被框架视为同一个幂等任务：不重复创建、不重复执行，代理层通常直接返回 `null`。
+
+如果你的业务需要显式区分下面这些语义，就不适合继续藏在注解里：
+
+* 这是第一次提交，还是命中了旧任务
+* 旧任务当前是什么状态
+* 旧任务是否已经成功、失败或取消
+* 本次提交对应的 `taskId` 是什么
+
+这种场景建议改用编程式 `ManagedRetryClient.submit(...)` 或 `Retries.managed(...)`，直接处理 `ManagedSubmitResult.Existing / Accepted / Completed` 等结果。
+
 ### MANAGED 最小接入集是什么？
 
 最小建议组合：
