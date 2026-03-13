@@ -101,7 +101,7 @@ RoutingManager customManager = RoutingManager.builder()
         .configManager(myIsolatedConfigManager)
         // 指定自定义的配置前缀（默认为 "router."），例如改为 "biz.router."
         .configPrefix("biz.router.")
-        // 指定自定义的解析器（默认使用基于 Hutool 的 JSON 解析器，支持 SPI 扩展）
+        // 指定自定义的解析器（默认使用基于 JsonUtil 的 JSON 解析器，支持 SPI 扩展）
         .configParser(new MyYamlRoutePolicyParser())
         // 手动注册带有自定义 Criteria 的表达式路由器工厂
         .addFactory(new ExpressionRouterFactory(myCriteria))
@@ -150,7 +150,7 @@ System.out.println("路由总耗时：" + trace.getCostMs() + "ms");
 
 在处理复杂对象路由（如路由结果是一个包含 host 和 port 的 JSON 对象）时，默认解析出的值通常为原生的 `LinkedHashMap`。如果直接进行类型强转极易引发 `ClassCastException`。
 
-为了解决这一痛点，`RoutingManager` 提供了带有目标类型参数的 `route` 方法，它会自动将解析结果转换为指定的 Java Bean（基于 Hutool 的 Convert）：
+为了解决这一痛点，`RoutingManager` 提供了带有目标类型参数的 `route` 方法，它会自动将解析结果转换为指定的 Java Bean（基于内部的 ConvertUtil）：
 
 ```java
 // 假设路由配置返回的是一个复杂的服务节点信息：{"host": "127.0.0.1", "port": 8080}

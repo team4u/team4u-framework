@@ -60,7 +60,7 @@ public class ByteBuddyProxyEngine implements ProxyEngine {
                     .load(classLoader)
                     .getLoaded();
 
-            // 使用 Hutool 反射工具类实例化，支持更复杂的构造场景
+            // 使用 ReflectUtil 反射工具类实例化，支持更复杂的构造场景
             return ReflectUtil.newInstance(proxyClass);
 
         } catch (Exception e) {

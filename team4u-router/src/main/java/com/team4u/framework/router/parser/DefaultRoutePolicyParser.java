@@ -9,7 +9,7 @@ import com.team4u.framework.router.spi.RoutePolicyParser;
 import java.util.ArrayList;
 
 /**
- * 默认的路由策略解析器 (基于 Hutool JSON)
+ * 默认的路由策略解析器 (基于 JsonUtil)
  *
  * @author n197
  */

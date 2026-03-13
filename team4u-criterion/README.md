@@ -635,7 +635,7 @@ public static <T> Value<T> create(String token, Function<String, T> converter, C
 | 转换器 ID | 实现类 | 功能 | 支持的输入 |
 |---------|--------|------|-----------|
 | `date` | `DateValueConverter` | 日期转换，支持 `now` 关键字 | `Date`、日期字符串、`"now"` |
-| `version` | `VersionValueConverter` | 语义化版本号转换（基于 Hutool） | 版本字符串（如 `"1.2.3"`） |
+| `version` | `VersionValueConverter` | 语义化版本号转换 | 版本字符串（如 `"1.2.3"`） |
 | `number` | `NumberValueConverter` | 数值转换（使用 `FastNumberUtil` 转为 `Long`/`Double`） | `Number`、数字字符串 |
 | `string` | `StringValueConverter` | 字符串转换 | 任意对象（调用 `toString()`） |
 | `size` | `SizeValueConverter` | 大小/长度转换 | `Collection`、`Map`、`Array`、`CharSequence` |
