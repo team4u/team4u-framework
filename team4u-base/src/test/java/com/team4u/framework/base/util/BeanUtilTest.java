@@ -1,5 +1,6 @@
 package com.team4u.framework.base.util;
 
+import lombok.Data;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -64,46 +65,15 @@ public class BeanUtilTest {
         Assert.assertEquals("Beijing", city);
     }
 
-    // 测试用的辅助类
+    @Data
     public static class TestUser {
         private String userName;
         private int userAge;
         private TestAddress address;
-
-        public String getUserName() {
-            return userName;
-        }
-
-        public void setUserName(String userName) {
-            this.userName = userName;
-        }
-
-        public int getUserAge() {
-            return userAge;
-        }
-
-        public void setUserAge(int userAge) {
-            this.userAge = userAge;
-        }
-
-        public TestAddress getAddress() {
-            return address;
-        }
-
-        public void setAddress(TestAddress address) {
-            this.address = address;
-        }
     }
 
+    @Data
     public static class TestAddress {
         private String city;
-
-        public String getCity() {
-            return city;
-        }
-
-        public void setCity(String city) {
-            this.city = city;
-        }
     }
 }
