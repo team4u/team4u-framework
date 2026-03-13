@@ -79,7 +79,7 @@ public class ClassUtilTest {
                 TestInterface.class
         );
 
-        Assert.assertTrue("应至少扫描到一个实现类", classes.size() >= 1);
+        Assert.assertFalse("应至少扫描到一个实现类", classes.isEmpty());
         Assert.assertTrue("应包含 TestImplement 类", classes.contains(TestImplement.class));
         Assert.assertFalse("不应包含接口本身", classes.contains(TestInterface.class));
     }
