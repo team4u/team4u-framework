@@ -38,7 +38,7 @@
 
 ```xml
 <dependency>
-    <groupId>io.github.jayblue98</groupId>
+    <groupId>com.team4u</groupId>
     <artifactId>team4u-serializer-jackson</artifactId>
     <version>${version}</version>
 </dependency>
@@ -48,7 +48,7 @@
 
 ```xml
 <dependency>
-    <groupId>io.github.jayblue98</groupId>
+    <groupId>com.team4u</groupId>
     <artifactId>team4u-serializer-json</artifactId>
     <version>${version}</version>
 </dependency>
