@@ -1,6 +1,6 @@
 [返回总目录](../README.md)
 
-# 契约翻译引擎模块 (team4u-translator)
+# 契约翻译模块 (team4u-translator)
 
 [![JDK 8+](https://img.shields.io/badge/JDK-8+-green.svg)](https://openjdk.java.net/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
@@ -8,40 +8,104 @@
 ## 目录
 
 - [简介](#简介)
-- [核心机制](#核心机制)
-- [快速入门](#快速入门)
-- [执行管线原理](#执行管线原理)
+- [核心模型](#核心模型)
+- [工作流程](#工作流程)
+- [快速开始](#快速开始)
+- [进阶示例](#进阶示例)
 - [扩展渲染器](#扩展渲染器)
+- [当前约束与说明](#当前约束与说明)
 
 ---
 
 ## 简介
 
-`team4u-translator` 是一个以现代分布式架构、领域驱动设计（DDD）以及高可用微服务治理视角为基础构建的**系统边界契约防腐与转化网关**。
+`team4u-translator` 用于把内部系统返回的原始响应 `RawResponse`，按路由规则翻译成对外暴露的统一结果 `TranslatedResponse`。
 
-在现代架构中，内部微服务拥有独立的异常或状态码体系，而对外的输出（如 App、第三方系统）必须统一控制。本模块利用团队已有生态（极速路由、策略链、动态代理等），彻底重塑了转换方案，达到了“零侵入与解耦”的设计原则。
+它适合放在系统边界层使用，例如：
 
-### 核心优势
+- 将内部异常码映射成统一的业务错误码
+- 将内部报错文案替换成用户可读的提示信息
+- 在输出文案中插入上下文变量，如 `traceId`、业务动作、请求参数摘要
 
-1. **彻底无侵入 (Zero Intrusion)**：配合 Spring AOP 或全局异常拦截网关，业务代码只负责正常的异常抛出，翻译转换动作被透明挂载于框架层。
-2. **读写分离与不可变性**：全局配置 (`ErrorDef`) 为只读引用，引擎每次计算均产出崭新的不可变结果对象 (`TranslatedResponse`)，杜绝并发污染。
-3. **管线分离与动态渲染**：基于 `team4u-policy` 提供有序责任链支持，内置国际化、变量替换与智能兜底三大核心管线节点，职责各自独立。
-4. **高层治理**：支持链路追踪 (TraceId)、日志级别动态下发 (LogLevel) 等高阶配置，为企业的可观测性打通最后一公里。
+模块本身只负责“翻译”这件事，核心依赖：
 
----
-
-## 核心机制
-
-本模块的核心运转依然坚持**三段式流水线架构**：
-
-1. **上下文组装 (Context Build)**：将被翻译的异常或原始数据 `RawResponse`，连同追踪 ID 等信息组装进 `MatchContext` 执行沙箱中。
-2. **极速路由决策 (Routing Target)**：通过给定的 Router ID 向 `RoutingManager` 寻址，获取最佳的静态映射规则节点（`ErrorDef` 实例）。
-   *   **组合扩展**：支持使用 `composite` 类型路由器。你可以将“业务定制翻译规则”与“全局通用翻译规则”通过 ID 关联进行串联。引擎会优先尝试匹配业务私有规则，若无匹配则平滑降级至通用规则，实现翻译策略的层级复用。
-3. **责任链渲染 (Pipeline Render)**：组装出 `RenderContext` 后加载流转管道。依次通过**兜底 -> 国际化 -> 模板变量替换**的三道工序，最终构建出带追踪戳的 `TranslatedResponse` 交付给最终触点。
+- [team4u-router](../team4u-router/README.md)：根据 `routerId` 找到命中的 `ErrorDef`
+- [team4u-policy](../team4u-policy/README.md)：按优先级执行渲染策略链
 
 ---
 
-## 快速入门
+## 核心模型
+
+### `ResponseTranslator`
+
+统一入口接口：
+
+```java
+TranslatedResponse translate(RawResponse source, String routerId, Map<String, Object> args);
+```
+
+- `source`：待翻译的原始响应
+- `routerId`：路由规则标识
+- `args`：本次翻译的动态参数，例如 `traceId`、模板变量等
+
+### `RawResponse`
+
+表示上游系统的原始输出，包含：
+
+- `domain`：来源域或来源系统
+- `code`：原始错误码
+- `message`：原始消息
+- `cause`：可选异常对象
+
+### `ErrorDef`
+
+路由命中后返回的目标定义，当前包含：
+
+- `code`：翻译后的目标错误码
+- `i18nKey`：国际化键
+- `defaultMsg`：默认文案模板
+- `logLevel`：扩展字段，当前默认引擎不消费
+
+### `TranslatedResponse`
+
+最终输出结果，包含：
+
+- `code`
+- `message`
+- `traceId`
+
+### `RenderPolicy`
+
+渲染策略 SPI。内置实现包括：
+
+- `I18nRenderPolicy`
+- `TemplateRenderPolicy`
+- `FallbackRenderPolicy`
+
+---
+
+## 工作流程
+
+一次翻译的执行过程如下：
+
+1. 调用 `ResponseTranslator.translate(...)`
+2. 用 `RawResponse` 和 `args` 构造路由上下文
+3. 通过 `RoutingManager` 按 `routerId` 查找匹配的 `ErrorDef`
+4. 若未命中路由，直接返回原始 `code` 和 `message`
+5. 若命中路由，构造 `RenderContext`
+6. 依次执行命中的 `RenderPolicy`
+7. 输出 `TranslatedResponse`
+
+从当前源码行为看，几个关键点需要特别注意：
+
+- `traceId` 只从 `args.get("traceId")` 提取
+- 模板渲染会自动注入 `rawCode` 和 `rawMessage`
+- 当目标 `code` 或 `message` 为空时，兜底策略会回填原始值
+- 国际化策略当前是占位式实现，不是完整的消息源集成
+
+---
+
+## 快速开始
 
 ### 引入依赖
 
@@ -53,37 +117,46 @@
 </dependency>
 ```
 
-### 发起翻译
+### 发起一次翻译
 
 ```java
-// 1. 获取全局唯一的翻译门面
+import com.team4u.framework.translator.api.ResponseTranslator;
+import com.team4u.framework.translator.engine.DefaultResponseTranslator;
+import com.team4u.framework.translator.model.RawResponse;
+import com.team4u.framework.translator.model.TranslatedResponse;
+
+import java.util.HashMap;
+import java.util.Map;
+
 ResponseTranslator translator = new DefaultResponseTranslator();
 
-// 2. 模拟某次微服务异常返回：原始响应对象
-RawResponse request = RawResponse.of("ORDER_CENTER", "ORDER_001", "上层订单服务调用失联"); 
+RawResponse source = RawResponse.of(
+        "ORDER_CENTER",
+        "ORDER_001",
+        "上游订单服务暂时不可用"
+);
 
-// 3. 构建该次拦截或诊断需要的外部附加透传参数
-Map<String, Object> additionalArgs = new HashMap<>();
-additionalArgs.put("traceId", "acbsad-213csa");
+Map<String, Object> args = new HashMap<>();
+args.put("traceId", "trace-20260314-001");
+args.put("action", "提交订单");
 
-// 4. 发起转换
-// "error_router" 是配置中心/路由中心创建的专门路由映射标识（对应 json 例如：router.error_router）
-TranslatedResponse response = translator.translate(request, "error_router", additionalArgs);
+TranslatedResponse response = translator.translate(source, "error_router", args);
 
-// 5. 使用或展示最终转换后的契约数据
-System.out.println("给用户展示的码: " + response.getCode());
-System.out.println("给用户展示的文案: " + response.getMessage());
-System.out.println("该异常的链路追踪标识: " + response.getTraceId());
+System.out.println(response.getCode());
+System.out.println(response.getMessage());
+System.out.println(response.getTraceId());
 ```
 
----
+其中：
 
-## 执行管线原理
+- `error_router` 是路由规则标识
+- 实际路由规则由 `team4u-router` 负责解析与命中
+- 命中的目标值需要能转换成 `ErrorDef`
 
-### 配置的对应关系
-当上层经过 `translator.translate` 并顺利通过底层 `RoutingManager` 时，对应的静态 `ErrorDef` 定义会被提取。
+### 一个基础路由示例
 
-**路由定义 (JSON示例) :**
+下面的示例展示如何把上游错误翻译成统一契约：
+
 ```json
 {
   "id": "error_router",
@@ -92,99 +165,197 @@ System.out.println("该异常的链路追踪标识: " + response.getTraceId());
     {
       "condition": "domain == 'ORDER_CENTER'",
       "value": {
-          "code": "G_SYSTEM_DOWN",
-          "i18nKey": "err.order.timeout",
-          "logLevel": "WARN",
-          "defaultMsg": "当前网络开小差了系统反馈: [${rawMessage}], 交易链路Id: ${traceId}"
+        "code": "ORDER_SERVICE_UNAVAILABLE",
+        "defaultMsg": "操作失败：${action}，请稍后重试。原始原因：${rawMessage}"
       }
     }
   ]
 }
 ```
 
-### 组合路由 (Composite Router) 实战示例
-针对“业务定制”与“全局公用”规则共存的翻译场景：
+如果当前请求参数中包含：
 
-**1. 业务线 A 专用规则 (`translator.biz-order`)**
+```java
+args.put("action", "提交订单");
+```
+
+则最终返回的消息形如：
+
+```text
+操作失败：提交订单，请稍后重试。原始原因：上游订单服务暂时不可用
+```
+
+---
+
+## 进阶示例
+
+### 1. 组合路由：业务规则优先，全局规则兜底
+
+当某条业务线需要优先覆盖全局翻译规则时，可以借助 `composite` 路由器组合多个路由定义。
+
+业务专用规则：
+
 ```json
 {
+  "id": "translator.biz-order",
   "type": "map",
   "rules": [
-    { "condition": "PAY_FAIL", "value": { "code": "E001", "defaultMsg": "支付处理失败，请检查余额" } }
+    {
+      "condition": "PAY_FAIL",
+      "value": {
+        "code": "ORDER_PAY_FAILED",
+        "defaultMsg": "订单支付失败，请检查余额或稍后重试"
+      }
+    }
   ]
 }
 ```
 
-**2. 系统全局通用规则 (`translator.system`)**
+全局规则：
+
 ```json
 {
+  "id": "translator.system",
   "type": "expression",
   "rules": [
-    { "condition": "rawCode == 'DB_TIMEOUT'", "value": { "code": "S999", "defaultMsg": "数据库繁忙" } }
+    {
+      "condition": "code == 'DB_TIMEOUT'",
+      "value": {
+        "code": "SYSTEM_BUSY",
+        "defaultMsg": "系统繁忙，请稍后再试"
+      }
+    }
   ],
-  "fallbackValue": { "code": "UNKNOWN", "defaultMsg": "系统未知报错: ${rawMessage}" }
+  "fallbackValue": {
+    "code": "UNKNOWN_ERROR",
+    "defaultMsg": "系统异常：${rawMessage}"
+  }
 }
 ```
 
-**3. 最终网关入口组合逻辑 (`translator.main`)**
+组合入口：
+
 ```json
 {
   "id": "translator.main",
   "type": "composite",
   "ext": {
     "delegates": [
-      "translator.biz-order",   // 高优先级：先匹配业务私有定义
-      "translator.system"      // 低优先级：后匹配系统全局兜底
+      "translator.biz-order",
+      "translator.system"
     ]
   }
 }
 ```
 
-在代码中，你只需调用 `translator.translate(request, "translator.main", args)`，即可享受到由于“订单业务规则”与“通用报错中心”聚合带来的契约翻译便利。
+此时可直接调用：
 
-### 内置的渲染管道流转
+```java
+TranslatedResponse response = translator.translate(source, "translator.main", args);
+```
 
-命中路由规则后，会加载 `RenderContext` 并按照内置 `RenderPolicy` 接口的优先级别进行组装加工：
+### 2. 国际化键示例
 
-1. **`FallbackRenderPolicy`（优先级：最高，保证前置兜底）**  
-   若静态配置中缺失必要的 `code` 或者是 `defaultMsg`，兜底策略将优先使用 `RawResponse` 中的对应来源信息将其填满。
-2. **`I18nRenderPolicy`（优先级：中级，处理多语境）**  
-   该节点将探索 `ErrorDef` 中是否定义了 `i18nKey`。如果发现且本地多语言源存在该语境，将直接覆写上个管线传来的默认文案；若无，安静路过。
-3. **`TemplateRenderPolicy`（优先级：默认，完成最终拼装）**  
-   执行真正的变量格式化动作。将文本中类似 `${xxx}` 的占位符自动匹配透传的 `args` 以及 `rawCode` 或 `rawMessage` 占位，形成人类可读的最终报错。
+如果路由目标中配置了 `i18nKey`，内置 `I18nRenderPolicy` 会尝试解析对应文案：
+
+```json
+{
+  "id": "error_router",
+  "type": "expression",
+  "rules": [
+    {
+      "condition": "domain == 'ORDER_CENTER'",
+      "value": {
+        "code": "ORDER_INVALID",
+        "i18nKey": "order.invalid",
+        "defaultMsg": "订单不可用"
+      }
+    }
+  ]
+}
+```
+
+按当前实现，`i18nKey = "order.invalid"` 会被解析为：
+
+```text
+Order has been invalid
+```
+
+如果未找到对应国际化内容，则继续使用 `defaultMsg`。
+
+### 3. 模板变量说明
+
+模板渲染支持两类变量：
+
+- 调用方透传的 `args`
+- 框架自动注入的 `rawCode`、`rawMessage`
+
+示例：
+
+```json
+{
+  "code": "SYSTEM_ERROR",
+  "defaultMsg": "内部异常[${rawCode}]，原因：${rawMessage}。业务操作：${action}"
+}
+```
+
+如果 `action = 查询明细`，则消息会被渲染为：
+
+```text
+内部异常[NPE]，原因：空指针异常。业务操作：查询明细
+```
 
 ---
 
 ## 扩展渲染器
 
-如果内置管线仍未满足特定需求（如增加脱敏、字段增补），你只需要继承 `RenderPolicy` 接口即可享受 SPI 动态织入的便捷：
+如果内置策略不满足需求，可以实现自定义 `RenderPolicy`，例如在模板渲染后做脱敏处理。
 
-1. **编写自定义策略实现类**
-   ```java
-   public class MyDesensitizationPolicy implements RenderPolicy {
-       @Override
-       public int priority() {
-           return NORMAL - 100; // 在模板之后执行，清理不当文字
-       }
+### 编写策略
 
-       @Override
-       public boolean supports(RenderContext context) {
-           return true; 
-       }
+```java
+import com.team4u.framework.translator.model.RenderContext;
+import com.team4u.framework.translator.render.RenderPolicy;
 
-       @Override
-       public void render(RenderContext context) {
-           String currentMsg = context.getFinalMessage();
-           if (currentMsg != null && currentMsg.contains("138")) {
-               context.setFinalMessage(currentMsg.replaceAll("138\\d{8}", "138****"));
-           }
-       }
-   }
-   ```
+public class MyDesensitizationPolicy implements RenderPolicy {
 
-2. **追加 SPI 声明**  
-   在工程根路径新建或进入文本文件：`src/main/resources/META-INF/services/com.team4u.framework.translator.render.RenderPolicy`，增加全限定类路径即可：
-   ```text
-   com.yourcompany.project.MyDesensitizationPolicy
-   ```
-   下次随着引擎启动，你的这道管线屏障即插即用生效。
+    @Override
+    public int priority() {
+        return NORMAL + 100;
+    }
+
+    @Override
+    public boolean supports(RenderContext context) {
+        return true;
+    }
+
+    @Override
+    public void render(RenderContext context) {
+        String message = context.getFinalMessage();
+        if (message != null && message.contains("138")) {
+            context.setFinalMessage(message.replaceAll("138\\d{8}", "138****"));
+        }
+    }
+}
+```
+
+### 注册 SPI
+
+在 `src/main/resources/META-INF/services/com.team4u.framework.translator.render.RenderPolicy` 中添加实现类全限定名：
+
+```text
+com.yourcompany.project.MyDesensitizationPolicy
+```
+
+启动后，`DefaultResponseTranslator` 会通过 SPI 与包扫描自动注册可用策略。
+
+---
+
+## 当前约束与说明
+
+- 当前默认引擎只负责翻译，不内置 Spring AOP、异常拦截或网关封装能力。
+- `logLevel` 虽然存在于 `ErrorDef` 中，但默认翻译流程不会使用它。
+- `I18nRenderPolicy` 当前是演示型实现，默认只内置少量 mock 行为；如果需要真实国际化能力，通常需要自定义策略或扩展实现。
+- 只有当消息中包含模板占位符时，`TemplateRenderPolicy` 才会参与渲染。
+- 当模板变量缺失时，未命中的占位符会保留原样。
+- 未命中任何路由规则时，返回值等同于原始输入的 `code` 和 `message`，`traceId` 为 `null`。
