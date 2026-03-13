@@ -52,7 +52,8 @@ public class BeanUtil {
                             && !isSimpleType(field.getType())) {
                         convertedValue = toBean((Map<?, ?>) value, field.getType(), options);
                     } else {
-                        convertedValue = ConvertUtil.convert(field.getType(), value);
+                        // 传入 getGenericType 以保留泛型信息，支持如 List<Integer> 的转换
+                        convertedValue = ConvertUtil.convert(field.getGenericType(), value);
                     }
                     field.set(bean, convertedValue);
                 }
