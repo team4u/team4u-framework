@@ -28,7 +28,7 @@ public class TargetedDyeingInterceptorTest {
     }
 
     private void refreshRules(List<DyeingRule> rules) {
-        // 对于单元测试，直接使用 Hutool 反射替换由 Registry 自我管理的缓存变量
+        // 对于单元测试，直接使用内部反射工具替换由 Registry 自我管理的缓存变量
         ReflectUtil.setFieldValue(interceptor, "activeRules", rules);
     }
 

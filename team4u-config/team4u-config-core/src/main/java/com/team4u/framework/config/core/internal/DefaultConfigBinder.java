@@ -12,7 +12,7 @@ import java.util.Map;
 /**
  * 默认配置绑定器实现
  * <p>
- * 基于 Hutool 的 {@link BeanUtil} 和 {@link ConvertUtil} 实现配置到 Java 对象的映射。
+ * 基于内部的 {@link BeanUtil} 和 {@link ConvertUtil} 实现配置到 Java 对象的映射。
  * 支持松散绑定（自动处理驼峰、下划线、中划线等命名风格差异）以及深层嵌套对象的绑定。
  * </p>
  */
@@ -45,7 +45,7 @@ public class DefaultConfigBinder implements ConfigBinder {
             return (T) unflattenedMap;
         }
 
-        // 将 Map 数据注入到 Java Bean 中，利用 Hutool 的 CopyOptions 增强绑定灵活性
+        // 将 Map 数据注入到 Java Bean 中，利用内部的 CopyOptions 增强绑定灵活性
         CopyOptions copyOptions = CopyOptions.create()
                 .ignoreCase()
                 .ignoreError();
