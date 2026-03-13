@@ -22,9 +22,9 @@ public class LeaseExecutionContext {
      */
     private final String taskId;
     /**
-     * 任务所属的逻辑队列名称
+     * 任务所属的逻辑任务分组名称
      */
-    private final String queue;
+    private final String taskGroup;
     /**
      * 业务定义的任务类型，用于路由到对应的处理器
      */
@@ -50,7 +50,7 @@ public class LeaseExecutionContext {
      */
     private final long createdAtMillis;
     /**
-     * 任务在队列中最近一次可见（可被抢占）的时间戳（毫秒）
+     * 任务最近一次可见（可被抢占）的时间戳（毫秒）
      */
     private final long visibleAtMillis;
     /**
@@ -64,7 +64,7 @@ public class LeaseExecutionContext {
 
     @Builder
     protected LeaseExecutionContext(String taskId,
-                                    String queue,
+                                    String taskGroup,
                                     String taskType,
                                     String payload,
                                     int deliveryCount,
@@ -75,7 +75,7 @@ public class LeaseExecutionContext {
                                     long leaseExpiresAtMillis,
                                     Runnable heartbeatRequester) {
         this.taskId = taskId;
-        this.queue = queue;
+        this.taskGroup = taskGroup;
         this.taskType = taskType;
         this.payload = payload;
         this.deliveryCount = deliveryCount;

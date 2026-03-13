@@ -155,7 +155,7 @@ public class RecoveryHandlerLeaseTaskHandlerAdapterTest {
                         .taskId("task-1")
                         .workerId("worker-1")
                         .leaseToken("lease-1")
-                        .queue(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE)
+                        .taskGroup(RetryLeaseTaskGroups.DEFAULT_RECOVERY_TASK_GROUP)
                         .taskType("recover-payment")
                         .payload("serialized-input")
                         .build(),

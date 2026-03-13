@@ -109,17 +109,17 @@ public class LeaseWorkerLifecycleTest {
         }
 
         @Override
-        public void register(String queue, String taskType, LeaseTaskHandler handler) {
+        public void register(String taskGroup, String taskType, LeaseTaskHandler handler) {
         }
 
         @Override
-        public Optional<LeaseTaskHandler> get(String queue, String taskType) {
+        public Optional<LeaseTaskHandler> get(String taskGroup, String taskType) {
             return Optional.of(handler);
         }
 
         @Override
-        public Set<LeaseSubscription> subscriptions() {
-            return Collections.singleton(LeaseSubscription.builder().queue("retry-q").build());
+        public Set<LeaseTaskGroupSubscription> subscriptions() {
+            return Collections.singleton(LeaseTaskGroupSubscription.builder().taskGroup("retry-q").build());
         }
     }
 
@@ -139,7 +139,7 @@ public class LeaseWorkerLifecycleTest {
                         .taskId("task-1")
                         .workerId(request.getWorkerId())
                         .leaseToken("lease-1")
-                        .queue("retry-q")
+                        .taskGroup("retry-q")
                         .taskType("recover-payment")
                         .payload("{}")
                         .build();

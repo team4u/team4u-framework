@@ -25,7 +25,7 @@ public class LeaseLifecycleExecutionContext extends LeaseExecutionContext {
                                           Runnable heartbeatRequester,
                                           LeaseRuntimeClient runtimeClient) {
         super(grant.getTaskId(),
-                grant.getQueue(),
+                grant.getTaskGroup(),
                 grant.getTaskType(),
                 grant.getPayload(),
                 grant.getDeliveryCount(),

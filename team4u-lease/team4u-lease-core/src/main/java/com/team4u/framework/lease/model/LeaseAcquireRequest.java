@@ -33,9 +33,9 @@ public class LeaseAcquireRequest {
      * 当前工作者订阅的队列列表
      */
     @Singular
-    private final Set<LeaseSubscription> subscriptions;
+    private final Set<LeaseTaskGroupSubscription> subscriptions;
 
-    public Set<LeaseSubscription> getSubscriptions() {
+    public Set<LeaseTaskGroupSubscription> getSubscriptions() {
         if (subscriptions == null) {
             return Collections.emptySet();
         }

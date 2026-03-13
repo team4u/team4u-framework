@@ -16,7 +16,7 @@ public class RecoveryHandlerRegistryLeaseAdapterTest {
         RecoveryHandlerRegistryLeaseAdapter adapter = new RecoveryHandlerRegistryLeaseAdapter(registry);
         CapturingLeaseTaskHandler handler = new CapturingLeaseTaskHandler();
 
-        adapter.register(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE, "payment", handler);
+        adapter.register(RetryLeaseTaskGroups.DEFAULT_RECOVERY_TASK_GROUP, "payment", handler);
 
         @SuppressWarnings("rawtypes")
         RecoveryHandler recoveryHandler = registry.get("payment").orElseThrow(AssertionError::new);
@@ -33,7 +33,7 @@ public class RecoveryHandlerRegistryLeaseAdapterTest {
         RecoveryHandlerRegistryLeaseAdapter adapter = new RecoveryHandlerRegistryLeaseAdapter(registry);
         registry.register(new ObjectPayloadRecoveryHandler());
         try {
-            adapter.get(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE, "payment");
+            adapter.get(RetryLeaseTaskGroups.DEFAULT_RECOVERY_TASK_GROUP, "payment");
             Assert.fail("expected IllegalArgumentException");
         } catch (IllegalArgumentException ex) {
             Assert.assertTrue(ex.getMessage().contains("StringRecoveryHandler"));

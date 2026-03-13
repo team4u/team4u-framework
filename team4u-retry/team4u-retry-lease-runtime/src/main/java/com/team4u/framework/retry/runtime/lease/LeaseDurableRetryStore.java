@@ -33,7 +33,7 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
     private final LeaseProducer producer;
     private final LeaseAdminService adminService;
     private final LeaseQueryService queryService;
-    private final String queue;
+    private final String taskGroup;
     private final RetryRecordSerializer serializer;
 
     public LeaseDurableRetryStore(LeaseBackend backend) {
@@ -41,22 +41,22 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
     }
 
     public LeaseDurableRetryStore(LeaseBackend backend, RetryRecordSerializer serializer) {
-        this(backend, backend, backend, RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE, serializer);
+        this(backend, backend, backend, RetryLeaseTaskGroups.DEFAULT_RECOVERY_TASK_GROUP, serializer);
     }
 
     public LeaseDurableRetryStore(
             LeaseProducer producer,
             LeaseAdminService adminService,
             LeaseQueryService queryService,
-            String queue) {
-        this(producer, adminService, queryService, queue, HutoolRetryRecordSerializer.INSTANCE);
+            String taskGroup) {
+        this(producer, adminService, queryService, taskGroup, HutoolRetryRecordSerializer.INSTANCE);
     }
 
     public LeaseDurableRetryStore(
             LeaseProducer producer,
             LeaseAdminService adminService,
             LeaseQueryService queryService,
-            String queue,
+            String taskGroup,
             RetryRecordSerializer serializer) {
         if (serializer == null) {
             throw new IllegalArgumentException("RetryRecordSerializer must not be null");
@@ -64,7 +64,9 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
         this.producer = producer;
         this.adminService = adminService;
         this.queryService = queryService;
-        this.queue = (queue == null || queue.trim().isEmpty()) ? RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE : queue;
+        this.taskGroup = (taskGroup == null || taskGroup.trim().isEmpty())
+                ? RetryLeaseTaskGroups.DEFAULT_RECOVERY_TASK_GROUP
+                : taskGroup;
         this.serializer = serializer;
     }
 
@@ -77,7 +79,7 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
                 .build();
         // 通过租约系统的幂等发布接口进行存盘
         LeasePublishResult publishResult = producer.publishIfAbsent(LeasePublishRequest.builder()
-                .queue(queue)
+                .taskGroup(taskGroup)
                 .taskType(request.getRequest().getTaskType())
                 .payload(serializer.serialize(record))
                 // 租约侧使用“类型|幂等键”作为业务唯一性校验，确保存储层不产生冗余任务
@@ -110,7 +112,7 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
 
     @Override
     public Optional<RetryRecord> findByIdempotencyKey(String taskType, String idempotencyKey) {
-        return queryService.getByBusinessKey(queue, businessKey(taskType, idempotencyKey)).map(this::deserialize);
+        return queryService.getByBusinessKey(taskGroup, businessKey(taskType, idempotencyKey)).map(this::deserialize);
     }
 
     @Override

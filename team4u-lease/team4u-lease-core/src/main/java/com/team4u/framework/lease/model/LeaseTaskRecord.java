@@ -25,9 +25,9 @@ public class LeaseTaskRecord {
      */
     private final String taskId;
     /**
-     * 所属队列
+     * 所属任务分组
      */
-    private final String queue;
+    private final String taskGroup;
     /**
      * 业务定义的任务类型
      */

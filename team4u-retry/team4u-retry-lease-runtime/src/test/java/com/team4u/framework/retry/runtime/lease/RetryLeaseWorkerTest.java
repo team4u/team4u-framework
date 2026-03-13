@@ -68,7 +68,7 @@ public class RetryLeaseWorkerTest {
         RecoveryHandlerRegistryLeaseAdapter adapter =
                 (RecoveryHandlerRegistryLeaseAdapter) getField(delegate, "registry");
         Assert.assertSame(registry, getField(adapter, "delegate"));
-        Assert.assertEquals(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE, getField(adapter, "queue"));
+        Assert.assertEquals(RetryLeaseTaskGroups.DEFAULT_RECOVERY_TASK_GROUP, getField(adapter, "taskGroup"));
     }
 
     /**
@@ -89,7 +89,7 @@ public class RetryLeaseWorkerTest {
         RecoveryHandlerRegistryLeaseAdapter adapter =
                 (RecoveryHandlerRegistryLeaseAdapter) getField(delegate, "registry");
         Assert.assertSame(RecoveryHandlerRegistry.global(), getField(adapter, "delegate"));
-        Assert.assertEquals(RetryLeaseQueues.DEFAULT_RECOVERY_QUEUE, getField(adapter, "queue"));
+        Assert.assertEquals(RetryLeaseTaskGroups.DEFAULT_RECOVERY_TASK_GROUP, getField(adapter, "taskGroup"));
     }
 
     /**

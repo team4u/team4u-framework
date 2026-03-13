@@ -79,7 +79,7 @@
 - 内存版无需额外初始化。
 - JDBC 版需要先创建 `lease_task` 表，初始化脚本见：
   - `team4u-lease-jdbc/src/main/resources/schema/lease_task_mysql.sql`
-- 如果需要按业务键做幂等建档，请确保 schema 已包含 `business_key` 列以及 `(queue_name, business_key)` 唯一约束。
+- 如果需要按业务键做幂等建档，请确保 schema 已包含 `business_key` 列以及 `(task_group, business_key)` 唯一约束。
 
 ### 4. 创建 Producer 并发布任务
 
@@ -88,7 +88,7 @@ LeaseProducer producer = ...;
 
 producer.publish(
     LeasePublishRequest.builder()
-        .queue("demo")
+        .taskGroup("demo")
         .taskType("demo")
         .payload("hello")
         .delayMillis(0L)
@@ -101,7 +101,7 @@ producer.publish(
 ```java
 LeasePublishResult result = producer.publishIfAbsent(
     LeasePublishRequest.builder()
-        .queue("demo")
+        .taskGroup("demo")
         .taskType("demo")
         .payload("hello")
         .businessKey("demo|order-1001")
@@ -208,7 +208,7 @@ worker.shutdown();
 
 ```mermaid
 stateDiagram-v2
-    [*] --> READY: publish/reschedule/requeueFailed
+    [*] --> READY: publish/reschedule/rescheduleFailed
     READY --> RUNNING: acquire
     RUNNING --> READY: release(delay) / lease expired
     RUNNING --> CLOSED: close(SUCCEEDED)
@@ -262,7 +262,7 @@ stateDiagram-v2
 为降低耦合度，框架将能力划分为不同角色接口。
 
 ### `LeaseProducer` (任务发布)
-业务系统通常通过该接口将待处理任务投递到租约队列中。
+业务系统通常通过该接口将待处理任务投递到租约任务分组中。
 - 创建延迟任务、异步处理任务、未来某时刻执行的任务。
 - 如果需要提交幂等，可传入 `businessKey` 并使用 `publishIfAbsent(...)`。
 
@@ -274,11 +274,11 @@ Worker 执行过程中调用的底层 API。通常只有 Worker 执行链路会�
 ### `LeaseQueryService` (查询服务)
 用于查询任务状态与任务详情。
 - 适合：控制台查询、问题排查、运维巡检、统计分析。
-- 除 `get(taskId)` 外，也支持 `getByBusinessKey(queue, businessKey)`。
+- 除 `get(taskId)` 外，也支持 `getByBusinessKey(taskGroup, businessKey)`。
 
 ### `LeaseAdminService` (管理服务)
 用于管理任务。
-- 典型能力：修改任务、重排调度时间、重新入队失败任务。
+- 典型能力：修改任务、重排调度时间、重新调度失败任务。
 - 适合：控制面、运营后台、人工干预工具。
 
 ### 管理操作示例
@@ -299,7 +299,7 @@ Optional<LeaseTaskRecord> task = queryService.getByBusinessKey("demo", "demo|ord
 adminService.reschedule(taskId, 300_000L);
 
 // 重新入队失败任务
-adminService.requeueFailed(taskId, 0L);
+adminService.rescheduleFailed(taskId, 0L);
 
 // 更新任务内容
 adminService.update(
@@ -413,7 +413,7 @@ worker.start("lease-worker-main");
 
 // 4. 发布任务
 backend.publish(LeasePublishRequest.builder()
-        .queue("order").taskType("pay").payload("{\"orderId\": 1001}").build());
+        .taskGroup("order").taskType("pay").payload("{\"orderId\": 1001}").build());
 
 // 5. 优雅停机
 // shutdown() 默认最多等待一个 leaseMillis 周期
@@ -445,7 +445,7 @@ worker.shutdownGracefully(5000);
 - 内存版可以用于生产吗？  
   不建议。内存版重启数据丢失，且不适合多实例协同。
 - 任务失败后如何再次执行？  
-  可以调用 `release(delay)` 稍后重试，或者任务进入失败态后通过 `requeueFailed` 重新入队。
+  可以调用 `release(delay)` 稍后重试，或者任务进入失败态后通过 `rescheduleFailed` 重新入队。
 - 业务处理器需要幂等吗？  
   需要。由于不是 exactly-once 语义，业务侧应自行保证幂等性。
 - `businessKey` 适合做什么？  

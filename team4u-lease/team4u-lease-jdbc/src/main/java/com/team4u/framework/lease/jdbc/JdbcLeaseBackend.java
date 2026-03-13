@@ -76,7 +76,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
                 throw new IllegalStateException("publishIfAbsent failed", e);
             }
             try {
-                LeaseTaskEntity existing = dao.findByBusinessKey(request.getQueue(), request.getBusinessKey());
+                LeaseTaskEntity existing = dao.findByBusinessKey(request.getTaskGroup(), request.getBusinessKey());
                 if (existing != null) {
                     return LeasePublishResult.builder()
                             .created(false)
@@ -161,7 +161,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
     }
 
     @Override
-    public LeaseAdminResult requeueFailed(String taskId, long delayMillis) {
+    public LeaseAdminResult rescheduleFailed(String taskId, long delayMillis) {
         validateTaskId(taskId);
         try {
             LeaseTaskEntity current = dao.findById(taskId);
@@ -172,11 +172,11 @@ public class JdbcLeaseBackend implements LeaseBackend {
                 return LeaseAdminResult.CLOSED;
             }
             long now = now();
-            return dao.requeueFailed(taskId, now + Math.max(0L, delayMillis), now) == 1
+            return dao.rescheduleFailed(taskId, now + Math.max(0L, delayMillis), now) == 1
                     ? LeaseAdminResult.APPLIED
                     : LeaseAdminResult.CLOSED;
         } catch (SQLException e) {
-            throw new IllegalStateException("requeueFailed failed: " + taskId, e);
+            throw new IllegalStateException("rescheduleFailed failed: " + taskId, e);
         }
     }
 
@@ -192,12 +192,12 @@ public class JdbcLeaseBackend implements LeaseBackend {
     }
 
     @Override
-    public Optional<LeaseTaskRecord> getByBusinessKey(String queue, String businessKey) {
-        if (StrUtil.isBlank(queue) || StrUtil.isBlank(businessKey)) {
+    public Optional<LeaseTaskRecord> getByBusinessKey(String taskGroup, String businessKey) {
+        if (StrUtil.isBlank(taskGroup) || StrUtil.isBlank(businessKey)) {
             return Optional.empty();
         }
         try {
-            LeaseTaskEntity entity = dao.findByBusinessKey(queue, businessKey);
+            LeaseTaskEntity entity = dao.findByBusinessKey(taskGroup, businessKey);
             return entity == null ? Optional.empty() : Optional.of(entity.toRecord());
         } catch (SQLException e) {
             throw new IllegalStateException("getByBusinessKey failed", e);
@@ -338,8 +338,8 @@ public class JdbcLeaseBackend implements LeaseBackend {
         ObjectUtil.defaultIfNull(request, () -> {
             throw new IllegalArgumentException("request must not be null");
         });
-        if (StrUtil.isBlank(request.getQueue())) {
-            throw new IllegalArgumentException("request.queue must not be blank");
+        if (StrUtil.isBlank(request.getTaskGroup())) {
+            throw new IllegalArgumentException("request.taskGroup must not be blank");
         }
         if (StrUtil.isBlank(request.getTaskType())) {
             throw new IllegalArgumentException("request.taskType must not be blank");
@@ -359,9 +359,9 @@ public class JdbcLeaseBackend implements LeaseBackend {
         if (request.getSubscriptions().isEmpty()) {
             throw new IllegalArgumentException("request.subscriptions must not be empty");
         }
-        for (LeaseSubscription subscription : request.getSubscriptions()) {
-            if (subscription == null || StrUtil.isBlank(subscription.getQueue())) {
-                throw new IllegalArgumentException("subscription.queue must not be blank");
+        for (LeaseTaskGroupSubscription subscription : request.getSubscriptions()) {
+            if (subscription == null || StrUtil.isBlank(subscription.getTaskGroup())) {
+                throw new IllegalArgumentException("subscription.taskGroup must not be blank");
             }
         }
     }
@@ -403,7 +403,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
         long now = now();
         return LeaseTaskEntity.builder()
                 .taskId(nextTaskId())
-                .queue(request.getQueue())
+                .taskGroup(request.getTaskGroup())
                 .taskType(request.getTaskType())
                 .payload(request.getPayload())
                 .businessKey(request.getBusinessKey())

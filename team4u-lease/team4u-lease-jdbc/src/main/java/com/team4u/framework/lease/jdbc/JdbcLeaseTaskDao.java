@@ -34,7 +34,7 @@ public class JdbcLeaseTaskDao {
     /**
      * 字段列表
      */
-    public static final String COLUMNS = "task_id, queue_name, task_type, payload, business_key, state, outcome, failure_reason, "
+    public static final String COLUMNS = "task_id, task_group, task_type, payload, business_key, state, outcome, failure_reason, "
             + "priority, delivery_count, failure_count, worker_id, lease_token, lease_expires_at, visible_at, "
             + "created_at, updated_at, version, error_message, attributes_json";
     /**
@@ -61,7 +61,7 @@ public class JdbcLeaseTaskDao {
     public void insert(LeaseTaskEntity entity) throws SQLException {
         db.insert(Entity.create(TABLE_NAME)
                 .set("task_id", entity.getTaskId())
-                .set("queue_name", entity.getQueue())
+                .set("task_group", entity.getTaskGroup())
                 .set("task_type", entity.getTaskType())
                 .set("payload", entity.getPayload())
                 .set("business_key", entity.getBusinessKey())
@@ -96,10 +96,10 @@ public class JdbcLeaseTaskDao {
         return rows.isEmpty() ? null : toEntity(rows.get(0));
     }
 
-    public LeaseTaskEntity findByBusinessKey(String queue, String businessKey) throws SQLException {
+    public LeaseTaskEntity findByBusinessKey(String taskGroup, String businessKey) throws SQLException {
         List<Entity> rows = db.query(
-                "SELECT " + COLUMNS + " FROM " + TABLE_NAME + " WHERE queue_name = ? AND business_key = ?",
-                queue,
+                "SELECT " + COLUMNS + " FROM " + TABLE_NAME + " WHERE task_group = ? AND business_key = ?",
+                taskGroup,
                 businessKey);
         return rows.isEmpty() ? null : toEntity(rows.get(0));
     }
@@ -113,20 +113,20 @@ public class JdbcLeaseTaskDao {
      * @return 任务候选者列表
      * @throws SQLException SQL 异常
      */
-    public List<LeaseTaskEntity> findAcquirableTasks(Set<LeaseSubscription> subscriptions, long now, int limit)
+    public List<LeaseTaskEntity> findAcquirableTasks(Set<LeaseTaskGroupSubscription> subscriptions, long now, int limit)
             throws SQLException {
         if (subscriptions == null || subscriptions.isEmpty()) {
             return Collections.emptyList();
         }
         List<Object> params = new ArrayList<Object>();
         // 对应 UNION ALL 的第一部分：查找所有 READY 状态且已过可见时间的任务
-        for (LeaseSubscription subscription : subscriptions) {
-            params.add(subscription.getQueue());
+        for (LeaseTaskGroupSubscription subscription : subscriptions) {
+            params.add(subscription.getTaskGroup());
         }
         params.add(now);
         // 对应 UNION ALL 的第二部分：查找所有 RUNNING 状态且租约已过期的任务（故障接管）
-        for (LeaseSubscription subscription : subscriptions) {
-            params.add(subscription.getQueue());
+        for (LeaseTaskGroupSubscription subscription : subscriptions) {
+            params.add(subscription.getTaskGroup());
         }
         params.add(now);
         params.add(limit);
@@ -332,7 +332,7 @@ public class JdbcLeaseTaskDao {
     /**
      * 将失败任务重新放入队列
      */
-    public int requeueFailed(String taskId, long visibleAt, long now) throws SQLException {
+    public int rescheduleFailed(String taskId, long visibleAt, long now) throws SQLException {
         Entity entity = Entity.create(TABLE_NAME);
         entity.set("state", LeaseTaskState.READY.name());
         entity.set("outcome", null);
@@ -557,9 +557,9 @@ public class JdbcLeaseTaskDao {
      * 该方法是 query 和 count 共用的 WHERE 构建逻辑，确保过滤条件只维护在一处。
      */
     private void buildWhereFromQuery(StringBuilder sql, List<Object> params, LeaseQueryRequest request) {
-        if (request.getQueue() != null) {
-            sql.append(" AND queue_name = ?");
-            params.add(request.getQueue());
+        if (request.getTaskGroup() != null) {
+            sql.append(" AND task_group = ?");
+            params.add(request.getTaskGroup());
         }
         if (request.getTaskType() != null) {
             sql.append(" AND task_type = ?");
@@ -601,7 +601,7 @@ public class JdbcLeaseTaskDao {
     private LeaseTaskEntity toEntity(Entity row) {
         return LeaseTaskEntity.builder()
                 .taskId(row.getStr("task_id"))
-                .queue(row.getStr("queue_name"))
+                .taskGroup(row.getStr("task_group"))
                 .taskType(row.getStr("task_type"))
                 .payload(row.getStr("payload"))
                 .businessKey(row.getStr("business_key"))

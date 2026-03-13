@@ -20,11 +20,11 @@ public class InMemoryLeaseBackendTest extends AbstractLeaseContractSupport {
     public void testListCanFilterByQueueTaskTypeAndState() {
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
         backend.publish(
-                LeasePublishRequest.builder().queue("queue-a").taskType("pay").payload("a").priority(5).build());
-        backend.publish(LeasePublishRequest.builder().queue("queue-b").taskType("mail").payload("b").build());
+                LeasePublishRequest.builder().taskGroup("group-a").taskType("pay").payload("a").priority(5).build());
+        backend.publish(LeasePublishRequest.builder().taskGroup("group-b").taskType("mail").payload("b").build());
 
         Assert.assertEquals(1, backend.list(LeaseQueryRequest.builder()
-                .queue("queue-a")
+                .taskGroup("group-a")
                 .taskType("pay")
                 .state(LeaseTaskState.READY)
                 .build()).getItems().size());
@@ -34,7 +34,7 @@ public class InMemoryLeaseBackendTest extends AbstractLeaseContractSupport {
     public void testSnapshotReflectsInternalStoredTasks() {
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
         String taskId = backend.publish(LeasePublishRequest.builder()
-                .queue("queue-a")
+                .taskGroup("group-a")
                 .taskType("pay")
                 .payload("a")
                 .build());
@@ -42,7 +42,7 @@ public class InMemoryLeaseBackendTest extends AbstractLeaseContractSupport {
         Map<String, InMemoryLeaseBackend.StoredTask> snapshot = backend.snapshot();
         Assert.assertTrue(snapshot.containsKey(taskId));
         Assert.assertEquals(LeaseTaskState.READY, snapshot.get(taskId).getState());
-        Assert.assertEquals("queue-a", snapshot.get(taskId).getQueue());
+        Assert.assertEquals("group-a", snapshot.get(taskId).getTaskGroup());
         Assert.assertEquals("pay", snapshot.get(taskId).getTaskType());
     }
 }
