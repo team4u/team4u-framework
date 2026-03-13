@@ -4,7 +4,6 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.team4u.framework.log.config.FinOpsConfigRepository;
 import com.team4u.framework.log.config.FinOpsConfigRepository.FinOpsConfig;
-import com.team4u.framework.log.jackson.JacksonLogSerializer;
 import com.team4u.framework.mask.jackson.MaskConfig;
 import com.team4u.framework.log.jackson.TruncatingStringSerializer;
 import com.team4u.framework.log.support.TestLogHelper;
@@ -23,23 +22,18 @@ public class LogEngineTest {
 
     private LogEngine engine;
     private TestLogHelper logHelper;
-    private FinOpsConfig defaultFinOpsConfig;
 
     @Before
     public void setup() {
         logHelper = TestLogHelper.start();
         engine = LogEngine.getInstance();
-        // 保存默认配置并在测试结束后恢复，如果需要
-        defaultFinOpsConfig = FinOpsConfigRepository.getInstance().get();
-        FinOpsConfigRepository.getInstance().get().setMaxStringLength(2000);
-        FinOpsConfigRepository.getInstance().get().setMaxLogLength(5000);
+        FinOpsConfigRepository.getInstance().reset();
     }
 
     @After
     public void teardown() {
         logHelper.stop();
-        FinOpsConfigRepository.getInstance().get().setMaxStringLength(defaultFinOpsConfig.getMaxStringLength());
-        FinOpsConfigRepository.getInstance().get().setMaxLogLength(defaultFinOpsConfig.getMaxLogLength());
+        FinOpsConfigRepository.getInstance().reset();
     }
 
     @Test
@@ -58,7 +52,8 @@ public class LogEngineTest {
 
     @Test
     public void testStringTruncation() {
-        FinOpsConfigRepository.getInstance().get().setMaxStringLength(10);
+        FinOpsConfigRepository repository = FinOpsConfigRepository.getInstance();
+        repository.replace(repository.get().withMaxStringLength(10));
 
         LogEvent event = new LogEvent().setAction("TestTruncation");
         event.getPayload().put("longString", "0123456789ABCDEF");
@@ -70,7 +65,8 @@ public class LogEngineTest {
 
     @Test
     public void testBeanStringTruncation() {
-        FinOpsConfigRepository.getInstance().get().setMaxStringLength(10);
+        FinOpsConfigRepository repository = FinOpsConfigRepository.getInstance();
+        repository.replace(repository.get().withMaxStringLength(10));
 
         LogEvent event = new LogEvent().setAction("VeryLongActionName");
 
@@ -92,7 +88,8 @@ public class LogEngineTest {
 
     @Test
     public void testLogTruncation() {
-        FinOpsConfigRepository.getInstance().get().setMaxLogLength(20);
+        FinOpsConfigRepository repository = FinOpsConfigRepository.getInstance();
+        repository.replace(repository.get().withMaxLogLength(20));
 
         LogEvent event = new LogEvent().setAction("VeryLongActionNameThatWillBeTruncated");
 
@@ -103,10 +100,10 @@ public class LogEngineTest {
 
     @Test
     public void testAttributeSnapshotTakesPrecedence() throws Exception {
-        FinOpsConfigRepository.getInstance().get().setMaxStringLength(50);
+        FinOpsConfigRepository repository = FinOpsConfigRepository.getInstance();
+        repository.replace(repository.get().withMaxStringLength(50));
 
-        FinOpsConfig snapshot = new FinOpsConfig();
-        snapshot.setMaxStringLength(5);
+        FinOpsConfig snapshot = FinOpsConfig.defaults().withMaxStringLength(5);
 
         ObjectMapper mapper = new ObjectMapper();
         SimpleModule module = new SimpleModule();
@@ -124,7 +121,8 @@ public class LogEngineTest {
 
     @Test
     public void testFallbackToGlobalConfigWhenAttributeMissing() throws Exception {
-        FinOpsConfigRepository.getInstance().get().setMaxStringLength(6);
+        FinOpsConfigRepository repository = FinOpsConfigRepository.getInstance();
+        repository.replace(repository.get().withMaxStringLength(6));
 
         ObjectMapper mapper = new ObjectMapper();
         SimpleModule module = new SimpleModule();
@@ -139,7 +137,7 @@ public class LogEngineTest {
     @Test
     public void testDefaultFallbackWhenSnapshotAndFinOpsAreNull() throws Exception {
         // 验证全局 FinOps 配置的默认截断行为
-        FinOpsConfigRepository.getInstance().get().setMaxStringLength(2000);
+        FinOpsConfigRepository.getInstance().replace(FinOpsConfig.defaults());
 
         ObjectMapper mapper = new ObjectMapper();
         SimpleModule module = new SimpleModule();
@@ -192,14 +190,14 @@ public class LogEngineTest {
 
     @Test
     public void testReset() {
-        FinOpsConfigRepository.getInstance().get().setMaxLogLength(100);
-        FinOpsConfigRepository.getInstance().get().setMaxStringLength(100);
+        FinOpsConfigRepository repository = FinOpsConfigRepository.getInstance();
+        repository.replace(FinOpsConfig.defaults().withMaxLogLength(100).withMaxStringLength(100));
 
         engine.reset();
 
         LogEvent event = new LogEvent().setAction("TestReset");
         event.getPayload().put("long", "01234567890123456789");
 
-        Assert.assertEquals(100, FinOpsConfigRepository.getInstance().get().getMaxLogLength());
+        Assert.assertEquals(FinOpsConfig.defaults().getMaxLogLength(), repository.get().getMaxLogLength());
     }
 }
