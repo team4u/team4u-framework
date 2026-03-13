@@ -6,6 +6,8 @@ import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.trace.RouteTrace;
 
+import java.lang.reflect.Type;
+
 /**
  * 抽象路由器，处理通用的类型转换和兜底逻辑
  *
@@ -25,7 +27,7 @@ public abstract class AbstractRouter implements Router {
 
     @SuppressWarnings("unchecked")
     @Override
-    public <T> RouteResult<T> route(Object request, Class<T> targetType) {
+    public <T> RouteResult<T> route(Object request, Type targetType) {
         // 调用子类的匹配逻辑
         RouteResult<?> result = route(request);
         if (result == null || result.isNotMatch()) {
@@ -37,12 +39,16 @@ public abstract class AbstractRouter implements Router {
             return RouteResult.matched(null, result.getMatchedConditions());
         }
 
-        if (targetType != null && !targetType.isInstance(rawValue)) {
+        if (targetType != null && !isInstance(targetType, rawValue)) {
             T convertedValue = ConvertUtil.convert(targetType, rawValue);
             return RouteResult.matched(convertedValue, result.getMatchedConditions());
         }
 
         return (RouteResult<T>) result;
+    }
+
+    private boolean isInstance(Type targetType, Object rawValue) {
+        return targetType instanceof Class && ((Class<?>) targetType).isInstance(rawValue);
     }
 
     /**

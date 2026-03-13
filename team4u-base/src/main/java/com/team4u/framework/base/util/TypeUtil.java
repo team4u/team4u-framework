@@ -14,6 +14,28 @@ import java.lang.reflect.Type;
 public class TypeUtil {
 
     /**
+     * 获取指定类所继承的父类中定义的指定位置泛型参数类型。
+     *
+     * @param clazz 目标子类
+     * @param index 泛型参数位置，从 0 开始
+     * @return 识别出的泛型参数类型；若未定义泛型或位置非法则返回 null
+     */
+    public static Type getTypeArgument(Class<?> clazz, int index) {
+        if (clazz == null || index < 0) {
+            return null;
+        }
+        Type type = clazz.getGenericSuperclass();
+        if (!(type instanceof ParameterizedType)) {
+            return null;
+        }
+        Type[] arguments = ((ParameterizedType) type).getActualTypeArguments();
+        if (index >= arguments.length) {
+            return null;
+        }
+        return arguments[index];
+    }
+
+    /**
      * 获取指定类所继承的父类中定义的第一个泛型参数类型
      * <p>
      * 常见场景：在基类中通过此方法获取子类声明的具体泛型类型。
@@ -25,15 +47,9 @@ public class TypeUtil {
      * @return 识别出的第一个泛型参数的 Class 对象；若未定义泛型或无法识别则返回 null
      */
     public static Class<?> getTypeArgument(Class<?> clazz) {
-        Type type = clazz.getGenericSuperclass();
-        if (type instanceof ParameterizedType) {
-            Type[] arguments = ((ParameterizedType) type).getActualTypeArguments();
-            if (arguments.length > 0) {
-                Type argument = arguments[0];
-                if (argument instanceof Class) {
-                    return (Class<?>) argument;
-                }
-            }
+        Type argument = getTypeArgument(clazz, 0);
+        if (argument instanceof Class) {
+            return (Class<?>) argument;
         }
         return null;
     }

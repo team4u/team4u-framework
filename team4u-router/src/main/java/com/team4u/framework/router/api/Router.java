@@ -1,7 +1,10 @@
 package com.team4u.framework.router.api;
 
+import com.team4u.framework.base.util.TypeReference;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.trace.RouteTrace;
+
+import java.lang.reflect.Type;
 
 /**
  * 核心路由接口
@@ -25,7 +28,31 @@ public interface Router {
      * @param <T>        结果类型
      * @return 路由结果
      */
-    <T> RouteResult<T> route(Object request, Class<T> targetType);
+    default <T> RouteResult<T> route(Object request, Class<T> targetType) {
+        return route(request, (Type) targetType);
+    }
+
+    /**
+     * 执行路由并转换结果类型
+     *
+     * @param request    路由请求对象
+     * @param targetType 期望转换的目标类型
+     * @param <T>        结果类型
+     * @return 路由结果
+     */
+    <T> RouteResult<T> route(Object request, Type targetType);
+
+    /**
+     * 执行路由并转换结果类型
+     *
+     * @param request       路由请求对象
+     * @param typeReference 期望转换的目标类型引用
+     * @param <T>           结果类型
+     * @return 路由结果
+     */
+    default <T> RouteResult<T> route(Object request, TypeReference<T> typeReference) {
+        return route(request, typeReference != null ? typeReference.getType() : null);
+    }
 
     /**
      * 执行路由并返回诊断轨迹

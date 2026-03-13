@@ -1,6 +1,6 @@
 package com.team4u.framework.mask.config;
 
-import com.team4u.framework.serializer.json.TypeReference;
+import com.team4u.framework.base.util.TypeReference;
 import com.team4u.framework.serializer.json.JsonUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;

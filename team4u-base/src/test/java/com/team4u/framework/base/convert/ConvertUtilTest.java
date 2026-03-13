@@ -1,11 +1,11 @@
 package com.team4u.framework.base.convert;
 
+import com.team4u.framework.base.util.TypeReference;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.lang.reflect.ParameterizedType;
 import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -126,6 +126,18 @@ public class ConvertUtilTest {
                 ConvertUtil.convert(longSetType, Arrays.asList("1", 2, 3L)));
         Assert.assertEquals(Arrays.asList(true, false, true),
                 new ArrayList<Boolean>(ConvertUtil.convert(boolCollectionType, "true, false, yes")));
+    }
+
+    @Test
+    @SuppressWarnings("rawtypes")
+    public void testTypeReferenceRequiresGenericArgument() {
+        try {
+            new TypeReference() {
+            };
+            Assert.fail("Should reject raw TypeReference");
+        } catch (IllegalArgumentException e) {
+            Assert.assertTrue(e.getMessage().contains("具体的泛型参数"));
+        }
     }
 
     @Test
@@ -273,12 +285,6 @@ public class ConvertUtilTest {
     private enum TestEnum {
         LOW,
         HIGH
-    }
-
-    private abstract static class TypeReference<T> {
-        Type getType() {
-            return ((ParameterizedType) getClass().getGenericSuperclass()).getActualTypeArguments()[0];
-        }
     }
 
     public static class TestBean {

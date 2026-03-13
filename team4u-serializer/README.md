@@ -73,7 +73,7 @@ User decoded = JsonUtil.toBean(json, User.class);
 
 ```java
 import com.team4u.framework.serializer.json.JsonUtil;
-import com.team4u.framework.serializer.json.TypeReference;
+import com.team4u.framework.base.util.TypeReference;
 
 String json = "[{\"name\":\"jay\"}]";
 List<User> users = JsonUtil.toBean(json, new TypeReference<List<User>>() {});

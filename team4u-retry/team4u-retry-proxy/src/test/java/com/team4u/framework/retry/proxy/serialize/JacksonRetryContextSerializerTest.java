@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.proxy.serialize;
 
-import com.team4u.framework.serializer.json.TypeReference;
+import com.team4u.framework.base.util.TypeReference;
 import lombok.Data;
 import org.junit.Assert;
 import org.junit.Test;

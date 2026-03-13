@@ -1,5 +1,6 @@
 package com.team4u.framework.router;
 
+import com.team4u.framework.base.util.TypeReference;
 import com.team4u.framework.config.test.TestConfigContext;
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.router.api.builder.RoutePolicyBuilder;
@@ -10,7 +11,9 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Arrays;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -139,6 +142,23 @@ public class RoutingManagerTest {
     }
 
     @Test
+    public void testGenericTypeConversion() {
+        String config = "{\"type\":\"map\", \"rules\":[{\"condition\":\"serviceA\", \"value\":[{\"host\":\"127.0.0.1\",\"port\":8080},{\"host\":\"127.0.0.2\",\"port\":8081}]}]}";
+        RouteResult<List<TargetService>> result = routingManager.routeByConfig(
+                config,
+                "serviceA",
+                new TypeReference<List<TargetService>>() {
+                });
+
+        Assert.assertTrue(result.isMatch());
+        Assert.assertEquals(2, result.getValue().size());
+        Assert.assertEquals("127.0.0.1", result.getValue().get(0).getHost());
+        Assert.assertEquals(Integer.valueOf(8080), result.getValue().get(0).getPort());
+        Assert.assertEquals("127.0.0.2", result.getValue().get(1).getHost());
+        Assert.assertEquals(Integer.valueOf(8081), result.getValue().get(1).getPort());
+    }
+
+    @Test
     public void testMapRouterWithBuilder() {
         // 使用强类型的构建器创建路由策略
         RoutePolicy policy = RoutePolicyBuilder.<String>map()
@@ -151,6 +171,24 @@ public class RoutingManagerTest {
         // 执行路由并验证结果
         Assert.assertEquals("AlipayService", routingManager.routeByPolicy(policy, "ALIPAY").getValue());
         Assert.assertEquals("CashService", routingManager.routeByPolicy(policy, "UNKNOWN_PAY").getValue());
+    }
+
+    @Test
+    public void testRouteByPolicyWithTypeReference() {
+        RoutePolicy policy = RoutePolicyBuilder.<Object>map()
+                .id("coupon-router")
+                .rule("new-user", Arrays.asList("coupon-A", "coupon-B"))
+                .fallback(Arrays.asList("default-coupon"))
+                .build();
+
+        RouteResult<List<String>> result = routingManager.routeByPolicy(
+                policy,
+                "new-user",
+                new TypeReference<List<String>>() {
+                });
+
+        Assert.assertTrue(result.isMatch());
+        Assert.assertEquals(Arrays.asList("coupon-A", "coupon-B"), result.getValue());
     }
 
     @Test
