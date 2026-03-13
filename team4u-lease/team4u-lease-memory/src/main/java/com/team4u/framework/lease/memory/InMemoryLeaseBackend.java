@@ -189,7 +189,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         if (current == null) {
             return LeaseAdminResult.TASK_NOT_FOUND;
         }
-        if (!current.isRequeueableFailure()) {
+        if (!current.isFailedAndClosed()) {
             return LeaseAdminResult.CLOSED;
         }
         long visibleAt = System.currentTimeMillis() + Math.max(0L, delayMillis);
@@ -288,7 +288,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
 
     private LeaseGrant claim(AvailabilityRef ref, String workerId, long leaseMillis) {
         StoredTask current = records.get(ref.taskId);
-        if (current == null || current.isTerminal()) {
+        if (current == null || current.isClose()) {
             return null;
         }
         long now = System.currentTimeMillis();
@@ -588,11 +588,11 @@ public class InMemoryLeaseBackend implements LeaseBackend {
                     .build();
         }
 
-        private boolean isTerminal() {
+        private boolean isClose() {
             return state == LeaseTaskState.CLOSED;
         }
 
-        private boolean isRequeueableFailure() {
+        private boolean isFailedAndClosed() {
             return state == LeaseTaskState.CLOSED && outcome == LeaseTaskOutcome.FAILED;
         }
 
@@ -611,7 +611,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
 
         private LeaseRuntimeResult validateRuntimeMutation(LeaseHandle handle, long now) {
             // runtime 操作必须由当前持有有效租约的 worker 发起。
-            if (isTerminal()) {
+            if (isClose()) {
                 return LeaseRuntimeResult.CLOSED;
             }
             if (state != LeaseTaskState.RUNNING) {
@@ -629,7 +629,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
 
         private LeaseAdminResult validateAdminMutable(long now) {
             // 管理操作不能覆盖终态任务，也不能打断仍有效的租约。
-            if (isTerminal()) {
+            if (isClose()) {
                 return LeaseAdminResult.CLOSED;
             }
             if (hasActiveLease(now)) {
@@ -639,7 +639,7 @@ public class InMemoryLeaseBackend implements LeaseBackend {
         }
 
         private LeaseAdminResult validateAdminClose(long now) {
-            if (isTerminal()) {
+            if (isClose()) {
                 return LeaseAdminResult.CLOSED;
             }
             if (hasActiveLease(now)) {
