@@ -1,10 +1,10 @@
 package com.team4u.framework.base.instance;
 
-import com.team4u.framework.base.util.cache.Cache;
-import com.team4u.framework.base.util.CacheUtil;
-import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.base.config.ConfigParser;
 import com.team4u.framework.base.config.StringConfigParser;
+import com.team4u.framework.base.util.CacheUtil;
+import com.team4u.framework.base.util.StringUtil;
+import com.team4u.framework.base.util.cache.Cache;
 
 /**
  * 动态实例缓存提供者 (纯粹增强型)
@@ -48,8 +48,8 @@ public class DynamicInstanceProvider<I, C, T> {
     private final Object[] locks = new Object[128];
 
     public DynamicInstanceProvider(Cache<Object, T> cache,
-            ConfigParser<I, C> configParser,
-            InstanceFactory<C, T> instanceFactory) {
+                                   ConfigParser<I, C> configParser,
+                                   InstanceFactory<C, T> instanceFactory) {
         this.cache = cache;
         this.configParser = configParser;
         this.instanceFactory = instanceFactory;
@@ -61,8 +61,8 @@ public class DynamicInstanceProvider<I, C, T> {
     // ---------------- Factory Methods ----------------
 
     public static <I, C, T> DynamicInstanceProvider<I, C, T> createLru(int capacity,
-            ConfigParser<I, C> configParser,
-            InstanceFactory<C, T> instanceFactory) {
+                                                                       ConfigParser<I, C> configParser,
+                                                                       InstanceFactory<C, T> instanceFactory) {
         return new DynamicInstanceProvider<>(
                 CacheUtil.newLRUCache(capacity),
                 configParser,
@@ -70,8 +70,8 @@ public class DynamicInstanceProvider<I, C, T> {
     }
 
     public static <C, T> DynamicInstanceProvider<String, C, T> createStringLru(int capacity,
-            StringConfigParser<C> configParser,
-            InstanceFactory<C, T> instanceFactory) {
+                                                                               StringConfigParser<C> configParser,
+                                                                               InstanceFactory<C, T> instanceFactory) {
         return createLru(capacity, configParser, instanceFactory);
     }
 

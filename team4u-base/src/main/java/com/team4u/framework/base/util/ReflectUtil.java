@@ -1,11 +1,6 @@
 package com.team4u.framework.base.util;
 
-import java.lang.reflect.AccessibleObject;
-import java.lang.reflect.Field;
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Member;
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
+import java.lang.reflect.*;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -18,6 +13,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author jay.wu
  */
 public class ReflectUtil {
+
+    /**
+     * 字段缓存，用于提高反射获取字段的性能
+     */
+    private static final Map<Class<?>, Map<String, Field>> FIELD_CACHE = new ConcurrentHashMap<>();
 
     /**
      * 设置对象字段值
@@ -61,11 +61,6 @@ public class ReflectUtil {
     }
 
     /**
-     * 字段缓存，用于提高反射获取字段的性能
-     */
-    private static final Map<Class<?>, Map<String, Field>> FIELD_CACHE = new ConcurrentHashMap<>();
-
-    /**
      * 查找类中的指定字段
      * <p>
      * 查找范围包括私有字段，并会向上递归查找父类，直到找到为止。
@@ -78,7 +73,7 @@ public class ReflectUtil {
         if (clazz == null || StringUtil.isEmpty(fieldName)) {
             return null;
         }
-        
+
         // 从缓存中获取类的所有字段，如果不存在则进行初始化解析
         Map<String, Field> fieldMap = FIELD_CACHE.computeIfAbsent(clazz, c -> {
             Map<String, Field> map = new HashMap<>();
@@ -94,7 +89,7 @@ public class ReflectUtil {
             }
             return map;
         });
-        
+
         return fieldMap.get(fieldName);
     }
 

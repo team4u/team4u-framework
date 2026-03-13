@@ -1,6 +1,6 @@
 package com.team4u.framework.criterion.compiler.impl;
 
-import com.team4u.framework.base.util.ConvertUtil;
+import com.team4u.framework.base.convert.ConvertUtil;
 import com.team4u.framework.criterion.MatchPredicate;
 import com.team4u.framework.criterion.compiler.AbstractCriterionCompiler;
 import com.team4u.framework.criterion.model.CriterionVisitor;

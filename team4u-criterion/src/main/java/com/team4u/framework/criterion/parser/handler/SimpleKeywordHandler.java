@@ -1,6 +1,6 @@
 package com.team4u.framework.criterion.parser.handler;
 
-import com.team4u.framework.base.util.ConvertUtil;
+import com.team4u.framework.base.convert.ConvertUtil;
 import com.team4u.framework.criterion.model.Criterion;
 import com.team4u.framework.criterion.model.value.FixedValue;
 import com.team4u.framework.criterion.model.value.Value;

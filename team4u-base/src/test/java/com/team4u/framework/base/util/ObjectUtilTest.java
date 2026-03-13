@@ -5,6 +5,7 @@ import org.junit.Test;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.HashMap;
 
 /**
@@ -37,7 +38,7 @@ public class ObjectUtilTest {
         Assert.assertTrue("空数组应判定为空", ObjectUtil.isEmpty(new String[0]));
 
         Assert.assertFalse("空格字符串不应判定为空", ObjectUtil.isEmpty(" "));
-        Assert.assertFalse("非空列表不应判定为空", ObjectUtil.isEmpty(Arrays.asList(1)));
+        Assert.assertFalse("非空列表不应判定为空", ObjectUtil.isEmpty(Collections.singletonList(1)));
         Assert.assertFalse("非空数组不应判定为空", ObjectUtil.isEmpty(new String[]{"a"}));
         Assert.assertFalse("普通对象不应判定为空", ObjectUtil.isEmpty(123));
     }

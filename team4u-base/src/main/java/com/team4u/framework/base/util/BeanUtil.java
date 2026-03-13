@@ -1,5 +1,7 @@
 package com.team4u.framework.base.util;
 
+import com.team4u.framework.base.convert.ConvertUtil;
+
 import java.lang.reflect.Field;
 import java.util.HashMap;
 import java.util.Map;
@@ -13,6 +15,11 @@ import java.util.concurrent.ConcurrentHashMap;
  * @author jay.wu
  */
 public class BeanUtil {
+
+    /**
+     * 规范化字段缓存，用于提高忽略大小写及特殊字符匹配的性能
+     */
+    private static final Map<Class<?>, Map<String, Field>> NORMALIZED_FIELD_CACHE = new ConcurrentHashMap<>();
 
     /**
      * 将 Map 转换为 Bean 对象
@@ -75,11 +82,6 @@ public class BeanUtil {
         return type.isPrimitive() || type == String.class || Number.class.isAssignableFrom(type)
                 || type == Boolean.class || type == Character.class;
     }
-
-    /**
-     * 规范化字段缓存，用于提高忽略大小写及特殊字符匹配的性能
-     */
-    private static final Map<Class<?>, Map<String, Field>> NORMALIZED_FIELD_CACHE = new ConcurrentHashMap<>();
 
     /**
      * 查找类及其父类中定义的指定名称的字段

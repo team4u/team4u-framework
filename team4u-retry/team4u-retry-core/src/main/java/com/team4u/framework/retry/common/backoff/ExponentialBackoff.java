@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.common.backoff;
 
-import com.team4u.framework.base.util.ConvertUtil;
+import com.team4u.framework.base.convert.ConvertUtil;
 import com.team4u.framework.retry.config.BackoffConfig;
 import lombok.EqualsAndHashCode;
 
@@ -14,10 +14,26 @@ import java.util.Map;
 @EqualsAndHashCode
 public class ExponentialBackoff implements Backoff {
 
+    /**
+     * 初始延迟时间（毫秒）
+     */
     private final long initialDelayMillis;
+    /**
+     * 指数倍数
+     */
     private final double multiplier;
+    /**
+     * 最大延迟时间（毫秒）
+     */
     private final long maxDelayMillis;
 
+    /**
+     * 构造指数级退避策略
+     *
+     * @param initialDelayMillis 初始延迟时间（毫秒）
+     * @param multiplier         指数倍数，必须大于 0
+     * @param maxDelayMillis     最大延迟时间（毫秒）
+     */
     public ExponentialBackoff(long initialDelayMillis, double multiplier, long maxDelayMillis) {
         if (initialDelayMillis < 0L) {
             throw new IllegalArgumentException("initialDelayMillis must be greater than or equal to 0");

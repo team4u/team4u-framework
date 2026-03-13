@@ -1,6 +1,6 @@
 package com.team4u.framework.lease.jdbc;
 
-import com.team4u.framework.base.util.ConvertUtil;
+import com.team4u.framework.base.convert.ConvertUtil;
 import com.team4u.framework.base.util.JdbcUtil;
 import com.team4u.framework.base.util.SqlExpression;
 import com.team4u.framework.lease.enums.LeaseTaskFailureReason;

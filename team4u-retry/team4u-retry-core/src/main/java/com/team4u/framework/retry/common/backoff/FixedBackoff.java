@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.common.backoff;
 
-import com.team4u.framework.base.util.ConvertUtil;
+import com.team4u.framework.base.convert.ConvertUtil;
 import com.team4u.framework.retry.config.BackoffConfig;
 import lombok.EqualsAndHashCode;
 
@@ -14,8 +14,16 @@ import java.util.Map;
 @EqualsAndHashCode
 public class FixedBackoff implements Backoff {
 
+    /**
+     * 固定延迟时间（毫秒）
+     */
     private final long delayMillis;
 
+    /**
+     * 构造固定延迟退避策略
+     *
+     * @param delayMillis 固定延迟时间（毫秒）
+     */
     public FixedBackoff(long delayMillis) {
         if (delayMillis < 0L) {
             throw new IllegalArgumentException("delayMillis must be greater than or equal to 0");
