@@ -1,6 +1,7 @@
 package com.team4u.framework.base.util;
 
 import com.team4u.framework.base.util.cache.Cache;
+import com.team4u.framework.base.util.cache.LFUCache;
 import com.team4u.framework.base.util.cache.LRUCache;
 import com.team4u.framework.base.util.cache.TimedCache;
 import org.junit.Assert;
@@ -22,7 +23,7 @@ public class CacheUtilTest {
     @Test
     public void newLFUCache() {
         Cache<String, String> cache = CacheUtil.newLFUCache(10);
-        Assert.assertTrue("生成的缓存当前应为 LRUCache 实例", cache instanceof LRUCache);
+        Assert.assertTrue("生成的缓存应为 LFUCache 实例", cache instanceof LFUCache);
     }
 
     @Test

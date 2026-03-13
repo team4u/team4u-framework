@@ -59,16 +59,7 @@ public class RateLimitInterceptor implements LogInterceptor {
         // 生成特征索引：动作 + 异常类名
         String signature = event.getAction() + "|" + event.getException().getClass().getName();
 
-        AtomicInteger count = errorCounter.get(signature);
-        if (count == null) {
-            synchronized (errorCounter) {
-                count = errorCounter.get(signature);
-                if (count == null) {
-                    count = new AtomicInteger(0);
-                    errorCounter.put(signature, count);
-                }
-            }
-        }
+        AtomicInteger count = errorCounter.getOrCreate(signature, () -> new AtomicInteger(0));
 
         int currentCount = count.incrementAndGet();
 

@@ -6,6 +6,11 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+import java.util.concurrent.TimeUnit;
+
 /**
  * 异常限流拦截器单元测试
  */
@@ -75,6 +80,37 @@ public class RateLimitInterceptorTest {
     @Test
     public void testPriority() {
         Assert.assertEquals(1000, interceptor.priority());
+    }
+
+    @Test
+    public void testConcurrentSameSignature() throws Exception {
+        updateLimit(100);
+        int threadCount = 8;
+        ExecutorService executor = Executors.newFixedThreadPool(threadCount);
+        CountDownLatch start = new CountDownLatch(1);
+        CountDownLatch done = new CountDownLatch(threadCount);
+
+        for (int i = 0; i < threadCount; i++) {
+            executor.submit(() -> {
+                try {
+                    start.await();
+                    Assert.assertTrue(interceptor.handle(createErrorEvent("ActionC", new RuntimeException("E1"))));
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    Assert.fail("线程被意外中断");
+                } finally {
+                    done.countDown();
+                }
+            });
+        }
+
+        start.countDown();
+        Assert.assertTrue(done.await(2, TimeUnit.SECONDS));
+        executor.shutdown();
+
+        LogEvent overflow = createErrorEvent("ActionC", new RuntimeException("E1"));
+        Assert.assertTrue(interceptor.handle(overflow));
+        Assert.assertFalse(overflow.isSuppressed());
     }
 
     private LogEvent createErrorEvent(String action, Throwable e) {

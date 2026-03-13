@@ -12,8 +12,8 @@ import com.team4u.framework.base.util.cache.Cache;
  * 将输入源 (Input) 直接映射为最终实例 (Instance)。
  * <p>
  * 核心特性：
- * 1. <b>纯粹对象键</b>：直接利用 Input/Config 对象的 {@code equals/hashCode} 作为唯一标识。
- * 只要输入内容一致，即可复用缓存实例。
+ * 1. <b>纯粹对象键</b>：直接利用当前传入的 Input 或 Config 对象的 {@code equals/hashCode} 作为唯一标识。
+ * 只要同一种调用路径下的输入内容一致，即可复用缓存实例；本类不会主动对 Input 和 Config 做跨键归一化。
  * 2. <b>分段锁并发控制</b>：保留了 Striped Locking 机制，在高并发写入（Cache Miss）时避免全局锁竞争。
  * 3. <b>双重获取支持</b>：支持通过原始 Input 获取，也支持通过已解析的 Config 直接获取。
  *

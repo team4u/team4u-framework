@@ -1,7 +1,11 @@
 package com.team4u.framework.base.util.cache;
 
+import lombok.Getter;
+
 import java.util.Map;
+import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.function.Supplier;
 
 /**
  * 定时自动过期的缓存实现
@@ -17,7 +21,7 @@ import java.util.concurrent.ConcurrentHashMap;
  */
 public class TimedCache<K, V> implements Cache<K, V> {
 
-    private final Map<K, CacheObj<V>> map = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<K, CacheObj<V>> map = new ConcurrentHashMap<>();
     private final long timeout;
 
     /**
@@ -35,9 +39,9 @@ public class TimedCache<K, V> implements Cache<K, V> {
         if (obj == null) {
             return null;
         }
-        // 获取时进行过期检查（惰性清理）
-        if (obj.isExpired()) {
-            map.remove(key);
+        long now = System.currentTimeMillis();
+        if (obj.isExpired(now)) {
+            map.remove(key, obj);
             return null;
         }
         return obj.getValue();
@@ -60,7 +64,46 @@ public class TimedCache<K, V> implements Cache<K, V> {
 
     @Override
     public int size() {
+        cleanExpiredEntries();
         return map.size();
+    }
+
+    /**
+     * 获取指定 key 对应的值；若不存在或已过期，则原子地创建并写入新值。
+     *
+     * @param key      缓存键
+     * @param supplier 值创建器
+     * @return 已存在或新创建的值；若 supplier 返回 null，则返回 null
+     */
+    public V getOrCreate(K key, Supplier<V> supplier) {
+        Objects.requireNonNull(supplier, "supplier");
+        ValueHolder<V> holder = new ValueHolder<>();
+        map.compute(key, (ignored, existing) -> {
+            long now = System.currentTimeMillis();
+            if (existing != null && !existing.isExpired(now)) {
+                holder.value = existing.getValue();
+                return existing;
+            }
+
+            V newValue = supplier.get();
+            holder.value = newValue;
+            return newValue == null ? null : new CacheObj<>(newValue, timeout, now);
+        });
+        return holder.value;
+    }
+
+    private void cleanExpiredEntries() {
+        if (timeout <= 0 || map.isEmpty()) {
+            return;
+        }
+
+        long now = System.currentTimeMillis();
+        for (Map.Entry<K, CacheObj<V>> entry : map.entrySet()) {
+            CacheObj<V> obj = entry.getValue();
+            if (obj != null && obj.isExpired(now)) {
+                map.remove(entry.getKey(), obj);
+            }
+        }
     }
 
     /**
@@ -68,6 +111,7 @@ public class TimedCache<K, V> implements Cache<K, V> {
      *
      * @param <V> 包装值的类型
      */
+    @Getter
     private static class CacheObj<V> {
         private final V value;
         private final long expireTime;
@@ -77,12 +121,12 @@ public class TimedCache<K, V> implements Cache<K, V> {
          * @param timeout 自当前时间起算的超时时长（毫秒）
          */
         public CacheObj(V value, long timeout) {
-            this.value = value;
-            this.expireTime = timeout > 0 ? System.currentTimeMillis() + timeout : Long.MAX_VALUE;
+            this(value, timeout, System.currentTimeMillis());
         }
 
-        public V getValue() {
-            return value;
+        private CacheObj(V value, long timeout, long now) {
+            this.value = value;
+            this.expireTime = timeout > 0 ? now + timeout : Long.MAX_VALUE;
         }
 
         /**
@@ -90,8 +134,12 @@ public class TimedCache<K, V> implements Cache<K, V> {
          *
          * @return true 若当前系统时间已超过预设的过期时间点
          */
-        public boolean isExpired() {
-            return System.currentTimeMillis() > expireTime;
+        public boolean isExpired(long now) {
+            return now > expireTime;
         }
+    }
+
+    private static final class ValueHolder<V> {
+        private V value;
     }
 }

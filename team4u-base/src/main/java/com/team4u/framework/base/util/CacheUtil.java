@@ -1,6 +1,7 @@
 package com.team4u.framework.base.util;
 
 import com.team4u.framework.base.util.cache.Cache;
+import com.team4u.framework.base.util.cache.LFUCache;
 import com.team4u.framework.base.util.cache.LRUCache;
 import com.team4u.framework.base.util.cache.TimedCache;
 
@@ -11,7 +12,10 @@ import com.team4u.framework.base.util.cache.TimedCache;
  *
  * @author jay.wu
  */
-public class CacheUtil {
+public final class CacheUtil {
+
+    private CacheUtil() {
+    }
 
     /**
      * 创建一个新的 LRU（最近最少使用）缓存
@@ -27,8 +31,6 @@ public class CacheUtil {
 
     /**
      * 创建一个新的 LFU（最不经常使用）缓存
-     * <p>
-     * 注意：当前实现暂以 LRU 代替 LFU。
      *
      * @param capacity 缓存最大容量
      * @param <K>      键类型
@@ -36,7 +38,7 @@ public class CacheUtil {
      * @return LFU 缓存实例
      */
     public static <K, V> Cache<K, V> newLFUCache(int capacity) {
-        return new LRUCache<>(capacity);
+        return new LFUCache<>(capacity);
     }
 
     /**
