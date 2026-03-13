@@ -11,7 +11,7 @@ package com.team4u.framework.base.util;
 public class HashUtil {
 
     /**
-     * 计算 32 位 MurmurHash3 值
+     * 计算 32 位 MurmurHash3 值（默认 seed = 0）
      * <p>
      * 这是一种极简版的实现，适用于对字节数组进行快速哈希计算。
      *
@@ -19,15 +19,27 @@ public class HashUtil {
      * @return 32 位哈希值
      */
     public static int murmur32(byte[] data) {
-        int h1 = 0;
+        return murmur32(data, 0);
+    }
+
+    /**
+     * 计算 32 位 MurmurHash3 值
+     *
+     * @param data 待计算的字节数组
+     * @param seed 计算时使用的种子
+     * @return 32 位哈希值
+     */
+    public static int murmur32(byte[] data, int seed) {
+        int h1 = seed;
         int len = data.length;
         int nblocks = len / 4;
 
         for (int i = 0; i < nblocks; i++) {
-            int k1 = (data[i * 4] & 0xff)
-                    | ((data[i * 4 + 1] & 0xff) << 8)
-                    | ((data[i * 4 + 2] & 0xff) << 16)
-                    | ((data[i * 4 + 3] & 0xff) << 24);
+            int index = i * 4;
+            int k1 = (data[index] & 0xff)
+                    | ((data[index + 1] & 0xff) << 8)
+                    | ((data[index + 2] & 0xff) << 16)
+                    | ((data[index + 3] & 0xff) << 24);
 
             k1 *= 0xcc9e2d51;
             k1 = Integer.rotateLeft(k1, 15);
@@ -43,8 +55,10 @@ public class HashUtil {
         switch (len & 3) {
             case 3:
                 k1 ^= (data[tail + 2] & 0xff) << 16;
+                // fall through
             case 2:
                 k1 ^= (data[tail + 1] & 0xff) << 8;
+                // fall through
             case 1:
                 k1 ^= (data[tail] & 0xff);
                 k1 *= 0xcc9e2d51;
@@ -72,10 +86,7 @@ public class HashUtil {
      * @return 64 位哈希值
      */
     public static long murmur64(byte[] data) {
-        long h1 = 0;
-        long h2 = 0;
-        int len = data.length;
-        // 简化版，实际可用 murmur32 结果拼凑或参考通用实现
-        return (long) murmur32(data) << 32 | (murmur32(data) & 0xFFFFFFFFL);
+        int hash32 = murmur32(data);
+        return ((long) hash32 << 32) | (hash32 & 0xFFFFFFFFL);
     }
 }
