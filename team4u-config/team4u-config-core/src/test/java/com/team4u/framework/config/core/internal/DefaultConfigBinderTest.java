@@ -8,6 +8,7 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
@@ -48,6 +49,16 @@ public class DefaultConfigBinderTest {
         // 设置支持松散绑定的配置项（例如：下划线形式）
         entries.put("server.max_threads", new ConfigEntry("server.max_threads", "200", "s", 1L));
 
+        // 设置布尔值
+        entries.put("server.enabled", new ConfigEntry("server.enabled", "true", "s", 1L));
+        entries.put("server.debug", new ConfigEntry("server.debug", "yes", "s", 1L));
+
+        // 设置数组（逗号分隔）
+        entries.put("server.tags", new ConfigEntry("server.tags", "web,api,test", "s", 1L));
+
+        // 设置列表（逗号分隔）
+        entries.put("server.ports", new ConfigEntry("server.ports", "80,443,8080", "s", 1L));
+
         // 设置嵌套属性相关的配置项
         entries.put("server.db.url", new ConfigEntry("server.db.url", "jdbc:mysql", "s", 1L));
         entries.put("server.db.username", new ConfigEntry("server.db.username", "root", "s", 1L));
@@ -68,6 +79,38 @@ public class DefaultConfigBinderTest {
         // 验证字符串类型绑定
         String name = binder.bind(snapshot, "app.name", String.class);
         Assert.assertEquals("TestApp", name);
+
+        // 验证布尔类型绑定
+        Boolean enabled = binder.bind(snapshot, "server.enabled", Boolean.class);
+        Assert.assertTrue(enabled);
+
+        // 验证布尔类型绑定（支持 yes/no 等特殊值）
+        Boolean debug = binder.bind(snapshot, "server.debug", Boolean.class);
+        Assert.assertTrue(debug);
+    }
+
+    /**
+     * 测试将配置项绑定到复杂类型（如数组、列表）
+     */
+    @Test
+    public void testBindComplexTypes() {
+        // 验证数组类型绑定
+        String[] tags = binder.bind(snapshot, "server.tags", String[].class);
+        Assert.assertArrayEquals(new String[]{"web", "api", "test"}, tags);
+
+        // 验证 JavaBean 中复杂类型的绑定
+        ServerConfig config = binder.bind(snapshot, "server", ServerConfig.class);
+        Assert.assertNotNull(config);
+        Assert.assertTrue(config.isEnabled());
+        Assert.assertTrue(config.isDebug());
+        Assert.assertArrayEquals(new String[]{"web", "api", "test"}, config.getTags());
+
+        Assert.assertNotNull(config.getPorts());
+        Assert.assertEquals(3, config.getPorts().size());
+        Assert.assertTrue(config.getPorts().get(0) instanceof Integer);
+        Assert.assertEquals(Integer.valueOf(80), config.getPorts().get(0));
+        Assert.assertEquals(Integer.valueOf(443), config.getPorts().get(1));
+        Assert.assertEquals(Integer.valueOf(8080), config.getPorts().get(2));
     }
 
     /**
@@ -138,6 +181,22 @@ public class DefaultConfigBinderTest {
      */
     @Data
     public static class ServerConfig {
+        /**
+         * 是否启用
+         */
+        private boolean enabled;
+        /**
+         * 是否开启调试
+         */
+        private boolean debug;
+        /**
+         * 标签列表
+         */
+        private String[] tags;
+        /**
+         * 端口列表
+         */
+        private List<Integer> ports;
         /**
          * 服务器主机地址
          */

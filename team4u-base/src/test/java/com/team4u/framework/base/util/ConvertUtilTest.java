@@ -52,10 +52,35 @@ public class ConvertUtilTest {
         Assert.assertTrue(ConvertUtil.convert(boolean.class, "1"));
         Assert.assertTrue(ConvertUtil.convert(Boolean.class, "yes"));
         Assert.assertTrue(ConvertUtil.convert(Boolean.class, "ok"));
+        Assert.assertTrue(ConvertUtil.convert(Boolean.class, "on"));
+        Assert.assertTrue(ConvertUtil.convert(Boolean.class, "y"));
         Assert.assertFalse(ConvertUtil.convert(Boolean.class, "false"));
         Assert.assertFalse(ConvertUtil.convert(Boolean.class, "0"));
         Assert.assertFalse(ConvertUtil.convert(Boolean.class, "no"));
+        Assert.assertFalse(ConvertUtil.convert(Boolean.class, "off"));
+        Assert.assertFalse(ConvertUtil.convert(Boolean.class, "n"));
         Assert.assertNull(ConvertUtil.convert(Boolean.class, "abc"));
+
+        // 测试转换为 Float
+        Assert.assertEquals(Float.valueOf(123.45f), ConvertUtil.convert(Float.class, "123.45"));
+        Assert.assertEquals(Float.valueOf(123.0f), ConvertUtil.convert(float.class, 123));
+
+        // 测试转换为 Short
+        Assert.assertEquals(Short.valueOf((short) 123), ConvertUtil.convert(Short.class, "123"));
+        Assert.assertEquals(Short.valueOf((short) 123), ConvertUtil.convert(short.class, 123));
+
+        // 测试转换为 Byte
+        Assert.assertEquals(Byte.valueOf((byte) 123), ConvertUtil.convert(Byte.class, "123"));
+        Assert.assertEquals(Byte.valueOf((byte) 123), ConvertUtil.convert(byte.class, 123));
+
+        // 测试转换为 Character
+        Assert.assertEquals(Character.valueOf('a'), ConvertUtil.convert(Character.class, "a"));
+        Assert.assertEquals(Character.valueOf('1'), ConvertUtil.convert(char.class, 1));
+
+        // 测试转换为数组
+        Assert.assertArrayEquals(new String[]{"a", "b", "c"}, ConvertUtil.convert(String[].class, "a, b, c"));
+        Assert.assertArrayEquals(new Integer[]{1, 2, 3}, ConvertUtil.convert(Integer[].class, "1, 2, 3"));
+        Assert.assertArrayEquals(new int[]{1, 2, 3}, ConvertUtil.convert(int[].class, "1, 2, 3"));
 
         // 测试转换为 Number
         Assert.assertEquals(new BigDecimal("123.45"), ConvertUtil.convert(Number.class, "123.45"));
@@ -118,18 +143,61 @@ public class ConvertUtilTest {
     }
 
     @Test
+    public void testToFloat() {
+        Assert.assertEquals(Float.valueOf(123.45f), ConvertUtil.toFloat(123.45f));
+        Assert.assertEquals(Float.valueOf(123.0f), ConvertUtil.toFloat(123));
+        Assert.assertEquals(Float.valueOf(123.45f), ConvertUtil.toFloat(" 123.45 "));
+        Assert.assertNull(ConvertUtil.toFloat("abc"));
+        Assert.assertEquals(Float.valueOf(456.78f), ConvertUtil.toFloat("abc", 456.78f));
+        Assert.assertNull(ConvertUtil.toFloat(null));
+    }
+
+    @Test
+    public void testToShort() {
+        Assert.assertEquals(Short.valueOf((short) 123), ConvertUtil.toShort((short) 123));
+        Assert.assertEquals(Short.valueOf((short) 123), ConvertUtil.toShort(123));
+        Assert.assertEquals(Short.valueOf((short) 123), ConvertUtil.toShort(" 123 "));
+        Assert.assertNull(ConvertUtil.toShort("abc"));
+        Assert.assertEquals(Short.valueOf((short) 456), ConvertUtil.toShort("abc", (short) 456));
+        Assert.assertNull(ConvertUtil.toShort(null));
+    }
+
+    @Test
+    public void testToByte() {
+        Assert.assertEquals(Byte.valueOf((byte) 123), ConvertUtil.toByte((byte) 123));
+        Assert.assertEquals(Byte.valueOf((byte) 123), ConvertUtil.toByte(123));
+        Assert.assertEquals(Byte.valueOf((byte) 123), ConvertUtil.toByte(" 123 "));
+        Assert.assertNull(ConvertUtil.toByte("abc"));
+        Assert.assertEquals(Byte.valueOf((byte) 45), ConvertUtil.toByte("abc", (byte) 45));
+        Assert.assertNull(ConvertUtil.toByte(null));
+    }
+
+    @Test
+    public void testToChar() {
+        Assert.assertEquals(Character.valueOf('a'), ConvertUtil.toChar('a'));
+        Assert.assertEquals(Character.valueOf('a'), ConvertUtil.toChar(" a "));
+        Assert.assertEquals(Character.valueOf('1'), ConvertUtil.toChar(1));
+        Assert.assertNull(ConvertUtil.toChar(""));
+        Assert.assertEquals(Character.valueOf('d'), ConvertUtil.toChar(null, 'd'));
+    }
+
+    @Test
     public void testToBool() {
         Assert.assertTrue(ConvertUtil.toBool(true));
         Assert.assertTrue(ConvertUtil.toBool("true"));
         Assert.assertTrue(ConvertUtil.toBool("1"));
         Assert.assertTrue(ConvertUtil.toBool("yes"));
         Assert.assertTrue(ConvertUtil.toBool("ok"));
+        Assert.assertTrue(ConvertUtil.toBool("on"));
+        Assert.assertTrue(ConvertUtil.toBool("y"));
         Assert.assertTrue(ConvertUtil.toBool("  TRUE  "));
 
         Assert.assertFalse(ConvertUtil.toBool(false));
         Assert.assertFalse(ConvertUtil.toBool("false"));
         Assert.assertFalse(ConvertUtil.toBool("0"));
         Assert.assertFalse(ConvertUtil.toBool("no"));
+        Assert.assertFalse(ConvertUtil.toBool("off"));
+        Assert.assertFalse(ConvertUtil.toBool("n"));
 
         Assert.assertNull(ConvertUtil.toBool("abc"));
         Assert.assertTrue(ConvertUtil.toBool("abc", true));
@@ -151,6 +219,9 @@ public class ConvertUtilTest {
         // 测试数组
         String[] array = {"a", "b"};
         Assert.assertEquals(list, ConvertUtil.toList(array));
+
+        // 测试逗号分隔字符串
+        Assert.assertEquals(Arrays.asList("a", "b", "c"), ConvertUtil.toList("a, b, c"));
 
         // 测试单个对象
         Assert.assertEquals(Arrays.asList("a"), ConvertUtil.toList("a"));
