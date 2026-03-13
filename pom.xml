@@ -24,6 +24,7 @@
         <module>team4u-lease</module>
         <module>team4u-retry</module>
         <module>team4u-serializer</module>
+        <module>team4u-bom</module>
     </modules>
 
     <properties>
@@ -39,6 +40,7 @@
         <slf4j.version>1.7.36</slf4j.version>
         <jackson.version>2.16.1</jackson.version>
         <h2.version>2.2.224</h2.version>
+        <mockito.version>4.11.0</mockito.version>
     </properties>
 
     <dependencyManagement>
@@ -80,7 +82,19 @@
                 <groupId>org.projectlombok</groupId>
                 <artifactId>lombok</artifactId>
                 <version>${lombok.version}</version>
-                <scope>compile</scope>
+                <scope>provided</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-core</artifactId>
+                <version>${mockito.version}</version>
+                <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>org.mockito</groupId>
+                <artifactId>mockito-inline</artifactId>
+                <version>${mockito.version}</version>
+                <scope>test</scope>
             </dependency>
             <dependency>
                 <groupId>com.team4u</groupId>
