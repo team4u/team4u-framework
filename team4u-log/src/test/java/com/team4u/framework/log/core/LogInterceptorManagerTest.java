@@ -24,7 +24,8 @@ public class LogInterceptorManagerTest {
         // 2. 修改拦截器状态
         MdcEnrichInterceptor.getInstance().setTraceIdKey("customTraceId");
 
-        FinOpsConfigRepository.getInstance().get().setErrorLimitPerSecond(50);
+        FinOpsConfigRepository repository = FinOpsConfigRepository.getInstance();
+        repository.replace(repository.get().withErrorLimitPerSecond(50));
 
         DyeingRule activeRule = new DyeingRule();
         activeRule.setId("test");

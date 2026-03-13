@@ -23,5 +23,10 @@
             <!-- 在测试模块中，我们希望它是 compile 范围，以便使用此模块的模块可以使用 JUnit 相关功能 -->
             <scope>compile</scope>
         </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 </project>

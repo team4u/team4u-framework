@@ -29,8 +29,8 @@ public class LogConfigReloadTest {
 
     @After
     public void teardown() {
-        testConfigContext.destroy();
         logHelper.stop();
+        testConfigContext.destroy();
     }
 
     @Test

@@ -27,7 +27,8 @@ public class RateLimitInterceptorTest {
     }
 
     private void updateLimit(int limit) {
-        FinOpsConfigRepository.getInstance().get().setErrorLimitPerSecond(limit);
+        FinOpsConfigRepository repository = FinOpsConfigRepository.getInstance();
+        repository.replace(repository.get().withErrorLimitPerSecond(limit));
     }
 
     @Test

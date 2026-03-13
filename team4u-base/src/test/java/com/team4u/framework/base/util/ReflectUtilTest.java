@@ -48,7 +48,7 @@ public class ReflectUtilTest {
 
     // 测试用的辅助类
     static class TestParentClass {
-        private final String parentField = "parent";
+        private String parentField = "parent";
 
         public String getParentField() {
             return parentField;
@@ -56,7 +56,7 @@ public class ReflectUtilTest {
     }
 
     static class TestChildClass extends TestParentClass {
-        private final String childField = "child";
+        private String childField = "child";
 
         public String getChildField() {
             return childField;
