@@ -1,6 +1,6 @@
 package com.team4u.framework.message.core;
 
-import cn.hutool.core.util.IdUtil;
+import com.team4u.framework.base.util.IdUtil;
 import lombok.Getter;
 
 import java.io.Serializable;
@@ -50,7 +50,7 @@ public class MessageHeaders extends HashMap<String, Object> implements Serializa
      * 初始化基础元数据，确保消息具备可追踪的标识与时间属性
      */
     public final void initDefaultHeaders() {
-        this.putIfAbsent(ID, IdUtil.fastSimpleUUID());
+        this.putIfAbsent(ID, IdUtil.simpleUUID());
         this.putIfAbsent(TIMESTAMP, System.currentTimeMillis());
     }
 

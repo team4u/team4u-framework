@@ -1,7 +1,7 @@
 package com.team4u.framework.criterion.compiler.impl;
 
-import cn.hutool.core.convert.Convert;
-import cn.hutool.core.date.DateUtil;
+import com.team4u.framework.base.util.ConvertUtil;
+import com.team4u.framework.base.util.DateUtil;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -31,11 +31,11 @@ public class BetweenCriterionCompilerTest {
     @Test
     public void testClosedIntervalIncludeBoth() {
         BetweenCriterion criterion = new BetweenCriterion(
-                ValueFactory.create("18", Convert::toBigDecimal, BigDecimal.class),
-                ValueFactory.create("30", Convert::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("18", ConvertUtil::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("30", ConvertUtil::toBigDecimal, BigDecimal.class),
                 true,
                 true,
-                Convert::toBigDecimal);
+                ConvertUtil::toBigDecimal);
 
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(25)));
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(18)));
@@ -47,11 +47,11 @@ public class BetweenCriterionCompilerTest {
     @Test
     public void testOpenIntervalExcludeBoth() {
         BetweenCriterion criterion = new BetweenCriterion(
-                ValueFactory.create("18", Convert::toBigDecimal, BigDecimal.class),
-                ValueFactory.create("30", Convert::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("18", ConvertUtil::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("30", ConvertUtil::toBigDecimal, BigDecimal.class),
                 false,
                 false,
-                Convert::toBigDecimal);
+                ConvertUtil::toBigDecimal);
 
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(25)));
         Assert.assertFalse(compiler.compile(criterion, null).test(MatchContext.of(18)));
@@ -64,11 +64,11 @@ public class BetweenCriterionCompilerTest {
     public void testMixedIntervalLowerInclude() {
         // [18, 30)
         BetweenCriterion criterion = new BetweenCriterion(
-                ValueFactory.create("18", Convert::toBigDecimal, BigDecimal.class),
-                ValueFactory.create("30", Convert::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("18", ConvertUtil::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("30", ConvertUtil::toBigDecimal, BigDecimal.class),
                 true,
                 false,
-                Convert::toBigDecimal);
+                ConvertUtil::toBigDecimal);
 
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(18)));
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(29)));
@@ -80,11 +80,11 @@ public class BetweenCriterionCompilerTest {
     public void testMixedIntervalUpperInclude() {
         // (18, 30]
         BetweenCriterion criterion = new BetweenCriterion(
-                ValueFactory.create("18", Convert::toBigDecimal, BigDecimal.class),
-                ValueFactory.create("30", Convert::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("18", ConvertUtil::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("30", ConvertUtil::toBigDecimal, BigDecimal.class),
                 false,
                 true,
-                Convert::toBigDecimal);
+                ConvertUtil::toBigDecimal);
 
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(19)));
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(30)));
@@ -95,11 +95,11 @@ public class BetweenCriterionCompilerTest {
     @Test
     public void testDecimalValues() {
         BetweenCriterion criterion = new BetweenCriterion(
-                ValueFactory.create("90.5", Convert::toBigDecimal, BigDecimal.class),
-                ValueFactory.create("100.0", Convert::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("90.5", ConvertUtil::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("100.0", ConvertUtil::toBigDecimal, BigDecimal.class),
                 true,
                 true,
-                Convert::toBigDecimal);
+                ConvertUtil::toBigDecimal);
 
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(95.5)));
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(90.5)));
@@ -111,11 +111,11 @@ public class BetweenCriterionCompilerTest {
     @Test
     public void testNullActual() {
         BetweenCriterion criterion = new BetweenCriterion(
-                ValueFactory.create("18", Convert::toBigDecimal, BigDecimal.class),
-                ValueFactory.create("30", Convert::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("18", ConvertUtil::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("30", ConvertUtil::toBigDecimal, BigDecimal.class),
                 true,
                 true,
-                Convert::toBigDecimal);
+                ConvertUtil::toBigDecimal);
 
         Assert.assertFalse(compiler.compile(criterion, null).test(MatchContext.of(null)));
     }
@@ -123,11 +123,11 @@ public class BetweenCriterionCompilerTest {
     @Test
     public void testStringActual() {
         BetweenCriterion criterion = new BetweenCriterion(
-                ValueFactory.create("18", Convert::toBigDecimal, BigDecimal.class),
-                ValueFactory.create("30", Convert::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("18", ConvertUtil::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("30", ConvertUtil::toBigDecimal, BigDecimal.class),
                 true,
                 true,
-                Convert::toBigDecimal);
+                ConvertUtil::toBigDecimal);
 
         // 字符串无法转换为数字时不匹配
         Assert.assertFalse(compiler.compile(criterion, null).test(MatchContext.of("abc")));
@@ -136,11 +136,11 @@ public class BetweenCriterionCompilerTest {
     @Test
     public void testStringNumberActual() {
         BetweenCriterion criterion = new BetweenCriterion(
-                ValueFactory.create("18", Convert::toBigDecimal, BigDecimal.class),
-                ValueFactory.create("30", Convert::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("18", ConvertUtil::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("30", ConvertUtil::toBigDecimal, BigDecimal.class),
                 true,
                 true,
-                Convert::toBigDecimal);
+                ConvertUtil::toBigDecimal);
 
         // 字符串数字可以转换后匹配
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of("25")));
@@ -153,11 +153,11 @@ public class BetweenCriterionCompilerTest {
     @Test
     public void testNegativeRange() {
         BetweenCriterion criterion = new BetweenCriterion(
-                ValueFactory.create("-10", Convert::toBigDecimal, BigDecimal.class),
-                ValueFactory.create("5", Convert::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("-10", ConvertUtil::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("5", ConvertUtil::toBigDecimal, BigDecimal.class),
                 true,
                 true,
-                Convert::toBigDecimal);
+                ConvertUtil::toBigDecimal);
 
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(-5)));
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(-10)));
@@ -169,11 +169,11 @@ public class BetweenCriterionCompilerTest {
     @Test
     public void testZeroCrossing() {
         BetweenCriterion criterion = new BetweenCriterion(
-                ValueFactory.create("-5", Convert::toBigDecimal, BigDecimal.class),
-                ValueFactory.create("5", Convert::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("-5", ConvertUtil::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("5", ConvertUtil::toBigDecimal, BigDecimal.class),
                 true,
                 true,
-                Convert::toBigDecimal);
+                ConvertUtil::toBigDecimal);
 
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(0)));
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(-5)));
@@ -185,11 +185,11 @@ public class BetweenCriterionCompilerTest {
     @Test
     public void testIntegerActual() {
         BetweenCriterion criterion = new BetweenCriterion(
-                ValueFactory.create("1", Convert::toBigDecimal, BigDecimal.class),
-                ValueFactory.create("100", Convert::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("1", ConvertUtil::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("100", ConvertUtil::toBigDecimal, BigDecimal.class),
                 true,
                 true,
-                Convert::toBigDecimal);
+                ConvertUtil::toBigDecimal);
 
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(50)));
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(1)));
@@ -199,11 +199,11 @@ public class BetweenCriterionCompilerTest {
     @Test
     public void testLongActual() {
         BetweenCriterion criterion = new BetweenCriterion(
-                ValueFactory.create("1000", Convert::toBigDecimal, BigDecimal.class),
-                ValueFactory.create("9999", Convert::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("1000", ConvertUtil::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("9999", ConvertUtil::toBigDecimal, BigDecimal.class),
                 true,
                 true,
-                Convert::toBigDecimal);
+                ConvertUtil::toBigDecimal);
 
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(5000L)));
     }
@@ -211,11 +211,11 @@ public class BetweenCriterionCompilerTest {
     @Test
     public void testBigDecimalActual() {
         BetweenCriterion criterion = new BetweenCriterion(
-                ValueFactory.create("10.5", Convert::toBigDecimal, BigDecimal.class),
-                ValueFactory.create("20.5", Convert::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("10.5", ConvertUtil::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("20.5", ConvertUtil::toBigDecimal, BigDecimal.class),
                 true,
                 true,
-                Convert::toBigDecimal);
+                ConvertUtil::toBigDecimal);
 
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(new BigDecimal("15.5"))));
     }
@@ -224,11 +224,11 @@ public class BetweenCriterionCompilerTest {
     public void testEqualBoundaries() {
         // 边界值相等的闭区间应该只匹配该值
         BetweenCriterion criterion = new BetweenCriterion(
-                ValueFactory.create("50", Convert::toBigDecimal, BigDecimal.class),
-                ValueFactory.create("50", Convert::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("50", ConvertUtil::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("50", ConvertUtil::toBigDecimal, BigDecimal.class),
                 true,
                 true,
-                Convert::toBigDecimal);
+                ConvertUtil::toBigDecimal);
 
         Assert.assertTrue(compiler.compile(criterion, null).test(MatchContext.of(50)));
         Assert.assertFalse(compiler.compile(criterion, null).test(MatchContext.of(49)));
@@ -239,11 +239,11 @@ public class BetweenCriterionCompilerTest {
     public void testEqualBoundariesOpen() {
         // 边界值相等的开区间不匹配任何值
         BetweenCriterion criterion = new BetweenCriterion(
-                ValueFactory.create("50", Convert::toBigDecimal, BigDecimal.class),
-                ValueFactory.create("50", Convert::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("50", ConvertUtil::toBigDecimal, BigDecimal.class),
+                ValueFactory.create("50", ConvertUtil::toBigDecimal, BigDecimal.class),
                 false,
                 false,
-                Convert::toBigDecimal);
+                ConvertUtil::toBigDecimal);
 
         Assert.assertFalse(compiler.compile(criterion, null).test(MatchContext.of(50)));
     }

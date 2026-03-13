@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.proxy;
 
-import cn.hutool.core.lang.Assert;
+import com.team4u.framework.base.util.Assert;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
 import com.team4u.framework.retry.inline.InlineRetryClient;

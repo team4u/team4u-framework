@@ -1,6 +1,5 @@
 package com.team4u.framework.mask.policy;
 
-import cn.hutool.core.lang.Validator;
 import com.team4u.framework.mask.MaskPolicy;
 import com.team4u.framework.mask.MaskType;
 import com.team4u.framework.mask.MaskUtils;
@@ -27,7 +26,7 @@ public class NameMaskPolicy implements MaskPolicy {
             return value;
         }
 
-        if (Validator.hasChinese(value)) {
+        if (value.codePoints().anyMatch(cp -> Character.UnicodeScript.of(cp) == Character.UnicodeScript.HAN)) {
             return maskChineseName(value);
         }
 

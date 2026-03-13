@@ -1,6 +1,6 @@
 package com.team4u.framework.criterion.util;
 
-import cn.hutool.core.convert.Convert;
+import com.team4u.framework.base.util.ConvertUtil;
 
 import java.util.*;
 
@@ -37,7 +37,7 @@ public class CriterionCollectionUtil {
             if (obj instanceof Object[]) {
                 return Arrays.asList((Object[]) obj);
             }
-            return Convert.toList(obj);
+            return ConvertUtil.toList(obj);
         }
 
         if (obj instanceof Iterator) {

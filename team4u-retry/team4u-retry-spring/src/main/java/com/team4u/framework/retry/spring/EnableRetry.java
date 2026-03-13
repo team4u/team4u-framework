@@ -1,5 +1,6 @@
 package com.team4u.framework.retry.spring;
 
+import com.team4u.framework.retry.proxy.Retryable;
 import org.springframework.context.annotation.Import;
 
 import java.lang.annotation.*;

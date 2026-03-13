@@ -1,6 +1,6 @@
 package com.team4u.framework.translator.render.builtin;
 
-import cn.hutool.core.util.StrUtil;
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.translator.model.ErrorDef;
 import com.team4u.framework.translator.model.RenderContext;
 import com.team4u.framework.translator.render.RenderPolicy;
@@ -23,7 +23,7 @@ public class I18nRenderPolicy implements RenderPolicy {
     @Override
     public boolean supports(RenderContext context) {
         ErrorDef routeDef = context.getRouteDef();
-        return routeDef != null && StrUtil.isNotEmpty(routeDef.getI18nKey());
+        return routeDef != null && StringUtil.isNotEmpty(routeDef.getI18nKey());
     }
 
     @Override
@@ -38,7 +38,7 @@ public class I18nRenderPolicy implements RenderPolicy {
         // 如果能够找到对应语种配置，则覆盖 defaultMsg；否则保持原形交由下游 Template 解析。
         String i18nTemplate = resolveI18nMessage(i18nKey);
 
-        if (StrUtil.isNotEmpty(i18nTemplate)) {
+        if (StringUtil.isNotEmpty(i18nTemplate)) {
             context.setFinalMessage(i18nTemplate);
         }
     }

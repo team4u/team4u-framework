@@ -1,7 +1,7 @@
 package com.team4u.framework.router.core;
 
-import cn.hutool.log.Log;
-import cn.hutool.log.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.criterion.MatchContext;
 import com.team4u.framework.criterion.trace.TraceNode;
@@ -20,7 +20,7 @@ import java.util.List;
  */
 public class ExpressionRouter extends AbstractRouter {
 
-    private static final Log log = LogFactory.get();
+    private static final Logger log = LoggerFactory.getLogger(ExpressionRouter.class);
 
     private final List<RouteRule> rules;
     private final Criteria criteria;

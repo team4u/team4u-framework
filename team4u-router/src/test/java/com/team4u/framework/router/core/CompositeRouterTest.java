@@ -1,6 +1,6 @@
 package com.team4u.framework.router.core;
 
-import cn.hutool.json.JSONUtil;
+import com.team4u.framework.serializer.json.JsonUtil;
 import com.team4u.framework.config.test.TestConfigContext;
 import com.team4u.framework.router.RoutingManager;
 import com.team4u.framework.router.api.RouterType;
@@ -36,7 +36,7 @@ public class CompositeRouterTest {
      */
     private void registerPolicy(String id, RoutePolicy policy) {
         policy.setId(id);
-        configContext.put("router." + id, JSONUtil.toJsonStr(policy));
+        configContext.put("router." + id, JsonUtil.toJsonStr(policy));
     }
 
     @Test

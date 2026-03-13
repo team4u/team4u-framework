@@ -1,7 +1,7 @@
 package com.team4u.framework.message.core.interceptor;
 
-import cn.hutool.core.date.DateUtil;
-import cn.hutool.core.date.TimeInterval;
+import com.team4u.framework.base.util.DateUtil;
+import com.team4u.framework.base.util.DateUtil.TimeInterval;
 import com.team4u.framework.message.core.Message;
 import lombok.extern.slf4j.Slf4j;
 
@@ -37,7 +37,7 @@ public class LoggingMessageInterceptor implements MessageInterceptor {
     @Override
     public void afterCompletion(Message<?> message, Exception ex) {
         TimeInterval timer = TIMER_LOCAL.get();
-        long cost = timer != null ? timer.intervalMs() : -1;
+        long cost = timer != null ? timer.interval() : -1;
         TIMER_LOCAL.remove();
 
         if (ex == null) {

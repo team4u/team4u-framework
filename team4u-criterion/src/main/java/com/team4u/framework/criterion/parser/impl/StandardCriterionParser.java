@@ -1,6 +1,6 @@
 package com.team4u.framework.criterion.parser.impl;
 
-import cn.hutool.core.util.StrUtil;
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.criterion.model.*;
 import com.team4u.framework.criterion.model.convert.ValueConverterRegistry;
 import com.team4u.framework.criterion.model.value.Value;
@@ -119,7 +119,7 @@ public class StandardCriterionParser implements CriterionParser {
 
     @Override
     public Criterion parse(String expression) {
-        if (StrUtil.isBlank(expression)) {
+        if (StringUtil.isBlank(expression)) {
             return null;
         }
         List<Token> tokens = tokenize(expression);

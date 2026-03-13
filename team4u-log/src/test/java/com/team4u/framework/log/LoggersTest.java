@@ -1,6 +1,6 @@
 package com.team4u.framework.log;
 
-import cn.hutool.core.util.ReflectUtil;
+import com.team4u.framework.base.util.ReflectUtil;
 import com.team4u.framework.log.core.LogEvent;
 import com.team4u.framework.log.pipeline.interceptor.TargetedDyeingInterceptor;
 import com.team4u.framework.log.pipeline.interceptor.TargetedDyeingInterceptor.DyeingRule;

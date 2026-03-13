@@ -1,7 +1,7 @@
 package com.team4u.framework.config.db;
 
-import cn.hutool.db.Db;
-import cn.hutool.db.Entity;
+import com.team4u.framework.base.util.ConvertUtil;
+import com.team4u.framework.base.util.JdbcUtil;
 import com.team4u.framework.config.core.domain.ConfigEntry;
 import com.team4u.framework.config.core.spi.ConfigSource;
 import lombok.extern.slf4j.Slf4j;
@@ -84,7 +84,7 @@ public class DbConfigSource implements ConfigSource {
     @Override
     public Map<String, ConfigEntry> load() {
         try {
-            List<Entity> rows = queryRows(null);
+            List<Map<String, Object>> rows = queryRows(null);
             return toConfigMap(rows);
         } catch (SQLException e) {
             log.error("[{}] Failed to load all configs", name, e);
@@ -100,7 +100,7 @@ public class DbConfigSource implements ConfigSource {
     @Override
     public Map<String, ConfigEntry> loadSince(long timestamp) {
         try {
-            List<Entity> rows = queryRows(timestamp);
+            List<Map<String, Object>> rows = queryRows(timestamp);
             return toConfigMap(rows);
         } catch (SQLException e) {
             log.error("[{}] Failed to load incremental configs, timestamp={}", name, timestamp, e);
@@ -114,9 +114,7 @@ public class DbConfigSource implements ConfigSource {
      * @param sinceTimestamp 起始时间戳，不为空时执行增量查询
      * @return 记录快照列表
      */
-    private List<Entity> queryRows(Long sinceTimestamp) throws SQLException {
-        Db db = Db.use(dataSource);
-
+    private List<Map<String, Object>> queryRows(Long sinceTimestamp) throws SQLException {
         StringBuilder sql = new StringBuilder("SELECT * FROM ").append(options.getTableName())
                 .append(" WHERE 1=1");
         List<Object> params = new ArrayList<>();
@@ -126,7 +124,7 @@ public class DbConfigSource implements ConfigSource {
             params.add(new Timestamp(sinceTimestamp));
         }
 
-        return db.query(sql.toString(), params.toArray());
+        return JdbcUtil.query(dataSource, sql.toString(), params.toArray());
     }
 
     /**
@@ -135,15 +133,15 @@ public class DbConfigSource implements ConfigSource {
      * 将数据库行映射为配置条目，并处理软删除逻辑。
      * </p>
      */
-    private Map<String, ConfigEntry> toConfigMap(List<Entity> rows) {
+    private Map<String, ConfigEntry> toConfigMap(List<Map<String, Object>> rows) {
         Map<String, ConfigEntry> result = new HashMap<>(rows.size());
         long now = System.currentTimeMillis();
 
-        for (Entity row : rows) {
-            String configType = row.getStr(options.getConfigTypeColumn());
-            String configKey = row.getStr(options.getConfigKeyColumn());
-            String configValue = row.getStr(options.getConfigValueColumn());
-            Integer enabled = row.getInt(options.getEnabledColumn());
+        for (Map<String, Object> row : rows) {
+            String configType = ConvertUtil.toStr(row.get(options.getConfigTypeColumn().toLowerCase()));
+            String configKey = ConvertUtil.toStr(row.get(options.getConfigKeyColumn().toLowerCase()));
+            String configValue = ConvertUtil.toStr(row.get(options.getConfigValueColumn().toLowerCase()));
+            Integer enabled = ConvertUtil.toInt(row.get(options.getEnabledColumn().toLowerCase()));
 
             // 拼接配置键：prefix.key
             String fullKey = configType + "." + configKey;

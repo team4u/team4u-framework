@@ -1,6 +1,6 @@
 package com.team4u.framework.log.pipeline.interceptor;
 
-import cn.hutool.core.util.StrUtil;
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.log.core.LogEvent;
 import com.team4u.framework.log.pipeline.LogInterceptor;
 import org.slf4j.MDC;
@@ -37,7 +37,7 @@ public class MdcEnrichInterceptor implements LogInterceptor {
      * @param traceIdKey 键名（例如 "requestId"）
      */
     public void setTraceIdKey(String traceIdKey) {
-        if (StrUtil.isNotBlank(traceIdKey)) {
+        if (StringUtil.isNotBlank(traceIdKey)) {
             this.traceIdKey = traceIdKey;
         }
     }
@@ -57,7 +57,7 @@ public class MdcEnrichInterceptor implements LogInterceptor {
     public boolean handle(LogEvent event) {
         // 直接从 MDC 中获取指定的键值
         String traceId = MDC.get(traceIdKey);
-        if (StrUtil.isNotBlank(traceId)) {
+        if (StringUtil.isNotBlank(traceId)) {
             event.setTraceId(traceId);
         }
         return true;

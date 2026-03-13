@@ -23,6 +23,7 @@
         <module>team4u-log</module>
         <module>team4u-lease</module>
         <module>team4u-retry</module>
+        <module>team4u-serializer</module>
     </modules>
 
     <properties>
@@ -31,16 +32,23 @@
         <maven.compiler.source>1.8</maven.compiler.source>
         <maven.compiler.target>1.8</maven.compiler.target>
 
-        <hutool.version>5.8.43</hutool.version>
         <lombok.version>1.18.30</lombok.version>
         <junit.version>4.13.2</junit.version>
         <byte-buddy.version>1.14.12</byte-buddy.version>
         <spring.version>5.3.39</spring.version>
         <slf4j.version>1.7.36</slf4j.version>
+        <jackson.version>2.16.1</jackson.version>
+        <h2.version>2.2.224</h2.version>
     </properties>
 
     <dependencyManagement>
         <dependencies>
+            <dependency>
+                <groupId>com.h2database</groupId>
+                <artifactId>h2</artifactId>
+                <version>${h2.version}</version>
+                <scope>test</scope>
+            </dependency>
             <dependency>
                 <groupId>org.slf4j</groupId>
                 <artifactId>slf4j-api</artifactId>
@@ -69,15 +77,30 @@
                 <version>${byte-buddy.version}</version>
             </dependency>
             <dependency>
-                <groupId>cn.hutool</groupId>
-                <artifactId>hutool-all</artifactId>
-                <version>${hutool.version}</version>
-            </dependency>
-            <dependency>
                 <groupId>org.projectlombok</groupId>
                 <artifactId>lombok</artifactId>
                 <version>${lombok.version}</version>
                 <scope>compile</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-serializer-json</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-serializer-jackson</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-databind</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.datatype</groupId>
+                <artifactId>jackson-datatype-jsr310</artifactId>
+                <version>${jackson.version}</version>
             </dependency>
             <dependency>
                 <groupId>junit</groupId>

@@ -1,6 +1,6 @@
 package com.team4u.framework.criterion.util;
 
-import cn.hutool.core.util.NumberUtil;
+import com.team4u.framework.base.util.NumberUtil;
 
 import java.math.BigDecimal;
 import java.util.Objects;

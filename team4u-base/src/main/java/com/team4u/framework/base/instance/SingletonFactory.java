@@ -1,7 +1,7 @@
 package com.team4u.framework.base.instance;
 
-import cn.hutool.cache.CacheUtil;
-import cn.hutool.core.util.ReflectUtil;
+import com.team4u.framework.base.util.CacheUtil;
+import com.team4u.framework.base.util.ReflectUtil;
 
 /**
  * 单例工厂类

@@ -1,8 +1,7 @@
 package com.team4u.framework.message.channel.mq;
 
-import cn.hutool.core.io.IoUtil;
-import cn.hutool.core.util.RuntimeUtil;
-import cn.hutool.core.util.StrUtil;
+import com.team4u.framework.base.util.IoUtil;
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.policy.core.KeyedPolicyRegistry;
 
 /**
@@ -34,8 +33,8 @@ public class MqChannelFactoryHolder {
      * @return 准备就绪的生命周期通道实例
      */
     public LifecycleMessageChannel createAndStart(String configId) {
-        String protocol = StrUtil.subBefore(configId, ".", false);
-        String destination = StrUtil.subAfter(configId, ".", false);
+        String protocol = StringUtil.subBefore(configId, ".", false);
+        String destination = StringUtil.subAfter(configId, ".", false);
 
         MqChannelFactory factory = registry.get(protocol)
                 .orElseThrow(() -> new IllegalArgumentException("Unsupported MQ protocol: [" + protocol + "]"));
@@ -43,7 +42,7 @@ public class MqChannelFactoryHolder {
         LifecycleMessageChannel channel = factory.create(destination);
 
         // 挂载资源释放钩子，保障在 JVM 关闭时进行必要的连接清理
-        RuntimeUtil.addShutdownHook(() -> IoUtil.close(channel));
+        Runtime.getRuntime().addShutdownHook(new Thread(() -> IoUtil.close(channel)));
 
         // 启动逻辑通道，使其进入可分发状态
         channel.start();

@@ -1,8 +1,8 @@
 package com.team4u.framework.base.instance;
 
-import cn.hutool.cache.Cache;
-import cn.hutool.cache.CacheUtil;
-import cn.hutool.core.util.StrUtil;
+import com.team4u.framework.base.util.cache.Cache;
+import com.team4u.framework.base.util.CacheUtil;
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.base.config.ConfigParser;
 import com.team4u.framework.base.config.StringConfigParser;
 
@@ -105,7 +105,7 @@ public class DynamicInstanceProvider<I, C, T> {
             }
 
             // 解析配置
-            if (input instanceof String && StrUtil.isBlank((String) input)) {
+            if (input instanceof String && StringUtil.isBlank((String) input)) {
                 return null;
             }
             C config = configParser.parse(input);

@@ -1,6 +1,6 @@
 package com.team4u.framework.criterion.compiler.impl;
 
-import cn.hutool.core.date.DateUtil;
+import com.team4u.framework.base.util.DateUtil;
 import org.junit.Assert;
 import org.junit.Test;
 import com.team4u.framework.criterion.Criteria;

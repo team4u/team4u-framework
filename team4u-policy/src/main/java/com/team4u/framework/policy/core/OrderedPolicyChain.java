@@ -1,6 +1,7 @@
 package com.team4u.framework.policy.core;
 
-import cn.hutool.log.Log;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.policy.api.ContextPolicy;
 import com.team4u.framework.policy.api.PolicyRegistry;
 import com.team4u.framework.policy.exception.PolicyException;
@@ -21,7 +22,7 @@ import java.util.function.Predicate;
 @Getter
 public class OrderedPolicyChain<C, P extends ContextPolicy<C>> implements PolicyRegistry<P> {
 
-    private static final Log log = Log.get();
+    private static final Logger log = LoggerFactory.getLogger(OrderedPolicyChain.class);
 
     /**
      * 策略类型

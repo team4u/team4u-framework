@@ -1,7 +1,7 @@
 package com.team4u.framework.retry.common.concurrent;
 
-import cn.hutool.log.Log;
-import cn.hutool.log.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -15,7 +15,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 public class RetryExecutorManager {
 
     static final String SHUTDOWN_HOOK_ENABLED_PROPERTY = "team4u.retry.executors.shutdownHook.enabled";
-    private static final Log log = LogFactory.get();
+    private static final Logger log = LoggerFactory.getLogger(RetryExecutorManager.class);
     private static final String DAEMON_PROPERTY = "team4u.retry.executors.daemon";
     private volatile ScheduledExecutorService globalScheduler;
     private volatile ExecutorService globalCleanupExecutor;

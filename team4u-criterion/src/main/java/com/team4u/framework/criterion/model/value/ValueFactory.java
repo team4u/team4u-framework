@@ -1,7 +1,7 @@
 package com.team4u.framework.criterion.model.value;
 
-import cn.hutool.core.util.NumberUtil;
-import cn.hutool.core.util.StrUtil;
+import com.team4u.framework.base.util.NumberUtil;
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.criterion.util.FastNumberUtil;
 
 import java.util.function.Function;
@@ -29,7 +29,7 @@ public class ValueFactory {
      * @return Value 对象
      */
     public static <T> Value<T> create(String rawToken, Function<String, T> typeParser, Class<T> targetType) {
-        if (StrUtil.isBlank(rawToken)) {
+        if (StringUtil.isBlank(rawToken)) {
             return new FixedValue<>(null);
         }
 
@@ -37,7 +37,7 @@ public class ValueFactory {
         if (rawToken.startsWith("$")) {
             // 截取 '$' 符号后的真实变量名
             String varName = rawToken.substring(1);
-            if (StrUtil.isBlank(varName)) {
+            if (StringUtil.isBlank(varName)) {
                 throw new IllegalArgumentException("Invalid variable name: " + rawToken);
             }
             return new VariableValue<>(varName, targetType);
@@ -46,7 +46,7 @@ public class ValueFactory {
         // --- 以下全部解析为静态常量 (FixedValue) ---
 
         // 2. 被引号包裹的字符串 (例如 'VIP')
-        if (StrUtil.isWrap(rawToken, "'", "'")) {
+        if (StringUtil.isWrap(rawToken, "'", "'")) {
             // 统一调用 parseString 进行去引号和反转义
             return new FixedValue<>(typeParser.apply(parseString(rawToken)));
         }
@@ -78,7 +78,7 @@ public class ValueFactory {
      * @return 解析后的字符串
      */
     public static String parseString(String rawToken) {
-        if (StrUtil.isWrap(rawToken, "'", "'")) {
+        if (StringUtil.isWrap(rawToken, "'", "'")) {
             return rawToken.substring(1, rawToken.length() - 1);
         }
         return rawToken;

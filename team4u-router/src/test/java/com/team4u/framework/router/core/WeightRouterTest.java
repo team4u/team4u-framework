@@ -1,6 +1,6 @@
 package com.team4u.framework.router.core;
 
-import cn.hutool.core.util.HashUtil;
+import com.team4u.framework.base.util.HashUtil;
 import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;

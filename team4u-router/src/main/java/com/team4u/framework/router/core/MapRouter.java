@@ -1,7 +1,7 @@
 package com.team4u.framework.router.core;
 
-import cn.hutool.log.Log;
-import cn.hutool.log.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.router.api.RouterType;
 import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.model.RoutePolicy;
@@ -18,7 +18,7 @@ import java.util.Map;
  */
 public class MapRouter extends AbstractRouter {
 
-    private static final Log log = LogFactory.get();
+    private static final Logger log = LoggerFactory.getLogger(MapRouter.class);
 
     private final Map<String, Object> rules;
 

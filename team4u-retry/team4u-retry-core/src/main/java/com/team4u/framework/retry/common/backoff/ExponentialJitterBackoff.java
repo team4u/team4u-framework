@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.common.backoff;
 
-import cn.hutool.core.convert.Convert;
+import com.team4u.framework.base.util.ConvertUtil;
 import com.team4u.framework.retry.config.BackoffConfig;
 import lombok.EqualsAndHashCode;
 
@@ -54,9 +54,9 @@ public class ExponentialJitterBackoff implements Backoff {
             double multiplier = 2.0;
             long maxDelay = 30000L;
             if (params != null) {
-                initialDelay = Convert.toLong(params.get("initialDelay"), 1000L);
-                multiplier = Convert.toDouble(params.get("multiplier"), 2.0);
-                maxDelay = Convert.toLong(params.get("maxDelay"), 30000L);
+                initialDelay = ConvertUtil.toLong(params.get("initialDelay"), 1000L);
+                multiplier = ConvertUtil.toDouble(params.get("multiplier"), 2.0);
+                maxDelay = ConvertUtil.toLong(params.get("maxDelay"), 30000L);
             }
             return new ExponentialJitterBackoff(initialDelay, multiplier, maxDelay);
         }

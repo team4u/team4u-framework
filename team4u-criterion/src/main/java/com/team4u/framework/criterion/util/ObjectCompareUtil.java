@@ -1,7 +1,7 @@
 package com.team4u.framework.criterion.util;
 
-import cn.hutool.core.convert.Convert;
-import cn.hutool.core.util.ObjectUtil;
+import com.team4u.framework.base.util.ConvertUtil;
+import com.team4u.framework.base.util.ObjectUtil;
 
 /**
  * 对象比较工具类
@@ -35,8 +35,8 @@ public class ObjectCompareUtil {
         }
 
         // 兜底：宽容模式下，最后尝试转为字符串进行字面值比较（例如 Integer(1) 与 "1"）
-        String s1 = Convert.toStr(obj1);
-        String s2 = Convert.toStr(obj2);
+        String s1 = ConvertUtil.toStr(obj1);
+        String s2 = ConvertUtil.toStr(obj2);
         return ObjectUtil.equal(s1, s2);
     }
 }

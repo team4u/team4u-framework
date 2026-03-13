@@ -1,9 +1,8 @@
 package com.team4u.framework.lease.jdbc;
 
-import cn.hutool.core.util.IdUtil;
-import cn.hutool.core.util.ObjectUtil;
-import cn.hutool.core.util.StrUtil;
-import cn.hutool.db.Db;
+import com.team4u.framework.base.util.Assert;
+import com.team4u.framework.base.util.IdUtil;
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.lease.api.LeaseBackend;
 import com.team4u.framework.lease.enums.LeaseAdminResult;
 import com.team4u.framework.lease.enums.LeaseRuntimeResult;
@@ -39,19 +38,43 @@ public class JdbcLeaseBackend implements LeaseBackend {
     private final JdbcLeaseTaskDao dao;
     private final LongSupplier clock;
 
+    /**
+     * 使用数据源初始化后端，默认使用 MySQL 方言和系统时钟
+     *
+     * @param dataSource 数据源
+     */
     public JdbcLeaseBackend(DataSource dataSource) {
         this(dataSource, new MySqlLeaseDbDialect(), System::currentTimeMillis);
     }
 
+    /**
+     * 使用数据源和指定的数据库方言初始化后端，默认使用系统时钟
+     *
+     * @param dataSource 数据源
+     * @param dialect    数据库方言
+     */
     public JdbcLeaseBackend(DataSource dataSource, LeaseDbDialect dialect) {
         this(dataSource, dialect, System::currentTimeMillis);
     }
 
+    /**
+     * 内部构造函数，支持注入自定义时钟，主要用于单元测试
+     *
+     * @param dataSource 数据源
+     * @param dialect    数据库方言
+     * @param clock      时钟供应商
+     */
     JdbcLeaseBackend(DataSource dataSource, LeaseDbDialect dialect, LongSupplier clock) {
-        this.dao = new JdbcLeaseTaskDao(Db.use(dataSource), dialect, new LeaseJsonCodec());
+        this.dao = new JdbcLeaseTaskDao(dataSource, dialect, new LeaseJsonCodec());
         this.clock = Objects.requireNonNull(clock, "clock");
     }
 
+    /**
+     * 发布一个新任务
+     *
+     * @param request 发布请求
+     * @return 生成的任务 ID
+     */
     @Override
     public String publish(LeasePublishRequest request) {
         validatePublishRequest(request);
@@ -60,6 +83,12 @@ public class JdbcLeaseBackend implements LeaseBackend {
         return entity.getTaskId();
     }
 
+    /**
+     * 如果任务不存在则发布新任务（基于业务键去重）
+     *
+     * @param request 发布请求
+     * @return 发布结果，包含是否创建成功及任务 ID
+     */
     @Override
     public LeasePublishResult publishIfAbsent(LeasePublishRequest request) {
         validatePublishRequest(request);
@@ -72,7 +101,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
                     .record(entity.toRecord())
                     .build();
         } catch (SQLException e) {
-            if (StrUtil.isBlank(request.getBusinessKey()) || !isDuplicateKey(e)) {
+            if (StringUtil.isBlank(request.getBusinessKey()) || !isDuplicateKey(e)) {
                 throw new IllegalStateException("publishIfAbsent failed", e);
             }
             try {
@@ -121,12 +150,26 @@ public class JdbcLeaseBackend implements LeaseBackend {
         }
     }
 
+    /**
+     * 关闭并完成运行中的任务
+     *
+     * @param handle  租约句柄
+     * @param request 关闭请求，包含执行状态和结果
+     * @return 运行态变动结果
+     */
     @Override
     public LeaseRuntimeResult close(LeaseHandle handle, LeaseCloseRequest request) {
         return applyRuntimeMutation(handle,
                 now -> dao.close(handle.getTaskId(), handle.getWorkerId(), handle.getLeaseToken(), request, now));
     }
 
+    /**
+     * 续延租约（心跳）
+     *
+     * @param handle       租约句柄
+     * @param extendMillis 续延的毫秒数
+     * @return 运行态变动结果
+     */
     @Override
     public LeaseRuntimeResult heartbeat(LeaseHandle handle, long extendMillis) {
         return applyRuntimeMutation(handle, now -> dao.heartbeat(
@@ -137,6 +180,13 @@ public class JdbcLeaseBackend implements LeaseBackend {
                 now));
     }
 
+    /**
+     * 释放当前持有的租约并让任务重新入队，可延迟可见
+     *
+     * @param handle  租约句柄
+     * @param request 释放请求，包含延迟时间和属性更新
+     * @return 运行态变动结果
+     */
     @Override
     public LeaseRuntimeResult release(LeaseHandle handle, LeaseReleaseRequest request) {
         return applyRuntimeMutation(handle, now -> dao.release(
@@ -150,16 +200,37 @@ public class JdbcLeaseBackend implements LeaseBackend {
                 now));
     }
 
+    /**
+     * 管理面：重新调度任务
+     *
+     * @param taskId      任务 ID
+     * @param delayMillis 调度延迟毫秒数
+     * @return 管理态操作结果
+     */
     @Override
     public LeaseAdminResult reschedule(String taskId, long delayMillis) {
         return applyAdminMutation(taskId, now -> dao.reschedule(taskId, now + Math.max(0L, delayMillis), now));
     }
 
+    /**
+     * 管理面：强制关闭任务
+     *
+     * @param taskId  任务 ID
+     * @param request 关闭请求
+     * @return 管理态操作结果
+     */
     @Override
     public LeaseAdminResult close(String taskId, LeaseCloseRequest request) {
         return applyAdminMutation(taskId, now -> dao.close(taskId, request, now));
     }
 
+    /**
+     * 管理面：将已关闭的失败任务重新放入队列执行
+     *
+     * @param taskId      任务 ID
+     * @param delayMillis 调度延迟毫秒数
+     * @return 管理态操作结果
+     */
     @Override
     public LeaseAdminResult rescheduleFailed(String taskId, long delayMillis) {
         validateTaskId(taskId);
@@ -180,6 +251,12 @@ public class JdbcLeaseBackend implements LeaseBackend {
         }
     }
 
+    /**
+     * 获取指定任务的记录信息
+     *
+     * @param taskId 任务 ID
+     * @return 任务记录
+     */
     @Override
     public Optional<LeaseTaskRecord> get(String taskId) {
         validateTaskId(taskId);
@@ -191,9 +268,16 @@ public class JdbcLeaseBackend implements LeaseBackend {
         }
     }
 
+    /**
+     * 根据业务键获取任务记录
+     *
+     * @param taskGroup   任务组名
+     * @param businessKey 业务键
+     * @return 任务记录
+     */
     @Override
     public Optional<LeaseTaskRecord> getByBusinessKey(String taskGroup, String businessKey) {
-        if (StrUtil.isBlank(taskGroup) || StrUtil.isBlank(businessKey)) {
+        if (StringUtil.isBlank(taskGroup) || StringUtil.isBlank(businessKey)) {
             return Optional.empty();
         }
         try {
@@ -204,11 +288,24 @@ public class JdbcLeaseBackend implements LeaseBackend {
         }
     }
 
+    /**
+     * 管理面：更新任务的基础信息
+     *
+     * @param request 更新请求
+     * @return 管理态操作结果
+     */
     @Override
     public LeaseAdminResult update(LeaseUpdateRequest request) {
         return applyAdminMutation(request.getTaskId(), now -> dao.update(request, now));
     }
 
+    /**
+     * 管理面：更新任务基础信息并重新进行调度
+     *
+     * @param request     更新请求
+     * @param delayMillis 调度延迟毫秒数
+     * @return 管理态操作结果
+     */
     @Override
     public LeaseAdminResult updateAndReschedule(LeaseUpdateRequest request, long delayMillis) {
         validateUpdateRequest(request);
@@ -217,6 +314,12 @@ public class JdbcLeaseBackend implements LeaseBackend {
                 now -> dao.updateAndReschedule(request, now + Math.max(0L, delayMillis), now));
     }
 
+    /**
+     * 分页列出符合条件的任务
+     *
+     * @param request 查询条件请求
+     * @return 任务分页结果
+     */
     @Override
     public LeaseTaskPage list(LeaseQueryRequest request) {
         try {
@@ -307,7 +410,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
     }
 
     private void validateUpdateRequest(LeaseUpdateRequest request) {
-        if (request == null || StrUtil.isBlank(request.getTaskId())) {
+        if (request == null || StringUtil.isBlank(request.getTaskId())) {
             throw new IllegalArgumentException("taskId required");
         }
     }
@@ -335,62 +438,45 @@ public class JdbcLeaseBackend implements LeaseBackend {
     }
 
     private void validatePublishRequest(LeasePublishRequest request) {
-        ObjectUtil.defaultIfNull(request, () -> {
-            throw new IllegalArgumentException("request must not be null");
-        });
-        if (StrUtil.isBlank(request.getTaskGroup())) {
-            throw new IllegalArgumentException("request.taskGroup must not be blank");
-        }
-        if (StrUtil.isBlank(request.getTaskType())) {
-            throw new IllegalArgumentException("request.taskType must not be blank");
-        }
+        Assert.notNull(request, "request must not be null");
+        Assert.notBlank(request.getTaskGroup(), "request.taskGroup must not be blank");
+        Assert.notBlank(request.getTaskType(), "request.taskType must not be blank");
     }
 
     private void validateAcquireRequest(LeaseAcquireRequest request) {
-        ObjectUtil.defaultIfNull(request, () -> {
-            throw new IllegalArgumentException("request must not be null");
-        });
-        if (StrUtil.isBlank(request.getWorkerId())) {
-            throw new IllegalArgumentException("request.workerId must not be blank");
-        }
+        Assert.notNull(request, "request must not be null");
+        Assert.notBlank(request.getWorkerId(), "request.workerId must not be blank");
         if (request.getLeaseMillis() <= 0L) {
             throw new IllegalArgumentException("request.leaseMillis must be greater than 0");
         }
-        if (request.getSubscriptions().isEmpty()) {
-            throw new IllegalArgumentException("request.subscriptions must not be empty");
-        }
+        Assert.notEmpty(request.getSubscriptions(),
+                "request.subscriptions must not be empty");
         for (LeaseTaskGroupSubscription subscription : request.getSubscriptions()) {
-            if (subscription == null || StrUtil.isBlank(subscription.getTaskGroup())) {
+            if (subscription == null || StringUtil.isBlank(subscription.getTaskGroup())) {
                 throw new IllegalArgumentException("subscription.taskGroup must not be blank");
             }
         }
     }
 
     private void validateHandle(LeaseHandle handle) {
-        ObjectUtil.defaultIfNull(handle, () -> {
-            throw new IllegalArgumentException("handle must not be null");
-        });
+        Assert.notNull(handle, "handle must not be null");
         validateTaskId(handle.getTaskId());
-        if (StrUtil.isBlank(handle.getWorkerId())) {
-            throw new IllegalArgumentException("handle.workerId must not be blank");
-        }
-        if (StrUtil.isBlank(handle.getLeaseToken())) {
-            throw new IllegalArgumentException("handle.leaseToken must not be blank");
-        }
+        Assert.notBlank(handle.getWorkerId(), "handle.workerId must not be blank");
+        Assert.notBlank(handle.getLeaseToken(), "handle.leaseToken must not be blank");
     }
 
     private void validateTaskId(String taskId) {
-        if (StrUtil.isBlank(taskId)) {
+        if (StringUtil.isBlank(taskId)) {
             throw new IllegalArgumentException("taskId must not be blank");
         }
     }
 
     private String nextTaskId() {
-        return "lease-task-" + IdUtil.fastSimpleUUID();
+        return "lease-task-" + IdUtil.simpleUUID();
     }
 
     private String nextLeaseToken() {
-        return "lease-token-" + IdUtil.fastSimpleUUID();
+        return "lease-token-" + IdUtil.simpleUUID();
     }
 
     /**

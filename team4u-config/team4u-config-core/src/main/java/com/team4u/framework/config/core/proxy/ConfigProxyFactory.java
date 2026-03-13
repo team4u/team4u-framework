@@ -1,6 +1,6 @@
 package com.team4u.framework.config.core.proxy;
 
-import cn.hutool.core.util.ReflectUtil;
+import com.team4u.framework.base.util.ReflectUtil;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.convert.PropertyConverterRegistry;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;

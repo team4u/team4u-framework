@@ -1,6 +1,6 @@
 package com.team4u.framework.criterion.parser;
 
-import cn.hutool.core.util.StrUtil;
+import com.team4u.framework.base.util.StringUtil;
 import lombok.Getter;
 
 /**
@@ -26,7 +26,7 @@ public class CriterionParseException extends RuntimeException {
      * @param tokenIndex 异常发生的Token索引
      */
     public CriterionParseException(String message, String expression, int tokenIndex) {
-        super(StrUtil.format("{} (at token index: {}, expression: [{}])", message, tokenIndex, expression));
+        super(StringUtil.format("{} (at token index: {}, expression: [{}])", message, tokenIndex, expression));
         this.expression = expression;
         this.tokenIndex = tokenIndex;
     }

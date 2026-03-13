@@ -1,7 +1,8 @@
 package com.team4u.framework.log.config;
 
-import cn.hutool.json.JSONUtil;
-import cn.hutool.log.Log;
+import com.team4u.framework.serializer.json.JsonUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import lombok.Data;
@@ -12,7 +13,7 @@ import lombok.Data;
  * 统一管理限流阈值、最大日志截断长度等 FinOps 相关配置。
  */
 public class FinOpsConfigRepository {
-    private static final Log log = Log.get();
+    private static final Logger log = LoggerFactory.getLogger(FinOpsConfigRepository.class);
     private static final FinOpsConfigRepository INSTANCE = new FinOpsConfigRepository();
     private static final String CONFIG_KEY = "team4u.log.finops";
 
@@ -38,7 +39,7 @@ public class FinOpsConfigRepository {
                 if (json == null || json.trim().isEmpty()) {
                     return new FinOpsConfig();
                 }
-                FinOpsConfig newConfig = JSONUtil.toBean(json, FinOpsConfig.class);
+                FinOpsConfig newConfig = JsonUtil.toBean(json, FinOpsConfig.class);
                 this.config = newConfig != null ? newConfig : new FinOpsConfig();
                 return this.config;
             } catch (Exception e) {

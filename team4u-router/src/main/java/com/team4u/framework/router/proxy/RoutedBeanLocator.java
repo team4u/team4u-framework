@@ -1,6 +1,6 @@
 package com.team4u.framework.router.proxy;
 
-import cn.hutool.core.util.StrUtil;
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.router.RoutingManager;
 import com.team4u.framework.router.api.exception.RouteException;
@@ -50,7 +50,7 @@ public class RoutedBeanLocator {
         RouteResult<String> result = routingManager.route(routerId, routeContext, String.class);
 
         // 如果未命中且没有兜底，抛出异常阻断
-        if (result == null || result.isNotMatch() || StrUtil.isBlank(result.getValue())) {
+        if (result == null || result.isNotMatch() || StringUtil.isBlank(result.getValue())) {
             throw RouteNotFoundException.ruleNotMatched(routerId);
         }
 

@@ -1,6 +1,6 @@
 package com.team4u.framework.message.core;
 
-import cn.hutool.core.lang.func.VoidFunc1;
+import com.team4u.framework.base.util.ThrowingConsumer;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -31,7 +31,7 @@ public class MessageHandlerBuilder {
      * @param func        函数式处理接口
      * @param <T>         业务载荷泛型
      */
-    public <T> MessageHandlerBuilder onMessage(Class<T> payloadType, VoidFunc1<Message<T>> func) {
+    public <T> MessageHandlerBuilder onMessage(Class<T> payloadType, ThrowingConsumer<Message<T>> func) {
         handlers.add(new MessageHandler<T>() {
             @Override
             public Class<T> supportedPayloadType() {
@@ -40,7 +40,7 @@ public class MessageHandlerBuilder {
 
             @Override
             public void handle(Message<T> message) throws Exception {
-                func.call(message);
+                func.accept(message);
             }
         });
         return this;

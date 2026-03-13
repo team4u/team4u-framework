@@ -1,8 +1,9 @@
 package com.team4u.framework.log.proxy;
 
-import cn.hutool.core.lang.TypeReference;
-import cn.hutool.json.JSONUtil;
-import cn.hutool.log.Log;
+import com.team4u.framework.serializer.json.TypeReference;
+import com.team4u.framework.serializer.json.JsonUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import lombok.Data;
@@ -17,7 +18,7 @@ import java.util.Map;
  * 维护第三方类库的动态代理日志规则
  */
 public class ProxyRuleRepository {
-    private static final Log log = Log.get();
+    private static final Logger log = LoggerFactory.getLogger(ProxyRuleRepository.class);
     private static final ProxyRuleRepository INSTANCE = new ProxyRuleRepository();
 
     // 配置中心的 Key
@@ -45,8 +46,8 @@ public class ProxyRuleRepository {
                     return new HashMap<>();
                 }
 
-                return JSONUtil.toBean(
-                        JSONUtil.parseObj(json),
+                return JsonUtil.toBean(
+                        json,
                         new TypeReference<Map<String, ProxyRule>>() {
                         },
                         false);

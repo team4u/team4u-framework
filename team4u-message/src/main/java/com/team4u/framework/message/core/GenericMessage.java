@@ -1,6 +1,6 @@
 package com.team4u.framework.message.core;
 
-import cn.hutool.core.lang.Assert;
+import com.team4u.framework.base.util.Assert;
 import lombok.Getter;
 import lombok.ToString;
 

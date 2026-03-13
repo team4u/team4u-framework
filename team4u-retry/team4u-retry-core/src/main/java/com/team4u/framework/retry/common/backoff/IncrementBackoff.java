@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.common.backoff;
 
-import cn.hutool.core.convert.Convert;
+import com.team4u.framework.base.util.ConvertUtil;
 import com.team4u.framework.retry.config.BackoffConfig;
 import lombok.EqualsAndHashCode;
 
@@ -49,8 +49,8 @@ public class IncrementBackoff implements Backoff {
             long initialDelay = 1000L;
             long stepMillis = 1000L;
             if (params != null) {
-                initialDelay = Convert.toLong(params.get("initialDelay"), 1000L);
-                stepMillis = Convert.toLong(params.get("stepMillis"), 1000L);
+                initialDelay = ConvertUtil.toLong(params.get("initialDelay"), 1000L);
+                stepMillis = ConvertUtil.toLong(params.get("stepMillis"), 1000L);
             }
             return new IncrementBackoff(initialDelay, stepMillis);
         }

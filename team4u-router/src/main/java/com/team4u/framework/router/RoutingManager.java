@@ -1,8 +1,8 @@
 package com.team4u.framework.router;
 
-import cn.hutool.core.util.StrUtil;
-import cn.hutool.log.Log;
-import cn.hutool.log.LogFactory;
+import com.team4u.framework.base.util.StringUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.base.util.ServiceLoaderUtil;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
@@ -30,7 +30,7 @@ import java.util.List;
  */
 public class RoutingManager {
 
-    private static final Log log = LogFactory.get();
+    private static final Logger log = LoggerFactory.getLogger(RoutingManager.class);
 
     private static volatile RoutingManager GLOBAL = builder().build();
 
@@ -108,7 +108,7 @@ public class RoutingManager {
      * 内部工厂方法：策略对象 -> 路由器实例
      */
     public Router buildRouter(RoutePolicy policy) {
-        if (policy == null || StrUtil.isBlank(policy.getType())) {
+        if (policy == null || StringUtil.isBlank(policy.getType())) {
             throw RouteConfigException.validationError("Invalid route policy or missing type");
         }
 
@@ -131,7 +131,7 @@ public class RoutingManager {
      */
     private Router getRouter(String routerId) {
         // 智能处理：如果 routerId 已经包含前缀，则不再重复拼接
-        String fullKey = (StrUtil.isNotEmpty(configPrefix) && routerId.startsWith(configPrefix))
+        String fullKey = (StringUtil.isNotEmpty(configPrefix) && routerId.startsWith(configPrefix))
                 ? routerId
                 : this.configPrefix + routerId;
 
@@ -222,7 +222,7 @@ public class RoutingManager {
      * 获取原始配置对应的路由器
      */
     private Router getRouterByConfig(String rawConfig) {
-        if (StrUtil.isBlank(rawConfig)) {
+        if (StringUtil.isBlank(rawConfig)) {
             return null;
         }
         return buildRouterFromConfig(rawConfig);
@@ -385,7 +385,7 @@ public class RoutingManager {
          * 自定义配置前缀，默认值为 "router."
          */
         public Builder configPrefix(String configPrefix) {
-            if (StrUtil.isNotBlank(configPrefix)) {
+            if (StringUtil.isNotBlank(configPrefix)) {
                 this.configPrefix = configPrefix;
             }
             return this;

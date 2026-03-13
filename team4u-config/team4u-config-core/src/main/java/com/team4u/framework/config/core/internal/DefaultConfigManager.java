@@ -1,9 +1,9 @@
 package com.team4u.framework.config.core.internal;
 
-import cn.hutool.core.collection.CollUtil;
-import cn.hutool.core.util.StrUtil;
-import cn.hutool.log.Log;
-import cn.hutool.log.LogFactory;
+import com.team4u.framework.base.util.CollectionUtil;
+import com.team4u.framework.base.util.StringUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.base.instance.DynamicInstanceProvider;
 import com.team4u.framework.config.core.ConfigChangeListener;
 import com.team4u.framework.config.core.ConfigManager;
@@ -30,7 +30,7 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 public class DefaultConfigManager implements ConfigManager {
 
-    private static final Log log = LogFactory.get();
+    private static final Logger log = LoggerFactory.getLogger(DefaultConfigManager.class);
 
     /**
      * 当前生效的配置快照引用
@@ -149,7 +149,7 @@ public class DefaultConfigManager implements ConfigManager {
      */
     private void initWatchers() {
         List<ConfigWatcher> watchers = watcherRegistry.getPolicies();
-        if (CollUtil.isNotEmpty(watchers)) {
+        if (CollectionUtil.isNotEmpty(watchers)) {
             for (ConfigWatcher watcher : watchers) {
                 watcher.init();
                 watcher.watch(hotReloadManager::signalChange);
@@ -185,7 +185,7 @@ public class DefaultConfigManager implements ConfigManager {
         ConfigPrefix annotation = configType.getAnnotation(ConfigPrefix.class);
         if (annotation != null) {
             String classPrefix = annotation.value();
-            if (StrUtil.isBlank(finalPrefix)) {
+            if (StringUtil.isBlank(finalPrefix)) {
                 finalPrefix = classPrefix;
             } else {
                 finalPrefix = finalPrefix + "." + classPrefix;
@@ -210,7 +210,7 @@ public class DefaultConfigManager implements ConfigManager {
 
     @Override
     public void addChangeListener(String keyPattern, ConfigChangeListener listener) {
-        if (StrUtil.isNotBlank(keyPattern) && listener != null) {
+        if (StringUtil.isNotBlank(keyPattern) && listener != null) {
             listeners.add(new ListenerRegistration(keyPattern, listener));
         }
     }
@@ -260,7 +260,7 @@ public class DefaultConfigManager implements ConfigManager {
                 try {
                     registration.listener.onChange(changedKey, oldVal, newVal);
                 } catch (Exception e) {
-                    log.error(e, "Error occurred while invoking ConfigChangeListener for key: {}", changedKey);
+                    log.error("Error occurred while invoking ConfigChangeListener for key: {}", changedKey, e);
                 }
             }
         }
@@ -273,14 +273,14 @@ public class DefaultConfigManager implements ConfigManager {
      * </p>
      */
     private boolean isMatch(String pattern, String key) {
-        if (StrUtil.isBlank(pattern) || StrUtil.isBlank(key)) {
+        if (StringUtil.isBlank(pattern) || StringUtil.isBlank(key)) {
             return false;
         }
         if (pattern.endsWith("*")) {
             String prefix = pattern.substring(0, pattern.length() - 1);
             return key.startsWith(prefix);
         }
-        return StrUtil.equals(pattern, key);
+        return StringUtil.equals(pattern, key);
     }
 
     /**
@@ -289,7 +289,7 @@ public class DefaultConfigManager implements ConfigManager {
     public void destroy() {
         hotReloadManager.destroy();
         List<ConfigWatcher> watchers = watcherRegistry.getPolicies();
-        if (CollUtil.isNotEmpty(watchers)) {
+        if (CollectionUtil.isNotEmpty(watchers)) {
             for (ConfigWatcher watcher : watchers) {
                 try {
                     watcher.destroy();

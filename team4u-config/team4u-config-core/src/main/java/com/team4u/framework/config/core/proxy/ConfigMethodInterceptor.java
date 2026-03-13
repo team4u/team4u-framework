@@ -1,7 +1,7 @@
 package com.team4u.framework.config.core.proxy;
 
-import cn.hutool.core.convert.Convert;
-import cn.hutool.core.util.StrUtil;
+import com.team4u.framework.base.util.ConvertUtil;
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.config.core.annotation.ConfigConverter;
 import com.team4u.framework.config.core.annotation.ConfigKey;
 import com.team4u.framework.config.core.annotation.ConfigRequired;
@@ -158,10 +158,10 @@ public class ConfigMethodInterceptor implements MethodInterceptor {
      */
     private static String inferNameFromGetter(String methodName) {
         if (methodName.startsWith("get") && methodName.length() > 3) {
-            return StrUtil.lowerFirst(methodName.substring(3));
+            return StringUtil.lowerFirst(methodName.substring(3));
         }
         if (methodName.startsWith("is") && methodName.length() > 2) {
-            return StrUtil.lowerFirst(methodName.substring(2));
+            return StringUtil.lowerFirst(methodName.substring(2));
         }
         return methodName;
     }
@@ -325,7 +325,7 @@ public class ConfigMethodInterceptor implements MethodInterceptor {
      */
     private Object convert(String rawValue, MethodMetadata metadata, MethodInvocation invocation) throws Throwable {
         try {
-            return Convert.convert(metadata.returnType, rawValue);
+            return ConvertUtil.convert(metadata.returnType, rawValue);
         } catch (Exception e) {
             // 转换失败时回退到字段初始值
             return invocation.proceed();

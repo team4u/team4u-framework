@@ -1,11 +1,11 @@
 package com.team4u.framework.retry.proxy;
 
-import cn.hutool.core.util.ReflectUtil;
-import cn.hutool.json.JSONUtil;
+import com.team4u.framework.base.util.ReflectUtil;
+import com.team4u.framework.serializer.json.JsonUtil;
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.retry.proxy.invocation.InvocationArgSnapshot;
 import com.team4u.framework.retry.proxy.invocation.InvocationRecoveryData;
-import com.team4u.framework.retry.proxy.serialize.HutoolRetryContextSerializer;
+import com.team4u.framework.retry.proxy.serialize.JacksonRetryContextSerializer;
 import com.team4u.framework.retry.proxy.serialize.RetryContextSerializer;
 import com.team4u.framework.retry.managed.recovery.RecoveryContext;
 import com.team4u.framework.retry.managed.recovery.RecoveryHandler;
@@ -30,7 +30,7 @@ public class InvocationReplay implements RecoveryHandler<String> {
 
     @Getter
     @Setter
-    private RetryContextSerializer serializer = HutoolRetryContextSerializer.INSTANCE;
+    private RetryContextSerializer serializer = JacksonRetryContextSerializer.INSTANCE;
 
     private static Map<String, Class<?>> primitiveTypes() {
         Map<String, Class<?>> primitiveTypes = new HashMap<String, Class<?>>();
@@ -89,7 +89,7 @@ public class InvocationReplay implements RecoveryHandler<String> {
         if (payload == null || payload.trim().isEmpty()) {
             return null;
         }
-        return JSONUtil.toBean(payload, InvocationRecoveryData.class);
+        return JsonUtil.toBean(payload, InvocationRecoveryData.class);
     }
 
     /**

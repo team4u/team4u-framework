@@ -16,7 +16,7 @@ import com.team4u.framework.retry.managed.model.RetryStatus;
 import com.team4u.framework.retry.managed.store.RetryQueryService;
 import com.team4u.framework.retry.managed.store.RetryStore;
 import com.team4u.framework.retry.managed.store.record.*;
-import com.team4u.framework.retry.managed.store.serialize.HutoolRetryRecordSerializer;
+import com.team4u.framework.retry.managed.store.serialize.JsonRetryRecordSerializer;
 import com.team4u.framework.retry.managed.store.serialize.RetryRecordSerializer;
 
 import java.time.Duration;
@@ -37,7 +37,7 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
     private final RetryRecordSerializer serializer;
 
     public LeaseDurableRetryStore(LeaseBackend backend) {
-        this(backend, HutoolRetryRecordSerializer.INSTANCE);
+        this(backend, JsonRetryRecordSerializer.INSTANCE);
     }
 
     public LeaseDurableRetryStore(LeaseBackend backend, RetryRecordSerializer serializer) {
@@ -49,7 +49,7 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
             LeaseAdminService adminService,
             LeaseQueryService queryService,
             String taskGroup) {
-        this(producer, adminService, queryService, taskGroup, HutoolRetryRecordSerializer.INSTANCE);
+        this(producer, adminService, queryService, taskGroup, JsonRetryRecordSerializer.INSTANCE);
     }
 
     public LeaseDurableRetryStore(

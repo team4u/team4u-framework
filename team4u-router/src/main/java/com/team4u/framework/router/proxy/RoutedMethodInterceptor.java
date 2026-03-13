@@ -1,9 +1,9 @@
 package com.team4u.framework.router.proxy;
 
-import cn.hutool.core.annotation.AnnotationUtil;
-import cn.hutool.core.bean.BeanUtil;
-import cn.hutool.core.util.ArrayUtil;
-import cn.hutool.core.util.ClassUtil;
+import com.team4u.framework.base.util.AnnotationUtil;
+import com.team4u.framework.base.util.BeanUtil;
+import com.team4u.framework.base.util.ArrayUtil;
+import com.team4u.framework.base.util.ClassUtil;
 import com.team4u.framework.base.util.TextTemplate;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;

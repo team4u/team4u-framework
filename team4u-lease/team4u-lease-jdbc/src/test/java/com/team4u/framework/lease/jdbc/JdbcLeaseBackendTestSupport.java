@@ -1,15 +1,22 @@
 package com.team4u.framework.lease.jdbc;
 
-import cn.hutool.db.Db;
-import cn.hutool.db.ds.simple.SimpleDataSource;
+import com.team4u.framework.base.util.JdbcUtil;
 
 import javax.sql.DataSource;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.PrintWriter;
 import java.nio.charset.StandardCharsets;
+import java.sql.Connection;
+import java.sql.DriverManager;
 import java.sql.SQLException;
+import java.sql.SQLFeatureNotSupportedException;
+import java.util.logging.Logger;
 
+/**
+ * JDBC 租约后端测试支持类
+ */
 final class JdbcLeaseBackendTestSupport {
 
     private static final String SCHEMA_RESOURCE = "schema/lease_task_mysql.sql";
@@ -22,7 +29,7 @@ final class JdbcLeaseBackendTestSupport {
         String jdbcUrl = "jdbc:h2:mem:" + dbName + ";MODE=MySQL;DB_CLOSE_DELAY=-1";
         DataSource dataSource = new SimpleDataSource(jdbcUrl, "sa", "");
         try {
-            Db.use(dataSource).execute("DROP TABLE IF EXISTS lease_task");
+            JdbcUtil.execute(dataSource, "DROP TABLE IF EXISTS lease_task");
             initializeSchema(dataSource);
         } catch (SQLException e) {
             throw new IllegalStateException("failed to initialize H2 schema", e);
@@ -35,7 +42,7 @@ final class JdbcLeaseBackendTestSupport {
         for (String statement : schemaSql.split(";")) {
             String sql = statement.trim();
             if (!sql.isEmpty()) {
-                Db.use(dataSource).execute(sql);
+                JdbcUtil.execute(dataSource, sql);
             }
         }
     }
@@ -55,6 +62,64 @@ final class JdbcLeaseBackendTestSupport {
             return new String(outputStream.toByteArray(), StandardCharsets.UTF_8);
         } catch (IOException e) {
             throw new IllegalStateException("failed to load schema resource: " + SCHEMA_RESOURCE, e);
+        }
+    }
+
+    /**
+     * 极简的数据源实现，仅供测试使用
+     */
+    private static class SimpleDataSource implements DataSource {
+        private final String url;
+        private final String user;
+        private final String password;
+
+        public SimpleDataSource(String url, String user, String password) {
+            this.url = url;
+            this.user = user;
+            this.password = password;
+        }
+
+        @Override
+        public Connection getConnection() throws SQLException {
+            return DriverManager.getConnection(url, user, password);
+        }
+
+        @Override
+        public Connection getConnection(String username, String password) throws SQLException {
+            return DriverManager.getConnection(url, username, password);
+        }
+
+        @Override
+        public <T> T unwrap(Class<T> iface) throws SQLException {
+            return null;
+        }
+
+        @Override
+        public boolean isWrapperFor(Class<?> iface) throws SQLException {
+            return false;
+        }
+
+        @Override
+        public PrintWriter getLogWriter() throws SQLException {
+            return null;
+        }
+
+        @Override
+        public void setLogWriter(PrintWriter out) throws SQLException {
+        }
+
+        @Override
+        public void setLoginTimeout(int seconds) throws SQLException {
+        }
+
+        @Override
+        public int getLoginTimeout() throws SQLException {
+            return 0;
+        }
+
+        @Override
+        public Logger getParentLogger() throws SQLFeatureNotSupportedException {
+            return null;
         }
     }
 }

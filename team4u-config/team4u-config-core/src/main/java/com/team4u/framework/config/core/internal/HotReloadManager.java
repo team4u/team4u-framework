@@ -1,7 +1,7 @@
 package com.team4u.framework.config.core.internal;
 
-import cn.hutool.log.Log;
-import cn.hutool.log.LogFactory;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import com.team4u.framework.config.core.spi.ConfigSource;
 
@@ -28,7 +28,7 @@ import java.util.function.Supplier;
  */
 public class HotReloadManager {
 
-    private static final Log log = LogFactory.get();
+    private static final Logger log = LoggerFactory.getLogger(HotReloadManager.class);
 
     /**
      * 对外部快照引用的持有
@@ -131,7 +131,7 @@ public class HotReloadManager {
 
         } catch (Exception e) {
             // 重载失败时打印日志并保持当前状态，确保系统可用性
-            log.error(e, "Failed to hot reload configuration. Keeping the old snapshot to maintain stability.");
+            log.error("Failed to hot reload configuration. Keeping the old snapshot to maintain stability.", e);
         }
     }
 

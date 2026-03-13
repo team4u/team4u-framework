@@ -1,6 +1,6 @@
 package com.team4u.framework.message;
 
-import cn.hutool.core.lang.func.VoidFunc1;
+import com.team4u.framework.base.util.ThrowingConsumer;
 import com.team4u.framework.message.core.*;
 import lombok.Data;
 import org.junit.Assert;
@@ -16,15 +16,12 @@ public class ExtendedFeatureTest {
 
     @Test
     public void testHandlerBuilderAndExtractor() throws Exception {
-        // 1. 使用 Lambda/匿名内部类 快速构建处理器
+        // 1. 使用 Lambda 快速构建处理器
         final AtomicBoolean handled = new AtomicBoolean(false);
         List<MessageHandler<?>> handlers = MessageHandlerBuilder.create()
-                .onMessage(OrderEvent.class, new VoidFunc1<Message<OrderEvent>>() {
-                    @Override
-                    public void call(Message<OrderEvent> msg) {
-                        Assert.assertEquals("ORD-100", msg.getPayload().getOrderId());
-                        handled.set(true);
-                    }
+                .onMessage(OrderEvent.class, msg -> {
+                    Assert.assertEquals("ORD-100", msg.getPayload().getOrderId());
+                    handled.set(true);
                 })
                 .build();
 

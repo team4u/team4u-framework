@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.proxy.serialize;
 
-import cn.hutool.core.lang.TypeReference;
+import com.team4u.framework.serializer.json.TypeReference;
 import lombok.Data;
 import org.junit.Assert;
 import org.junit.Test;
@@ -8,9 +8,12 @@ import org.junit.Test;
 import java.lang.reflect.Type;
 import java.util.List;
 
-public class HutoolRetryContextSerializerTest {
+/**
+ * Jackson 环境下的重试上下文序列化器测试
+ */
+public class JacksonRetryContextSerializerTest {
 
-    private final HutoolRetryContextSerializer serializer = HutoolRetryContextSerializer.INSTANCE;
+    private final JacksonRetryContextSerializer serializer = JacksonRetryContextSerializer.INSTANCE;
 
     @Test
     public void testSerializeNullReturnsNull() {
@@ -30,8 +33,9 @@ public class HutoolRetryContextSerializerTest {
     }
 
     @Test
-    public void testSerializeEnumUsesName() {
-        Assert.assertEquals("HIGH", serializer.serialize(Level.HIGH));
+    public void testSerializeEnumUsesNameWithQuotes() {
+        // Jackson 序列化枚举默认带双引号
+        Assert.assertEquals("\"HIGH\"", serializer.serialize(Level.HIGH));
     }
 
     @Test

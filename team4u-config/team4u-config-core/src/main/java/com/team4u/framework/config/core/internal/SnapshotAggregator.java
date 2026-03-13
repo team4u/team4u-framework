@@ -1,6 +1,6 @@
 package com.team4u.framework.config.core.internal;
 
-import cn.hutool.core.collection.CollUtil;
+import com.team4u.framework.base.util.CollectionUtil;
 import com.team4u.framework.config.core.domain.ConfigEntry;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import com.team4u.framework.config.core.spi.ConfigSource;
@@ -32,7 +32,7 @@ public class SnapshotAggregator {
      * @return 聚合处理后的全新不可变快照对象
      */
     public ConfigSnapshot aggregate(List<ConfigSource> sources, long version) {
-        if (CollUtil.isEmpty(sources)) {
+        if (CollectionUtil.isEmpty(sources)) {
             return new ConfigSnapshot(version, Collections.emptyMap());
         }
 

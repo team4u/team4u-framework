@@ -1,6 +1,6 @@
 package com.team4u.framework.criterion.model.convert;
 
-import cn.hutool.core.util.StrUtil;
+import com.team4u.framework.base.util.StringUtil;
 
 /**
  * 版本转换器
@@ -36,7 +36,7 @@ public class VersionValueConverter implements ValueConverter {
             if (other == null) {
                 return 1;
             }
-            return StrUtil.compareVersion(this.v, other.v);
+            return StringUtil.compareVersion(this.v, other.v);
         }
 
         @Override

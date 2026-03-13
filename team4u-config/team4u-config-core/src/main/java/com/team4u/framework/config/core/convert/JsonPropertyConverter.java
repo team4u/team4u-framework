@@ -1,6 +1,6 @@
 package com.team4u.framework.config.core.convert;
 
-import cn.hutool.json.JSONUtil;
+import com.team4u.framework.serializer.json.JsonUtil;
 
 /**
  * 基于 JSON 的通用属性转换器
@@ -18,6 +18,6 @@ public class JsonPropertyConverter implements PropertyConverter<Object> {
         if (source == null || source.isEmpty()) {
             return null;
         }
-        return JSONUtil.toBean(source, targetType);
+        return JsonUtil.toBean(source, targetType);
     }
 }

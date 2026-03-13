@@ -29,6 +29,12 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-serializer-jackson</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
             <groupId>org.springframework</groupId>
             <artifactId>spring-context</artifactId>
         </dependency>

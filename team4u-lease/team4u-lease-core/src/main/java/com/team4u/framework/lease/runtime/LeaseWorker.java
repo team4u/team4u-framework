@@ -14,10 +14,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.util.Set;
-import java.util.concurrent.Executors;
-import java.util.concurrent.RejectedExecutionException;
-import java.util.concurrent.ScheduledExecutorService;
-import java.util.concurrent.TimeUnit;
+import java.util.concurrent.*;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -375,7 +372,7 @@ public class LeaseWorker implements Runnable, AutoCloseable {
         private final long leaseMillis;
         private final String workerId;
         private final AtomicBoolean heartbeating = new AtomicBoolean(false);
-        private volatile java.util.concurrent.ScheduledFuture<?> future;
+        private volatile ScheduledFuture<?> future;
 
         private void start() {
             future = executor.scheduleAtFixedRate(this, intervalMillis, intervalMillis, TimeUnit.MILLISECONDS);

@@ -1,7 +1,7 @@
 package com.team4u.framework.log.pipeline.interceptor;
 
-import cn.hutool.cache.CacheUtil;
-import cn.hutool.cache.impl.TimedCache;
+import com.team4u.framework.base.util.CacheUtil;
+import com.team4u.framework.base.util.cache.TimedCache;
 import com.team4u.framework.log.config.FinOpsConfigRepository;
 import com.team4u.framework.log.core.LogEvent;
 import com.team4u.framework.log.pipeline.LogInterceptor;
@@ -39,7 +39,6 @@ public class RateLimitInterceptor implements LogInterceptor {
     @Override
     public void reset() {
         errorCounter.clear();
-        errorCounter.schedulePrune(1000);
     }
 
     @Override
@@ -60,10 +59,10 @@ public class RateLimitInterceptor implements LogInterceptor {
         // 生成特征索引：动作 + 异常类名
         String signature = event.getAction() + "|" + event.getException().getClass().getName();
 
-        AtomicInteger count = errorCounter.get(signature, false);
+        AtomicInteger count = errorCounter.get(signature);
         if (count == null) {
             synchronized (errorCounter) {
-                count = errorCounter.get(signature, false);
+                count = errorCounter.get(signature);
                 if (count == null) {
                     count = new AtomicInteger(0);
                     errorCounter.put(signature, count);

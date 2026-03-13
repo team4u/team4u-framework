@@ -69,7 +69,7 @@ public class LogProxyTest {
             LogEvent event = logHelper.lastEvent();
             Assert.assertEquals(Level.WARN, event.getLevel());
             Assert.assertEquals("business_error", event.getStatus());
-            Assert.assertTrue(logHelper.lastJson().contains("业务异常"));
+            Assert.assertEquals("业务异常", event.get("errMsg"));
             throw e;
         }
     }

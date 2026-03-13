@@ -1,9 +1,9 @@
 package com.team4u.framework.router.core;
 
-import cn.hutool.core.util.HashUtil;
-import cn.hutool.core.util.NumberUtil;
-import cn.hutool.log.Log;
-import cn.hutool.log.LogFactory;
+import com.team4u.framework.base.util.HashUtil;
+import com.team4u.framework.base.util.NumberUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.router.api.RouterType;
 import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.model.RoutePolicy;
@@ -25,7 +25,7 @@ import java.util.TreeMap;
  */
 public class WeightRouter extends AbstractRouter {
 
-    private static final Log log = LogFactory.get();
+    private static final Logger log = LoggerFactory.getLogger(WeightRouter.class);
 
     // 使用 TreeMap 存储累加权重和目标值的映射，利用其 ceilingEntry 快速定位区间
     private final TreeMap<Integer, Object> weightMap = new TreeMap<>();

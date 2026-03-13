@@ -1,6 +1,6 @@
 package com.team4u.framework.base.instance;
 
-import cn.hutool.cache.CacheUtil;
+import com.team4u.framework.base.util.CacheUtil;
 import lombok.Data;
 import org.junit.Assert;
 import org.junit.Test;

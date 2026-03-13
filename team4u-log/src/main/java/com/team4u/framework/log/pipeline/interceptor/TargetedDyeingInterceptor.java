@@ -1,7 +1,8 @@
 package com.team4u.framework.log.pipeline.interceptor;
 
-import cn.hutool.json.JSONUtil;
-import cn.hutool.log.Log;
+import com.team4u.framework.serializer.json.JsonUtil;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.criterion.Criteria;
@@ -25,7 +26,7 @@ import java.util.Map;
  */
 public class TargetedDyeingInterceptor implements LogInterceptor {
 
-    private static final Log log = Log.get();
+    private static final Logger log = LoggerFactory.getLogger(TargetedDyeingInterceptor.class);
 
     private static final TargetedDyeingInterceptor INSTANCE = new TargetedDyeingInterceptor();
     private static final String CONFIG_KEY = "team4u.log.dyeing";
@@ -58,7 +59,7 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
                     return this.activeRules;
                 }
 
-                List<DyeingRule> parsedRules = JSONUtil.toList(json, DyeingRule.class);
+                List<DyeingRule> parsedRules = JsonUtil.toList(json, DyeingRule.class);
                 List<DyeingRule> validRules = new ArrayList<>();
                 Criteria activeCriteria = this.criteria;
 
