@@ -62,7 +62,6 @@ TranslatedResponse translate(RawResponse source, String routerId, Map<String, Ob
 路由命中后返回的目标定义，当前包含：
 
 - `code`：翻译后的目标错误码
-- `i18nKey`：国际化键
 - `defaultMsg`：默认文案模板
 - `logLevel`：扩展字段，当前默认引擎不消费
 
@@ -78,7 +77,6 @@ TranslatedResponse translate(RawResponse source, String routerId, Map<String, Ob
 
 渲染策略 SPI。内置实现包括：
 
-- `I18nRenderPolicy`
 - `TemplateRenderPolicy`
 - `FallbackRenderPolicy`
 
@@ -99,9 +97,10 @@ TranslatedResponse translate(RawResponse source, String routerId, Map<String, Ob
 从当前源码行为看，几个关键点需要特别注意：
 
 - `traceId` 只从 `args.get("traceId")` 提取
+- `source` 不能为空，为 `null` 时会抛出 `NullPointerException`
 - 模板渲染会自动注入 `rawCode` 和 `rawMessage`
 - 当目标 `code` 或 `message` 为空时，兜底策略会回填原始值
-- 国际化策略当前是占位式实现，不是完整的消息源集成
+- 默认只通过 SPI 注册 `RenderPolicy`；包扫描需要显式启用
 
 ---
 
@@ -152,6 +151,15 @@ System.out.println(response.getTraceId());
 - `error_router` 是路由规则标识
 - 实际路由规则由 `team4u-router` 负责解析与命中
 - 命中的目标值需要能转换成 `ErrorDef`
+
+如果需要在默认 SPI 之外显式启用包扫描，可使用：
+
+```java
+ResponseTranslator translator = new DefaultResponseTranslator(
+        RoutingManager.global(),
+        "com.yourcompany.project.translator"
+);
+```
 
 ### 一个基础路由示例
 
@@ -254,36 +262,7 @@ args.put("action", "提交订单");
 TranslatedResponse response = translator.translate(source, "translator.main", args);
 ```
 
-### 2. 国际化键示例
-
-如果路由目标中配置了 `i18nKey`，内置 `I18nRenderPolicy` 会尝试解析对应文案：
-
-```json
-{
-  "id": "error_router",
-  "type": "expression",
-  "rules": [
-    {
-      "condition": "domain == 'ORDER_CENTER'",
-      "value": {
-        "code": "ORDER_INVALID",
-        "i18nKey": "order.invalid",
-        "defaultMsg": "订单不可用"
-      }
-    }
-  ]
-}
-```
-
-按当前实现，`i18nKey = "order.invalid"` 会被解析为：
-
-```text
-Order has been invalid
-```
-
-如果未找到对应国际化内容，则继续使用 `defaultMsg`。
-
-### 3. 模板变量说明
+### 2. 模板变量说明
 
 模板渲染支持两类变量：
 
@@ -347,7 +326,7 @@ public class MyDesensitizationPolicy implements RenderPolicy {
 com.yourcompany.project.MyDesensitizationPolicy
 ```
 
-启动后，`DefaultResponseTranslator` 会通过 SPI 与包扫描自动注册可用策略。
+启动后，`DefaultResponseTranslator` 默认只会通过 SPI 注册可用策略；如需包扫描，需使用带 `scanPackages` 参数的构造器显式开启。
 
 ---
 
@@ -355,7 +334,6 @@ com.yourcompany.project.MyDesensitizationPolicy
 
 - 当前默认引擎只负责翻译，不内置 Spring AOP、异常拦截或网关封装能力。
 - `logLevel` 虽然存在于 `ErrorDef` 中，但默认翻译流程不会使用它。
-- `I18nRenderPolicy` 当前是演示型实现，默认只内置少量 mock 行为；如果需要真实国际化能力，通常需要自定义策略或扩展实现。
-- 只有当消息中包含模板占位符时，`TemplateRenderPolicy` 才会参与渲染。
+- 只有当消息中包含 `${...}` 模板占位符时，`TemplateRenderPolicy` 才会参与渲染。
 - 当模板变量缺失时，未命中的占位符会保留原样。
-- 未命中任何路由规则时，返回值等同于原始输入的 `code` 和 `message`，`traceId` 为 `null`。
+- 未命中任何路由规则时，返回值等同于原始输入的 `code` 和 `message`；若 `args` 中传入了 `traceId`，则会原样保留。

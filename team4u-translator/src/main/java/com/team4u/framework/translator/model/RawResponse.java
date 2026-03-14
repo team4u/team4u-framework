@@ -4,6 +4,8 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.util.Objects;
+
 /**
  * 原始响应输入对象 (Domain Model)
  * <p>
@@ -54,6 +56,7 @@ public class RawResponse {
      * @return RawResponse
      */
     public static RawResponse of(String domain, Throwable cause) {
+        Objects.requireNonNull(cause, "cause must not be null");
         return new RawResponse(domain, cause.getClass().getSimpleName(), cause.getMessage(), cause);
     }
 }
