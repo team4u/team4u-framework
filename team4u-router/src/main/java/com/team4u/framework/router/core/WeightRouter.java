@@ -2,8 +2,6 @@ package com.team4u.framework.router.core;
 
 import com.team4u.framework.base.util.HashUtil;
 import com.team4u.framework.base.util.NumberUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.team4u.framework.router.api.RouterType;
 import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.model.RoutePolicy;
@@ -11,16 +9,24 @@ import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.model.RouteRule;
 import com.team4u.framework.router.api.trace.RouteTrace;
 import com.team4u.framework.router.api.trace.RuleTrace;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Map;
 import java.util.TreeMap;
 
 /**
- * 权重路由器
+ * 权重路由器 (Weight-based Router/Traffic Shifter)
  * <p>
- * 根据配置的权重比例进行流量分发，自动处理权重累加逻辑。
- *
+ * 基于权重比例进行流量分发的路由器。核心算法：
+ * <ul>
+ *   <li>将所有规则的权重进行累加，形成一系列连续的数值区间。</li>
+ *   <li>对路由因子（请求对象）进行哈希运算（MurmurHash3），并映射到 [0, 总权重) 的范围内。</li>
+ *   <li>根据哈希值所属的权重区间，决定最终的路由目标。</li>
+ * </ul>
+ * 这种实现确保了流量分布的均匀性，并且在路由因子不变的情况下，路由结果具有确定性（Sticky Routing）。
+ * </p>
  * @author jay.wu
  */
 public class WeightRouter extends AbstractRouter {

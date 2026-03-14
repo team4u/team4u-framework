@@ -11,10 +11,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
-import java.util.Arrays;
-import java.util.HashMap;
-import java.util.List;
-import java.util.Map;
+import java.util.*;
 
 /**
  * RoutingManager 单元测试
@@ -177,10 +174,10 @@ public class RoutingManagerTest {
 
     @Test
     public void testRouteByPolicyWithTypeReference() {
-        RoutePolicy policy = RoutePolicyBuilder.<Object>map()
+        RoutePolicy policy = RoutePolicyBuilder.map()
                 .id("coupon-router")
                 .rule("new-user", Arrays.asList("coupon-A", "coupon-B"))
-                .fallback(Arrays.asList("default-coupon"))
+                .fallback(Collections.singletonList("default-coupon"))
                 .build();
 
         RouteResult<List<String>> result = routingManager.routeByPolicy(

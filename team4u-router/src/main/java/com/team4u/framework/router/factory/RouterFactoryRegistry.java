@@ -4,9 +4,10 @@ import com.team4u.framework.policy.core.KeyedPolicyRegistry;
 import com.team4u.framework.router.spi.RouterFactory;
 
 /**
- * 路由工厂注册表
+ * 路由工厂注册表 (Router Factory Registry)
  * <p>
- * 负责管理所有的 {@link RouterFactory} 实例。
+ * 统一管理所有已注册的路由器工厂。它基于策略模式，允许通过路由类型的标识符（如 "weight", "map", "expression"）
+ * 查找并获取对应的 {@link RouterFactory} 来创建路由器实例。
  * </p>
  */
 public class RouterFactoryRegistry extends KeyedPolicyRegistry<String, RouterFactory> {

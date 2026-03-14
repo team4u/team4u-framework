@@ -1,7 +1,5 @@
 package com.team4u.framework.router.core;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.criterion.MatchContext;
 import com.team4u.framework.criterion.trace.TraceNode;
@@ -11,12 +9,23 @@ import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.model.RouteRule;
 import com.team4u.framework.router.api.trace.RouteTrace;
 import com.team4u.framework.router.api.trace.RuleTrace;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 表达式路由器
+ * 表达式路由器 (Expression-based Router)
+ * <p>
+ * 基于条件表达式进行匹配的路由器。它支持灵活的逻辑判断，能够根据请求对象的属性通过内置表达式引擎进行规则匹配。
+ * 功能特性：
+ * <ul>
+ *   <li><b>规则排序匹配</b>：按照配置顺序依次计算规则表达式，首个匹配成功的规则即为结果（非多重匹配模式下）。</li>
+ *   <li><b>多重匹配支持</b>：若开启 `multiMatch`，将返回所有匹配成功的规则结果列表。</li>
+ *   <li><b>表达式预编译</b>：在初始化时预编译所有表达式，确保运行时的高性能执行。</li>
+ * </ul>
+ * </p>
  */
 public class ExpressionRouter extends AbstractRouter {
 

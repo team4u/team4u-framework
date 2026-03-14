@@ -6,12 +6,13 @@ import com.team4u.framework.router.api.model.RouteResult;
 import java.lang.reflect.Type;
 
 /**
- * 路由执行链上下文
+ * 路由执行调用上下文 (Route Invocation Context)
  * <p>
- * 封装当前路由调用的所有上下文信息，并提供让请求“继续流转”的方法。
+ * 该接口封装了路由执行过程中的所有状态信息，包括当前路由实例、请求对象、目标返回类型以及拦截器执行链。
+ * 它是拦截器模式的核心，通过 {@link #proceed()} 驱动调用链向后移动。
  * </p>
  *
- * @param <T> 路由结果类型
+ * @param <T> 预期的路由结果类型
  */
 public interface RouteInvocation<T> {
 

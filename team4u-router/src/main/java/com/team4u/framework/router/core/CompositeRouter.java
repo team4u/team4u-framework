@@ -11,10 +11,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 复合路由器
+ * 复合路由器（Waterfall Router）
  * <p>
- * 将多个独立配置的路由按照 delegates 顺序串行执行。
- * 命中即截断返回。若未命中，则返回包含实际兜底值的匹配对象，或者继续返回未匹配。
+ * 复合路由器允许将多个外部定义的子路由器（Delegates）组合在一起，形成路由链条。
+ * 它的工作原理类似于瀑布流或责任链：
+ * <ul>
+ *   <li>按配置顺序逐个询问子路由器。</li>
+ *   <li>如果子路由器返回“规则命中（Rule Match）”或“短路（Short Circuited）”，则立即停止并返回结果。</li>
+ *   <li>结果合并逻辑：过程中收集的最末端有效的兜底值（Fallback Value）将作为整条链路的最终备选方案。</li>
+ * </ul>
+ * 这种设计增强了配置的复用性，允许将通用路由逻辑提取为独立单元，再根据业务场景进行编排。
+ * </p>
  */
 public class CompositeRouter extends AbstractRouter {
 

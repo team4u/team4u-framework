@@ -1,9 +1,10 @@
 package com.team4u.framework.router.api.exception;
 
 /**
- * 路由模块基础异常类
+ * 路由模块基础异常类 (Base Route Exception)
  * <p>
- * 所有路由相关的异常都应继承此类，提供统一的异常处理机制。
+ * 它是框架内所有路由逻辑异常的超类，封装了统一的错误码（ErrorCode）机制，
+ * 便于上游业务系统进行精细化的错误分类处理。
  * </p>
  *
  * @author jay.wu
@@ -41,12 +42,13 @@ public class RouteException extends RuntimeException {
     }
 
     /**
-     * 创建类型不匹配异常
+     * 创建类型不匹配异常。
+     * 用于在动态定位 Bean 时，发现定位到的对象与接口期望的类型不符。
      *
-     * @param beanName     Bean 名称
-     * @param actualType   实际类型
-     * @param expectedType 期望类型
-     * @return 异常实例
+     * @param beanName     Bean 实例名称
+     * @param actualType   运行时实际检测到的类型
+     * @param expectedType 路由代理或定位逻辑声明的接口类型
+     * @return 类型不匹配异常实例
      */
     public static RouteException typeMismatch(String beanName, Class<?> actualType, Class<?> expectedType) {
         return new RouteException(
