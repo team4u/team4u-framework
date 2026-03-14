@@ -7,6 +7,7 @@ import org.slf4j.LoggerFactory;
 import org.slf4j.event.Level;
 
 import java.util.Map;
+import java.util.concurrent.Callable;
 
 /**
  * 结构化日志 Fluent API
@@ -194,6 +195,56 @@ public class Loggers {
             this.event.getPayload().putAll(map);
         }
         return this;
+    }
+
+    /**
+     * 开始一个日志区间（Span）
+     *
+     * @return LogSpan 实例
+     */
+    public LogSpan begin() {
+        return new LogSpan(this.derive(), System.nanoTime());
+    }
+
+    /**
+     * 包围执行一段逻辑，自动记录开始和结束日志（如果发生异常则记录失败日志）
+     *
+     * @param runnable 业务逻辑
+     */
+    public void around(Runnable runnable) {
+        LogSpan span = begin();
+        try {
+            runnable.run();
+            span.success().log();
+        } catch (Throwable e) {
+            span.failed(e).log();
+            throw e;
+        }
+    }
+
+    /**
+     * 包围执行一段逻辑并返回结果，自动记录开始和结束日志（如果发生异常则记录失败日志）
+     *
+     * @param callable 业务逻辑
+     * @param <T>      返回类型
+     * @return 业务逻辑执行结果
+     */
+    public <T> T around(Callable<T> callable) {
+        LogSpan span = begin();
+        try {
+            T result = callable.call();
+            span.success().log();
+            return result;
+        } catch (RuntimeException e) {
+            span.failed(e).log();
+            throw e;
+        } catch (Exception e) {
+            span.failed(e).log();
+            throw new RuntimeException(e);
+        } catch (Throwable e) {
+            span.failed(e).log();
+            throw e;
+        }
     }
 
     /**
