@@ -132,7 +132,7 @@ public class TypeConverterRegistry {
         try {
             return converter.convert(targetType, source);
         } catch (Exception e) {
-            log.warn("Type conversion failed, converter={}, targetType={}, sourceType={}, source={}",
+            log.warn("类型转换失败, 转换器={}, 目标类型={}, 源类型={}, 源数据={}",
                     converter.getClass().getName(),
                     targetType == null ? "null" : targetType.getTypeName(),
                     source == null ? "null" : source.getClass().getName(),

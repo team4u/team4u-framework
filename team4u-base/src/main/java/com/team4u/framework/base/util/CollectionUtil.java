@@ -1,6 +1,8 @@
 package com.team4u.framework.base.util;
 
 import java.util.Collection;
+import java.util.Map;
+
 /**
  * 集合工具类
  * <p>
@@ -56,8 +58,8 @@ public class CollectionUtil {
 
         if (obj instanceof Collection) {
             return ((Collection<?>) obj).size();
-        } else if (obj instanceof java.util.Map) {
-            return ((java.util.Map<?, ?>) obj).size();
+        } else if (obj instanceof Map) {
+            return ((Map<?, ?>) obj).size();
         } else if (obj instanceof Object[]) {
             return ((Object[]) obj).length;
         } else if (obj instanceof int[]) {

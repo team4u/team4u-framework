@@ -58,7 +58,7 @@ public class DynamicInstanceProviderTest {
         Assert.assertEquals(2, createCount.get());
 
         // 4. 手动失效后再获取
-        provider.invalidateInput(newConfigContent);
+        provider.invalidate(newConfigContent);
         InstanceMock p4 = provider.get(newConfigContent);
         Assert.assertNotSame(p3, p4);
         Assert.assertEquals(3, parseCount.get());
@@ -66,15 +66,13 @@ public class DynamicInstanceProviderTest {
 
         // 5. 清理测试
         provider.clear();
-        Assert.assertEquals(0, provider.inputCacheSize());
-        Assert.assertEquals(0, provider.configCacheSize());
+        Assert.assertEquals(0, provider.cacheSize());
     }
 
     @Test
     public void testMapInput() {
         // 输入源为 Map
         DynamicInstanceProvider<Map<String, Object>, ConfigMock, InstanceMock> provider = new DynamicInstanceProvider<>(
-                CacheUtil.newLRUCache(100),
                 CacheUtil.newLRUCache(100),
                 map -> new ConfigMock((String) map.get("value")),
                 config -> new InstanceMock(config.getValue()));
@@ -108,14 +106,14 @@ public class DynamicInstanceProviderTest {
 
         provider.get("v1");
         provider.get("v2");
-        Assert.assertEquals(2, provider.inputCacheSize());
+        Assert.assertEquals(2, provider.cacheSize());
 
         // v1 变成最近最少使用
         provider.get("v2");
 
         // 增加 v3，导致 v1 被淘汰
         provider.get("v3");
-        Assert.assertEquals(2, provider.inputCacheSize());
+        Assert.assertEquals(2, provider.cacheSize());
     }
 
     /**
@@ -259,8 +257,7 @@ public class DynamicInstanceProviderTest {
         InstanceMock fromConfig = provider.getByConfig("same-key");
 
         Assert.assertNotSame(fromInput, fromConfig);
-        Assert.assertEquals(1, provider.inputCacheSize());
-        Assert.assertEquals(1, provider.configCacheSize());
+        Assert.assertEquals(2, provider.cacheSize());
         Assert.assertEquals(2, createCount.get());
     }
 
