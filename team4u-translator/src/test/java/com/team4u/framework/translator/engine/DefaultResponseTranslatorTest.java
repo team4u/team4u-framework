@@ -3,9 +3,11 @@ package com.team4u.framework.translator.engine;
 import com.team4u.framework.router.RoutingManager;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.translator.api.ResponseTranslator;
-import com.team4u.framework.translator.model.RawResponse;
 import com.team4u.framework.translator.model.ErrorDef;
+import com.team4u.framework.translator.model.RawResponse;
 import com.team4u.framework.translator.model.TranslatedResponse;
+import com.team4u.framework.translator.render.builtin.FallbackRenderPolicy;
+import com.team4u.framework.translator.render.builtin.TemplateRenderPolicy;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
@@ -53,6 +55,7 @@ public class DefaultResponseTranslatorTest {
         Assert.assertNotNull(response);
         Assert.assertEquals("O001", response.getCode());
         Assert.assertEquals("订单不存在", response.getMessage());
+        Assert.assertNull(response.getTraceId());
     }
 
     /**
@@ -63,7 +66,6 @@ public class DefaultResponseTranslatorTest {
         ErrorDef def = new ErrorDef();
         def.setCode("NEW_001");
         def.setDefaultMsg("订单已作废");
-        def.setI18nKey("order.invalid");
 
         Mockito.when(routingManager.route(eq("err_router"), any(), eq(ErrorDef.class)))
                 .thenReturn(RouteResult.ruleMatch(def, (String) null));
@@ -74,7 +76,8 @@ public class DefaultResponseTranslatorTest {
 
         Assert.assertNotNull(response);
         Assert.assertEquals("NEW_001", response.getCode());
-        Assert.assertEquals("Order has been invalid", response.getMessage());
+        Assert.assertEquals("订单已作废", response.getMessage());
+        Assert.assertNull(response.getTraceId());
     }
 
     /**
@@ -123,6 +126,91 @@ public class DefaultResponseTranslatorTest {
         Assert.assertNotNull(response);
         Assert.assertEquals("SYSTEM_ERROR", response.getCode());
         Assert.assertEquals("内部异常[NPE]，原因：空指针异常。业务操作：查询明细", response.getMessage());
+    }
+
+    /**
+     * 测试输入参数为空时，期望快速失败抛出 NPE
+     */
+    @Test(expected = NullPointerException.class)
+    public void testTranslateRejectsNullSource() {
+        translator.translate(null, "err_router", null);
+    }
+
+    /**
+     * 测试匹配路由的情况下，传递的 traceId 能被正确保留和回传
+     */
+    @Test
+    public void testTranslateMatchedKeepsTraceId() {
+        ErrorDef def = new ErrorDef();
+        def.setCode("NEW_002");
+        def.setDefaultMsg("订单异常");
+
+        Mockito.when(routingManager.route(eq("err_router"), any(), eq(ErrorDef.class)))
+                .thenReturn(RouteResult.ruleMatch(def, (String) null));
+
+        Map<String, Object> args = new HashMap<>();
+        args.put("traceId", "trace-001");
+
+        TranslatedResponse response = translator.translate(
+                RawResponse.of("ORDER", "O001", "订单不存在"),
+                "err_router",
+                args);
+
+        Assert.assertEquals("trace-001", response.getTraceId());
+    }
+
+    /**
+     * 测试未匹配到路由配置的情况下，传递的 traceId 依然能被正确保留和回传
+     */
+    @Test
+    public void testTranslateUnmatchedKeepsTraceId() {
+        Mockito.when(routingManager.route(eq("err_router"), any(), eq(ErrorDef.class)))
+                .thenReturn(RouteResult.unmatch());
+
+        Map<String, Object> args = new HashMap<>();
+        args.put("traceId", "trace-raw");
+
+        TranslatedResponse response = translator.translate(
+                RawResponse.of("ORDER", "O001", "订单不存在"),
+                "err_router",
+                args);
+
+        Assert.assertEquals("trace-raw", response.getTraceId());
+    }
+
+    /**
+     * 测试引擎对各类不符合规范的 traceId 进行归一化处理（空字符串处理为 null）
+     */
+    @Test
+    public void testTranslateNormalizesTraceId() {
+        ErrorDef def = new ErrorDef();
+        def.setCode("NEW_003");
+        def.setDefaultMsg("订单异常");
+
+        Mockito.when(routingManager.route(eq("err_router"), any(), eq(ErrorDef.class)))
+                .thenReturn(RouteResult.ruleMatch(def, (String) null));
+
+        TranslatedResponse missing = translator.translate(
+                RawResponse.of("ORDER", "O001", "订单不存在"),
+                "err_router",
+                null);
+        Assert.assertNull(missing.getTraceId());
+
+        Map<String, Object> emptyArgs = new HashMap<>();
+        emptyArgs.put("traceId", "");
+        TranslatedResponse empty = translator.translate(
+                RawResponse.of("ORDER", "O001", "订单不存在"),
+                "err_router",
+                emptyArgs);
+        Assert.assertNull(empty.getTraceId());
+
+        Map<String, Object> literalArgs = new HashMap<>();
+        literalArgs.put("traceId", "null");
+        TranslatedResponse literal = translator.translate(
+                RawResponse.of("ORDER", "O001", "订单不存在"),
+                "err_router",
+                literalArgs);
+        Assert.assertEquals("null", literal.getTraceId());
     }
 
     /**
@@ -176,5 +264,42 @@ public class DefaultResponseTranslatorTest {
         Assert.assertEquals("PARTIAL_RENDER", response.getCode());
         // 期望：rawMessage 被替换，unknownVar 保留原样
         Assert.assertEquals("已知：系统异常，未知：${unknownVar}", response.getMessage());
+    }
+
+    /**
+     * 测试内置策略的执行优先级，确保 Template -> Fallback 的固定流转顺序
+     */
+    @Test
+    public void testBuiltinPolicyPriorityOrder() {
+        Assert.assertTrue(new TemplateRenderPolicy().priority() < new FallbackRenderPolicy().priority());
+    }
+
+    /**
+     * 测试不同构造器初始化的行为差异：仅使用 SPI 注册，或是带有自定义包扫描能力
+     */
+    @Test
+    public void testDefaultConstructorUsesSpiOnlyAndOptionalScanPackages() {
+        ErrorDef def = new ErrorDef();
+        def.setCode("SCAN");
+        def.setDefaultMsg("base");
+
+        Mockito.when(routingManager.route(eq("err_router"), any(), eq(ErrorDef.class)))
+                .thenReturn(RouteResult.ruleMatch(def, (String) null));
+
+        ResponseTranslator spiOnlyTranslator = new DefaultResponseTranslator(routingManager);
+        TranslatedResponse spiOnly = spiOnlyTranslator.translate(
+                RawResponse.of("ORDER", "O001", "订单不存在"),
+                "err_router",
+                null);
+        Assert.assertEquals("base", spiOnly.getMessage());
+
+        ResponseTranslator scanEnabledTranslator = new DefaultResponseTranslator(
+                routingManager,
+                "com.team4u.framework.translator.testpolicy");
+        TranslatedResponse scanned = scanEnabledTranslator.translate(
+                RawResponse.of("ORDER", "O001", "订单不存在"),
+                "err_router",
+                null);
+        Assert.assertEquals("base|scanned", scanned.getMessage());
     }
 }

@@ -17,11 +17,6 @@ public class ErrorDef {
     private String code;
 
     /**
-     * 国际化文案标识 (如: "err.order.timeout")
-     */
-    private String i18nKey;
-
-    /**
      * 默认文案模板 (如: "订单超时，单号:${orderId}")
      */
     private String defaultMsg;

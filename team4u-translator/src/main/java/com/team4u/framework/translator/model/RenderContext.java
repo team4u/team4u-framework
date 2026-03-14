@@ -3,12 +3,14 @@ package com.team4u.framework.translator.model;
 import lombok.Getter;
 import lombok.Setter;
 
+import java.util.Collections;
+import java.util.HashMap;
 import java.util.Map;
 
 /**
  * 渲染管线流转上下文
  * <p>
- * 传递给所有 MessageRenderer 的执行上下文，保证非共享线程安全。
+ * 传递给所有 RenderPolicy 的执行上下文，保证非共享线程安全。
  */
 @Getter
 public class RenderContext {
@@ -50,7 +52,7 @@ public class RenderContext {
     public RenderContext(RawResponse source, ErrorDef routeDef, Map<String, Object> args) {
         this.source = source;
         this.routeDef = routeDef;
-        this.args = args;
+        this.args = snapshotArgs(args);
 
         if (routeDef != null) {
             this.finalCode = routeDef.getCode();
@@ -65,5 +67,12 @@ public class RenderContext {
      */
     public TranslatedResponse build(String traceId) {
         return new TranslatedResponse(this.finalCode, this.finalMessage, traceId);
+    }
+
+    private Map<String, Object> snapshotArgs(Map<String, Object> args) {
+        if (args == null || args.isEmpty()) {
+            return Collections.emptyMap();
+        }
+        return Collections.unmodifiableMap(new HashMap<>(args));
     }
 }

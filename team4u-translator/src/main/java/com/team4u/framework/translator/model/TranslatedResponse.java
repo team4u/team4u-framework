@@ -1,15 +1,13 @@
 package com.team4u.framework.translator.model;
 
-import lombok.AllArgsConstructor;
-import lombok.Getter;
+import lombok.Value;
 
 /**
  * 最终翻译结果 (Immutable)
  * <p>
  * 渲染管线输出的最终对象，必须是不可变对象。
  */
-@Getter
-@AllArgsConstructor
+@Value
 public class TranslatedResponse {
 
     /**
