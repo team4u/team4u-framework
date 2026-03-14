@@ -52,7 +52,7 @@ public class ConfigDrivenRegistryTest {
     }
 
     @Test
-    public void testPrefixWithoutDotMatchSelf() {
+    public void testPrefixWithoutDotUsesStartsWithSemantics() {
         // 模拟 FinOpsConfigRepository 场景，前缀就是 CONFIG_KEY
         String configKey = "team4u.log.finops";
         ConfigDrivenRegistry<String> registry = new ConfigDrivenRegistry<>(
@@ -71,11 +71,11 @@ public class ConfigDrivenRegistryTest {
     public void testSafeSwap() {
         ConfigDrivenRegistry<String> registry = new ConfigDrivenRegistry<>(
                 configManager, "test.", val -> {
-                    if ("error".equals(val)) {
-                        throw new RuntimeException("Invalid config");
-                    }
-                    return val.toUpperCase();
-                });
+            if ("error".equals(val)) {
+                throw new RuntimeException("Invalid config");
+            }
+            return val.toUpperCase();
+        });
 
         configSource.putAndRefresh("test.k1", "v1");
         Assert.assertEquals("V1", registry.get("test.k1"));

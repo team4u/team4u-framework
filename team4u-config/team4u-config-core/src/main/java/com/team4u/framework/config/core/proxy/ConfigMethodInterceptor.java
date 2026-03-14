@@ -7,10 +7,13 @@ import com.team4u.framework.config.core.annotation.ConfigKey;
 import com.team4u.framework.config.core.annotation.ConfigRequired;
 import com.team4u.framework.config.core.convert.PropertyConverter;
 import com.team4u.framework.config.core.convert.PropertyConverterRegistry;
+import com.team4u.framework.config.core.domain.ConfigConversionException;
 import com.team4u.framework.config.core.domain.ConfigMissingException;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.annotation.Annotation;
 import java.lang.reflect.Field;
@@ -30,6 +33,8 @@ import java.util.function.Supplier;
  * @author jay.wu
  */
 public class ConfigMethodInterceptor implements MethodInterceptor {
+
+    private static final Logger log = LoggerFactory.getLogger(ConfigMethodInterceptor.class);
 
     /**
      * 全局方法元数据静态缓存，用于存储方法解析后的元数据信息
@@ -299,37 +304,59 @@ public class ConfigMethodInterceptor implements MethodInterceptor {
 
         // 如果配置了自定义转换器，则使用转换器处理
         if (metadata.converter != null) {
-            return convertWithCustomConverter(rawValue, metadata, invocation);
+            return convertWithCustomConverter(rawValue, metadata, key);
         }
 
         // 使用通用转换引擎进行处理
-        return convert(rawValue, metadata, invocation);
+        return convert(rawValue, metadata, key);
     }
 
     /**
      * 使用自定义转换器进行转换
      */
     @SuppressWarnings({"rawtypes", "unchecked"})
-    private Object convertWithCustomConverter(String rawValue, MethodMetadata metadata, MethodInvocation invocation)
-            throws Throwable {
+    private Object convertWithCustomConverter(String rawValue, MethodMetadata metadata, String key) {
         try {
-            return ((PropertyConverter) metadata.converter).convert(rawValue, metadata.returnType);
+            Object converted = ((PropertyConverter) metadata.converter).convert(rawValue, metadata.returnType);
+            if (converted == null && metadata.returnType.isPrimitive()) {
+                throw new IllegalStateException("primitive target cannot be null");
+            }
+            return converted;
         } catch (Exception e) {
-            // 转换发生异常时回退到字段初始值
-            return invocation.proceed();
+            throw conversionException(
+                    key,
+                    rawValue,
+                    metadata.returnType,
+                    metadata.converter.getClass().getName(),
+                    e);
         }
     }
 
     /**
      * 执行通用类型转换
      */
-    private Object convert(String rawValue, MethodMetadata metadata, MethodInvocation invocation) throws Throwable {
+    private Object convert(String rawValue, MethodMetadata metadata, String key) {
         try {
-            return ConvertUtil.convert(metadata.returnType, rawValue);
+            Object converted = ConvertUtil.convert(metadata.returnType, rawValue);
+            if (converted == null && metadata.returnType.isPrimitive()) {
+                throw new IllegalStateException("primitive target cannot be null");
+            }
+            return converted;
         } catch (Exception e) {
-            // 转换失败时回退到字段初始值
-            return invocation.proceed();
+            throw conversionException(key, rawValue, metadata.returnType, "ConvertUtil", e);
         }
+    }
+
+    private ConfigConversionException conversionException(
+            String key,
+            String rawValue,
+            Class<?> targetType,
+            String converterName,
+            Exception cause) {
+        String message = "配置项转换失败: key=[" + key + "], targetType=" + targetType.getName()
+                + ", converter=" + converterName + ", rawValue=" + rawValue;
+        log.error(message, cause);
+        return new ConfigConversionException(message, cause);
     }
 
     /**

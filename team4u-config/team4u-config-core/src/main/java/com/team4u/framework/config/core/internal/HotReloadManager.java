@@ -1,9 +1,9 @@
 package com.team4u.framework.config.core.internal;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import com.team4u.framework.config.core.spi.ConfigSource;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 import java.util.concurrent.ScheduledExecutorService;
@@ -52,26 +52,28 @@ public class HotReloadManager {
      */
     private final ScheduledExecutorService debounceExecutor;
     /**
+     * 版本生成器
+     */
+    private final AtomicLong versionGenerator;
+    /**
      * 防抖延迟时间（毫秒）
      */
     private long debounceWindowMs;
-    /**
-     * 版本生成器
-     */
-    private final AtomicLong versionGenerator = new AtomicLong(System.currentTimeMillis());
     /**
      * 当前待执行的加载任务句柄
      */
     private ScheduledFuture<?> pendingTask;
 
     public HotReloadManager(AtomicReference<ConfigSnapshot> currentSnapshot,
-            Supplier<List<ConfigSource>> configSourcesSupplier,
-            SnapshotAggregator aggregator,
-            long debounceWindowMs,
-            Consumer<ReloadEvent> onReloadSuccess) {
+                            Supplier<List<ConfigSource>> configSourcesSupplier,
+                            SnapshotAggregator aggregator,
+                            AtomicLong versionGenerator,
+                            long debounceWindowMs,
+                            Consumer<ReloadEvent> onReloadSuccess) {
         this.currentSnapshot = currentSnapshot;
         this.configSourcesSupplier = configSourcesSupplier;
         this.aggregator = aggregator;
+        this.versionGenerator = versionGenerator;
         this.debounceWindowMs = debounceWindowMs;
         this.onReloadSuccess = onReloadSuccess;
 
@@ -109,6 +111,13 @@ public class HotReloadManager {
         pendingTask = debounceExecutor.schedule(this::doReload, debounceWindowMs, TimeUnit.MILLISECONDS);
     }
 
+    public synchronized void cancelPendingReload() {
+        if (pendingTask != null && !pendingTask.isDone()) {
+            pendingTask.cancel(false);
+        }
+        pendingTask = null;
+    }
+
     /**
      * 实际执行重新加载与引用切换
      */
@@ -139,6 +148,7 @@ public class HotReloadManager {
      * 关闭资源，停止任务调度
      */
     public void destroy() {
+        cancelPendingReload();
         debounceExecutor.shutdownNow();
     }
 

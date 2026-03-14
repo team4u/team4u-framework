@@ -13,6 +13,7 @@ import javax.sql.DataSource;
 import java.sql.SQLException;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.*;
 
@@ -170,6 +171,20 @@ public class DbConfigSourceTest {
         JdbcUtil.execute(dataSource, "DROP TABLE my_custom_config");
     }
 
+    @Test(expected = IllegalStateException.class)
+    public void testLoadFailsFastWhenTableUnavailable() throws SQLException {
+        DbConfigSource source = new DbConfigSource("DB-All", 100, dataSource);
+        JdbcUtil.execute(dataSource, "DROP TABLE system_config");
+        source.load();
+    }
+
+    @Test(expected = IllegalStateException.class)
+    public void testIncrementalLoadFailsFastWhenTableUnavailable() throws SQLException {
+        DbConfigSource source = new DbConfigSource("DB-All", 100, dataSource);
+        JdbcUtil.execute(dataSource, "DROP TABLE system_config");
+        source.loadSince(System.currentTimeMillis());
+    }
+
     /**
      * 变更探测监听测试。
      */
@@ -192,6 +207,24 @@ public class DbConfigSourceTest {
         ThreadUtil.sleep(1500);
 
         assertTrue("数据库发生变更后，应触发 changeSignal 回调", triggered.get());
+
+        watcher.destroy();
+    }
+
+    @Test
+    public void testWatcherFailureKeepsBaselineAndRecordsError() throws SQLException {
+        DbConfigWatcher watcher = new DbConfigWatcher(dataSource, 1);
+        AtomicInteger triggerCount = new AtomicInteger();
+
+        watcher.watch(triggerCount::incrementAndGet);
+
+        ThreadUtil.sleep(1200);
+        JdbcUtil.execute(dataSource, "DROP TABLE system_config");
+
+        ThreadUtil.sleep(1200);
+        assertEquals("查询失败时不应伪装成变更", 0, triggerCount.get());
+        assertTrue("失败计数应递增", watcher.getFailureCount() > 0);
+        assertNotNull("最近错误应可观测", watcher.getLastErrorMessage());
 
         watcher.destroy();
     }

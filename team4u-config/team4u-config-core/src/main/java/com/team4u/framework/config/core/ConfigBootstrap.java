@@ -2,6 +2,7 @@ package com.team4u.framework.config.core;
 
 import com.team4u.framework.config.core.convert.PropertyConverter;
 import com.team4u.framework.config.core.convert.PropertyConverterRegistry;
+import com.team4u.framework.config.core.internal.DefaultConfigManager;
 import com.team4u.framework.config.core.spi.ConfigSource;
 import com.team4u.framework.config.core.spi.ConfigSourceRegistry;
 import com.team4u.framework.config.core.spi.ConfigWatcher;
@@ -69,6 +70,17 @@ public class ConfigBootstrap {
      */
     public synchronized void lock() {
         this.locked = true;
+    }
+
+    /**
+     * 仅用于测试场景，清理全局注册表并解除锁定。
+     */
+    public synchronized void resetForTests() {
+        DefaultConfigManager.global().resetForTests();
+        ConfigSourceRegistry.global().unregisterAll();
+        ConfigWatcherRegistry.global().unregisterAll();
+        PropertyConverterRegistry.global().unregisterAll();
+        this.locked = false;
     }
 
     /**
