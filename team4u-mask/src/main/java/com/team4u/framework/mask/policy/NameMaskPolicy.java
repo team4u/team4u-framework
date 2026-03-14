@@ -34,18 +34,18 @@ public class NameMaskPolicy implements MaskPolicy {
     }
 
     private String maskChineseName(String value) {
-        int length = value.length();
+        int length = MaskUtils.codePointLength(value);
         if (length <= 3) {
-            // 三个字及以下，只显示最后一个字
+            // 针对短字符中文姓名（1~3个字）：隐藏姓氏及中间字，默认尽全力保留尾字
             return MaskUtils.mask(value, 0, 1);
         } else {
-            // 三个字以上，显示最后两个字
+            // 针对长字符中文姓名（复姓或少数民族，4个字及以上）：隐藏首部，保留尾部至少2个字符段
             return MaskUtils.mask(value, 0, 2);
         }
     }
 
     private String maskEnglishName(String value) {
-        // 英文姓名：只显示前一后一
+        // 针对英文或拼音姓名：采取仅暴漏首尾单一有效字母，隐藏中间全部内容的策略
         return MaskUtils.mask(value, 1, 1);
     }
 }

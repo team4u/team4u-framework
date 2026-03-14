@@ -10,11 +10,15 @@ import com.team4u.framework.log.core.LogSerializer;
 import com.team4u.framework.mask.jackson.JacksonMaskModule;
 import com.team4u.framework.mask.jackson.MaskConfig;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 /**
  * 基于 Jackson 的日志序列化器
  */
 public class JacksonLogSerializer implements LogSerializer {
 
+    private static final ObjectMapper FALLBACK_MAPPER = new ObjectMapper();
     private volatile ObjectMapper objectMapper;
 
     public JacksonLogSerializer() {
@@ -60,9 +64,15 @@ public class JacksonLogSerializer implements LogSerializer {
             }
             return rawJson;
         } catch (Exception e) {
-            return String.format("{\"error\": \"Serialization failed\", \"action\": \"%s\", \"reason\": \"%s\"}",
-                    event.getAction() != null ? event.getAction() : "",
-                    e.getMessage());
+            Map<String, Object> fallback = new LinkedHashMap<>();
+            fallback.put("error", "Serialization failed");
+            fallback.put("action", event.getAction() != null ? event.getAction() : "");
+            fallback.put("reason", e.getMessage() != null ? e.getMessage() : e.getClass().getName());
+            try {
+                return FALLBACK_MAPPER.writeValueAsString(fallback);
+            } catch (Exception ignored) {
+                return "{\"error\":\"Serialization failed\"}";
+            }
         }
     }
 

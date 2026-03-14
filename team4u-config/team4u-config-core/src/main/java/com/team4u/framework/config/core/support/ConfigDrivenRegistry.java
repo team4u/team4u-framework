@@ -26,6 +26,7 @@ public class ConfigDrivenRegistry<T> {
     @Getter
     private final String keyPrefix;
     private final Function<String, T> instanceFactory;
+    private final AutoCloseable listenerHandle;
 
     // 实例缓存：Key 为配置键，Value 为对象实例
     private final Map<String, T> instanceCache = new ConcurrentHashMap<>();
@@ -41,7 +42,7 @@ public class ConfigDrivenRegistry<T> {
         this.instanceFactory = instanceFactory;
 
         // 注册变更监听器：当前采用 startsWith 语义，keyPrefix + "*" 会匹配所有同前缀键
-        this.configManager.addChangeListener(this.keyPrefix + "*", this::onConfigChanged);
+        this.listenerHandle = this.configManager.registerChangeListener(this.keyPrefix + "*", this::onConfigChanged);
     }
 
     /**
@@ -121,6 +122,22 @@ public class ConfigDrivenRegistry<T> {
      * 销毁注册表，释放所有实例资源
      */
     public void destroy() {
+        closeListenerQuietly();
         instanceCache.keySet().forEach(this::removeAndClose);
+    }
+
+    /**
+     * 安静地关闭配置变更监听器句柄。
+     * <p>
+     * 忽略在注销监听器过程中抛出的异常，防止影响资源清理流程。
+     */
+    private void closeListenerQuietly() {
+        if (listenerHandle != null) {
+            try {
+                listenerHandle.close();
+            } catch (Exception e) {
+                log.warn("Error occurred while closing config change listener.", e);
+            }
+        }
     }
 }

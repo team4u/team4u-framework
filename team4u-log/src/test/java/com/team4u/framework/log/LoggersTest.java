@@ -1,7 +1,9 @@
 package com.team4u.framework.log;
 
 import com.team4u.framework.base.util.ReflectUtil;
+import com.team4u.framework.log.core.LogEngine;
 import com.team4u.framework.log.core.LogEvent;
+import com.team4u.framework.log.pipeline.LogInterceptor;
 import com.team4u.framework.log.pipeline.interceptor.TargetedDyeingInterceptor;
 import com.team4u.framework.log.pipeline.interceptor.TargetedDyeingInterceptor.DyeingRule;
 import com.team4u.framework.log.support.TestLogHelper;
@@ -115,6 +117,19 @@ public class LoggersTest {
         Assert.assertEquals(1, logHelper.allEvents().size());
     }
 
+    @Test
+    public void testLogWithGenericPrecheckBypass() {
+        BypassInterceptor interceptor = new BypassInterceptor();
+        LogEngine.getInstance().getInterceptorManager().register(interceptor);
+        try {
+            Loggers.of(this.getClass()).action("Bypass").log();
+            Assert.assertEquals(1, logHelper.allEvents().size());
+            Assert.assertEquals("Bypass", logHelper.lastEvent().getAction());
+        } finally {
+            LogEngine.getInstance().getInterceptorManager().unregister(interceptor);
+        }
+    }
+
     /**
      * 测试 derive 功能，确保派生出的日志器与原日志器状态隔离
      */
@@ -158,5 +173,17 @@ public class LoggersTest {
         Assert.assertNull(baseLog.getEvent().getPayload().get("user"));
         Assert.assertNull(baseLog.getEvent().getPayload().get("orderId"));
         Assert.assertEquals("TestModule", baseLog.getEvent().getPayload().get("module"));
+    }
+
+    private static class BypassInterceptor implements LogInterceptor {
+        @Override
+        public boolean handle(LogEvent event) {
+            return true;
+        }
+
+        @Override
+        public boolean shouldBypassLevelPrecheck(LogEvent event) {
+            return true;
+        }
     }
 }

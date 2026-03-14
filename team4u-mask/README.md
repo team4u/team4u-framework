@@ -100,7 +100,9 @@ String name = FastMasker.mask("周杰伦", MaskType.NAME);              // **伦
 ### 2. 行为约定
 
 * 输入值为 `null` 或空串时：默认原样返回（按具体策略处理）。
+* 输入策略类型为 `null` 或空串时：`FastMasker` 返回原值，不抛异常。
 * 未找到策略 Key 时：`FastMasker` 返回原值，不抛异常。
+* 字符串掩码与截断按 Unicode code point 执行，不会截断半个代理对字符。
 * 所有策略统一通过 `MaskPolicy#key()` 路由，便于标准化治理。
 
 ---
@@ -183,6 +185,8 @@ String json = mapper.writeValueAsString(userDTO);
 ```
 
 > `@Mask` 仅作用于字段序列化阶段，不影响对象内存中的原值。
+>
+> `@Mask` 仅对 `String` 字段生效；若误用于非 `String` 字段，会跳过脱敏并保留原始 JSON 类型。
 
 ---
 
@@ -206,6 +210,8 @@ start(configManager);
 // 应用关闭时可调用
 // MaskBootstrap.global().stop();
 ```
+
+`MaskBootstrap.global().start(configManager)` 支持重复调用；重新启动时会先释放旧的规则监听，再绑定新的 `ConfigManager`。
 
 ### 2. 配置 Key 与数据结构
 
@@ -243,8 +249,13 @@ start(configManager);
 `JacksonMaskModule` 通过 `DynamicMaskSerializerModifier` 自动介入序列化流程：
 
 1. 处理对象字段：先看 `@Mask`，再查 `MaskRuleRepository`。
-2. 处理 `Map`：对 `String key + String value` 的项按规则脱敏。
+2. 处理 `Map`：对 `String key + String value` 的项按规则脱敏，其它内容继续走 Jackson 默认序列化链。
 3. 复杂值递归：Map 中非字符串值走 Jackson 默认序列化链。
+
+补充约定：
+
+* `MaskType.NULL` 在 Jackson 序列化中会输出 JSON `null`。
+* `Map` 脱敏基于 Jackson 原生 `MapSerializer` 增强，保留 `JsonInclude`、自定义 content serializer、排序和过滤等行为。
 
 ### 序列化上下文配置（可选）
 

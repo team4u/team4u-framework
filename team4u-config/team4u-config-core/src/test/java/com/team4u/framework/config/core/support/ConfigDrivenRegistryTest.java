@@ -115,6 +115,26 @@ public class ConfigDrivenRegistryTest {
         Assert.assertEquals(2, closeCount.get());
     }
 
+    @Test
+    public void testDestroyUnregistersListener() {
+        AtomicInteger factoryCount = new AtomicInteger(0);
+
+        ConfigDrivenRegistry<String> registry = new ConfigDrivenRegistry<>(
+                configManager, "test.", value -> {
+            factoryCount.incrementAndGet();
+            return value.toUpperCase();
+        });
+
+        configSource.putAndRefresh("test.k1", "v1");
+        Assert.assertEquals("V1", registry.get("test.k1"));
+        Assert.assertEquals(1, factoryCount.get());
+
+        registry.destroy();
+
+        configSource.putAndRefresh("test.k1", "v2");
+        Assert.assertEquals(1, factoryCount.get());
+    }
+
     private static class MockInstance implements AutoCloseable {
         private final String name;
         private final AtomicInteger closeCount;

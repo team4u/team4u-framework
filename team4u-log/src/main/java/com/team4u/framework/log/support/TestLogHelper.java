@@ -16,9 +16,20 @@ import java.util.List;
 public class TestLogHelper {
 
     private final MemoryLogAppender memoryAppender;
+    private final LogAppender originalAppender;
+    private final CompositeLogAppender attachedComposite;
+    private final boolean ownsComposite;
+    private volatile boolean stopped;
 
-    private TestLogHelper(MemoryLogAppender memoryAppender) {
+    private TestLogHelper(
+            MemoryLogAppender memoryAppender,
+            LogAppender originalAppender,
+            CompositeLogAppender attachedComposite,
+            boolean ownsComposite) {
         this.memoryAppender = memoryAppender;
+        this.originalAppender = originalAppender;
+        this.attachedComposite = attachedComposite;
+        this.ownsComposite = ownsComposite;
     }
 
     /**
@@ -30,19 +41,21 @@ public class TestLogHelper {
      * @return 测试助手实例
      */
     public static TestLogHelper start() {
-        LogAppender currentAppender = LogEngine.getInstance().getAppender();
+        LogEngine engine = LogEngine.getInstance();
+        LogAppender currentAppender = engine.getAppender();
+        MemoryLogAppender memoryAppender = new MemoryLogAppender();
 
         // 如果当前已经是复合 Appender，不再嵌套
         if (currentAppender instanceof CompositeLogAppender) {
-            MemoryLogAppender memoryAppender = new MemoryLogAppender();
-            ((CompositeLogAppender) currentAppender).addAppender(memoryAppender);
-            return new TestLogHelper(memoryAppender);
+            CompositeLogAppender compositeAppender = (CompositeLogAppender) currentAppender;
+            compositeAppender.addAppender(memoryAppender);
+            return new TestLogHelper(memoryAppender, currentAppender, compositeAppender, false);
         }
 
-        MemoryLogAppender memoryAppender = new MemoryLogAppender();
-        LogEngine.getInstance().setAppender(new CompositeLogAppender(currentAppender, memoryAppender));
+        CompositeLogAppender compositeAppender = new CompositeLogAppender(currentAppender, memoryAppender);
+        engine.setAppender(compositeAppender);
 
-        return new TestLogHelper(memoryAppender);
+        return new TestLogHelper(memoryAppender, currentAppender, compositeAppender, true);
     }
 
     /**
@@ -81,9 +94,33 @@ public class TestLogHelper {
     }
 
     /**
-     * 停止捕获并重置 LogEngine 到默认状态
+     * 关闭日志测试助手并恢复全局环境。
+     * <p>
+     * 安全地移除内存捕获器。如果是本实例主动创建的复合追加器（CompositeAppender），
+     * 并且此时只剩下原有的追加器时，会彻底将其还原，消除测试运行的副作用。
+     * 保证该方法幂等并具备线程安全性。
      */
     public void stop() {
-        LogEngine.getInstance().reset();
+        if (stopped) {
+            return;
+        }
+
+        synchronized (this) {
+            if (stopped) {
+                return;
+            }
+
+            LogEngine engine = LogEngine.getInstance();
+            attachedComposite.removeAppender(memoryAppender);
+
+            if (ownsComposite
+                    && engine.getAppender() == attachedComposite
+                    && attachedComposite.getAppenders().size() == 1
+                    && attachedComposite.getAppenders().contains(originalAppender)) {
+                engine.setAppender(originalAppender);
+            }
+
+            stopped = true;
+        }
     }
 }

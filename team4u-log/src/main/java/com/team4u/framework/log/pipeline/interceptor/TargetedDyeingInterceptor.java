@@ -1,8 +1,5 @@
 package com.team4u.framework.log.pipeline.interceptor;
 
-import com.team4u.framework.serializer.json.JsonUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.criterion.Criteria;
@@ -11,10 +8,14 @@ import com.team4u.framework.log.LogContext;
 import com.team4u.framework.log.core.LogEvent;
 import com.team4u.framework.log.pipeline.LogInterceptor;
 import com.team4u.framework.log.pipeline.context.LogContextCollector;
+import com.team4u.framework.serializer.json.JsonUtil;
 import lombok.Data;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.slf4j.event.Level;
 
 import java.util.ArrayList;
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 
@@ -31,7 +32,7 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
     private static final TargetedDyeingInterceptor INSTANCE = new TargetedDyeingInterceptor();
     private static final String CONFIG_KEY = "team4u.log.dyeing";
 
-    private volatile List<DyeingRule> activeRules = new ArrayList<>();
+    private volatile List<DyeingRule> activeRules = Collections.emptyList();
 
     private volatile Criteria criteria = Criteria.global();
 
@@ -51,11 +52,15 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
         return INSTANCE;
     }
 
-    public void init(ConfigManager configManager) {
+    public synchronized void init(ConfigManager configManager) {
+        if (this.registry != null) {
+            this.registry.destroy();
+        }
+
         this.registry = new ConfigDrivenRegistry<>(configManager, CONFIG_KEY, json -> {
             try {
                 if (json == null || json.trim().isEmpty()) {
-                    this.activeRules = new ArrayList<>();
+                    this.activeRules = Collections.emptyList();
                     return this.activeRules;
                 }
 
@@ -85,12 +90,17 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
             }
         });
 
-        this.registry.get(CONFIG_KEY);
+        List<DyeingRule> loadedRules = this.registry.get(CONFIG_KEY);
+        this.activeRules = loadedRules != null ? loadedRules : Collections.emptyList();
     }
 
     @Override
-    public void reset() {
-        this.activeRules = new ArrayList<>();
+    public synchronized void reset() {
+        if (this.registry != null) {
+            this.registry.destroy();
+            this.registry = null;
+        }
+        this.activeRules = Collections.emptyList();
         this.criteria = Criteria.global();
         // 同步重置全局日志上下文
         LogContext.reset();
@@ -105,6 +115,11 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
      */
     public boolean hasActiveRules() {
         return !activeRules.isEmpty();
+    }
+
+    @Override
+    public boolean shouldBypassLevelPrecheck(LogEvent event) {
+        return hasActiveRules();
     }
 
     @Override

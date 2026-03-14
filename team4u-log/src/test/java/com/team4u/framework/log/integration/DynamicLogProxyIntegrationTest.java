@@ -5,6 +5,7 @@ import com.team4u.framework.log.LogBootstrap;
 import com.team4u.framework.log.core.LogEvent;
 import com.team4u.framework.log.pipeline.interceptor.TargetedDyeingInterceptor;
 import com.team4u.framework.log.proxy.LogProxyFactory;
+import com.team4u.framework.log.proxy.ProxyRuleRepository;
 import com.team4u.framework.log.support.TestLogHelper;
 import org.junit.After;
 import org.junit.Assert;
@@ -34,6 +35,7 @@ public class DynamicLogProxyIntegrationTest {
     public void teardown() {
         logHelper.stop();
         configContext.destroy();
+        ProxyRuleRepository.getInstance().reset();
         TargetedDyeingInterceptor.getInstance().reset();
     }
 
@@ -137,6 +139,21 @@ public class DynamicLogProxyIntegrationTest {
             Assert.assertNotNull(after);
             Assert.assertEquals(Level.WARN, after.getLevel());
             Assert.assertEquals("business_error", after.getStatus());
+        }
+    }
+
+    @Test
+    public void testProxyRuleInvalidConfigAtStartupDoesNotThrow() throws InterruptedException {
+        configContext.put("team4u.log.proxy", "{");
+        Thread.sleep(50);
+
+        ThirdPartyService service = LogProxyFactory.createDynamicProxy(new ThirdPartyService());
+
+        try {
+            service.send("13812345678", "startup-bad-config");
+            Assert.fail("预期抛出业务异常");
+        } catch (Exception ignored) {
+            Assert.assertNull("启动时坏配置不应激活动态代理规则", logHelper.lastEvent());
         }
     }
 

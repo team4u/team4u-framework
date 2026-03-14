@@ -46,6 +46,15 @@ public class ReflectUtilTest {
         Assert.assertEquals("newParentValue", obj.getParentField());
     }
 
+    @Test
+    public void testGetFieldValue() {
+        TestChildClass obj = new TestChildClass();
+
+        Assert.assertEquals("child", ReflectUtil.getFieldValue(obj, "childField"));
+        Assert.assertEquals("parent", ReflectUtil.getFieldValue(obj, "parentField"));
+        Assert.assertNull(ReflectUtil.getFieldValue(obj, "missingField"));
+    }
+
     // 测试用的辅助类
     static class TestParentClass {
         private String parentField = "parent";

@@ -6,6 +6,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.event.Level;
 
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
+
 /**
  * SLF4J 日志追加器
  * <p>
@@ -13,13 +16,15 @@ import org.slf4j.event.Level;
  */
 public class Slf4jLogAppender implements LogAppender {
 
+    private final ConcurrentMap<String, Logger> loggerCache = new ConcurrentHashMap<>();
+
     @Override
     public void append(LogEvent event) {
         String loggerName = event.getLoggerName();
         if (loggerName == null) {
             loggerName = LogEngine.class.getName(); // 默认兜底名称
         }
-        Logger logger = LoggerFactory.getLogger(loggerName);
+        Logger logger = loggerCache.computeIfAbsent(loggerName, LoggerFactory::getLogger);
         Level level = event.getLevel();
 
         // 预检查日志级别，避免不必要的 JSON 序列化

@@ -1,11 +1,11 @@
 package com.team4u.framework.mask.config;
 
 import com.team4u.framework.base.util.TypeReference;
+import com.team4u.framework.config.core.ConfigManager;
+import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.serializer.json.JsonUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.team4u.framework.config.core.ConfigManager;
-import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 
 import java.util.HashMap;
 import java.util.Map;
@@ -25,7 +25,7 @@ public class MaskRuleRepository {
     /**
      * 手动注入规则缓存（主要用于测试场景）
      */
-    private volatile Map<String, Map<String, String>> ruleCache = new HashMap<>();
+    private volatile Map<String, Map<String, String>> manualRuleCache = new HashMap<>();
 
     private ConfigDrivenRegistry<Map<String, Map<String, String>>> registry;
 
@@ -44,7 +44,11 @@ public class MaskRuleRepository {
     /**
      * 组件自治：自己初始化自己的配置监听
      */
-    public void init(ConfigManager configManager) {
+    public synchronized void init(ConfigManager configManager) {
+        if (this.registry != null) {
+            this.registry.destroy();
+        }
+
         this.registry = new ConfigDrivenRegistry<>(configManager, CONFIG_KEY, json -> {
             try {
                 if (json == null || json.trim().isEmpty()) {
@@ -72,8 +76,8 @@ public class MaskRuleRepository {
      * 清空规则缓存并释放与 ConfigManager 的监听关系，
      * 确保下次 init() 时从干净状态重新初始化。
      */
-    public void reset() {
-        this.ruleCache = new HashMap<>();
+    public synchronized void reset() {
+        this.manualRuleCache = new HashMap<>();
         if (this.registry != null) {
             this.registry.destroy();
             this.registry = null;
@@ -86,7 +90,7 @@ public class MaskRuleRepository {
      * @param rules className -> (fieldName -> maskPolicyKey)
      */
     public void setRuleCache(Map<String, Map<String, String>> rules) {
-        this.ruleCache = rules != null ? rules : new HashMap<>();
+        this.manualRuleCache = rules != null ? rules : new HashMap<>();
     }
 
     /**
@@ -134,6 +138,6 @@ public class MaskRuleRepository {
                 return rules;
             }
         }
-        return ruleCache;
+        return manualRuleCache;
     }
 }

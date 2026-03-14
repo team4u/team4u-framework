@@ -39,6 +39,9 @@ public class FastMasker {
      * @return 脱敏后的字符串
      */
     public static String mask(String value, MaskType type) {
+        if (type == null) {
+            return value;
+        }
         return mask(value, type.name());
     }
 
@@ -51,6 +54,10 @@ public class FastMasker {
      */
     public static String mask(String value, String type) {
         if (value == null || value.isEmpty()) {
+            return value;
+        }
+
+        if (type == null || type.isEmpty()) {
             return value;
         }
 

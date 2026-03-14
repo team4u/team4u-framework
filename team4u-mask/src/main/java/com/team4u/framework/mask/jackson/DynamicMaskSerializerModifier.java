@@ -9,6 +9,8 @@ import com.fasterxml.jackson.databind.ser.std.MapSerializer;
 import com.fasterxml.jackson.databind.type.MapType;
 import com.team4u.framework.mask.Mask;
 import com.team4u.framework.mask.config.MaskRuleRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.List;
 
@@ -18,6 +20,7 @@ import java.util.List;
  * 支持根据外部规则或注解对第三方类及动态 Map 进行脱敏。
  */
 public class DynamicMaskSerializerModifier extends BeanSerializerModifier {
+    private static final Logger log = LoggerFactory.getLogger(DynamicMaskSerializerModifier.class);
 
     @Override
     public List<BeanPropertyWriter> changeProperties(SerializationConfig config,
@@ -31,7 +34,12 @@ public class DynamicMaskSerializerModifier extends BeanSerializerModifier {
             // 1. 优先使用注解配置
             Mask maskAnnotation = writer.getAnnotation(Mask.class);
             if (maskAnnotation != null) {
-                writer.assignSerializer(new MaskStringSerializer(maskAnnotation.value().name()));
+                if (isStringProperty(writer)) {
+                    writer.assignSerializer(new MaskStringSerializer(maskAnnotation.value().name()));
+                } else {
+                    log.warn("Mask annotation ignored for non-String property: {}.{} ({})",
+                            className, fieldName, writer.getType());
+                }
                 continue;
             }
 
@@ -39,7 +47,12 @@ public class DynamicMaskSerializerModifier extends BeanSerializerModifier {
             // 规则仅在构建序列化器时执行，提升性能
             String externalRule = MaskRuleRepository.getInstance().findRule(className, fieldName);
             if (externalRule != null) {
-                writer.assignSerializer(new MaskStringSerializer(externalRule));
+                if (isStringProperty(writer)) {
+                    writer.assignSerializer(new MaskStringSerializer(externalRule));
+                } else {
+                    log.warn("Mask rule [{}] ignored for non-String property: {}.{} ({})",
+                            externalRule, className, fieldName, writer.getType());
+                }
             }
         }
         return beanProperties;
@@ -56,5 +69,9 @@ public class DynamicMaskSerializerModifier extends BeanSerializerModifier {
                     beanDesc.getBeanClass().getName());
         }
         return serializer;
+    }
+
+    private boolean isStringProperty(BeanPropertyWriter writer) {
+        return writer.getType() != null && writer.getType().hasRawClass(String.class);
     }
 }

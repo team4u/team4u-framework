@@ -1,12 +1,12 @@
 package com.team4u.framework.log.pipeline;
 
-import com.team4u.framework.policy.core.OrderedPolicyChain;
-import com.team4u.framework.policy.engine.PolicyPipeline;
-import com.team4u.framework.policy.util.PolicyScanner;
 import com.team4u.framework.log.core.LogEvent;
 import com.team4u.framework.log.pipeline.interceptor.MdcEnrichInterceptor;
 import com.team4u.framework.log.pipeline.interceptor.RateLimitInterceptor;
 import com.team4u.framework.log.pipeline.interceptor.TargetedDyeingInterceptor;
+import com.team4u.framework.policy.core.OrderedPolicyChain;
+import com.team4u.framework.policy.engine.PolicyPipeline;
+import com.team4u.framework.policy.util.PolicyScanner;
 
 /**
  * 日志拦截器管理器
@@ -71,6 +71,15 @@ public class LogInterceptorManager {
      */
     public boolean execute(LogEvent event) {
         return pipeline.executeChain(event, LogInterceptor::handle);
+    }
+
+    /**
+     * 判断是否存在会在处理链中改变当前输出判定的拦截器。
+     */
+    public boolean shouldProcessDisabledLevel(LogEvent event) {
+        return chain.getPolicies().stream()
+                .filter(interceptor -> interceptor.supports(event))
+                .anyMatch(interceptor -> interceptor.shouldBypassLevelPrecheck(event));
     }
 
     /**

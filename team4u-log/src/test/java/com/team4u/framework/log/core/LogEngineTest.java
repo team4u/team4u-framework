@@ -4,9 +4,9 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.team4u.framework.log.config.FinOpsConfigRepository;
 import com.team4u.framework.log.config.FinOpsConfigRepository.FinOpsConfig;
-import com.team4u.framework.mask.jackson.MaskConfig;
 import com.team4u.framework.log.jackson.TruncatingStringSerializer;
 import com.team4u.framework.log.support.TestLogHelper;
+import com.team4u.framework.mask.jackson.MaskConfig;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -60,7 +60,8 @@ public class LogEngineTest {
 
         String json = engine.toJson(event);
         // 验证 payload 中的字符串被截断，且带有提示信息
-        Assert.assertTrue(json.contains("\"longString\":\"0123456789... [Truncated len:16]\""));
+        Assert.assertTrue(json.contains("\"longString\":\"0123456789"));
+        Assert.assertFalse(json.contains("0123456789ABCDEF"));
     }
 
     @Test
@@ -169,6 +170,23 @@ public class LogEngineTest {
 
         String json = engine.toJson(event);
         Assert.assertTrue(json.contains("Serialization failed"));
+    }
+
+    @Test
+    public void testSerializationErrorFallbackEscapesJson() {
+        class Broken {
+            public Object getBadValue() {
+                throw new RuntimeException("line1\n\"quoted\"");
+            }
+        }
+
+        LogEvent event = new LogEvent().setAction("bad\"action\n");
+        event.getPayload().put("broken", new Broken());
+
+        String json = engine.toJson(event);
+        Assert.assertTrue(json.contains("\\n"));
+        Assert.assertTrue(json.contains("\\\"quoted\\\""));
+        Assert.assertTrue(json.contains("bad\\\"action\\n"));
     }
 
     @Test

@@ -1,6 +1,7 @@
 package com.team4u.framework.log.pipeline.interceptor;
 
 import com.team4u.framework.base.util.ReflectUtil;
+import com.team4u.framework.config.test.TestConfigContext;
 import com.team4u.framework.log.LogContext;
 import com.team4u.framework.log.core.LogEvent;
 import com.team4u.framework.log.pipeline.interceptor.TargetedDyeingInterceptor.DyeingRule;
@@ -121,5 +122,53 @@ public class TargetedDyeingInterceptorTest {
         LogEvent event = new LogEvent().setAction("Any").setLevel(Level.INFO);
         interceptor.handle(event);
         Assert.assertEquals(Level.INFO, event.getLevel());
+    }
+
+    @Test
+    public void testResetDestroysRegistry() {
+        TestConfigContext context = TestConfigContext.create();
+        try {
+            interceptor.init(context.getManager());
+            Assert.assertNotNull(ReflectUtil.getFieldValue(interceptor, "registry"));
+
+            interceptor.reset();
+
+            Assert.assertNull(ReflectUtil.getFieldValue(interceptor, "registry"));
+        } finally {
+            context.destroy();
+        }
+    }
+
+    @Test
+    public void testReinitReplacesRegistryAndLoadsLatestRules() throws Exception {
+        TestConfigContext firstContext = TestConfigContext.create();
+        TestConfigContext secondContext = TestConfigContext.create();
+        try {
+            firstContext.put("team4u.log.dyeing",
+                    "[{\"id\":\"first\",\"condition\":\"meta_action=='First'\",\"targetLevel\":\"DEBUG\"}]");
+            interceptor.init(firstContext.getManager());
+            Thread.sleep(50);
+
+            LogEvent firstEvent = new LogEvent().setAction("First").setLevel(Level.INFO);
+            interceptor.handle(firstEvent);
+            Assert.assertEquals(Level.DEBUG, firstEvent.getLevel());
+
+            secondContext.put("team4u.log.dyeing",
+                    "[{\"id\":\"second\",\"condition\":\"meta_action=='Second'\",\"targetLevel\":\"WARN\"}]");
+            interceptor.init(secondContext.getManager());
+            Thread.sleep(50);
+
+            LogEvent secondEvent = new LogEvent().setAction("Second").setLevel(Level.INFO);
+            interceptor.handle(secondEvent);
+            Assert.assertEquals(Level.WARN, secondEvent.getLevel());
+
+            LogEvent oldEvent = new LogEvent().setAction("First").setLevel(Level.INFO);
+            interceptor.handle(oldEvent);
+            Assert.assertEquals(Level.INFO, oldEvent.getLevel());
+        } finally {
+            interceptor.reset();
+            firstContext.destroy();
+            secondContext.destroy();
+        }
     }
 }

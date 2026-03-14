@@ -105,15 +105,17 @@ public interface ConfigManager {
     }
 
     /**
-     * 注册配置变更监听器
+     * 注册配置变更监听器，并返回可关闭的监听句柄。
      * <p>
      * 支持精确匹配或通配符模式，监听范围取决于实现的模式匹配逻辑。
+     * 返回的句柄可用于显式注销该监听器。
      * </p>
      *
      * @param keyPattern 监听的键名或前缀模式（如 "app.db.*"）
      * @param listener   变更回调处理程序
+     * @return 可关闭的监听句柄
      */
-    void addChangeListener(String keyPattern, ConfigChangeListener listener);
+    AutoCloseable registerChangeListener(String keyPattern, ConfigChangeListener listener);
 
     /**
      * 配置管理器构造器

@@ -94,7 +94,7 @@ Loggers.of(OrderService.class)
 | `level(Level level)`                                      | 通用方法：直接设置日志级别。                                       |
 | `atTrace() / atDebug() / atInfo() / atWarn() / atError()` | 手动指定日志输出级别。                                             |
 | `status(String status)`                                   | 手动指定业务状态（如 `processing`）。                              |
-| `derive()`                                                | 派生日志器。基于当前状态拷贝出一个独立的副本。常用于定义日志模板。 |
+| `derive()`                                                | 派生日志器。基于当前状态做浅拷贝并返回副本。常用于定义日志模板。   |
 | `log()`                                                   | 终结方法，将事件提交给日志引擎的流水线进行拦截与输出。             |
 ### 拦截器管理 (LogInterceptorManager)
 日志处理流水线由 `LogInterceptorManager` 统一管理。它负责内置拦截器的初始化、自定义拦截器的注册以及执行链的调度。
@@ -126,7 +126,11 @@ MdcEnrichInterceptor.getInstance().setTraceIdKey("requestId");
 
 ---
 #### 日志器派生 (Template Logger)
-为了减少重复代码（如每个方法都要手动 `.put("module", "Trade")`），您可以预定义一个模板日志器，在具体业务点通过 `derive()` 派生出独立实例。派生实例会继承模板的所有 KV 和配置，且后续的修改互不污染。
+为了减少重复代码（如每个方法都要手动 `.put("module", "Trade")`），您可以预定义一个模板日志器，在具体业务点通过 `derive()` 派生出独立实例。派生实例会继承模板的所有 KV 和配置，且后续对顶层字段与 payload Map 的修改互不污染。
+
+> 注意：
+> `derive()` 对 `payload` 只做浅拷贝。也就是说，`payload` 里的嵌套可变对象（如 `List`、`Map`、自定义 DTO）仍然可能与模板共享引用。
+> 若模板中放入的是可变对象，后续对这些内部对象的修改仍可能相互影响。建议模板 payload 只放不可变值或每次派生后重新填充可变内容。
 
 ```java
 public class OrderService {
@@ -316,8 +320,10 @@ try {
     Assert.assertTrue(json.contains("**伦"));
     
 } finally {
-    // 停止捕获并重置环境
+    // 停止当前 helper 的捕获挂载
     helper.stop();
+    // 如需测试间全局隔离，请显式重置对应单例状态
+    LogEngine.getInstance().reset();
 }
 ```
 

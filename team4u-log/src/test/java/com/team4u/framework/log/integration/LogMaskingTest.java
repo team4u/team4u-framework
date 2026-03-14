@@ -1,8 +1,8 @@
 package com.team4u.framework.log.integration;
 
 import com.team4u.framework.log.Loggers;
-import com.team4u.framework.mask.config.MaskRuleRepository;
 import com.team4u.framework.log.support.TestLogHelper;
+import com.team4u.framework.mask.config.MaskRuleRepository;
 import lombok.Data;
 import org.junit.After;
 import org.junit.Assert;
@@ -21,8 +21,7 @@ public class LogMaskingTest {
 
     @Before
     public void setup() {
-        // TestLogHelper.start() 之前，上一个测试的 teardown() 已通过
-        // logHelper.stop() → LogEngine.reset() 将所有子组件归零，这里无需额外清理
+        MaskRuleRepository.getInstance().reset();
         logHelper = TestLogHelper.start();
     }
 
@@ -34,6 +33,7 @@ public class LogMaskingTest {
     @After
     public void teardown() {
         logHelper.stop();
+        MaskRuleRepository.getInstance().reset();
     }
 
     @Test

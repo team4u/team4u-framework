@@ -1,11 +1,12 @@
 package com.team4u.framework.log.appender;
 
 import com.team4u.framework.log.core.LogEvent;
-import lombok.Setter;
 
+import java.util.ArrayDeque;
 import java.util.ArrayList;
+import java.util.Deque;
 import java.util.List;
-import java.util.concurrent.LinkedBlockingDeque;
+import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * 内存日志追加器
@@ -14,19 +15,36 @@ import java.util.concurrent.LinkedBlockingDeque;
  */
 public class MemoryLogAppender implements LogAppender {
 
-    private final LinkedBlockingDeque<LogEvent> events = new LinkedBlockingDeque<>();
+    private final ReentrantLock lock = new ReentrantLock();
+    private final Deque<LogEvent> events = new ArrayDeque<>();
     /**
      * 最大存储容量，默认 1000 条
      */
-    @Setter
     private int capacity = 1000;
 
     @Override
     public void append(LogEvent event) {
-        if (events.size() >= capacity) {
-            events.pollFirst();
+        if (event == null) {
+            return;
         }
-        events.offerLast(event);
+
+        lock.lock();
+        try {
+            trimToFit(capacity - 1);
+            events.offerLast(event);
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    public void setCapacity(int capacity) {
+        lock.lock();
+        try {
+            this.capacity = Math.max(1, capacity);
+            trimToFit(this.capacity);
+        } finally {
+            lock.unlock();
+        }
     }
 
     /**
@@ -35,7 +53,12 @@ public class MemoryLogAppender implements LogAppender {
      * @return 日志事件副本
      */
     public List<LogEvent> getEvents() {
-        return new ArrayList<>(events);
+        lock.lock();
+        try {
+            return new ArrayList<>(events);
+        } finally {
+            lock.unlock();
+        }
     }
 
     /**
@@ -44,20 +67,42 @@ public class MemoryLogAppender implements LogAppender {
      * @return 最近的日志事件，若无则返回 null
      */
     public LogEvent lastEvent() {
-        return events.peekLast();
+        lock.lock();
+        try {
+            return events.peekLast();
+        } finally {
+            lock.unlock();
+        }
     }
 
     /**
      * 清空当前内存中缓存的所有日志
      */
     public void clear() {
-        events.clear();
+        lock.lock();
+        try {
+            events.clear();
+        } finally {
+            lock.unlock();
+        }
     }
 
     /**
      * 获取当前存储的日志数量
      */
     public int size() {
-        return events.size();
+        lock.lock();
+        try {
+            return events.size();
+        } finally {
+            lock.unlock();
+        }
+    }
+
+    private void trimToFit(int maxSize) {
+        int normalizedMaxSize = Math.max(0, maxSize);
+        while (events.size() > normalizedMaxSize) {
+            events.pollFirst();
+        }
     }
 }

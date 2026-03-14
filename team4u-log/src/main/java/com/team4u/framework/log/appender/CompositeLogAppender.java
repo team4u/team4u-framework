@@ -2,9 +2,10 @@ package com.team4u.framework.log.appender;
 
 import com.team4u.framework.log.core.LogEvent;
 
-import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
  * 复合日志追加器
@@ -13,7 +14,7 @@ import java.util.List;
  */
 public class CompositeLogAppender implements LogAppender {
 
-    private final List<LogAppender> appenders = new ArrayList<>();
+    private final CopyOnWriteArrayList<LogAppender> appenders = new CopyOnWriteArrayList<>();
 
     public CompositeLogAppender(LogAppender... appenders) {
         if (appenders != null) {
@@ -41,6 +42,13 @@ public class CompositeLogAppender implements LogAppender {
      * 获取所有内部追加器
      */
     public List<LogAppender> getAppenders() {
-        return appenders;
+        return Collections.unmodifiableList(appenders);
+    }
+
+    /**
+     * 移除一个追加器
+     */
+    public boolean removeAppender(LogAppender appender) {
+        return appender != null && appenders.remove(appender);
     }
 }
