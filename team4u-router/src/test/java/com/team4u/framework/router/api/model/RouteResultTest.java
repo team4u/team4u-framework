@@ -29,5 +29,20 @@ public class RouteResultTest {
         Assert.assertNotSame("matched() 每次调用应返回新实例", result1, result2);
         Assert.assertTrue(result1.isMatch());
         Assert.assertEquals("A", result1.getValue());
+        Assert.assertTrue(result1.isFallbackMatch());
+    }
+
+    @Test
+    public void testExplicitOutcomeFactories() {
+        RouteResult<String> ruleMatch = RouteResult.ruleMatch("A", "cond");
+        RouteResult<String> fallbackMatch = RouteResult.fallbackMatch("B");
+        RouteResult<String> shortCircuited = RouteResult.shortCircuited("C", "hit");
+
+        Assert.assertTrue(ruleMatch.isRuleMatch());
+        Assert.assertEquals(RouteOutcome.RULE_MATCH, ruleMatch.getOutcome());
+        Assert.assertTrue(fallbackMatch.isFallbackMatch());
+        Assert.assertEquals(RouteOutcome.FALLBACK_MATCH, fallbackMatch.getOutcome());
+        Assert.assertTrue(shortCircuited.isShortCircuited());
+        Assert.assertEquals(RouteOutcome.SHORT_CIRCUITED, shortCircuited.getOutcome());
     }
 }

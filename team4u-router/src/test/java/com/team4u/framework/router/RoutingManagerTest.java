@@ -26,6 +26,8 @@ public class RoutingManagerTest {
 
     @Before
     public void setUp() {
+        RouterBootstrap.global().resetForTest();
+        RoutingManager.resetGlobalForTest();
         configContext = TestConfigContext.create();
         routingManager = RoutingManager.builder()
                 .configManager(configContext.getManager())
@@ -260,6 +262,23 @@ public class RoutingManagerTest {
         RouteResult<String> result3 = routingManager.route(compositeId, "unknown");
         Assert.assertTrue(result3.isMatch());
         Assert.assertEquals("Fallback-B", result3.getValue());
+    }
+
+    @Test
+    public void testGlobalConfigPrefixFreezesAfterInitialization() {
+        RouterBootstrap.global().resetForTest();
+        RoutingManager.resetGlobalForTest();
+
+        RouterBootstrap.global().configPrefix("biz.router.");
+        RoutingManager globalManager = RoutingManager.global();
+        Assert.assertEquals("biz.router.", globalManager.getConfigPrefix());
+
+        try {
+            RouterBootstrap.global().configPrefix("other.router.");
+            Assert.fail("Should reject prefix changes after global initialization");
+        } catch (Exception e) {
+            Assert.assertTrue(e.getMessage().contains("configPrefix cannot be changed"));
+        }
     }
 
     public static class TargetService {

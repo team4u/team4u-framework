@@ -21,14 +21,14 @@ public class RouteResult<T> {
      * 匹配失败的单例对象，用于减少不必要的对象创建。
      * </p>
      */
-    private static final RouteResult<?> UNMATCH_INSTANCE = new RouteResult<>(false, null, null);
+    private static final RouteResult<?> UNMATCH_INSTANCE = new RouteResult<>(RouteOutcome.NO_MATCH, null, null);
 
-    boolean match;
+    RouteOutcome outcome;
     T value;
     List<String> matchedConditions;
 
-    private RouteResult(boolean match, T value, List<String> matchedConditions) {
-        this.match = match;
+    private RouteResult(RouteOutcome outcome, T value, List<String> matchedConditions) {
+        this.outcome = outcome;
         this.value = value;
         // 使用不可变列表确保对象的不可变性
         this.matchedConditions = matchedConditions != null
@@ -43,8 +43,9 @@ public class RouteResult<T> {
      * @param <T>   结果类型
      * @return 路由结果
      */
+    @Deprecated
     public static <T> RouteResult<T> matched(T value) {
-        return new RouteResult<>(true, value, null);
+        return fallbackMatch(value);
     }
 
     /**
@@ -56,8 +57,12 @@ public class RouteResult<T> {
      * @return 路由结果
      */
     public static <T> RouteResult<T> matched(T value, String matchedCondition) {
+        return ruleMatch(value, matchedCondition);
+    }
+
+    public static <T> RouteResult<T> ruleMatch(T value, String matchedCondition) {
         List<String> conditions = matchedCondition != null ? Collections.singletonList(matchedCondition) : null;
-        return new RouteResult<>(true, value, conditions);
+        return new RouteResult<>(RouteOutcome.RULE_MATCH, value, conditions);
     }
 
     /**
@@ -69,7 +74,28 @@ public class RouteResult<T> {
      * @return 路由结果
      */
     public static <T> RouteResult<T> matched(T value, List<String> matchedConditions) {
-        return new RouteResult<>(true, value, matchedConditions);
+        return ruleMatch(value, matchedConditions);
+    }
+
+    public static <T> RouteResult<T> ruleMatch(T value, List<String> matchedConditions) {
+        return new RouteResult<>(RouteOutcome.RULE_MATCH, value, matchedConditions);
+    }
+
+    public static <T> RouteResult<T> fallbackMatch(T value) {
+        return new RouteResult<>(RouteOutcome.FALLBACK_MATCH, value, null);
+    }
+
+    public static <T> RouteResult<T> shortCircuited(T value) {
+        return new RouteResult<>(RouteOutcome.SHORT_CIRCUITED, value, null);
+    }
+
+    public static <T> RouteResult<T> shortCircuited(T value, String matchedCondition) {
+        List<String> conditions = matchedCondition != null ? Collections.singletonList(matchedCondition) : null;
+        return new RouteResult<>(RouteOutcome.SHORT_CIRCUITED, value, conditions);
+    }
+
+    public static <T> RouteResult<T> shortCircuited(T value, List<String> matchedConditions) {
+        return new RouteResult<>(RouteOutcome.SHORT_CIRCUITED, value, matchedConditions);
     }
 
     /**
@@ -86,13 +112,29 @@ public class RouteResult<T> {
         return (RouteResult<T>) UNMATCH_INSTANCE;
     }
 
+    public boolean isMatch() {
+        return outcome.isMatch();
+    }
+
     /**
      * 判断是否未匹配
      *
      * @return 如果未匹配返回 true
      */
     public boolean isNotMatch() {
-        return !match;
+        return !isMatch();
+    }
+
+    public boolean isRuleMatch() {
+        return outcome == RouteOutcome.RULE_MATCH;
+    }
+
+    public boolean isFallbackMatch() {
+        return outcome == RouteOutcome.FALLBACK_MATCH;
+    }
+
+    public boolean isShortCircuited() {
+        return outcome == RouteOutcome.SHORT_CIRCUITED;
     }
 
     /**

@@ -36,15 +36,28 @@ public abstract class AbstractRouter implements Router {
 
         Object rawValue = result.getValue();
         if (rawValue == null) {
-            return RouteResult.matched(null, result.getMatchedConditions());
+            return rebuildResult(result, null);
         }
 
         if (targetType != null && !isInstance(targetType, rawValue)) {
             T convertedValue = ConvertUtil.convert(targetType, rawValue);
-            return RouteResult.matched(convertedValue, result.getMatchedConditions());
+            return rebuildResult(result, convertedValue);
         }
 
         return (RouteResult<T>) result;
+    }
+
+    private <T> RouteResult<T> rebuildResult(RouteResult<?> original, T value) {
+        if (original.isRuleMatch()) {
+            return RouteResult.ruleMatch(value, original.getMatchedConditions());
+        }
+        if (original.isShortCircuited()) {
+            return RouteResult.shortCircuited(value, original.getMatchedConditions());
+        }
+        if (original.isFallbackMatch()) {
+            return RouteResult.fallbackMatch(value);
+        }
+        return RouteResult.unmatch();
     }
 
     private boolean isInstance(Type targetType, Object rawValue) {
@@ -62,7 +75,7 @@ public abstract class AbstractRouter implements Router {
      */
     @SuppressWarnings("unchecked")
     protected <T> RouteResult<T> fallback() {
-        return fallbackValue != null ? RouteResult.matched((T) fallbackValue) : RouteResult.unmatch();
+        return fallbackValue != null ? RouteResult.fallbackMatch((T) fallbackValue) : RouteResult.unmatch();
     }
 
     /**

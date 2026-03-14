@@ -37,20 +37,18 @@ public class CompositeRouter extends AbstractRouter {
             RouteResult<T> result = manager.route(delegateId, request);
 
             if (result != null && result.isMatch()) {
-                // 如果是真实命中（存在命中条件），则直接截断返回
-                if (result.getMatchedConditions() != null) {
+                if (result.isRuleMatch() || result.isShortCircuited()) {
                     return result;
                 }
 
-                // 走到这里说明子路由产生了 fallback（isMatch=true 但 condition=null）
-                if (result.getValue() != null) {
+                if (result.isFallbackMatch() && result.getValue() != null) {
                     fallback = result.getValue();
                 }
             }
         }
 
         // 都不命中，返回兜底
-        return fallback != null ? RouteResult.matched((T) fallback) : RouteResult.unmatch();
+        return fallback != null ? RouteResult.fallbackMatch((T) fallback) : RouteResult.unmatch();
     }
 
     @SuppressWarnings("unchecked")
@@ -69,7 +67,7 @@ public class CompositeRouter extends AbstractRouter {
             RouteTrace<T> childTrace = manager.trace(delegateId, request);
             RouteResult<T> result = childTrace != null ? childTrace.getResult() : null;
 
-            boolean childRealMatched = result != null && result.isMatch() && result.getMatchedConditions() != null;
+            boolean childRealMatched = result != null && (result.isRuleMatch() || result.isShortCircuited());
 
             // 将子路由的追踪结果转化为一个普通的 Node 组装到当前父组合 Trace
             routeTrace.addStep(RuleTrace.normal(
@@ -84,14 +82,14 @@ public class CompositeRouter extends AbstractRouter {
             }
 
             // 同步备选兜底
-            if (result != null && result.isMatch() && result.getValue() != null) {
+            if (result != null && result.isFallbackMatch() && result.getValue() != null) {
                 fallback = result.getValue();
             }
         }
 
         if (!isMatch) {
             routeTrace.addStep(RuleTrace.fallback(fallback != null));
-            routeTrace.setResult(fallback != null ? RouteResult.matched((T) fallback) : RouteResult.unmatch());
+            routeTrace.setResult(fallback != null ? RouteResult.fallbackMatch((T) fallback) : RouteResult.unmatch());
         }
 
         return completeTrace(routeTrace, start);

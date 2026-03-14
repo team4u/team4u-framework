@@ -29,6 +29,7 @@ public class WeightRouter extends AbstractRouter {
 
     // 使用 TreeMap 存储累加权重和目标值的映射，利用其 ceilingEntry 快速定位区间
     private final TreeMap<Integer, Object> weightMap = new TreeMap<>();
+    private final TreeMap<Integer, String> conditionMap = new TreeMap<>();
     private int totalWeight = 0;
 
     public WeightRouter(RoutePolicy policy) {
@@ -63,6 +64,7 @@ public class WeightRouter extends AbstractRouter {
                 totalWeight += weight;
                 // 将累加后的总权重作为 Key
                 weightMap.put(totalWeight, rule.getValue());
+                conditionMap.put(totalWeight, rule.getCondition());
             }
         }
     }
@@ -88,10 +90,11 @@ public class WeightRouter extends AbstractRouter {
         Map.Entry<Integer, Object> entry = weightMap.ceilingEntry(hashValue + 1);
 
         if (entry != null) {
+            String condition = conditionMap.get(entry.getKey());
             if (log.isTraceEnabled()) {
                 log.trace("Route matched: key [{}] (hash: {}) -> value [{}]", routingKey, hashValue, entry.getValue());
             }
-            return RouteResult.matched((T) entry.getValue(), String.valueOf(entry.getKey()));
+            return RouteResult.ruleMatch((T) entry.getValue(), condition);
         }
 
         return fallback();
@@ -113,8 +116,14 @@ public class WeightRouter extends AbstractRouter {
         Map.Entry<Integer, Object> entry = weightMap.ceilingEntry(hashValue + 1);
 
         if (entry != null) {
-            routeTrace.addStep(RuleTrace.normal(String.valueOf(hashValue), true, entry.getKey()));
-            routeTrace.setResult(RouteResult.matched((T) entry.getValue(), String.valueOf(entry.getKey())));
+            String condition = conditionMap.get(entry.getKey());
+            Integer lowerKey = weightMap.lowerKey(entry.getKey());
+            int lowerBound = lowerKey != null ? lowerKey : 0;
+            routeTrace.addStep(RuleTrace.normal(
+                    condition,
+                    true,
+                    "hash=" + hashValue + ", range=[" + lowerBound + "," + entry.getKey() + ")"));
+            routeTrace.setResult(RouteResult.ruleMatch((T) entry.getValue(), condition));
         } else {
             routeTrace.addStep(RuleTrace.normal(String.valueOf(hashValue), false, null));
             routeTrace.addStep(RuleTrace.fallback(fallbackValue != null));
@@ -124,4 +133,3 @@ public class WeightRouter extends AbstractRouter {
         return completeTrace(routeTrace, start);
     }
 }
-
