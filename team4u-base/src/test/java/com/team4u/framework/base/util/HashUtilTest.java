@@ -46,9 +46,9 @@ public class HashUtilTest {
         long hash2 = HashUtil.murmur64(data);
         Assert.assertEquals(hash1, hash2);
 
-        // 验证 64 位由 32 位组合而成（基于当前代码实现）
+        // 验证 64 位实现不再是 32 位结果的简单拼接
         int h32 = HashUtil.murmur32(data);
-        long expected = (long) h32 << 32 | (h32 & 0xFFFFFFFFL);
-        Assert.assertEquals(expected, hash1);
+        long combined = (long) h32 << 32 | (h32 & 0xFFFFFFFFL);
+        Assert.assertNotEquals(combined, hash1);
     }
 }

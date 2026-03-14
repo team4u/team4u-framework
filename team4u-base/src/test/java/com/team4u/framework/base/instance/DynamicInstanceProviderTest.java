@@ -58,7 +58,7 @@ public class DynamicInstanceProviderTest {
         Assert.assertEquals(2, createCount.get());
 
         // 4. 手动失效后再获取
-        provider.invalidate(newConfigContent);
+        provider.invalidateInput(newConfigContent);
         InstanceMock p4 = provider.get(newConfigContent);
         Assert.assertNotSame(p3, p4);
         Assert.assertEquals(3, parseCount.get());
@@ -66,13 +66,15 @@ public class DynamicInstanceProviderTest {
 
         // 5. 清理测试
         provider.clear();
-        Assert.assertEquals(0, provider.size());
+        Assert.assertEquals(0, provider.inputCacheSize());
+        Assert.assertEquals(0, provider.configCacheSize());
     }
 
     @Test
     public void testMapInput() {
         // 输入源为 Map
         DynamicInstanceProvider<Map<String, Object>, ConfigMock, InstanceMock> provider = new DynamicInstanceProvider<>(
+                CacheUtil.newLRUCache(100),
                 CacheUtil.newLRUCache(100),
                 map -> new ConfigMock((String) map.get("value")),
                 config -> new InstanceMock(config.getValue()));
@@ -106,14 +108,14 @@ public class DynamicInstanceProviderTest {
 
         provider.get("v1");
         provider.get("v2");
-        Assert.assertEquals(2, provider.size());
+        Assert.assertEquals(2, provider.inputCacheSize());
 
         // v1 变成最近最少使用
         provider.get("v2");
 
         // 增加 v3，导致 v1 被淘汰
         provider.get("v3");
-        Assert.assertEquals(2, provider.size());
+        Assert.assertEquals(2, provider.inputCacheSize());
     }
 
     /**
@@ -240,6 +242,26 @@ public class DynamicInstanceProviderTest {
         InstanceMock p2 = provider.getByConfig(config);
         Assert.assertSame(p1, p2);
         Assert.assertEquals(1, createCount.get());
+    }
+
+    @Test
+    public void testInputAndConfigUseDifferentCaches() {
+        AtomicInteger createCount = new AtomicInteger();
+        DynamicInstanceProvider<String, String, InstanceMock> provider = DynamicInstanceProvider.createStringLru(
+                100,
+                input -> input,
+                config -> {
+                    createCount.incrementAndGet();
+                    return new InstanceMock(config);
+                });
+
+        InstanceMock fromInput = provider.get("same-key");
+        InstanceMock fromConfig = provider.getByConfig("same-key");
+
+        Assert.assertNotSame(fromInput, fromConfig);
+        Assert.assertEquals(1, provider.inputCacheSize());
+        Assert.assertEquals(1, provider.configCacheSize());
+        Assert.assertEquals(2, createCount.get());
     }
 
     @Data

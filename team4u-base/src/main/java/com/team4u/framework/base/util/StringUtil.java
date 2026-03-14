@@ -63,14 +63,14 @@ public class StringUtil {
     /**
      * 格式化字符串，使用 {} 作为占位符
      * <p>
-     * 例如：{@code format("Hello {}", "World")} 将返回 "Hello World"。
+     * 例如：{@code simpleFormat("Hello {}", "World")} 将返回 "Hello World"。
      * </p>
      *
      * @param template 模板字符串
      * @param args     参数
      * @return 格式化后的字符串
      */
-    public static String format(String template, Object... args) {
+    public static String simpleFormat(String template, Object... args) {
         if (isEmpty(template) || args == null || args.length == 0) {
             return template;
         }

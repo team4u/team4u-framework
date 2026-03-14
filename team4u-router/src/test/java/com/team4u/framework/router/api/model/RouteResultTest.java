@@ -22,9 +22,9 @@ public class RouteResultTest {
 
     @Test
     public void testMatchedIsNOTSingleton() {
-        // 验证 matched() 每次调用返回的是新实例
-        RouteResult<String> result1 = RouteResult.matched("A");
-        RouteResult<String> result2 = RouteResult.matched("A");
+        // 验证 fallbackMatch() 每次调用返回的是新实例
+        RouteResult<String> result1 = RouteResult.fallbackMatch("A");
+        RouteResult<String> result2 = RouteResult.fallbackMatch("A");
 
         Assert.assertNotSame("matched() 每次调用应返回新实例", result1, result2);
         Assert.assertTrue(result1.isMatch());

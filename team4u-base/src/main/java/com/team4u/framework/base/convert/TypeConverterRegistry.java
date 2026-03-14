@@ -1,5 +1,8 @@
 package com.team4u.framework.base.convert;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 import java.lang.reflect.Type;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -13,6 +16,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * @author jay.wu
  */
 public class TypeConverterRegistry {
+
+    private static final Logger log = LoggerFactory.getLogger(TypeConverterRegistry.class);
 
     /**
      * 表示未匹配到合适转换器的占位对象
@@ -127,7 +132,24 @@ public class TypeConverterRegistry {
         try {
             return converter.convert(targetType, source);
         } catch (Exception e) {
-            return null;
+            log.warn("Type conversion failed, converter={}, targetType={}, sourceType={}, source={}",
+                    converter.getClass().getName(),
+                    targetType == null ? "null" : targetType.getTypeName(),
+                    source == null ? "null" : source.getClass().getName(),
+                    summarizeSource(source),
+                    e);
+            throw new TypeConversionException(converter, targetType, source, e);
         }
+    }
+
+    private String summarizeSource(Object source) {
+        if (source == null) {
+            return "null";
+        }
+        String value = String.valueOf(source);
+        if (value.length() <= 120) {
+            return value;
+        }
+        return value.substring(0, 117) + "...";
     }
 }
