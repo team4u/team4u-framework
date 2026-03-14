@@ -230,11 +230,18 @@ public class DefaultConfigManager implements ConfigManager {
         }
     }
 
+
+
     @Override
-    public void addChangeListener(String keyPattern, ConfigChangeListener listener) {
-        if (StringUtil.isNotBlank(keyPattern) && listener != null) {
-            listeners.add(new ListenerRegistration(keyPattern, listener));
+    public AutoCloseable registerChangeListener(String keyPattern, ConfigChangeListener listener) {
+        if (StringUtil.isBlank(keyPattern) || listener == null) {
+            return () -> {
+            };
         }
+
+        ListenerRegistration registration = new ListenerRegistration(keyPattern, listener);
+        listeners.add(registration);
+        return () -> listeners.remove(registration);
     }
 
     public void setDebounceWindowMs(long debounceWindowMs) {

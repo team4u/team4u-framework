@@ -61,6 +61,31 @@ public class ReflectUtil {
     }
 
     /**
+     * 根据字段名获取对象字段值
+     * <p>
+     * 会向上递归查找父类中的字段，并确保其可访问。
+     *
+     * @param obj       目标对象
+     * @param fieldName 字段名称
+     * @return 字段值，未找到时返回 null
+     */
+    public static Object getFieldValue(Object obj, String fieldName) {
+        if (obj == null || StringUtil.isEmpty(fieldName)) {
+            return null;
+        }
+        Field field = getField(obj.getClass(), fieldName);
+        if (field == null) {
+            return null;
+        }
+        makeAccessible(field);
+        try {
+            return field.get(obj);
+        } catch (IllegalAccessException e) {
+            throw new RuntimeException("Could not get field value", e);
+        }
+    }
+
+    /**
      * 查找类中的指定字段
      * <p>
      * 查找范围包括私有字段，并会向上递归查找父类，直到找到为止。

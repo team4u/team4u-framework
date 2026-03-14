@@ -12,6 +12,8 @@ import java.util.Set;
  * <p>
  * 核心设计思路：按需拉取数据。该 Map 本身不持有任何键值对拷贝，
  * 只有当表达式引擎调用其 get(key) 时，才会依次询问所有的 {@link LogContextSource}。
+ * 它不是一个支持完整遍历语义的通用 Map，而是一个 lookup-only 适配器：
+ * 允许通过 get/containsKey 取值，但不承诺 entrySet/size 等遍历相关行为。
  *
  * @author jay.wu
  */

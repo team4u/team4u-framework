@@ -20,17 +20,17 @@ public class MaskUtils {
             return value;
         }
 
-        int length = value.length();
+        int length = codePointLength(value);
         if (prefix + suffix >= length) {
             return value;
         }
 
         StringBuilder sb = new StringBuilder();
-        sb.append(value, 0, prefix);
+        sb.append(substringByCodePoints(value, 0, prefix));
         for (int i = 0; i < length - prefix - suffix; i++) {
             sb.append("*");
         }
-        sb.append(value, length - suffix, length);
+        sb.append(substringByCodePoints(value, length - suffix, length));
         return sb.toString();
     }
 
@@ -46,7 +46,7 @@ public class MaskUtils {
             return value;
         }
 
-        int length = value.length();
+        int length = codePointLength(value);
         int maskLength = (int) Math.ceil(length * (percent / 100.0));
         if (maskLength <= 0) {
             return value;
@@ -59,11 +59,11 @@ public class MaskUtils {
         // 居中掩码
         int start = (length - maskLength) / 2;
         StringBuilder sb = new StringBuilder();
-        sb.append(value, 0, start);
+        sb.append(substringByCodePoints(value, 0, start));
         for (int i = 0; i < maskLength; i++) {
             sb.append("*");
         }
-        sb.append(value, start + maskLength, length);
+        sb.append(substringByCodePoints(value, start + maskLength, length));
         return sb.toString();
     }
 
@@ -75,10 +75,10 @@ public class MaskUtils {
      * @return 截取后的字符串
      */
     public static String limit(String value, int limit) {
-        if (value == null || value.length() <= limit) {
+        if (value == null || codePointLength(value) <= limit) {
             return value;
         }
-        return value.substring(0, limit);
+        return substringByCodePoints(value, 0, limit);
     }
 
     /**
@@ -92,5 +92,37 @@ public class MaskUtils {
             return value;
         }
         return "*";
+    }
+
+    /**
+     * 按 Unicode code point 统计字符串长度。
+     *
+     * @param value 原始字符串
+     * @return code point 数量
+     */
+    public static int codePointLength(String value) {
+        if (value == null || value.isEmpty()) {
+            return 0;
+        }
+        return value.codePointCount(0, value.length());
+    }
+
+    /**
+     * 按 Unicode code point 截取字符串。
+     *
+     * @param value 原始字符串
+     * @param begin 起始 code point 索引（包含）
+     * @param end   结束 code point 索引（不包含）
+     * @return 截取后的字符串
+     */
+    public static String substringByCodePoints(String value, int begin, int end) {
+        if (value == null) {
+            return null;
+        }
+        int safeBegin = Math.max(0, begin);
+        int safeEnd = Math.max(safeBegin, Math.min(end, codePointLength(value)));
+        int beginIndex = value.offsetByCodePoints(0, safeBegin);
+        int endIndex = value.offsetByCodePoints(0, safeEnd);
+        return value.substring(beginIndex, endIndex);
     }
 }

@@ -1,10 +1,10 @@
 package com.team4u.framework.log.integration;
 
 import com.team4u.framework.log.core.LogEvent;
-import com.team4u.framework.mask.config.MaskRuleRepository;
 import com.team4u.framework.log.proxy.AutoLogTrace;
 import com.team4u.framework.log.proxy.LogProxyFactory;
 import com.team4u.framework.log.support.TestLogHelper;
+import com.team4u.framework.mask.config.MaskRuleRepository;
 import lombok.Data;
 import org.junit.After;
 import org.junit.Assert;
@@ -23,7 +23,7 @@ public class LogDynamicProxyTest {
 
     @Before
     public void setup() {
-        // 上一个测试的 teardown() 已通过 LogEngine.reset() 将所有子组件归零
+        MaskRuleRepository.getInstance().reset();
         logHelper = TestLogHelper.start();
     }
 
@@ -34,6 +34,7 @@ public class LogDynamicProxyTest {
     @After
     public void teardown() {
         logHelper.stop();
+        MaskRuleRepository.getInstance().reset();
     }
 
     @Test

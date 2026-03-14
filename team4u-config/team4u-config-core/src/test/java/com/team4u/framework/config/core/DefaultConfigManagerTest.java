@@ -13,6 +13,7 @@ import org.junit.Test;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 
 public class DefaultConfigManagerTest {
 
@@ -59,13 +60,13 @@ public class DefaultConfigManagerTest {
 
         // 注册监听器来测试变更分发
         AtomicInteger changeEvtCount = new AtomicInteger();
-        manager.addChangeListener("key1", (key, oldVal, newVal) -> {
+        manager.registerChangeListener("key1", (key, oldVal, newVal) -> {
             changeEvtCount.incrementAndGet();
             Assert.assertEquals("val1", oldVal);
             Assert.assertEquals("val2", newVal);
         });
 
-        manager.addChangeListener("app.*", (key, oldVal, newVal) -> {
+        manager.registerChangeListener("app.*", (key, oldVal, newVal) -> {
             changeEvtCount.incrementAndGet();
             Assert.assertEquals("app.name", key);
             Assert.assertNull(oldVal);
@@ -101,6 +102,50 @@ public class DefaultConfigManagerTest {
 
         manager.destroy();
         Assert.assertEquals(1, watcher.destroyCount.get());
+    }
+
+    @Test
+    public void testRegisterChangeListenerCanBeClosed() throws Exception {
+        AtomicInteger loadCount = new AtomicInteger();
+        Map<String, ConfigEntry> initialData = new HashMap<>();
+        initialData.put("key1", new ConfigEntry("key1", "val1", "mock", 0));
+
+        MockSource source = new MockSource("MockSource", 1, loadCount, initialData);
+        MockWatcher watcher = new MockWatcher();
+
+        ConfigSourceRegistry sourceRegistry = new ConfigSourceRegistry();
+        sourceRegistry.register(source);
+
+        ConfigWatcherRegistry watcherRegistry = new ConfigWatcherRegistry();
+        watcherRegistry.register(watcher);
+
+        DefaultConfigManager manager = new DefaultConfigManager(
+                sourceRegistry,
+                watcherRegistry,
+                new PropertyConverterRegistry(),
+                new ConfigBinder() {
+                    @Override
+                    public <T> T bind(ConfigSnapshot snapshot, String prefix, Class<T> type) {
+                        return null;
+                    }
+                },
+                0);
+
+        AtomicReference<String> seenValue = new AtomicReference<>();
+        AutoCloseable handle = manager.registerChangeListener("key1", (key, oldVal, newVal) -> seenValue.set(newVal));
+
+        source.data.put("key1", new ConfigEntry("key1", "val2", "mock", 1));
+        watcher.trigger();
+        Assert.assertEquals("val2", seenValue.get());
+
+        handle.close();
+        seenValue.set(null);
+
+        source.data.put("key1", new ConfigEntry("key1", "val3", "mock", 2));
+        watcher.trigger();
+        Assert.assertNull(seenValue.get());
+
+        manager.destroy();
     }
 
     private static class MockSource implements ConfigSource {

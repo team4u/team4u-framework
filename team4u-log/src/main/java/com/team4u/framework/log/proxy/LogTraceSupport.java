@@ -1,9 +1,9 @@
 package com.team4u.framework.log.proxy;
 
-import com.team4u.framework.proxy.core.MethodInvocation;
 import com.team4u.framework.log.Loggers;
 import com.team4u.framework.mask.FastMasker;
 import com.team4u.framework.mask.config.MaskRuleRepository;
+import com.team4u.framework.proxy.core.MethodInvocation;
 import lombok.Builder;
 import lombok.Data;
 
@@ -14,6 +14,7 @@ import java.lang.reflect.UndeclaredThrowableException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
 
 /**
  * 日志追踪辅助支持类
@@ -118,17 +119,35 @@ public class LogTraceSupport {
     }
 
     /**
-     * 获取原始目标类（处理 ByteBuddy 代理情况）
+     * 获取原始目标类
+     * <p>
+     * 针对AOP代理对象进行解包解析，支持兼容ByteBuddy及常规CGLib动态代理。
+     * 当传递代理对象时，可以自动分析并穿透代理获取底层的真实业务类，
+     * 用于确保日志和脱敏规则精确匹配到定义类上。
+     *
+     * @param invocation 拦截器方法调用上下文
+     * @param method     当前执行的方法
+     * @return 实际承担业务逻辑的原始类对象
      */
     public static Class<?> getTargetClass(MethodInvocation invocation, Method method) {
-        Object proxy = invocation.getProxy();
-        if (proxy == null) {
+        Object target = invocation.getTarget();
+        if (target != null) {
+            return target.getClass();
+        }
+
+        if (method != null && method.getDeclaringClass() != Object.class) {
             return method.getDeclaringClass();
         }
 
+        Object proxy = invocation.getProxy();
+        if (proxy == null) {
+            return Objects.requireNonNull(method).getDeclaringClass();
+        }
+
         Class<?> proxyClass = proxy.getClass();
-        // 兼容 ByteBuddy 代理类名特征
-        if (proxyClass.getName().contains("ByteBuddy") || proxyClass.getName().contains("$$")) {
+        if (proxyClass.getSuperclass() != null
+                && proxyClass.getSuperclass() != Object.class
+                && (proxyClass.getName().contains("ByteBuddy") || proxyClass.getName().contains("$$"))) {
             return proxyClass.getSuperclass();
         }
 

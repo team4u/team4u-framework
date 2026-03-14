@@ -7,6 +7,8 @@ import com.team4u.framework.log.pipeline.LogInterceptorManager;
 import com.team4u.framework.log.pipeline.interceptor.MdcEnrichInterceptor;
 import com.team4u.framework.log.pipeline.interceptor.TargetedDyeingInterceptor;
 import com.team4u.framework.log.pipeline.interceptor.TargetedDyeingInterceptor.DyeingRule;
+import lombok.Getter;
+import lombok.Setter;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -60,16 +62,22 @@ public class LogInterceptorManagerTest {
         Assert.assertEquals(0, mock.getState());
     }
 
+    @Test
+    public void testShouldProcessDisabledLevel() {
+        LogInterceptorManager manager = new LogInterceptorManager();
+        LogEvent event = new LogEvent();
+
+        Assert.assertFalse(manager.shouldProcessDisabledLevel(event));
+
+        BypassInterceptor bypassInterceptor = new BypassInterceptor();
+        manager.register(bypassInterceptor);
+        Assert.assertTrue(manager.shouldProcessDisabledLevel(event));
+    }
+
+    @Setter
+    @Getter
     private static class MockInterceptor implements LogInterceptor {
         private int state = 0;
-
-        public int getState() {
-            return state;
-        }
-
-        public void setState(int state) {
-            this.state = state;
-        }
 
         @Override
         public void reset() {
@@ -78,6 +86,18 @@ public class LogInterceptorManagerTest {
 
         @Override
         public boolean handle(LogEvent event) {
+            return true;
+        }
+    }
+
+    private static class BypassInterceptor implements LogInterceptor {
+        @Override
+        public boolean handle(LogEvent event) {
+            return true;
+        }
+
+        @Override
+        public boolean shouldBypassLevelPrecheck(LogEvent event) {
             return true;
         }
     }

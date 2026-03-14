@@ -3,6 +3,8 @@ package com.team4u.framework.mask.policy;
 import com.team4u.framework.mask.MaskPolicy;
 import com.team4u.framework.mask.MaskType;
 
+import com.team4u.framework.mask.MaskUtils;
+
 /**
  * 电子邮箱脱敏策略
  *
@@ -21,11 +23,13 @@ public class EmailMaskPolicy implements MaskPolicy {
             return value;
         }
         int index = value.indexOf("@");
-        // 邮箱前缀长度小于等于 1 时处理
-        if (index <= 1) {
-            return "*" + value.substring(index);
+        String prefix = value.substring(0, index);
+        String suffix = value.substring(index);
+        // 针对单字符及超短前缀的安全脱敏策略
+        if (MaskUtils.codePointLength(prefix) <= 1) {
+            return "*" + suffix;
         }
-        // 保留前缀第一个字符并脱敏，拼接域名
-        return value.charAt(0) + "****" + value.substring(index);
+        // 对于多字符前缀：暴露首部单一有效CodePoint，隐蔽中间内容，并拼接完整安全防护域
+        return MaskUtils.substringByCodePoints(prefix, 0, 1) + "****" + suffix;
     }
 }

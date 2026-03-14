@@ -1,12 +1,12 @@
 package com.team4u.framework.log.proxy;
 
 import com.team4u.framework.base.util.TypeReference;
-import com.team4u.framework.serializer.json.JsonUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
+import com.team4u.framework.serializer.json.JsonUtil;
 import lombok.Data;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.List;
@@ -37,9 +37,18 @@ public class ProxyRuleRepository {
     }
 
     /**
-     * 组件自治：自己初始化自己的配置监听
+     * 初始化配置规则并挂载配置监听。
+     * <p>
+     * 通过指定的配置管理器构建驱动注册表，实现配置规则组件自治。
+     * 同步加载初始配置信息，并在底层建立监听以响应后续的实时重读。
+     * 
+     * @param configManager 注入配置管理实例
      */
-    public void init(ConfigManager configManager) {
+    public synchronized void init(ConfigManager configManager) {
+        if (this.registry != null) {
+            this.registry.destroy();
+        }
+
         this.registry = new ConfigDrivenRegistry<>(configManager, CONFIG_KEY, json -> {
             try {
                 if (json == null || json.trim().isEmpty()) {
@@ -53,7 +62,7 @@ public class ProxyRuleRepository {
                         false);
             } catch (Exception e) {
                 log.error("ProxyRuleRepository|parseConfig|error|msg={}", e.getMessage());
-                throw new IllegalArgumentException("Invalid proxy rule config", e);
+                return null;
             }
         });
         // 触发首次拉取
@@ -61,12 +70,12 @@ public class ProxyRuleRepository {
     }
 
     /**
-     * 重置仓库状态（用于测试环境隔离）
+     * 注销并释放当前所持有的缓存状态和配置监听关系。
      * <p>
-     * 清空规则缓存并释放与 ConfigManager 的监听关系，
-     * 确保下次 init() 时从干净状态重新初始化。
+     * 避免因重复调用或者应用重启引发监听泄露。
+     * 执行完毕后，环境处于无规则匹配且无内存占用的干净状态。
      */
-    public void reset() {
+    public synchronized void reset() {
         if (this.registry != null) {
             this.registry.destroy();
             this.registry = null;

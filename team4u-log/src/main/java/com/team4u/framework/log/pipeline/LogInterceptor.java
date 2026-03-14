@@ -1,7 +1,7 @@
 package com.team4u.framework.log.pipeline;
 
-import com.team4u.framework.policy.api.ContextPolicy;
 import com.team4u.framework.log.core.LogEvent;
+import com.team4u.framework.policy.api.ContextPolicy;
 
 /**
  * 日志处理拦截器
@@ -22,6 +22,16 @@ public interface LogInterceptor extends ContextPolicy<LogEvent> {
      * 重置拦截器状态
      */
     default void reset() {
+    }
+
+    /**
+     * 是否需要绕过日志级别的预检查。
+     * <p>
+     * 用于支持会在拦截链中提升级别的拦截器，使被当前 logger 级别暂时拦住的日志
+     * 仍然有机会进入引擎处理。
+     */
+    default boolean shouldBypassLevelPrecheck(LogEvent event) {
+        return false;
     }
 
     @Override

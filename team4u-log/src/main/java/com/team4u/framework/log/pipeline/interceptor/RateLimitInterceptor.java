@@ -56,8 +56,8 @@ public class RateLimitInterceptor implements LogInterceptor {
         // 获取当前实时限流阈值
         int errorLimitPerSecond = FinOpsConfigRepository.getInstance().get().getErrorLimitPerSecond();
 
-        // 生成特征索引：动作 + 异常类名
-        String signature = event.getAction() + "|" + event.getException().getClass().getName();
+        // 生成特征索引：loggerName + 动作 + 异常类名
+        String signature = buildSignature(event);
 
         AtomicInteger count = errorCounter.getOrCreate(signature, () -> new AtomicInteger(0));
 
@@ -76,5 +76,11 @@ public class RateLimitInterceptor implements LogInterceptor {
         }
 
         return true;
+    }
+
+    private String buildSignature(LogEvent event) {
+        String loggerName = event.getLoggerName() != null ? event.getLoggerName() : "";
+        String action = event.getAction() != null ? event.getAction() : "";
+        return loggerName + "|" + action + "|" + event.getException().getClass().getName();
     }
 }

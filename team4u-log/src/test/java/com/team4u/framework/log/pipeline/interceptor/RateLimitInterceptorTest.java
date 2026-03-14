@@ -60,6 +60,19 @@ public class RateLimitInterceptorTest {
     }
 
     @Test
+    public void testDifferentLoggerNamesUseDifferentBuckets() {
+        updateLimit(1);
+
+        LogEvent serviceA1 = createErrorEvent("ActionA", new RuntimeException("E1")).setLoggerName("service.A");
+        LogEvent serviceA2 = createErrorEvent("ActionA", new RuntimeException("E1")).setLoggerName("service.A");
+        LogEvent serviceB = createErrorEvent("ActionA", new RuntimeException("E1")).setLoggerName("service.B");
+
+        Assert.assertTrue(interceptor.handle(serviceA1));
+        Assert.assertFalse(interceptor.handle(serviceA2));
+        Assert.assertTrue("不同 loggerName 不应共享限流桶", interceptor.handle(serviceB));
+    }
+
+    @Test
     public void testNonErrorEvent() {
         LogEvent event = new LogEvent().setAction("ActionA");
         Assert.assertTrue("非异常日志不应被限流", interceptor.handle(event));

@@ -2,7 +2,6 @@ package com.team4u.framework.log;
 
 import com.team4u.framework.log.core.LogEngine;
 import com.team4u.framework.log.core.LogEvent;
-import com.team4u.framework.log.pipeline.interceptor.TargetedDyeingInterceptor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.slf4j.event.Level;
@@ -201,9 +200,9 @@ public class Loggers {
      * 提交日志事件
      */
     public void log() {
-        // 性能保护：若无有效染色规则且日志级别未达到输出标准，则忽略该日志
-        if (!TargetedDyeingInterceptor.getInstance().hasActiveRules()
-                && !isLevelEnabled(event.getLevel())) {
+        // 性能保护：若当前 logger 级别不会输出，且后续拦截链也不会改变这一判定，则忽略该日志
+        if (!isLevelEnabled(event.getLevel())
+                && !LogEngine.getInstance().getInterceptorManager().shouldProcessDisabledLevel(event)) {
             return;
         }
 

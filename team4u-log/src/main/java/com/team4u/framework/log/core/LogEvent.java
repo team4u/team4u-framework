@@ -114,6 +114,7 @@ public class LogEvent {
      * 常用于将当前 LogEvent 作为模板（Template），
      * 预置公共的 KV 属性或动作，在具体使用时 derive 出来，避免状态污染。
      * 特别说明：payload (KV 映射) 会进行浅拷贝（创建新的 Map）。
+     * payload 中的内部可变对象不会深拷贝，仍然可能与模板共享引用。
      *
      * @return 派生的 LogEvent 实例
      */

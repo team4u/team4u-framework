@@ -103,4 +103,18 @@ public class FastMaskerTest {
         // 未知类型返回原值
         Assert.assertEquals("anyValue", FastMasker.mask("anyValue", "UNKNOWN"));
     }
+
+    @Test
+    public void testNullTypeReturnsOriginalValue() {
+        Assert.assertEquals("anyValue", FastMasker.mask("anyValue", (String) null));
+        Assert.assertEquals("anyValue", FastMasker.mask("anyValue", (MaskType) null));
+        Assert.assertEquals("anyValue", FastMasker.mask("anyValue", ""));
+    }
+
+    @Test
+    public void testUnicodeCodePointSafety() {
+        Assert.assertEquals("A**C", MaskUtils.mask("A😀BC", 1, 1));
+        Assert.assertEquals("A😀", MaskUtils.limit("A😀BC", 2));
+        Assert.assertEquals("😀****@example.com", FastMasker.mask("😀abc@example.com", MaskType.EMAIL));
+    }
 }
