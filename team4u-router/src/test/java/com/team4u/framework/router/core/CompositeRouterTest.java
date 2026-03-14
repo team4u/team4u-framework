@@ -1,6 +1,5 @@
 package com.team4u.framework.router.core;
 
-import com.team4u.framework.serializer.json.JsonUtil;
 import com.team4u.framework.config.test.TestConfigContext;
 import com.team4u.framework.router.RoutingManager;
 import com.team4u.framework.router.api.RouterType;
@@ -8,6 +7,7 @@ import com.team4u.framework.router.api.builder.RoutePolicyBuilder;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.trace.RouteTrace;
+import com.team4u.framework.serializer.json.JsonUtil;
 import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;

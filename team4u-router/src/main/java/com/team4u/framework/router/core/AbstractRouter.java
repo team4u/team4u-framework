@@ -9,15 +9,25 @@ import com.team4u.framework.router.api.trace.RouteTrace;
 import java.lang.reflect.Type;
 
 /**
- * 抽象路由器，处理通用的类型转换和兜底逻辑
+ * 抽象路由器基类 (Abstract Router Base Class)
+ * <p>
+ * 为所有具体的路由器实现提供公共基础功能和约定，包括：
+ * <ul>
+ *   <li><b>结果类型转换</b>：底层路由逻辑通常返回 Object 类型，基类负责将其转换为调用方期望的泛型类型。</li>
+ *   <li><b>兜底（Fallback）处理</b>：管理全局兜底逻辑，当所有规则均未命中时返回预设的默认值。</li>
+ *   <li><b>追踪（Trace）辅助</b>：提供计时和结构化追踪日志的构建工具，便于子类实现诊断功能。</li>
+ *   <li><b>统一路由接口</b>：实现 {@link Router} 接口，提供统一的路由入口。</li>
+ * </ul>
+ * 子类需要实现 {@link #route(Object)} 方法来定义具体的路由匹配逻辑。
+ * </p>
  *
  * @author jay.wu
  */
 public abstract class AbstractRouter implements Router {
 
     /**
-     * 兜底路由值
-     * 当所有规则都不匹配时，返回该值
+     * 显式指定的兜底路由值。
+     * 当该路由器内部的所有规则或子路由均未命中时，将尝试返回此值（以 Fallback 状态匹配）。
      */
     protected final Object fallbackValue;
 
@@ -65,13 +75,14 @@ public abstract class AbstractRouter implements Router {
     }
 
     /**
-     * 执行兜底逻辑
+     * 执行统一的兜底匹配逻辑。
      * <p>
-     * 使用策略中的显式兜底值，子类可直接调用此方法
+     * 若配置了有效的兜底值，则返回 {@link RouteResult#fallbackMatch(Object)}；
+     * 否则返回 {@link RouteResult#unmatch()}。
      * </p>
      *
      * @param <T> 结果类型
-     * @return 如果有兜底值则返回匹配结果，否则返回未匹配
+     * @return 路由结果
      */
     @SuppressWarnings("unchecked")
     protected <T> RouteResult<T> fallback() {

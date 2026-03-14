@@ -8,7 +8,11 @@ import com.team4u.framework.router.core.CompositeRouter;
 import com.team4u.framework.router.spi.RouterFactory;
 
 /**
- * 复合路由器构建工厂
+ * 复合路由器工厂 (Composite Router Factory)
+ * <p>
+ * 专门用于创建 {@link com.team4u.framework.router.core.CompositeRouter} 实例。
+ * 由于复合路由器需要调用其他子路由器，该工厂持有 {@link RoutingManager} 的引用以便在创建时进行注入。
+ * </p>
  */
 public class CompositeRouterFactory implements RouterFactory {
 

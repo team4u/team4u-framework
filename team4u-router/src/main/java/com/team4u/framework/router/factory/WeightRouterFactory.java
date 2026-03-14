@@ -7,7 +7,10 @@ import com.team4u.framework.router.core.WeightRouter;
 import com.team4u.framework.router.spi.RouterFactory;
 
 /**
- * 权重路由器工厂
+ * 权重路由器工厂 (Weight Router Factory)
+ * <p>
+ * 专门用于创建 {@link com.team4u.framework.router.core.WeightRouter} 实例，实现基于哈希区间的流量均衡分发。
+ * </p>
  *
  * @author jay.wu
  */

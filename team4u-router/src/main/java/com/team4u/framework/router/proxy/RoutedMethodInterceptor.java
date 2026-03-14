@@ -1,10 +1,6 @@
 package com.team4u.framework.router.proxy;
 
-import com.team4u.framework.base.util.AnnotationUtil;
-import com.team4u.framework.base.util.BeanUtil;
-import com.team4u.framework.base.util.ArrayUtil;
-import com.team4u.framework.base.util.ClassUtil;
-import com.team4u.framework.base.util.TextTemplate;
+import com.team4u.framework.base.util.*;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
 import com.team4u.framework.router.RoutingManager;
@@ -22,9 +18,17 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 声明式路由方法拦截器
+ * 声明式路由方法拦截器 (Proxy Method Interceptor)
  * <p>
- * 核心逻辑：拦截接口方法调用 -> 提取路由上下文 -> 执行路由得到目标 Bean -> 反射调用。
+ * 该类是 AOP 声明式路由的核心实现。当一个被 {@link Routed} 标记的方法被调用时，由该拦截器进行拦截。
+ * 核心执行流程：
+ * <ol>
+ *   <li><b>元数据解析</b>：获取方法或类上的路由配置（缓存以提升性能）。</li>
+ *   <li><b>上下文提取</b>：从方法参数中提取用于路由决策的上下文对象。</li>
+ *   <li><b>ID 渲染</b>：将路由标识模板（如 "router.${tenantId}"）渲染为具体的路由 ID。</li>
+ *   <li><b>动态定位</b>：通过 {@link RoutedBeanLocator} 结合路由结果找到真正的目标 Bean。</li>
+ *   <li><b>逻辑分派</b>：通过反射将方法调用转发给目标 Bean。</li>
+ * </ol>
  * </p>
  *
  * @author jay.wu
@@ -116,6 +120,18 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
         return new RouteMetadata(true, template, contextIndex, placeholderCount, routerIdPattern);
     }
 
+    private static int countPlaceholders(String pattern) {
+        if (pattern == null || pattern.isEmpty()) {
+            return 0;
+        }
+        int count = 0;
+        Matcher matcher = PLACEHOLDER_PATTERN.matcher(pattern);
+        while (matcher.find()) {
+            count++;
+        }
+        return count;
+    }
+
     @Override
     public Object invoke(MethodInvocation invocation) throws Throwable {
         Method method = invocation.getMethod();
@@ -168,18 +184,6 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
             // 剥离反射包装的异常，抛出业务真实异常
             throw e.getTargetException();
         }
-    }
-
-    private static int countPlaceholders(String pattern) {
-        if (pattern == null || pattern.isEmpty()) {
-            return 0;
-        }
-        int count = 0;
-        Matcher matcher = PLACEHOLDER_PATTERN.matcher(pattern);
-        while (matcher.find()) {
-            count++;
-        }
-        return count;
     }
 
     /**

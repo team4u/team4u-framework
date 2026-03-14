@@ -1,15 +1,19 @@
 package com.team4u.framework.router.parser;
 
 import com.team4u.framework.base.util.StringUtil;
-import com.team4u.framework.serializer.json.JsonUtil;
 import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.spi.RoutePolicyParser;
+import com.team4u.framework.serializer.json.JsonUtil;
 
 import java.util.ArrayList;
 
 /**
- * 默认的路由策略解析器 (基于 JsonUtil)
+ * 默认路由策略解析器 (Default Route Policy Parser)
+ * <p>
+ * 基于 {@link com.team4u.framework.serializer.json.JsonUtil} 实现的 JSON 解析器。
+ * 它能够将配置中心的 JSON 字符串反序列化为 {@link RoutePolicy} 模型，并进行基础的合规性校验。
+ * </p>
  *
  * @author n197
  */

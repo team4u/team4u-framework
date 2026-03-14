@@ -36,9 +36,9 @@ public class RouteNotFoundException extends RouteException {
     }
 
     /**
-     * 创建规则未匹配异常
+     * 创建路由规则未匹配异常。
      *
-     * @param routerId 路由 ID
+     * @param routerId 路由策略 ID
      * @return 异常实例
      */
     public static RouteNotFoundException ruleNotMatched(String routerId) {
@@ -50,10 +50,10 @@ public class RouteNotFoundException extends RouteException {
     }
 
     /**
-     * 创建 Bean 未找到异常
+     * 创建目标 Bean 未找到异常。
      *
-     * @param routerId       路由 ID
-     * @param targetBeanName 目标 Bean 名称
+     * @param routerId       路由策略 ID
+     * @param targetBeanName 路由预测的目标 Bean 名称
      * @return 异常实例
      */
     public static RouteNotFoundException beanNotFound(String routerId, String targetBeanName) {

@@ -8,12 +8,7 @@ import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.policy.util.PolicyScanner;
 import com.team4u.framework.router.api.Router;
 import com.team4u.framework.router.api.exception.RouteConfigException;
-import com.team4u.framework.router.api.interceptor.DefaultRouteInvocation;
-import com.team4u.framework.router.api.interceptor.RouteInterceptor;
-import com.team4u.framework.router.api.interceptor.RouteInterceptorRegistry;
-import com.team4u.framework.router.api.interceptor.RouteTraceObservation;
-import com.team4u.framework.router.api.interceptor.RouteInvocation;
-import com.team4u.framework.router.api.interceptor.TraceableRouteInterceptor;
+import com.team4u.framework.router.api.interceptor.*;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.trace.RouteTrace;
@@ -32,8 +27,17 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * 路由管理器
- * 统一门面，负责工厂发现与路由实例注册管理
+ * 路由管理器（Routing Facade）
+ * <p>
+ * 该类是路由模块的核心入口，采用门面模式对外统一提供路由执行、诊断（Trace）以及配置解析功能。
+ * 它管理着：
+ * <ul>
+ *   <li>{@link RouterFactoryRegistry}：按类型（如 weight, map, expression 等）管理路由创建工厂。</li>
+ *   <li>{@link RouteInterceptorRegistry}：管理路由执行前后的拦截插件。</li>
+ *   <li>{@link ConfigDrivenRegistry}：基于配置中心动态感知路由配置变更，并实时更新对应的 Router 实例。</li>
+ * </ul>
+ * 这种设计允许开发者通过简单的 ID 引用执行逻辑，即便底层的路由策略由 DBA 或运营人员在配置中心实时修改。
+ * </p>
  */
 @Getter
 public class RoutingManager {
@@ -52,8 +56,10 @@ public class RoutingManager {
     private final RouteInterceptorRegistry interceptorRegistry;
 
     private final RoutePolicyParser configParser;
-    private final String configPrefix;
-
+    /**
+     * 配置键前缀，默认为 "router."
+     */
+    private volatile String configPrefix = "router.";
     /**
      * 配置驱动的路由器注册表
      */
@@ -68,6 +74,7 @@ public class RoutingManager {
         this.configParser = configParser;
         this.configPrefix = configPrefix.endsWith(".") ? configPrefix : configPrefix + ".";
         this.interceptorRegistry = interceptorRegistry;
+        // 构建配置驱动的动态注册表，将配置中心的 JSON/YAML 自动映射为 Router 实例
         this.routerRegistry = new ConfigDrivenRegistry<>(
                 configManager,
                 this.configPrefix,
@@ -75,7 +82,12 @@ public class RoutingManager {
     }
 
     /**
-     * 获取指定 ID 的 Router 对象
+     * 获取全局共享的 RoutingManager 实例。
+     * <p>
+     * 首次调用时将触发全局初始化，并锁定 {@link RouterBootstrap} 中的相关配置。
+     * </p>
+     *
+     * @return 全局实例
      */
     public static RoutingManager global() {
         RoutingManager current = GLOBAL;
@@ -93,9 +105,8 @@ public class RoutingManager {
     }
 
     /**
-     * 重置或替换全局实例
+     * 重置或替换全局实例（主要用于测试）
      */
-    @Deprecated
     public static void setGlobal(RoutingManager routingManager) {
         GLOBAL = routingManager;
         if (routingManager != null) {
@@ -103,16 +114,24 @@ public class RoutingManager {
         }
     }
 
+    /**
+     * 判断全局实例是否已初始化
+     */
     static boolean isGlobalInitialized() {
         return GLOBAL != null;
     }
 
+    /**
+     * 重置全局实例（仅用于测试）
+     */
     public static void resetGlobalForTest() {
         GLOBAL = null;
     }
 
     /**
-     * 创建路由管理器构造器
+     * 创建路由管理器构造器，用于构建自定义上下文的路由管理器。
+     *
+     * @return 构造器实例
      */
     public static Builder builder() {
         return new Builder();
@@ -136,7 +155,14 @@ public class RoutingManager {
     }
 
     /**
-     * 内部工厂方法：策略对象 -> 路由器实例
+     * 基于路由策略对象创建路由器实例。
+     * <p>
+     * 该方法会利用已注册的 {@link RouterFactory} 按类型生成具体的实现类（如权重路由、规则路由等）。
+     * </p>
+     *
+     * @param policy 路由策略，包含类型及其特定配置参数
+     * @return 具体的 Router 实现
+     * @throws RouteConfigException 如果类型不支持或创建失败
      */
     public Router buildRouter(RoutePolicy policy) {
         if (policy == null || StringUtil.isBlank(policy.getType())) {
@@ -234,10 +260,15 @@ public class RoutingManager {
     }
 
     /**
-     * 统一路由执行逻辑，支持拦截器链
+     * 核心路由分发逻辑。
+     * <p>
+     * 支持多重拦截（Interception），执行过程遵循以下流水线：
+     * Interceptor1 -> Interceptor2 -> ... -> Router.route() -> ... -> InterceptorN
+     * </p>
      */
     private <T> RouteResult<T> doRoute(String routerId, Router router, Object request, Type targetType) {
         List<RouteInterceptor> interceptors = interceptorRegistry.getPolicies();
+        // 快速路径：无拦截器时直接调用路由器，减少调用栈深度
         if (interceptors == null || interceptors.isEmpty()) {
             if (router == null) {
                 return RouteResult.unmatch();
@@ -245,6 +276,7 @@ public class RoutingManager {
             return targetType != null ? router.route(request, targetType) : router.route(request);
         }
 
+        // 拦截逻辑封装
         RouteInvocation<T> invocation = new DefaultRouteInvocation<>(
                 routerId, router, request, targetType, interceptors);
         return invocation.proceed();
@@ -571,17 +603,25 @@ public class RoutingManager {
         }
 
         /**
-         * 构建工厂注册表
+         * 构建工厂注册表。
+         * <p>
+         * 加载顺序（优先级由低到高）：
+         * 1. 自动扫描 com.team4u.framework.router 包下的默认工厂。
+         * 2. 通过 ServiceLoader 加载 SPI 定义的工厂。
+         * 3. 加载通过 {@link #addFactory(RouterFactory)} 或 {@link #factoryRegistry(RouterFactoryRegistry)} 手动指定的工厂。
+         * </p>
          */
         private RouterFactoryRegistry buildFactoryRegistry() {
+            RouterFactoryRegistry finalRegistry = new RouterFactoryRegistry();
+            // 先加载默认实现的工厂
+            PolicyScanner.scanAndRegister(finalRegistry, "com.team4u.framework.router");
+            // 再加载 SPI 工厂
+            PolicyScanner.registerFromServiceLoader(finalRegistry);
+
+            // 最后叠加手动指定的工厂（覆盖自动发现的同名工厂）
             RouterFactoryRegistry sourceRegistry = this.factoryRegistry != null
                     ? this.factoryRegistry
                     : RouterFactoryRegistry.global();
-
-            // 先自动扫描和加载，后注册手动添加的工厂，以确保手动注册具有更高优先级
-            RouterFactoryRegistry finalRegistry = new RouterFactoryRegistry();
-            PolicyScanner.registerFromServiceLoader(finalRegistry);
-            PolicyScanner.scanAndRegister(finalRegistry, "com.team4u.framework.router");
             finalRegistry.addAll(sourceRegistry);
 
             return finalRegistry;

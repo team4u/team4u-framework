@@ -9,6 +9,9 @@ import com.team4u.framework.router.spi.RouterFactory;
 
 /**
  * 表达式路由器工厂
+ * <p>
+ * 专门用于创建 {@link ExpressionRouter} 实例。它持有表达式引擎引用，并将其注入到生成的路由器中。
+ * </p>
  */
 public class ExpressionRouterFactory implements RouterFactory {
 

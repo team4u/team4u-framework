@@ -1,7 +1,5 @@
 package com.team4u.framework.router.core;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.team4u.framework.router.api.RouterType;
 import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.model.RoutePolicy;
@@ -9,12 +7,18 @@ import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.model.RouteRule;
 import com.team4u.framework.router.api.trace.RouteTrace;
 import com.team4u.framework.router.api.trace.RuleTrace;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.HashMap;
 import java.util.Map;
 
 /**
- * 映射路由器
+ * 映射路由器 (Exact Match Router)
+ * <p>
+ * 实现最简单的精确值匹配逻辑。将请求对象转换为字符串（String.valueOf）后，直接在哈希表中查找对应的映射结果。
+ * 典型应用场景：根据渠道 ID、用户 ID 或特定标识符进行快速分发。
+ * </p>
  */
 public class MapRouter extends AbstractRouter {
 
