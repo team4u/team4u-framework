@@ -18,10 +18,10 @@ public class TypeConversionException extends RuntimeException {
         String targetTypeName = targetType == null ? "null" : targetType.getTypeName();
         String sourceType = source == null ? "null" : source.getClass().getName();
         String sourceSummary = summarizeSource(source);
-        return "Type conversion failed, converter=" + converterName
-                + ", targetType=" + targetTypeName
-                + ", sourceType=" + sourceType
-                + ", source=" + sourceSummary;
+        return "类型转换失败, 转换器=" + converterName
+                + ", 目标类型=" + targetTypeName
+                + ", 源类型=" + sourceType
+                + ", 源数据=" + sourceSummary;
     }
 
     private static String summarizeSource(Object source) {

@@ -48,7 +48,7 @@ public class SpringUtil implements ApplicationContextAware {
 
     private static void ensureApplicationContext() {
         if (applicationContext == null) {
-            throw new IllegalStateException("ApplicationContext has not been initialized");
+            throw new IllegalStateException("ApplicationContext 尚未初始化");
         }
     }
 

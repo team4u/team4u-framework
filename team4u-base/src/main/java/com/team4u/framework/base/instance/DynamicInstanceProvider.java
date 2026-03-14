@@ -5,6 +5,7 @@ import com.team4u.framework.base.cache.CacheUtil;
 import com.team4u.framework.base.config.ConfigParser;
 import com.team4u.framework.base.config.StringConfigParser;
 import com.team4u.framework.base.util.StringUtil;
+import lombok.Data;
 
 /**
  * 动态实例缓存提供者
@@ -24,14 +25,9 @@ import com.team4u.framework.base.util.StringUtil;
 public class DynamicInstanceProvider<I, C, T> {
 
     /**
-     * 输入缓存
+     * 统一缓存
      */
-    private final Cache<I, T> inputCache;
-
-    /**
-     * 配置缓存
-     */
-    private final Cache<C, T> configCache;
+    private final Cache<Object, T> cache;
 
     /**
      * 配置解析器 (Input -> Config)
@@ -44,36 +40,25 @@ public class DynamicInstanceProvider<I, C, T> {
     private final InstanceFactory<C, T> instanceFactory;
 
     /**
-     * 输入分段锁桶
+     * 分段锁桶
      */
-    private final Object[] inputLocks = new Object[128];
+    private final Object[] locks = new Object[128];
 
-    /**
-     * 配置分段锁桶
-     */
-    private final Object[] configLocks = new Object[128];
-
-    public DynamicInstanceProvider(Cache<I, T> inputCache,
-                                   Cache<C, T> configCache,
+    public DynamicInstanceProvider(Cache<Object, T> cache,
                                    ConfigParser<I, C> configParser,
                                    InstanceFactory<C, T> instanceFactory) {
-        this.inputCache = inputCache;
-        this.configCache = configCache;
+        this.cache = cache;
         this.configParser = configParser;
         this.instanceFactory = instanceFactory;
-        for (int i = 0; i < inputLocks.length; i++) {
-            inputLocks[i] = new Object();
-            configLocks[i] = new Object();
+        for (int i = 0; i < locks.length; i++) {
+            locks[i] = new Object();
         }
     }
-
-    // ---------------- Factory Methods ----------------
 
     public static <I, C, T> DynamicInstanceProvider<I, C, T> createLru(int capacity,
                                                                        ConfigParser<I, C> configParser,
                                                                        InstanceFactory<C, T> instanceFactory) {
         return new DynamicInstanceProvider<>(
-                CacheUtil.newLRUCache(capacity),
                 CacheUtil.newLRUCache(capacity),
                 configParser,
                 instanceFactory);
@@ -100,13 +85,14 @@ public class DynamicInstanceProvider<I, C, T> {
             return null;
         }
 
-        T instance = inputCache.get(input);
+        InputKey inputKey = new InputKey(input);
+        T instance = cache.get(inputKey);
         if (instance != null) {
             return instance;
         }
 
-        synchronized (getInputLock(input)) {
-            instance = inputCache.get(input);
+        synchronized (getLock(inputKey)) {
+            instance = cache.get(inputKey);
             if (instance != null) {
                 return instance;
             }
@@ -122,7 +108,7 @@ public class DynamicInstanceProvider<I, C, T> {
             instance = instanceFactory.create(config);
 
             if (instance != null) {
-                inputCache.put(input, instance);
+                cache.put(inputKey, instance);
             }
             return instance;
         }
@@ -131,7 +117,7 @@ public class DynamicInstanceProvider<I, C, T> {
     /**
      * 直接根据配置对象获取实例
      * <p>
-     * 适用于已经持有 Config 对象的场景，结果会缓存在 configCache 中。
+     * 适用于已经持有 Config 对象的场景，结果会缓存在 cache 中。
      *
      * @param config 配置对象
      * @return 实例
@@ -141,13 +127,14 @@ public class DynamicInstanceProvider<I, C, T> {
             return null;
         }
 
-        T instance = configCache.get(config);
+        ConfigKey configKey = new ConfigKey(config);
+        T instance = cache.get(configKey);
         if (instance != null) {
             return instance;
         }
 
-        synchronized (getConfigLock(config)) {
-            instance = configCache.get(config);
+        synchronized (getLock(configKey)) {
+            instance = cache.get(configKey);
             if (instance != null) {
                 return instance;
             }
@@ -155,52 +142,52 @@ public class DynamicInstanceProvider<I, C, T> {
             instance = instanceFactory.create(config);
 
             if (instance != null) {
-                configCache.put(config, instance);
+                cache.put(configKey, instance);
             }
             return instance;
         }
     }
 
     /**
-     * 移除输入缓存
+     * 移除缓存，不区分输入和配置
+     *
+     * @param key 缓存键
      */
-    public void invalidateInput(I input) {
-        inputCache.remove(input);
+    public void invalidate(Object key) {
+        if (key == null)
+            return;
+        cache.remove(new InputKey(key));
+        cache.remove(new ConfigKey(key));
     }
 
     /**
-     * 移除配置缓存
+     * 清空全部缓存
      */
-    public void invalidateConfig(C config) {
-        configCache.remove(config);
-    }
-
     public void clear() {
-        inputCache.clear();
-        configCache.clear();
+        cache.clear();
     }
 
     /**
-     * 输入缓存大小
+     * 获取总缓存大小
      */
-    public int inputCacheSize() {
-        return inputCache.size();
+    public int cacheSize() {
+        return cache.size();
+    }
+
+    private Object getLock(Object key) {
+        return locks[(key.hashCode() & 0x7FFFFFFF) % locks.length];
     }
 
     /**
-     * 配置缓存大小
+     * 用于隔离不同来源的 Key 包装类
      */
-    public int configCacheSize() {
-        return configCache.size();
+    @Data
+    protected static class InputKey {
+        private final Object key;
     }
 
-    // ---------------- Internal ----------------
-
-    private Object getInputLock(I key) {
-        return inputLocks[(key.hashCode() & 0x7FFFFFFF) % inputLocks.length];
-    }
-
-    private Object getConfigLock(C key) {
-        return configLocks[(key.hashCode() & 0x7FFFFFFF) % configLocks.length];
+    @Data
+    protected static class ConfigKey {
+        private final Object key;
     }
 }

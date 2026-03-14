@@ -21,7 +21,6 @@ public class SingletonFactory {
     private static final DynamicInstanceProvider<Class<?>, Class<?>, Object> PROVIDER = new DynamicInstanceProvider<>(
             // 默认使用 LFU 缓存，容量 1000
             CacheUtil.newLFUCache(1000),
-            CacheUtil.newLFUCache(1000),
             // Input -> Config: 直接返回类本身
             clazz -> clazz,
             // Config -> Instance: 使用反射创建实例
@@ -48,7 +47,7 @@ public class SingletonFactory {
      * @param clazz 实例类型
      */
     public static void invalidate(Class<?> clazz) {
-        PROVIDER.invalidateInput(clazz);
+        PROVIDER.invalidate(clazz);
     }
 
     /**
