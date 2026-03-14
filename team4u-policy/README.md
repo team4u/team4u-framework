@@ -63,6 +63,12 @@ public class AlipayPolicy implements PaymentPolicy {
 
 使用 `KeyedPolicyRegistry` 进行管理。该注册表针对读操作进行了极致优化（Copy-On-Write 机制），确保高并发下的读取性能。
 
+行为约定：
+
+- `key()` 不能为空，注册 `null key` 会抛出 `PolicyException`
+- 相同 `key` 后注册覆盖前注册
+- `getPolicies()` 返回缓存快照，不保证 `Map` 的插入顺序
+
 ```java
 import com.team4u.framework.policy.core.KeyedPolicyRegistry;
 
@@ -122,11 +128,23 @@ public class VipDiscountPolicy implements DiscountPolicy {
 
 使用 `OrderedPolicyChain` 管理。它会自动根据 `priority` 对策略进行排序。
 
+行为约定：
+
+- 默认按 `priority` 升序执行，值越小优先级越高
+- 相同 `priority` 时按注册顺序执行
+- 默认重复注册模式为 `APPEND`，同一实现类可注册多个实例
+- 如需保留“同类覆盖”语义，可显式使用 `DuplicatePolicyMode.REPLACE_BY_CLASS`
+
 ```java
+import com.team4u.framework.policy.core.DuplicatePolicyMode;
 import com.team4u.framework.policy.core.OrderedPolicyChain;
 
 // 创建链
 OrderedPolicyChain<OrderContext, DiscountPolicy> chain = new OrderedPolicyChain<>(DiscountPolicy.class);
+
+// 如需旧的“同类覆盖”语义，可显式指定模式
+OrderedPolicyChain<OrderContext, DiscountPolicy> replaceChain =
+        new OrderedPolicyChain<>(DiscountPolicy.class, DuplicatePolicyMode.REPLACE_BY_CLASS);
 
 // 注册 (自动排序)
 chain.register(new VipDiscountPolicy());
@@ -165,6 +183,7 @@ pipeline.executeChain(context, (policy, ctx) -> {
 ### 包扫描注册
 
 自动扫描指定包下所有实现了策略接口的类，并注册到 Registry 中。
+该方式更适合无状态、无依赖、可无参构造的策略对象。
 
 ```java
 import com.team4u.framework.policy.util.PolicyScanner;
@@ -189,6 +208,7 @@ PolicyScanner.registerFromServiceLoader(registry);
 ### Spring 自动化集成
 
 在 Spring 项目中，可以通过 `@PolicyAutoRegister` 注解实现策略的零代码自动注册。
+对于依赖注入型策略，优先推荐 Spring 自动注册而不是 `PolicyScanner` 反射实例化。
 
 1. **配置注册表 Bean**：使用 `@PolicyAutoRegister` 标注 Registry Bean。
 

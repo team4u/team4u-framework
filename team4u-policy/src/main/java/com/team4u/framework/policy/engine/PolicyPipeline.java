@@ -13,23 +13,22 @@ import java.util.List;
  */
 public class PolicyPipeline<C, P extends ContextPolicy<C>> {
 
-    private final OrderedPolicyChain<C, P> engine;
+    private final OrderedPolicyChain<C, ? extends P> engine;
 
     /**
      * 以已完成设定和配置注册的核心路由引擎为底建立新的执行流水线。
      *
      * @param engine 用于进行环境适配和筛选分配的高级路由器
      */
-    public PolicyPipeline(OrderedPolicyChain<C, P> engine) {
+    public PolicyPipeline(OrderedPolicyChain<C, ? extends P> engine) {
         this.engine = engine;
     }
 
     /**
      * 以共享上下文类型的基础结构版本，自动适配任意继承体系内的策略。
      */
-    @SuppressWarnings("unchecked")
     public static <C> PolicyPipeline<C, ContextPolicy<C>> of(OrderedPolicyChain<C, ? extends ContextPolicy<C>> engine) {
-        return new PolicyPipeline<>((OrderedPolicyChain<C, ContextPolicy<C>>) engine);
+        return new PolicyPipeline<>(engine);
     }
 
     /**
@@ -41,7 +40,7 @@ public class PolicyPipeline<C, P extends ContextPolicy<C>> {
      * @return 如果流水线执行完成且没有被 action 告知打断，则返回 true；否则返回 false。
      */
     public boolean executeChain(C context, PolicyAction<C, P> action) {
-        List<P> matchedPolicies = engine.allMatches(context);
+        List<? extends P> matchedPolicies = engine.allMatches(context);
         for (P policy : matchedPolicies) {
             boolean shouldContinue = action.execute(policy, context);
             if (!shouldContinue) {

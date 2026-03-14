@@ -1,11 +1,11 @@
 package com.team4u.framework.policy.core;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.team4u.framework.policy.api.KeyedPolicy;
 import com.team4u.framework.policy.api.PolicyRegistry;
 import com.team4u.framework.policy.exception.PolicyException;
 import lombok.Getter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
@@ -47,13 +47,14 @@ public class KeyedPolicyRegistry<K, P extends KeyedPolicy<K>> implements PolicyR
 
     @Override
     public synchronized void register(P policy) {
-        if (!isValidPolicy(policy)) {
+        K key = validatePolicyAndGetKey(policy);
+        if (key == null) {
             return;
         }
-        policies.put(policy.key(), policy);
+        policies.put(key, policy);
         updateCache();
         log.info("KeyedPolicyRegistry|register|success|policyClass={}|key={}|count={}",
-                policyClass.getSimpleName(), policy.key(), policies.size());
+                policyClass.getSimpleName(), key, policies.size());
     }
 
     @Override
@@ -63,8 +64,9 @@ public class KeyedPolicyRegistry<K, P extends KeyedPolicy<K>> implements PolicyR
         }
         int addedCount = 0;
         for (P policy : policies) {
-            if (isValidPolicy(policy)) {
-                this.policies.put(policy.key(), policy);
+            K key = validatePolicyAndGetKey(policy);
+            if (key != null) {
+                this.policies.put(key, policy);
                 addedCount++;
             }
         }
@@ -93,11 +95,7 @@ public class KeyedPolicyRegistry<K, P extends KeyedPolicy<K>> implements PolicyR
         if (other.policies.isEmpty()) {
             return;
         }
-        int addedCount = other.policies.size();
-        policies.putAll(other.policies);
-        updateCache();
-        log.info("KeyedPolicyRegistry|addAll|success|policyClass={}|addedCount={}|totalCount={}",
-                policyClass.getSimpleName(), addedCount, policies.size());
+        addAll(other.getPolicies());
     }
 
     /**
@@ -107,14 +105,18 @@ public class KeyedPolicyRegistry<K, P extends KeyedPolicy<K>> implements PolicyR
      * @return true 如果策略有效，false 如果为 null
      * @throws PolicyException 如果策略类型不匹配
      */
-    private boolean isValidPolicy(P policy) {
+    private K validatePolicyAndGetKey(P policy) {
         if (policy == null) {
-            return false;
+            return null;
         }
         if (!policyClass.isInstance(policy)) {
             throw PolicyException.typeMismatch(policyClass, policy.getClass());
         }
-        return true;
+        K key = policy.key();
+        if (key == null) {
+            throw PolicyException.policyKeyNull(policyClass);
+        }
+        return key;
     }
 
     private void updateCache() {
@@ -134,7 +136,7 @@ public class KeyedPolicyRegistry<K, P extends KeyedPolicy<K>> implements PolicyR
     @Override
     public synchronized int unregisterIf(Predicate<P> predicate) {
         int originalSize = policies.size();
-        policies.values().removeIf(predicate);
+        policies.entrySet().removeIf(entry -> predicate.test(entry.getValue()));
         int removedCount = originalSize - policies.size();
 
         if (removedCount > 0) {

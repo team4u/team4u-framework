@@ -61,6 +61,48 @@ public class PolicyPipelineTest {
         Assert.assertEquals("因为A的priority更小所以优先排在表首面触碰即切断", "A", logs.get(0));
     }
 
+    @Test
+    @SuppressWarnings("unchecked")
+    public void testExecuteChainWithEmptyChain() {
+        OrderedPolicyChain<String, ContextPolicy<String>> engine = new OrderedPolicyChain<>(
+                (Class) ContextPolicy.class);
+        PolicyPipeline<String, ContextPolicy<String>> pipeline = new PolicyPipeline<>(engine);
+
+        Assert.assertTrue("空链执行应直接完成", pipeline.executeChain("context", (policy, context) -> false));
+    }
+
+    @Test(expected = IllegalStateException.class)
+    @SuppressWarnings("unchecked")
+    public void testExecuteChainActionThrows() {
+        OrderedPolicyChain<String, ContextPolicy<String>> engine = new OrderedPolicyChain<>(
+                (Class) ContextPolicy.class);
+        engine.register(new DummyPolicyA("A"));
+
+        PolicyPipeline<String, ContextPolicy<String>> pipeline = new PolicyPipeline<>(engine);
+
+        pipeline.executeChain("context", (policy, context) -> {
+            throw new IllegalStateException("boom");
+        });
+    }
+
+    @Test
+    @SuppressWarnings("unchecked")
+    public void testOfWithoutUncheckedCastUsage() {
+        OrderedPolicyChain<String, DummyPolicyA> engine = new OrderedPolicyChain<>((Class) DummyPolicyA.class);
+        engine.register(new DummyPolicyA("A"));
+
+        PolicyPipeline<String, ContextPolicy<String>> pipeline = PolicyPipeline.of(engine);
+
+        List<String> logs = new ArrayList<>();
+        pipeline.executeChain("context", (policy, context) -> {
+            logs.add(((DummyPolicy) policy).getName());
+            return true;
+        });
+
+        Assert.assertEquals("of 应当正确适配子类型策略链", 1, logs.size());
+        Assert.assertEquals("A", logs.get(0));
+    }
+
     static abstract class DummyPolicy implements ContextPolicy<String> {
         private final String name;
         private final int priority;

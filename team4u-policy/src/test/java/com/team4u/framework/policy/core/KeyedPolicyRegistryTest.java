@@ -177,6 +177,46 @@ public class KeyedPolicyRegistryTest {
         Assert.assertFalse("不应匹配不存在的 Key", registry.get("UNKNOWN").isPresent());
     }
 
+    @Test(expected = PolicyException.class)
+    public void testRegisterNullKey() {
+        KeyedPolicyRegistry<String, TestPolicy> registry = new KeyedPolicyRegistry<>(TestPolicy.class);
+
+        registry.register(new TestPolicyImpl(null));
+    }
+
+    @Test
+    public void testRegisterNullKeyWithDetails() {
+        KeyedPolicyRegistry<String, TestPolicy> registry = new KeyedPolicyRegistry<>(TestPolicy.class);
+
+        try {
+            registry.register(new TestPolicyImpl(null));
+            Assert.fail("应当抛出异常");
+        } catch (PolicyException e) {
+            Assert.assertEquals(TestPolicy.class, e.getExpectedPolicyClass());
+            Assert.assertTrue(e.getMessage().contains("key cannot be null"));
+        }
+    }
+
+    @Test
+    public void testRegisterSameKeyOverride() {
+        KeyedPolicyRegistry<String, TestPolicy> registry = new KeyedPolicyRegistry<>(TestPolicy.class);
+        TestPolicyImpl first = new TestPolicyImpl("A");
+        TestPolicyImpl second = new TestPolicyImpl("A");
+
+        registry.register(first);
+        registry.register(second);
+
+        Assert.assertEquals("相同 key 应当只保留一个策略", 1, registry.getPolicies().size());
+        Assert.assertSame("相同 key 后注册应覆盖前注册", second, registry.get("A").get());
+    }
+
+    @Test(expected = PolicyException.class)
+    public void testAddAllNullKey() {
+        KeyedPolicyRegistry<String, TestPolicy> registry = new KeyedPolicyRegistry<>(TestPolicy.class);
+
+        registry.addAll(Arrays.asList(new TestPolicyImpl("A"), new TestPolicyImpl(null)));
+    }
+
     @Test
     public void testUnregisterByType() {
         KeyedPolicyRegistry<String, TestPolicy> registry = new KeyedPolicyRegistry<>(TestPolicy.class);
@@ -229,6 +269,21 @@ public class KeyedPolicyRegistryTest {
         Assert.assertEquals("应当移除一个策略", 1, removed);
         Assert.assertEquals("注销后应当保留两个策略", 2, registry.getPolicies().size());
         Assert.assertFalse("A 应当被移除", registry.get("A").isPresent());
+    }
+
+    @Test
+    public void testUnregisterIfMultipleSameType() {
+        KeyedPolicyRegistry<String, TestPolicy> registry = new KeyedPolicyRegistry<>(TestPolicy.class);
+        registry.register(new TestPolicyImpl("A"));
+        registry.register(new TestPolicyImpl("B"));
+        registry.register(new OtherPolicyImpl("C"));
+
+        int removed = registry.unregisterIf(p -> p.getClass().equals(TestPolicyImpl.class));
+
+        Assert.assertEquals("应当移除两个同类型策略", 2, removed);
+        Assert.assertFalse("A 应当被移除", registry.get("A").isPresent());
+        Assert.assertFalse("B 应当被移除", registry.get("B").isPresent());
+        Assert.assertTrue("其他类型策略应保留", registry.get("C").isPresent());
     }
 
     @Test
