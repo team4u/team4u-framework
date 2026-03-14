@@ -2,6 +2,7 @@ package com.team4u.framework.config.core.internal;
 
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import com.team4u.framework.config.core.spi.ConfigSource;
+import lombok.Setter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -58,6 +59,7 @@ public class HotReloadManager {
     /**
      * 防抖延迟时间（毫秒）
      */
+    @Setter
     private long debounceWindowMs;
     /**
      * 当前待执行的加载任务句柄
@@ -82,10 +84,6 @@ public class HotReloadManager {
             t.setDaemon(true);
             return t;
         });
-    }
-
-    public void setDebounceWindowMs(long debounceWindowMs) {
-        this.debounceWindowMs = debounceWindowMs;
     }
 
     /**

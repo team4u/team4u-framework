@@ -130,7 +130,9 @@ public class ConfigProxyTest {
             }
 
             @Override
-            public void addChangeListener(String keyPattern, ConfigChangeListener listener) {
+            public AutoCloseable registerChangeListener(String keyPattern, ConfigChangeListener listener) {
+                return () -> {
+                };
             }
         };
     }
