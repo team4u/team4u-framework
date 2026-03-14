@@ -1,5 +1,6 @@
 package com.team4u.framework.base.util.cache;
 
+import com.team4u.framework.base.cache.LFUCache;
 import org.junit.Assert;
 import org.junit.Test;
 

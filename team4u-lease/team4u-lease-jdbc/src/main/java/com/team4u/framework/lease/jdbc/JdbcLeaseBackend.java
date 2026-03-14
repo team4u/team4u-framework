@@ -1,5 +1,6 @@
 package com.team4u.framework.lease.jdbc;
 
+
 import com.team4u.framework.base.util.Assert;
 import com.team4u.framework.base.util.IdUtil;
 import com.team4u.framework.base.util.StringUtil;

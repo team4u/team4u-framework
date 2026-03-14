@@ -1,5 +1,6 @@
 package com.team4u.framework.base.util.cache;
 
+import com.team4u.framework.base.cache.TimedCache;
 import com.team4u.framework.base.util.ThreadUtil;
 import org.junit.Assert;
 import org.junit.Test;

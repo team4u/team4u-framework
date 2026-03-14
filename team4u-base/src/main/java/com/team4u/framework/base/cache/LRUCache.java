@@ -1,4 +1,4 @@
-package com.team4u.framework.base.util.cache;
+package com.team4u.framework.base.cache;
 
 import java.util.LinkedHashMap;
 import java.util.Map;

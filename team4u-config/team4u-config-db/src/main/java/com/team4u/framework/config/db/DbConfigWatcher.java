@@ -1,6 +1,6 @@
 package com.team4u.framework.config.db;
 
-import com.team4u.framework.base.util.JdbcUtil;
+import com.team4u.framework.base.jdbc.JdbcUtil;
 import com.team4u.framework.config.core.spi.ConfigWatcher;
 import lombok.extern.slf4j.Slf4j;
 

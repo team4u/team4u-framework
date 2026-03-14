@@ -1,4 +1,4 @@
-package com.team4u.framework.base.util.cache;
+package com.team4u.framework.base.cache;
 
 import java.util.HashMap;
 import java.util.Iterator;

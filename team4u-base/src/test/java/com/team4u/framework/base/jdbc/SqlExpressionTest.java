@@ -1,4 +1,4 @@
-package com.team4u.framework.base.util;
+package com.team4u.framework.base.jdbc;
 
 import org.junit.Assert;
 import org.junit.Test;
@@ -20,7 +20,7 @@ public class SqlExpressionTest {
     @Test
     public void testPlaceholders() {
         // 测试正常数量的占位符
-        Assert.assertEquals("占位符数量不正确", "?,?,?", SqlExpression.placeholders(3));
+        Assert.assertEquals("占位符数量不正确", "?, ?, ?", SqlExpression.placeholders(3));
         // 测试 1 个占位符
         Assert.assertEquals("单个占位符不正确", "?", SqlExpression.placeholders(1));
         // 测试 0 个占位符
