@@ -3,6 +3,7 @@ package com.team4u.framework.log.config;
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.team4u.framework.serializer.json.JsonUtil;
+import lombok.Data;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import com.team4u.framework.config.core.ConfigManager;
@@ -90,6 +91,7 @@ public class FinOpsConfigRepository {
     /**
      * FinOps 实体类
      */
+    @Data
     public static final class FinOpsConfig {
         private static final int DEFAULT_MAX_LOG_LENGTH = 5000;
         private static final int DEFAULT_MAX_STRING_LENGTH = 2000;
@@ -132,18 +134,6 @@ public class FinOpsConfigRepository {
             this.maxLogLength = maxLogLength;
             this.maxStringLength = maxStringLength;
             this.errorLimitPerSecond = errorLimitPerSecond;
-        }
-
-        public int getMaxLogLength() {
-            return maxLogLength;
-        }
-
-        public int getMaxStringLength() {
-            return maxStringLength;
-        }
-
-        public int getErrorLimitPerSecond() {
-            return errorLimitPerSecond;
         }
 
         public FinOpsConfig withMaxLogLength(int maxLogLength) {
