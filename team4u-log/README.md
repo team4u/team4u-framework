@@ -95,6 +95,8 @@ Loggers.of(OrderService.class)
 | `atTrace() / atDebug() / atInfo() / atWarn() / atError()` | 手动指定日志输出级别。                                             |
 | `status(String status)`                                   | 手动指定业务状态（如 `processing`）。                              |
 | `derive()`                                                | 派生日志器。基于当前状态做浅拷贝并返回副本。常用于定义日志模板。   |
+| `begin()`                                                 | 开启一个日志区间（Span），支持自动计时。                           |
+| `around(Runnable/Callable)`                               | 便捷方法：包围执行业务逻辑，自动记录开始和结束（含计时）。         |
 | `log()`                                                   | 终结方法，将事件提交给日志引擎的流水线进行拦截与输出。             |
 ### 拦截器管理 (LogInterceptorManager)
 日志处理流水线由 `LogInterceptorManager` 统一管理。它负责内置拦截器的初始化、自定义拦截器的注册以及执行链的调度。
@@ -148,6 +150,40 @@ public class OrderService {
                 .log();
     }
 }
+```
+
+---
+#### 区间日志 (Log Span)
+除了直接输出结果日志，`Loggers` 还提供 `begin()` 方法开启一个执行区间（Span），并在结束时自动计算耗时。
+
+**主要特性：**
+*   **自动计时**：自动记录开始时间，在调用状态方法（如 `success()`, `failed()`）时自动填入 `durationMs`。
+*   **状态隔离**：通过 `logStart()` 记录开始日志时，会自动克隆当前上下文，不影响最终结束日志的状态。
+*   **包围模式**：提供 `around()` 方法，一键完成“记录开始 -> 执行业务 -> 记录结果”的全流程。
+
+**1. 手动管理 Span：**
+```java
+LogSpan span = Loggers.of(OrderService.class)
+        .action("CreateOrder")
+        .put("orderId", orderId)
+        .begin()         // 开启 Span 并记录起始时间
+        .logStart();     // 可选：立即输出一条 status="start" 的日志
+
+try {
+    businessService.doSomething();
+    span.success().log(); // 自动计算耗时并输出结果日志
+} catch (Exception e) {
+    span.failed(e).log(); // 自动计算耗时，记录异常并输出
+}
+```
+
+**2. 使用 Around 便捷方法：**
+```java
+// 自动处理异常捕获与耗时计算
+Loggers.of(OrderService.class)
+       .action("CreateOrder")
+       .put("orderId", orderId)
+       .around(() -> businessService.doSomething());
 ```
 
 #### 日志标准字段说明
