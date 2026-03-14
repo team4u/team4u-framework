@@ -1,9 +1,9 @@
 package com.team4u.framework.config.core.support;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.team4u.framework.config.core.ConfigManager;
 import lombok.Getter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
@@ -40,7 +40,7 @@ public class ConfigDrivenRegistry<T> {
         this.keyPrefix = keyPrefix;
         this.instanceFactory = instanceFactory;
 
-        // 注册变更监听器：使用 * 后缀实现前缀匹配，涵盖 keyPrefix 自身及其子配置项
+        // 注册变更监听器：当前采用 startsWith 语义，keyPrefix + "*" 会匹配所有同前缀键
         this.configManager.addChangeListener(this.keyPrefix + "*", this::onConfigChanged);
     }
 

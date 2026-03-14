@@ -9,9 +9,11 @@ import java.sql.SQLException;
 import java.sql.Timestamp;
 import java.util.List;
 import java.util.Map;
+import java.util.OptionalLong;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 基于数据库轮询的配置变更监听器。
@@ -44,16 +46,17 @@ public class DbConfigWatcher implements ConfigWatcher {
      * 轮询间隔（秒）
      */
     private final int intervalSeconds;
-
+    private final AtomicLong failureCount = new AtomicLong();
     /**
      * 上次记录的最大时间戳
      */
     private volatile long lastMaxTimestamp = 0L;
-
+    private volatile boolean baselineInitialized = false;
     /**
      * 定时任务线程池
      */
     private ScheduledExecutorService scheduler;
+    private volatile String lastErrorMessage;
 
     /**
      * 构建 DB 配置监听器（默认间隔 5 秒）
@@ -98,9 +101,16 @@ public class DbConfigWatcher implements ConfigWatcher {
      * @param changeSignal 变更通知信号回调
      */
     @Override
-    public void watch(Runnable changeSignal) {
-        // 初始化基准时间戳
-        lastMaxTimestamp = queryMaxTimestamp();
+    public synchronized void watch(Runnable changeSignal) {
+        stopScheduler();
+
+        OptionalLong baseline = queryMaxTimestamp();
+        if (baseline.isPresent()) {
+            lastMaxTimestamp = baseline.getAsLong();
+            baselineInitialized = true;
+        } else {
+            baselineInitialized = false;
+        }
 
         scheduler = Executors.newSingleThreadScheduledExecutor(r -> {
             Thread t = new Thread(r, "db-config-watcher");
@@ -122,11 +132,8 @@ public class DbConfigWatcher implements ConfigWatcher {
      * 停止监听任务并释放资源。
      */
     @Override
-    public void destroy() {
-        if (scheduler != null && !scheduler.isShutdown()) {
-            scheduler.shutdownNow();
-            log.info("[DbConfigWatcher] Stopped");
-        }
+    public synchronized void destroy() {
+        stopScheduler();
     }
 
     /**
@@ -134,7 +141,18 @@ public class DbConfigWatcher implements ConfigWatcher {
      */
     private void pollAndSignal(Runnable changeSignal) {
         try {
-            long currentMax = queryMaxTimestamp();
+            OptionalLong currentMaxResult = queryMaxTimestamp();
+            if (!currentMaxResult.isPresent()) {
+                return;
+            }
+
+            long currentMax = currentMaxResult.getAsLong();
+            if (!baselineInitialized) {
+                lastMaxTimestamp = currentMax;
+                baselineInitialized = true;
+                return;
+            }
+
             if (currentMax > lastMaxTimestamp) {
                 log.debug("[DbConfigWatcher] Database config changed ({} -> {})", lastMaxTimestamp, currentMax);
                 lastMaxTimestamp = currentMax;
@@ -150,28 +168,46 @@ public class DbConfigWatcher implements ConfigWatcher {
      *
      * @return 毫秒级时间戳
      */
-    private long queryMaxTimestamp() {
+    private OptionalLong queryMaxTimestamp() {
         try {
             String sql = "SELECT MAX(" + options.getUpdateTimeColumn() + ") AS max_time FROM " + options.getTableName();
             List<Map<String, Object>> rows = JdbcUtil.query(dataSource, sql);
             if (rows.isEmpty()) {
-                return 0L;
+                return OptionalLong.of(0L);
             }
 
             Object maxTime = rows.get(0).get("max_time");
             if (maxTime == null) {
-                return 0L;
+                return OptionalLong.of(0L);
             }
 
             // 映射数据库时间类型为毫秒级时间戳
             if (maxTime instanceof Timestamp) {
-                return ((Timestamp) maxTime).getTime();
+                return OptionalLong.of(((Timestamp) maxTime).getTime());
             }
 
-            return Long.parseLong(maxTime.toString());
+            return OptionalLong.of(Long.parseLong(maxTime.toString()));
         } catch (SQLException e) {
+            failureCount.incrementAndGet();
+            lastErrorMessage = e.getMessage();
             log.error("[DbConfigWatcher] Failed to query max timestamp", e);
-            return 0L;
+            return OptionalLong.empty();
         }
+    }
+
+    public long getFailureCount() {
+        return failureCount.get();
+    }
+
+    public String getLastErrorMessage() {
+        return lastErrorMessage;
+    }
+
+    private void stopScheduler() {
+        if (scheduler != null && !scheduler.isShutdown()) {
+            scheduler.shutdownNow();
+            log.info("[DbConfigWatcher] Stopped");
+        }
+        scheduler = null;
     }
 }

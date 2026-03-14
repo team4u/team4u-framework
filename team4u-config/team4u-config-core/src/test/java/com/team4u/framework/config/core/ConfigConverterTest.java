@@ -5,6 +5,7 @@ import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.config.core.annotation.ConfigConverter;
 import com.team4u.framework.config.core.convert.JsonPropertyConverter;
 import com.team4u.framework.config.core.convert.PropertyConverter;
+import com.team4u.framework.config.core.domain.ConfigConversionException;
 import com.team4u.framework.config.core.domain.ConfigEntry;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import com.team4u.framework.config.core.spi.ConfigSource;
@@ -55,6 +56,34 @@ public class ConfigConverterTest {
 
         // 验证解密转换
         Assert.assertEquals("secret_pwd", config.getPassword());
+    }
+
+    @Test(expected = ConfigConversionException.class)
+    public void testCustomConverterFailsFast() {
+        Map<String, ConfigEntry> entries = new HashMap<>();
+        long now = System.currentTimeMillis();
+        entries.put("app.password", new ConfigEntry("app.password", "bad-value", "mock", now));
+
+        ConfigSnapshot snapshot = new ConfigSnapshot(1L, entries);
+        ConfigManager manager = ConfigManager.builder()
+                .addSource(new StaticConfigSource(snapshot))
+                .build();
+
+        manager.createProxy("app", FailingConverterConfig.class).getPassword();
+    }
+
+    @Test(expected = ConfigConversionException.class)
+    public void testBuiltinConversionFailsFast() {
+        Map<String, ConfigEntry> entries = new HashMap<>();
+        long now = System.currentTimeMillis();
+        entries.put("app.port", new ConfigEntry("app.port", "not-a-number", "mock", now));
+
+        ConfigSnapshot snapshot = new ConfigSnapshot(1L, entries);
+        ConfigManager manager = ConfigManager.builder()
+                .addSource(new StaticConfigSource(snapshot))
+                .build();
+
+        manager.createProxy("app", PrimitiveConfig.class).getPort();
     }
 
     public static class ConverterConfig {
@@ -118,6 +147,30 @@ public class ConfigConverterTest {
                 return source.substring("fake_encrypt_".length());
             }
             return source;
+        }
+    }
+
+    public static class AlwaysFailConverter implements PropertyConverter<String> {
+        @Override
+        public String convert(String source, Class<String> targetType) {
+            throw new IllegalArgumentException("boom");
+        }
+    }
+
+    public static class FailingConverterConfig {
+        @ConfigConverter(AlwaysFailConverter.class)
+        private String password;
+
+        public String getPassword() {
+            return password;
+        }
+    }
+
+    public static class PrimitiveConfig {
+        private int port;
+
+        public int getPort() {
+            return port;
         }
     }
 

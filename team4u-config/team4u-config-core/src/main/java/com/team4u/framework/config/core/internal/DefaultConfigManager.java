@@ -1,10 +1,8 @@
 package com.team4u.framework.config.core.internal;
 
+import com.team4u.framework.base.instance.DynamicInstanceProvider;
 import com.team4u.framework.base.util.CollectionUtil;
 import com.team4u.framework.base.util.StringUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
-import com.team4u.framework.base.instance.DynamicInstanceProvider;
 import com.team4u.framework.config.core.ConfigChangeListener;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.annotation.ConfigPrefix;
@@ -17,9 +15,12 @@ import com.team4u.framework.config.core.spi.ConfigSourceRegistry;
 import com.team4u.framework.config.core.spi.ConfigWatcher;
 import com.team4u.framework.config.core.spi.ConfigWatcherRegistry;
 import lombok.EqualsAndHashCode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
@@ -31,7 +32,12 @@ import java.util.concurrent.atomic.AtomicReference;
 public class DefaultConfigManager implements ConfigManager {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultConfigManager.class);
-
+    private static final DefaultConfigManager GLOBAL = new DefaultConfigManager(
+            ConfigSourceRegistry.global(),
+            ConfigWatcherRegistry.global(),
+            PropertyConverterRegistry.global(),
+            new DefaultConfigBinder(),
+            500);
     /**
      * 当前生效的配置快照引用
      */
@@ -41,7 +47,6 @@ public class DefaultConfigManager implements ConfigManager {
      */
     private final ConfigSourceRegistry sourceRegistry;
     private final ConfigWatcherRegistry watcherRegistry;
-
     /**
      * 对象绑定器
      */
@@ -50,7 +55,6 @@ public class DefaultConfigManager implements ConfigManager {
      * 代理工厂
      */
     private final ConfigProxyFactory proxyFactory;
-
     /**
      * 聚合器，负责合并各配置源数据
      */
@@ -59,40 +63,27 @@ public class DefaultConfigManager implements ConfigManager {
      * 热加载管理器，处理变更防抖与异步更新
      */
     private final HotReloadManager hotReloadManager;
-
+    private final AtomicLong versionGenerator = new AtomicLong(System.currentTimeMillis());
     /**
      * 用户注册的配置变更监听器容器
      */
     private final List<ListenerRegistration> listeners = new CopyOnWriteArrayList<>();
-
     /**
      * 代理对象实例缓存，避免重复创建代理实例
      */
     private final DynamicInstanceProvider<ProxyKey, ProxyKey, Object> proxyInstanceProvider;
-
-    private static final DefaultConfigManager GLOBAL = new DefaultConfigManager(
-            ConfigSourceRegistry.global(),
-            ConfigWatcherRegistry.global(),
-            PropertyConverterRegistry.global(),
-            new DefaultConfigBinder(),
-            500);
-
-    /**
-     * 获取全局标准单例配置管理引擎
-     */
-    public static DefaultConfigManager global() {
-        return GLOBAL;
-    }
+    private final Set<ConfigWatcher> activeWatchers = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Object watcherLifecycleMonitor = new Object();
 
     /**
      * @param debounceWindowMs 防抖延迟时间（毫秒）。传入 0 或负数时，变更信号将同步立即执行重载，
      *                         可用于单元测试环境中完全消除 {@code Thread.sleep} 等待。
      */
     public DefaultConfigManager(ConfigSourceRegistry sourceRegistry,
-            ConfigWatcherRegistry watcherRegistry,
-            PropertyConverterRegistry converterRegistry,
-            ConfigBinder configBinder,
-            long debounceWindowMs) {
+                                ConfigWatcherRegistry watcherRegistry,
+                                PropertyConverterRegistry converterRegistry,
+                                ConfigBinder configBinder,
+                                long debounceWindowMs) {
         this.sourceRegistry = sourceRegistry;
         this.watcherRegistry = watcherRegistry;
         this.configBinder = configBinder;
@@ -106,17 +97,25 @@ public class DefaultConfigManager implements ConfigManager {
                 snapshotRef,
                 () -> this.sourceRegistry.getPolicies(),
                 this.aggregator,
+                this.versionGenerator,
                 debounceWindowMs,
                 this::fireChangeEvents);
 
         // 启动各配置源的监控任务
-        initWatchers();
+        reconcileWatchers();
 
         // 基于 LRU 策略初始化代理对象缓存提供者
         this.proxyInstanceProvider = DynamicInstanceProvider.createLru(
                 1024,
                 key -> key,
                 key -> doCreateProxy(key.prefix, key.configType));
+    }
+
+    /**
+     * 获取全局标准单例配置管理引擎
+     */
+    public static DefaultConfigManager global() {
+        return GLOBAL;
     }
 
     /**
@@ -128,7 +127,7 @@ public class DefaultConfigManager implements ConfigManager {
     public void refresh() {
         log.info("Refreshing configuration...");
         initialLoad();
-        initWatchers();
+        reconcileWatchers();
     }
 
     /**
@@ -138,7 +137,7 @@ public class DefaultConfigManager implements ConfigManager {
      * </p>
      */
     private void initialLoad() {
-        ConfigSnapshot snapshot = aggregator.aggregate(sourceRegistry.getPolicies(), System.nanoTime());
+        ConfigSnapshot snapshot = aggregator.aggregate(sourceRegistry.getPolicies(), nextVersion());
         snapshotRef.set(snapshot);
         log.info("ConfigSnapshot built, version = {}, entries = {}", snapshot.getVersion(),
                 snapshot.getEntries().size());
@@ -147,12 +146,35 @@ public class DefaultConfigManager implements ConfigManager {
     /**
      * 启动各配置监听器实现
      */
-    private void initWatchers() {
-        List<ConfigWatcher> watchers = watcherRegistry.getPolicies();
-        if (CollectionUtil.isNotEmpty(watchers)) {
-            for (ConfigWatcher watcher : watchers) {
+    private long nextVersion() {
+        return versionGenerator.incrementAndGet();
+    }
+
+    /**
+     * 启动或回收监听器，确保 refresh() 不会重复拉起已运行的 watcher。
+     */
+    private void reconcileWatchers() {
+        synchronized (watcherLifecycleMonitor) {
+            Set<ConfigWatcher> desiredWatchers = Collections.newSetFromMap(new IdentityHashMap<>());
+            List<ConfigWatcher> watchers = watcherRegistry.getPolicies();
+            if (CollectionUtil.isNotEmpty(watchers)) {
+                desiredWatchers.addAll(watchers);
+            }
+
+            for (ConfigWatcher activeWatcher : new ArrayList<>(activeWatchers)) {
+                if (!desiredWatchers.contains(activeWatcher)) {
+                    destroyWatcher(activeWatcher);
+                    activeWatchers.remove(activeWatcher);
+                }
+            }
+
+            for (ConfigWatcher watcher : desiredWatchers) {
+                if (activeWatchers.contains(watcher)) {
+                    continue;
+                }
                 watcher.init();
                 watcher.watch(hotReloadManager::signalChange);
+                activeWatchers.add(watcher);
             }
         }
     }
@@ -287,16 +309,36 @@ public class DefaultConfigManager implements ConfigManager {
      * 销毁实例，释放线程池与监听器资源
      */
     public void destroy() {
-        hotReloadManager.destroy();
-        List<ConfigWatcher> watchers = watcherRegistry.getPolicies();
-        if (CollectionUtil.isNotEmpty(watchers)) {
-            for (ConfigWatcher watcher : watchers) {
-                try {
-                    watcher.destroy();
-                } catch (Exception e) {
-                    log.warn("Error destroying watcher: {}", e.getMessage());
-                }
+        synchronized (watcherLifecycleMonitor) {
+            for (ConfigWatcher watcher : new ArrayList<>(activeWatchers)) {
+                destroyWatcher(watcher);
             }
+            activeWatchers.clear();
+        }
+        hotReloadManager.destroy();
+    }
+
+    /**
+     * 仅用于测试场景，重置运行时状态但保留全局单例对象本身。
+     */
+    public void resetForTests() {
+        synchronized (watcherLifecycleMonitor) {
+            for (ConfigWatcher watcher : new ArrayList<>(activeWatchers)) {
+                destroyWatcher(watcher);
+            }
+            activeWatchers.clear();
+        }
+        hotReloadManager.cancelPendingReload();
+        listeners.clear();
+        proxyInstanceProvider.clear();
+        snapshotRef.set(new ConfigSnapshot(nextVersion(), Collections.emptyMap()));
+    }
+
+    private void destroyWatcher(ConfigWatcher watcher) {
+        try {
+            watcher.destroy();
+        } catch (Exception e) {
+            log.warn("Error destroying watcher: {}", e.getMessage());
         }
     }
 

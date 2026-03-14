@@ -89,8 +89,7 @@ public class DbConfigSource implements ConfigSource {
             List<DbConfigRow> rows = queryRows(null);
             return toConfigMap(rows);
         } catch (SQLException e) {
-            log.error("[{}] Failed to load all configs", name, e);
-            return Collections.emptyMap();
+            throw new IllegalStateException("[" + name + "] Failed to load all configs", e);
         }
     }
 
@@ -105,8 +104,8 @@ public class DbConfigSource implements ConfigSource {
             List<DbConfigRow> rows = queryRows(timestamp);
             return toConfigMap(rows);
         } catch (SQLException e) {
-            log.error("[{}] Failed to load incremental configs, timestamp={}", name, timestamp, e);
-            return Collections.emptyMap();
+            throw new IllegalStateException(
+                    "[" + name + "] Failed to load incremental configs, timestamp=" + timestamp, e);
         }
     }
 

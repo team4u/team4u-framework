@@ -49,9 +49,13 @@ public class DefaultConfigManagerTest {
                 binder,
                 500);
 
+        Assert.assertEquals(1, watcher.initCount.get());
+        Assert.assertEquals(1, watcher.watchCount.get());
+
         // 验证首次同步加载后的数据状态
         Assert.assertEquals(1, loadCount.get());
         Assert.assertEquals("val1", manager.getString("key1").orElse(null));
+        long initialVersion = manager.currentSnapshot().getVersion();
 
         // 注册监听器来测试变更分发
         AtomicInteger changeEvtCount = new AtomicInteger();
@@ -86,11 +90,17 @@ public class DefaultConfigManagerTest {
         // 防抖合并结束后，应仅额外触发一次加载行为
         Assert.assertEquals(2, loadCount.get());
         Assert.assertEquals("val2", manager.getString("key1").orElse(null));
+        Assert.assertTrue(manager.currentSnapshot().getVersion() > initialVersion);
 
         // 验证监听器被准确触发了 2 次 (key1 + app.name)
         Assert.assertEquals(2, changeEvtCount.get());
 
+        manager.refresh();
+        Assert.assertEquals("refresh 不应重复初始化 watcher", 1, watcher.initCount.get());
+        Assert.assertEquals("refresh 不应重复注册 watcher", 1, watcher.watchCount.get());
+
         manager.destroy();
+        Assert.assertEquals(1, watcher.destroyCount.get());
     }
 
     private static class MockSource implements ConfigSource {
@@ -124,11 +134,25 @@ public class DefaultConfigManagerTest {
     }
 
     private static class MockWatcher implements ConfigWatcher {
+        private final AtomicInteger initCount = new AtomicInteger();
+        private final AtomicInteger watchCount = new AtomicInteger();
+        private final AtomicInteger destroyCount = new AtomicInteger();
         private Runnable changeSignal;
 
         @Override
+        public void init() {
+            initCount.incrementAndGet();
+        }
+
+        @Override
         public void watch(Runnable changeSignal) {
+            watchCount.incrementAndGet();
             this.changeSignal = changeSignal;
+        }
+
+        @Override
+        public void destroy() {
+            destroyCount.incrementAndGet();
         }
 
         public void trigger() {

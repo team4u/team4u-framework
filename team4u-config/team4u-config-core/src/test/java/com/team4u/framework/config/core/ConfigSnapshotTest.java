@@ -98,6 +98,18 @@ public class ConfigSnapshotTest {
     }
 
     @Test
+    public void testGetSmartCollisionUsesDeterministicWinner() {
+        Map<String, ConfigEntry> entries = new HashMap<>();
+        long now = System.currentTimeMillis();
+        entries.put("APP_PORT", new ConfigEntry("APP_PORT", "7070", "env", now));
+        entries.put("app.port", new ConfigEntry("app.port", "8080", "prop", now));
+
+        ConfigSnapshot snapshot = new ConfigSnapshot(1L, entries);
+
+        Assert.assertEquals("8080", snapshot.getSmart("appPort").orElse(null));
+    }
+
+    @Test
     public void testToString() {
         Map<String, ConfigEntry> entries = new HashMap<>();
         long now = System.currentTimeMillis();

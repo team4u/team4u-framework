@@ -75,7 +75,7 @@ ConfigManager 是所有操作的入口。你可以使用内置的标准单例，
 
 #### 1. 标准单例（推荐）
 
-自动通过 SPI 发现并聚合配置。你也可以在调用 `global()` 之前，通过统一的引导类 `ConfigBootstrap` 手动预填组件：
+默认会通过 SPI 尝试发现可无参构造的扩展实现。你也可以在调用 `global()` 之前，通过统一的引导类 `ConfigBootstrap` 手动预填组件：
 
 ```java
 // 使用统一入口进行全局注册
@@ -84,7 +84,7 @@ ConfigBootstrap.global()
     .addWatcher(new MyCustomConfigWatcher()) // 显式注册自定义监听器
     .lock(); // 注册完成后建议锁定
 
-// 获取标准单例，它会自动包含上面手动注册的源以及 SPI 加载的源
+// 获取标准单例，它会包含上面手动注册的源以及 SPI 加载到的扩展
 ConfigManager manager = ConfigManager.global();
 ```
 
@@ -212,10 +212,10 @@ public class AppConfig {
 }
 ```
 
-#### @ConfigRequired & @ConfigDefault
+#### @ConfigRequired
 
 - `@ConfigRequired`: 标记为必填。若配置缺失**且字段无初始值**时抛出 `ConfigMissingException`。
-- `@ConfigDefault`: 提供字符串形式的默认值（支持占位符）。
+- 当前版本未提供 `@ConfigDefault` 注解；默认值能力通过 Java Bean 字段初始值和占位符默认值（`${key:default}`）实现。
 
 ---
 
@@ -244,14 +244,14 @@ public class AppConfig {
 
 #### SystemEnvConfigSource (系统属性与环境变量)
 
-自动聚合 JVM 系统属性 (`-D`) 和操作系统环境变量。
+用于聚合 JVM 系统属性 (`-D`) 和操作系统环境变量。该配置源通常需要显式构造并注册。
 
 - **自动归一化**：环境变量通常为大写下划线（如 `APP_PORT`），框架会自动生成对应的点分小写键（如 `app.port`），实现业务层感知透明。
 - **优先级**：JVM 系统属性 > 环境变量。
 
 #### PropertiesConfigSource
 
-支持从 `java.util.Properties` 实例或类路径（Classpath）资源文件加载静态配置。
+支持从 `java.util.Properties` 实例或类路径（Classpath）资源文件加载静态配置，通常通过代码显式创建。
 
 ---
 
@@ -426,11 +426,11 @@ Assert.assertEquals("test-app", config.getName());
 
 ### 启动阻断 (Fail-Fast)
 
-在 ConfigManager 初始化时，会执行 initialLoad()。如果任何关键配置源加载失败，系统将抛出异常并阻断应用启动，防止应用在配置不完整的状态下运行。
+在 ConfigManager 初始化时，会执行 initialLoad()。如果任何关键配置源加载失败，系统将抛出异常并阻断应用启动，防止应用在配置不完整的状态下运行。数据库配置源的全量/增量读取失败也会显式抛错，不再静默回退为空配置。
 
 ### 热更容错与原子性
 
-热更新过程是原子性的。如果新快照在聚合或加载过程中发生异常，HotReloadManager 会捕获异常并记录错误日志，同时保留旧快照生效，确保系统运行的连续性。
+热更新过程是原子性的。如果新快照在聚合或加载过程中发生异常，HotReloadManager 会捕获异常并记录错误日志，同时保留旧快照生效，确保系统运行的连续性。当前热更新链路仍以 watcher 触发后的全量重建为主，`loadSince` 属于 SPI 级可选能力，不代表框架主链路已启用增量合并。
 
 ### 配置溯源 (Traceability)
 
@@ -527,7 +527,7 @@ public void process() {
 
 ```java
 // 1. 初始化注册表，监听特定前缀
-// 支持精准匹配 keyPrefix 自身（如 "router"）及其下属所有配置（如 "router.order"）
+// 当前使用 startsWith 语义：会匹配 "router"、"router.order" 以及其他同前缀键
 ConfigDrivenRegistry<Router> routerRegistry = new ConfigDrivenRegistry<>(
         ConfigManager.global(),
         "router", 

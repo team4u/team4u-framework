@@ -5,6 +5,8 @@ import com.team4u.framework.base.util.MapUtil;
 import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.config.core.internal.PlaceholderResolver;
 import lombok.Getter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 
@@ -17,6 +19,7 @@ import java.util.*;
  * </p>
  */
 public class ConfigSnapshot {
+    private static final Logger log = LoggerFactory.getLogger(ConfigSnapshot.class);
     /**
      * 快照版本号，通常由时间戳或递增序列生成
      */
@@ -60,6 +63,25 @@ public class ConfigSnapshot {
         return key.toLowerCase().replace(".", "").replace("-", "").replace("_", "");
     }
 
+    private static int looseKeyPriority(String key) {
+        if (key == null) {
+            return Integer.MAX_VALUE;
+        }
+        if (key.matches("[a-z0-9]+(\\.[a-z0-9]+)+")) {
+            return 0;
+        }
+        if (key.equals(key.toLowerCase()) && key.contains("-")) {
+            return 1;
+        }
+        if (key.equals(key.toLowerCase()) && key.contains("_")) {
+            return 2;
+        }
+        if (key.equals(key.toLowerCase())) {
+            return 3;
+        }
+        return 4;
+    }
+
     /**
      * 构建松散匹配所需的归一化索引
      */
@@ -67,12 +89,25 @@ public class ConfigSnapshot {
         if (CollectionUtil.isEmpty(originalKeys)) {
             return Collections.emptyMap();
         }
-        Map<String, String> index = new HashMap<>(originalKeys.size());
+        Map<String, List<String>> collisions = new HashMap<>(originalKeys.size());
         for (String key : originalKeys) {
             String normalized = normalize(key);
             if (normalized != null) {
-                // 如果出现归一化冲突，则保留最早遇到的原始键
-                index.putIfAbsent(normalized, key);
+                collisions.computeIfAbsent(normalized, ignored -> new ArrayList<>()).add(key);
+            }
+        }
+
+        Map<String, String> index = new HashMap<>(collisions.size());
+        for (Map.Entry<String, List<String>> entry : collisions.entrySet()) {
+            List<String> candidates = new ArrayList<>(entry.getValue());
+            candidates.sort(Comparator.comparingInt(ConfigSnapshot::looseKeyPriority).thenComparing(String::compareTo));
+
+            String winner = candidates.get(0);
+            index.put(entry.getKey(), winner);
+
+            if (candidates.size() > 1) {
+                log.warn("Config loose-key collision detected: normalizedKey={}, winner={}, candidates={}",
+                        entry.getKey(), winner, candidates);
             }
         }
         return Collections.unmodifiableMap(index);
