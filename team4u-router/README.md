@@ -237,7 +237,7 @@ RouteTrace<String> trace = manager.traceByPolicy(exprPolicy, request);
 使用 `@Routed` 标记接口或方法。`routerId` 既可以是一个静态的配置键，也可以是一个包含 **`${property}` 占位符** 的动态模板。
 
 *   **常量模式**：如果不包含 `${}`，则直接作为字面量常量。例如 `routerId = "payment-router"` 指向 `router.payment-router`。
-*   **变量模式**：包含 `${property}`，则从路由上下文（可以是 POJO 对象或简单类型）中解析并替换变量。例如 `routerId = "${tenantId}.router"`，如果上下文中的 `tenantId` 为 `alipay`，则指向 `router.alipay.router`。
+*   **变量模式**：包含 `${property}`，则从路由上下文中解析并替换变量。对象上下文支持多占位符；简单类型上下文只支持单占位符模板。
 *   **混合模式**：支持常量与变量混合，如 `routerId = "biz.${region}.router"`。
 
 ```java
@@ -250,7 +250,7 @@ public interface PaymentService {
 
 // 示例 2：简单类型上下文模式
 // 框架支持直接将 String, int 等简单类型作为路由上下文。
-// 此时，`${property}` 占位符会被直接替换为该简单类型参数的值。
+// 此时仅支持单个占位符；`${property}` 会被直接替换为该简单类型参数的值。
 public interface SimpleService {
     // 如果 userId=123，则最终查找 "router.user_123"
     @Routed(routerId = "router.user_${userId}")
@@ -352,7 +352,7 @@ service.process(myRequest);
 1.  **自动补全**：`RoutingManager` 默认前缀为 `router.`。调用 `route("my-id")` 时，框架会自动查找 `router.my-id`。
 2.  **逃生舱（自动去重）**：如果你的逻辑 ID 已经包含了前缀（如 `route("router.my-id")`），框架会智能识别并**不再重复拼接**。
 3.  **自定义前缀**：
-    *   **全局设置 (推荐)**：通过 `RouterBootstrap.global().configPrefix("biz.router.")` 进行一次性配置。这会同时自动刷新 `RoutingManager` 的全局实例。
+    *   **全局设置 (推荐)**：通过 `RouterBootstrap.global().configPrefix("biz.router.")` 在应用启动期进行一次性配置。全局 `RoutingManager` 首次初始化后前缀会被冻结，后续不允许再修改。
     *   **实例隔离**：在需要环境隔离时，通过 `RoutingManager.builder().configPrefix("other.router.")` 构建局部实例。
 
 > [!TIP]
@@ -369,6 +369,7 @@ service.process(myRequest);
 *   配置类型：`type: "map"`
 *   匹配逻辑：`rules.get(String.valueOf(request))`
 *   兜底机制：使用 `fallbackValue` 字段作为唯一的兜底机制。
+*   `null` 请求：当 `request == null` 时，不参与规则匹配，直接进入 `fallbackValue`。
 *   安全校验：内置重复 Key 校验，初始化时若检测到重复的 `condition` 会抛出异常，防止逻辑冲突。
 
 ### 2. ExpressionRouter (表达式路由)
@@ -426,6 +427,7 @@ if (result.isMatch()) {
 *   匹配逻辑：基于 Hash 取模。将请求（如 userId）映射为 `[0, totalWeight)` 范围内的整数，再通过 `TreeMap` 快速定位区间。
 *   配置友好：无需手动计算累加概率，直接配置各个规则的相对权重。
 *   高性能：$O(\log N)$ 查找复杂度，性能接近精准匹配。
+*   Trace 可读性：`result.getMatchedCondition()` 返回原始权重配置值；trace 的 `diagnosticDetail` 会额外展示 `hash` 和命中区间。
 
 ### 4. CompositeRouter (组合/代理路由)
 
@@ -433,8 +435,8 @@ if (result.isMatch()) {
 
 *   配置类型：`type: "composite"`
 *   瀑布流执行：按照 `ext.delegates` 中定义的 ID 顺序依次调用 `RoutingManager` 执行下层路由。
-*   短路截断：一旦其中一个子路由产生 **真实匹配 (MatchedConditions != null)**，则立即停止并返回该结果。
-*   降级叠加：如果子路由未触发真实匹配但返回了 `fallbackValue`，组合路由会临时持有该值，并继续尝试后续委托项，直到找到真实命中或返回最后一个触发的兜底值。
+*   短路截断：一旦其中一个子路由产生 `RULE_MATCH` 或 `SHORT_CIRCUITED`，则立即停止并返回该结果。
+*   降级叠加：如果子路由返回 `FALLBACK_MATCH`，组合路由会临时持有该值，并继续尝试后续委托项，直到找到真实命中或返回最后一个触发的兜底值。
 *   透明递归：支持嵌套组合（即子路由也可以是另一个 `composite` 类型）。
 
 #### 组合路由配置示例
@@ -458,7 +460,7 @@ if (result.isMatch()) {
 `RoutingManager` 提供了完善的机制以确保高性能与灵活性：
 *   配置实例缓存：内部通过 `ConfigDrivenRegistry` 自动监听配置变更，并缓存由配置生成的 `Router` 实例。
 *   自动发现机制：`RoutingManager` 在构建时会通过 `PolicyScanner` 自动扫描包及 SPI (`RouterFactory`)，实现零配置集成。
-*   声明式支持：提供 `@Routed`、`@RouteContext` 注解及 `RoutedProxyFactory`，实现零侵入的方法级动态路由。
+*   声明式支持：提供 `@Routed`、`@RouteContext` 注解及 `RoutedProxyFactory`，实现零侵入的方法级动态路由；默认通过 `BeanManager` 解析目标 Bean，也支持自定义 `BeanResolver`。
 *   高性能路由：`AbstractRouter` 封装了通用的类型转换逻辑，确保从原始配置到业务对象的平滑过渡。
 
 ---
@@ -466,6 +468,9 @@ if (result.isMatch()) {
 ## 路由诊断
 
 对于复杂的表达式路由，仅知道最终结果往往是不够的。`RoutingManager` 提供了 `trace` 接口，允许开发者查看完整的匹配轨迹。
+
+> [!IMPORTANT]
+> `trace()` 的主体永远是底层 `router.trace()` 结果。普通 `RouteInterceptor` 不会在 trace 中执行请求变异、短路或其他副作用逻辑；如果需要补充外围诊断事件，请实现 `TraceableRouteInterceptor`。
 
 ```java
 // 执行诊断路由
@@ -485,8 +490,10 @@ for (RuleTrace step : trace.getSteps()) {
 路由轨迹包含以下关键信息：
 - `routerType`: 实际执行的路由器类型。
 - `steps`: 每一个评估步骤的明细，包括是否匹配、原始条件以及底层诊断信息。
+- `events`: 可选的附加事件列表，由 `TraceableRouteInterceptor` 追加，不会覆盖 router 自身 `steps`。
 - `costMs`: 本次路由计算的耗时。
 - `result`: 最终的路由结果。
+    - `getOutcome()`：查看结果来源语义，固定为 `RULE_MATCH`、`FALLBACK_MATCH`、`NO_MATCH`、`SHORT_CIRCUITED` 之一。
     - `getMatchedCondition()`：获取首个命中的条件。
     - `getMatchedConditions()`：获取所有命中的条件列表（List<String>）。
         - 命中规则时：包含对应 Key 或表达式。
@@ -637,6 +644,8 @@ for (RuleTrace step : trace.getSteps()) {
 - **`RouteInterceptor`**：拦截器核心接口，继承自 `OrderedPolicy`。
     - `intercept(invocation)`：执行拦截逻辑。
     - `priority()`：定义执行优先级（越小优先级越高）。
+- **`TraceableRouteInterceptor`**：可选的观察型扩展接口。
+    - `beforeTrace(...)` / `afterTrace(...)`：仅用于补充 trace 事件，不会修改请求和结果。
 - **`RouteInvocation`**：拦截执行上下文。
     - `getRequest()` / `setRequest()`：允许在链条中增强或替换请求对象。
     - `proceed()`：驱动执行链向下流转。
@@ -711,12 +720,15 @@ public class SafeFallbackInterceptor implements RouteInterceptor {
             return invocation.proceed();
         } catch (Exception e) {
             log.error("Routing failed for: {}", invocation.getRouterId(), e);
-            // 发生异常时，短路并返回一个未匹配结果，防止上层业务中断
+            // 发生异常时，返回一个未匹配结果，防止上层业务中断
             return RouteResult.unmatch();
         }
     }
 }
 ```
+
+> [!TIP]
+> 如果你希望拦截器在 `trace()` 中留下额外诊断信息，请实现 `TraceableRouteInterceptor`。普通 `RouteInterceptor` 不会在 trace 中执行，因此它们的请求变异、短路和其他副作用不会反映到 trace 结果里。
 
 ---
 

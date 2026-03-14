@@ -30,6 +30,11 @@ public class RouteTrace<T> {
     private List<RuleTrace> steps = new ArrayList<>();
 
     /**
+     * 额外的观察事件
+     */
+    private List<RouteTraceEvent> events = new ArrayList<>();
+
+    /**
      * 耗时 (毫秒)
      */
     private long costMs;
@@ -41,5 +46,9 @@ public class RouteTrace<T> {
      */
     public void addStep(RuleTrace step) {
         this.steps.add(step);
+    }
+
+    public void addEvent(RouteTraceEvent event) {
+        this.events.add(event);
     }
 }

@@ -104,6 +104,24 @@ public class RoutedProxyTest {
         Assert.assertEquals("A", proxy.sayHello("abc"));
     }
 
+    @Test
+    public void testRoutedProxyWithCustomBeanResolver() {
+        configContext.put("router.custom_resolver",
+                "{\"type\":\"map\",\"rules\":[{\"condition\":\"A\",\"value\":\"ignoredBeanName\"}]}");
+
+        CustomResolverService proxy = RoutedProxyFactory.createProxy(
+                CustomResolverService.class,
+                routingManager,
+                beanName -> new CustomResolverService() {
+                    @Override
+                    public String route(String request) {
+                        return "resolved";
+                    }
+                });
+
+        Assert.assertEquals("resolved", proxy.route("A"));
+    }
+
     @Test(expected = RouteConfigException.class)
     public void testSimpleContextWithMultiplePlaceholdersShouldFail() {
         MultiPlaceholderSimpleTypeService proxy = RoutedProxyFactory.createProxy(MultiPlaceholderSimpleTypeService.class, routingManager);
@@ -145,6 +163,11 @@ public class RoutedProxyTest {
     @Routed(routerId = "router")
     public interface MultipleRouteContextService {
         String route(@RouteContext String a, @RouteContext String b);
+    }
+
+    @Routed(routerId = "custom_resolver")
+    public interface CustomResolverService {
+        String route(@RouteContext String request);
     }
 
     public static class ServiceA implements TestService, SimpleTypeService, UserTypeService {

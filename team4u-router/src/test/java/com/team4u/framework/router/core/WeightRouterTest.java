@@ -41,9 +41,9 @@ public class WeightRouterTest {
         Assert.assertEquals(1, trace.getSteps().size());
 
         RuleTrace step = trace.getSteps().get(0);
-        // 验证轨迹中的条件没有 "weight_hash:" 前缀
-        Assert.assertEquals(String.valueOf(hashValue), step.getCondition());
+        Assert.assertEquals(trace.getResult().getMatchedCondition(), step.getCondition());
         Assert.assertTrue(step.isMatched());
+        Assert.assertTrue(step.getDiagnosticDetail().toString().contains("hash=" + hashValue));
     }
 
     /**

@@ -76,7 +76,7 @@ public class MapRouter extends AbstractRouter {
             if (log.isTraceEnabled()) {
                 log.trace("Route matched: key [{}] -> value [{}]", routingKey, target);
             }
-            return RouteResult.matched((T) target, routingKey);
+            return RouteResult.ruleMatch((T) target, routingKey);
         }
 
         // 未匹配时记录日志 (仅在 TRACE 级别)
@@ -105,7 +105,7 @@ public class MapRouter extends AbstractRouter {
         if (rules.containsKey(routingKey)) {
             Object target = rules.get(routingKey);
             routeTrace.addStep(RuleTrace.normal(routingKey, true, null));
-            routeTrace.setResult(RouteResult.matched((T) target, routingKey));
+            routeTrace.setResult(RouteResult.ruleMatch((T) target, routingKey));
         } else {
             routeTrace.addStep(RuleTrace.normal(routingKey, false, null));
             routeTrace.addStep(RuleTrace.fallback(fallbackValue != null));

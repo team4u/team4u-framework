@@ -25,6 +25,10 @@ public class RouterBootstrap {
      */
     private final AtomicBoolean locked = new AtomicBoolean(false);
     /**
+     * 全局配置冻结标志。
+     */
+    private final AtomicBoolean frozen = new AtomicBoolean(false);
+    /**
      * 全局配置前缀，使用 volatile 保证可见性
      */
     private volatile String configPrefix = "router.";
@@ -53,7 +57,7 @@ public class RouterBootstrap {
     /**
      * 设置全局配置前缀
      * <p>
-     * 设置后将自动重置 RoutingManager 的全局实例，以应用新的前缀。
+     * 仅允许在全局 RoutingManager 初始化前调用。
      * </p>
      *
      * @param configPrefix 配置前缀
@@ -61,11 +65,8 @@ public class RouterBootstrap {
      * @throws IllegalStateException 如果已锁定
      */
     public RouterBootstrap configPrefix(String configPrefix) {
-        checkLocked();
+        checkMutable();
         this.configPrefix = configPrefix;
-        // 设置前缀后，由于 RoutingManager.global() 是在加载时就初始化的，
-        // 这里需要强制刷新全局实例以使前缀生效。
-        RoutingManager.setGlobal(RoutingManager.builder().build());
         return this;
     }
 
@@ -77,7 +78,7 @@ public class RouterBootstrap {
      * @throws IllegalStateException 如果已锁定
      */
     public RouterBootstrap addFactory(RouterFactory factory) {
-        checkLocked();
+        checkMutable();
         RouterFactoryRegistry.global().register(factory);
         return this;
     }
@@ -90,7 +91,7 @@ public class RouterBootstrap {
      * @throws IllegalStateException 如果已锁定
      */
     public RouterBootstrap addInterceptor(RouteInterceptor interceptor) {
-        checkLocked();
+        checkMutable();
         RouteInterceptorRegistry.global().register(interceptor);
         return this;
     }
@@ -115,6 +116,10 @@ public class RouterBootstrap {
         return locked.get();
     }
 
+    public boolean isFrozen() {
+        return frozen.get();
+    }
+
     /**
      * 解锁全局注册表
      * <p>
@@ -126,13 +131,33 @@ public class RouterBootstrap {
     }
 
     /**
-     * 检查锁定状态，如果已锁定则抛出异常
-     *
-     * @throws IllegalStateException 如果已锁定
+     * 全局配置冻结。
      */
-    private void checkLocked() {
+    void freezeConfig() {
+        frozen.set(true);
+    }
+
+    /**
+     * 测试专用重置入口。
+     */
+    public void resetForTest() {
+        locked.set(false);
+        frozen.set(false);
+        configPrefix = "router.";
+    }
+
+    /**
+     * 检查锁定/冻结状态，如果不可变则抛出异常
+     *
+     * @throws IllegalStateException 如果已锁定或已冻结
+     */
+    private void checkMutable() {
         if (locked.get()) {
             throw RouteConfigException.registryLocked();
+        }
+        if (frozen.get() || RoutingManager.isGlobalInitialized()) {
+            throw RouteConfigException.validationError(
+                    "configPrefix cannot be changed after global RoutingManager initialization");
         }
     }
 }

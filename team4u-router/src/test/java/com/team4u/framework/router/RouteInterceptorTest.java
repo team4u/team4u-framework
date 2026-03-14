@@ -94,7 +94,7 @@ public class RouteInterceptorTest {
             @Override
             public <T> RouteResult<T> intercept(RouteInvocation<T> invocation) {
                 // 不调用 invocation.proceed()，直接返回结果
-                return RouteResult.matched((T) "short-circuit", "hit");
+                return RouteResult.shortCircuited((T) "short-circuit", "hit");
             }
         };
 
@@ -106,6 +106,7 @@ public class RouteInterceptorTest {
         RouteResult<String> result = routingManager.routeByConfig(config, "k");
 
         Assert.assertEquals("short-circuit", result.getValue());
+        Assert.assertTrue(result.isShortCircuited());
     }
 
     @Test

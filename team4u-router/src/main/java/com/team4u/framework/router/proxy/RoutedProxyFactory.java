@@ -36,9 +36,18 @@ public class RoutedProxyFactory {
      * @return 代理实例
      */
     public static <T> T createProxy(Class<T> interfaceClass, RoutingManager routingManager) {
+        return createProxy(interfaceClass, routingManager, null);
+    }
+
+    /**
+     * 为指定接口创建一个声明式路由代理实例
+     */
+    public static <T> T createProxy(Class<T> interfaceClass,
+                                    RoutingManager routingManager,
+                                    BeanResolver beanResolver) {
         return ProxyBuilder.forClass(interfaceClass)
                 .asEmptyObject()
-                .addInterceptor(new RoutedMethodInterceptor(routingManager))
+                .addInterceptor(new RoutedMethodInterceptor(routingManager, beanResolver))
                 .build();
     }
 }

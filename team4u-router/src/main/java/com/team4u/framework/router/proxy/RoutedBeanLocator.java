@@ -18,6 +18,8 @@ import com.team4u.framework.router.api.model.RouteResult;
  */
 public class RoutedBeanLocator {
 
+    private static final BeanResolver DEFAULT_RESOLVER = beanName -> BeanManager.getInstance().getBean(beanName);
+
     /**
      * 根据路由规则和上下文，动态获取对应的 Bean 实例
      *
@@ -29,7 +31,7 @@ public class RoutedBeanLocator {
      * @throws RouteNotFoundException 当路由未命中或 Bean 不存在时抛出
      */
     public static <T> T locate(String routerId, Object routeContext, Class<T> expectedType) {
-        return locate(RoutingManager.global(), routerId, routeContext, expectedType);
+        return locate(RoutingManager.global(), DEFAULT_RESOLVER, routerId, routeContext, expectedType);
     }
 
     /**
@@ -46,6 +48,19 @@ public class RoutedBeanLocator {
     @SuppressWarnings("unchecked")
     public static <T> T locate(RoutingManager routingManager, String routerId, Object routeContext,
                                Class<T> expectedType) {
+        return locate(routingManager, DEFAULT_RESOLVER, routerId, routeContext, expectedType);
+    }
+
+    /**
+     * 根据自定义 BeanResolver 获取对应 Bean。
+     */
+    @SuppressWarnings("unchecked")
+    public static <T> T locate(RoutingManager routingManager,
+                               BeanResolver beanResolver,
+                               String routerId,
+                               Object routeContext,
+                               Class<T> expectedType) {
+        BeanResolver effectiveResolver = beanResolver != null ? beanResolver : DEFAULT_RESOLVER;
         // 1. 执行路由计算，期望策略中配置的 value 是目标 Bean 的名称
         RouteResult<String> result = routingManager.route(routerId, routeContext, String.class);
 
@@ -57,7 +72,7 @@ public class RoutedBeanLocator {
         String targetBeanName = result.getValue();
 
         // 2. 从统一的 BeanManager 中获取真实的执行实例
-        Object bean = BeanManager.getInstance().getBean(targetBeanName);
+        Object bean = effectiveResolver.getBean(targetBeanName);
 
         if (bean == null) {
             throw RouteNotFoundException.beanNotFound(routerId, targetBeanName);

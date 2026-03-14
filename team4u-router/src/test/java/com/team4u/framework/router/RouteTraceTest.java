@@ -2,10 +2,14 @@ package com.team4u.framework.router;
 
 import com.team4u.framework.router.api.interceptor.RouteInterceptor;
 import com.team4u.framework.router.api.interceptor.RouteInvocation;
+import com.team4u.framework.router.api.interceptor.RouteTraceObservation;
+import com.team4u.framework.router.api.interceptor.TraceableRouteInterceptor;
+import com.team4u.framework.router.api.model.RouteOutcome;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.model.RouteRule;
 import com.team4u.framework.router.api.trace.RouteTrace;
+import com.team4u.framework.router.api.trace.RouteTraceEvent;
 import com.team4u.framework.router.api.trace.RuleTrace;
 import org.junit.Assert;
 import org.junit.Test;
@@ -124,8 +128,8 @@ public class RouteTraceTest {
         String config = "{\"type\":\"map\",\"rules\":[{\"condition\":\"A\",\"value\":\"ValueA\"}]}";
         RouteTrace<String> trace = routingManager.traceByConfig(config, "B");
 
-        Assert.assertTrue(trace.getResult().isMatch());
-        Assert.assertEquals("ValueA", trace.getResult().getValue());
+        Assert.assertFalse(trace.getResult().isMatch());
+        Assert.assertTrue(trace.getEvents().isEmpty());
     }
 
     @Test
@@ -134,7 +138,7 @@ public class RouteTraceTest {
                 .addInterceptor(new RouteInterceptor() {
                     @Override
                     public <T> RouteResult<T> intercept(RouteInvocation<T> invocation) {
-                        return RouteResult.matched((T) "short", "hit");
+                        return RouteResult.shortCircuited((T) "short", "hit");
                     }
                 })
                 .build();
@@ -142,8 +146,42 @@ public class RouteTraceTest {
         String config = "{\"type\":\"map\",\"rules\":[{\"condition\":\"A\",\"value\":\"ValueA\"}]}";
         RouteTrace<String> trace = routingManager.traceByConfig(config, "B");
 
+        Assert.assertFalse(trace.getResult().isMatch());
+        Assert.assertEquals(RouteOutcome.NO_MATCH, trace.getResult().getOutcome());
+        Assert.assertEquals(2, trace.getSteps().size());
+    }
+
+    @Test
+    public void testTraceShouldCollectObserverEvents() {
+        RoutingManager routingManager = RoutingManager.builder()
+                .addInterceptor(new TraceableRouteInterceptor() {
+                    @Override
+                    public <T> RouteResult<T> intercept(RouteInvocation<T> invocation) {
+                        return invocation.proceed();
+                    }
+
+                    @Override
+                    public <T> Object beforeTrace(RouteTraceObservation<T> observation) {
+                        return "before:" + observation.getRouterId();
+                    }
+
+                    @Override
+                    public <T> Object afterTrace(RouteTraceObservation<T> observation) {
+                        return observation.getTrace().getResult().getOutcome().name();
+                    }
+                })
+                .build();
+
+        String config = "{\"type\":\"map\",\"rules\":[{\"condition\":\"A\",\"value\":\"ValueA\"}]}";
+        RouteTrace<String> trace = routingManager.traceByConfig(config, "A");
+
         Assert.assertTrue(trace.getResult().isMatch());
-        Assert.assertEquals("short", trace.getResult().getValue());
-        Assert.assertTrue(trace.getSteps().isEmpty());
+        Assert.assertEquals(2, trace.getEvents().size());
+        RouteTraceEvent before = trace.getEvents().get(0);
+        RouteTraceEvent after = trace.getEvents().get(1);
+        Assert.assertEquals("before", before.getPhase());
+        Assert.assertEquals("before:raw-config", before.getDetail());
+        Assert.assertEquals("after", after.getPhase());
+        Assert.assertEquals("RULE_MATCH", after.getDetail());
     }
 }

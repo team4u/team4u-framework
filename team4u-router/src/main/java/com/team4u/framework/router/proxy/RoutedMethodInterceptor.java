@@ -43,12 +43,13 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
      */
     private static final RoutedMethodInterceptor GLOBAL = new RoutedMethodInterceptor();
     private final RoutingManager routingManager;
+    private final BeanResolver beanResolver;
 
     /**
      * 使用全局默认的路由管理器构建拦截器
      */
     public RoutedMethodInterceptor() {
-        this(null);
+        this(null, null);
     }
 
     /**
@@ -57,7 +58,12 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
      * @param routingManager 自定义路由管理器
      */
     public RoutedMethodInterceptor(RoutingManager routingManager) {
+        this(routingManager, null);
+    }
+
+    public RoutedMethodInterceptor(RoutingManager routingManager, BeanResolver beanResolver) {
         this.routingManager = routingManager != null ? routingManager : RoutingManager.global();
+        this.beanResolver = beanResolver;
     }
 
     /**
@@ -150,6 +156,7 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
         // 注意：这里期望的类型就是当前方法所在的接口类
         Object targetBean = RoutedBeanLocator.locate(
                 this.routingManager,
+                this.beanResolver,
                 routerId,
                 context,
                 method.getDeclaringClass());

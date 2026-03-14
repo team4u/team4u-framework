@@ -11,10 +11,13 @@ import com.team4u.framework.router.api.exception.RouteConfigException;
 import com.team4u.framework.router.api.interceptor.DefaultRouteInvocation;
 import com.team4u.framework.router.api.interceptor.RouteInterceptor;
 import com.team4u.framework.router.api.interceptor.RouteInterceptorRegistry;
+import com.team4u.framework.router.api.interceptor.RouteTraceObservation;
 import com.team4u.framework.router.api.interceptor.RouteInvocation;
+import com.team4u.framework.router.api.interceptor.TraceableRouteInterceptor;
 import com.team4u.framework.router.api.model.RoutePolicy;
 import com.team4u.framework.router.api.model.RouteResult;
 import com.team4u.framework.router.api.trace.RouteTrace;
+import com.team4u.framework.router.api.trace.RouteTraceEvent;
 import com.team4u.framework.router.factory.CompositeRouterFactory;
 import com.team4u.framework.router.factory.RouterFactoryRegistry;
 import com.team4u.framework.router.parser.DefaultRoutePolicyParser;
@@ -25,6 +28,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Type;
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -36,7 +40,7 @@ public class RoutingManager {
 
     private static final Logger log = LoggerFactory.getLogger(RoutingManager.class);
 
-    private static volatile RoutingManager GLOBAL = builder().build();
+    private static volatile RoutingManager GLOBAL;
 
     /**
      * 路由工厂注册器，可供外部手工补充注册自定义工厂
@@ -74,14 +78,37 @@ public class RoutingManager {
      * 获取指定 ID 的 Router 对象
      */
     public static RoutingManager global() {
-        return GLOBAL;
+        RoutingManager current = GLOBAL;
+        if (current != null) {
+            return current;
+        }
+
+        synchronized (RoutingManager.class) {
+            if (GLOBAL == null) {
+                RouterBootstrap.global().freezeConfig();
+                GLOBAL = builder().build();
+            }
+            return GLOBAL;
+        }
     }
 
     /**
      * 重置或替换全局实例
      */
+    @Deprecated
     public static void setGlobal(RoutingManager routingManager) {
         GLOBAL = routingManager;
+        if (routingManager != null) {
+            RouterBootstrap.global().freezeConfig();
+        }
+    }
+
+    static boolean isGlobalInitialized() {
+        return GLOBAL != null;
+    }
+
+    public static void resetGlobalForTest() {
+        GLOBAL = null;
     }
 
     /**
@@ -297,25 +324,57 @@ public class RoutingManager {
     }
 
     /**
-     * 统一路由追踪逻辑，追踪结果基于拦截器链的真实执行结果
+     * 统一路由追踪逻辑，追踪结果始终以底层 router.trace() 为主体。
      */
     private <T> RouteTrace<T> doTrace(String routerId, Router router, Object request) {
         List<RouteInterceptor> interceptors = interceptorRegistry.getPolicies();
-        if (interceptors == null || interceptors.isEmpty()) {
-            return router != null ? router.trace(request) : emptyTrace();
+        List<TraceableRouteInterceptor> observers = collectTraceObservers(interceptors);
+        RouteTraceObservation<T> beforeObservation = new RouteTraceObservation<>(routerId, router, request, null);
+        List<RouteTraceEvent> beforeEvents = new ArrayList<>();
+        for (TraceableRouteInterceptor observer : observers) {
+            beforeEvents.add(captureTraceEvent(beforeObservation, observer, true));
         }
 
-        long start = System.currentTimeMillis();
-        RouteTrace<T> trace = new RouteTrace<>();
-        trace.setResult(doRoute(routerId, router, request, null));
-        trace.setCostMs(System.currentTimeMillis() - start);
-        if (router != null) {
-            String routerName = router.getClass().getSimpleName();
-            trace.setRouterType(routerName.endsWith("Router")
-                    ? routerName.substring(0, routerName.length() - "Router".length()).toLowerCase()
-                    : routerName.toLowerCase());
+        RouteTrace<T> trace = router != null ? router.trace(request) : emptyTrace();
+        for (RouteTraceEvent event : beforeEvents) {
+            trace.addEvent(event);
+        }
+
+        RouteTraceObservation<T> afterObservation = new RouteTraceObservation<>(routerId, router, request, trace);
+        for (int i = observers.size() - 1; i >= 0; i--) {
+            trace.addEvent(captureTraceEvent(afterObservation, observers.get(i), false));
         }
         return trace;
+    }
+
+    private List<TraceableRouteInterceptor> collectTraceObservers(List<RouteInterceptor> interceptors) {
+        List<TraceableRouteInterceptor> observers = new ArrayList<>();
+        if (interceptors == null || interceptors.isEmpty()) {
+            return observers;
+        }
+        for (RouteInterceptor interceptor : interceptors) {
+            if (interceptor instanceof TraceableRouteInterceptor) {
+                observers.add((TraceableRouteInterceptor) interceptor);
+            }
+        }
+        return observers;
+    }
+
+    private <T> RouteTraceEvent captureTraceEvent(RouteTraceObservation<T> observation,
+                                                  TraceableRouteInterceptor observer,
+                                                  boolean beforePhase) {
+        try {
+            Object detail = beforePhase ? observer.beforeTrace(observation) : observer.afterTrace(observation);
+            return new RouteTraceEvent(
+                    observer.getClass().getSimpleName(),
+                    beforePhase ? "before" : "after",
+                    detail);
+        } catch (Exception e) {
+            return new RouteTraceEvent(
+                    observer.getClass().getSimpleName(),
+                    beforePhase ? "before-error" : "after-error",
+                    e.getMessage());
+        }
     }
 
     /**
