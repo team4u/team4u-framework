@@ -10,11 +10,11 @@ import lombok.Data;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
+import java.lang.reflect.Proxy;
 import java.lang.reflect.UndeclaredThrowableException;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 
 /**
  * 日志追踪辅助支持类
@@ -38,15 +38,16 @@ public class LogTraceSupport {
         long start = System.currentTimeMillis();
         Method method = invocation.getMethod();
         Object[] args = invocation.getArguments();
+        Class<?> targetClass = options.getTargetClass() != null ? options.getTargetClass() : getTargetClass(invocation, method);
 
         // 统一构建命名的参数 Map，并执行主动脱敏
-        Map<String, Object> namedArgs = buildNamedArguments(invocation, method, args);
+        Map<String, Object> namedArgs = buildNamedArguments(targetClass, method, args);
 
         try {
             Object result = invocation.proceed();
             long cost = System.currentTimeMillis() - start;
 
-            Loggers loggers = Loggers.of(options.getTargetClass())
+            Loggers loggers = Loggers.of(targetClass)
                     .action(options.getAction())
                     .duration(cost)
                     .putAll(namedArgs)
@@ -68,7 +69,7 @@ public class LogTraceSupport {
             Throwable throwable = unwrap(e);
             long cost = System.currentTimeMillis() - start;
 
-            Loggers loggers = Loggers.of(options.getTargetClass())
+            Loggers loggers = Loggers.of(targetClass)
                     .action(options.getAction())
                     .duration(cost)
                     .putAll(namedArgs);
@@ -90,13 +91,12 @@ public class LogTraceSupport {
     /**
      * 构建命名的参数 Map，并根据规则执行主动脱敏
      */
-    private static Map<String, Object> buildNamedArguments(MethodInvocation invocation, Method method, Object[] args) {
+    private static Map<String, Object> buildNamedArguments(Class<?> targetClass, Method method, Object[] args) {
         Map<String, Object> namedArgs = new LinkedHashMap<>();
         if (args == null || args.length == 0) {
             return namedArgs;
         }
 
-        Class<?> targetClass = getTargetClass(invocation, method);
         Parameter[] parameters = getParameters(targetClass, method);
 
         for (int i = 0; i < args.length; i++) {
@@ -130,34 +130,54 @@ public class LogTraceSupport {
      * @return 实际承担业务逻辑的原始类对象
      */
     public static Class<?> getTargetClass(MethodInvocation invocation, Method method) {
-        Object target = invocation.getTarget();
-        if (target != null) {
-            return target.getClass();
+        if (invocation != null) {
+            Object target = invocation.getTarget();
+            if (target != null) {
+                return userClass(target.getClass());
+            }
+
+            Object proxy = invocation.getProxy();
+            if (proxy != null) {
+                Class<?> proxyClass = userClass(proxy.getClass());
+                if (proxyClass != null && proxyClass != Object.class && !Proxy.isProxyClass(proxyClass)) {
+                    return proxyClass;
+                }
+            }
         }
 
-        if (method != null && method.getDeclaringClass() != Object.class) {
+        if (method != null && method.getDeclaringClass() != null) {
             return method.getDeclaringClass();
         }
 
-        Object proxy = invocation.getProxy();
-        if (proxy == null) {
-            return Objects.requireNonNull(method).getDeclaringClass();
+        return Object.class;
+    }
+
+    private static Class<?> userClass(Class<?> clazz) {
+        if (clazz == null) {
+            return Object.class;
         }
 
-        Class<?> proxyClass = proxy.getClass();
-        if (proxyClass.getSuperclass() != null
-                && proxyClass.getSuperclass() != Object.class
-                && (proxyClass.getName().contains("ByteBuddy") || proxyClass.getName().contains("$$"))) {
-            return proxyClass.getSuperclass();
+        Class<?> current = clazz;
+        while (current != null && current != Object.class) {
+            String name = current.getName();
+            if (name.contains("$$") || name.contains("ByteBuddy")) {
+                current = current.getSuperclass();
+                continue;
+            }
+            return current;
         }
 
-        return proxyClass;
+        return Object.class;
     }
 
     /**
      * 获取方法参数定义，优先尝试从目标类查找以确保获取真实名称
      */
     private static Parameter[] getParameters(Class<?> targetClass, Method method) {
+        if (method == null) {
+            return null;
+        }
+
         try {
             Method targetMethod = targetClass.getDeclaredMethod(method.getName(), method.getParameterTypes());
             Parameter[] parameters = targetMethod.getParameters();

@@ -34,6 +34,35 @@ public class LogTraceSupportTest {
                 LogTraceSupport.getTargetClass(invocation, method));
     }
 
+    @Test
+    public void testGetTargetClassUsesUserClassForByteBuddyProxyWithoutTarget() throws Exception {
+        LogDynamicProxyTest.ThirdPartySmsClient proxy = ProxyBuilder.forClass(LogDynamicProxyTest.ThirdPartySmsClient.class)
+                .withDelegate(new LogDynamicProxyTest.ThirdPartySmsClient())
+                .build();
+        Method method = LogDynamicProxyTest.ThirdPartySmsClient.class.getMethod(
+                "send", String.class, String.class, String.class);
+
+        MethodInvocation invocation = new StubInvocation(proxy, null, method);
+        Assert.assertSame(LogDynamicProxyTest.ThirdPartySmsClient.class,
+                LogTraceSupport.getTargetClass(invocation, method));
+    }
+
+    @Test
+    public void testGetTargetClassFallsBackToMethodDeclaringClassWhenInvocationIsNull() throws Exception {
+        Method method = LogDynamicProxyTest.ThirdPartyPaymentApi.class.getMethod("pay", String.class, int.class);
+
+        Assert.assertSame(LogDynamicProxyTest.ThirdPartyPaymentApi.class,
+                LogTraceSupport.getTargetClass(null, method));
+    }
+
+    @Test
+    public void testGetTargetClassReturnsObjectClassWhenNoInvocationOrMethodData() {
+        MethodInvocation invocation = new StubInvocation(null, null, null);
+
+        Assert.assertSame(Object.class,
+                LogTraceSupport.getTargetClass(invocation, null));
+    }
+
     private static class StubInvocation implements MethodInvocation {
         private final Object proxy;
         private final Object target;

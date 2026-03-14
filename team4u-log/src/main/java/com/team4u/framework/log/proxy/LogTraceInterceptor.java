@@ -15,15 +15,15 @@ public class LogTraceInterceptor implements MethodInterceptor {
     @Override
     public Object invoke(MethodInvocation invocation) throws Throwable {
         Method method = invocation.getMethod();
+        Class<?> targetClass = LogTraceSupport.getTargetClass(invocation, method);
         // 获取追踪配置
-        AutoLogTrace config = getAnnotation(invocation, method);
+        AutoLogTrace config = getAnnotation(targetClass, method);
 
         // 无配置则直接放行
         if (config == null) {
             return invocation.proceed();
         }
 
-        Class<?> targetClass = LogTraceSupport.getTargetClass(invocation, method);
         String action = config.action().isEmpty() ? method.getName() : config.action();
 
         // 统一构建配置选项并执行
@@ -37,11 +37,10 @@ public class LogTraceInterceptor implements MethodInterceptor {
         return LogTraceSupport.proceed(invocation, options);
     }
 
-    private AutoLogTrace getAnnotation(MethodInvocation invocation, Method method) {
+    private AutoLogTrace getAnnotation(Class<?> targetClass, Method method) {
         AutoLogTrace config = method.getAnnotation(AutoLogTrace.class);
         if (config != null) return config;
 
-        Class<?> targetClass = LogTraceSupport.getTargetClass(invocation, method);
         if (targetClass != null && targetClass != Object.class) {
             try {
                 Method originalMethod = targetClass.getDeclaredMethod(method.getName(), method.getParameterTypes());
