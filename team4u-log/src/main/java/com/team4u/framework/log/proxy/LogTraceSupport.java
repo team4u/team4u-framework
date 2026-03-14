@@ -145,7 +145,7 @@ public class LogTraceSupport {
             }
         }
 
-        if (method != null && method.getDeclaringClass() != null) {
+        if (method != null) {
             return method.getDeclaringClass();
         }
 
