@@ -435,7 +435,7 @@ if (result.isMatch()) {
 
 *   配置类型：`type: "composite"`
 *   瀑布流执行：按照 `ext.delegates` 中定义的 ID 顺序依次调用 `RoutingManager` 执行下层路由。
-*   短路截断：一旦其中一个子路由产生 `RULE_MATCH` 或 `SHORT_CIRCUITED`，则立即停止并返回该结果。
+*   短路截断：一旦其中一个子路由产生 `RULE_MATCH` 或 `SHORT_CIRCUITED`，则立即停止并返回该结果。`SHORT_CIRCUITED` 一般不是子路由自身规则计算出来的，而是该子路由执行链中的 `RouteInterceptor` 直接返回了结果。
 *   降级叠加：如果子路由返回 `FALLBACK_MATCH`，组合路由会临时持有该值，并继续尝试后续委托项，直到找到真实命中或返回最后一个触发的兜底值。
 *   透明递归：支持嵌套组合（即子路由也可以是另一个 `composite` 类型）。
 
@@ -494,6 +494,7 @@ for (RuleTrace step : trace.getSteps()) {
 - `costMs`: 本次路由计算的耗时。
 - `result`: 最终的路由结果。
     - `getOutcome()`：查看结果来源语义，固定为 `RULE_MATCH`、`FALLBACK_MATCH`、`NO_MATCH`、`SHORT_CIRCUITED` 之一。
+      `RULE_MATCH` 表示命中了显式路由规则；`FALLBACK_MATCH` 表示未命中显式规则，但命中了兜底值；`NO_MATCH` 表示既未命中规则，也没有可用的兜底值；`SHORT_CIRCUITED` 通常表示某个上游 `RouteInterceptor` 没有继续调用 `proceed()`，而是直接返回了最终结果。
     - `getMatchedCondition()`：获取首个命中的条件。
     - `getMatchedConditions()`：获取所有命中的条件列表（List<String>）。
         - 命中规则时：包含对应 Key 或表达式。
@@ -723,6 +724,22 @@ public class SafeFallbackInterceptor implements RouteInterceptor {
             // 发生异常时，返回一个未匹配结果，防止上层业务中断
             return RouteResult.unmatch();
         }
+    }
+}
+```
+
+#### 场景 D：主动短路 (Short Circuit)
+
+当拦截器已经可以确定最终结果时，可以不再继续调用 `proceed()`，直接返回 `RouteResult.shortCircuited(...)`，后续拦截器和目标路由都不会再执行。
+
+```java
+public class RouterBypassInterceptor implements RouteInterceptor {
+    @Override
+    public <T> RouteResult<T> intercept(RouteInvocation<T> invocation) {
+        if (shouldBypass(invocation.getRequest())) {
+            return RouteResult.shortCircuited((T) "degraded-target", "bypass");
+        }
+        return invocation.proceed();
     }
 }
 ```
