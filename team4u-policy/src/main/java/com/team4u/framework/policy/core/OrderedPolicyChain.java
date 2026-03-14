@@ -1,11 +1,11 @@
 package com.team4u.framework.policy.core;
 
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 import com.team4u.framework.policy.api.ContextPolicy;
 import com.team4u.framework.policy.api.PolicyRegistry;
 import com.team4u.framework.policy.exception.PolicyException;
 import lombok.Getter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.*;
 import java.util.function.Predicate;
@@ -28,6 +28,10 @@ public class OrderedPolicyChain<C, P extends ContextPolicy<C>> implements Policy
      * 策略类型
      */
     private final Class<P> policyClass;
+    /**
+     * 重复注册处理模式
+     */
+    private final DuplicatePolicyMode duplicatePolicyMode;
 
     /**
      * 策略列表缓存 (volatile 保证可见性，存储不可变列表)
@@ -35,7 +39,12 @@ public class OrderedPolicyChain<C, P extends ContextPolicy<C>> implements Policy
     private volatile List<P> policies = Collections.emptyList();
 
     public OrderedPolicyChain(Class<P> policyClass) {
+        this(policyClass, DuplicatePolicyMode.APPEND);
+    }
+
+    public OrderedPolicyChain(Class<P> policyClass, DuplicatePolicyMode duplicatePolicyMode) {
         this.policyClass = policyClass;
+        this.duplicatePolicyMode = duplicatePolicyMode == null ? DuplicatePolicyMode.APPEND : duplicatePolicyMode;
     }
 
     @Override
@@ -45,8 +54,7 @@ public class OrderedPolicyChain<C, P extends ContextPolicy<C>> implements Policy
         }
 
         List<P> newPolicies = new ArrayList<>(policies);
-        newPolicies.removeIf(p -> p.getClass().equals(policy.getClass()));
-        newPolicies.add(policy);
+        addPolicy(newPolicies, policy);
         updatePolicies(newPolicies);
 
         log.info("OrderedPolicyChain|register|success|policyClass={}|policy={}|count={}",
@@ -65,8 +73,7 @@ public class OrderedPolicyChain<C, P extends ContextPolicy<C>> implements Policy
             if (!isValidPolicy(policy)) {
                 continue;
             }
-            newPolicies.removeIf(p -> p.getClass().equals(policy.getClass()));
-            newPolicies.add(policy);
+            addPolicy(newPolicies, policy);
             addedCount++;
         }
 
@@ -119,6 +126,13 @@ public class OrderedPolicyChain<C, P extends ContextPolicy<C>> implements Policy
     private void updatePolicies(List<P> newPolicies) {
         Collections.sort(newPolicies);
         this.policies = Collections.unmodifiableList(newPolicies);
+    }
+
+    private void addPolicy(List<P> newPolicies, P policy) {
+        if (duplicatePolicyMode == DuplicatePolicyMode.REPLACE_BY_CLASS) {
+            newPolicies.removeIf(p -> p.getClass().equals(policy.getClass()));
+        }
+        newPolicies.add(policy);
     }
 
     @Override

@@ -184,15 +184,93 @@ public class OrderedPolicyChainTest {
     }
 
     @Test
-    public void testRegisterReplace() {
+    public void testRegisterAppendByDefault() {
         OrderedPolicyChain<String, TestPolicy> chain = new OrderedPolicyChain<>(TestPolicy.class);
 
-        // 注册同类策略 (相同实现类会被替换)
+        // 默认模式为追加，同类策略应共存
         chain.register(new DummyPolicyA(10));
-        chain.register(new DummyPolicyA(20)); // 应替换
+        chain.register(new DummyPolicyA(20));
 
-        Assert.assertEquals("同类策略应当只保留一个", 1, chain.getPolicies().size());
+        Assert.assertEquals("默认模式下同类策略应当共存", 2, chain.getPolicies().size());
+        Assert.assertEquals("优先级更高的应排在前面", 10, chain.getPolicies().get(0).priority());
+        Assert.assertEquals("后注册的低优先级策略应排在后面", 20, chain.getPolicies().get(1).priority());
+    }
+
+    @Test
+    public void testRegisterReplaceByClassMode() {
+        OrderedPolicyChain<String, TestPolicy> chain = new OrderedPolicyChain<>(
+                TestPolicy.class, DuplicatePolicyMode.REPLACE_BY_CLASS);
+
+        chain.register(new DummyPolicyA(10));
+        chain.register(new DummyPolicyA(20));
+
+        Assert.assertEquals("替换模式下同类策略应当只保留一个", 1, chain.getPolicies().size());
         Assert.assertEquals("应当保留的是后注册的", 20, chain.getPolicies().get(0).priority());
+    }
+
+    @Test
+    public void testSamePriorityKeepRegistrationOrder() {
+        OrderedPolicyChain<String, TestPolicy> chain = new OrderedPolicyChain<>(TestPolicy.class);
+
+        DummyPolicyA first = new DummyPolicyA(10);
+        DummyPolicyB second = new DummyPolicyB(10);
+        DummyPolicyC third = new DummyPolicyC(10);
+
+        chain.register(first);
+        chain.register(second);
+        chain.register(third);
+
+        Assert.assertSame("相同优先级时应保留注册顺序", first, chain.getPolicies().get(0));
+        Assert.assertSame("相同优先级时应保留注册顺序", second, chain.getPolicies().get(1));
+        Assert.assertSame("相同优先级时应保留注册顺序", third, chain.getPolicies().get(2));
+    }
+
+    @Test
+    public void testReplaceModeReRegisterChangesOrderWithinSamePriority() {
+        OrderedPolicyChain<String, TestPolicy> chain = new OrderedPolicyChain<>(
+                TestPolicy.class, DuplicatePolicyMode.REPLACE_BY_CLASS);
+
+        DummyPolicyA first = new DummyPolicyA(10);
+        DummyPolicyB second = new DummyPolicyB(10);
+        DummyPolicyA replacement = new DummyPolicyA(10);
+
+        chain.register(first);
+        chain.register(second);
+        chain.register(replacement);
+
+        Assert.assertSame("重新注册后应视为新的注册时刻", second, chain.getPolicies().get(0));
+        Assert.assertSame("替换后的实例应排到同优先级末尾", replacement, chain.getPolicies().get(1));
+    }
+
+    @Test
+    public void testAddAllReplaceByClassMode() {
+        OrderedPolicyChain<String, TestPolicy> chain = new OrderedPolicyChain<>(
+                TestPolicy.class, DuplicatePolicyMode.REPLACE_BY_CLASS);
+
+        chain.register(new DummyPolicyA(10));
+        chain.addAll(Arrays.asList(new DummyPolicyA(20), new DummyPolicyB(5)));
+
+        Assert.assertEquals("替换模式下同类 addAll 后应只保留一份", 2, chain.getPolicies().size());
+        Assert.assertEquals("新增的高优先级策略应排在前面", DummyPolicyB.class, chain.getPolicies().get(0).getClass());
+        Assert.assertEquals("同类策略应保留批量注册中的最新实例", 20, chain.getPolicies().get(1).priority());
+    }
+
+    @Test
+    public void testAddAllRegistryReplaceByClassMode() {
+        OrderedPolicyChain<String, TestPolicy> chain1 = new OrderedPolicyChain<>(
+                TestPolicy.class, DuplicatePolicyMode.REPLACE_BY_CLASS);
+        OrderedPolicyChain<String, TestPolicy> chain2 = new OrderedPolicyChain<>(
+                TestPolicy.class, DuplicatePolicyMode.REPLACE_BY_CLASS);
+
+        chain1.register(new DummyPolicyA(10));
+        chain2.register(new DummyPolicyA(20));
+        chain2.register(new DummyPolicyB(5));
+
+        chain1.addAll(chain2);
+
+        Assert.assertEquals("合并 registry 后同类策略应保持替换语义", 2, chain1.getPolicies().size());
+        Assert.assertEquals(DummyPolicyB.class, chain1.getPolicies().get(0).getClass());
+        Assert.assertEquals(20, chain1.getPolicies().get(1).priority());
     }
 
     @Test

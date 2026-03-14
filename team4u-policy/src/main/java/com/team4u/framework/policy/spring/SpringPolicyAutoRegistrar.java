@@ -1,14 +1,14 @@
 package com.team4u.framework.policy.spring;
 
+import com.team4u.framework.policy.api.PolicyRegistry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.team4u.framework.policy.api.PolicyRegistry;
 import org.springframework.beans.factory.SmartInitializingSingleton;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 
-import java.util.Collection;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * Spring 策略自动注册器
@@ -21,6 +21,7 @@ import java.util.Map;
 public class SpringPolicyAutoRegistrar implements SmartInitializingSingleton, ApplicationContextAware {
 
     private static final Logger log = LoggerFactory.getLogger(SpringPolicyAutoRegistrar.class);
+    private final AtomicBoolean initialized = new AtomicBoolean(false);
     private ApplicationContext context;
 
     @Override
@@ -31,6 +32,10 @@ public class SpringPolicyAutoRegistrar implements SmartInitializingSingleton, Ap
     @Override
     @SuppressWarnings({"unchecked", "rawtypes"})
     public void afterSingletonsInstantiated() {
+        if (!initialized.compareAndSet(false, true)) {
+            log.debug("SpringPolicyAutoRegistrar|autoRegister|skip|reason=alreadyInitialized");
+            return;
+        }
         // 1. 获取 Spring 容器中所有的策略注册表 (如 KeyedPolicyRegistry, OrderedPolicyChain)
         Map<String, PolicyRegistry> registries = context.getBeansOfType(PolicyRegistry.class);
 
