@@ -95,7 +95,7 @@ public class DefaultConfigManager implements ConfigManager {
         // 配置热重载管理器，防抖窗口由外部传入，支持测试环境配置为 0 以实现同步重载
         this.hotReloadManager = new HotReloadManager(
                 snapshotRef,
-                () -> this.sourceRegistry.getPolicies(),
+                this.sourceRegistry::getPolicies,
                 this.aggregator,
                 this.versionGenerator,
                 debounceWindowMs,
@@ -230,8 +230,6 @@ public class DefaultConfigManager implements ConfigManager {
         }
     }
 
-
-
     @Override
     public AutoCloseable registerChangeListener(String keyPattern, ConfigChangeListener listener) {
         if (StringUtil.isBlank(keyPattern) || listener == null) {
@@ -244,6 +242,9 @@ public class DefaultConfigManager implements ConfigManager {
         return () -> listeners.remove(registration);
     }
 
+    /**
+     * 防抖延迟时间（毫秒）
+     */
     public void setDebounceWindowMs(long debounceWindowMs) {
         this.hotReloadManager.setDebounceWindowMs(debounceWindowMs);
     }
