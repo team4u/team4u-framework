@@ -1,8 +1,10 @@
 package com.team4u.framework.base.jdbc;
 
+import com.team4u.framework.base.convert.ConvertUtil;
+import com.team4u.framework.base.convert.TypeConversionException;
+
 import javax.sql.DataSource;
 import java.lang.reflect.Field;
-import java.math.BigDecimal;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
@@ -91,7 +93,7 @@ public class JdbcUtil {
             try (ResultSet rs = ps.executeQuery()) {
                 if (rs.next()) {
                     Object value = rs.getObject(1);
-                    return value == null ? null : type.cast(value);
+                    return convertScalarValue(value, type, sql);
                 }
                 return null;
             }
@@ -331,7 +333,7 @@ public class JdbcUtil {
                 }
 
                 field.setAccessible(true);
-                field.set(obj, convertValue(value, field.getType()));
+                field.set(obj, convertFieldValue(value, field, clazz));
             }
 
             return obj;
@@ -383,44 +385,73 @@ public class JdbcUtil {
         return sb.toString();
     }
 
-    /**
-     * 基础类型转换
-     */
-    private static Object convertValue(Object value, Class<?> targetType) {
+    private static <T> T convertScalarValue(Object value, Class<T> targetType, String sql) throws SQLException {
         if (value == null) {
             return null;
         }
 
-        if (targetType.isAssignableFrom(value.getClass())) {
+        if (targetType.isInstance(value)) {
+            return targetType.cast(value);
+        }
+
+        try {
+            T converted = ConvertUtil.convert(targetType, value);
+            if (converted != null) {
+                return converted;
+            }
+        } catch (TypeConversionException e) {
+            throw buildScalarConversionException(sql, targetType, value, e);
+        }
+
+        throw buildScalarConversionException(sql, targetType, value, null);
+    }
+
+    private static Object convertFieldValue(Object value, Field field, Class<?> beanType) throws SQLException {
+        if (value == null) {
+            return null;
+        }
+
+        Class<?> fieldType = field.getType();
+        if (fieldType.isInstance(value)) {
             return value;
         }
 
-        if (targetType == Integer.class || targetType == int.class) {
-            return ((Number) value).intValue();
-        }
-        if (targetType == Long.class || targetType == long.class) {
-            return ((Number) value).longValue();
-        }
-        if (targetType == Double.class || targetType == double.class) {
-            return ((Number) value).doubleValue();
-        }
-        if (targetType == Float.class || targetType == float.class) {
-            return ((Number) value).floatValue();
-        }
-        if (targetType == Short.class || targetType == short.class) {
-            return ((Number) value).shortValue();
-        }
-        if (targetType == BigDecimal.class && value instanceof Number) {
-            return BigDecimal.valueOf(((Number) value).doubleValue());
-        }
-        if (targetType == String.class) {
-            return String.valueOf(value);
-        }
-        if (targetType == java.util.Date.class && value instanceof Timestamp) {
-            return new java.util.Date(((Timestamp) value).getTime());
+        try {
+            Object converted = ConvertUtil.convert(field.getGenericType(), value);
+            if (converted != null) {
+                return converted;
+            }
+        } catch (TypeConversionException e) {
+            throw new SQLException("字段转换失败: bean=" + beanType.getName()
+                    + ", field=" + field.getName()
+                    + ", targetType=" + field.getGenericType().getTypeName()
+                    + ", sourceType=" + value.getClass().getName()
+                    + ", source=" + summarizeValue(value), e);
         }
 
-        return value;
+        throw new SQLException("字段转换失败: bean=" + beanType.getName()
+                + ", field=" + field.getName()
+                + ", targetType=" + field.getGenericType().getTypeName()
+                + ", sourceType=" + value.getClass().getName()
+                + ", source=" + summarizeValue(value));
+    }
+
+    private static <T> SQLException buildScalarConversionException(String sql,
+                                                                   Class<T> targetType,
+                                                                   Object value,
+                                                                   Throwable cause) {
+        return new SQLException("标量转换失败: sql=" + sql
+                + ", targetType=" + targetType.getName()
+                + ", sourceType=" + value.getClass().getName()
+                + ", source=" + summarizeValue(value), cause);
+    }
+
+    private static String summarizeValue(Object value) {
+        String text = String.valueOf(value);
+        if (text.length() <= 120) {
+            return text;
+        }
+        return text.substring(0, 117) + "...";
     }
 
     /**

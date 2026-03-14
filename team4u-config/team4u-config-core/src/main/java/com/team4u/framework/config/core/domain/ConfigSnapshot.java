@@ -276,7 +276,7 @@ public class ConfigSnapshot {
      * @return 剥离前缀后的键值映射表
      */
     public Map<String, String> getByPrefix(String prefix) {
-        if (CollectionUtil.isEmpty(entries) || StringUtil.isBlank(prefix)) {
+        if (MapUtil.isEmpty(entries) || StringUtil.isBlank(prefix)) {
             return Collections.emptyMap();
         }
 

@@ -7,14 +7,13 @@ import com.team4u.framework.base.config.StringConfigParser;
 import com.team4u.framework.base.util.StringUtil;
 
 /**
- * 动态实例缓存提供者 (纯粹增强型)
+ * 动态实例缓存提供者
  * <p>
- * 将输入源 (Input) 直接映射为最终实例 (Instance)。
+ * 将输入源 (Input) 与配置对象 (Config) 分别映射到最终实例 (Instance)。
  * <p>
  * 核心特性：
- * 1. <b>纯粹对象键</b>：直接利用当前传入的 Input 或 Config 对象的 {@code equals/hashCode} 作为唯一标识。
- * 只要同一种调用路径下的输入内容一致，即可复用缓存实例；本类不会主动对 Input 和 Config 做跨键归一化。
- * 2. <b>分段锁并发控制</b>：保留了 Striped Locking 机制，在高并发写入（Cache Miss）时避免全局锁竞争。
+ * 1. <b>输入/配置双缓存</b>：Input 与 Config 分别维护独立缓存，避免键空间污染。
+ * 2. <b>分段锁并发控制</b>：在高并发 Cache Miss 时减少不必要的全局锁竞争。
  * 3. <b>双重获取支持</b>：支持通过原始 Input 获取，也支持通过已解析的 Config 直接获取。
  *
  * @param <I> 输入源类型 (Input)，必须正确实现 hashCode/equals
@@ -25,11 +24,14 @@ import com.team4u.framework.base.util.StringUtil;
 public class DynamicInstanceProvider<I, C, T> {
 
     /**
-     * 实例缓存
-     * Key: I (输入对象) 或 C (配置对象)
-     * Value: T (最终实例)
+     * 输入缓存
      */
-    private final Cache<Object, T> cache;
+    private final Cache<I, T> inputCache;
+
+    /**
+     * 配置缓存
+     */
+    private final Cache<C, T> configCache;
 
     /**
      * 配置解析器 (Input -> Config)
@@ -42,19 +44,26 @@ public class DynamicInstanceProvider<I, C, T> {
     private final InstanceFactory<C, T> instanceFactory;
 
     /**
-     * 分段锁桶 (Striped Locks)
-     * 用于细粒度控制并发创建实例的过程
+     * 输入分段锁桶
      */
-    private final Object[] locks = new Object[128];
+    private final Object[] inputLocks = new Object[128];
 
-    public DynamicInstanceProvider(Cache<Object, T> cache,
+    /**
+     * 配置分段锁桶
+     */
+    private final Object[] configLocks = new Object[128];
+
+    public DynamicInstanceProvider(Cache<I, T> inputCache,
+                                   Cache<C, T> configCache,
                                    ConfigParser<I, C> configParser,
                                    InstanceFactory<C, T> instanceFactory) {
-        this.cache = cache;
+        this.inputCache = inputCache;
+        this.configCache = configCache;
         this.configParser = configParser;
         this.instanceFactory = instanceFactory;
-        for (int i = 0; i < locks.length; i++) {
-            locks[i] = new Object();
+        for (int i = 0; i < inputLocks.length; i++) {
+            inputLocks[i] = new Object();
+            configLocks[i] = new Object();
         }
     }
 
@@ -64,6 +73,7 @@ public class DynamicInstanceProvider<I, C, T> {
                                                                        ConfigParser<I, C> configParser,
                                                                        InstanceFactory<C, T> instanceFactory) {
         return new DynamicInstanceProvider<>(
+                CacheUtil.newLRUCache(capacity),
                 CacheUtil.newLRUCache(capacity),
                 configParser,
                 instanceFactory);
@@ -80,9 +90,9 @@ public class DynamicInstanceProvider<I, C, T> {
     /**
      * 根据输入源获取实例
      * <p>
-     * 流程：Input -> (Cache Miss) -> Parse Config -> Create Instance
+     * 流程：Input -> inputCache -> Parse Config -> Create Instance
      *
-     * @param input 输入源 (作为缓存 Key)
+     * @param input 输入源
      * @return 实例，如果 input 为 null 或解析失败则返回 null
      */
     public T get(I input) {
@@ -90,21 +100,17 @@ public class DynamicInstanceProvider<I, C, T> {
             return null;
         }
 
-        // 1. Fast-path: 查缓存
-        T instance = cache.get(input);
+        T instance = inputCache.get(input);
         if (instance != null) {
             return instance;
         }
 
-        // 2. Slow-path: 加锁创建
-        synchronized (getLock(input)) {
-            // DCL (Double Check Lock)
-            instance = cache.get(input);
+        synchronized (getInputLock(input)) {
+            instance = inputCache.get(input);
             if (instance != null) {
                 return instance;
             }
 
-            // 解析配置
             if (input instanceof String && StringUtil.isBlank((String) input)) {
                 return null;
             }
@@ -113,11 +119,10 @@ public class DynamicInstanceProvider<I, C, T> {
                 return null;
             }
 
-            // 创建实例
             instance = instanceFactory.create(config);
 
             if (instance != null) {
-                cache.put(input, instance);
+                inputCache.put(input, instance);
             }
             return instance;
         }
@@ -126,9 +131,9 @@ public class DynamicInstanceProvider<I, C, T> {
     /**
      * 直接根据配置对象获取实例
      * <p>
-     * 适用于已经持有 Config 对象的场景。
+     * 适用于已经持有 Config 对象的场景，结果会缓存在 configCache 中。
      *
-     * @param config 配置对象 (作为缓存 Key)
+     * @param config 配置对象
      * @return 实例
      */
     public T getByConfig(C config) {
@@ -136,13 +141,13 @@ public class DynamicInstanceProvider<I, C, T> {
             return null;
         }
 
-        T instance = cache.get(config);
+        T instance = configCache.get(config);
         if (instance != null) {
             return instance;
         }
 
-        synchronized (getLock(config)) {
-            instance = cache.get(config);
+        synchronized (getConfigLock(config)) {
+            instance = configCache.get(config);
             if (instance != null) {
                 return instance;
             }
@@ -150,30 +155,52 @@ public class DynamicInstanceProvider<I, C, T> {
             instance = instanceFactory.create(config);
 
             if (instance != null) {
-                cache.put(config, instance);
+                configCache.put(config, instance);
             }
             return instance;
         }
     }
 
     /**
-     * 移除缓存
+     * 移除输入缓存
      */
-    public void invalidate(Object key) {
-        cache.remove(key);
+    public void invalidateInput(I input) {
+        inputCache.remove(input);
+    }
+
+    /**
+     * 移除配置缓存
+     */
+    public void invalidateConfig(C config) {
+        configCache.remove(config);
     }
 
     public void clear() {
-        cache.clear();
+        inputCache.clear();
+        configCache.clear();
     }
 
-    public int size() {
-        return cache.size();
+    /**
+     * 输入缓存大小
+     */
+    public int inputCacheSize() {
+        return inputCache.size();
+    }
+
+    /**
+     * 配置缓存大小
+     */
+    public int configCacheSize() {
+        return configCache.size();
     }
 
     // ---------------- Internal ----------------
 
-    private Object getLock(Object key) {
-        return locks[(key.hashCode() & 0x7FFFFFFF) % locks.length];
+    private Object getInputLock(I key) {
+        return inputLocks[(key.hashCode() & 0x7FFFFFFF) % inputLocks.length];
+    }
+
+    private Object getConfigLock(C key) {
+        return configLocks[(key.hashCode() & 0x7FFFFFFF) % configLocks.length];
     }
 }

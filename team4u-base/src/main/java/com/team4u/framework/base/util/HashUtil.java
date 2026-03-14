@@ -80,13 +80,119 @@ public class HashUtil {
     /**
      * 计算 64 位 MurmurHash3 值
      * <p>
-     * 这是一种极简版的实现，通过组合 32 位哈希结果来生成 64 位哈希值。
-     *
+     * 采用 MurmurHash3 x64_128(seed=0) 的低 64 位输出。
+     * </p>
      * @param data 待计算的字节数组
      * @return 64 位哈希值
      */
     public static long murmur64(byte[] data) {
-        int hash32 = murmur32(data);
-        return ((long) hash32 << 32) | (hash32 & 0xFFFFFFFFL);
+        final long c1 = 0x87c37b91114253d5L;
+        final long c2 = 0x4cf5ad432745937fL;
+        long h1 = 0L;
+        long h2 = 0L;
+        int length = data.length;
+        int nblocks = length >> 4;
+
+        for (int i = 0; i < nblocks; i++) {
+            int index = i << 4;
+            long k1 = getLittleEndianLong(data, index);
+            long k2 = getLittleEndianLong(data, index + 8);
+
+            k1 *= c1;
+            k1 = Long.rotateLeft(k1, 31);
+            k1 *= c2;
+            h1 ^= k1;
+
+            h1 = Long.rotateLeft(h1, 27);
+            h1 += h2;
+            h1 = h1 * 5 + 0x52dce729;
+
+            k2 *= c2;
+            k2 = Long.rotateLeft(k2, 33);
+            k2 *= c1;
+            h2 ^= k2;
+
+            h2 = Long.rotateLeft(h2, 31);
+            h2 += h1;
+            h2 = h2 * 5 + 0x38495ab5;
+        }
+
+        long k1 = 0L;
+        long k2 = 0L;
+        int tailStart = nblocks << 4;
+        switch (length & 15) {
+            case 15:
+                k2 ^= ((long) data[tailStart + 14] & 0xffL) << 48;
+            case 14:
+                k2 ^= ((long) data[tailStart + 13] & 0xffL) << 40;
+            case 13:
+                k2 ^= ((long) data[tailStart + 12] & 0xffL) << 32;
+            case 12:
+                k2 ^= ((long) data[tailStart + 11] & 0xffL) << 24;
+            case 11:
+                k2 ^= ((long) data[tailStart + 10] & 0xffL) << 16;
+            case 10:
+                k2 ^= ((long) data[tailStart + 9] & 0xffL) << 8;
+            case 9:
+                k2 ^= ((long) data[tailStart + 8] & 0xffL);
+                k2 *= c2;
+                k2 = Long.rotateLeft(k2, 33);
+                k2 *= c1;
+                h2 ^= k2;
+            case 8:
+                k1 ^= ((long) data[tailStart + 7] & 0xffL) << 56;
+            case 7:
+                k1 ^= ((long) data[tailStart + 6] & 0xffL) << 48;
+            case 6:
+                k1 ^= ((long) data[tailStart + 5] & 0xffL) << 40;
+            case 5:
+                k1 ^= ((long) data[tailStart + 4] & 0xffL) << 32;
+            case 4:
+                k1 ^= ((long) data[tailStart + 3] & 0xffL) << 24;
+            case 3:
+                k1 ^= ((long) data[tailStart + 2] & 0xffL) << 16;
+            case 2:
+                k1 ^= ((long) data[tailStart + 1] & 0xffL) << 8;
+            case 1:
+                k1 ^= ((long) data[tailStart] & 0xffL);
+                k1 *= c1;
+                k1 = Long.rotateLeft(k1, 31);
+                k1 *= c2;
+                h1 ^= k1;
+            default:
+                break;
+        }
+
+        h1 ^= length;
+        h2 ^= length;
+
+        h1 += h2;
+        h2 += h1;
+
+        h1 = fmix64(h1);
+        h2 = fmix64(h2);
+
+        h1 += h2;
+        return h1;
+    }
+
+    private static long getLittleEndianLong(byte[] data, int index) {
+        return ((long) data[index] & 0xffL)
+                | (((long) data[index + 1] & 0xffL) << 8)
+                | (((long) data[index + 2] & 0xffL) << 16)
+                | (((long) data[index + 3] & 0xffL) << 24)
+                | (((long) data[index + 4] & 0xffL) << 32)
+                | (((long) data[index + 5] & 0xffL) << 40)
+                | (((long) data[index + 6] & 0xffL) << 48)
+                | (((long) data[index + 7] & 0xffL) << 56);
+    }
+
+    private static long fmix64(long value) {
+        value ^= value >>> 33;
+        value *= 0xff51afd7ed558ccdL;
+        value ^= value >>> 33;
+        value *= 0xc4ceb9fe1a85ec53L;
+        value ^= value >>> 33;
+        return value;
     }
 }

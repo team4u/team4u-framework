@@ -43,18 +43,18 @@ public class StringUtilTest {
     }
 
     @Test
-    public void testFormat() {
+    public void testSimpleFormat() {
         // 正常格式化
-        Assert.assertEquals("格式化结果不匹配", "Hello world", StringUtil.format("Hello {}", "world"));
+        Assert.assertEquals("格式化结果不匹配", "Hello world", StringUtil.simpleFormat("Hello {}", "world"));
         // 多个参数
-        Assert.assertEquals("多参数格式化结果不匹配", "a=1, b=2", StringUtil.format("a={}, b={}", 1, 2));
+        Assert.assertEquals("多参数格式化结果不匹配", "a=1, b=2", StringUtil.simpleFormat("a={}, b={}", 1, 2));
         // 参数为 null 时会拼接 "null"
-        Assert.assertEquals("参数为 null 时应拼接 null 字符串", "a=null, b=2", StringUtil.format("a={}, b={}", null, 2));
+        Assert.assertEquals("参数为 null 时应拼接 null 字符串", "a=null, b=2", StringUtil.simpleFormat("a={}, b={}", null, 2));
         // 参数过多
-        Assert.assertEquals("参数过多时应忽略冗余参数", "a=1", StringUtil.format("a={}", 1, 2));
+        Assert.assertEquals("参数过多时应忽略冗余参数", "a=1", StringUtil.simpleFormat("a={}", 1, 2));
         // 模板为空
-        Assert.assertNull("模板为 null 应返回 null", StringUtil.format(null, "any"));
-        Assert.assertEquals("模板为空串应返回空串", "", StringUtil.format("", "any"));
+        Assert.assertNull("模板为 null 应返回 null", StringUtil.simpleFormat(null, "any"));
+        Assert.assertEquals("模板为空串应返回空串", "", StringUtil.simpleFormat("", "any"));
     }
 
     @Test

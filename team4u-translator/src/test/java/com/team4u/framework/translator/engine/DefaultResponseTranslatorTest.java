@@ -66,7 +66,7 @@ public class DefaultResponseTranslatorTest {
         def.setI18nKey("order.invalid");
 
         Mockito.when(routingManager.route(eq("err_router"), any(), eq(ErrorDef.class)))
-                .thenReturn(RouteResult.matched(def));
+                .thenReturn(RouteResult.ruleMatch(def, (String) null));
 
         RawResponse request = RawResponse.of("ORDER", "O001", "订单不存在");
 
@@ -87,7 +87,7 @@ public class DefaultResponseTranslatorTest {
         def.setDefaultMsg("系统开小差了");
 
         Mockito.when(routingManager.route(eq("err_router"), any(), eq(ErrorDef.class)))
-                .thenReturn(RouteResult.matched(def));
+                .thenReturn(RouteResult.ruleMatch(def, (String) null));
 
         RawResponse request = RawResponse.of("PAY", "P_ERR_TIMEOUT", "支付超时");
 
@@ -111,7 +111,7 @@ public class DefaultResponseTranslatorTest {
         def.setDefaultMsg("内部异常[${rawCode}]，原因：${rawMessage}。业务操作：${action}");
 
         Mockito.when(routingManager.route(eq("err_router"), any(), eq(ErrorDef.class)))
-                .thenReturn(RouteResult.matched(def));
+                .thenReturn(RouteResult.ruleMatch(def, (String) null));
 
         RawResponse request = RawResponse.of("SYSTEM", "NPE", "空指针异常");
 
@@ -142,7 +142,7 @@ public class DefaultResponseTranslatorTest {
         def.setDefaultMsg(null); // 为空，需要走 Fallback
 
         Mockito.when(routingManager.route(eq("err_router"), any(), eq(ErrorDef.class)))
-                .thenReturn(RouteResult.matched(def));
+                .thenReturn(RouteResult.ruleMatch(def, (String) null));
 
         // 故意让原始文本中带有一个看起来像模板的变量，它不应该被渲染引擎错误地处理
         RawResponse request = RawResponse.of("SYSTEM", "FALLBACK_O", "原始异常：${rawCode}");
@@ -166,7 +166,7 @@ public class DefaultResponseTranslatorTest {
         def.setDefaultMsg("已知：${rawMessage}，未知：${unknownVar}");
 
         Mockito.when(routingManager.route(eq("err_router"), any(), eq(ErrorDef.class)))
-                .thenReturn(RouteResult.matched(def));
+                .thenReturn(RouteResult.ruleMatch(def, (String) null));
 
         RawResponse request = RawResponse.of("SYS", "ERR", "系统异常");
 

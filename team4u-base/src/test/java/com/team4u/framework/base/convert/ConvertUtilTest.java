@@ -154,9 +154,14 @@ public class ConvertUtilTest {
     }
 
     @Test
-    public void testCustomConverterExceptionFallsBackToDefault() {
+    public void testCustomConverterExceptionFailsFast() {
         ConvertUtil.registerConverter(new ExplodingIntegerConverter());
-        Assert.assertEquals(Integer.valueOf(9), ConvertUtil.convert(Integer.class, "10", 9));
+        try {
+            ConvertUtil.convert(Integer.class, "10", 9);
+            Assert.fail("Should throw TypeConversionException");
+        } catch (TypeConversionException e) {
+            Assert.assertTrue(e.getMessage().contains(ExplodingIntegerConverter.class.getName()));
+        }
     }
 
     @Test

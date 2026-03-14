@@ -1,12 +1,10 @@
 package com.team4u.framework.base.util;
 
 import java.util.Collection;
-import java.util.Map;
-
 /**
  * 集合工具类
  * <p>
- * 提供针对集合（Collection）、字典（Map）以及数组的常用操作，如空值判断和大小计算。
+ * 提供针对集合（Collection）与可迭代对象的常用操作，如空值判断和大小计算。
  *
  * @author jay.wu
  */
@@ -33,26 +31,6 @@ public class CollectionUtil {
     }
 
     /**
-     * 判断 Map 是否为空
-     *
-     * @param map 待检查的 Map
-     * @return 如果 Map 为 null 或不包含任何键值对，返回 true，否则返回 false
-     */
-    public static boolean isEmpty(Map<?, ?> map) {
-        return map == null || map.isEmpty();
-    }
-
-    /**
-     * 判断 Map 是否为非空
-     *
-     * @param map 待检查的 Map
-     * @return 如果 Map 不为 null 且包含至少一个键值对，返回 true，否则返回 false
-     */
-    public static boolean isNotEmpty(Map<?, ?> map) {
-        return !isEmpty(map);
-    }
-
-    /**
      * 获取集合的大小
      *
      * @param collection 目标集合
@@ -60,16 +38,6 @@ public class CollectionUtil {
      */
     public static int size(Collection<?> collection) {
         return collection == null ? 0 : collection.size();
-    }
-
-    /**
-     * 获取 Map 的大小
-     *
-     * @param map 目标 Map
-     * @return Map 包含的键值对数量，如果 Map 为 null 则返回 0
-     */
-    public static int size(Map<?, ?> map) {
-        return map == null ? 0 : map.size();
     }
 
     /**
@@ -88,8 +56,8 @@ public class CollectionUtil {
 
         if (obj instanceof Collection) {
             return ((Collection<?>) obj).size();
-        } else if (obj instanceof Map) {
-            return ((Map<?, ?>) obj).size();
+        } else if (obj instanceof java.util.Map) {
+            return ((java.util.Map<?, ?>) obj).size();
         } else if (obj instanceof Object[]) {
             return ((Object[]) obj).length;
         } else if (obj instanceof int[]) {

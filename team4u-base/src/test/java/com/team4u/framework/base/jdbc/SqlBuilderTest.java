@@ -108,4 +108,13 @@ public class SqlBuilderTest {
         Assert.assertEquals("SELECT * FROM users WHERE 1=1", sb.getSql());
         Assert.assertEquals(0, sb.getParams().length);
     }
+
+    @Test
+    public void testAndOnEmptyBuilderDoesNotPrefixOperator() {
+        SqlBuilder sb = new SqlBuilder();
+        sb.and(b -> b.append("name = ?", "张三"));
+
+        Assert.assertEquals("(name = ?)", sb.getSql());
+        Assert.assertArrayEquals(new Object[]{"张三"}, sb.getParams());
+    }
 }

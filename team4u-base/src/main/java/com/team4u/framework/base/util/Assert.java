@@ -82,7 +82,7 @@ public class Assert {
      * @throws IllegalArgumentException 当 Map 为空时抛出
      */
     public static void notEmpty(Map<?, ?> map, String message) {
-        if (CollectionUtil.isEmpty(map)) {
+        if (MapUtil.isEmpty(map)) {
             throw new IllegalArgumentException(message);
         }
     }

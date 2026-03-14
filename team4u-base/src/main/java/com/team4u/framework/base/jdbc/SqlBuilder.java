@@ -17,12 +17,14 @@ public class SqlBuilder {
 
     private final StringBuilder sql = new StringBuilder();
     private final List<Object> params = new ArrayList<>();
+    private boolean hasConditionGroup;
 
     public SqlBuilder() {
     }
 
     public SqlBuilder(String initialSql) {
         sql.append(initialSql);
+        hasConditionGroup = initialSql != null && !initialSql.trim().isEmpty();
     }
 
     /**
@@ -37,6 +39,9 @@ public class SqlBuilder {
             sql.append(snippet);
             if (args != null) {
                 Collections.addAll(params, args);
+            }
+            if (!snippet.trim().isEmpty()) {
+                hasConditionGroup = true;
             }
         }
         return this;
@@ -82,6 +87,7 @@ public class SqlBuilder {
             i++;
         }
         sql.append(")");
+        hasConditionGroup = true;
         return this;
     }
 
@@ -118,8 +124,12 @@ public class SqlBuilder {
 
         String subSql = subBuilder.getSql();
         if (!subSql.isEmpty()) {
-            sql.append(prefix).append("(").append(subSql).append(")");
+            if (hasConditionGroup) {
+                sql.append(prefix);
+            }
+            sql.append("(").append(subSql).append(")");
             Collections.addAll(params, subBuilder.getParams());
+            hasConditionGroup = true;
         }
         return this;
     }

@@ -6,8 +6,6 @@ import org.junit.Test;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
-
 /**
  * 集合工具类单元测试
  *
@@ -30,29 +28,9 @@ public class CollectionUtilTest {
     }
 
     @Test
-    public void isEmptyMap() {
-        Assert.assertTrue("null Map 应为空", CollectionUtil.isEmpty((Map<?, ?>) null));
-        Assert.assertTrue("空 Map 应为空", CollectionUtil.isEmpty(Collections.emptyMap()));
-        Assert.assertFalse("非空 Map 不应为空", CollectionUtil.isEmpty(Collections.singletonMap("k", "v")));
-    }
-
-    @Test
-    public void isNotEmptyMap() {
-        Assert.assertFalse("null Map 不应为非空", CollectionUtil.isNotEmpty((Map<?, ?>) null));
-        Assert.assertFalse("空 Map 不应为非空", CollectionUtil.isNotEmpty(Collections.emptyMap()));
-        Assert.assertTrue("非空 Map 应为非空", CollectionUtil.isNotEmpty(Collections.singletonMap("k", "v")));
-    }
-
-    @Test
     public void sizeCollection() {
         Assert.assertEquals(0, CollectionUtil.size((java.util.Collection<?>) null));
         Assert.assertEquals(1, CollectionUtil.size(Collections.singletonList("a")));
-    }
-
-    @Test
-    public void sizeMap() {
-        Assert.assertEquals(0, CollectionUtil.size((Map<?, ?>) null));
-        Assert.assertEquals(1, CollectionUtil.size(Collections.singletonMap("k", "v")));
     }
 
     @Test
