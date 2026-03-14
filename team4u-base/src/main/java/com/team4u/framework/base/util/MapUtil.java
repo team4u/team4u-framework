@@ -45,7 +45,6 @@ public class MapUtil {
      * @param <T>  泛型类型
      * @return 路径对应的值，若未找到或转换失败则返回 null
      */
-    @SuppressWarnings("unchecked")
     public static <T> T getByPath(Map<?, ?> map, String path, Class<T> type) {
         if (map == null || path == null || path.isEmpty()) {
             return null;

@@ -1,8 +1,10 @@
 package com.team4u.framework.lease.jdbc;
 
 import com.team4u.framework.base.convert.ConvertUtil;
-import com.team4u.framework.base.util.JdbcUtil;
-import com.team4u.framework.base.util.SqlExpression;
+import com.team4u.framework.base.jdbc.InsertBuilder;
+import com.team4u.framework.base.jdbc.JdbcUtil;
+import com.team4u.framework.base.jdbc.SqlBuilder;
+import com.team4u.framework.base.jdbc.UpdateBuilder;
 import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
 import com.team4u.framework.lease.enums.LeaseTaskOutcome;
 import com.team4u.framework.lease.enums.LeaseTaskState;
@@ -35,11 +37,7 @@ public class JdbcLeaseTaskDao {
     public static final String COLUMNS = "task_id, task_group, task_type, payload, business_key, state, outcome, failure_reason, "
             + "priority, delivery_count, failure_count, worker_id, lease_token, lease_expires_at, visible_at, "
             + "created_at, updated_at, version, error_message, attributes_json";
-    /**
-     * 通用的管理面操作过滤条件占位符
-     * 用于确保状态非 CLOSED，且如果处于 RUNNING 状态则必须已过期
-     */
-    private static final String WHERE_UNLOCKED_OR_EXPIRED = "task_id = ? AND state <> ? AND NOT (state = ? AND lease_expires_at >= ?)";
+
     private final DataSource dataSource;
     private final LeaseDbDialect dialect;
     private final LeaseJsonCodec jsonCodec;
@@ -57,28 +55,29 @@ public class JdbcLeaseTaskDao {
      * @throws SQLException SQL 异常
      */
     public void insert(LeaseTaskEntity entity) throws SQLException {
-        String sql = "INSERT INTO " + TABLE_NAME + " (" + COLUMNS + ") VALUES (" + SqlExpression.placeholders(20) + ")";
-        JdbcUtil.execute(dataSource, sql,
-                entity.getTaskId(),
-                entity.getTaskGroup(),
-                entity.getTaskType(),
-                entity.getPayload(),
-                entity.getBusinessKey(),
-                entity.getState().name(),
-                entity.getOutcome() == null ? null : entity.getOutcome().name(),
-                entity.getFailureReason() == null ? null : entity.getFailureReason().name(),
-                entity.getPriority(),
-                entity.getDeliveryCount(),
-                entity.getFailureCount(),
-                entity.getWorkerId(),
-                entity.getLeaseToken(),
-                entity.getLeaseExpiresAtMillis(),
-                entity.getVisibleAtMillis(),
-                entity.getCreatedAtMillis(),
-                entity.getUpdatedAtMillis(),
-                entity.getVersion(),
-                entity.getErrorMessage(),
-                jsonCodec.toJson(entity.getAttributes()));
+        InsertBuilder builder = new InsertBuilder(TABLE_NAME)
+                .column("task_id", entity.getTaskId())
+                .column("task_group", entity.getTaskGroup())
+                .column("task_type", entity.getTaskType())
+                .column("payload", entity.getPayload())
+                .column("business_key", entity.getBusinessKey())
+                .column("state", entity.getState().name())
+                .column("outcome", entity.getOutcome() == null ? null : entity.getOutcome().name())
+                .column("failure_reason", entity.getFailureReason() == null ? null : entity.getFailureReason().name())
+                .column("priority", entity.getPriority())
+                .column("delivery_count", entity.getDeliveryCount())
+                .column("failure_count", entity.getFailureCount())
+                .column("worker_id", entity.getWorkerId())
+                .column("lease_token", entity.getLeaseToken())
+                .column("lease_expires_at", entity.getLeaseExpiresAtMillis())
+                .column("visible_at", entity.getVisibleAtMillis())
+                .column("created_at", entity.getCreatedAtMillis())
+                .column("updated_at", entity.getUpdatedAtMillis())
+                .column("version", entity.getVersion())
+                .column("error_message", entity.getErrorMessage())
+                .column("attributes_json", jsonCodec.toJson(entity.getAttributes()));
+
+        JdbcUtil.execute(dataSource, builder.getSql(), builder.getParams());
     }
 
     /**
@@ -167,23 +166,16 @@ public class JdbcLeaseTaskDao {
                           long now,
                           long expectedVersion)
             throws SQLException {
-        return JdbcUtil.execute(dataSource,
-                "UPDATE " + TABLE_NAME + " SET state = ?, worker_id = ?, lease_token = ?, lease_expires_at = ?, "
-                        + "delivery_count = delivery_count + 1, updated_at = ?, version = version + 1 "
-                        + "WHERE task_id = ? "
-                        + "AND version = ? "
-                        + "AND ((state = ? AND visible_at <= ?) OR (state = ? AND lease_expires_at <= ?))",
-                LeaseTaskState.RUNNING.name(),
-                workerId,
-                leaseToken,
-                leaseExpiresAt,
-                now,
-                taskId,
-                expectedVersion,
-                LeaseTaskState.READY.name(),
-                now,
-                LeaseTaskState.RUNNING.name(),
-                now);
+        SqlBuilder sb = new SqlBuilder("UPDATE ").append(TABLE_NAME)
+                .append(" SET state = ?, worker_id = ?, lease_token = ?, lease_expires_at = ?, ",
+                        LeaseTaskState.RUNNING.name(), workerId, leaseToken, leaseExpiresAt)
+                .append("delivery_count = delivery_count + 1, updated_at = ?, version = version + 1 ", now)
+                .append("WHERE task_id = ? ", taskId)
+                .append("AND version = ? ", expectedVersion)
+                .append("AND ((state = ? AND visible_at <= ?) OR (state = ? AND lease_expires_at <= ?))",
+                        LeaseTaskState.READY.name(), now, LeaseTaskState.RUNNING.name(), now);
+
+        return JdbcUtil.execute(dataSource, sb.getSql(), sb.getParams());
     }
 
     /**
@@ -195,34 +187,23 @@ public class JdbcLeaseTaskDao {
                 ? LeaseCloseRequest.succeeded()
                 : request.normalizeForRuntime();
 
-        Map<String, Object> entity = newEntityMap(now, safeRequest);
+        UpdateBuilder ub = new UpdateBuilder(TABLE_NAME);
+        ub.set("state", LeaseTaskState.CLOSED.name());
+        applyCloseRequest(ub, safeRequest);
+        ub.set("worker_id", null)
+                .set("lease_token", null)
+                .set("lease_expires_at", 0)
+                .set("updated_at", now)
+                .setExpression("version", "version + 1")
+                .where("task_id = ?", taskId)
+                .where("state = ?", LeaseTaskState.RUNNING.name())
+                .where("worker_id = ?", workerId)
+                .where("lease_token = ?", leaseToken)
+                .where("lease_expires_at >= ?", now);
 
-        List<Object> params = new ArrayList<>();
-        String assignments = buildUpdateAssignments(entity, params);
-
-        params.add(taskId);
-        params.add(LeaseTaskState.RUNNING.name());
-        params.add(workerId);
-        params.add(leaseToken);
-        params.add(now);
-
-        return JdbcUtil.execute(dataSource,
-                "UPDATE " + TABLE_NAME + " SET " + assignments
-                        + " WHERE task_id = ? AND state = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
-                params.toArray());
+        return JdbcUtil.execute(dataSource, ub.getSql(), ub.getParams());
     }
 
-    private Map<String, Object> newEntityMap(long now, LeaseCloseRequest safeRequest) {
-        Map<String, Object> entity = new LinkedHashMap<>();
-        entity.put("state", LeaseTaskState.CLOSED.name());
-        applyCloseRequest(entity, safeRequest);
-        entity.put("worker_id", null);
-        entity.put("lease_token", null);
-        entity.put("lease_expires_at", 0);
-        entity.put("updated_at", now);
-        entity.put("version", SqlExpression.increment("version"));
-        return entity;
-    }
 
     /**
      * 续延租约（心跳）
@@ -237,16 +218,17 @@ public class JdbcLeaseTaskDao {
      */
     public int heartbeat(String taskId, String workerId, String leaseToken, long leaseExpiresAt, long now)
             throws SQLException {
-        return JdbcUtil.execute(dataSource,
-                "UPDATE " + TABLE_NAME + " SET lease_expires_at = ?, updated_at = ?, version = version + 1 "
-                        + "WHERE task_id = ? AND state = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
-                leaseExpiresAt,
-                now,
-                taskId,
-                LeaseTaskState.RUNNING.name(),
-                workerId,
-                leaseToken,
-                now);
+        UpdateBuilder ub = new UpdateBuilder(TABLE_NAME)
+                .set("lease_expires_at", leaseExpiresAt)
+                .set("updated_at", now)
+                .setExpression("version", "version + 1")
+                .where("task_id = ?", taskId)
+                .where("state = ?", LeaseTaskState.RUNNING.name())
+                .where("worker_id = ?", workerId)
+                .where("lease_token = ?", leaseToken)
+                .where("lease_expires_at >= ?", now);
+
+        return JdbcUtil.execute(dataSource, ub.getSql(), ub.getParams());
     }
 
     /**
@@ -273,238 +255,172 @@ public class JdbcLeaseTaskDao {
             String errorMessage,
             long now)
             throws SQLException {
-        Map<String, Object> entity = new LinkedHashMap<>();
-        entity.put("state", LeaseTaskState.READY.name());
-        entity.put("outcome", null);
-        entity.put("failure_reason", null);
-        entity.put("visible_at", visibleAt);
-        entity.put("worker_id", null);
-        entity.put("lease_token", null);
-        entity.put("lease_expires_at", 0);
-        entity.put("error_message", errorMessage);
-        entity.put("version", SqlExpression.increment("version"));
-        if (payload != null) {
-            entity.put("payload", payload);
-        }
+        UpdateBuilder ub = new UpdateBuilder(TABLE_NAME)
+                .set("state", LeaseTaskState.READY.name())
+                .set("outcome", null)
+                .set("failure_reason", null)
+                .set("visible_at", visibleAt)
+                .set("worker_id", null)
+                .set("lease_token", null)
+                .set("lease_expires_at", 0)
+                .set("error_message", errorMessage)
+                .setExpression("version", "version + 1")
+                .setIfNotNull("payload", payload)
+                .set("updated_at", now);
+
         if (attributes != null && !attributes.isEmpty()) {
-            entity.put("attributes_json", jsonCodec.toJson(attributes));
+            ub.set("attributes_json", jsonCodec.toJson(attributes));
         }
-        entity.put("updated_at", now);
 
-        List<Object> params = new ArrayList<>();
-        String assignments = buildUpdateAssignments(entity, params);
-        params.add(taskId);
-        params.add(LeaseTaskState.RUNNING.name());
-        params.add(workerId);
-        params.add(leaseToken);
-        params.add(now);
+        ub.where("task_id = ?", taskId)
+                .where("state = ?", LeaseTaskState.RUNNING.name())
+                .where("worker_id = ?", workerId)
+                .where("lease_token = ?", leaseToken)
+                .where("lease_expires_at >= ?", now);
 
-        return JdbcUtil.execute(dataSource,
-                "UPDATE " + TABLE_NAME + " SET " + assignments
-                        + " WHERE task_id = ? AND state = ? AND worker_id = ? AND lease_token = ? AND lease_expires_at >= ?",
-                params.toArray());
+        return JdbcUtil.execute(dataSource, ub.getSql(), ub.getParams());
     }
 
     /**
      * 重新调度任务
-     *
-     * @param taskId    任务 ID
-     * @param visibleAt 下次可见时间戳
-     * @param now       当前时间戳
-     * @return 更新行数
-     * @throws SQLException SQL 异常
      */
     public int reschedule(String taskId, long visibleAt, long now) throws SQLException {
-        Map<String, Object> entity = new LinkedHashMap<>();
-        entity.put("state", LeaseTaskState.READY.name());
-        entity.put("outcome", null);
-        entity.put("failure_reason", null);
-        entity.put("error_message", null);
-        entity.put("visible_at", visibleAt);
-        entity.put("worker_id", null);
-        entity.put("lease_token", null);
-        entity.put("lease_expires_at", 0);
-        entity.put("updated_at", now);
-        entity.put("version", SqlExpression.increment("version"));
+        UpdateBuilder ub = new UpdateBuilder(TABLE_NAME)
+                .set("state", LeaseTaskState.READY.name())
+                .set("outcome", null)
+                .set("failure_reason", null)
+                .set("error_message", null)
+                .set("visible_at", visibleAt)
+                .set("worker_id", null)
+                .set("lease_token", null)
+                .set("lease_expires_at", 0)
+                .set("updated_at", now)
+                .setExpression("version", "version + 1");
 
-        List<Object> params = new ArrayList<>();
-        String assignments = buildUpdateAssignments(entity, params);
-        return JdbcUtil.execute(dataSource,
-                "UPDATE " + TABLE_NAME + " SET " + assignments + " WHERE " + WHERE_UNLOCKED_OR_EXPIRED,
-                buildAdminWhereParams(params, taskId, now));
+        applyAdminWhere(ub, taskId, now);
+        return JdbcUtil.execute(dataSource, ub.getSql(), ub.getParams());
     }
 
     /**
      * 管理面关闭任务
-     *
-     * @param taskId  任务 ID
-     * @param request 关闭请求
-     * @param now     当前时间戳
-     * @return 更新行数
-     * @throws SQLException SQL 异常
      */
     public int close(String taskId, LeaseCloseRequest request, long now) throws SQLException {
         LeaseCloseRequest safeRequest = request == null
                 ? LeaseCloseRequest.cancelled(null)
                 : request.normalizeForAdmin();
 
-        Map<String, Object> entity = newEntityMap(now, safeRequest);
+        UpdateBuilder ub = new UpdateBuilder(TABLE_NAME)
+                .set("state", LeaseTaskState.CLOSED.name());
 
-        List<Object> params = new ArrayList<>();
-        String assignments = buildUpdateAssignments(entity, params);
-        return JdbcUtil.execute(dataSource,
-                "UPDATE " + TABLE_NAME + " SET " + assignments + " WHERE " + WHERE_UNLOCKED_OR_EXPIRED,
-                buildAdminWhereParams(params, taskId, now));
+        applyCloseRequest(ub, safeRequest);
+        ub.set("worker_id", null)
+                .set("lease_token", null)
+                .set("lease_expires_at", 0)
+                .set("updated_at", now)
+                .setExpression("version", "version + 1");
+
+        applyAdminWhere(ub, taskId, now);
+        return JdbcUtil.execute(dataSource, ub.getSql(), ub.getParams());
     }
 
     /**
      * 将失败任务重新放入队列
-     *
-     * @param taskId    任务 ID
-     * @param visibleAt 下次可见时间戳
-     * @param now       当前时间戳
-     * @return 更新行数
-     * @throws SQLException SQL 异常
      */
     public int rescheduleFailed(String taskId, long visibleAt, long now) throws SQLException {
-        Map<String, Object> entity = new LinkedHashMap<>();
-        entity.put("state", LeaseTaskState.READY.name());
-        entity.put("outcome", null);
-        entity.put("failure_reason", null);
-        entity.put("error_message", null);
-        entity.put("visible_at", visibleAt);
-        entity.put("worker_id", null);
-        entity.put("lease_token", null);
-        entity.put("lease_expires_at", 0);
-        entity.put("updated_at", now);
-        entity.put("version", SqlExpression.increment("version"));
+        UpdateBuilder ub = new UpdateBuilder(TABLE_NAME)
+                .set("state", LeaseTaskState.READY.name())
+                .set("outcome", null)
+                .set("failure_reason", null)
+                .set("error_message", null)
+                .set("visible_at", visibleAt)
+                .set("worker_id", null)
+                .set("lease_token", null)
+                .set("lease_expires_at", 0)
+                .set("updated_at", now)
+                .setExpression("version", "version + 1")
+                .where("task_id = ?", taskId)
+                .where("state = ?", LeaseTaskState.CLOSED.name())
+                .where("outcome = ?", LeaseTaskOutcome.FAILED.name());
 
-        List<Object> params = new ArrayList<>();
-        String assignments = buildUpdateAssignments(entity, params);
-        params.add(taskId);
-        params.add(LeaseTaskState.CLOSED.name());
-        params.add(LeaseTaskOutcome.FAILED.name());
-
-        return JdbcUtil.execute(dataSource,
-                "UPDATE " + TABLE_NAME + " SET " + assignments + " WHERE task_id = ? AND state = ? AND outcome = ?",
-                params.toArray());
+        return JdbcUtil.execute(dataSource, ub.getSql(), ub.getParams());
     }
 
     /**
      * 更新任务属性（运维接口）
-     *
-     * @param request 更新请求
-     * @param now     当前时间戳
-     * @return 更新行数
-     * @throws SQLException SQL 异常
      */
     public int update(LeaseUpdateRequest request, long now) throws SQLException {
-        Map<String, Object> entity = new LinkedHashMap<>();
-        applyUpdateRequest(entity, request);
-        if (entity.isEmpty()) {
-            return 0;
-        }
-        entity.put("updated_at", now);
-        entity.put("version", SqlExpression.increment("version"));
+        UpdateBuilder ub = new UpdateBuilder(TABLE_NAME);
+        applyUpdateRequest(ub, request);
+        ub.set("updated_at", now)
+                .setExpression("version", "version + 1");
 
-        List<Object> params = new ArrayList<>();
-        String assignments = buildUpdateAssignments(entity, params);
-        return JdbcUtil.execute(dataSource,
-                "UPDATE " + TABLE_NAME + " SET " + assignments + " WHERE " + WHERE_UNLOCKED_OR_EXPIRED,
-                buildAdminWhereParams(params, request.getTaskId(), now));
+        applyAdminWhere(ub, request.getTaskId(), now);
+        return JdbcUtil.execute(dataSource, ub.getSql(), ub.getParams());
     }
 
     /**
      * 更新并重新调度任务
-     *
-     * @param request   更新请求
-     * @param visibleAt 下次可见时间戳
-     * @param now       当前时间戳
-     * @return 更新行数
-     * @throws SQLException SQL 异常
      */
     public int updateAndReschedule(
             LeaseUpdateRequest request,
             long visibleAt,
             long now) throws SQLException {
-        Map<String, Object> entity = new LinkedHashMap<>();
-        entity.put("state", LeaseTaskState.READY.name());
-        entity.put("outcome", null);
-        entity.put("failure_reason", null);
-        entity.put("error_message", null);
-        entity.put("visible_at", visibleAt);
-        entity.put("worker_id", null);
-        entity.put("lease_token", null);
-        entity.put("lease_expires_at", 0);
-        applyUpdateRequest(entity, request);
-        entity.put("updated_at", now);
-        entity.put("version", SqlExpression.increment("version"));
+        UpdateBuilder ub = new UpdateBuilder(TABLE_NAME)
+                .set("state", LeaseTaskState.READY.name())
+                .set("outcome", null)
+                .set("failure_reason", null)
+                .set("error_message", null)
+                .set("visible_at", visibleAt)
+                .set("worker_id", null)
+                .set("lease_token", null)
+                .set("lease_expires_at", 0);
 
-        List<Object> params = new ArrayList<>();
-        String assignments = buildUpdateAssignments(entity, params);
-        return JdbcUtil.execute(dataSource,
-                "UPDATE " + TABLE_NAME + " SET " + assignments + " WHERE " + WHERE_UNLOCKED_OR_EXPIRED,
-                buildAdminWhereParams(params, request.getTaskId(), now));
+        applyUpdateRequest(ub, request);
+        ub.set("updated_at", now)
+                .setExpression("version", "version + 1");
+
+        applyAdminWhere(ub, request.getTaskId(), now);
+        return JdbcUtil.execute(dataSource, ub.getSql(), ub.getParams());
     }
 
-    private void applyCloseRequest(Map<String, Object> entity, LeaseCloseRequest request) {
+    private void applyCloseRequest(UpdateBuilder ub, LeaseCloseRequest request) {
         if (request.getOutcome() == LeaseTaskOutcome.FAILED) {
-            entity.put("failure_reason", request.getFailureReason().name());
-            entity.put("failure_count", SqlExpression.increment("failure_count"));
+            ub.set("failure_reason", request.getFailureReason().name());
+            ub.setExpression("failure_count", "failure_count + 1");
         }
-        entity.put("outcome", request.getOutcome().name());
-        entity.put("error_message", request.getErrorMessage());
+        ub.set("outcome", request.getOutcome().name());
+        ub.set("error_message", request.getErrorMessage());
 
         if (request.getPayload() != null) {
-            entity.put("payload", request.getPayload());
+            ub.set("payload", request.getPayload());
         }
         if (!request.getAttributes().isEmpty()) {
-            entity.put("attributes_json", jsonCodec.toJson(request.getAttributes()));
+            ub.set("attributes_json", jsonCodec.toJson(request.getAttributes()));
         }
     }
 
-    private void applyUpdateRequest(Map<String, Object> entity, LeaseUpdateRequest request) {
+    private void applyUpdateRequest(UpdateBuilder ub, LeaseUpdateRequest request) {
         if (request.getTaskType() != null) {
-            entity.put("task_type", request.getTaskType());
+            ub.set("task_type", request.getTaskType());
         }
         if (request.getPayload() != null) {
-            entity.put("payload", request.getPayload());
+            ub.set("payload", request.getPayload());
         }
         if (request.getPriority() != null) {
-            entity.put("priority", request.getPriority());
+            ub.set("priority", request.getPriority());
         }
         if (request.getAttributes() != null && !request.getAttributes().isEmpty()) {
-            entity.put("attributes_json", jsonCodec.toJson(request.getAttributes()));
+            ub.set("attributes_json", jsonCodec.toJson(request.getAttributes()));
         }
-    }
-
-    private String buildUpdateAssignments(Map<String, Object> entity, List<Object> params) {
-        StringBuilder sql = new StringBuilder();
-        for (Map.Entry<String, Object> entry : entity.entrySet()) {
-            if (sql.length() > 0) {
-                sql.append(", ");
-            }
-            String field = entry.getKey();
-            Object value = entry.getValue();
-            if (value instanceof SqlExpression) {
-                sql.append(field).append(" = ").append(((SqlExpression) value).getExpression());
-            } else {
-                sql.append(field).append(" = ?");
-                params.add(value);
-            }
-        }
-        return sql.toString();
     }
 
     /**
-     * 构建管理面 WHERE 子句参数
+     * 构建管理面 WHERE 条件
      */
-    private Object[] buildAdminWhereParams(List<Object> params, String taskId, long now) {
-        params.add(taskId);
-        params.add(LeaseTaskState.CLOSED.name());
-        params.add(LeaseTaskState.RUNNING.name());
-        params.add(now);
-        return params.toArray();
+    private void applyAdminWhere(UpdateBuilder ub, String taskId, long now) {
+        ub.where("task_id = ?", taskId)
+                .where("state <> ?", LeaseTaskState.CLOSED.name())
+                .where("NOT (state = ? AND lease_expires_at >= ?)", LeaseTaskState.RUNNING.name(), now);
     }
 
     /**
@@ -516,19 +432,17 @@ public class JdbcLeaseTaskDao {
      */
     public LeaseTaskPage query(LeaseQueryRequest request) throws SQLException {
         LeaseQueryRequest safeRequest = request == null ? LeaseQueryRequest.builder().build() : request;
-        List<Object> params = new ArrayList<>();
 
-        StringBuilder whereSql = new StringBuilder(" WHERE 1=1");
-        buildWhereFromQuery(whereSql, params, safeRequest);
-
-        String sql = "SELECT " + COLUMNS + " FROM " + TABLE_NAME + whereSql + dialect.buildQuerySuffix();
+        SqlBuilder sb = new SqlBuilder(" WHERE 1=1");
+        buildWhereFromQuery(sb, safeRequest);
 
         int page = Math.max(0, safeRequest.getPage());
         int pageSize = safeRequest.getPageSize() <= 0 ? 50 : safeRequest.getPageSize();
-        params.add(pageSize);
-        params.add(page * pageSize);
 
-        List<LeaseTaskEntity> items = toEntities(JdbcUtil.query(dataSource, sql, params.toArray()));
+        String sql = "SELECT " + COLUMNS + " FROM " + TABLE_NAME + sb.getSql() + dialect.buildQuerySuffix();
+        List<LeaseTaskEntity> items = toEntities(JdbcUtil.query(dataSource, sql,
+                mergeParams(sb.getParams(), pageSize, page * pageSize)));
+
         long total = count(safeRequest);
 
         List<LeaseTaskRecord> records = new ArrayList<>(items.size());
@@ -544,6 +458,13 @@ public class JdbcLeaseTaskDao {
                 .build();
     }
 
+    private Object[] mergeParams(Object[] baseParams, Object... extraParams) {
+        Object[] result = new Object[baseParams.length + extraParams.length];
+        System.arraycopy(baseParams, 0, result, 0, baseParams.length);
+        System.arraycopy(extraParams, 0, result, baseParams.length, extraParams.length);
+        return result;
+    }
+
     /**
      * 统计满足条件的任务总数
      *
@@ -553,12 +474,10 @@ public class JdbcLeaseTaskDao {
      */
     public long count(LeaseQueryRequest request) throws SQLException {
         LeaseQueryRequest safeRequest = request == null ? LeaseQueryRequest.builder().build() : request;
-        List<Object> params = new ArrayList<>();
+        SqlBuilder sb = new SqlBuilder("SELECT COUNT(*) AS total FROM ").append(TABLE_NAME).append(" WHERE 1=1");
+        buildWhereFromQuery(sb, safeRequest);
 
-        StringBuilder sql = new StringBuilder("SELECT COUNT(*) AS total FROM ").append(TABLE_NAME).append(" WHERE 1=1");
-        buildWhereFromQuery(sql, params, safeRequest);
-
-        List<Map<String, Object>> rows = JdbcUtil.query(dataSource, sql.toString(), params.toArray());
+        List<Map<String, Object>> rows = JdbcUtil.query(dataSource, sb.getSql(), sb.getParams());
         if (rows.isEmpty()) {
             return 0L;
         }
@@ -566,38 +485,13 @@ public class JdbcLeaseTaskDao {
         return total == null ? 0L : total.longValue();
     }
 
-    private void buildWhereFromQuery(StringBuilder sql, List<Object> params, LeaseQueryRequest request) {
-        if (request.getTaskGroup() != null) {
-            sql.append(" AND task_group = ?");
-            params.add(request.getTaskGroup());
-        }
-        if (request.getTaskType() != null) {
-            sql.append(" AND task_type = ?");
-            params.add(request.getTaskType());
-        }
-        if (!request.getStates().isEmpty()) {
-            sql.append(" AND state IN (").append(SqlExpression.placeholders(request.getStates().size())).append(")");
-            for (LeaseTaskState state : request.getStates()) {
-                params.add(state.name());
-            }
-        }
-        if (!request.getOutcomes().isEmpty()) {
-            sql.append(" AND outcome IN (").append(SqlExpression.placeholders(request.getOutcomes().size())).append(")");
-            for (LeaseTaskOutcome outcome : request.getOutcomes()) {
-                params.add(outcome.name());
-            }
-        }
-        if (!request.getFailureReasons().isEmpty()) {
-            sql.append(" AND failure_reason IN (").append(SqlExpression.placeholders(request.getFailureReasons().size()))
-                    .append(")");
-            for (LeaseTaskFailureReason failureReason : request.getFailureReasons()) {
-                params.add(failureReason.name());
-            }
-        }
-        if (request.getWorkerId() != null) {
-            sql.append(" AND worker_id = ?");
-            params.add(request.getWorkerId());
-        }
+    private void buildWhereFromQuery(SqlBuilder sb, LeaseQueryRequest request) {
+        sb.appendIfNotNull(" AND task_group = ?", request.getTaskGroup())
+                .appendIfNotNull(" AND task_type = ?", request.getTaskType())
+                .inIfNotEmpty(" AND state IN ", request.getStates().stream().map(Enum::name).collect(java.util.stream.Collectors.toList()))
+                .inIfNotEmpty(" AND outcome IN ", request.getOutcomes().stream().map(Enum::name).collect(java.util.stream.Collectors.toList()))
+                .inIfNotEmpty(" AND failure_reason IN ", request.getFailureReasons().stream().map(Enum::name).collect(java.util.stream.Collectors.toList()))
+                .appendIfNotNull(" AND worker_id = ?", request.getWorkerId());
     }
 
     private List<LeaseTaskEntity> toEntities(List<Map<String, Object>> rows) {

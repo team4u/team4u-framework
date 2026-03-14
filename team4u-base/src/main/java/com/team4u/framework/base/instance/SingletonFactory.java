@@ -1,6 +1,6 @@
 package com.team4u.framework.base.instance;
 
-import com.team4u.framework.base.util.CacheUtil;
+import com.team4u.framework.base.cache.CacheUtil;
 import com.team4u.framework.base.util.ReflectUtil;
 
 /**

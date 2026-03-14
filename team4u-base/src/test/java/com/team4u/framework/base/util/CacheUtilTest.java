@@ -1,9 +1,6 @@
 package com.team4u.framework.base.util;
 
-import com.team4u.framework.base.util.cache.Cache;
-import com.team4u.framework.base.util.cache.LFUCache;
-import com.team4u.framework.base.util.cache.LRUCache;
-import com.team4u.framework.base.util.cache.TimedCache;
+import com.team4u.framework.base.cache.*;
 import org.junit.Assert;
 import org.junit.Test;
 

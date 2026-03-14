@@ -1,4 +1,6 @@
-package com.team4u.framework.base.util;
+package com.team4u.framework.base.jdbc;
+
+import lombok.Data;
 
 import java.util.Collections;
 
@@ -10,18 +12,13 @@ import java.util.Collections;
  *
  * @author jay.wu
  */
+@Data
 public class SqlExpression {
 
-    private final String expression;
-
     /**
-     * 构造函数
-     *
-     * @param expression SQL 表达式内容
+     * 表达式字符串
      */
-    public SqlExpression(String expression) {
-        this.expression = expression;
-    }
+    private final String expression;
 
     /**
      * 生成字段自增表达式，例如：column + 1
@@ -46,15 +43,6 @@ public class SqlExpression {
         if (count <= 0) {
             return "";
         }
-        return String.join(",", Collections.nCopies(count, "?"));
-    }
-
-    /**
-     * 获取原始表达式内容
-     *
-     * @return 表达式字符串
-     */
-    public String getExpression() {
-        return expression;
+        return String.join(", ", Collections.nCopies(count, "?"));
     }
 }

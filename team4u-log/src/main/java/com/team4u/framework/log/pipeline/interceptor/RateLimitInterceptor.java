@@ -1,7 +1,7 @@
 package com.team4u.framework.log.pipeline.interceptor;
 
-import com.team4u.framework.base.util.CacheUtil;
-import com.team4u.framework.base.util.cache.TimedCache;
+import com.team4u.framework.base.cache.CacheUtil;
+import com.team4u.framework.base.cache.TimedCache;
 import com.team4u.framework.log.config.FinOpsConfigRepository;
 import com.team4u.framework.log.core.LogEvent;
 import com.team4u.framework.log.pipeline.LogInterceptor;

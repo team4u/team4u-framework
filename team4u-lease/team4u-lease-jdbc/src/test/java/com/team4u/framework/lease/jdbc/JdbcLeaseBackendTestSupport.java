@@ -1,6 +1,6 @@
 package com.team4u.framework.lease.jdbc;
 
-import com.team4u.framework.base.util.JdbcUtil;
+import com.team4u.framework.base.jdbc.JdbcUtil;
 
 import javax.sql.DataSource;
 import java.io.ByteArrayOutputStream;
@@ -109,12 +109,12 @@ final class JdbcLeaseBackendTestSupport {
         }
 
         @Override
-        public void setLoginTimeout(int seconds) throws SQLException {
+        public int getLoginTimeout() throws SQLException {
+            return 0;
         }
 
         @Override
-        public int getLoginTimeout() throws SQLException {
-            return 0;
+        public void setLoginTimeout(int seconds) throws SQLException {
         }
 
         @Override

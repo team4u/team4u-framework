@@ -1,6 +1,6 @@
 package com.team4u.framework.config.db;
 
-import com.team4u.framework.base.util.JdbcUtil;
+import com.team4u.framework.base.jdbc.JdbcUtil;
 import com.team4u.framework.base.util.ThreadUtil;
 import com.team4u.framework.config.core.domain.ConfigEntry;
 import com.team4u.framework.config.core.spi.ConfigSource;

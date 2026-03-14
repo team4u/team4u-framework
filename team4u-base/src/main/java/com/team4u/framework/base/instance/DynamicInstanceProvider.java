@@ -1,10 +1,10 @@
 package com.team4u.framework.base.instance;
 
+import com.team4u.framework.base.cache.Cache;
+import com.team4u.framework.base.cache.CacheUtil;
 import com.team4u.framework.base.config.ConfigParser;
 import com.team4u.framework.base.config.StringConfigParser;
-import com.team4u.framework.base.util.CacheUtil;
 import com.team4u.framework.base.util.StringUtil;
-import com.team4u.framework.base.util.cache.Cache;
 
 /**
  * 动态实例缓存提供者 (纯粹增强型)

@@ -1,7 +1,6 @@
 package com.team4u.framework.config.db;
 
-import com.team4u.framework.base.convert.ConvertUtil;
-import com.team4u.framework.base.util.JdbcUtil;
+import com.team4u.framework.base.jdbc.JdbcUtil;
 import com.team4u.framework.config.core.domain.ConfigEntry;
 import com.team4u.framework.config.core.spi.ConfigSource;
 import lombok.extern.slf4j.Slf4j;
@@ -9,7 +8,10 @@ import lombok.extern.slf4j.Slf4j;
 import javax.sql.DataSource;
 import java.sql.SQLException;
 import java.sql.Timestamp;
-import java.util.*;
+import java.util.Collections;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
 
 /**
  * 基于数据库的配置源实现。
@@ -84,7 +86,7 @@ public class DbConfigSource implements ConfigSource {
     @Override
     public Map<String, ConfigEntry> load() {
         try {
-            List<Map<String, Object>> rows = queryRows(null);
+            List<DbConfigRow> rows = queryRows(null);
             return toConfigMap(rows);
         } catch (SQLException e) {
             log.error("[{}] Failed to load all configs", name, e);
@@ -100,7 +102,7 @@ public class DbConfigSource implements ConfigSource {
     @Override
     public Map<String, ConfigEntry> loadSince(long timestamp) {
         try {
-            List<Map<String, Object>> rows = queryRows(timestamp);
+            List<DbConfigRow> rows = queryRows(timestamp);
             return toConfigMap(rows);
         } catch (SQLException e) {
             log.error("[{}] Failed to load incremental configs, timestamp={}", name, timestamp, e);
@@ -114,17 +116,21 @@ public class DbConfigSource implements ConfigSource {
      * @param sinceTimestamp 起始时间戳，不为空时执行增量查询
      * @return 记录快照列表
      */
-    private List<Map<String, Object>> queryRows(Long sinceTimestamp) throws SQLException {
-        StringBuilder sql = new StringBuilder("SELECT * FROM ").append(options.getTableName())
-                .append(" WHERE 1=1");
-        List<Object> params = new ArrayList<>();
+    private List<DbConfigRow> queryRows(Long sinceTimestamp) throws SQLException {
+        String sql = "SELECT " +
+                options.getConfigTypeColumn() + " AS config_type, " +
+                options.getConfigKeyColumn() + " AS config_key, " +
+                options.getConfigValueColumn() + " AS config_value, " +
+                options.getEnabledColumn() + " AS enabled " +
+                " FROM " + options.getTableName() +
+                " WHERE 1=1";
 
         if (sinceTimestamp != null) {
-            sql.append(" AND ").append(options.getUpdateTimeColumn()).append(" > ?");
-            params.add(new Timestamp(sinceTimestamp));
+            sql += " AND " + options.getUpdateTimeColumn() + " > ?";
+            return JdbcUtil.queryList(dataSource, sql, DbConfigRow.class, new Timestamp(sinceTimestamp));
         }
 
-        return JdbcUtil.query(dataSource, sql.toString(), params.toArray());
+        return JdbcUtil.queryList(dataSource, sql, DbConfigRow.class);
     }
 
     /**
@@ -133,25 +139,32 @@ public class DbConfigSource implements ConfigSource {
      * 将数据库行映射为配置条目，并处理软删除逻辑。
      * </p>
      */
-    private Map<String, ConfigEntry> toConfigMap(List<Map<String, Object>> rows) {
+    private Map<String, ConfigEntry> toConfigMap(List<DbConfigRow> rows) {
         Map<String, ConfigEntry> result = new HashMap<>(rows.size());
         long now = System.currentTimeMillis();
 
-        for (Map<String, Object> row : rows) {
-            String configType = ConvertUtil.toStr(row.get(options.getConfigTypeColumn().toLowerCase()));
-            String configKey = ConvertUtil.toStr(row.get(options.getConfigKeyColumn().toLowerCase()));
-            String configValue = ConvertUtil.toStr(row.get(options.getConfigValueColumn().toLowerCase()));
-            Integer enabled = ConvertUtil.toInt(row.get(options.getEnabledColumn().toLowerCase()));
-
+        for (DbConfigRow row : rows) {
             // 拼接配置键：prefix.key
-            String fullKey = configType + "." + configKey;
+            String fullKey = row.getConfigType() + "." + row.getConfigKey();
 
             // 处理软删除，标记为失效条目
-            String value = (enabled != null && enabled == 0) ? TOMBSTONE_VALUE : configValue;
+            String value = (row.getEnabled() != null && row.getEnabled() == 0)
+                    ? TOMBSTONE_VALUE : row.getConfigValue();
 
             result.put(fullKey, new ConfigEntry(fullKey, value, name, now));
         }
 
         return Collections.unmodifiableMap(result);
+    }
+
+    /**
+     * 内部数据库行对应的 POJO。
+     */
+    @lombok.Data
+    public static class DbConfigRow {
+        private String configType;
+        private String configKey;
+        private String configValue;
+        private Integer enabled;
     }
 }
