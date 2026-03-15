@@ -29,7 +29,7 @@ public class DynamicLogProxyIntegrationTest {
         configContext = TestConfigContext.create();
         // 初始化日志系统，对接测试配置上下文
         LogBootstrap.start(LogBootstrap.Options.builder()
-                .configManager(configContext.getManager())
+                .configManager(configContext.getConfigManager())
                 .build());
     }
 

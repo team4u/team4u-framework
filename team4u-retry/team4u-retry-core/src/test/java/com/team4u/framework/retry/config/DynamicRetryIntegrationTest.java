@@ -22,7 +22,7 @@ public class DynamicRetryIntegrationTest {
         context = TestConfigContext.create();
         // 注入 TestConfigContext 中的 ConfigManager 到注册表中，实现零延迟同步重载测试
         DynamicRetryPolicyRegistry.setRegistry(new ConfigDrivenRegistry<>(
-                context.getManager(),
+                context.getConfigManager(),
                 "retry.policy.",
                 RetryPolicyParser::create));
     }

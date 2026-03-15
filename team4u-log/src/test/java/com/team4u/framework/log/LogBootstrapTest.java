@@ -55,10 +55,10 @@ public class LogBootstrapTest {
         secondContext.put("team4u.log.dyeing", dyeingRule("rule-b", "Second", "WARN"));
 
         LogBootstrap.start(LogBootstrap.Options.builder()
-                .configManager(firstContext.getManager())
+                .configManager(firstContext.getConfigManager())
                 .build());
         LogBootstrap.start(LogBootstrap.Options.builder()
-                .configManager(secondContext.getManager())
+                .configManager(secondContext.getConfigManager())
                 .build());
 
         Assert.assertEquals(LogBootstrap.State.STARTED, LogBootstrap.getState());
@@ -79,10 +79,10 @@ public class LogBootstrapTest {
         secondContext.put("team4u.log.dyeing", dyeingRule("rule-b", "Second", "WARN"));
 
         LogBootstrap.start(LogBootstrap.Options.builder()
-                .configManager(firstContext.getManager())
+                .configManager(firstContext.getConfigManager())
                 .build());
         LogBootstrap.reconfigure(LogBootstrap.Options.builder()
-                .configManager(secondContext.getManager())
+                .configManager(secondContext.getConfigManager())
                 .build());
 
         Assert.assertEquals(LogBootstrap.State.STARTED, LogBootstrap.getState());
@@ -100,10 +100,10 @@ public class LogBootstrapTest {
         firstContext.put("team4u.log.dyeing", dyeingRule("rule-a", "First", "DEBUG"));
 
         LogBootstrap.start(LogBootstrap.Options.builder()
-                .configManager(firstContext.getManager())
+                .configManager(firstContext.getConfigManager())
                 .build());
 
-        ConfigManager failingManager = failingManager(secondContext.getManager(), 3);
+        ConfigManager failingManager = failingManager(secondContext.getConfigManager(), 3);
         try {
             LogBootstrap.reconfigure(LogBootstrap.Options.builder()
                     .configManager(failingManager)
@@ -127,7 +127,7 @@ public class LogBootstrapTest {
 
         try {
             LogBootstrap.start(LogBootstrap.Options.builder()
-                    .configManager(failingManager(firstContext.getManager(), 3))
+                    .configManager(failingManager(firstContext.getConfigManager(), 3))
                     .build());
             Assert.fail("Expected start to fail");
         } catch (RuntimeException expected) {
@@ -136,7 +136,7 @@ public class LogBootstrapTest {
         }
 
         LogBootstrap.start(LogBootstrap.Options.builder()
-                .configManager(secondContext.getManager())
+                .configManager(secondContext.getConfigManager())
                 .build());
 
         Assert.assertEquals(LogBootstrap.State.STARTED, LogBootstrap.getState());
@@ -154,7 +154,7 @@ public class LogBootstrapTest {
         secondContext.put("team4u.log.dyeing", dyeingRule("rule-b", "Second", "WARN"));
 
         LogBootstrap.start(LogBootstrap.Options.builder()
-                .configManager(firstContext.getManager())
+                .configManager(firstContext.getConfigManager())
                 .build());
         LogBootstrap.stop();
         LogBootstrap.stop();
@@ -164,7 +164,7 @@ public class LogBootstrapTest {
         assertLevel("First", Level.INFO);
 
         LogBootstrap.start(LogBootstrap.Options.builder()
-                .configManager(secondContext.getManager())
+                .configManager(secondContext.getConfigManager())
                 .build());
         assertLevel("Second", Level.WARN);
     }
