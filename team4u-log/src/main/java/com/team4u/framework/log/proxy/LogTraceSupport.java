@@ -36,7 +36,7 @@ public class LogTraceSupport {
      * @throws Throwable 原始业务异常
      */
     public static Object proceed(MethodInvocation invocation, LogTraceOptions options) throws Throwable {
-        long start = System.currentTimeMillis();
+        long startNanos = System.nanoTime();
         Method method = invocation.getMethod();
         Object[] args = invocation.getArguments();
         Class<?> targetClass = options.getTargetClass() != null ? options.getTargetClass() : getTargetClass(invocation, method);
@@ -46,7 +46,7 @@ public class LogTraceSupport {
 
         try {
             Object result = invocation.proceed();
-            long cost = System.currentTimeMillis() - start;
+            long cost = (System.nanoTime() - startNanos) / 1_000_000;
 
             Loggers loggers = Loggers.of(targetClass)
                     .action(options.getAction())
@@ -68,7 +68,7 @@ public class LogTraceSupport {
 
         } catch (Throwable e) {
             Throwable throwable = unwrap(e);
-            long cost = System.currentTimeMillis() - start;
+            long cost = (System.nanoTime() - startNanos) / 1_000_000;
 
             Loggers loggers = Loggers.of(targetClass)
                     .action(options.getAction())
