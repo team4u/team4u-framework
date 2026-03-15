@@ -20,6 +20,21 @@ public class ReflectUtil {
     private static final Map<Class<?>, Map<String, Field>> FIELD_CACHE = new ConcurrentHashMap<>();
 
     /**
+     * 方法数组缓存，用于避免频繁调用获取方法数组时的内存拷贝与对象创建开销
+     */
+    private static final Map<Class<?>, Method[]> METHOD_CACHE = new ConcurrentHashMap<>();
+
+    /**
+     * 方法参数缓存，用于避免频繁调用获取方法参数时的内存拷贝与对象创建开销
+     */
+    private static final Map<Class<?>, Map<Method, Parameter[]>> PARAMETER_CACHE = new ConcurrentHashMap<>();
+
+    /**
+     * 空参数数组占位符，用于在缓存中表示未找到带名称的参数
+     */
+    private static final Parameter[] EMPTY_PARAMETERS = new Parameter[0];
+
+    /**
      * 设置对象字段值
      * <p>
      * 会自动调用 {@link #makeAccessible(AccessibleObject)} 以确保私有字段可访问。
@@ -167,7 +182,7 @@ public class ReflectUtil {
         }
         Class<?> searchType = clazz;
         while (searchType != null) {
-            Method[] methods = (searchType.isInterface() ? searchType.getMethods() : searchType.getDeclaredMethods());
+            Method[] methods = getMethods(searchType);
             for (Method method : methods) {
                 if (methodName.equals(method.getName())
                         && (paramTypes == null || isArgumentsMatch(method.getParameterTypes(), paramTypes))) {
@@ -177,6 +192,55 @@ public class ReflectUtil {
             searchType = searchType.getSuperclass();
         }
         return null;
+    }
+
+    /**
+     * 获取类的所有方法，带缓存机制以提升性能
+     *
+     * @param clazz 目标类
+     * @return 方法数组
+     */
+    private static Method[] getMethods(Class<?> clazz) {
+        return METHOD_CACHE.computeIfAbsent(clazz, c ->
+                c.isInterface() ? c.getMethods() : c.getDeclaredMethods()
+        );
+    }
+
+    /**
+     * 获取方法参数定义，优先尝试从目标类查找以确保获取真实参数名称
+     * <p>
+     * 说明：此方法内部增加了缓存支持，以提高获取方法参数的性能，避免 Parameter 对象的频繁创建。
+     *
+     * @param targetClass 目标类
+     * @param method      方法对象
+     * @return 参数数组，如果未获取到则返回 null
+     */
+    public static Parameter[] getParameters(Class<?> targetClass, Method method) {
+        if (method == null) {
+            return null;
+        }
+
+        Map<Method, Parameter[]> methodCache = PARAMETER_CACHE.computeIfAbsent(targetClass, k -> new ConcurrentHashMap<>());
+
+        Parameter[] cachedParams = methodCache.computeIfAbsent(method, m -> {
+            Method targetMethod = getMethod(targetClass, m.getName(), m.getParameterTypes());
+            if (targetMethod != null) {
+                Parameter[] parameters = targetMethod.getParameters();
+                if (parameters.length > 0 && parameters[0].isNamePresent()) {
+                    return parameters;
+                }
+            }
+
+            Parameter[] parameters = m.getParameters();
+            if (parameters.length > 0 && parameters[0].isNamePresent()) {
+                return parameters;
+            }
+
+            // 使用占位符表示未找到带名称的参数或无参数
+            return EMPTY_PARAMETERS;
+        });
+
+        return cachedParams == EMPTY_PARAMETERS ? null : cachedParams;
     }
 
     /**
