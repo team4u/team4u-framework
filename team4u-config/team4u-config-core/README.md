@@ -215,7 +215,7 @@ public class AppConfig {
 #### @ConfigRequired
 
 - `@ConfigRequired`: 标记为必填。若配置缺失**且字段无初始值**时抛出 `ConfigMissingException`。
-- 当前版本未提供 `@ConfigDefault` 注解；默认值能力通过 Java Bean 字段初始值和占位符默认值（`${key:default}`）实现。
+-  默认值能力通过 Java Bean 字段初始值和占位符默认值（`${key:default}`）实现。
 
 ---
 
@@ -426,11 +426,11 @@ Assert.assertEquals("test-app", config.getName());
 
 ### 启动阻断 (Fail-Fast)
 
-在 ConfigManager 初始化时，会执行 initialLoad()。如果任何关键配置源加载失败，系统将抛出异常并阻断应用启动，防止应用在配置不完整的状态下运行。数据库配置源的全量/增量读取失败也会显式抛错，不再静默回退为空配置。
+在 ConfigManager 初始化时，会执行 initialLoad()。如果任何关键配置源加载失败，系统将抛出异常并阻断应用启动，防止应用在配置不完整的状态下运行。数据库配置源的全量读取失败也会显式抛错，不再静默回退为空配置。
 
 ### 热更容错与原子性
 
-热更新过程是原子性的。如果新快照在聚合或加载过程中发生异常，HotReloadManager 会捕获异常并记录错误日志，同时保留旧快照生效，确保系统运行的连续性。当前热更新链路仍以 watcher 触发后的全量重建为主，`loadSince` 属于 SPI 级可选能力，不代表框架主链路已启用增量合并。
+热更新过程是原子性的。如果新快照在聚合或加载过程中发生异常，HotReloadManager 会捕获异常并记录错误日志，同时保留旧快照生效，确保系统运行的连续性。当前热更新链路仅依赖 `load()` 进行全量重载。
 
 ### 配置溯源 (Traceability)
 

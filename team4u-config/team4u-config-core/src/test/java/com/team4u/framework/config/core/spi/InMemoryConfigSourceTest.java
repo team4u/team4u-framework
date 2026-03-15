@@ -103,29 +103,6 @@ public class InMemoryConfigSourceTest {
     }
 
     /**
-     * 验证 loadSince() 增量加载：仅返回时间戳严格大于给定值的条目
-     */
-    @Test
-    public void testLoadSinceReturnOnlyChangedEntries() throws InterruptedException {
-        // 写入第一批数据，记录此时时间戳
-        source.put("stable", "v1");
-        long checkpoint = System.currentTimeMillis();
-
-        // 保证后续写入在 checkpoint 之后
-        Thread.sleep(5);
-
-        // 写入第二批数据
-        source.put("changed", "v2");
-
-        Map<String, ConfigEntry> delta = source.loadSince(checkpoint);
-
-        // 只有 changed 是在 checkpoint 之后写入的
-        Assert.assertEquals(1, delta.size());
-        Assert.assertTrue(delta.containsKey("changed"));
-        Assert.assertEquals("v2", delta.get("changed").getValue());
-    }
-
-    /**
      * 验证全量 load() 返回的是快照，对其修改不影响内部存储
      */
     @Test

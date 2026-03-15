@@ -105,36 +105,6 @@ public class DbConfigSourceTest {
     }
 
     /**
-     * 增量加载场景。
-     */
-    @Test
-    public void testIncrementalLoad() throws SQLException {
-        DbConfigSource source = new DbConfigSource("DB-All", 100, dataSource);
-
-        // 记录当前时间作为快照基线
-        long snapshotTime = System.currentTimeMillis();
-
-        // 停顿 1 秒，确保后续写入的 update_time 大于快照时间
-        ThreadUtil.sleep(1100);
-
-        // 新增一条记录
-        JdbcUtil.execute(dataSource, "insert into system_config(config_type, config_key, config_value) values (?, ?, ?)",
-                "app", "timeout", "3000");
-
-        // 修改一条已有记录
-        JdbcUtil.execute(dataSource, "UPDATE system_config SET config_value = '9090' WHERE config_key = 'port'");
-
-        // 执行增量加载，只应返回新增和修改的两条
-        Map<String, ConfigEntry> changes = source.loadSince(snapshotTime);
-
-        assertEquals("增量结果应包含新增和修改各一条", 2, changes.size());
-        assertEquals("3000", changes.get("app.timeout").getValue());
-        assertEquals("9090", changes.get("app.port").getValue());
-        // 未发生变更的条目不应出现在增量结果中
-        assertNull("未变更的条目不应出现在增量结果中", changes.get("app.name"));
-    }
-
-    /**
      * 自定义映射测试，验证表名和字段名可配置。
      */
     @Test
@@ -176,13 +146,6 @@ public class DbConfigSourceTest {
         DbConfigSource source = new DbConfigSource("DB-All", 100, dataSource);
         JdbcUtil.execute(dataSource, "DROP TABLE system_config");
         source.load();
-    }
-
-    @Test(expected = IllegalStateException.class)
-    public void testIncrementalLoadFailsFastWhenTableUnavailable() throws SQLException {
-        DbConfigSource source = new DbConfigSource("DB-All", 100, dataSource);
-        JdbcUtil.execute(dataSource, "DROP TABLE system_config");
-        source.loadSince(System.currentTimeMillis());
     }
 
     /**
