@@ -21,7 +21,7 @@ public class RateLimitInterceptorTest {
     @Before
     public void setup() {
         interceptor = RateLimitInterceptor.getInstance();
-        interceptor.reset();
+        interceptor.stop();
         // 将阈值调低方便测试
         updateLimit(2);
     }
@@ -86,7 +86,7 @@ public class RateLimitInterceptorTest {
 
         // 刷新限流并重置
         updateLimit(10);
-        interceptor.reset();
+        interceptor.stop();
 
         Assert.assertTrue("重置后应恢复正常", interceptor.handle(createErrorEvent("X", new RuntimeException())));
     }

@@ -41,7 +41,7 @@ public class ProxyRuleRepository {
      * <p>
      * 通过指定的配置管理器构建驱动注册表，实现配置规则组件自治。
      * 同步加载初始配置信息，并在底层建立监听以响应后续的实时重读。
-     * 
+     *
      * @param configManager 注入配置管理实例
      */
     public synchronized void init(ConfigManager configManager) {
@@ -75,7 +75,7 @@ public class ProxyRuleRepository {
      * 避免因重复调用或者应用重启引发监听泄露。
      * 执行完毕后，环境处于无规则匹配且无内存占用的干净状态。
      */
-    public synchronized void reset() {
+    public synchronized void stop() {
         if (this.registry != null) {
             this.registry.destroy();
             this.registry = null;

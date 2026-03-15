@@ -26,7 +26,7 @@ public class LoggersTest {
     @Before
     public void setup() {
         logHelper = TestLogHelper.start();
-        TargetedDyeingInterceptor.getInstance().reset();
+        TargetedDyeingInterceptor.getInstance().stop();
     }
 
     private void refreshRules(List<DyeingRule> rules) {
@@ -36,7 +36,7 @@ public class LoggersTest {
     @After
     public void teardown() {
         logHelper.stop();
-        TargetedDyeingInterceptor.getInstance().reset();
+        TargetedDyeingInterceptor.getInstance().stop();
     }
 
     @Test

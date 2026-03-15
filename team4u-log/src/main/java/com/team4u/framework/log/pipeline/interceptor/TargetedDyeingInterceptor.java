@@ -40,7 +40,7 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
     private ConfigDrivenRegistry<List<DyeingRule>> registry;
 
     private TargetedDyeingInterceptor() {
-        reset();
+        this.stop();
     }
 
     /**
@@ -94,8 +94,7 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
         this.activeRules = loadedRules != null ? loadedRules : Collections.emptyList();
     }
 
-    @Override
-    public synchronized void reset() {
+    public synchronized void stop() {
         if (this.registry != null) {
             this.registry.destroy();
             this.registry = null;

@@ -86,6 +86,6 @@ public class LogInterceptorManager {
      * 重置所有拦截器至初始状态
      */
     public void reset() {
-        chain.getPolicies().forEach(LogInterceptor::reset);
+        chain.getPolicies().forEach(LogInterceptor::stop);
     }
 }

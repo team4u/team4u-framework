@@ -7,6 +7,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.lang.reflect.Field;
 import java.util.List;
 
 /**
@@ -141,11 +142,28 @@ public class LogSpanTest {
     public void testManualDuration() {
         LogSpan span = Loggers.of(LogSpanTest.class).begin();
         span.put("key", "val");
-        Loggers loggers = (Loggers) com.team4u.framework.base.util.ReflectUtil.getFieldValue(span, "delegate");
+        Loggers loggers = (Loggers) readField(span, "delegate");
         loggers.duration(999);
         span.success().log();
 
         LogEvent event = logHelper.lastEvent();
         Assert.assertEquals(999L, event.getDurationMs());
+    }
+
+    /**
+     * 通过反射读取对象内部字段（替代原有依赖库，减少耦合）
+     *
+     * @param target    目标对象
+     * @param fieldName 字段名称
+     * @return 字段值
+     */
+    private Object readField(Object target, String fieldName) {
+        try {
+            Field field = target.getClass().getDeclaredField(fieldName);
+            field.setAccessible(true);
+            return field.get(target);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
+        }
     }
 }

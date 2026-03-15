@@ -28,15 +28,18 @@ public class DynamicLogProxyIntegrationTest {
         logHelper = TestLogHelper.start();
         configContext = TestConfigContext.create();
         // 初始化日志系统，对接测试配置上下文
-        LogBootstrap.global().configManager(configContext.getManager()).start();
+        LogBootstrap.start(LogBootstrap.Options.builder()
+                .configManager(configContext.getManager())
+                .build());
     }
 
     @After
     public void teardown() {
         logHelper.stop();
+        LogBootstrap.stop();
         configContext.destroy();
-        ProxyRuleRepository.getInstance().reset();
-        TargetedDyeingInterceptor.getInstance().reset();
+        ProxyRuleRepository.getInstance().stop();
+        TargetedDyeingInterceptor.getInstance().stop();
     }
 
     @Test
