@@ -80,7 +80,7 @@ public class LogInterceptorManagerTest {
         private int state = 0;
 
         @Override
-        public void reset() {
+        public void stop() {
             this.state = 0;
         }
 

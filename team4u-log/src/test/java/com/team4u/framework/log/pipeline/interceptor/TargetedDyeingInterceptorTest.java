@@ -11,6 +11,7 @@ import org.junit.Test;
 import org.slf4j.MDC;
 import org.slf4j.event.Level;
 
+import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.List;
 
@@ -24,7 +25,7 @@ public class TargetedDyeingInterceptorTest {
     @Before
     public void setup() {
         interceptor = TargetedDyeingInterceptor.getInstance();
-        interceptor.reset();
+        interceptor.stop();
         MDC.clear();
     }
 
@@ -129,11 +130,11 @@ public class TargetedDyeingInterceptorTest {
         TestConfigContext context = TestConfigContext.create();
         try {
             interceptor.init(context.getManager());
-            Assert.assertNotNull(ReflectUtil.getFieldValue(interceptor, "registry"));
+            Assert.assertNotNull(readField(interceptor, "registry"));
 
-            interceptor.reset();
+            interceptor.stop();
 
-            Assert.assertNull(ReflectUtil.getFieldValue(interceptor, "registry"));
+            Assert.assertNull(readField(interceptor, "registry"));
         } finally {
             context.destroy();
         }
@@ -166,9 +167,26 @@ public class TargetedDyeingInterceptorTest {
             interceptor.handle(oldEvent);
             Assert.assertEquals(Level.INFO, oldEvent.getLevel());
         } finally {
-            interceptor.reset();
+            interceptor.stop();
             firstContext.destroy();
             secondContext.destroy();
+        }
+    }
+
+    /**
+     * 通过反射读取对象内部字段，替代外部框架依赖
+     *
+     * @param target    目标对象
+     * @param fieldName 字段名称
+     * @return 字段对应的值
+     */
+    private Object readField(Object target, String fieldName) {
+        try {
+            Field field = target.getClass().getDeclaredField(fieldName);
+            field.setAccessible(true);
+            return field.get(target);
+        } catch (Exception e) {
+            throw new RuntimeException(e);
         }
     }
 }

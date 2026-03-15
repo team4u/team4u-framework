@@ -2,12 +2,12 @@ package com.team4u.framework.log.config;
 
 import com.fasterxml.jackson.annotation.JsonCreator;
 import com.fasterxml.jackson.annotation.JsonProperty;
+import com.team4u.framework.config.core.ConfigManager;
+import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.serializer.json.JsonUtil;
 import lombok.Data;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import com.team4u.framework.config.core.ConfigManager;
-import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 
 /**
  * 成本与性能（FinOps）配置仓库
@@ -35,7 +35,7 @@ public class FinOpsConfigRepository {
     /**
      * 组件自治：自己初始化自己的配置监听
      */
-    public void init(ConfigManager configManager) {
+    public synchronized void init(ConfigManager configManager) {
         if (this.registry != null) {
             this.registry.destroy();
         }
@@ -66,7 +66,7 @@ public class FinOpsConfigRepository {
      * 无论当前配置来自配置中心还是测试注入，均恢复默认配置，
      * 以确保单元测试和嵌入式运行场景没有状态泄漏。
      */
-    public void reset() {
+    public synchronized void stop() {
         if (this.registry != null) {
             this.registry.destroy();
             this.registry = null;
@@ -112,13 +112,6 @@ public class FinOpsConfigRepository {
          */
         private final int errorLimitPerSecond;
 
-        public static FinOpsConfig defaults() {
-            return new FinOpsConfig(
-                    DEFAULT_MAX_LOG_LENGTH,
-                    DEFAULT_MAX_STRING_LENGTH,
-                    DEFAULT_ERROR_LIMIT_PER_SECOND);
-        }
-
         @JsonCreator
         public FinOpsConfig(
                 @JsonProperty("maxLogLength") Integer maxLogLength,
@@ -134,6 +127,13 @@ public class FinOpsConfigRepository {
             this.maxLogLength = maxLogLength;
             this.maxStringLength = maxStringLength;
             this.errorLimitPerSecond = errorLimitPerSecond;
+        }
+
+        public static FinOpsConfig defaults() {
+            return new FinOpsConfig(
+                    DEFAULT_MAX_LOG_LENGTH,
+                    DEFAULT_MAX_STRING_LENGTH,
+                    DEFAULT_ERROR_LIMIT_PER_SECOND);
         }
 
         public FinOpsConfig withMaxLogLength(int maxLogLength) {

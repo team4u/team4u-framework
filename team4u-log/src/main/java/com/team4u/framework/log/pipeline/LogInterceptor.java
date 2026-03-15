@@ -21,7 +21,7 @@ public interface LogInterceptor extends ContextPolicy<LogEvent> {
     /**
      * 重置拦截器状态
      */
-    default void reset() {
+    default void stop() {
     }
 
     /**

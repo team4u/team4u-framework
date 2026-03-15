@@ -28,29 +28,59 @@
 
 ### 模块自举（初始化启动）
 为了启用动态脱敏、动态染色等高级功能，需在应用启动阶段进行模块初始化：
+
 ```java
 import com.team4u.framework.log.LogBootstrap;
-import com.team4u.framework.config.core.ConfigManager;
-import com.team4u.framework.criterion.Criteria;
 
 // 1) 全部使用默认全局实例（推荐开箱即用）
-LogBootstrap.global().start();
+LogBootstrap.start();
 
 // 2) 仅覆盖配置管理器，其余保持默认
-LogBootstrap.global()
-        .configManager(globalConfigManager)
-        .start();
+LogBootstrap.
+
+start(LogBootstrap.Options.builder()
+        .
+
+configManager(globalConfigManager)
+        .
+
+build());
 
 // 3) 同时覆盖 Criteria（用于业务方注入自定义规则引擎实例）
-LogBootstrap.global()
-        .configManager(globalConfigManager)
-        .criteria(customCriteria)
-        .start();
+        LogBootstrap.
+
+start(LogBootstrap.Options.builder()
+        .
+
+configManager(globalConfigManager)
+        .
+
+criteria(customCriteria)
+        .
+
+build());
+
+// 4) 运行中显式重配
+        LogBootstrap.
+
+reconfigure(LogBootstrap.Options.builder()
+        .
+
+configManager(anotherConfigManager)
+        .
+
+build());
+
+// 5) 应用关闭时释放监听
+        LogBootstrap.
+
+stop();
 ```
 
 > 说明：
-> - `configManager(...)` 未设置时默认使用 `ConfigManager.global()`。
-> - `criteria(...)` 未设置时默认使用 `Criteria.global()`。
+> - `LogBootstrap.start()` 使用 `ConfigManager.global()` 和 `Criteria.global()`。
+> - `start(options)` 只负责启动；运行中换依赖请使用 `reconfigure(options)`。
+> - `stop()` 幂等，可用于测试与嵌入式场景清理。
 
 ### 基础日志打印
 使用 `Loggers` 提供的 Fluent API 记录业务日志：
@@ -329,7 +359,7 @@ service.register(req);
 
 #### 启动建议
 
-- 使用 `LogBootstrap.global().start()` 时，日志模块会自动联动初始化 `MaskBootstrap`。
+- 使用 `LogBootstrap.start()` 时，日志模块会自动联动初始化 `MaskBootstrap`。
 - 若你依赖方法参数名进行脱敏（如 `String mobile`），建议开启编译参数 `-parameters`，避免参数名退化为 `arg0/arg1`。
 ## 单元测试与日志验证
 

@@ -24,7 +24,7 @@ public class RateLimitInterceptor implements LogInterceptor {
     private final TimedCache<String, AtomicInteger> errorCounter = CacheUtil.newTimedCache(1000);
 
     private RateLimitInterceptor() {
-        reset();
+        stop();
     }
 
     /**
@@ -37,7 +37,7 @@ public class RateLimitInterceptor implements LogInterceptor {
     }
 
     @Override
-    public void reset() {
+    public void stop() {
         errorCounter.clear();
     }
 

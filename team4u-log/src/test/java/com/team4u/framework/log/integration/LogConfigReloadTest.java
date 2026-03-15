@@ -22,7 +22,9 @@ public class LogConfigReloadTest {
     @Before
     public void setup() {
         testConfigContext = TestConfigContext.create();
-        LogBootstrap.global().configManager(testConfigContext.getManager()).start();
+        LogBootstrap.start(LogBootstrap.Options.builder()
+                .configManager(testConfigContext.getManager())
+                .build());
 
         logHelper = TestLogHelper.start();
     }
@@ -30,6 +32,7 @@ public class LogConfigReloadTest {
     @After
     public void teardown() {
         logHelper.stop();
+        LogBootstrap.stop();
         testConfigContext.destroy();
     }
 

@@ -1,12 +1,11 @@
 package com.team4u.framework.log.core;
 
+import com.team4u.framework.log.LogBootstrap;
 import com.team4u.framework.log.appender.LogAppender;
 import com.team4u.framework.log.appender.Slf4jLogAppender;
 import com.team4u.framework.log.config.FinOpsConfigRepository;
 import com.team4u.framework.log.jackson.JacksonLogSerializer;
 import com.team4u.framework.log.pipeline.LogInterceptorManager;
-import com.team4u.framework.log.proxy.ProxyRuleRepository;
-import com.team4u.framework.mask.MaskBootstrap;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -63,12 +62,12 @@ public class LogEngine {
     public void reset() {
         // 追加器恢复默认
         this.appender = new Slf4jLogAppender();
+        // 先统一释放 bootstrap 绑定的监听与运行时状态
+        LogBootstrap.stop();
         // 拦截器链清空
         this.interceptorManager.reset();
-        // 各配置驱动仓库归零，释放旧 ConfigManager 的监听
-        MaskBootstrap.global().stop();
-        ProxyRuleRepository.getInstance().reset();
-        FinOpsConfigRepository.getInstance().reset();
+        // 补齐测试态默认快照
+        FinOpsConfigRepository.getInstance().stop();
         // 重建 ObjectMapper，清空 Jackson 的 BeanSerializer 缓存
         this.serializer.reset();
     }

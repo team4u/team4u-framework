@@ -27,13 +27,13 @@ public class LogEngineTest {
     public void setup() {
         logHelper = TestLogHelper.start();
         engine = LogEngine.getInstance();
-        FinOpsConfigRepository.getInstance().reset();
+        FinOpsConfigRepository.getInstance().stop();
     }
 
     @After
     public void teardown() {
         logHelper.stop();
-        FinOpsConfigRepository.getInstance().reset();
+        FinOpsConfigRepository.getInstance().stop();
     }
 
     @Test

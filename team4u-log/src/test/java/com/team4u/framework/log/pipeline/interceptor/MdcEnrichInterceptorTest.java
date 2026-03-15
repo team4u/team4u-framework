@@ -13,7 +13,7 @@ public class MdcEnrichInterceptorTest {
 
     @Before
     public void setUp() {
-        MdcEnrichInterceptor.getInstance().reset();
+        MdcEnrichInterceptor.getInstance().stop();
         MDC.clear();
     }
 
