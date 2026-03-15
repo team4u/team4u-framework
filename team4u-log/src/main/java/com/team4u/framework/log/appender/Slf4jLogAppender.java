@@ -50,8 +50,11 @@ public class Slf4jLogAppender implements LogAppender {
             case WARN:
                 logger.warn(finalLogMsg);
                 break;
-            default:
+            case TRACE:
                 logger.trace(finalLogMsg);
+                break;
+            default:
+                logger.info(finalLogMsg);
         }
     }
 
@@ -67,8 +70,10 @@ public class Slf4jLogAppender implements LogAppender {
                 return logger.isDebugEnabled();
             case WARN:
                 return logger.isWarnEnabled();
-            default:
+            case TRACE:
                 return logger.isTraceEnabled();
+            default:
+                return logger.isInfoEnabled();
         }
     }
 }

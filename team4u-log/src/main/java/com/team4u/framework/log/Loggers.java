@@ -235,15 +235,15 @@ public class Loggers {
             T result = callable.call();
             span.success().log();
             return result;
-        } catch (RuntimeException e) {
-            span.failed(e).log();
-            throw e;
-        } catch (Exception e) {
-            span.failed(e).log();
-            throw new RuntimeException(e);
         } catch (Throwable e) {
             span.failed(e).log();
-            throw e;
+            if (e instanceof RuntimeException) {
+                throw (RuntimeException) e;
+            }
+            if (e instanceof Error) {
+                throw (Error) e;
+            }
+            throw new RuntimeException(e);
         }
     }
 
