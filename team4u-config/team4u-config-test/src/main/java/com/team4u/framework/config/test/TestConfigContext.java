@@ -3,6 +3,7 @@ package com.team4u.framework.config.test;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.internal.DefaultConfigManager;
 import com.team4u.framework.config.core.spi.InMemoryConfigSource;
+import lombok.Getter;
 
 /**
  * 配置管理测试上下文工具类
@@ -10,6 +11,7 @@ import com.team4u.framework.config.core.spi.InMemoryConfigSource;
  * 封装了零延迟热重载的 ConfigManager 及 InMemoryConfigSource，专门用于加速和简化单元测试。
  * </p>
  */
+@Getter
 public class TestConfigContext {
 
     private final InMemoryConfigSource source;
@@ -31,18 +33,6 @@ public class TestConfigContext {
                 .debounceWindow(0) // 0延时，实现测试环境同步热重载
                 .build();
     }
-
-    // --- 核心实例获取 ---
-
-    public ConfigManager getManager() {
-        return configManager;
-    }
-
-    public InMemoryConfigSource getSource() {
-        return source;
-    }
-
-    // --- 快捷操作方法（支持链式调用） ---
 
     /**
      * 写入配置并立即触发同步热重载

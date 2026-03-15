@@ -30,7 +30,7 @@ public class RoutedProxyTest {
 
         // 3. 构建局部 RoutingManager
         routingManager = RoutingManager.builder()
-                .configManager(configContext.getManager())
+                .configManager(configContext.getConfigManager())
                 .build();
     }
 

@@ -12,7 +12,7 @@ public class TestConfigContextTest {
     @Test
     public void testCreate() {
         TestConfigContext context = TestConfigContext.create();
-        Assert.assertNotNull(context.getManager());
+        Assert.assertNotNull(context.getConfigManager());
         Assert.assertNotNull(context.getSource());
         Assert.assertEquals("test-mock-source", context.getSource().name());
         Assert.assertEquals(0, context.getSource().priority());
@@ -23,18 +23,18 @@ public class TestConfigContextTest {
         TestConfigContext context = TestConfigContext.create();
         context.put("test.key", "test.value");
 
-        Assert.assertEquals("test.value", context.getManager().getString("test.key").orElse(null));
+        Assert.assertEquals("test.value", context.getConfigManager().getString("test.key").orElse(null));
     }
 
     @Test
     public void testDelete() {
         TestConfigContext context = TestConfigContext.create();
         context.put("test.key", "test.value");
-        Assert.assertEquals("test.value", context.getManager().getString("test.key").orElse(null));
+        Assert.assertEquals("test.value", context.getConfigManager().getString("test.key").orElse(null));
 
         // delete 使用 Tombstone 语义
         context.delete("test.key");
-        Assert.assertFalse(context.getManager().getString("test.key").isPresent());
+        Assert.assertFalse(context.getConfigManager().getString("test.key").isPresent());
 
         // 验证底层存储确实包含 Tombstone
         Assert.assertEquals(ConfigSource.TOMBSTONE_VALUE, context.getSource().load().get("test.key").getValue());
@@ -44,11 +44,11 @@ public class TestConfigContextTest {
     public void testRemove() {
         TestConfigContext context = TestConfigContext.create();
         context.put("test.key", "test.value");
-        Assert.assertEquals("test.value", context.getManager().getString("test.key").orElse(null));
+        Assert.assertEquals("test.value", context.getConfigManager().getString("test.key").orElse(null));
 
         // remove 物理移除
         context.remove("test.key");
-        Assert.assertFalse(context.getManager().getString("test.key").isPresent());
+        Assert.assertFalse(context.getConfigManager().getString("test.key").isPresent());
 
         // 验证底层存储不包含该键
         Assert.assertFalse(context.getSource().load().containsKey("test.key"));

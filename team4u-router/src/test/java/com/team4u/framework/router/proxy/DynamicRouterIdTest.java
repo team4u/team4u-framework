@@ -31,7 +31,7 @@ public class DynamicRouterIdTest {
 
         configContext = TestConfigContext.create();
         routingManager = RoutingManager.builder()
-                .configManager(configContext.getManager())
+                .configManager(configContext.getConfigManager())
                 .build();
     }
 

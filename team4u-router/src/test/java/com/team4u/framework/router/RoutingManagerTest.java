@@ -27,7 +27,7 @@ public class RoutingManagerTest {
         RoutingManager.resetGlobalForTest();
         configContext = TestConfigContext.create();
         routingManager = RoutingManager.builder()
-                .configManager(configContext.getManager())
+                .configManager(configContext.getConfigManager())
                 .build();
 
         RoutingManager.setGlobal(routingManager);
@@ -213,7 +213,7 @@ public class RoutingManagerTest {
     public void testCustomConfigPrefix() {
         String customPrefix = "biz.router.";
         RoutingManager customManager = RoutingManager.builder()
-                .configManager(configContext.getManager())
+                .configManager(configContext.getConfigManager())
                 .configPrefix(customPrefix)
                 .build();
 

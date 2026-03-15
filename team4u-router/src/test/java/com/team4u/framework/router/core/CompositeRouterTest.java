@@ -24,7 +24,7 @@ public class CompositeRouterTest {
     public void setUp() {
         configContext = TestConfigContext.create();
         routingManager = RoutingManager.builder()
-                .configManager(configContext.getManager())
+                .configManager(configContext.getConfigManager())
                 .build();
     }
 

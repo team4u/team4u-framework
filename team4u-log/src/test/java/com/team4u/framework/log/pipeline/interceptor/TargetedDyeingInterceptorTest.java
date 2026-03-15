@@ -129,7 +129,7 @@ public class TargetedDyeingInterceptorTest {
     public void testResetDestroysRegistry() {
         TestConfigContext context = TestConfigContext.create();
         try {
-            interceptor.init(context.getManager());
+            interceptor.init(context.getConfigManager());
             Assert.assertNotNull(readField(interceptor, "registry"));
 
             interceptor.stop();
@@ -147,7 +147,7 @@ public class TargetedDyeingInterceptorTest {
         try {
             firstContext.put("team4u.log.dyeing",
                     "[{\"id\":\"first\",\"condition\":\"meta_action=='First'\",\"targetLevel\":\"DEBUG\"}]");
-            interceptor.init(firstContext.getManager());
+            interceptor.init(firstContext.getConfigManager());
             Thread.sleep(50);
 
             LogEvent firstEvent = new LogEvent().setAction("First").setLevel(Level.INFO);
@@ -156,7 +156,7 @@ public class TargetedDyeingInterceptorTest {
 
             secondContext.put("team4u.log.dyeing",
                     "[{\"id\":\"second\",\"condition\":\"meta_action=='Second'\",\"targetLevel\":\"WARN\"}]");
-            interceptor.init(secondContext.getManager());
+            interceptor.init(secondContext.getConfigManager());
             Thread.sleep(50);
 
             LogEvent secondEvent = new LogEvent().setAction("Second").setLevel(Level.INFO);
