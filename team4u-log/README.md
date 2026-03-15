@@ -36,45 +36,23 @@ import com.team4u.framework.log.LogBootstrap;
 LogBootstrap.start();
 
 // 2) 仅覆盖配置管理器，其余保持默认
-LogBootstrap.
-
-start(LogBootstrap.Options.builder()
-        .
-
-configManager(globalConfigManager)
-        .
-
-build());
+LogBootstrap.start(LogBootstrap.Options.builder()
+        .configManager(globalConfigManager)
+        .build());
 
 // 3) 同时覆盖 Criteria（用于业务方注入自定义规则引擎实例）
-        LogBootstrap.
-
-start(LogBootstrap.Options.builder()
-        .
-
-configManager(globalConfigManager)
-        .
-
-criteria(customCriteria)
-        .
-
-build());
+LogBootstrap.start(LogBootstrap.Options.builder()
+        .configManager(globalConfigManager)
+        .criteria(customCriteria)
+        .build());
 
 // 4) 运行中显式重配
-        LogBootstrap.
-
-reconfigure(LogBootstrap.Options.builder()
-        .
-
-configManager(anotherConfigManager)
-        .
-
-build());
+LogBootstrap.reconfigure(LogBootstrap.Options.builder()
+        .configManager(anotherConfigManager)
+        .build());
 
 // 5) 应用关闭时释放监听
-        LogBootstrap.
-
-stop();
+LogBootstrap.stop();
 ```
 
 > 说明：
