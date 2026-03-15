@@ -133,6 +133,9 @@ Loggers.of(OrderService.class)
 
 - `derive()` 对 `payload` 只做浅拷贝。顶层 Map 会复制，内部可变对象不会深拷贝。
 - 如果你依赖方法参数名做脱敏或日志展示，建议开启 Maven 编译参数 `-parameters`，否则参数名可能退化成 `arg0`、`arg1`。
+- Spring Bean 场景下，`@AutoLogTrace` 需要显式 `@Import(LogSpringConfiguration.class)` 才会生效；非 Spring 对象仍然走 `LogProxyFactory.createProxy()`。
+- 同一个 Spring Bean 不要同时走 Spring AOP 和 `LogProxyFactory.createProxy()`，否则同一调用可能重复记两条日志。
+- Spring AOP 仍受代理模型限制：同类自调用通常不生效，`private` / `final` 方法通常不会被拦截。
 - 染色规则里的基础元数据字段必须写成 `meta_*`，例如 `meta_action`、`meta_status`，不能直接写裸字段名。
 - 输出前还会经过脱敏、超长字段截断、整条日志截断和异常限流；“为什么少了”不一定是没执行，有可能是保护机制生效。
 - `traceId` 默认从 MDC 里的 `traceId` 读取。如果你的链路字段叫 `requestId`，需要显式调整提取 key。
@@ -157,6 +160,8 @@ Loggers.of(PaymentService.class)
 
 优先使用 `@AutoLogTrace`，适合服务层、门面层、SDK 封装层这类“方法边界清晰”的位置。
 
+非 Spring 场景：
+
 ```java
 import com.team4u.framework.log.proxy.AutoLogTrace;
 
@@ -174,6 +179,31 @@ public class UserService {
 ```java
 UserService service = LogProxyFactory.createProxy(new UserService());
 ```
+
+Spring Bean 场景：
+
+```java
+import com.team4u.framework.log.spring.LogSpringConfiguration;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+import org.springframework.stereotype.Service;
+
+@Configuration
+@Import(LogSpringConfiguration.class)
+public class LogSupportConfig {
+}
+
+@Service
+public class UserService {
+
+    @AutoLogTrace(action = "RegisterUser", slowThreshold = 200)
+    public String register(UserReq req) {
+        return "SUCCESS";
+    }
+}
+```
+
+此时无需再手动调用 `LogProxyFactory.createProxy()`。
 
 ### 第三方 SDK 或无法改源码的对象
 

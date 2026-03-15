@@ -8,11 +8,7 @@ import com.team4u.framework.proxy.core.MethodInvocation;
 import lombok.Builder;
 import lombok.Data;
 
-import java.lang.reflect.InvocationTargetException;
-import java.lang.reflect.Method;
-import java.lang.reflect.Parameter;
-import java.lang.reflect.Proxy;
-import java.lang.reflect.UndeclaredThrowableException;
+import java.lang.reflect.*;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -28,14 +24,49 @@ import java.util.Map;
 public class LogTraceSupport {
 
     /**
+     * 自动解析日志追踪配置并执行拦截
+     *
+     * @param invocation  日志调用上下文
+     * @param targetClass 显式指定的目标类（可为空，为空时自动推断）
+     * @return 方法执行结果
+     * @throws Throwable 原始业务异常
+     */
+    public static Object invoke(LogInvocation invocation, Class<?> targetClass) throws Throwable {
+        Method method = invocation.getMethod();
+        if (targetClass == null) {
+            targetClass = getTargetClass(invocation, method);
+        }
+
+        // 获取追踪配置
+        AutoLogTrace config = AutoLogTraceResolver.resolve(targetClass, method);
+
+        // 无配置则直接放行
+        if (config == null) {
+            return invocation.proceed();
+        }
+
+        String action = config.action().isEmpty() ? method.getName() : config.action();
+
+        // 统一构建配置选项并执行
+        LogTraceOptions options = LogTraceOptions.builder()
+                .targetClass(targetClass)
+                .action(action)
+                .slowThreshold(config.slowThreshold())
+                .ignoreExceptionClasses(config.ignoreExceptions())
+                .build();
+
+        return proceed(invocation, options);
+    }
+
+    /**
      * 执行拦截并记录日志
      *
-     * @param invocation 拦截器方法调用上下文
+     * @param invocation 日志调用上下文
      * @param options    日志追踪配置选项
      * @return 方法执行结果
      * @throws Throwable 原始业务异常
      */
-    public static Object proceed(MethodInvocation invocation, LogTraceOptions options) throws Throwable {
+    public static Object proceed(LogInvocation invocation, LogTraceOptions options) throws Throwable {
         long startNanos = System.nanoTime();
         Method method = invocation.getMethod();
         Object[] args = invocation.getArguments();
@@ -131,6 +162,17 @@ public class LogTraceSupport {
      * @return 实际承担业务逻辑的原始类对象
      */
     public static Class<?> getTargetClass(MethodInvocation invocation, Method method) {
+        return getTargetClass(invocation == null ? null : new Team4uMethodInvocationAdapter(invocation), method);
+    }
+
+    /**
+     * 获取原始目标类
+     *
+     * @param invocation 日志调用上下文
+     * @param method     当前执行的方法
+     * @return 实际承担业务逻辑的原始类对象
+     */
+    public static Class<?> getTargetClass(LogInvocation invocation, Method method) {
         if (invocation != null) {
             Object target = invocation.getTarget();
             if (target != null) {

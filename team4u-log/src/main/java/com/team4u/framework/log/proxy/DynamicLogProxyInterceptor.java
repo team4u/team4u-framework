@@ -1,8 +1,8 @@
 package com.team4u.framework.log.proxy;
 
+import com.team4u.framework.log.proxy.ProxyRuleRepository.ProxyRule;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
-import com.team4u.framework.log.proxy.ProxyRuleRepository.ProxyRule;
 
 import java.lang.reflect.Method;
 import java.util.List;
@@ -38,7 +38,7 @@ public class DynamicLogProxyInterceptor implements MethodInterceptor {
                 .ignoreExceptionNames(rule.getIgnoreExceptions())
                 .build();
 
-        return LogTraceSupport.proceed(invocation, options);
+        return LogTraceSupport.proceed(new Team4uMethodInvocationAdapter(invocation), options);
     }
 
     private boolean isMethodMatched(String methodName, List<String> configuredMethods) {
