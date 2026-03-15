@@ -13,10 +13,10 @@ Team4u Framework 是一个专为构建高性能、高可扩展性 Java 应用而
 
 ## 核心哲学
 
-- **极致性能**：关键路径采用无锁设计、Copy-On-Write 机制及 JIT 风格的预编译技术，确保在高并发场景下的稳定表现。
-- **职责解耦**：倡导“策略驱动”与“声明式配置”，将业务决策逻辑与执行流程彻底分离。
-- **零侵入与灵活性**：核心模块不强绑定 Spring，支持独立运行，同时提供完善的 Spring 桥接适配器，实现真正的“即插即用”。
-- **可观测性**：内置完善的 Trace 诊断能力，让表达式计算、路由匹配等黑盒逻辑变得透明直观。
+- 极致性能：关键路径采用无锁设计、Copy-On-Write 机制及 JIT 风格的预编译技术，确保在高并发场景下的稳定表现。
+- 职责解耦：倡导“策略驱动”与“声明式配置”，将业务决策逻辑与执行流程彻底分离。
+- 零侵入与灵活性：核心模块不强绑定 Spring，支持独立运行，同时提供完善的 Spring 桥接适配器，实现真正的“即插即用”。
+- 可观测性：内置完善的 Trace 诊断能力，让表达式计算、路由匹配等黑盒逻辑变得透明直观。
 
 ---
 
@@ -24,17 +24,16 @@ Team4u Framework 是一个专为构建高性能、高可扩展性 Java 应用而
 
 | 模块 | 核心功能 | 典型场景 |
 | :--- | :--- | :--- |
-| [**team4u-bean**](./team4u-bean/README.md) | 轻量级 Bean 容器 | 独立 SDK 开发、单例管理、Spring 容器桥接 |
-| [**team4u-proxy**](./team4u-proxy/README.md) | 动态代理与 AOP | 方法拦截、热交换 (HotSwap)、空对象安全防御 |
-| [**team4u-retry**](./team4u-retry/README.md) | 统一重试治理模块 | 同步/异步重试、注解重试、动态策略、持久化降级 |
-| [**team4u-criterion**](./team4u-criterion/README.md) | 逻辑表达式引擎 | 营销圈选、风控规则、动态配置过滤 |
-| [**team4u-config**](./team4u-config/README.md) | 强类型配置管理 | 动态配置重载、多源配置聚合、热部署 |
-| [**team4u-policy**](./team4u-policy/README.md) | 策略与责任链模式 | 支付渠道路由、风控拦截流、优惠计算 |
-| [**team4u-log**](./team4u-log/README.md) | 结构化动态日志治理 | 自动化日志追踪、极速数据脱敏、热重载治理 |
-| [**team4u-mask**](./team4u-mask/README.md) | 数据脱敏治理模块 | 字段脱敏、动态规则、Jackson 无侵入敏感信息保护 |
-| [**team4u-router**](./team4u-router/README.md) | 声明式业务路由 | 业务分流、灰度控制、实验版本路由 |
-| [**team4u-message**](./team4u-message/README.md) | 统一消息抽象框架 | 进程内事件总线、跨网络 MQ (Kafka/RocketMQ) 抽象 |
-| [**team4u-base**](./team4u-base/README.md) | 基础公共工具类 | 框架内部公用辅助方法 |
+| [team4u-bean](./team4u-bean/README.md) | 轻量级 Bean 容器 | 独立 SDK 开发、单例管理、Spring 容器桥接 |
+| [team4u-proxy](./team4u-proxy/README.md) | 动态代理与 AOP | 方法拦截、热交换 (HotSwap)、空对象安全防御 |
+| [team4u-retry](./team4u-retry/README.md) | 统一重试治理模块 | 同步/异步重试、注解重试、动态策略、持久化降级 |
+| [team4u-criterion](./team4u-criterion/README.md) | 逻辑表达式引擎 | 营销圈选、风控规则、动态配置过滤 |
+| [team4u-config](./team4u-config/README.md) | 强类型配置管理 | 动态配置重载、多源配置聚合、热部署 |
+| [team4u-policy](./team4u-policy/README.md) | 策略与责任链模式 | 支付渠道路由、风控拦截流、优惠计算 |
+| [team4u-log](./team4u-log/README.md) | 结构化动态日志治理 | 自动化日志追踪、极速数据脱敏、热重载治理 |
+| [team4u-mask](./team4u-mask/README.md) | 数据脱敏治理模块 | 字段脱敏、动态规则、Jackson 无侵入敏感信息保护 |
+| [team4u-router](./team4u-router/README.md) | 声明式业务路由 | 业务分流、灰度控制、实验版本路由 |
+| [team4u-base](./team4u-base/README.md) | 基础公共工具类 | 框架内部公用辅助方法 |
 ---
 
 ## 核心组件详解
@@ -91,8 +90,8 @@ Team4u Framework 是一个专为构建高性能、高可扩展性 Java 应用而
 
 ## 环境要求
 
-- **JDK**: 8 及以上版本。
-- **依赖库**: 核心依赖 ByteBuddy 等优秀开源库进行底层增强。
+- JDK: 8 及以上版本。
+- 依赖库: 核心依赖 ByteBuddy 等优秀开源库进行底层增强。
 
 ---
 
