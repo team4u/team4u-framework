@@ -4,6 +4,8 @@ import org.junit.Assert;
 import org.junit.Test;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.Method;
+import java.lang.reflect.Parameter;
 
 /**
  * ReflectUtil 单元测试
@@ -55,12 +57,42 @@ public class ReflectUtilTest {
         Assert.assertNull(ReflectUtil.getFieldValue(obj, "missingField"));
     }
 
+    @Test
+    public void testGetParameters() throws Exception {
+        // 场景一：获取类中自身声明的方法参数
+        Method method = TestChildClass.class.getMethod("childMethod", String.class, String.class);
+        Parameter[] params = ReflectUtil.getParameters(TestChildClass.class, method);
+        if (params != null) {
+            Assert.assertEquals(2, params.length);
+        }
+
+        // 场景二：传入的方法为空
+        Parameter[] paramsNullMethod = ReflectUtil.getParameters(TestChildClass.class, null);
+        Assert.assertNull(paramsNullMethod);
+
+        // 场景三：方法来源于接口（使用 Object.class 作为 targetClass 时未找到会自动回退）
+        Method interfaceMethod = TestInterface.class.getMethod("interfaceMethod", String.class, int.class);
+        Parameter[] paramsFallback = ReflectUtil.getParameters(Object.class, interfaceMethod);
+        if (paramsFallback != null) {
+            Assert.assertEquals(2, paramsFallback.length);
+        }
+    }
+
+    // 测试用的辅助接口
+    interface TestInterface {
+        void interfaceMethod(String arg0, int arg1);
+    }
+
     // 测试用的辅助类
-    static class TestParentClass {
+    static class TestParentClass implements TestInterface {
         private String parentField = "parent";
 
         public String getParentField() {
             return parentField;
+        }
+
+        @Override
+        public void interfaceMethod(String arg0, int arg1) {
         }
     }
 
@@ -69,6 +101,9 @@ public class ReflectUtilTest {
 
         public String getChildField() {
             return childField;
+        }
+
+        public void childMethod(String p1, String p2) {
         }
     }
 }

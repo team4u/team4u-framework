@@ -1,5 +1,6 @@
 package com.team4u.framework.log.proxy;
 
+import com.team4u.framework.base.util.ReflectUtil;
 import com.team4u.framework.log.Loggers;
 import com.team4u.framework.mask.FastMasker;
 import com.team4u.framework.mask.config.MaskRuleRepository;
@@ -97,7 +98,7 @@ public class LogTraceSupport {
             return namedArgs;
         }
 
-        Parameter[] parameters = getParameters(targetClass, method);
+        Parameter[] parameters = ReflectUtil.getParameters(targetClass, method);
 
         for (int i = 0; i < args.length; i++) {
             Parameter parameter = (parameters != null && i < parameters.length) ? parameters[i] : null;
@@ -168,31 +169,6 @@ public class LogTraceSupport {
         }
 
         return Object.class;
-    }
-
-    /**
-     * 获取方法参数定义，优先尝试从目标类查找以确保获取真实名称
-     */
-    private static Parameter[] getParameters(Class<?> targetClass, Method method) {
-        if (method == null) {
-            return null;
-        }
-
-        try {
-            Method targetMethod = targetClass.getDeclaredMethod(method.getName(), method.getParameterTypes());
-            Parameter[] parameters = targetMethod.getParameters();
-            if (parameters.length > 0 && parameters[0].isNamePresent()) {
-                return parameters;
-            }
-        } catch (NoSuchMethodException ignored) {
-        }
-
-        Parameter[] parameters = method.getParameters();
-        if (parameters.length > 0 && parameters[0].isNamePresent()) {
-            return parameters;
-        }
-
-        return null;
     }
 
     /**
