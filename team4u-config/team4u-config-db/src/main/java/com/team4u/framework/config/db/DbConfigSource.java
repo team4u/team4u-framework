@@ -7,7 +7,6 @@ import lombok.extern.slf4j.Slf4j;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
-import java.sql.Timestamp;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.List;
@@ -16,7 +15,7 @@ import java.util.Map;
 /**
  * 基于数据库的配置源实现。
  * <p>
- * 从 {@code system_config} 表加载配置，支持全量及增量加载。
+ * 从 {@code system_config} 表加载配置，支持全量加载。
  * 配置键采用 {@code config_type.config_key} 格式，实现模块化隔离。
  * 支持软删除逻辑（{@code enabled=0}），自动映射为失效标记。
  * </p>
@@ -86,7 +85,7 @@ public class DbConfigSource implements ConfigSource {
     @Override
     public Map<String, ConfigEntry> load() {
         try {
-            List<DbConfigRow> rows = queryRows(null);
+            List<DbConfigRow> rows = queryRows();
             return toConfigMap(rows);
         } catch (SQLException e) {
             throw new IllegalStateException("[" + name + "] Failed to load all configs", e);
@@ -94,40 +93,17 @@ public class DbConfigSource implements ConfigSource {
     }
 
     /**
-     * 增量拉取配置变更。
-     *
-     * @param timestamp 起始毫秒时间戳
-     */
-    @Override
-    public Map<String, ConfigEntry> loadSince(long timestamp) {
-        try {
-            List<DbConfigRow> rows = queryRows(timestamp);
-            return toConfigMap(rows);
-        } catch (SQLException e) {
-            throw new IllegalStateException(
-                    "[" + name + "] Failed to load incremental configs, timestamp=" + timestamp, e);
-        }
-    }
-
-    /**
      * 执行数据库查询。
      *
-     * @param sinceTimestamp 起始时间戳，不为空时执行增量查询
      * @return 记录快照列表
      */
-    private List<DbConfigRow> queryRows(Long sinceTimestamp) throws SQLException {
+    private List<DbConfigRow> queryRows() throws SQLException {
         String sql = "SELECT " +
                 options.getConfigTypeColumn() + " AS config_type, " +
                 options.getConfigKeyColumn() + " AS config_key, " +
                 options.getConfigValueColumn() + " AS config_value, " +
                 options.getEnabledColumn() + " AS enabled " +
-                " FROM " + options.getTableName() +
-                " WHERE 1=1";
-
-        if (sinceTimestamp != null) {
-            sql += " AND " + options.getUpdateTimeColumn() + " > ?";
-            return JdbcUtil.queryList(dataSource, sql, DbConfigRow.class, new Timestamp(sinceTimestamp));
-        }
+                " FROM " + options.getTableName();
 
         return JdbcUtil.queryList(dataSource, sql, DbConfigRow.class);
     }

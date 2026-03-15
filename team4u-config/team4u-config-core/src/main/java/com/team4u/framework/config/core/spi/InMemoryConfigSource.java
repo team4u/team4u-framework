@@ -18,7 +18,7 @@ import java.util.concurrent.ConcurrentHashMap;
  * </ul>
  * 本实现同时集成了 {@link ConfigWatcher} 能力。通过 {@code putAndRefresh} 等方法更新配置后，
  * 会立即发送变更信号，触发配置中心的快照重载。
- * 本类是线程安全的，并完整支持 {@link ConfigSource#loadSince(long)} 增量加载协议。
+ * 本类是线程安全的。
  * </p>
  */
 public class InMemoryConfigSource implements ConfigSource, ConfigWatcher {
@@ -162,22 +162,5 @@ public class InMemoryConfigSource implements ConfigSource, ConfigWatcher {
     @Override
     public Map<String, ConfigEntry> load() {
         return Collections.unmodifiableMap(new HashMap<>(store));
-    }
-
-    /**
-     * 执行增量加载
-     * <p>
-     * 返回所有更新时间戳晚于指定时间点的配置条目。
-     * </p>
-     */
-    @Override
-    public Map<String, ConfigEntry> loadSince(long timestamp) {
-        Map<String, ConfigEntry> changed = new HashMap<>();
-        for (ConfigEntry entry : store.values()) {
-            if (entry.getTimestamp() > timestamp) {
-                changed.put(entry.getKey(), entry);
-            }
-        }
-        return Collections.unmodifiableMap(changed);
     }
 }

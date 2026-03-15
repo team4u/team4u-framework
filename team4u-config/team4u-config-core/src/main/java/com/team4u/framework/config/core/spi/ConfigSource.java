@@ -38,17 +38,4 @@ public interface ConfigSource extends OrderedPolicy {
      * @return 当前数据源包含的所有配置映射表，应包含失效标记（Tombstone）条目
      */
     Map<String, ConfigEntry> load();
-
-    /**
-     * 执行增量配置加载
-     * <p>
-     * 若数据源支持高效的增量获取，可实现此方法以提升聚合效率。
-     * </p>
-     *
-     * @param timestamp 上次访问的时间戳
-     * @return 自指定时间点以来发生变更的配置项；若不支持增量加载，请返回 null，框架将回退到全量加载
-     */
-    default Map<String, ConfigEntry> loadSince(long timestamp) {
-        return null;
-    }
 }
