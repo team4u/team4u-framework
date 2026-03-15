@@ -15,6 +15,7 @@
 - 手工 `Loggers`
 - `LogSpan`
 - `@AutoLogTrace`
+- Spring Bean + `@Import(LogSpringConfiguration.class)`
 - `createProxy()`
 - `createDynamicProxy()`
 
@@ -121,6 +122,17 @@ LogContext.addSource((event, key) -> {
 
 ## 自动代理链路
 
+### Spring Bean + `@AutoLogTrace`
+
+Spring Bean 场景下，`LogSpringConfiguration` 会注册一个基于 Advisor 的 AOP 入口。它只负责：
+
+- 匹配方法级或类级 `@AutoLogTrace`
+- 解析目标类上的真实注解
+- 组装 `LogTraceOptions`
+- 把 Spring 的 `MethodInvocation` 适配到 `LogTraceSupport`
+
+这条链路不会引入第二套日志实现，最终仍然归一到同一个 `LogEvent` 模型和输出流水线。
+
 ### `createProxy()`
 
 `LogProxyFactory.createProxy()` 面向可控代码对象，底层通过 `team4u-proxy` 挂上 `LogTraceInterceptor`，再读取 `@AutoLogTrace` 注解配置来决定：
@@ -138,6 +150,12 @@ LogContext.addSource((event, key) -> {
 - 允许拦截的方法
 - `slowThreshold`
 - `ignoreExceptions`
+
+三条入口的分工建议是：
+
+- Spring Bean：`@AutoLogTrace` + `@Import(LogSpringConfiguration.class)`
+- 普通业务对象：`LogProxyFactory.createProxy()`
+- 第三方对象：`createDynamicProxy()`
 
 ## 脱敏与序列化
 

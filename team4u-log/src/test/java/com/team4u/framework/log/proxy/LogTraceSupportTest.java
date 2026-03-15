@@ -52,7 +52,7 @@ public class LogTraceSupportTest {
         Method method = LogDynamicProxyTest.ThirdPartyPaymentApi.class.getMethod("pay", String.class, int.class);
 
         Assert.assertSame(LogDynamicProxyTest.ThirdPartyPaymentApi.class,
-                LogTraceSupport.getTargetClass(null, method));
+                LogTraceSupport.getTargetClass((MethodInvocation) null, method));
     }
 
     @Test

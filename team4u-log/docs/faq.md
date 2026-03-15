@@ -61,6 +61,19 @@
 - 日志里的参数名可读性会下降
 - 基于参数名的动态脱敏规则会更难命中
 
+Spring AOP 不会自动修复这个问题。即使 `@AutoLogTrace` 通过 Spring Bean 生效，参数名保留仍然取决于业务工程自己的编译参数。
+
+## 为什么 Spring Bean 上的 `@AutoLogTrace` 没生效？
+
+优先排查这几项：
+
+- 是否显式 `@Import(LogSpringConfiguration.class)`
+- 当前对象是否真的是 Spring 容器管理的 Bean
+- 是否属于同类自调用，导致没有经过 Spring 代理
+- 方法是否是 `private` / `final`
+
+如果你已经是 Spring Bean 场景，不要再额外调用 `LogProxyFactory.createProxy()`；两种入口叠加会导致重复日志。
+
 ## 为什么染色规则写了 `action == 'CreateOrder'` 却不生效？
 
 因为日志元数据必须写成 `meta_*`，不能直接写裸字段名。
