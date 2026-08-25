@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 扩展自定义路由器 (RouterFactory SPI)
+## 扩展自定义路由器 (RouterFactory SPI)
 
 当内置的 `map`、`expression`、`weight`、`composite` 无法满足特定算法场景（如一致性哈希分片、地理位置距离计算分发、机器学习在线预测路由）时，可通过实现 `RouterFactory` 接入自定义路由器。
 
@@ -89,7 +89,7 @@ RoutingManager manager = RoutingManager.builder()
 
 ---
 
-## 2. 自定义配置解析器 (RoutePolicyParser SPI)
+## 自定义配置解析器 (RoutePolicyParser SPI)
 
 默认情况下，`team4u-router` 使用 `DefaultRoutePolicyParser`（基于 `JsonUtil`）解析 JSON 格式的路由配置。如果你的系统统一采用 YAML、Properties 或自定义 DSL 配置，可实现 `RoutePolicyParser` 接口：
 
@@ -122,7 +122,7 @@ public class YamlRoutePolicyParser implements RoutePolicyParser {
 
 ---
 
-## 3. 全局引导与配置生命周期 (`RouterBootstrap`)
+## 全局引导与配置生命周期 (`RouterBootstrap`)
 
 为了保证多线程与生产环境下的确定性与安全性，`RouterBootstrap` 提供了状态机锁机制：
 
@@ -154,7 +154,7 @@ public class RouterLifecycleListener implements ApplicationListener<ApplicationR
 
 ---
 
-## 4. 路由管理器工厂加载优先级
+## 路由管理器工厂加载优先级
 
 `RoutingManager.Builder` 在构建 `factoryRegistry` 时采用分层合并策略（优先级由低到高）：
 

@@ -36,7 +36,7 @@ stateDiagram-v2
 
 ## 核心枚举与语义定义
 
-### 1. 任务状态 (`LeaseTaskState`)
+### 任务状态 (`LeaseTaskState`)
 
 | 状态 | 说明 | 是否可被 Worker 抢占 |
 | :--- | :--- | :--- |
@@ -46,7 +46,7 @@ stateDiagram-v2
 
 ---
 
-### 2. 终态结果 (`LeaseTaskOutcome`)
+### 终态结果 (`LeaseTaskOutcome`)
 
 当任务状态进入 `CLOSED` 时，记录最终执行结论：
 
@@ -56,7 +56,7 @@ stateDiagram-v2
 
 ---
 
-### 3. 失败诱因 (`LeaseTaskFailureReason`)
+### 失败诱因 (`LeaseTaskFailureReason`)
 
 当 `outcome = FAILED` 时，框架记录详细的失败分类：
 
@@ -71,7 +71,7 @@ stateDiagram-v2
 
 ---
 
-### 4. 运行时写回结果 (`LeaseRuntimeResult`)
+### 运行时写回结果 (`LeaseRuntimeResult`)
 
 Worker 节点向后端提交 `heartbeat`、`close` 或 `release` 时的执行响应：
 
@@ -84,7 +84,7 @@ Worker 节点向后端提交 `heartbeat`、`close` 或 `release` 时的执行响
 
 ---
 
-### 5. 管理面操作结果 (`LeaseAdminResult`)
+### 管理面操作结果 (`LeaseAdminResult`)
 
 运维人员或管理后台调用 `LeaseAdminService` 时的执行响应：
 

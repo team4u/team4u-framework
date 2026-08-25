@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 实现自定义 `BeanFactory`
+## 实现自定义 `BeanFactory`
 
 ```java
 package com.mycompany.container;
@@ -41,7 +41,7 @@ public class CustomJndiBeanFactory implements BeanFactory {
 
 ---
 
-## 2. 注册 SPI 配置文件
+## 注册 SPI 配置文件
 
 在项目资源目录 `resources/META-INF/services/com.team4u.framework.bean.core.BeanFactory` 中写入自定义实现类的全限定名：
 
@@ -51,7 +51,7 @@ com.mycompany.container.CustomJndiBeanFactory
 
 ---
 
-## 3. Order 优先级排序与多源聚合规则
+## Order 优先级排序与多源聚合规则
 
 `BeanManager` 启动时通过 `ServiceLoader.load(BeanFactory.class)` 自动发现所有扩展并按 `getOrder()` 升序排列：
 

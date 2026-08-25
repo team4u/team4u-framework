@@ -37,7 +37,7 @@ System.out.println(proxy.sayHello("Alice")); // 输出: [V2] Hello, Alice
 
 ## 核心实现与线程安全保障
 
-### 1. `Swappable` 契约
+### `Swappable` 契约
 ```java
 package com.team4u.framework.proxy.support;
 
@@ -52,7 +52,7 @@ public interface Swappable {
 }
 ```
 
-### 2. `HotSwapInterceptor` 拦截逻辑
+### `HotSwapInterceptor` 拦截逻辑
 `HotSwapInterceptor` 继承自 `DelegateInterceptor`：
 - 当检测到调用的方法是 `Swappable.hotswap(Object)` 时，直接拦截并执行字段替换：
   ```java

@@ -4,7 +4,7 @@
 
 ---
 
-## 案例 1：核心交易订单流转日志
+## 核心交易订单流转日志
 
 ### 业务场景
 在电商交易系统中，订单创建包含多个步骤（参数校验、风控检查、锁定库存、落库）。要求：
@@ -56,7 +56,7 @@ public class TradeOrderService {
 
 ---
 
-## 案例 2：慢方法监控与慢调用自动提权
+## 慢方法监控与慢调用自动提权
 
 ### 业务场景
 大型报表导出与复杂统计查询接口，正常情况下耗时在 100ms 以内。要求：若某次执行耗时超过 500ms，自动将日志级别提升为 `WARN` 并记录状态为 `"slow_success"`，供告警平台采集。
@@ -98,14 +98,14 @@ public class ReportQueryService {
 
 ---
 
-## 案例 3：线上排查与动态条件染色实战
+## 线上排查与动态条件染色实战
 
 ### 业务场景
 线上环境日常运行在 `INFO` 级别，排查特定 VIP 租户 `TENANT_VIP_008` 在调用微信支付接口时的偶尔超时问题。
 
 ### 治理步骤
 
-#### 1. 动态下发染色规则（配置 `team4u.log.dyeing`）
+#### 动态下发染色规则（配置 `team4u.log.dyeing`）
 ```json
 [
   {
@@ -116,7 +116,7 @@ public class ReportQueryService {
 ]
 ```
 
-#### 2. 业务日志打印
+#### 业务日志打印
 ```java
 Loggers.of(PaymentService.class)
        .action("WxPayRequest")
@@ -127,6 +127,6 @@ Loggers.of(PaymentService.class)
        .log();
 ```
 
-#### 3. 效果
+#### 效果
 - 普通租户（`tenantId != 'TENANT_VIP_008'`）的 DEBUG 日志直接在客户端短路丢弃，零性能消耗；
 - `TENANT_VIP_008` 的请求命中染色规则，日志级别被提权并完整输出到日志平台，`payload` 中自动附加 `"dyeingRuleMatched": "dyeing_vip_tenant"`。

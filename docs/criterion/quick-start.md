@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 引入依赖
+## 引入依赖
 
 ```xml
 <dependency>
@@ -19,7 +19,7 @@
 
 ---
 
-## 2. 基础比较与规则判定
+## 基础比较与规则判定
 
 ```java
 import com.team4u.framework.criterion.Criteria;
@@ -46,7 +46,7 @@ public class CriterionQuickStart {
 
 ---
 
-## 3. 使用 MatchContext 传递动态变量
+## 使用 MatchContext 传递动态变量
 
 当规则需要动态比较运行时参数（如外部传入的阈值）时，使用 `$` 前缀定义动态变量：
 
@@ -73,7 +73,7 @@ System.out.println("匹配结果: " + isValid); // true
 
 ---
 
-## 4. 可视化 Trace 链路追踪
+## 可视化 Trace 链路追踪
 
 当复杂规则未命中时，使用 `trace` 接口能够快速还原规则执行树与每一步的短路状态：
 
@@ -95,7 +95,7 @@ System.out.println("执行轨迹: " + traceNode.render());
 
 ---
 
-## 5. 表达式静态分析与预热
+## 表达式静态分析与预热
 
 ```java
 // 1. 提取表达式中定义的所有变量名

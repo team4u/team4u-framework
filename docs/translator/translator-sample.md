@@ -4,7 +4,7 @@
 
 ---
 
-## 案例 1：Spring Boot 全局 ControllerAdvice 统一异常拦截
+## Spring Boot 全局 ControllerAdvice 统一异常拦截
 
 ### 业务场景
 在微服务对外 API 网关中，捕获所有上游服务抛出的 `BizRpcException`，动态翻译为面向前端 App 的统一规范 JSON 响应，并自动透传链路追踪 `traceId`。
@@ -64,7 +64,7 @@ public class GlobalExceptionHandler {
 
 ---
 
-## 案例 2：聚合支付多渠道原始错误代码统一映射
+## 聚合支付多渠道原始错误代码统一映射
 
 ### 业务场景
 聚合支付网关对接了微信支付、支付宝、云闪付等多家渠道。各渠道对“账户余额不足”返回的原始状态码各异：

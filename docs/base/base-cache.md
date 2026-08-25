@@ -41,7 +41,7 @@ public interface Cache<K, V> {
 
 ## 各缓存实现细节与用法
 
-### 1. `LRUCache<K, V>`
+### `LRUCache<K, V>`
 基于 `LinkedHashMap(capacity, 0.75f, true)` 实现，重写 `removeEldestEntry` 实现容量超限时自动淘汰最久未访问的条目。
 ```java
 import com.team4u.framework.base.cache.Cache;
@@ -55,7 +55,7 @@ UserInfo user = userCache.get("U101");
 
 ---
 
-### 2. `LFUCache<K, V>`
+### `LFUCache<K, V>`
 内部采用多级频次桶（`frequencyBuckets: Map<Integer, LinkedHashSet<K>>`）与最小频次指针 `minFrequency`：
 - 访问节点时频次自动递增，并在频次桶间平移；
 - 淘汰时以 $O(1)$ 时间复杂度快速定位并移除最小频次桶中最久未访问的条目；
@@ -67,7 +67,7 @@ policyCache.put("rule_order", new RulePolicy());
 
 ---
 
-### 3. `TimedCache<K, V>`
+### `TimedCache<K, V>`
 - 基于 `ConcurrentHashMap<K, CacheObj<V>>` 实现；
 - 每个条目包装过期时间点 `expireTime = now + timeout`；
 - 采用**惰性删除（Lazy Expiration）**策略：在 `get(key)` 时检查若已过期则原子删除并返回 `null`；在调用 `size()` 时全量清理已过期的条目。

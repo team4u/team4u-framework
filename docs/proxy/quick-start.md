@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 引入依赖
+## 引入依赖
 
 ```xml
 <dependency>
@@ -19,7 +19,7 @@
 
 ---
 
-## 2. 基础用法：接口代理与委托
+## 基础用法：接口代理与委托
 
 ```java
 import com.team4u.framework.proxy.ProxyBuilder;
@@ -41,7 +41,7 @@ System.out.println(proxy.sayHello("World")); // 输出: Hello, World
 
 ---
 
-## 3. 进阶用法：普通类代理（非接口）
+## 进阶用法：普通类代理（非接口）
 
 得益于 ByteBuddy 双引擎自适应机制，你可以直接为没有实现接口的普通类（非 `final` 类）创建代理：
 
@@ -64,7 +64,7 @@ System.out.println(proxy.process("ORD_1001")); // 输出: Order processed: ORD_1
 
 ---
 
-## 4. 极简用法：一键挂载拦截器
+## 极简用法：一键挂载拦截器
 
 使用静态快捷方法 `ProxyBuilder.proxy(...)`，一步到位生成包含指定拦截器的代理对象：
 

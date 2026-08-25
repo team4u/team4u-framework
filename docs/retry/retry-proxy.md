@@ -6,7 +6,7 @@
 
 ## 核心注解
 
-### 1. `@Retryable`
+### `@Retryable`
 标注在接口、类或具体方法上：
 
 ```java
@@ -26,7 +26,7 @@ public interface PaymentService {
 
 ---
 
-### 2. `@RetryIgnore` 与幂等键影响
+### `@RetryIgnore` 与幂等键影响
 
 标记在方法参数上，指示在生成持久化调用快照时忽略该参数（后台回放时该位置将以 `null` 注入）：
 

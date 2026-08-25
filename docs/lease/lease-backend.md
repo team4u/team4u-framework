@@ -19,7 +19,7 @@
 
 ## JDBC 后端并发控制与索引设计 (`JdbcLeaseBackend`)
 
-### 1. 抢占 SQL 语义与版本乐观锁 (`tryAcquire`)
+### 抢占 SQL 语义与版本乐观锁 (`tryAcquire`)
 
 在多 Worker 并发竞争场景下，`JdbcLeaseBackend` 依靠单条原子 `UPDATE` 语句完成抢占：
 
@@ -48,7 +48,7 @@ WHERE task_id = ?
 
 ---
 
-### 2. MySQL 方言与 `UNION ALL` 复合索引优化 (`MySqlLeaseDbDialect`)
+### MySQL 方言与 `UNION ALL` 复合索引优化 (`MySqlLeaseDbDialect`)
 
 如果使用单条含 `OR` 条件的 SQL 扫描待抢占候选任务，数据库查询优化器极易放弃索引走全表扫描。
 
@@ -81,7 +81,7 @@ LIMIT ?;
 
 ---
 
-### 3. 短轮询等待机制 (Short Polling)
+### 短轮询等待机制 (Short Polling)
 
 当 Worker 调用 `acquire(request)` 且设置了 `waitTimeoutMillis` 时：
 1. 立即执行一次 `tryAcquireOnce`。
@@ -90,7 +90,7 @@ LIMIT ?;
 
 ---
 
-### 4. 幂等发布冲突处理 (`publishIfAbsent`)
+### 幂等发布冲突处理 (`publishIfAbsent`)
 
 `JdbcLeaseBackend.publishIfAbsent` 利用 MySQL 唯一约束 `uk_lease_task_business (task_group, business_key)`：
 - 首先尝试 `INSERT INTO lease_task ...`。
@@ -98,7 +98,7 @@ LIMIT ?;
 
 ---
 
-### 5. 管理面安全防护 (`applyAdminWhere`)
+### 管理面安全防护 (`applyAdminWhere`)
 
 为了防止运维后台误操作修改正在正常运行的长任务，`JdbcLeaseTaskDao` 在执行管理面 `reschedule`、`update`、`close` 时增加保护条件：
 

@@ -40,7 +40,7 @@ graph LR
 
 ## 典型拦截器场景与示例
 
-### 1. 全局上下文注入与动态改写 (Context Enricher)
+### 全局上下文注入与动态改写 (Context Enricher)
 
 自动从 `ThreadLocal` 或全局会话中提取租户 ID、环境标识并注入路由请求中，避免业务方层层透传：
 
@@ -76,7 +76,7 @@ public class TenantEnrichInterceptor implements RouteInterceptor {
 }
 ```
 
-### 2. 路由性能监控与打点 (Metrics Collector)
+### 路由性能监控与打点 (Metrics Collector)
 
 统计所有路由器的执行耗时、规则命中状态以及异常指标：
 
@@ -108,7 +108,7 @@ public class MetricsInterceptor implements RouteInterceptor {
 }
 ```
 
-### 3. 主动短路与熔断降级 (Short Circuit)
+### 主动短路与熔断降级 (Short Circuit)
 
 在熔断、灰度引流或黑白名单场景中，拦截器可以直接返回结果，阻断后续路由规则计算：
 

@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 引入依赖
+## 引入依赖
 
 ### 仅使用 INLINE 模式
 ```xml
@@ -36,7 +36,7 @@
 
 ---
 
-## 2. INLINE 同步重试快速上手
+## INLINE 同步重试快速上手
 
 ```java
 import com.team4u.framework.retry.api.Retries;
@@ -62,7 +62,7 @@ System.out.println("执行结果: " + result);
 
 ---
 
-## 3. INLINE 异步重试 (`CompletableFuture`)
+## INLINE 异步重试 (`CompletableFuture`)
 
 ```java
 import com.team4u.framework.retry.api.Retries;
@@ -85,11 +85,11 @@ future.thenAccept(res -> System.out.println("异步结果: " + res));
 
 ---
 
-## 4. MANAGED 托管持久化重试快速上手
+## MANAGED 托管持久化重试快速上手
 
 适用于前台尝试有限次数，若失败则持久化并由后台 Worker 持续接管补偿的场景：
 
-### 1. 组装并启动运行时
+### 组装并启动运行时
 ```java
 import com.team4u.framework.lease.api.LeaseBackend;
 import com.team4u.framework.retry.api.ManagedSubmitResult;
@@ -124,7 +124,7 @@ ManagedRetryRuntime runtime = ManagedRetryRuntime.lease(backend)
         .start();
 ```
 
-### 2. 提交任务
+### 提交任务
 ```java
 ManagedSubmitResult<String> result = Retries.managed(runtime.client())
         .taskType("pay-notify")

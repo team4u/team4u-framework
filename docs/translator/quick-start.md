@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 引入依赖
+## 引入依赖
 
 在项目的 `pom.xml` 中引入 `team4u-translator` 模块：
 
@@ -21,7 +21,7 @@
 
 ---
 
-## 2. 准备路由规则配置
+## 准备路由规则配置
 
 在配置中心定义错误码映射规则（以 JSON 结构下发，由 `team4u-router` 自动监听解析）：
 
@@ -55,7 +55,7 @@
 
 ---
 
-## 3. 执行翻译
+## 执行翻译
 
 ```java
 import com.team4u.framework.translator.api.ResponseTranslator;
@@ -98,7 +98,7 @@ public class TranslatorQuickStart {
 
 ---
 
-## 4. 构造器定制与包扫描
+## 构造器定制与包扫描
 
 如果你的项目需要自定义 `RoutingManager` 或扩展自定义渲染策略包路径：
 

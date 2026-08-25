@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 引入依赖
+## 引入依赖
 
 推荐在项目中引入 `team4u-serializer-jackson` 模块（会自动传递引入核心门面 `team4u-serializer-json`）：
 
@@ -21,7 +21,7 @@
 
 ---
 
-## 2. 基础对象序列化与反序列化
+## 基础对象序列化与反序列化
 
 ```java
 import com.team4u.framework.serializer.json.JsonUtil;
@@ -56,7 +56,7 @@ public class SerializerQuickStart {
 
 ---
 
-## 3. 复杂嵌套泛型反序列化 (`TypeReference`)
+## 复杂嵌套泛型反序列化 (`TypeReference`)
 
 借助 `TypeReference`，在运行期完整保留多层泛型类型元数据：
 
@@ -84,7 +84,7 @@ public class GenericQuickStart {
 
 ---
 
-## 4. 集合与通用树对象解析
+## 集合与通用树对象解析
 
 ```java
 // 快速解析为 List 集合

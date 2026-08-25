@@ -4,7 +4,7 @@
 
 ---
 
-## 案例 1：基于 `TextTemplate` 的多维度 Kafka Topic 路由计算
+## 基于 `TextTemplate` 的多维度 Kafka Topic 路由计算
 
 ### 业务场景
 消息路由网关需根据租户 ID、业务类型与部署环境动态计算 Kafka Topic：`app.topic.${env}.${tenantId}.${bizType}`。
@@ -36,7 +36,7 @@ public class DynamicTopicResolver {
 
 ---
 
-## 案例 2：基于 `DynamicInstanceProvider` 的动态规则引擎加载流水线
+## 基于 `DynamicInstanceProvider` 的动态规则引擎加载流水线
 
 ### 业务场景
 从配置中心接收 JSON 格式的流控规则，并将其转换为可执行的 `RateLimitExecutor` 实例。要求：
@@ -85,7 +85,7 @@ public class DynamicRateLimiterManager {
 
 ---
 
-## 案例 3：基于 `JdbcUtil` 与 `SqlBuilder` 的轻量级数据同步
+## 基于 `JdbcUtil` 与 `SqlBuilder` 的轻量级数据同步
 
 ### 业务场景
 开发轻量级后台同步任务，根据动态过滤条件从数据表中拉取分页数据，并将处理结果批量入库。

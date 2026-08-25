@@ -25,12 +25,12 @@ graph TD
     Release --> Out[返回实例: T]
 ```
 
-### 1. 双缓存空间隔离语义
+### 双缓存空间隔离语义
 - **`InputKey` 空间**：通过 `get(I input)` 访问时，以 `new InputKey(input)` 缓存最终创建的实例 `T`；
 - **`ConfigKey` 空间**：通过 `getByConfig(C config)` 访问时，以 `new ConfigKey(config)` 缓存最终创建的实例 `T`；
 - 两个包装键使用不同的类型标签，彻底避免了具有相同 `hashCode` 的输入源与配置对象之间的键空间污染。
 
-### 2. 分段锁并发控制 (Striped Lock)
+### 分段锁并发控制 (Striped Lock)
 内部维护了固定长度为 128 的分段锁桶：
 ```java
 private final Object[] locks = new Object[128];
@@ -46,7 +46,7 @@ private Object getLock(Object key) {
 
 ## 构造与核心 API 清单
 
-### 1. 静态工厂构造
+### 静态工厂构造
 ```java
 // 1. 基于 LRU 缓存的泛型构造
 public static <I, C, T> DynamicInstanceProvider<I, C, T> createLru(
@@ -61,7 +61,7 @@ public static <C, T> DynamicInstanceProvider<String, C, T> createStringLru(
         InstanceFactory<C, T> instanceFactory);
 ```
 
-### 2. 实例获取与管理方法
+### 实例获取与管理方法
 | 方法签名 | 说明 |
 | :--- | :--- |
 | `T get(I input)` | 根据输入源获取实例（自动完成查缓存、加锁、解析配置、创建实例并写入缓存） |

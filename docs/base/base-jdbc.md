@@ -6,7 +6,7 @@
 
 ## 核心构建器一览
 
-### 1. 结构化插入构建器 (`InsertBuilder`)
+### 结构化插入构建器 (`InsertBuilder`)
 ```java
 package com.team4u.framework.base.jdbc;
 
@@ -29,7 +29,7 @@ public class InsertBuilder {
 
 ---
 
-### 2. 结构化更新构建器 (`UpdateBuilder`)
+### 结构化更新构建器 (`UpdateBuilder`)
 ```java
 package com.team4u.framework.base.jdbc;
 
@@ -58,7 +58,7 @@ public class UpdateBuilder {
 
 ---
 
-### 3. 动态流式 SQL 构建器 (`SqlBuilder`)
+### 动态流式 SQL 构建器 (`SqlBuilder`)
 ```java
 package com.team4u.framework.base.jdbc;
 
@@ -112,7 +112,7 @@ public class SqlBuilder {
 
 ## 完整使用示例
 
-### 1. 流式更新与插入
+### 流式更新与插入
 ```java
 import com.team4u.framework.base.jdbc.InsertBuilder;
 import com.team4u.framework.base.jdbc.UpdateBuilder;
@@ -138,7 +138,7 @@ int rows = JdbcUtil.execute(dataSource, update.getSql(), update.getParams());
 
 ---
 
-### 2. 动态多条件查询与实体映射
+### 动态多条件查询与实体映射
 ```java
 import com.team4u.framework.base.jdbc.SqlBuilder;
 import com.team4u.framework.base.jdbc.JdbcUtil;

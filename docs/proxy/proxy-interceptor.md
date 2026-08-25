@@ -6,7 +6,7 @@
 
 ## 核心接口契约
 
-### 1. `MethodInterceptor`
+### `MethodInterceptor`
 ```java
 package com.team4u.framework.proxy.core;
 
@@ -22,7 +22,7 @@ public interface MethodInterceptor {
 }
 ```
 
-### 2. `MethodInvocation`
+### `MethodInvocation`
 ```java
 package com.team4u.framework.proxy.core;
 

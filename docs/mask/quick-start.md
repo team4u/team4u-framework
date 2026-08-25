@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 引入依赖
+## 引入依赖
 
 ```xml
 <dependency>
@@ -16,7 +16,7 @@
 
 ---
 
-## 2. 编程式脱敏（一行代码）
+## 编程式脱敏（一行代码）
 
 通过 `FastMasker` 静态门面快速执行脱敏：
 
@@ -52,7 +52,7 @@ public class MaskQuickStart {
 
 ---
 
-## 3. 注解式脱敏与 Jackson JSON 序列化
+## 注解式脱敏与 Jackson JSON 序列化
 
 ### 步骤 1：在 JavaBean 字段上标注 `@Mask`
 

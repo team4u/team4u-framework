@@ -51,7 +51,7 @@ graph TD
 
 ## 核心机制详解
 
-### 1. 自动心跳与并发控制
+### 自动心跳与并发控制
 
 - **自动周期续约**：任务开始执行后，Worker 立即启动 `HeartbeatTask`，通过 `scheduleAtFixedRate` 周期性执行。每次心跳将 `lease_expires_at` 延后至 `now + leaseMillis`。
 - **手动即时续约**：业务代码如预知后续将执行耗时较长的重计算，可调用 `context.requestHeartbeat()` 触发即时续租。
@@ -62,7 +62,7 @@ graph TD
 
 ---
 
-### 2. 缺失处理器策略 (`MissingHandlerStrategy`)
+### 缺失处理器策略 (`MissingHandlerStrategy`)
 
 当 Worker 抢占到一个任务，但本地 `DefaultLeaseTaskHandlerRegistry` 未找到对应 `taskType` 的 Handler 时：
 
@@ -85,7 +85,7 @@ graph TD
 
 ---
 
-### 3. 生命周期感知型处理器 (`LeaseLifecycleAwareTaskHandler`) 与契约保护
+### 生命周期感知型处理器 (`LeaseLifecycleAwareTaskHandler`) 与契约保护
 
 框架支持两类处理器接口：
 
@@ -107,7 +107,7 @@ graph TD
 
 ---
 
-### 4. 优雅停机 (Graceful Shutdown)
+### 优雅停机 (Graceful Shutdown)
 
 在容器缩容、应用发布（`SIGTERM`）或调用 `close()` 时，Worker 提供两阶段优雅停机保护：
 

@@ -17,7 +17,7 @@
 
 ## 核心接口与行为规范
 
-### 1. `KeyedPolicy<K>` 接口
+### `KeyedPolicy<K>` 接口
 ```java
 package com.team4u.framework.policy.api;
 
@@ -31,14 +31,14 @@ public interface KeyedPolicy<K> {
 
 ---
 
-### 2. `KeyedPolicyRegistry<K, P>` 注册表
+### `KeyedPolicyRegistry<K, P>` 注册表
 
-#### (1) 写入同步与不可变快照缓存
+#### 写入同步与不可变快照缓存
 `KeyedPolicyRegistry` 内部维护了 `Map<K, P> policies` 索引以及一个只读的 `volatile List<P> unmodifiablePolicies` 缓存：
 - 每次发生写操作（`register`, `addAll`, `unregister`, `unregisterIf`, `unregisterAll`）时，在同步块内完成底层 Map 更新后，立即构建一份全新的只读列表并更新缓存引用。
 - `getPolicies()` 直接返回此 `volatile` 引用，**彻底消除了高并发读取时的集合拷贝与 GC 开销**。
 
-#### (2) 完整 API 规范
+#### 完整 API 规范
 
 ```java
 public class KeyedPolicyRegistry<K, P extends KeyedPolicy<K>> implements PolicyRegistry<P> {

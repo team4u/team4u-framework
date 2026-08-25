@@ -22,7 +22,7 @@
 
 ## 多源优先级聚合与 Tombstone (墓碑) 机制
 
-### 1. 优先级覆盖原理 (`SnapshotAggregator`)
+### 优先级覆盖原理 (`SnapshotAggregator`)
 在快照构建阶段，`SnapshotAggregator` 接收按优先级升序排序的配置源列表，按序对每个源的配置映射执行 `putIfAbsent`：
 
 ```mermaid
@@ -40,7 +40,7 @@ graph TD
 
 因此，高优先级源中的键会首先占据位置，低优先级源中的同名键将被自动忽略。
 
-### 2. Tombstone (墓碑) 失效机制
+### Tombstone (墓碑) 失效机制
 在多源配置体系中，“删除配置”如果仅仅是物理移除该键，会导致低优先级源中的旧值“死灰复燃”。
 
 为此，框架引入了 **Tombstone 机制**：
@@ -55,14 +55,14 @@ graph TD
 
 ## 内置源使用详解
 
-### 1. `SystemEnvConfigSource`
+### `SystemEnvConfigSource`
 自动结合 JVM 属性与环境变量，并在加载时自动为环境变量生成规范化的点分小写键副本：
 ```java
 // APP_SERVER_PORT=9090 会自动生成副本 app.server.port=9090
 SystemEnvConfigSource envSource = new SystemEnvConfigSource("SystemEnv", 0);
 ```
 
-### 2. `PropertiesConfigSource`
+### `PropertiesConfigSource`
 支持通过 `Properties` 对象或从 ClassLoader 资源路径加载：
 ```java
 // 方式 A：从 ClassPath 资源加载
@@ -78,7 +78,7 @@ props.setProperty("app.timeout", "5000");
 PropertiesConfigSource directSource = new PropertiesConfigSource("CustomProps", 500, props);
 ```
 
-### 3. `InMemoryConfigSource`
+### `InMemoryConfigSource`
 内存配置源同时实现了 `ConfigSource` 与 `ConfigWatcher`：
 ```java
 InMemoryConfigSource memSource = new InMemoryConfigSource("MemoryMock", 10);
@@ -102,7 +102,7 @@ memSource.remove("feature.toggle");
 
 `team4u-config-db` 提供了从关系型数据库（MySQL、PostgreSQL、Oracle、H2 等）全量加载配置与基于时间戳轮询探测热更新的能力。
 
-### 1. 数据库建表 DDL
+### 数据库建表 DDL
 默认表名为 `system_config`：
 
 ```sql
@@ -119,7 +119,7 @@ CREATE TABLE `system_config` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='系统全局配置表';
 ```
 
-### 2. 自定义表结构映射 (`DbConfigOptions`)
+### 自定义表结构映射 (`DbConfigOptions`)
 如果已有数据表的字段名不同，可通过 `DbConfigOptions` 自定义映射：
 
 | 属性方法 | 默认常量 | 说明 |
@@ -131,7 +131,7 @@ CREATE TABLE `system_config` (
 | `setEnabledColumn(...)` | `DEFAULT_ENABLED_COLUMN = "enabled"` | 启用状态列名（值为 0 时映射为 Tombstone 失效标记） |
 | `setUpdateTimeColumn(...)` | `DEFAULT_UPDATE_TIME_COLUMN = "update_time"` | 更新时间列名（用于 `DbConfigWatcher` 轮询探测变更） |
 
-### 3. 配置源与监听器装配示例
+### 配置源与监听器装配示例
 
 ```java
 import com.team4u.framework.config.core.ConfigManager;
@@ -165,7 +165,7 @@ ConfigManager manager = ConfigManager.builder()
         .build();
 ```
 
-### 4. `DbConfigWatcher` 变更探测机制
+### `DbConfigWatcher` 变更探测机制
 - 每次轮询仅执行一条轻量 SQL：`SELECT MAX(update_time) AS max_time FROM <table_name>`。
 - 启动时自动记录基线时间戳 (`lastMaxTimestamp`)。
 - 当探测到 `currentMax > lastMaxTimestamp` 时，触发 `changeSignal.run()` 发送重载信号。

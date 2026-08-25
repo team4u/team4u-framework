@@ -47,7 +47,7 @@ for (RouteTraceEvent event : trace.getEvents()) {
 
 ## Trace 数据结构详解
 
-### 1. `RouteTrace<T>`
+### `RouteTrace<T>`
 
 | 字段 | 类型 | 说明 |
 | :--- | :--- | :--- |
@@ -57,7 +57,7 @@ for (RouteTraceEvent event : trace.getEvents()) {
 | `steps` | `List<RuleTrace>` | 规则评估步骤明细列表，按规则遍历顺序记录 |
 | `events` | `List<RouteTraceEvent>` | 由 `TraceableRouteInterceptor` 捕获的观察事件列表 |
 
-### 2. `RuleTrace`
+### `RuleTrace`
 
 | 字段 | 类型 | 说明 |
 | :--- | :--- | :--- |
@@ -66,7 +66,7 @@ for (RouteTraceEvent event : trace.getEvents()) {
 | `isFallback` | `boolean` | 是否为兜底分支 |
 | `diagnosticDetail` | `Object` | 底层引擎输出的详细诊断（如 Criterion AST 树状计算值、Weight 命中的 Hash 区间、Composite 子路由 Trace 对象） |
 
-### 3. `RouteTraceEvent`
+### `RouteTraceEvent`
 
 | 字段 | 类型 | 说明 |
 | :--- | :--- | :--- |
@@ -78,7 +78,7 @@ for (RouteTraceEvent event : trace.getEvents()) {
 
 ## 各类路由器的 Trace 输出特性
 
-### 1. ExpressionRouter 的 Trace 输出
+### ExpressionRouter 的 Trace 输出
 深度集成 `team4u-criterion` 的 `TraceNode`，将表达式树的每个叶子节点与实际值直观呈现：
 
 ```text
@@ -90,7 +90,7 @@ for (RouteTraceEvent event : trace.getEvents()) {
 > [!TIP]
 > 诊断细节一眼即可看出：第一条规则中 `region == 'CN'` 满足 (`[Y]`)，但 `amount > 5000` 实际值为 `2000` 不满足 (`[N]`)，从而导致逻辑短路。
 
-### 2. WeightRouter 的 Trace 输出
+### WeightRouter 的 Trace 输出
 展示分流键计算出的 MurmurHash32 结果与所落入的权重区间：
 
 ```text
@@ -98,7 +98,7 @@ for (RouteTraceEvent event : trace.getEvents()) {
   └─ 诊断细节: hash=1523, range=[20, 50)
 ```
 
-### 3. CompositeRouter 的 Trace 输出
+### CompositeRouter 的 Trace 输出
 以嵌套形式逐层记录子路由的 `RouteTrace` 执行细节：
 
 ```text
@@ -108,7 +108,7 @@ for (RouteTraceEvent event : trace.getEvents()) {
   └─ 诊断细节: RouteTrace(routerType=expression, steps=[...], result=RouteResult(outcome=RULE_MATCH))
 ```
 
-### 4. MapRouter 的 Trace 输出
+### MapRouter 的 Trace 输出
 未命中时展示规则键对比与兜底进入过程：
 
 ```text

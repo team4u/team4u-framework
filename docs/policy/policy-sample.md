@@ -4,14 +4,14 @@
 
 ---
 
-## 案例 1：多渠道聚合支付网关 (KeyedPolicy)
+## 多渠道聚合支付网关 (KeyedPolicy)
 
 ### 业务场景
 聚合支付系统需要根据前端传入的支付方式代码（如 `"ALIPAY"`, `"WECHAT"`, `"UNIONPAY"`）分发到对应的支付渠道 SDK 执行统一统一下单。
 
 ### 代码实现
 
-#### 1. 策略接口与数据传输模型
+#### 策略接口与数据传输模型
 ```java
 import com.team4u.framework.policy.api.KeyedPolicy;
 import lombok.Data;
@@ -35,7 +35,7 @@ public interface PayChannelStrategy extends KeyedPolicy<String> {
 }
 ```
 
-#### 2. 渠道策略实现（由 Spring 托管）
+#### 渠道策略实现（由 Spring 托管）
 ```java
 @Component
 public class WechatPayStrategy implements PayChannelStrategy {
@@ -72,7 +72,7 @@ public class AlipayStrategy implements PayChannelStrategy {
 }
 ```
 
-#### 3. 路由分发服务
+#### 路由分发服务
 ```java
 @Service
 public class PaymentGatewayService {
@@ -90,7 +90,7 @@ public class PaymentGatewayService {
 
 ---
 
-## 案例 2：多级营销优惠叠加计算链 (ContextPolicy)
+## 多级营销优惠叠加计算链 (ContextPolicy)
 
 ### 业务场景
 电商订单在结算时，需要按照固定顺序依次评估并叠加多种优惠规则：
@@ -100,7 +100,7 @@ public class PaymentGatewayService {
 
 ### 代码实现
 
-#### 1. 上下文与策略定义
+#### 上下文与策略定义
 ```java
 import com.team4u.framework.policy.api.ContextPolicy;
 import lombok.Data;
@@ -127,7 +127,7 @@ public interface PromotionPolicy extends ContextPolicy<OrderSettlementContext> {
 }
 ```
 
-#### 2. 各级营销策略实现
+#### 各级营销策略实现
 ```java
 public class NewUserPromotion implements PromotionPolicy {
     @Override
@@ -165,7 +165,7 @@ public class MemberDiscountPromotion implements PromotionPolicy {
 }
 ```
 
-#### 3. 优惠链装配与全量匹配执行
+#### 优惠链装配与全量匹配执行
 ```java
 public class PromotionEngine {
 
@@ -194,7 +194,7 @@ public class PromotionEngine {
 
 ---
 
-## 案例 3：金融交易风控拦截流水线 (PolicyPipeline)
+## 金融交易风控拦截流水线 (PolicyPipeline)
 
 ### 业务场景
 在转账或大额交易前，必须经过多道风控规则检查（黑名单过滤 -> 单日限额检查 -> 异地登录校验）。任何一关未通过，必须**立即终止后续校验并阻断交易**。

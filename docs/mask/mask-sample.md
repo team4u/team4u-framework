@@ -4,7 +4,7 @@
 
 ---
 
-## 案例 1：Spring Boot 开放平台出参自动脱敏
+## Spring Boot 开放平台出参自动脱敏
 
 ### 业务场景
 开放平台用户详情接口对外返回数据，要求：
@@ -15,7 +15,7 @@
 
 ### 代码实现
 
-#### 1. 响应 VO 声明
+#### 响应 VO 声明
 ```java
 import com.team4u.framework.mask.Mask;
 import com.team4u.framework.mask.MaskType;
@@ -42,7 +42,7 @@ public class UserDetailVO {
 }
 ```
 
-#### 2. 配置 JacksonMaskModule 与 Controller
+#### 配置 JacksonMaskModule 与 Controller
 ```java
 @Configuration
 public class WebJacksonConfig {
@@ -69,12 +69,12 @@ public class UserController {
 
 ---
 
-## 案例 2：第三方支付回调 Map 报文动态治理
+## 第三方支付回调 Map 报文动态治理
 
 ### 业务场景
 第三方支付平台异步回调通知入参为一个动态 `Map<String, Object>`，其中包含敏感字段 `payerPhone`、`bankAccount` 与 `authCode`。由于没有源码实体类，通过配置中心下发动态规则进行无侵入脱敏。
 
-### 1. 配置中心规则 (`team4u.mask.rules`)
+### 配置中心规则 (`team4u.mask.rules`)
 ```json
 {
   "java.util.HashMap": {
@@ -85,7 +85,7 @@ public class UserController {
 }
 ```
 
-### 2. 启动规则监听并在回调中安全打印日志
+### 启动规则监听并在回调中安全打印日志
 ```java
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.mask.MaskBootstrap;
@@ -120,7 +120,7 @@ public class PaymentCallbackController {
 
 ---
 
-## 案例 3：API 网关访问日志与超长报文防打爆
+## API 网关访问日志与超长报文防打爆
 
 ### 业务场景
 在 API 网关或服务拦截器中记录请求与响应报文。部分接口入参可能包含大段 Base64 编码的图片。要求：

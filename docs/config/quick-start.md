@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 引入依赖
+## 引入依赖
 
 ```xml
 <dependency>
@@ -26,7 +26,7 @@
 
 ---
 
-## 2. 准备配置文件
+## 准备配置文件
 
 在 `src/main/resources/test.properties`（或通过 `PropertiesConfigSource.fromResource` 加载的资源文件）中添加配置项：
 
@@ -42,7 +42,7 @@ server.description=${server.name} is running on port ${server.port}
 
 ---
 
-## 3. 基础键值读取
+## 基础键值读取
 
 `ConfigManager` 提供了直接获取字符串配置的快捷方法：
 
@@ -73,11 +73,11 @@ public class ConfigQuickStart {
 
 ---
 
-## 4. 推荐用法：强类型 JavaBean 动态代理
+## 推荐用法：强类型 JavaBean 动态代理
 
 相较于手动解析字符串，`team4u-config` 强烈推荐使用**强类型 JavaBean 声明式代理**：
 
-### 1. 定义普通的 JavaBean 配置类
+### 定义普通的 JavaBean 配置类
 
 只需提供无参构造函数与 Getter 方法，字段的初始值将自动作为配置缺失时的兜底默认值：
 
@@ -108,7 +108,7 @@ public class DbConfig {
 }
 ```
 
-### 2. 创建代理并直接使用
+### 创建代理并直接使用
 
 ```java
 import com.team4u.framework.config.core.ConfigManager;

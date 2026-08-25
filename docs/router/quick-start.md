@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 引入依赖
+## 引入依赖
 
 在项目的 `pom.xml` 中引入 `team4u-router` 模块：
 
@@ -21,7 +21,7 @@
 
 ---
 
-## 2. 准备路由规则配置
+## 准备路由规则配置
 
 在配置中心（如 Nacos / Apollo / 本地配置文件）中定义路由策略（以 JSON 结构下发）。
 
@@ -51,7 +51,7 @@
 
 ---
 
-## 3. 获取 RoutingManager 实例
+## 获取 RoutingManager 实例
 
 `RoutingManager` 是执行路由决策的核心门面，支持全局单例复用或使用 Builder 隔离构建：
 
@@ -81,7 +81,7 @@ RoutingManager customManager = RoutingManager.builder()
 
 ---
 
-## 4. 执行路由判定
+## 执行路由判定
 
 ### 基础调用
 
@@ -147,7 +147,7 @@ if (listResult.isMatch()) {
 
 ---
 
-## 5. 编程式路由（无需配置文件）
+## 编程式路由（无需配置文件）
 
 在单元测试或动态构建策略场景中，可以直接使用 `RoutePolicyBuilder` 构建规则，并通过 `routeByPolicy` 执行：
 
@@ -177,7 +177,7 @@ System.out.println(result.getValue()); // adult-service
 
 ---
 
-## 6. 临时字符串配置路由 (`routeByConfig`)
+## 临时字符串配置路由 (`routeByConfig`)
 
 方便直接透传原始 JSON 配置字符串进行单元测试：
 

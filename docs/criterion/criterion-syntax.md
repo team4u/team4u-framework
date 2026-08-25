@@ -16,7 +16,7 @@
 
 ---
 
-## 1. 关系比较操作符
+## 关系比较操作符
 
 | 操作符 | 说明 | 示例 |
 | :--- | :--- | :--- |
@@ -32,7 +32,7 @@
 
 ---
 
-## 2. 逻辑组合运算
+## 逻辑组合运算
 
 支持 `&&` (与)、`||` (或) 以及 `()` 括号调整优先级，遵循短路求值原则：
 
@@ -42,7 +42,7 @@ age >= 18 && (userLevel in ['VIP', 'SVIP'] || totalAmount > 5000)
 
 ---
 
-## 3. 空值与存在性检查 (Is / Is Not)
+## 空值与存在性检查 (Is / Is Not)
 
 | 语法 | 说明 | 示例 |
 | :--- | :--- | :--- |
@@ -53,7 +53,7 @@ age >= 18 && (userLevel in ['VIP', 'SVIP'] || totalAmount > 5000)
 
 ---
 
-## 4. 集合与容器操作
+## 集合与容器操作
 
 ### In / Not In (成员判定)
 - 常量集合：`status in ['PAID', 'SUCCESS']` 或 `status in [PAID, SUCCESS]`
@@ -74,7 +74,7 @@ age >= 18 && (userLevel in ['VIP', 'SVIP'] || totalAmount > 5000)
 
 ---
 
-## 5. 区间范围 (Between)
+## 区间范围 (Between)
 
 支持标准数学区间语法，`[` / `]` 表示闭区间（包含边界），`(` / `)` 表示开区间（不包含边界）：
 
@@ -86,7 +86,7 @@ age >= 18 && (userLevel in ['VIP', 'SVIP'] || totalAmount > 5000)
 
 ---
 
-## 6. 正则匹配与通配符 (Regex / Like)
+## 正则匹配与通配符 (Regex / Like)
 
 - **正则匹配 (`=~` 或 `regex`)**：
   - `email =~ '^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)+$'`
@@ -98,7 +98,7 @@ age >= 18 && (userLevel in ['VIP', 'SVIP'] || totalAmount > 5000)
 
 ---
 
-## 7. 概率灰度与 Hash 分流
+## 概率灰度与 Hash 分流
 
 ### 随机概率 (`prob` / `probability`)
 按指定浮点概率随机命中（`0.0 ~ 1.0`）：
@@ -112,7 +112,7 @@ age >= 18 && (userLevel in ['VIP', 'SVIP'] || totalAmount > 5000)
 
 ---
 
-## 8. 显式类型转换器 (ValueConverter)
+## 显式类型转换器 (ValueConverter)
 
 通过 `subject:converter` 后缀语法在比较前执行前置类型转换：
 
@@ -126,7 +126,7 @@ age >= 18 && (userLevel in ['VIP', 'SVIP'] || totalAmount > 5000)
 
 ---
 
-## 9. 极简语法糖
+## 极简语法糖
 
 在很多规则表中，简单的等值匹配非常普遍。Criterion 提供了极简语法糖：
 

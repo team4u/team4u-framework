@@ -27,7 +27,7 @@
 
 ## 基础用法
 
-### 1. 成功日志
+### 成功日志
 ```java
 Loggers.of(OrderService.class)
        .action("CreateOrder")
@@ -37,7 +37,7 @@ Loggers.of(OrderService.class)
        .log();
 ```
 
-### 2. 异常日志
+### 异常日志
 ```java
 try {
     paymentService.pay(orderId, amount);
@@ -93,7 +93,7 @@ public class OrderProcessor {
 
 ## 区间耗时追踪 (`LogSpan` 与 `around`)
 
-### 1. `LogSpan`（显式分阶段记录）
+### `LogSpan`（显式分阶段记录）
 通过 `begin()` 可以开启一个 `LogSpan`。支持在方法开始时打印一条 `start` 日志，并在方法结束时自动计算耗时：
 
 ```java
@@ -115,7 +115,7 @@ try {
 }
 ```
 
-### 2. `around()` 闭包包装
+### `around()` 闭包包装
 对于简单的方法调用，可以使用 `around` 一键包裹：
 
 ```java

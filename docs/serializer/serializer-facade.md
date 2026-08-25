@@ -6,7 +6,7 @@
 
 ## 核心 API 清单
 
-### 1. 序列化
+### 序列化
 ```java
 public static String toJsonStr(Object obj);
 ```
@@ -15,7 +15,7 @@ public static String toJsonStr(Object obj);
 
 ---
 
-### 2. 简单反序列化
+### 简单反序列化
 ```java
 public static <T> T toBean(String json, Class<T> clazz);
 ```
@@ -24,7 +24,7 @@ public static <T> T toBean(String json, Class<T> clazz);
 
 ---
 
-### 3. 反射类型反序列化
+### 反射类型反序列化
 ```java
 public static <T> T toBean(String json, Type type);
 ```
@@ -32,7 +32,7 @@ public static <T> T toBean(String json, Type type);
 
 ---
 
-### 4. 强类型泛型标记反序列化 (`TypeReference`)
+### 强类型泛型标记反序列化 (`TypeReference`)
 ```java
 public static <T> T toBean(String json, TypeReference<T> typeReference);
 ```
@@ -40,7 +40,7 @@ public static <T> T toBean(String json, TypeReference<T> typeReference);
 
 ---
 
-### 5. 容错解析模式 (`ignoreError`)
+### 容错解析模式 (`ignoreError`)
 ```java
 public static <T> T toBean(String json, TypeReference<T> typeReference, boolean ignoreError);
 ```
@@ -49,7 +49,7 @@ public static <T> T toBean(String json, TypeReference<T> typeReference, boolean 
 
 ---
 
-### 6. 便捷列表反序列化
+### 便捷列表反序列化
 ```java
 public static <T> List<T> toList(String json, Class<T> clazz);
 ```
@@ -57,7 +57,7 @@ public static <T> List<T> toList(String json, Class<T> clazz);
 
 ---
 
-### 7. 通用对象树解析
+### 通用对象树解析
 ```java
 public static Object parseObj(String json);
 ```
@@ -65,7 +65,7 @@ public static Object parseObj(String json);
 
 ---
 
-### 8. 获取当前活跃策略
+### 获取当前活跃策略
 ```java
 public static JsonSerializerPolicy getPolicy();
 ```

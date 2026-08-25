@@ -4,7 +4,7 @@
 
 ---
 
-## 案例 1：未支付订单 15 分钟超时自动取消
+## 未支付订单 15 分钟超时自动取消
 
 ### 业务场景
 用户下单后若 15 分钟内未完成支付，系统需自动关闭订单并释放库存。系统要求：
@@ -14,7 +14,7 @@
 
 ### 代码实现
 
-#### 1. 下单时幂等发布延迟租约任务
+#### 下单时幂等发布延迟租约任务
 ```java
 import com.team4u.framework.lease.api.LeaseProducer;
 import com.team4u.framework.lease.model.LeasePublishRequest;
@@ -52,7 +52,7 @@ public class OrderService {
 }
 ```
 
-#### 2. Worker 端注册处理逻辑
+#### Worker 端注册处理逻辑
 ```java
 import com.team4u.framework.lease.handler.DefaultLeaseTaskHandlerRegistry;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -92,7 +92,7 @@ public class OrderCancelHandler {
 
 ---
 
-## 案例 2：第三方支付结果长耗时轮询补偿 (`LeaseLifecycleAwareTaskHandler`)
+## 第三方支付结果长耗时轮询补偿 (`LeaseLifecycleAwareTaskHandler`)
 
 ### 业务场景
 某些聚合支付通道仅支持商户主动轮询支付结果。在提交支付后，系统需要每隔 30 秒发起一次状态查询：

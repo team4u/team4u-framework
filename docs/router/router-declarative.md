@@ -6,7 +6,7 @@
 
 ## 核心注解
 
-### 1. `@Routed`
+### `@Routed`
 可标注在业务接口、类或具体方法上（方法级注解优先于类级注解）：
 
 ```java
@@ -22,7 +22,7 @@ public @interface Routed {
 }
 ```
 
-### 2. `@RouteContext`
+### `@RouteContext`
 标注在接口方法的参数上，指示该参数对象作为路由计算的上下文：
 
 ```java
@@ -57,7 +57,7 @@ public @interface RouteContext {
 
 ## 完整接入示例
 
-### 1. 定义业务接口与入参模型
+### 定义业务接口与入参模型
 
 ```java
 public interface PaymentService {
@@ -74,7 +74,7 @@ public class PaymentOrder {
 }
 ```
 
-### 2. 编写多套业务实现 Bean
+### 编写多套业务实现 Bean
 
 在 Spring 或 `team4u-bean` 容器中注册不同的实现：
 
@@ -104,7 +104,7 @@ public class DefaultPaymentService implements PaymentService {
 }
 ```
 
-### 3. 配置中心下发路由规则
+### 配置中心下发路由规则
 
 配置键 `router.payment.CN.router`：
 ```json
@@ -121,7 +121,7 @@ public class DefaultPaymentService implements PaymentService {
 }
 ```
 
-### 4. 创建并调用动态代理
+### 创建并调用动态代理
 
 通过 `RoutedProxyFactory` 一键生成代理对象：
 
