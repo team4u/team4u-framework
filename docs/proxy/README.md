@@ -19,16 +19,16 @@
 
 ```mermaid
 graph TD
-    PB[ProxyBuilder 流式构建器] --> Engine{智能引擎自适应}
-    Engine -->|全部为 Interface| JDK[JdkProxyEngine<br/>Proxy.newProxyInstance]
-    Engine -->|包含普通 Class| BB[ByteBuddyProxyEngine<br/>subclass + implement]
+    PB["ProxyBuilder 流式构建器"] --> Engine{"智能引擎自适应"}
+    Engine -->|"全部为 Interface"| JDK["JdkProxyEngine<br/>Proxy.newProxyInstance"]
+    Engine -->|"包含普通 Class"| BB["ByteBuddyProxyEngine<br/>subclass + implement"]
     
-    Proxy[生成的代理对象 Proxy] --> Chain[MethodInterceptor 责任链]
-    Chain --> I1[TrackInterceptor<br/>Tracker 性能与异常审计]
-    Chain --> I2[HotSwapInterceptor<br/>动态热替换 Swappable]
-    Chain --> I3[EmptyValueInterceptor<br/>空对象防 NPE 拦截]
-    Chain --> I4[DelegateInterceptor<br/>鸭子类型方法委托与异常解包]
-    I4 --> Target[真实目标实例 Target]
+    Proxy["生成的代理对象 Proxy"] --> Chain["MethodInterceptor 责任链"]
+    Chain --> I1["TrackInterceptor<br/>Tracker 性能与异常审计"]
+    Chain --> I2["HotSwapInterceptor<br/>动态热替换 Swappable"]
+    Chain --> I3["EmptyValueInterceptor<br/>空对象防 NPE 拦截"]
+    Chain --> I4["DelegateInterceptor<br/>鸭子类型方法委托与异常解包"]
+    I4 --> Target["真实目标实例 Target"]
 ```
 
 ## 核心特性

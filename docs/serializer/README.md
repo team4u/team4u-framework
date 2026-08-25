@@ -18,12 +18,12 @@
 
 ```mermaid
 graph TD
-    User[业务 / SDK 调用 JsonUtil 静态门面] --> JU[JsonUtil]
-    JU --> OPC[OrderedPolicyChain 策略链]
-    OPC --> SPI[META-INF/services SPI 自动发现]
-    SPI --> JP[JacksonSerializerPolicy<br/>team4u-serializer-jackson 模块]
-    SPI -.-> Custom[自定义 JsonSerializerPolicy<br/>如 FastJSON2 / Gson]
-    JP --> Jackson[Jackson ObjectMapper<br/>JSR310 / 非空过滤 / 未知字段容错]
+    User["业务 / SDK 调用 JsonUtil 静态门面"] --> JU["JsonUtil"]
+    JU --> OPC["OrderedPolicyChain 策略链"]
+    OPC --> SPI["META-INF/services SPI 自动发现"]
+    SPI --> JP["JacksonSerializerPolicy<br/>team4u-serializer-jackson 模块"]
+    SPI -.-> Custom["自定义 JsonSerializerPolicy<br/>如 FastJSON2 / Gson"]
+    JP --> Jackson["Jackson ObjectMapper<br/>JSR310 / 非空过滤 / 未知字段容错"]
 ```
 
 ## 核心概念

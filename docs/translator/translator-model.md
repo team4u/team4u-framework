@@ -78,7 +78,7 @@ sequenceDiagram
 
     Client->>Engine: translate(source, routerId, args)
     Engine->>Engine: 1. 校验 source 非空 (NPE 防御)<br/>2. 快照 args 为不可变 Map<br/>3. 提取并归一化 traceId
-    Engine->>Router: route(routerId, MatchContext[actual=source, attributes=args], ErrorDef.class)
+    Engine->>Router: route(routerId, MatchContext["actual=source, attributes=args"], ErrorDef.class)
     
     alt 未命中任何路由规则 (result == null || !result.isMatch())
         Engine-->>Client: 原样返回: new TranslatedResponse(source.code, source.message, traceId)

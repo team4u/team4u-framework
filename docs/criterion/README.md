@@ -30,16 +30,16 @@ Criterion 将规则生命周期拆解为三个阶段：**DSL 词法解析 (Parsi
 
 ```mermaid
 graph LR
-    A[业务表达式 String] --> P[StandardCriterionParser<br/>词法与语法解析器]
-    P --> AST[Criterion<br/>抽象语法树]
-    AST --> C[CompilingVisitor<br/>编译器访问者]
-    C --> F[MatchPredicate<br/>编译后的闭包函数]
-    F -.-> Cache[(DynamicInstanceProvider 编译缓存)]
+    A["业务表达式 String"] --> P["StandardCriterionParser<br/>词法与语法解析器"]
+    P --> AST["Criterion<br/>抽象语法树"]
+    AST --> C["CompilingVisitor<br/>编译器访问者"]
+    C --> F["MatchPredicate<br/>编译后的闭包函数"]
+    F -.-> Cache[("DynamicInstanceProvider 编译缓存")]
     
-    CTX[MatchContext<br/>运行时匹配上下文] --> E[执行判定 test]
+    CTX["MatchContext<br/>运行时匹配上下文"] --> E["执行判定 test"]
     Cache --> E
-    E --> R[判定结果 boolean]
-    E -.-> T[TraceRecorder<br/>可视化执行追踪树]
+    E --> R["判定结果 boolean"]
+    E -.-> T["TraceRecorder<br/>可视化执行追踪树"]
 ```
 
 Criterion 具备以下核心设计特色：

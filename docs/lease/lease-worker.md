@@ -16,12 +16,12 @@ graph TD
         Flag["processingTask (AtomicBoolean)"]
     end
     
-    WT -->|1. acquire 抢占成功| Flag
-    WT -->|2. 启动心跳| HT
-    HT -.->|3. 定时或手动 requestHeartbeat| HB["向后端发送 heartbeat 延长过期时间"]
-    WT -->|4. 分发执行| Handler["LeaseTaskHandler / LeaseLifecycleAwareTaskHandler"]
-    Handler -->|5. 成功/失败/释放| Client["LeaseRuntimeClient (close / release)"]
-    WT -->|6. 结束任务, 停止心跳| HT
+    WT -->|"1. acquire 抢占成功"| Flag
+    WT -->|"2. 启动心跳"| HT
+    HT -.->|"3. 定时或手动 requestHeartbeat"| HB["向后端发送 heartbeat 延长过期时间"]
+    WT -->|"4. 分发执行"| Handler["LeaseTaskHandler / LeaseLifecycleAwareTaskHandler"]
+    Handler -->|"5. 成功/失败/释放"| Client["LeaseRuntimeClient (close / release)"]
+    WT -->|"6. 结束任务, 停止心跳"| HT
 ```
 
 1. **主工作线程 (`workerThread`)**：
@@ -68,11 +68,11 @@ graph TD
 
 ```mermaid
 graph TD
-    A[Worker 抢占到任务] --> B{本地是否注册 Handler?}
-    B -->|已注册| C[正常执行业务逻辑]
-    B -->|未注册| D{missingHandlerStrategy}
-    D -->|FAIL_FAST| E[close FAILED<br/>failureReason = MISSING_HANDLER<br/>failureCount + 1]
-    D -->|RETRY_LATER| F[release 延迟 missingHandlerRetryDelayMillis 重新入队<br/>failureCount 不增加, outcome 保持 null]
+    A["Worker 抢占到任务"] --> B{"本地是否注册 Handler?"}
+    B -->|"已注册"| C["正常执行业务逻辑"]
+    B -->|"未注册"| D{"missingHandlerStrategy"}
+    D -->|"FAIL_FAST"| E["close FAILED<br/>failureReason = MISSING_HANDLER<br/>failureCount + 1"]
+    D -->|"RETRY_LATER"| F["release 延迟 missingHandlerRetryDelayMillis 重新入队<br/>failureCount 不增加, outcome 保持 null"]
 ```
 
 - **`FAIL_FAST` (默认模式)**：

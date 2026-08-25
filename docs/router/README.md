@@ -28,22 +28,22 @@
 
 ```mermaid
 graph TD
-    A[业务请求 Context] --> RM[RoutingManager 路由管理器]
-    RM --> CDR[ConfigDrivenRegistry<br/>配置驱动路由实例缓存]
-    CDR -.-> CM[(ConfigManager 配置中心)]
+    A["业务请求 Context"] --> RM["RoutingManager 路由管理器"]
+    RM --> CDR["ConfigDrivenRegistry<br/>配置驱动路由实例缓存"]
+    CDR -.-> CM[("ConfigManager 配置中心")]
     
-    RM --> IC[RouteInterceptor 责任链]
-    IC --> R{Router 路由策略实现}
+    RM --> IC["RouteInterceptor 责任链"]
+    IC --> R{"Router 路由策略实现"}
     
-    R -->|type=map| MR[MapRouter 精准映射]
-    R -->|type=expression| ER[ExpressionRouter 表达式路由]
-    R -->|type=weight| WR[WeightRouter 权重分流]
-    R -->|type=composite| CR[CompositeRouter 组合代理]
-    R -->|type=custom| CUST[自定义 SPI Router]
+    R -->|"type=map"| MR["MapRouter 精准映射"]
+    R -->|"type=expression"| ER["ExpressionRouter 表达式路由"]
+    R -->|"type=weight"| WR["WeightRouter 权重分流"]
+    R -->|"type=composite"| CR["CompositeRouter 组合代理"]
+    R -->|"type=custom"| CUST["自定义 SPI Router"]
     
-    R --> RES[RouteResult 路由结果]
-    RES -.-> TR[RouteTrace 白盒诊断轨迹]
-    RES --> BL[RoutedBeanLocator / Proxy<br/>定位并执行目标 Bean]
+    R --> RES["RouteResult 路由结果"]
+    RES -.-> TR["RouteTrace 白盒诊断轨迹"]
+    RES --> BL["RoutedBeanLocator / Proxy<br/>定位并执行目标 Bean"]
 ```
 
 ## 核心概念

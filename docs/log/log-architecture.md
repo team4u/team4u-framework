@@ -47,13 +47,13 @@ public class LogEvent {
 
 ```mermaid
 graph TD
-    Event[构建完成的 LogEvent] --> I1[MdcEnrichInterceptor<br/>priority: HIGH (0)<br/>从 MDC 提取 traceId 填入外层]
-    I1 --> I2[TargetedDyeingInterceptor<br/>priority: NORMAL (100)<br/>评估 team4u.log.dyeing 规则, 提权 level]
-    I2 --> I3[RateLimitInterceptor<br/>priority: LOW (200)<br/>异常特征限流, 抑制高频错误日志]
-    I3 --> Check{是否通过 / 未被 suppressed}
-    Check -->|否| Drop[终止输出]
-    Check -->|是| Serializer[JacksonLogSerializer<br/>执行 JacksonMaskModule 脱敏与超长截断]
-    Serializer --> Appender[LogAppender<br/>Slf4jLogAppender / MemoryLogAppender]
+    Event["构建完成的 LogEvent"] --> I1["MdcEnrichInterceptor<br/>priority: HIGH (0)<br/>从 MDC 提取 traceId 填入外层"]
+    I1 --> I2["TargetedDyeingInterceptor<br/>priority: NORMAL (100)<br/>评估 team4u.log.dyeing 规则, 提权 level"]
+    I2 --> I3["RateLimitInterceptor<br/>priority: LOW (200)<br/>异常特征限流, 抑制高频错误日志"]
+    I3 --> Check{"是否通过 / 未被 suppressed"}
+    Check -->|"否"| Drop["终止输出"]
+    Check -->|"是"| Serializer["JacksonLogSerializer<br/>执行 JacksonMaskModule 脱敏与超长截断"]
+    Serializer --> Appender["LogAppender<br/>Slf4jLogAppender / MemoryLogAppender"]
 ```
 
 ### 拦截器优先级契约

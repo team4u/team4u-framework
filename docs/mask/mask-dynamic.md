@@ -60,16 +60,16 @@ MaskBootstrap.global().start(configManager);
 
 ```mermaid
 graph TD
-    Field[待脱敏字段 className.fieldName] --> Check1{JavaBean 字段上<br/>是否存在 @Mask 注解}
+    Field["待脱敏字段 className.fieldName"] --> Check1{"JavaBean 字段上<br/>是否存在 @Mask 注解"}
     
-    Check1 -->|存在 @Mask| UseAnno[1. 优先使用注解指定的 MaskType (最高优先级)]
-    Check1 -->|不存在| Check2{MaskRuleRepository 中<br/>是否存在指定 className 规则}
+    Check1 -->|"存在 @Mask"| UseAnno["1. 优先使用注解指定的 MaskType (最高优先级)"]
+    Check1 -->|"不存在"| Check2{"MaskRuleRepository 中<br/>是否存在指定 className 规则"}
     
-    Check2 -->|存在且匹配 fieldName| UseClass[2. 使用类级别精确规则]
-    Check2 -->|不存在或未匹配| Check3{MaskRuleRepository 中<br/>是否存在 * 全局通配规则}
+    Check2 -->|"存在且匹配 fieldName"| UseClass["2. 使用类级别精确规则"]
+    Check2 -->|"不存在或未匹配"| Check3{"MaskRuleRepository 中<br/>是否存在 * 全局通配规则"}
     
-    Check3 -->|存在且匹配 fieldName| UseGlobal[3. 兜底使用全局通配字段规则]
-    Check3 -->|未命中| NoMask[不执行脱敏，输出原值]
+    Check3 -->|"存在且匹配 fieldName"| UseGlobal["3. 兜底使用全局通配字段规则"]
+    Check3 -->|"未命中"| NoMask["不执行脱敏，输出原值"]
 ```
 
 ### 规则查找实现 (`MaskRuleRepository.findRule`)

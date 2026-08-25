@@ -10,16 +10,16 @@
 
 ```mermaid
 graph TD
-    Change[配置中心变更信号 key: clients.sms-gateway] --> Listener[ConfigDrivenRegistry 监听回调]
+    Change["配置中心变更信号 key: clients.sms-gateway"] --> Listener["ConfigDrivenRegistry 监听回调"]
     
-    Listener --> CheckDel{newValue 是否为空或被删除}
-    CheckDel -->|是 (删除/Tombstone)| Remove[从 instanceCache 移除<br/>调用 oldInstance.close 释放资源]
-    CheckDel -->|否 (更新/新增)| Build[调用 instanceFactory.apply 构建新实例]
+    Listener --> CheckDel{"newValue 是否为空或被删除"}
+    CheckDel -->|"是 (删除/Tombstone)"| Remove["从 instanceCache 移除<br/>调用 oldInstance.close 释放资源"]
+    CheckDel -->|"否 (更新/新增)"| Build["调用 instanceFactory.apply 构建新实例"]
     
-    Build --> TryBuild{构建新实例是否成功}
-    TryBuild -->|失败抛出异常| KeepOld[打印错误日志<br/>保留旧实例继续对外服务 (业务不中断)]
-    TryBuild -->|成功返回 newInstance| Swap[更新 instanceCache.put<br/>安全替换为新实例]
-    Swap --> CloseOld[若旧实例实现了 AutoCloseable<br/>自动调用 oldInstance.close 优雅关闭]
+    Build --> TryBuild{"构建新实例是否成功"}
+    TryBuild -->|"失败抛出异常"| KeepOld["打印错误日志<br/>保留旧实例继续对外服务 (业务不中断)"]
+    TryBuild -->|"成功返回 newInstance"| Swap["更新 instanceCache.put<br/>安全替换为新实例"]
+    Swap --> CloseOld["若旧实例实现了 AutoCloseable<br/>自动调用 oldInstance.close 优雅关闭"]
 ```
 
 1. **安全热替换 (Safe Swap)**：

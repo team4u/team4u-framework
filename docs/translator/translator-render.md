@@ -8,10 +8,10 @@
 
 ```mermaid
 graph LR
-    RC[RenderContext<br/>finalCode, finalMessage] --> P1[1. TemplateRenderPolicy<br/>priority=NORMAL(0)<br/>${...} 占位符解析替换]
-    P1 --> P2[2. 自定义业务策略<br/>priority=NORMAL+10<br/>敏感词脱敏 / 多语言翻译]
-    P2 --> P3[3. FallbackRenderPolicy<br/>priority=LOWEST<br/>空值字段兜底回填]
-    P3 --> Out[TranslatedResponse]
+    RC["RenderContext<br/>finalCode, finalMessage"] --> P1["1. TemplateRenderPolicy<br/>priority=NORMAL(0)<br/>${...} 占位符解析替换"]
+    P1 --> P2["2. 自定义业务策略<br/>priority=NORMAL+10<br/>敏感词脱敏 / 多语言翻译"]
+    P2 --> P3["3. FallbackRenderPolicy<br/>priority=LOWEST<br/>空值字段兜底回填"]
+    P3 --> Out["TranslatedResponse"]
 ```
 
 ---

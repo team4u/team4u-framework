@@ -21,19 +21,19 @@
 
 ```mermaid
 graph LR
-    Raw[RawResponse 上游原始响应<br/>domain, code, message, cause] --> T[ResponseTranslator 核心引擎]
-    Args[动态参数 args<br/>traceId, action 等] --> T
+    Raw["RawResponse 上游原始响应<br/>domain, code, message, cause"] --> T["ResponseTranslator 核心引擎"]
+    Args["动态参数 args<br/>traceId, action 等"] --> T
     
-    T --> MC[MatchContext 上下文组装<br/>actual=source, attributes=args]
-    MC --> RM[team4u-router 规则路由决策]
-    RM --> ED[ErrorDef 目标定义<br/>code, defaultMsg, logLevel]
+    T --> MC["MatchContext 上下文组装<br/>actual=source, attributes=args"]
+    MC --> RM["team4u-router 规则路由决策"]
+    RM --> ED["ErrorDef 目标定义<br/>code, defaultMsg, logLevel"]
     
-    ED --> RC[RenderContext 渲染上下文]
-    RC --> RP1[TemplateRenderPolicy<br/>${...} 占位符变量插值]
-    RP1 --> RP2[FallbackRenderPolicy<br/>默认兜底填充]
-    RP2 --> RP3[自定义 RenderPolicy<br/>脱敏/多语言/审计]
+    ED --> RC["RenderContext 渲染上下文"]
+    RC --> RP1["TemplateRenderPolicy<br/>${...} 占位符变量插值"]
+    RP1 --> RP2["FallbackRenderPolicy<br/>默认兜底填充"]
+    RP2 --> RP3["自定义 RenderPolicy<br/>脱敏/多语言/审计"]
     
-    RP3 --> Out[TranslatedResponse<br/>code, message, traceId]
+    RP3 --> Out["TranslatedResponse<br/>code, message, traceId"]
 ```
 
 ## 核心概念

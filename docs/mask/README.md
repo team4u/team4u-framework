@@ -22,27 +22,27 @@
 ```mermaid
 graph TD
     subgraph 接入层
-        A1[编程式: FastMasker.mask]
-        A2[注解式: @Mask 字段]
-        A3[配置式: team4u.mask.rules 动态下发]
+        A1["编程式: FastMasker.mask"]
+        A2["注解式: @Mask 字段"]
+        A3["配置式: team4u.mask.rules 动态下发"]
     end
 
-    subgraph 序列化治理层 (Jackson)
-        A2 --> JM[JacksonMaskModule]
-        A3 --> MR[MaskRuleRepository 规则库]
+    subgraph 序列化治理层__Jackson_ ["序列化治理层 (Jackson)"]
+        A2 --> JM["JacksonMaskModule"]
+        A3 --> MR["MaskRuleRepository 规则库"]
         MR --> JM
-        JM --> DMSM[DynamicMaskSerializerModifier]
-        DMSM --> MMS[MaskStringSerializer / MaskableMapSerializer]
+        JM --> DMSM["DynamicMaskSerializerModifier"]
+        DMSM --> MMS["MaskStringSerializer / MaskableMapSerializer"]
     end
 
     subgraph 策略路由与执行层
-        A1 --> FM[FastMasker 统一门面]
+        A1 --> FM["FastMasker 统一门面"]
         MMS --> FM
-        FM --> PR[KeyedPolicyRegistry<br/>Copy-On-Write 策略路由]
-        PR --> MP{MaskPolicy 实现}
-        MP -->|15+ 内置算法| MU[MaskUtils<br/>Unicode CodePoint 安全处理]
-        MP -->|自定义 SPI| Ext[业务扩展策略]
-        MU --> Out[脱敏后安全数据]
+        FM --> PR["KeyedPolicyRegistry<br/>Copy-On-Write 策略路由"]
+        PR --> MP{"MaskPolicy 实现"}
+        MP -->|"15+ 内置算法"| MU["MaskUtils<br/>Unicode CodePoint 安全处理"]
+        MP -->|"自定义 SPI"| Ext["业务扩展策略"]
+        MU --> Out["脱敏后安全数据"]
     end
 ```
 

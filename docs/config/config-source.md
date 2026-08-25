@@ -27,15 +27,15 @@
 
 ```mermaid
 graph TD
-    subgraph 优先级排序 (数值越小越优先)
-        S1[源 1: SystemEnv, Priority = 0]
-        S2[源 2: DbConfig, Priority = 100]
-        S3[源 3: Properties, Priority = 500]
+    subgraph 优先级排序__数值越小越优先_ ["优先级排序 (数值越小越优先)"]
+        S1["源 1: SystemEnv, Priority = 0"]
+        S2["源 2: DbConfig, Priority = 100"]
+        S3["源 3: Properties, Priority = 500"]
     end
 
-    S1 -->|1. 写入 finalMap.putIfAbsent| FM[合并结果映射表]
-    S2 -->|2. 写入已空缺的 key| FM
-    S3 -->|3. 填充剩余默认值| FM
+    S1 -->|"1. 写入 finalMap.putIfAbsent"| FM["合并结果映射表"]
+    S2 -->|"2. 写入已空缺的 key"| FM
+    S3 -->|"3. 填充剩余默认值"| FM
 ```
 
 因此，高优先级源中的键会首先占据位置，低优先级源中的同名键将被自动忽略。
