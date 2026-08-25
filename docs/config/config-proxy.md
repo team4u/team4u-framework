@@ -225,14 +225,14 @@ public class OrderSettlementService {
 
 ```mermaid
 graph TD
-    Call[代理方法调用 config.getPort] --> Check1{是否为 pin/Object 方法}
-    Check1 -->|是| Direct[直接处理或放行 proceed]
-    Check1 -->|否| CacheCheck{检查 valueCache 版本<br/>cache.version == snapshot.version}
+    Call["代理方法调用 config.getPort"] --> Check1{"是否为 pin/Object 方法"}
+    Check1 -->|"是"| Direct["直接处理或放行 proceed"]
+    Check1 -->|"否"| CacheCheck{"检查 valueCache 版本<br/>cache.version == snapshot.version"}
     
-    CacheCheck -->|命中| ReturnVal[直接返回缓存值 (零反射/零转换)]
-    CacheCheck -->|未命中| MetaCheck[从 METADATA_CACHE 读取方法元数据]
-    MetaCheck --> Resolve[执行 getSmart 检索 & 类型转换]
-    Resolve --> PutCache[更新 valueCache(version, value)]
+    CacheCheck -->|"命中"| ReturnVal["直接返回缓存值 (零反射/零转换)"]
+    CacheCheck -->|"未命中"| MetaCheck["从 METADATA_CACHE 读取方法元数据"]
+    MetaCheck --> Resolve["执行 getSmart 检索 & 类型转换"]
+    Resolve --> PutCache["更新 valueCache(version, value)"]
     PutCache --> ReturnVal
 ```
 

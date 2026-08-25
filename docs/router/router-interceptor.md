@@ -8,11 +8,11 @@
 
 ```mermaid
 graph LR
-    Req[路由请求 Request] --> I1[Interceptor 1<br/>上下文注入 priority=-100]
-    I1 --> I2[Interceptor 2<br/>耗时指标监控 priority=0]
-    I2 --> I3[Interceptor 3<br/>熔断短路/降级 priority=100]
-    I3 --> R[Target Router<br/>真正路由计算]
-    R --> Res[RouteResult]
+    Req["路由请求 Request"] --> I1["Interceptor 1<br/>上下文注入 priority=-100"]
+    I1 --> I2["Interceptor 2<br/>耗时指标监控 priority=0"]
+    I2 --> I3["Interceptor 3<br/>熔断短路/降级 priority=100"]
+    I3 --> R["Target Router<br/>真正路由计算"]
+    R --> Res["RouteResult"]
 ```
 
 ### 核心接口

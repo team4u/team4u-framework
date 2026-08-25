@@ -8,22 +8,22 @@
 
 ```mermaid
 graph TD
-    W1[DbConfigWatcher 数据库轮询] -->|检测到变动| Signal[发送 changeSignal 回调]
-    W2[Custom ConfigWatcher 文件/MQ] -->|检测到变动| Signal
-    W3[InMemoryConfigSource.putAndRefresh] -->|手动触发| Signal
+    W1["DbConfigWatcher 数据库轮询"] -->|"检测到变动"| Signal["发送 changeSignal 回调"]
+    W2["Custom ConfigWatcher 文件/MQ"] -->|"检测到变动"| Signal
+    W3["InMemoryConfigSource.putAndRefresh"] -->|"手动触发"| Signal
     
-    Signal --> Debounce{HotReloadManager<br/>防抖窗口判断}
-    Debounce -->|debounceWindowMs > 0| Delay[取消旧计时，重新延迟调度 500ms]
-    Debounce -->|debounceWindowMs <= 0| Sync[直接在当前线程同步重载 (测试模式)]
+    Signal --> Debounce{"HotReloadManager<br/>防抖窗口判断"}
+    Debounce -->|"debounceWindowMs > 0"| Delay["取消旧计时，重新延迟调度 500ms"]
+    Debounce -->|"debounceWindowMs <= 0"| Sync["直接在当前线程同步重载 (测试模式)"]
     
-    Delay --> Aggregate[SnapshotAggregator 重新聚合所有源]
+    Delay --> Aggregate["SnapshotAggregator 重新聚合所有源"]
     Sync --> Aggregate
     
-    Aggregate -->|聚合成功| Swap[AtomicReference.getAndSet<br/>原子切换生效快照]
-    Aggregate -->|异常失败| KeepOld[捕获异常并告警，保持旧快照稳定运行]
+    Aggregate -->|"聚合成功"| Swap["AtomicReference.getAndSet<br/>原子切换生效快照"]
+    Aggregate -->|"异常失败"| KeepOld["捕获异常并告警，保持旧快照稳定运行"]
     
-    Swap --> Diff[比对新旧快照差异 (New vs Old)]
-    Diff --> Listeners[触发匹配的 ConfigChangeListener]
+    Swap --> Diff["比对新旧快照差异 (New vs Old)"]
+    Diff --> Listeners["触发匹配的 ConfigChangeListener"]
 ```
 
 ---

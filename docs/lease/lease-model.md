@@ -21,15 +21,15 @@ Worker 获得的任务句柄 `LeaseHandle` 封装了 `taskId`、`workerId` 与 `
 
 ```mermaid
 stateDiagram-v2
-    [*] --> READY: 1. 发布 (publish / publishIfAbsent)
-    READY --> RUNNING: 2. 抢占成功 (acquire: deliveryCount++, version++, 生成 leaseToken)
-    RUNNING --> RUNNING: 3. 心跳续约 (heartbeat: 延长 lease_expires_at, version++)
-    RUNNING --> READY: 4. 主动释放 (release: 设定 visible_at 延迟重新就绪)
-    RUNNING --> READY: 5. 租约超时未续约 (被其他 Worker acquire 接管)
-    RUNNING --> CLOSED: 6. 成功执行 (close SUCCEEDED)
-    RUNNING --> CLOSED: 7. 异常失败 (close FAILED: failureCount++)
-    READY --> CLOSED: 8. 管理面取消 (close CANCELLED)
-    CLOSED --> READY: 9. 失败重调 (rescheduleFailed: 仅限 FAILED 终态)
+    [*] --> READY: 发布建档 (publish / publishIfAbsent)
+    READY --> RUNNING: 抢占租约成功 (acquire)
+    RUNNING --> RUNNING: 心跳续期 (heartbeat)
+    RUNNING --> READY: 主动释放延期 (release)
+    RUNNING --> READY: 租约超时接管 (acquire)
+    RUNNING --> CLOSED: 成功完成 (close SUCCEEDED)
+    RUNNING --> CLOSED: 异常失败 (close FAILED)
+    READY --> CLOSED: 管理面取消 (close CANCELLED)
+    CLOSED --> READY: 失败重调 (rescheduleFailed)
 ```
 
 ---

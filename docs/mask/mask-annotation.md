@@ -106,20 +106,20 @@ mapper.registerModule(new JacksonMaskModule());
 
 ```mermaid
 graph TD
-    Desc[Jackson 构建 BeanDescription] --> Mod[DynamicMaskSerializerModifier.changeProperties]
+    Desc["Jackson 构建 BeanDescription"] --> Mod["DynamicMaskSerializerModifier.changeProperties"]
     
-    Mod --> Loop[遍历字段 BeanPropertyWriter]
-    Loop --> CheckAnno{是否存在 @Mask 注解}
+    Mod --> Loop["遍历字段 BeanPropertyWriter"]
+    Loop --> CheckAnno{"是否存在 @Mask 注解"}
     
-    CheckAnno -->|是| CheckStr1{是否为 String 类型}
-    CheckStr1 -->|是| AssignAnno[设置 MaskStringSerializer maskAnnotation.value]
-    CheckStr1 -->|否| Warn1[打印 Warn 日志，跳过脱敏并保留原生序列化]
+    CheckAnno -->|"是"| CheckStr1{"是否为 String 类型"}
+    CheckStr1 -->|"是"| AssignAnno["设置 MaskStringSerializer maskAnnotation.value"]
+    CheckStr1 -->|"否"| Warn1["打印 Warn 日志，跳过脱敏并保留原生序列化"]
     
-    CheckAnno -->|否| CheckRepo{MaskRuleRepository 是否有外部规则}
-    CheckRepo -->|是| CheckStr2{是否为 String 类型}
-    CheckStr2 -->|是| AssignRepo[设置 MaskStringSerializer externalRule]
-    CheckStr2 -->|否| Warn2[打印 Warn 日志，跳过脱敏]
-    CheckRepo -->|否| Default[保持 Jackson 默认序列化器]
+    CheckAnno -->|"否"| CheckRepo{"MaskRuleRepository 是否有外部规则"}
+    CheckRepo -->|"是"| CheckStr2{"是否为 String 类型"}
+    CheckStr2 -->|"是"| AssignRepo["设置 MaskStringSerializer externalRule"]
+    CheckStr2 -->|"否"| Warn2["打印 Warn 日志，跳过脱敏"]
+    CheckRepo -->|"否"| Default["保持 Jackson 默认序列化器"]
 ```
 
 ### `DynamicMaskSerializerModifier` 的性能优化

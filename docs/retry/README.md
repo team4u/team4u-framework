@@ -21,17 +21,17 @@
 
 ```mermaid
 graph TD
-    User[业务请求] --> Retries[Retries 统一门面]
+    User["业务请求"] --> Retries["Retries 统一门面"]
     
-    Retries -->|INLINE 模式| InlineClient[DefaultInlineRetryClient<br/>当前线程同步 / CompletableFuture 异步]
-    InlineClient -->|即时退避重试| Target1[目标方法 / 远程服务]
+    Retries -->|"INLINE 模式"| InlineClient["DefaultInlineRetryClient<br/>当前线程同步 / CompletableFuture 异步"]
+    InlineClient -->|"即时退避重试"| Target1["目标方法 / 远程服务"]
     
-    Retries -->|MANAGED 模式| ManagedClient[DefaultManagedRetryClient]
-    ManagedClient -->|1. 幂等建档 createIfAbsent| Store[LeaseDurableRetryStore<br/>team4u-lease 持久化存储]
-    ManagedClient -->|2. 前台尝试 foregroundMaxRetries| Target2[前台尝试执行]
-    Target2 -->|成功| S1[写入 durable SUCCEEDED 终态<br/>返回 ManagedSubmitResult.Completed]
-    Target2 -->|前台预算耗尽| Handoff[写回最新 RetryRecord 快照<br/>交由后台 RetryLeaseWorker 接管<br/>返回 ManagedSubmitResult.Accepted]
-    Handoff --> RecoveryHandler[StringRecoveryHandler / InvocationReplay<br/>后台 Worker 持续异步退避补偿]
+    Retries -->|"MANAGED 模式"| ManagedClient["DefaultManagedRetryClient"]
+    ManagedClient -->|"1. 幂等建档 createIfAbsent"| Store["LeaseDurableRetryStore<br/>team4u-lease 持久化存储"]
+    ManagedClient -->|"2. 前台尝试 foregroundMaxRetries"| Target2["前台尝试执行"]
+    Target2 -->|"成功"| S1["写入 durable SUCCEEDED 终态<br/>返回 ManagedSubmitResult.Completed"]
+    Target2 -->|"前台预算耗尽"| Handoff["写回最新 RetryRecord 快照<br/>交由后台 RetryLeaseWorker 接管<br/>返回 ManagedSubmitResult.Accepted"]
+    Handoff --> RecoveryHandler["StringRecoveryHandler / InvocationReplay<br/>后台 Worker 持续异步退避补偿"]
 ```
 
 ## 核心概念

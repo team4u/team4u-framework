@@ -127,15 +127,15 @@ OrderedPolicyChain<MyContext, MyPolicy> chain =
 
 ```mermaid
 graph LR
-    Start[开始执行流水线] --> P1{策略 1: 黑名单检查<br/>Priority: -1000}
-    P1 -->|返回 true| P2{策略 2: 额度超限检查<br/>Priority: 0}
-    P1 -->|返回 false| Abort[立即中断流水线<br/>返回 false]
+    Start["开始执行流水线"] --> P1{"策略 1: 黑名单检查<br/>Priority: -1000"}
+    P1 -->|"返回 true"| P2{"策略 2: 额度超限检查<br/>Priority: 0"}
+    P1 -->|"返回 false"| Abort["立即中断流水线<br/>返回 false"]
     
-    P2 -->|返回 true| P3{策略 3: 频次限制检查<br/>Priority: 1000}
-    P2 -->|返回 false| Abort
+    P2 -->|"返回 true"| P3{"策略 3: 频次限制检查<br/>Priority: 1000"}
+    P2 -->|"返回 false"| Abort
     
-    P3 -->|返回 true| Success[流水线全部通过<br/>返回 true]
-    P3 -->|返回 false| Abort
+    P3 -->|"返回 true"| Success["流水线全部通过<br/>返回 true"]
+    P3 -->|"返回 false"| Abort
 ```
 
 ### 完整使用代码

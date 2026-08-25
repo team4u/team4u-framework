@@ -21,17 +21,17 @@
 
 ```mermaid
 graph LR
-    S1[SystemEnvConfigSource<br/>JVM 参数 & 环境变量] --> A[SnapshotAggregator<br/>多源优先级聚合器]
-    S2[PropertiesConfigSource<br/>本地资源文件] --> A
-    S3[DbConfigSource<br/>关系型数据库配置] --> A
-    S4[InMemoryConfigSource<br/>内存动态配置源] --> A
+    S1["SystemEnvConfigSource<br/>JVM 参数 & 环境变量"] --> A["SnapshotAggregator<br/>多源优先级聚合器"]
+    S2["PropertiesConfigSource<br/>本地资源文件"] --> A
+    S3["DbConfigSource<br/>关系型数据库配置"] --> A
+    S4["InMemoryConfigSource<br/>内存动态配置源"] --> A
     
-    A -->|Flatten & Normalize & Resolve| Snap[Immutable ConfigSnapshot<br/>不可变快照 (带版本号)]
-    Snap -->|Atomic CAS SWAP| CM[ConfigManager 门面]
+    A -->|"Flatten & Normalize & Resolve"| Snap["Immutable ConfigSnapshot<br/>不可变快照 (带版本号)"]
+    Snap -->|"Atomic CAS SWAP"| CM["ConfigManager 门面"]
     
-    CM -->|createProxy Live Mode| B1[实时业务代理<br/>每次读取最新快照]
-    CM -->|SnapshotAware.pin Pinned Mode| B2[强一致快照代理<br/>锁定调用时快照版本]
-    CM -->|ConfigDrivenRegistry| CR[动态实例生命周期管理<br/>Safe Swap & 优雅关闭]
+    CM -->|"createProxy Live Mode"| B1["实时业务代理<br/>每次读取最新快照"]
+    CM -->|"SnapshotAware.pin Pinned Mode"| B2["强一致快照代理<br/>锁定调用时快照版本"]
+    CM -->|"ConfigDrivenRegistry"| CR["动态实例生命周期管理<br/>Safe Swap & 优雅关闭"]
 ```
 
 ## 核心特性

@@ -8,8 +8,8 @@
 
 ```mermaid
 graph TD
-    TN[TraceNode 根节点<br/>type: LogicCriterion | matched: false] --> N1[TraceNode<br/>description: age >= 18 | input: 16 | matched: false]
-    TN --> N2[TraceNode<br/>description: role == ADMIN | input: USER | matched: false]
+    TN["TraceNode 根节点<br/>type: LogicCriterion | matched: false"] --> N1["TraceNode<br/>description: age >= 18 | input: 16 | matched: false"]
+    TN --> N2["TraceNode<br/>description: role == ADMIN | input: USER | matched: false"]
 ```
 
 ### `TraceNode` 节点结构

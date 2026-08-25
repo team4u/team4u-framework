@@ -8,21 +8,21 @@
 
 ```mermaid
 graph TD
-    Input[输入源 input: I] --> Cache1{查 InputKey 缓存}
-    Cache1 -->|命中| Ret1[返回实例: T]
-    Cache1 -->|未命中| Lock[获取对应分段锁<br/>locks桶索引]
+    Input["输入源 input: I"] --> Cache1{"查 InputKey 缓存"}
+    Cache1 -->|"命中"| Ret1["返回实例: T"]
+    Cache1 -->|"未命中"| Lock["获取对应分段锁<br/>locks桶索引"]
     
-    Lock --> Cache1Check{DCL 再次查 InputKey}
-    Cache1Check -->|命中| Ret1_2[返回实例: T]
-    Cache1Check -->|未命中| Parse[ConfigParser.parse<br/>I -> C]
+    Lock --> Cache1Check{"DCL 再次查 InputKey"}
+    Cache1Check -->|"命中"| Ret1_2["返回实例: T"]
+    Cache1Check -->|"未命中"| Parse["ConfigParser.parse<br/>I -> C"]
     
-    Parse --> NullCheck{config 是否为 null}
-    NullCheck -->|是| RetNull[返回 null]
-    NullCheck -->|否| Factory[InstanceFactory.create<br/>C -> T]
+    Parse --> NullCheck{"config 是否为 null"}
+    NullCheck -->|"是"| RetNull["返回 null"]
+    NullCheck -->|"否"| Factory["InstanceFactory.create<br/>C -> T"]
     
-    Factory --> Put[写入 InputKey 缓存]
-    Put --> Release[释放分段锁]
-    Release --> Out[返回实例: T]
+    Factory --> Put["写入 InputKey 缓存"]
+    Put --> Release["释放分段锁"]
+    Release --> Out["返回实例: T"]
 ```
 
 ### 双缓存空间隔离语义

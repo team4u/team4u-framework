@@ -10,11 +10,11 @@
 
 ```mermaid
 graph TD
-    Start[PolicyScanner.scanAndRegister] --> Scan[ClassUtil 扫描指定包下的 Class]
-    Scan --> Filter{类过滤器校验}
-    Filter -->|排除: 接口/抽象类/匿名类/本地类/非静态内部类/合成类| Skip[忽略跳过]
-    Filter -->|通过: 标准公共可实例化实现类| Instantiate[ReflectUtil.newInstance 实例化]
-    Instantiate --> Register[registry.register 注入注册表]
+    Start["PolicyScanner.scanAndRegister"] --> Scan["ClassUtil 扫描指定包下的 Class"]
+    Scan --> Filter{"类过滤器校验"}
+    Filter -->|"排除: 接口/抽象类/匿名类/本地类/非静态内部类/合成类"| Skip["忽略跳过"]
+    Filter -->|"通过: 标准公共可实例化实现类"| Instantiate["ReflectUtil.newInstance 实例化"]
+    Instantiate --> Register["registry.register 注入注册表"]
 ```
 
 ### 使用方式

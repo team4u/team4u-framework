@@ -18,16 +18,16 @@
 
 ```mermaid
 graph TD
-    User[业务 / SDK 调用 BeanManager] --> BM[BeanManager 统一调度门面]
-    BM -->|遍历 factories 列表<br/>按 getOrder() 升序查找| Chain{有序工厂链}
+    User["业务 / SDK 调用 BeanManager"] --> BM["BeanManager 统一调度门面"]
+    BM -->|"遍历 factories 列表<br/>按 getOrder() 升序查找"| Chain{"有序工厂链"}
     
-    Chain -->|order=100| SC[SpringBeanContainer<br/>Spring 环境适配器]
-    SC -->|命中| SpCtx[(Spring ApplicationContext)]
+    Chain -->|"order=100"| SC["SpringBeanContainer<br/>Spring 环境适配器"]
+    SC -->|"命中"| SpCtx[("Spring ApplicationContext")]
     
-    Chain -->|order=Integer.MAX_VALUE| LC[LocalBeanContainer<br/>本地兜底容器]
-    LC -->|命中| LocalMap[(ConcurrentHashMap 单例存储)]
+    Chain -->|"order=Integer.MAX_VALUE"| LC["LocalBeanContainer<br/>本地兜底容器"]
+    LC -->|"命中"| LocalMap[("ConcurrentHashMap 单例存储")]
     
-    Chain -.->|可扩展 SPI 容器| Custom[自定义 BeanFactory<br/>例如 JNDI / 配置中心]
+    Chain -.->|"可扩展 SPI 容器"| Custom["自定义 BeanFactory<br/>例如 JNDI / 配置中心"]
 ```
 
 ## 核心概念

@@ -24,10 +24,10 @@ MatchContext matchCtx = MatchContext.of(source).setAttributes(safeArgs);
 
 ```mermaid
 graph TD
-    In[RawResponse + args] --> Master[translator.master 组合路由器]
-    Master -->|优先级 1| Live[translator.live 直播私有规则<br/>ExpressionRouter 表达式]
-    Master -->|优先级 2| Order[translator.order 订单私有规则<br/>ExpressionRouter 表达式]
-    Master -->|优先级 3| Common[translator.common 全局公共规则<br/>ExpressionRouter 通用兜底]
+    In["RawResponse + args"] --> Master["translator.master 组合路由器"]
+    Master -->|"优先级 1"| Live["translator.live 直播私有规则<br/>ExpressionRouter 表达式"]
+    Master -->|"优先级 2"| Order["translator.order 订单私有规则<br/>ExpressionRouter 表达式"]
+    Master -->|"优先级 3"| Common["translator.common 全局公共规则<br/>ExpressionRouter 通用兜底"]
 ```
 
 ---

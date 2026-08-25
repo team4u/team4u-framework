@@ -14,13 +14,13 @@
 
 ```mermaid
 graph TD
-    Base[team4u-base 核心模块] --> DIP[DynamicInstanceProvider<br/>分段锁双缓存实例提供者]
-    Base --> SF[SingletonFactory<br/>全局反射单例工厂]
-    Base --> TT[TextTemplate<br/>预解析零正则文本模板]
-    Base --> Cache[Cache 体系<br/>LRU / LFU / TimedCache]
-    Base --> CU[ConvertUtil / TypeConverterRegistry<br/>强类型转换系统]
-    Base --> JDBC[JdbcUtil / SqlBuilder / InsertBuilder<br/>轻量 JDBC 流式构造器]
-    Base --> Util[通用工具集<br/>Reflect, String, Date, Digest, Id, ServiceLoader]
+    Base["team4u-base 核心模块"] --> DIP["DynamicInstanceProvider<br/>分段锁双缓存实例提供者"]
+    Base --> SF["SingletonFactory<br/>全局反射单例工厂"]
+    Base --> TT["TextTemplate<br/>预解析零正则文本模板"]
+    Base --> Cache["Cache 体系<br/>LRU / LFU / TimedCache"]
+    Base --> CU["ConvertUtil / TypeConverterRegistry<br/>强类型转换系统"]
+    Base --> JDBC["JdbcUtil / SqlBuilder / InsertBuilder<br/>轻量 JDBC 流式构造器"]
+    Base --> Util["通用工具集<br/>Reflect, String, Date, Digest, Id, ServiceLoader"]
 ```
 
 ---

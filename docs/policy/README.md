@@ -21,15 +21,15 @@
 
 ```mermaid
 graph TD
-    subgraph Key-Value 精准路由模式 (KeyedPolicy)
-        KP[KeyedPolicy 自描述 Key] --> KPR[KeyedPolicyRegistry 注册表<br/>Copy-On-Write 无锁极速读]
-        KPR -->|get Key O 1 查找| Exec1[精准执行目标策略]
+    subgraph Key_Value_精准路由模式__KeyedPolicy_ ["Key-Value 精准路由模式 (KeyedPolicy)"]
+        KP["KeyedPolicy 自描述 Key"] --> KPR["KeyedPolicyRegistry 注册表<br/>Copy-On-Write 无锁极速读"]
+        KPR -->|"get Key O 1 查找"| Exec1["精准执行目标策略"]
     end
 
-    subgraph Ordered Chain 有序责任链模式 (ContextPolicy)
-        CP[ContextPolicy 上下文自匹配 & 优先级] --> OPC[OrderedPolicyChain 责任链<br/>按 priority 升序自动排序]
-        OPC -->|allMatches / firstMatch| PP[PolicyPipeline 流程中断执行]
-        PP --> Exec2[执行匹配策略链路]
+    subgraph Ordered_Chain_有序责任链模式__ContextPolicy_ ["Ordered Chain 有序责任链模式 (ContextPolicy)"]
+        CP["ContextPolicy 上下文自匹配 & 优先级"] --> OPC["OrderedPolicyChain 责任链<br/>按 priority 升序自动排序"]
+        OPC -->|"allMatches / firstMatch"| PP["PolicyPipeline 流程中断执行"]
+        PP --> Exec2["执行匹配策略链路"]
     end
 ```
 

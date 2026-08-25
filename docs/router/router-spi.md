@@ -160,9 +160,9 @@ public class RouterLifecycleListener implements ApplicationListener<ApplicationR
 
 ```mermaid
 graph TD
-    S1[1. 自动扫描 com.team4u.framework.router 包默认工厂] --> S2[2. ServiceLoader 加载 SPI 扩展工厂]
-    S2 --> S3[3. 显式 addFactory / factoryRegistry 手动注册]
-    S3 --> S4[4. 自动注入绑定当前 Manager 上下文的 CompositeRouterFactory]
+    S1["1. 自动扫描 com.team4u.framework.router 包默认工厂"] --> S2["2. ServiceLoader 加载 SPI 扩展工厂"]
+    S2 --> S3["3. 显式 addFactory / factoryRegistry 手动注册"]
+    S3 --> S4["4. 自动注入绑定当前 Manager 上下文的 CompositeRouterFactory"]
 ```
 
 1. **内置默认工厂**：包含 `MapRouterFactory`、`ExpressionRouterFactory`、`WeightRouterFactory`。

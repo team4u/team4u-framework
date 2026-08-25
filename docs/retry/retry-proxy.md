@@ -93,17 +93,17 @@ proxy.notifyMerchant("ORDER_1001", "{\"amount\": 100}");
 
 ```mermaid
 graph TD
-    A[调用 proxy.method] --> B[RetryDelegate 拦截]
-    B --> C[JacksonRetryContextSerializer 序列化参数快照]
-    C --> D[生成 SHA-256 幂等键并落库]
-    D --> E[前台执行]
-    E -->|前台未完成, 转入后台| F[后台 RetryLeaseWorker 抢占租约]
-    F --> G[InvocationReplay 反序列化参数]
-    G --> H[从 BeanManager 查找目标 Bean]
-    H --> I[RecoveryExecutionContext.run 设置 RECOVERING=true]
-    I --> J[反射调用目标方法 target.method]
-    J --> K{RetryDelegate 检查 isRecovering?}
-    K -->|是 (恢复中)| L[直接放行底层调用, 绝不再触发二次代理重试]
+    A["调用 proxy.method"] --> B["RetryDelegate 拦截"]
+    B --> C["JacksonRetryContextSerializer 序列化参数快照"]
+    C --> D["生成 SHA-256 幂等键并落库"]
+    D --> E["前台执行"]
+    E -->|"前台未完成, 转入后台"| F["后台 RetryLeaseWorker 抢占租约"]
+    F --> G["InvocationReplay 反序列化参数"]
+    G --> H["从 BeanManager 查找目标 Bean"]
+    H --> I["RecoveryExecutionContext.run 设置 RECOVERING=true"]
+    I --> J["反射调用目标方法 target.method"]
+    J --> K{"RetryDelegate 检查 isRecovering?"}
+    K -->|"是 (恢复中)"| L["直接放行底层调用, 绝不再触发二次代理重试"]
 ```
 
 ### 防递归拦截机制 (`RecoveryExecutionContext`)

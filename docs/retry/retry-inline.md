@@ -43,18 +43,18 @@
 
 ```mermaid
 graph TD
-    A[发生异常 rawException] --> B[RetryExceptionUtil 递归解包]
-    B --> C{cause 为 InterruptedException?}
-    C -->|是| Stop1[恢复中断标记, 终止重试]
-    C -->|否| D{failedAttemptsSoFar > maxRetries?}
-    D -->|是 (已超上限)| Stop2[终止重试, 抛出异常]
-    D -->|否| E{命中 abortOnExceptions 黑名单?}
-    E -->|是| Stop2
-    E -->|否| F{配置了 retryOnExceptions 白名单?}
-    F -->|已配置 且 未命中| Stop2
-    F -->|未配置 或 命中白名单| G{配置了 condition 表达式?}
-    G -->|已配置 且 计算为 false| Stop2
-    G -->|未配置 或 计算为 true| R[允许继续重试, 计算退避延时]
+    A["发生异常 rawException"] --> B["RetryExceptionUtil 递归解包"]
+    B --> C{"cause 为 InterruptedException?"}
+    C -->|"是"| Stop1["恢复中断标记, 终止重试"]
+    C -->|"否"| D{"failedAttemptsSoFar > maxRetries?"}
+    D -->|"是 (已超上限)"| Stop2["终止重试, 抛出异常"]
+    D -->|"否"| E{"命中 abortOnExceptions 黑名单?"}
+    E -->|"是"| Stop2
+    E -->|"否"| F{"配置了 retryOnExceptions 白名单?"}
+    F -->|"已配置 且 未命中"| Stop2
+    F -->|"未配置 或 命中白名单"| G{"配置了 condition 表达式?"}
+    G -->|"已配置 且 计算为 false"| Stop2
+    G -->|"未配置 或 计算为 true"| R["允许继续重试, 计算退避延时"]
 ```
 
 ### 动态表达式判定 (`condition`)

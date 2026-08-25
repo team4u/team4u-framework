@@ -8,11 +8,11 @@ Criterion 区别于传统解释型表达式引擎的核心特征在于：**JIT �
 
 ```mermaid
 graph TD
-    AST[Criterion 抽象语法树] --> CV[CompilingVisitor 编译访问者]
-    CV --> CR[CompilerRegistry 编译器注册表]
-    CR --> Spec[特定编译器节点<br/>SmartCompare / In / Logic 等]
-    Spec --> MP[MatchPredicate 函数式闭包<br/>context -> boolean]
-    MP -.-> Cache[DynamicInstanceProvider LRU 编译缓存]
+    AST["Criterion 抽象语法树"] --> CV["CompilingVisitor 编译访问者"]
+    CV --> CR["CompilerRegistry 编译器注册表"]
+    CR --> Spec["特定编译器节点<br/>SmartCompare / In / Logic 等"]
+    Spec --> MP["MatchPredicate 函数式闭包<br/>context -> boolean"]
+    MP -.-> Cache["DynamicInstanceProvider LRU 编译缓存"]
 ```
 
 1. **AST 预优化**：在解析阶段，静态常量、正则表达式等在编译期完成类型推断与预编译（例如 `Pattern.compile`、常量折叠与静态 Set 分拣）。

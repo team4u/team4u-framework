@@ -23,12 +23,12 @@
 
 ```mermaid
 graph LR
-    Log[Loggers 流式日志 / @AutoLogTrace / 动态代理] --> E[LogEvent 统一结构化事件]
-    E --> P1[MdcEnrichInterceptor<br/>注入 traceId]
-    P1 --> P2[TargetedDyeingInterceptor<br/>DSL 染色与级别提权]
-    P2 --> P3[JacksonMaskModule<br/>team4u.mask.rules 动态脱敏]
-    P3 --> P4[FinOps 成本与限流拦截<br/>字符串截断 / byte数组防爆 / 异常频控]
-    P4 --> Out[Slf4jLogAppender / CompositeLogAppender<br/>标准 JSON 输出]
+    Log["Loggers 流式日志 / @AutoLogTrace / 动态代理"] --> E["LogEvent 统一结构化事件"]
+    E --> P1["MdcEnrichInterceptor<br/>注入 traceId"]
+    P1 --> P2["TargetedDyeingInterceptor<br/>DSL 染色与级别提权"]
+    P2 --> P3["JacksonMaskModule<br/>team4u.mask.rules 动态脱敏"]
+    P3 --> P4["FinOps 成本与限流拦截<br/>字符串截断 / byte数组防爆 / 异常频控"]
+    P4 --> Out["Slf4jLogAppender / CompositeLogAppender<br/>标准 JSON 输出"]
 ```
 
 ## 核心特性
