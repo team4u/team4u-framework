@@ -1,65 +1,75 @@
-# Team4u Framework
+# Team4u Framework 架构与组件文档索引
 
 [![JDK 8+](https://img.shields.io/badge/JDK-8+-green.svg)](https://openjdk.java.net/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-## 简介
-
-Team4u Framework 是一个专为构建高性能、高可扩展性 Java 应用而设计的轻量级、模块化基础组件库。它旨在通过高度解耦的架构设计，屏蔽底层复杂性，为开发者提供一套统一、简洁且强大的编程模型。
-
-无论是在构建微服务中间件、复杂业务系统，还是轻量级 SDK 时，Team4u 都能提供从基础容器到高级路由分流的核心支撑，帮助团队更专注于业务逻辑的实现。
+`team4u-framework` 是一个轻量级、模块化、高可扩展的 Java 基础架构组件套件。组件遵循“**轻量无强制依赖、配置即规则、策略易扩展、接口统一、性能极致**”的设计理念，帮助开发者降低业务复杂度、规范架构模式并提高系统稳定性与研发效能。
 
 ---
 
-## 核心哲学
+## 组件分类导航
 
-- 极致性能：关键路径采用无锁设计、Copy-On-Write 机制及 JIT 风格的预编译技术，确保在高并发场景下的稳定表现。
-- 职责解耦：倡导“策略驱动”与“声明式配置”，将业务决策逻辑与执行流程彻底分离。
-- 零侵入与灵活性：核心模块不强绑定 Spring，支持独立运行，同时提供完善的 Spring 桥接适配器，实现真正的“即插即用”。
-- 可观测性：内置完善的 Trace 诊断能力，让表达式计算、路由匹配等黑盒逻辑变得透明直观。
+### 业务路由与规则控制
 
----
+将多维度的业务决策逻辑、灰度分流、人群圈选与契约转换结构化、外部化管理。
 
-## 模块概览
-
-| 模块 | 核心功能 | 典型场景 |
-| :--- | :--- | :--- |
-| [team4u-bean](./team4u-bean/README.md) | 轻量级 Bean 容器 | 独立 SDK 开发、单例管理、Spring 容器桥接 |
-| [team4u-proxy](./team4u-proxy/README.md) | 动态代理与 AOP | 方法拦截、热交换 (HotSwap)、空对象安全防御 |
-| [team4u-retry](./team4u-retry/README.md) | 统一重试治理模块 | 同步/异步重试、注解重试、动态策略、持久化降级 |
-| [team4u-criterion](./team4u-criterion/README.md) | 逻辑表达式引擎 | 营销圈选、风控规则、动态配置过滤 |
-| [team4u-config](./team4u-config/README.md) | 强类型配置管理 | 动态配置重载、多源配置聚合、热部署 |
-| [team4u-policy](./team4u-policy/README.md) | 策略与责任链模式 | 支付渠道路由、风控拦截流、优惠计算 |
-| [team4u-log](./team4u-log/README.md) | 结构化动态日志治理 | 自动化日志追踪、极速数据脱敏、热重载治理 |
-| [team4u-mask](./team4u-mask/README.md) | 数据脱敏治理模块 | 字段脱敏、动态规则、Jackson 无侵入敏感信息保护 |
-| [team4u-router](./team4u-router/README.md) | 声明式业务路由 | 业务分流、灰度控制、实验版本路由 |
-| [team4u-base](./team4u-base/README.md) | 基础公共工具类 | 框架内部公用辅助方法 |
----
-
-## 核心组件详解
-
-### 1. 表达式引擎 (Criterion)
-不同于通用的数学计算引擎，`team4u-criterion` 专注于业务逻辑判定。支持类 SQL 的 DSL 语法（如 `age > 18 && tags contains 'VIP'`），并能通过可视化 Trace 还原每一层逻辑的匹配细节。
-
-### 2. 路由管理 (Router)
-基于配置驱动的逻辑分流器。支持精准匹配 (Map) 与复杂的表达式匹配 (Expression)，允许在不重启应用的情况下，通过修改配置中心规则实时调整业务流向。
-
-### 3. 策略引擎 (Policy)
-提供了 O(1) 复杂度的精准路由键匹配和基于优先级的有序责任链。通过 `PolicyScanner` 实现“实现即注册”，极大降低了策略模式的维护成本。
-
-### 4. 动态代理 (Proxy)
-融合了 JDK Proxy 与 ByteBuddy 引擎，提供职责链式的拦截器模型。支持在运行时动态替换代理背后的真实对象（HotSwap），为构建高弹性系统提供基础。
-
-### 5. 消息抽象 (Message)
-采用“信封模式”统一了本地事件与远程消息的处理逻辑。支持处理器级别的独立线程池隔离和全生命周期的拦截器注入。
+| 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
+| :--- | :--- | :--- | :--- |
+| **[路由组件](docs/router/README.md)** | `team4u-router` | 插件化业务路由框架。支持精准映射 (`Map`)、规则表达式 (`Expression`)、权重分流 (`Weight`) 与组合代理 (`Composite`) 四种路由器，提供基于注解的声明式路由 (`@Routed`) 与白盒 Trace 诊断。 | [概览](docs/router/README.md) · [快速开始](docs/router/quick-start.md) |
+| **[Criterion 表达式组件](docs/criterion/README.md)** | `team4u-criterion` | 纳秒级业务规则 DSL 表达式引擎。支持类 SQL 自然语法、JIT 闭包直出、0 GC 数值宽容比较、白盒 Trace 执行树与外部属性延迟加载 (`LazyAttributeResolver`)。 | [概览](docs/criterion/README.md) · [快速开始](docs/criterion/quick-start.md) |
+| **[契约翻译组件](docs/translator/README.md)** | `team4u-translator` | 统一契约与响应翻译框架。将上游/底层原始响应 (`RawResponse`) 经由路由规则映射并渲染为统一对外契约 (`TranslatedResponse`)，内置模板变量插值与多级降级策略。 | [概览](docs/translator/README.md) · [快速开始](docs/translator/quick-start.md) |
 
 ---
 
-## 快速开始
+### 配置中心与动态治理
 
-### 引入父工程
+统一配置抽象与规则管理，支持热更新、类型安全代理与动态策略发现。
 
-在您的项目 `pom.xml` 中引入 Team4u 依赖管理：
+| 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
+| :--- | :--- | :--- | :--- |
+| **[配置组件](docs/config/README.md)** | `team4u-config` | 强类型安全配置框架。支持快照驱动 (`Snapshot`)、Live/Pinned 代理双模、环境变量/属性文件/数据库 (`team4u-config-db`) 多源聚合、占位符嵌套解析与防抖热更新。 | [概览](docs/config/README.md) · [快速开始](docs/config/quick-start.md) |
+| **[策略模式组件](docs/policy/README.md)** | `team4u-policy` | 高性能策略管理与责任链引擎。提供 O(1) 复杂度 Copy-On-Write 读写分离精准路由 (`KeyedPolicy`)、有序责任链 (`OrderedPolicyChain`)、中断流水线与 Spring 自动发现 (`@PolicyAutoRegister`)。 | [概览](docs/policy/README.md) · [快速开始](docs/policy/quick-start.md) |
+
+---
+
+### 服务治理与分布式协同
+
+提供分布式排他任务调度与统一容灾重试治理能力。
+
+| 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
+| :--- | :--- | :--- | :--- |
+| **[租约任务组件](docs/lease/README.md)** | `team4u-lease` | 独占租约与排他性长任务调度框架。通过可过期租约令牌与乐观锁版本控制实现安全抢占、心跳自动续约、故障接管、业务键幂等建档与优雅停机。 | [概览](docs/lease/README.md) · [快速开始](docs/lease/quick-start.md) |
+| **[通用重试组件](docs/retry/README.md)** | `team4u-retry` | 统一重试治理框架。支持进程内即时同步/异步重试 (`INLINE`)，以及基于租约持久化的跨进程后台托管补偿重试 (`MANAGED`)，支持 `@Retryable` 注解与动态策略下发。 | [概览](docs/retry/README.md) · [快速开始](docs/retry/quick-start.md) |
+
+---
+
+### 数据安全与日志治理
+
+聚焦敏感数据安全保护与低成本、高可观测的结构化日志体系。
+
+| 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
+| :--- | :--- | :--- | :--- |
+| **[数据脱敏组件](docs/mask/README.md)** | `team4u-mask` | 敏感数据脱敏治理组件。内置姓名、手机、身份证、银行卡等标准算法，支持 `@Mask` 注解、配置中心动态规则 (`team4u.mask.rules`) 与 Jackson 无侵入序列化脱敏。 | [概览](docs/mask/README.md) · [快速开始](docs/mask/quick-start.md) |
+| **[结构化日志组件](docs/log/README.md)** | `team4u-log` | 结构化动态日志治理框架。提供流式 JSON 日志 (`Loggers`)、方法级切面追踪 (`@AutoLogTrace`)、动态条件染色提权 (`team4u.log.dyeing`) 与 FinOps 成本保护限流。 | [概览](docs/log/README.md) · [快速开始](docs/log/quick-start.md) |
+
+---
+
+### 核心基础与架构支撑
+
+打磨基础开发体验，提供零框架强绑定的设计模式与工具集。
+
+| 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
+| :--- | :--- | :--- | :--- |
+| **[对象容器组件](docs/bean/README.md)** | `team4u-bean` | 轻量级 Bean 容器与对象管理门面。通过 `BeanFactory`/`BeanRegistry` 职责隔离与 Provider 链式查找，实现非 Spring 环境本地管理与 Spring 容器无缝桥接。 | [概览](docs/bean/README.md) · [快速开始](docs/bean/quick-start.md) |
+| **[动态代理组件](docs/proxy/README.md)** | `team4u-proxy` | 统一代理门面与 AOP 拦截器链。自适应 JDK Proxy / ByteBuddy 双引擎，开箱提供方法委托 (鸭子类型)、调用链追踪 (`Tracker`)、运行时热替换 (`HotSwap`) 与空对象防 NPE 代理。 | [概览](docs/proxy/README.md) · [快速开始](docs/proxy/quick-start.md) |
+| **[序列化组件](docs/serializer/README.md)** | `team4u-serializer` | 统一 JSON 序列化门面 (`JsonUtil`)。基于 SPI 自动扫描与优先级加载，原生提供高性能 Jackson 驱动，支持复杂泛型 `TypeReference` 提取与容错解析。 | [概览](docs/serializer/README.md) · [快速开始](docs/serializer/quick-start.md) |
+| **[核心基础组件](docs/base/README.md)** | `team4u-base` | 框架基石与通用工具库。提供分段锁动态实例创建 (`DynamicInstanceProvider`)、高性能预解析文本模板 (`TextTemplate`)、通用缓存 (`LRU/LFU/TimedCache`)、类型转换器与 JDBC 构建工具。 | [概览](docs/base/README.md) · [快速开始](docs/base/quick-start.md) |
+
+---
+
+## 快速接入
+
+在项目的 `pom.xml` 中引入 `team4u-framework` 依赖管理（BOM）：
 
 ```xml
 <dependencyManagement>
@@ -75,26 +85,60 @@ Team4u Framework 是一个专为构建高性能、高可扩展性 Java 应用而
 </dependencyManagement>
 ```
 
-### 选择性引入模块
-
-根据需求引入特定功能的模块，例如引入表达式引擎：
+按需引入各功能模块：
 
 ```xml
-<dependency>
-    <groupId>com.team4u</groupId>
-    <artifactId>team4u-criterion</artifactId>
-</dependency>
+<dependencies>
+    <!-- 业务路由模块 -->
+    <dependency>
+        <groupId>com.team4u</groupId>
+        <artifactId>team4u-router</artifactId>
+    </dependency>
+
+    <!-- 表达式引擎模块 -->
+    <dependency>
+        <groupId>com.team4u</groupId>
+        <artifactId>team4u-criterion</artifactId>
+    </dependency>
+
+    <!-- 配置中心核心模块 -->
+    <dependency>
+        <groupId>com.team4u</groupId>
+        <artifactId>team4u-config-core</artifactId>
+    </dependency>
+
+    <!-- 策略模式模块 -->
+    <dependency>
+        <groupId>com.team4u</groupId>
+        <artifactId>team4u-policy</artifactId>
+    </dependency>
+
+    <!-- 统一重试模块 -->
+    <dependency>
+        <groupId>com.team4u</groupId>
+        <artifactId>team4u-retry-core</artifactId>
+    </dependency>
+
+    <!-- 数据脱敏模块 -->
+    <dependency>
+        <groupId>com.team4u</groupId>
+        <artifactId>team4u-mask</artifactId>
+    </dependency>
+
+    <!-- 结构化日志模块 -->
+    <dependency>
+        <groupId>com.team4u</groupId>
+        <artifactId>team4u-log</artifactId>
+    </dependency>
+</dependencies>
 ```
 
 ---
 
-## 环境要求
+## 设计哲学
 
-- JDK: 8 及以上版本。
-- 依赖库: 核心依赖 ByteBuddy 等优秀开源库进行底层增强。
-
----
-
-## 开源协议
-
-本项目遵循 [MIT License](./LICENSE) 开源协议。
+- **轻量与解耦（Lightweight & Decoupled）**：核心模块不强制绑定 Spring 或重量级中间件，既可在纯 Java / CLI 环境高效运行，又能与 Spring 生态无缝整合。
+- **配置即规则（Configuration as Rule）**：将变动频繁的业务规则（路由、策略、脱敏、重试、错误映射）外部化与配置化，支持运行时热更新与动态生效。
+- **策略可插拔（Extensible by Policy）**：核心扩展点均基于策略模式与统一注册器设计，支持 SPI、Spring Bean 与运行时手动注册。
+- **极致性能与 0 GC（High Performance & Low Allocation）**：关键路径采用无锁设计、Copy-On-Write 机制、JIT 闭包预编译与原生类型快速比较，杜绝频繁 GC 抖动。
+- **白盒可观测（White-Box Observability）**：关键决策链路（如表达式判定、动态路由、重试接管、方法耗时）内置 Trace 诊断树，让复杂逻辑透明直观。
