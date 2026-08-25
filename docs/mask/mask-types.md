@@ -4,7 +4,7 @@
 
 ---
 
-## 15 种内置算法全量对照表
+## 内置算法全量对照表
 
 | `MaskType` 枚举值 | 策略实现类 | 算法规则与逻辑 | 示例入参 | 脱敏输出 |
 | :--- | :--- | :--- | :--- | :--- |
@@ -28,7 +28,7 @@
 
 ## 算法实现细节与边界行为
 
-### 1. `NameMaskPolicy` 汉字识别与处理
+### `NameMaskPolicy` 汉字识别与处理
 通过 Unicode Script 判定字符串中是否包含汉字：
 ```java
 if (value.codePoints().anyMatch(cp -> Character.UnicodeScript.of(cp) == Character.UnicodeScript.HAN)) {
@@ -44,12 +44,12 @@ if (value.codePoints().anyMatch(cp -> Character.UnicodeScript.of(cp) == Characte
 return MaskUtils.mask(value, 1, 1);
 ```
 
-### 2. `MaskUtils.maskByPercent` 居中掩码算法
+### `MaskUtils.maskByPercent` 居中掩码算法
 - 计算掩码星号数量：`maskLength = (int) Math.ceil(length * (percent / 100.0))`；
 - 计算居中起始索引：`start = (length - maskLength) / 2`；
 - 保留前缀 `[0, start)` + 填充 `maskLength` 个 `*` + 保留后缀 `[start + maskLength, length)`。
 
-### 3. 空值与边界安全
+### 空值与边界安全
 - **入参为 `null` 或空字符串 `""`**：直接原样返回，不抛出任何异常；
 - **保留前缀加后缀超过字符串总长度**（如 3 字符字符串执行 `mask(val, 2, 2)`）：`MaskUtils.mask` 安全判断 `prefix + suffix >= length`，直接返回原字符串，防止产生负数星号循环或越界；
 - **未知脱敏 Key**：调用 `FastMasker.mask(val, "UNKNOWN_KEY")` 时，若未找到注册的策略，默认安全返回原始值。

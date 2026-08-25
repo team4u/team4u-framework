@@ -36,7 +36,7 @@ classDiagram
     ContextPolicy <.. OrderedPolicyChain
 ```
 
-### 1. `ContextPolicy<C>` 接口
+### `ContextPolicy<C>` 接口
 上下文自匹配策略基接口：
 ```java
 package com.team4u.framework.policy.api;
@@ -71,7 +71,7 @@ public interface ContextPolicy<C> extends Comparable<ContextPolicy<C>> {
 }
 ```
 
-### 2. `OrderedPolicy` 接口
+### `OrderedPolicy` 接口
 用于无需上下文匹配、仅需纯排序的策略场景（将上下文泛型固定为 `Void`，默认 `supports(Void)` 始终返回 `true`）：
 ```java
 package com.team4u.framework.policy.api;
@@ -90,7 +90,7 @@ public interface OrderedPolicy extends ContextPolicy<Void> {
 
 `OrderedPolicyChain` 采用**手动写时复制 (Manual Copy-On-Write)** 机制。写入时自动按照 `priority()` 执行稳定升序排序，读取时零加锁、零对象创建。
 
-### 1. 重复策略处理模式 (`DuplicatePolicyMode`)
+### 重复策略处理模式 (`DuplicatePolicyMode`)
 在构造 `OrderedPolicyChain` 时，可指定重复策略注册模式：
 
 ```java
@@ -113,7 +113,7 @@ OrderedPolicyChain<MyContext, MyPolicy> chain =
         new OrderedPolicyChain<>(MyPolicy.class, DuplicatePolicyMode.REPLACE_BY_CLASS);
 ```
 
-### 2. 匹配查询方式
+### 匹配查询方式
 - **`firstMatch(context)`**：遍历已排序的策略链，返回**第一个**满足 `supports(context)` 的策略（`Optional<P>`），用于路由定位场景。
 - **`allMatches(context)`**：返回**所有**满足条件的策略列表（`List<P>`），用于多级优惠叠加、全量风控过滤等场景。
 

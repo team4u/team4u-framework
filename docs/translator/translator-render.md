@@ -16,7 +16,7 @@ graph LR
 
 ---
 
-## 1. 内置策略详解
+## 内置策略详解
 
 ### `TemplateRenderPolicy` (变量模板渲染器)
 - **优先级**：`priority() = NORMAL (0)`
@@ -50,7 +50,7 @@ graph LR
 
 ---
 
-## 2. 编写自定义渲染策略 (`RenderPolicy`)
+## 编写自定义渲染策略 (`RenderPolicy`)
 
 开发者可以实现 `RenderPolicy` 接口，在消息最终输出前执行敏感词脱敏、多语言国际化转换或动态安全审计。
 
@@ -119,7 +119,7 @@ public class I18nRenderPolicy implements RenderPolicy {
 
 ---
 
-## 3. 注册渲染策略
+## 注册渲染策略
 
 ### 方式 A：Java SPI 自动加载（推荐）
 在 `META-INF/services/com.team4u.framework.translator.render.RenderPolicy` 文件中追加实现类的全限定名：

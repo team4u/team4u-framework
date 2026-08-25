@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 引入依赖
+## 引入依赖
 
 生产环境推荐引入 JDBC 持久化模块：
 
@@ -28,7 +28,7 @@
 
 ---
 
-## 2. 初始化数据库表结构 (仅 JDBC 版需要)
+## 初始化数据库表结构 (仅 JDBC 版需要)
 
 在 MySQL 中创建 `lease_task` 表及专用复合索引（对应 `team4u-lease-jdbc` 的 `schema/lease_task_mysql.sql`）：
 
@@ -82,7 +82,7 @@ CREATE INDEX IF NOT EXISTS `idx_lease_task_closed_reason`
 
 ---
 
-## 3. 发布任务 (Producer)
+## 发布任务 (Producer)
 
 ```java
 import com.team4u.framework.lease.api.LeaseProducer;
@@ -116,7 +116,7 @@ if (result.isCreated()) {
 
 ---
 
-## 4. 处理任务 (Worker)
+## 处理任务 (Worker)
 
 ```java
 import com.team4u.framework.lease.handler.DefaultLeaseTaskHandlerRegistry;

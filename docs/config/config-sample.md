@@ -4,7 +4,7 @@
 
 ---
 
-## 案例 1：微服务多环境多源配置聚合
+## 微服务多环境多源配置聚合
 
 ### 业务场景
 微服务需适配本地研发、CI/CD 自动化测试与生产环境。要求：
@@ -56,7 +56,7 @@ public class ApplicationConfigBootstrap {
 
 ---
 
-## 案例 2：Spring Boot 自动装配集成
+## Spring Boot 自动装配集成
 
 `team4u-config-core` 内置了 `Team4uConfigAutoConfiguration`，可无缝融入 Spring 生态。
 
@@ -121,7 +121,7 @@ public class OrderService {
 
 ---
 
-## 案例 3：单元测试环境支持 (`TestConfigContext`)
+## 单元测试环境支持 (`TestConfigContext`)
 
 在编写单元测试时，频繁修改本地文件或连接真实数据库既不稳定又污染环境。`team4u-config-test` 模块提供了专用的 `TestConfigContext`。
 
@@ -186,7 +186,7 @@ public class AppServiceUnitTest {
 
 ---
 
-## 案例 4：全局引导与锁定机制 (`ConfigBootstrap`)
+## 全局引导与锁定机制 (`ConfigBootstrap`)
 
 为了规范全局配置组件的注册并防止运行期配置源被非法篡改，`ConfigBootstrap` 提供了注册与锁定支持：
 

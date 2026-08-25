@@ -4,7 +4,7 @@
 
 ---
 
-## 案例 1：动态业务开关与故障容灾迁移
+## 动态业务开关与故障容灾迁移
 
 ### 业务背景
 支付网关系统对接了两套通道服务（`primaryGatewayService` 与 `backupGatewayService`）。当主网关出现网络抖动或例行维护时，运维人员在配置中心实时修改配置，秒级将流量切换至备用网关，系统无需重启。
@@ -46,7 +46,7 @@ public class PaymentGatewayClient {
 
 ---
 
-## 案例 2：基于用户画像的多维商品定价与折扣
+## 基于用户画像的多维商品定价与折扣
 
 ### 业务背景
 电商平台根据用户等级 (`userRank`)、会员标签 (`tags`)、商品分类 (`category`) 与订单总额 (`amount`) 动态计算适用的定价策略模型。
@@ -90,7 +90,7 @@ BigDecimal finalPrice = pricingService.calculatePrice(ctx);
 
 ---
 
-## 案例 3：新算法模型灰度发布与 A/B 实验分流
+## 新算法模型灰度发布与 A/B 实验分流
 
 ### 业务背景
 推荐算法团队上线了新版模型 `recommendModelV2`，需要将全局 20% 的流量分发给新模型，80% 的流量保持老模型 `recommendModelV1`，且同一用户的推荐策略必须稳定幂等（粘性分流）。
@@ -120,7 +120,7 @@ List<Item> recommendations = model.recommend(userId);
 
 ---
 
-## 案例 4：多业务线私有规则覆盖系统全局规则 (CompositeRouter)
+## 多业务线私有规则覆盖系统全局规则 (CompositeRouter)
 
 ### 业务背景
 大型中台系统包含直播业务线和通用电商业务线。直播业务有独特的报错码与翻译策略，其余公共错误（如 DB 超时、限流）则统一使用中台基准规则。

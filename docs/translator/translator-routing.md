@@ -34,7 +34,7 @@ graph TD
 
 ## 完整配置示例
 
-### 1. 直播业务线私有规则 (`router.translator.live`)
+### 直播业务线私有规则 (`router.translator.live`)
 ```json
 {
   "id": "translator.live",
@@ -58,7 +58,7 @@ graph TD
 }
 ```
 
-### 2. 订单业务线私有规则 (`router.translator.order`)
+### 订单业务线私有规则 (`router.translator.order`)
 ```json
 {
   "id": "translator.order",
@@ -82,7 +82,7 @@ graph TD
 }
 ```
 
-### 3. 中台系统公共规则 (`router.translator.common`)
+### 中台系统公共规则 (`router.translator.common`)
 ```json
 {
   "id": "translator.common",
@@ -110,7 +110,7 @@ graph TD
 }
 ```
 
-### 4. 组合聚合总入口 (`router.translator.master`)
+### 组合聚合总入口 (`router.translator.master`)
 ```json
 {
   "id": "translator.master",

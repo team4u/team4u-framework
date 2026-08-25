@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 扩展自定义脱敏策略 (`MaskPolicy`)
+## 扩展自定义脱敏策略 (`MaskPolicy`)
 
 所有脱敏算法均实现 `MaskPolicy` 接口（继承自 `KeyedPolicy<String>`）。
 
@@ -50,7 +50,7 @@ com.mycompany.mask.PassportMaskPolicy
 
 ---
 
-## 2. 超长报文截断保护 (`MaskConfig`)
+## 超长报文截断保护 (`MaskConfig`)
 
 在生产环境的接口出参或日志打印中，某些字段可能包含大段 Base64 编码的图片或超长 XML/JSON 报文。为避免打爆磁盘日志或撑爆网关缓冲区，可通过 `MaskConfig` 配置字符串最大截断长度。
 
@@ -80,9 +80,9 @@ String jsonOutput = mapper.writer()
 
 ---
 
-## 3. Unicode CodePoint 安全计算原理
+## Unicode CodePoint 安全计算原理
 
-在 Java 中，一个 `char` 仅能表示 16 位 Unicode 字符（基本多语言平面 BMP）。对于包含 4 字节的 Emoji 表情（如 😀、👨‍👩‍👧‍👦）或汉字生僻字（如 𠮷），Java 内部使用**代理对 (Surrogate Pair)** 表示，即占用 2 个 `char`。
+在 Java 中，一个 `char` 仅能表示 16 位 Unicode 字符（基本多语言平面 BMP）。对于包含 4 字节的表情符号或生僻字，Java 内部使用**代理对 (Surrogate Pair)** 表示，即占用 2 个 `char`。
 
 若使用普通的 `String.length()` 或 `String.substring()` 进行截取或掩码，极易将代理对拆开，导致**乱码或前端解析崩溃**。
 
@@ -93,7 +93,7 @@ String jsonOutput = mapper.writer()
 ```java
 public class MaskUtils {
 
-    // 安全统计实际字符数量 (1 个 Emoji 计算为 1 个字符)
+    // 安全统计实际字符数量 (1 个多字节 CodePoint 计算为 1 个字符)
     public static int codePointLength(String value) {
         if (value == null || value.isEmpty()) {
             return 0;
@@ -117,9 +117,10 @@ public class MaskUtils {
 
 ### 效果对比
 ```java
-String emojiText = "😀😁😂13812345678";
+// 包含多字节字符的文本
+String rawText = "\uD83D\uDE00\uD83D\uDE01\uD83D\uDE0213812345678";
 
-// MaskUtils 准确识别前 3 个字符为 Emoji，保留前 3 个 Emoji 与后 3 位数字：
-String safeResult = FastMasker.mask(emojiText, MaskType.MOBILE);
-System.out.println(safeResult); // 输出: 😀😁😂*****678 (Emoji 完整无损)
+// MaskUtils 准确识别前 3 个字符为多字节 CodePoint，保留前 3 个字符与后 3 位数字：
+String safeResult = FastMasker.mask(rawText, MaskType.MOBILE);
+System.out.println(safeResult); // 输出: \uD83D\uDE00\uD83D\uDE01\uD83D\uDE02*****678 (多字节字符完整无损)
 ```

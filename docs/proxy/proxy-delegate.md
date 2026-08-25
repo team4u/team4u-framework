@@ -37,15 +37,15 @@ System.out.println(proxy.sayHello("Jack")); // 输出: Duck Typing: Jack
 
 `DelegateInterceptor` 在执行委托转发时，采用了以下核心机制：
 
-### 1. 继承/实现关系直接调用
+### 继承/实现关系直接调用
 如果目标对象的类型本身是被代理类型的子类或实现类（`method.getDeclaringClass().isAssignableFrom(target.getClass())`），则直接使用原始 `Method` 对象执行调用，避免任何额外查找开销。
 
-### 2. 鸭子类型动态匹配与并发缓存
+### 鸭子类型动态匹配与并发缓存
 如果目标对象没有实现该接口，`DelegateInterceptor` 通过 `ReflectUtil.getMethod(target.getClass(), methodName, paramTypes)` 进行同名同签名的方法查找，并将映射关系缓存在 `ConcurrentMap<Method, Method> methodCache` 中。
 - 首次调用完成解析并写入缓存；
 - 后续所有并发调用均为纳秒级的 Map 查找与反射执行。
 
-### 3. 业务异常多层自动解包
+### 业务异常多层自动解包
 在反射调用中，业务抛出的异常通常会被包裹在 `InvocationTargetException` 或工具类运行时异常中。`DelegateInterceptor` 会递归剥离这些包装异常：
 ```java
 Throwable cause = e;

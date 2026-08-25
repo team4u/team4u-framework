@@ -6,7 +6,7 @@
 
 ## 核心数据模型
 
-### 1. `RawResponse` (上游原始响应)
+### `RawResponse` (上游原始响应)
 代表上游微服务或第三方依赖返回的原始数据：
 
 ```java
@@ -25,7 +25,7 @@ public class RawResponse {
 
 ---
 
-### 2. `ErrorDef` (目标契约定义)
+### `ErrorDef` (目标契约定义)
 路由规则命中后从配置中心（如 JSON）反序列化得到的目标静态模板：
 
 ```java
@@ -38,7 +38,7 @@ public class ErrorDef {
 
 ---
 
-### 3. `TranslatedResponse` (最终统一输出)
+### `TranslatedResponse` (最终统一输出)
 最终输出给调用方或前端的标准化契约对象。这是一个通过 Lombok `@Value` 修饰的 **不可变对象 (Immutable)**：
 
 ```java
@@ -52,7 +52,7 @@ public class TranslatedResponse {
 
 ---
 
-### 4. `RenderContext` (渲染管线流转上下文)
+### `RenderContext` (渲染管线流转上下文)
 传递给各个 `RenderPolicy` 的执行上下文，保证非共享线程安全：
 
 | 属性 / 方法 | 类型 / 返回值 | 说明 |

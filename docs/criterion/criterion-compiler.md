@@ -25,21 +25,21 @@ graph TD
 
 在大规模高并发的核心网关、推荐分流与支付交易链路中，规则判定引擎的临时对象创建（如 `BigDecimal`、`Iterator`、装箱对象）会引发频繁的 Minor GC 停顿。Criterion 在底层做了极其精细的 0 GC 优化：
 
-### 1. `ValueOptimizer` 编译期值优化器
+### `ValueOptimizer` 编译期值优化器
 针对规则中的预期值（如 `age > 18` 中的 `18`），`ValueOptimizer` 会在编译期窥探其类型：
 - **静态常量优化 (`FixedValue`)**：在编译期提前完成类型转换并常驻内存。生成的 `CompiledValue` 闭包在运行时**直接返回常量引用**，零计算分支、零对象分配。
 - **静态集合预构建 (`optimizeToSet`)**：对于 `in ['A', 'B', 'C']` 或 `containsAll`，若所有元素均为字面常量，编译器在编译期直接构建好不可变的静态 `HashSet`，避免运行期每次匹配时重复创建集合。
 
-### 2. `FastNumberUtil` 与原生类型极速比对
+### `FastNumberUtil` 与原生类型极速比对
 `SmartCompareCriterionCompiler` 内置了原生类型极速分支：
 - **原生 Long 比较**：当预期值是整数常量（如 `18`），编译器直接生成 `buildStaticLongPredicate` 闭包。若运行时实际入参也是整数，直接执行 `Long.compare(actualNum.longValue(), constantLong)`，**全程 0 装箱、0 临时对象分配**。
 - **原生 Double 比较**：当预期值是浮点数常量，编译器直接生成 `buildStaticDoublePredicate` 闭包执行 `Double.compare`。
 - **彻底消除 `BigDecimal` 堆分配**：相比传统引擎使用 `BigDecimal` 进行宽容比对，Criterion 原生数值比对性能提升数倍且无 GC 负担。
 
-### 3. `LogicCriterionCompiler` 消除迭代器分配
+### `LogicCriterionCompiler` 消除迭代器分配
 在编译 `&&` 与 `||` 组合逻辑时，编译器在编译期将子规则列表转换为原生数组 `MatchPredicate[]`。运行时遍历数组比遍历 `List` 更快，且**完全避免了 `Iterator` 迭代器对象的内存分配**。
 
-### 4. `HashProbabilityCriterionCompiler` 64 位哈希分流
+### `HashProbabilityCriterionCompiler` 64 位哈希分流
 Hash 分流采用高离散度的 **MurmurHash64** 算法：
 $$\text{scale} = \frac{(\text{HashUtil.murmur64}(\text{salt} + \text{actual}) \ \& \ \text{Long.MAX\_VALUE}) \pmod{10000}}{10000.0}$$
 - **纳秒级运算**：直接基于字节数组进行位运算。

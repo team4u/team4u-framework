@@ -63,7 +63,7 @@ public @interface AutoLogTrace {
 
 ## 接入方式
 
-### 1. Spring Bean 接入（推荐）
+### Spring Bean 接入（推荐）
 
 在 Spring 配置中引入 `LogSpringConfiguration`，即可使 Spring 托管的所有 Bean 上的 `@AutoLogTrace` 注解生效：
 
@@ -97,7 +97,7 @@ public class UserService {
 
 ---
 
-### 2. 非 Spring 普通对象接入 (`LogProxyFactory.createProxy`)
+### 非 Spring 普通对象接入 (`LogProxyFactory.createProxy`)
 
 对于在纯 Java 环境下运行或自行实例化的对象：
 
@@ -114,7 +114,7 @@ proxyService.register("tom", "13800138000", "p@ssword");
 
 ---
 
-### 3. 第三方不可修改源码类：动态配置驱动 (`createDynamicProxy`)
+### 第三方不可修改源码类：动态配置驱动 (`createDynamicProxy`)
 
 对于引入的第三方 SDK 或不可修改源代码的 Client 类，无法在源码上添加 `@AutoLogTrace` 注解。可以使用动态代理配合配置中心规则进行治理：
 

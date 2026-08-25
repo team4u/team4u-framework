@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 反射包扫描注册 (`PolicyScanner`)
+## 反射包扫描注册 (`PolicyScanner`)
 
 `PolicyScanner` 支持扫描指定 ClassLoader / 包路径下所有实现指定策略接口的类，通过反射无参构造器实例化并注册到注册表中。
 
@@ -37,7 +37,7 @@ PolicyScanner.scanAndRegister(registry, "com.mycompany.app.payment", PaymentPoli
 
 ---
 
-## 2. Java 标准 SPI 机制
+## Java 标准 SPI 机制
 
 基于 Java `ServiceLoader` 机制，在 `META-INF/services/` 中声明接口实现，解耦实现类与调用方：
 
@@ -54,7 +54,7 @@ PolicyScanner.scanAndRegister(registry, "com.mycompany.app.payment", PaymentPoli
 
 ---
 
-## 3. Spring 容器自动集成 (`@PolicyAutoRegister`)
+## Spring 容器自动集成 (`@PolicyAutoRegister`)
 
 在 Spring Boot 或 Spring Framework 应用中，策略类往往需要依赖注入 Spring 的 `@Service`、`@Repository` 或 RPC 客户端。`team4u-policy` 提供了零侵入的自动化装配机制。
 

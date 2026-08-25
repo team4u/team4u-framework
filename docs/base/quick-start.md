@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 引入依赖
+## 引入依赖
 
 ```xml
 <dependency>
@@ -16,7 +16,7 @@
 
 ---
 
-## 2. 文本模板渲染 (`TextTemplate`)
+## 文本模板渲染 (`TextTemplate`)
 
 ```java
 import com.team4u.framework.base.util.TextTemplate;
@@ -41,7 +41,7 @@ System.out.println(result); // biz.shanghai.alipay.router
 
 ---
 
-## 3. 全局反射单例工厂 (`SingletonFactory`)
+## 全局反射单例工厂 (`SingletonFactory`)
 
 ```java
 import com.team4u.framework.base.instance.SingletonFactory;
@@ -52,7 +52,7 @@ OrderPaymentService service = SingletonFactory.getInstance(OrderPaymentService.c
 
 ---
 
-## 4. 通用类型转换 (`ConvertUtil`)
+## 通用类型转换 (`ConvertUtil`)
 
 ```java
 import com.team4u.framework.base.convert.ConvertUtil;
@@ -72,7 +72,7 @@ List<String> tags = ConvertUtil.toList("apple,banana,orange");
 
 ---
 
-## 5. 本地缓存工具 (`CacheUtil`)
+## 本地缓存工具 (`CacheUtil`)
 
 ```java
 import com.team4u.framework.base.cache.Cache;
@@ -89,7 +89,7 @@ String token = tokenCache.getOrCreate("user_1001", () -> "TOKEN_ABC_999");
 
 ---
 
-## 6. 流式 SQL 构造 (`InsertBuilder` / `JdbcUtil`)
+## 流式 SQL 构造 (`InsertBuilder` / `JdbcUtil`)
 
 ```java
 import com.team4u.framework.base.jdbc.InsertBuilder;

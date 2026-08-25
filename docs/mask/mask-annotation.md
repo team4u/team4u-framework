@@ -70,7 +70,7 @@ public class CustomerVO {
 
 ## 注册 `JacksonMaskModule`
 
-### 1. Spring Boot 应用配置
+### Spring Boot 应用配置
 在 Spring Boot 项目中，只需将 `JacksonMaskModule` 注册为一个 Spring `@Bean` 或注入到 `ObjectMapper` 中：
 
 ```java
@@ -89,7 +89,7 @@ public class JacksonMaskConfig {
 }
 ```
 
-### 2. 独立客户端代码注册
+### 独立客户端代码注册
 ```java
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.team4u.framework.mask.jackson.JacksonMaskModule;
@@ -122,13 +122,13 @@ graph TD
     CheckRepo -->|否| Default[保持 Jackson 默认序列化器]
 ```
 
-### 1. `DynamicMaskSerializerModifier` 的性能优化
+### `DynamicMaskSerializerModifier` 的性能优化
 - 规则匹配与注解解析**仅在 Jackson 构建序列化器时执行一次**（首次序列化类时完成解析并被 Jackson 缓存），在后续高频的对象序列化过程中**零反射、零注解扫描**。
 
-### 2. `MaskStringSerializer`
+### `MaskStringSerializer`
 - 委托 `FastMasker.mask(value, maskType)` 执行脱敏；
 - 检查 `SerializerProvider` 上下文中的 `MaskConfig`，若设置了 `maxStringLength` 则执行截断保护。
 
-### 3. `MaskableMapSerializer` 对 Map 结构的动态支持
+### `MaskableMapSerializer` 对 Map 结构的动态支持
 - 拦截 Map 类型的序列化，针对 Map 中的每个 Entry，若 key 为 String 且 value 为 String，根据 `MaskRuleRepository` 匹配规则进行脱敏；
 - **写时优化**：仅在 Map 内真正存在发生脱敏或截断的条目时才创建新的 LinkedHashMap，未命中的 Map 直接原样写出，保障高并发性能。

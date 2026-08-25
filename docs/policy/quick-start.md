@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 引入依赖
+## 引入依赖
 
 ```xml
 <dependency>
@@ -16,11 +16,11 @@
 
 ---
 
-## 2. 场景 A：精准键值路由 (`KeyedPolicy`)
+## 精准键值路由 (`KeyedPolicy`)
 
 根据明确的业务标识（如支付渠道代码 `"ALIPAY"`, `"WECHAT"`）在 $O(1)$ 时间内直接定位目标策略：
 
-### 1. 定义策略接口与实现类
+### 定义策略接口与实现类
 ```java
 import com.team4u.framework.policy.api.KeyedPolicy;
 
@@ -43,7 +43,7 @@ public class AlipayPolicy implements PaymentPolicy {
 }
 ```
 
-### 2. 注册并执行
+### 注册并执行
 ```java
 import com.team4u.framework.policy.core.KeyedPolicyRegistry;
 
@@ -64,11 +64,11 @@ public class KeyedPolicyQuickStart {
 
 ---
 
-## 3. 场景 B：有序责任链过滤 (`ContextPolicy`)
+## 有序责任链过滤 (`ContextPolicy`)
 
 根据业务上下文动态评估 `supports(context)`，并按照 `priority()` 升序自动排序执行：
 
-### 1. 定义上下文与策略实现类
+### 定义上下文与策略实现类
 ```java
 import com.team4u.framework.policy.api.ContextPolicy;
 import lombok.AllArgsConstructor;
@@ -106,7 +106,7 @@ public class VipDiscountPolicy implements DiscountPolicy {
 }
 ```
 
-### 2. 注册并执行匹配
+### 注册并执行匹配
 ```java
 import com.team4u.framework.policy.core.OrderedPolicyChain;
 

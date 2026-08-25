@@ -4,7 +4,7 @@ Criterion 具备高度可扩展的架构，支持自定义比较操作符、类�
 
 ---
 
-## 1. 注册自定义操作符 (addOperator)
+## 注册自定义操作符 (addOperator)
 
 这是最轻量、最高频的扩展方式。当需要增加一个新的比较符号（例如 IP 网段匹配、模糊包含等）时，一行代码即可完成：
 
@@ -36,7 +36,7 @@ boolean isInternal = Criteria.global().matches(
 
 ---
 
-## 2. 注册自定义类型转换器 (ValueConverter)
+## 注册自定义类型转换器 (ValueConverter)
 
 当需要对特定业务实体（如 `Money`, `DataSize`, `GeoPoint`）执行前置转换并比较时，实现 `ValueConverter` 接口：
 
@@ -79,7 +79,7 @@ boolean match = Criteria.global().matches("price:money >= '99.99'", product);
 
 ---
 
-## 3. 深度 SPI 编译器与语法定制
+## 深度 SPI 编译器与语法定制
 
 若需要定制全新的 DSL 语法结构（例如 `it has_permission 'USER_READ'`）：
 
@@ -159,7 +159,7 @@ Criteria customCriteria = Criteria.builder()
 
 ---
 
-## 4. 沙箱环境与完全隔离 (`clear`)
+## 沙箱环境与完全隔离 (`clear`)
 
 在需要严格安全隔离的多租户或用户自定义脚本执行沙箱中，可通过 `Criteria.builder().clear()` 清除所有预置策略，仅开放受控的安全算子：
 

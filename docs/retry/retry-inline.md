@@ -8,13 +8,13 @@
 
 `DefaultInlineRetryClient` 提供了同步与异步两套高性能重试执行器：
 
-### 1. 同步阻塞重试 (`call`)
+### 同步阻塞重试 (`call`)
 - 在当前调用线程中循环执行 `Callable<T>`。
 - 捕获异常后通过 `RetryPolicy.canRetry(failedAttemptsSoFar, ex)` 判定是否允许重试。
 - 若允许重试，根据退避策略计算延迟时长 `delayMillis`，当前线程安全休眠（`Thread.sleep`）后进入下一轮尝试。
 - 若达到重试上限或命中不可重试异常，将原始业务根因直接抛出。
 
-### 2. 异步非阻塞重试 (`callAsync`)
+### 异步非阻塞重试 (`callAsync`)
 - 接收返回 `CompletableFuture<T>` 的任务供给函数 `Supplier<CompletableFuture<T>>`。
 - **全链路非阻塞**：当 Future 异常完成且满足重试条件时，通过全局调度线程池（`RetryExecutorManager` 中的 `ScheduledExecutorService`）提交延迟重放任务，**全程不占用任何业务工作线程**。
 - **取消信号桥接 (Cancellation Bridge)**：返回给调用方的 `resultFuture` 注册了级联取消监听器。若调用方对 `resultFuture.cancel(mayInterruptIfRunning)` 执行了取消操作，框架会自动联动取消当前正在执行中的异步 Future 及处于调度队列中的 `ScheduledFuture`，防止无效计算。

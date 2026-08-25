@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 引入依赖
+## 引入依赖
 
 ```xml
 <dependency>
@@ -16,7 +16,7 @@
 
 ---
 
-## 2. 场景 A：纯 Java 环境下的本地单例管理
+## 纯 Java 环境下的本地单例管理
 
 在没有 Spring 的独立脚本、批处理或 CLI 环境中，直接使用 `BeanManager` 提供的本地单例容器：
 
@@ -51,7 +51,7 @@ public class BeanQuickStart {
 
 ---
 
-## 3. 场景 B：Spring 环境无缝桥接
+## Spring 环境无缝桥接
 
 当你的通用 SDK 运行在 Spring Boot 环境中时，只需将 `SpringBeanContainer` 声明为一个 Spring Bean：
 

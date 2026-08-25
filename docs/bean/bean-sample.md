@@ -43,10 +43,10 @@ public class PushNotificationClient {
 
 ### 各环境使用效果
 
-#### 1. 在独立纯 Java 脚本或单元测试中：
+#### 在独立纯 Java 脚本或单元测试中：
 无需启动任何容器，直接 `new PushNotificationClient()` 即可秒级完成初始化并运行，使用 `DefaultHttpSmsSender` 发送。
 
-#### 2. 在 Spring Boot 应用中：
+#### 在 Spring Boot 应用中：
 业务方如果定义了自己的 Spring 组件：
 ```java
 @Component

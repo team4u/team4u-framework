@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 开启 Spring 重试支持 (`@EnableRetry`)
+## 开启 Spring 重试支持 (`@EnableRetry`)
 
 在任意 Spring `@Configuration` 配置类上添加 `@EnableRetry`：
 
@@ -46,7 +46,7 @@ graph TD
 
 ---
 
-## 2. Spring 业务 Bean 声明式使用
+## Spring 业务 Bean 声明式使用
 
 ```java
 import com.team4u.framework.retry.proxy.Retryable;
@@ -72,7 +72,7 @@ public class OrderRpcService {
 
 ---
 
-## 3. Spring 中接入 MANAGED 托管运行时
+## Spring 中接入 MANAGED 托管运行时
 
 当项目需要开启托管持久化重试时，只需额外向 Spring 容器提供 `ManagedRetryRuntime` 与 `ManagedRetryClient` 的 Bean 定义：
 

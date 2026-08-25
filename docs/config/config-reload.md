@@ -30,11 +30,11 @@ graph TD
 
 ## 核心机制详解
 
-### 1. `ConfigWatcher` 探测与触发解耦
+### `ConfigWatcher` 探测与触发解耦
 `ConfigSource` 专注于“读数据”，而 `ConfigWatcher` 专注于“感知变化”。两者清晰解耦：
 - `ConfigWatcher.watch(Runnable changeSignal)`：在配置中心启动时被调用，当 watcher 探测到外部变化后，只需调用 `changeSignal.run()`。
 
-### 2. 防抖时间窗口 (Debounce Window) 与原子替换
+### 防抖时间窗口 (Debounce Window) 与原子替换
 当运维人员在配置中心批量提交修改（例如短时间内修改了数十个配置项）时，若每次变动都触发全量重载，将导致系统频繁抖动。
 
 `HotReloadManager` 提供了高度优化的防抖调度机制：
@@ -79,7 +79,7 @@ AutoCloseable handle = manager.registerChangeListener("datasource.*", (key, oldV
 
 在快照构建阶段，`ConfigSnapshot` 自动调用 `PlaceholderResolver` 递归解析配置值中的动态占位符：
 
-### 1. 基础占位符与默认值
+### 基础占位符与默认值
 ```properties
 app.name=OrderService
 # 基础引用
@@ -88,7 +88,7 @@ app.title=${app.name}
 app.profile=${env:dev}
 ```
 
-### 2. 深度嵌套与动态键名
+### 深度嵌套与动态键名
 支持多级嵌套占位符解析：
 ```properties
 env=prod
@@ -98,7 +98,7 @@ db.dev.host=127.0.0.1
 current.db.host=${db.${env}.host}
 ```
 
-### 3. 循环依赖检测与递归保护
+### 循环依赖检测与递归保护
 - **循环依赖防护**：在解析链条中维护 `visitedKeys` 栈。若出现循环引用（如 `a=${b}` 且 `b=${a}`），立即抛出 `IllegalArgumentException("Circular dependency detected for placeholder key: ...")`。
 - **最大递归深度限制**：严格限制最大递归层级为 20 层（`MAX_DEPTH = 20`），防止异常配置导致 JVM 栈溢出。
 
@@ -106,13 +106,13 @@ current.db.host=${db.${env}.host}
 
 ## 可靠性设计与配置溯源
 
-### 1. 启动期快速失败 (Fail-Fast)
+### 启动期快速失败 (Fail-Fast)
 在 `ConfigManager` 初始化加载阶段，若底层关键配置源拉取失败抛出异常，系统将立即阻断应用启动，杜绝服务带着半残缺的配置上线。
 
-### 2. 运行期故障隔离与优雅回退
+### 运行期故障隔离与优雅回退
 在运行期热重载阶段，如果某个外部配置源拉取超时或网络中断，`HotReloadManager` 会捕获异常并打印 Error 日志，同时**保留当前生效的旧快照继续提供服务**，确保核心业务不受网络抖动影响。
 
-### 3. 配置溯源能力 (`ConfigEntry`)
+### 配置溯源能力 (`ConfigEntry`)
 通过快照可随时获取配置的元数据与来源信息：
 
 ```java

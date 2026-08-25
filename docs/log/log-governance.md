@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 动态条件染色提权 (`team4u.log.dyeing`)
+## 动态条件染色提权 (`team4u.log.dyeing`)
 
 线上排查特定 VIP 客户、特定订单或偶发错误时，无需将全局日志级别调至 DEBUG。只需下发一条染色规则，符合条件的日志将自动被提权输出。
 
@@ -44,7 +44,7 @@
 
 ---
 
-## 2. FinOps 成本保护与限流 (`team4u.log.finops`)
+## FinOps 成本保护与限流 (`team4u.log.finops`)
 
 在分布式系统中，突发流量、大报文或死循环报错极易导致日志存储成本失控。`team4u-log` 提供了多维度的 FinOps 成本防线。
 
@@ -77,7 +77,7 @@
 
 ---
 
-## 3. 动态数据脱敏 (`team4u.mask.rules`)
+## 动态数据脱敏 (`team4u.mask.rules`)
 
 `team4u-log` 与 `team4u-mask` 深度联动。在 Jackson 序列化输出阶段，自动应用配置中心下发的动态脱敏规则：
 

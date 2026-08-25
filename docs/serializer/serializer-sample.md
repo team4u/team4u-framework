@@ -4,7 +4,7 @@
 
 ---
 
-## 案例 1：通用 SDK 中的 JSON 编解码解耦
+## 通用 SDK 中的 JSON 编解码解耦
 
 ### 业务场景
 开发一个内部通用的 HTTP 远程调用 SDK，内部需要对请求和响应进行序列化。为了避免在 SDK 中写死具体的 JSON 框架导致与各个微服务宿主工程产生版本冲突，SDK 内部统一基于 `team4u-serializer-json` 提供的 `JsonUtil` 进行操作。
@@ -35,7 +35,7 @@ public class GenericHttpClient {
 
 ---
 
-## 案例 2：复杂嵌套泛型报文解析
+## 复杂嵌套泛型报文解析
 
 ### 业务场景
 API 网关返回通用的统一响应包装格式：`ApiResponse<PageResult<TradeOrderDTO>>`。要求在不丢失内部嵌套泛型类型信息的前提下完整反序列化。
@@ -87,7 +87,7 @@ public class ApiConsumer {
 
 ---
 
-## 案例 3：配置中心可选扩展配置的容错解析 (`ignoreError`)
+## 配置中心可选扩展配置的容错解析 (`ignoreError`)
 
 ### 业务场景
 配置中心下发动态插件配置，部分历史配置由于格式错误或版本不兼容可能解析失败。要求：解析失败时不阻断主流程启动，而是安全返回 `null` 并启用默认策略。

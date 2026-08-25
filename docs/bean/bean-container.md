@@ -8,7 +8,7 @@
 
 `team4u-bean` 遵循接口隔离原则，严格分离读写权限：
 
-### 1. `BeanFactory`（只读检索契约）
+### `BeanFactory`（只读检索契约）
 ```java
 package com.team4u.framework.bean.core;
 
@@ -29,7 +29,7 @@ public interface BeanFactory {
 }
 ```
 
-### 2. `BeanRegistry`（写入注册契约）
+### `BeanRegistry`（写入注册契约）
 ```java
 package com.team4u.framework.bean.core;
 

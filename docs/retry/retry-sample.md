@@ -4,7 +4,7 @@
 
 ---
 
-## 案例 1：第三方短信发送即时容灾 (INLINE 模式)
+## 第三方短信发送即时容灾 (INLINE 模式)
 
 ### 业务场景
 用户注册时发送验证码短信。当下游短信通道由于网络闪断发生超时时，系统立即在当前线程重试最多 2 次（连同首次共 3 次），采用指数退避：
@@ -45,7 +45,7 @@ public class SmsService {
 
 ---
 
-## 案例 2：支付成功商户 Webhook 通知可靠补偿 (MANAGED 模式)
+## 支付成功商户 Webhook 通知可靠补偿 (MANAGED 模式)
 
 ### 业务场景
 用户支付成功后，支付系统需要向商户服务器发送 Webhook 通知。商户服务可能临时停机维护或网络异常：
@@ -53,7 +53,7 @@ public class SmsService {
 - 若商户未响应，任务自动转入后台持久化接管，按指数抖动退避重试最多 5 次；
 - 服务发版重启后未完成的通知任务由后台 `RetryLeaseWorker` 自动接管继续重试。
 
-### 1. 提交任务
+### 提交任务
 ```java
 import com.team4u.framework.retry.api.ManagedSubmitResult;
 import com.team4u.framework.retry.api.Retries;
@@ -102,7 +102,7 @@ public class MerchantNotifyService {
 }
 ```
 
-### 2. 后台恢复处理
+### 后台恢复处理
 ```java
 import com.team4u.framework.retry.managed.recovery.RecoveryContext;
 import com.team4u.framework.retry.runtime.lease.StringRecoveryHandler;
@@ -136,7 +136,7 @@ public class MerchantNotifyRecoveryHandler implements StringRecoveryHandler {
 
 ---
 
-## 案例 3：Spring 声明式注解与上下文忽略 (@Retryable + @RetryIgnore)
+## Spring 声明式注解与上下文忽略 (@Retryable + @RetryIgnore)
 
 ### 业务场景
 在处理用户提现审核后，系统调用外部银行打款通道，方法参数中携带了不可序列化的 `HttpServletRequest` 请求上下文：

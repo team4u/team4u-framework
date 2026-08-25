@@ -24,7 +24,7 @@
 > [!IMPORTANT]
 > 注意 `ConvertUtil.convert` 的参数顺序：**目标类型在前，源数据在后**！
 
-### 1. 通用强类型转换
+### 通用强类型转换
 ```java
 // 基础转换（转换失败返回 null）
 <T> T convert(Class<T> type, Object value);
@@ -35,7 +35,7 @@
 <T> T convert(Type type, Object value, T defaultValue);
 ```
 
-### 2. 标量便捷转换方法
+### 标量便捷转换方法
 | 方法签名 | 说明 |
 | :--- | :--- |
 | `String toStr(Object value, [String defaultValue])` | 转为 String 字符串 |
@@ -50,7 +50,7 @@
 | `Character toChar(Object value, [Character defaultValue])` | 转为 Character 字符 |
 | `Boolean toBool(Object value, [Boolean defaultValue])` | 转为 Boolean（支持 `"true"`, `"1"`, `"yes"`, `"ok"`, `"on"`, `"y"` 识别为 `true`；`"false"`, `"0"`, `"no"`, `"off"`, `"n"` 识别为 `false`） |
 
-### 3. 集合与数组转换方法
+### 集合与数组转换方法
 ```java
 // 转为通用 List
 <T> List<T> toList(Object value);

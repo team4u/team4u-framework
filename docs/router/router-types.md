@@ -15,7 +15,7 @@
 
 ---
 
-## 1. 精准映射路由器 (MapRouter)
+## 精准映射路由器 (MapRouter)
 
 ### 特性说明
 - **类型标识**：`type: "map"` (常量 `RouterType.MAP`)
@@ -48,7 +48,7 @@ if (result.isRuleMatch()) {
 
 ---
 
-## 2. 规则表达式路由器 (ExpressionRouter)
+## 规则表达式路由器 (ExpressionRouter)
 
 ### 特性说明
 - **类型标识**：`type: "expression"` (常量 `RouterType.EXPRESSION`)
@@ -124,7 +124,7 @@ if (result.isMatch()) {
 
 ---
 
-## 3. 权重比例路由器 (WeightRouter)
+## 权重比例路由器 (WeightRouter)
 
 ### 特性说明
 - **类型标识**：`type: "weight"` (常量 `RouterType.WEIGHT`)
@@ -160,7 +160,7 @@ System.out.println("命中权重规则: " + result.getMatchedCondition()); // �
 
 ---
 
-## 4. 组合代理路由器 (CompositeRouter)
+## 组合代理路由器 (CompositeRouter)
 
 ### 特性说明
 - **类型标识**：`type: "composite"` (常量 `RouterType.COMPOSITE`)

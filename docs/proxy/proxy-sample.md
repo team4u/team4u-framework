@@ -4,7 +4,7 @@
 
 ---
 
-## 案例 1：动态算法/策略热切换 (HotSwap)
+## 动态算法/策略热切换 (HotSwap)
 
 ### 业务场景
 推荐引擎需要在线平滑切换排序算法模型（从协同过滤 `V1` 切换到深度模型 `V2`），要求不重启进程、调用方无感知、且在切换瞬间无请求报错。
@@ -49,7 +49,7 @@ public class RecommendationServiceHolder {
 
 ---
 
-## 案例 2：不可变配置对象的零 NPE 防御 (asEmptyObject)
+## 不可变配置对象的零 NPE 防御 (asEmptyObject)
 
 ### 业务场景
 服务启动时从远程加载配置树，某些业务线可能未配置 `cluster.metrics.reporter`。业务代码直接链式调用 `config.getCluster().getMetrics().getReporter().isEnabled()`，需要彻底杜绝 `NullPointerException`。
@@ -95,7 +95,7 @@ public class ConfigLoader {
 
 ---
 
-## 案例 3：统一方法执行耗时与审计监听器 (Tracker)
+## 统一方法执行耗时与审计监听器 (Tracker)
 
 ### 业务场景
 为数据同步组件的方法调用挂载审计日志，记录每张表同步的耗时并在发生异常时报警。

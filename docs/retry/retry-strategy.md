@@ -60,7 +60,7 @@ return ThreadLocalRandom.current().nextLong(
 
 你可以在配置中心（如 Apollo、Nacos、Consul 或配置数据库）中配置以 `retry.policy.` 为前缀的 JSON 规则，实现**无需发版、秒级生效**的线上重试治理。
 
-### 1. 配置中心 JSON 规范
+### 配置中心 JSON 规范
 配置 Key：`retry.policy.order-payment-rpc`
 
 ```json
@@ -87,7 +87,7 @@ return ThreadLocalRandom.current().nextLong(
 }
 ```
 
-### 2. 解析与类型安全校验 (`RetryPolicyParser`)
+### 解析与类型安全校验 (`RetryPolicyParser`)
 - **异常类加载校验**：`RetryPolicyParser` 在解析 `retryOnExceptions` 与 `abortOnExceptions` 时，通过 `ClassUtil.loadClass` 进行严格校验：
   - 必须为已加载的类且必须继承自 `java.lang.Throwable`；
   - 若类名不存在或类型不匹配，解析期即抛出包含字段名的明确 `IllegalArgumentException`，防止非法配置流入运行期。

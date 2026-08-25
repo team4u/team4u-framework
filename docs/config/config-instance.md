@@ -39,7 +39,7 @@ graph TD
 
 ## 完整实战示例：动态 HTTP 客户端连接池
 
-### 1. 定义受配置驱动的业务组件
+### 定义受配置驱动的业务组件
 实现 `AutoCloseable` 接口以支持优雅关闭：
 
 ```java
@@ -79,7 +79,7 @@ public class DynamicHttpClient implements AutoCloseable {
 }
 ```
 
-### 2. 初始化 `ConfigDrivenRegistry`
+### 初始化 `ConfigDrivenRegistry`
 
 ```java
 import com.team4u.framework.config.core.ConfigManager;

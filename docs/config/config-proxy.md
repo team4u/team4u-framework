@@ -8,7 +8,7 @@
 
 框架提供了 4 个核心注解，支持标注在类、方法或字段上：
 
-### 1. `@ConfigPrefix`
+### `@ConfigPrefix`
 在配置类级别声明统一的前缀，支持与编程式前缀级联组合：
 
 ```java
@@ -29,7 +29,7 @@ public class MysqlConfig {
 
 ---
 
-### 2. `@ConfigKey`
+### `@ConfigKey`
 用于显式指定某个属性或方法的配置键名，跳过默认根据 Getter 方法名推断的逻辑：
 
 - **相对路径**：`@ConfigKey("max-active")`，拼接到类前缀后（如 `datasource.mysql.max-active`）。
@@ -56,7 +56,7 @@ public class ServerConfig {
 
 ---
 
-### 3. `@ConfigRequired`
+### `@ConfigRequired`
 将配置项标记为必填项。
 
 - 校验时机：在运行时调用 Getter 属性时触发。
@@ -80,7 +80,7 @@ public class SecurityConfig {
 
 ---
 
-### 4. `@ConfigConverter`
+### `@ConfigConverter`
 针对复杂数据结构（如 JSON 对象、自定义格式字符串），指定专用的属性转换器。
 
 - 实现 `PropertyConverter<T>` 接口（继承自 `KeyedPolicy`）。

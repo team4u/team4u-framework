@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 引入依赖
+## 引入依赖
 
 ```xml
 <dependency>
@@ -30,7 +30,7 @@
 
 ---
 
-## 2. 启动日志治理模块 (`LogBootstrap`)
+## 启动日志治理模块 (`LogBootstrap`)
 
 在应用启动时（如 `main` 函数或 Spring Boot 启动类）初始化日志系统：
 
@@ -52,7 +52,7 @@ public class Application {
 
 ---
 
-## 3. 打印第一条结构化业务日志
+## 打印第一条结构化业务日志
 
 通过 Fluent API 流式构建业务日志：
 
@@ -95,7 +95,7 @@ public class OrderService {
 
 ---
 
-## 4. 联动动态脱敏
+## 联动动态脱敏
 
 无需重启应用，在配置中心下发脱敏配置 `team4u.mask.rules`：
 

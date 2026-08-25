@@ -47,7 +47,7 @@ public class TextTemplate {
 
 ## 使用示例
 
-### 1. 基础 Map 渲染
+### 基础 Map 渲染
 ```java
 import com.team4u.framework.base.util.TextTemplate;
 import java.util.HashMap;
@@ -72,7 +72,7 @@ System.out.println(topic); // "kafka.topic.order.cn-north.v1"
 
 ---
 
-### 2. 函数式提供者渲染 (`Function<String, Object>`)
+### 函数式提供者渲染 (`Function<String, Object>`)
 
 当变量值来源于系统属性、环境变量或 Spring `Environment` 时，可以直接传入函数式接口：
 
@@ -88,6 +88,6 @@ String dynamicPath = template.render(varName -> {
 
 ---
 
-### 3. 未命中占位符与默认值表现
+### 未命中占位符与默认值表现
 当渲染上下文（Map 或 Function）中未提供某个变量的值（返回 `null`）时：
 `PlaceholderSegment` 会保留原始占位符字符串（如 `${region}`），防止意外抹除未匹配的模板字段。

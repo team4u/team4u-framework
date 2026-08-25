@@ -4,7 +4,7 @@
 
 ---
 
-## 1. `JsonSerializerPolicy` 接口定义
+## `JsonSerializerPolicy` 接口定义
 
 ```java
 package com.team4u.framework.serializer.json;
@@ -36,7 +36,7 @@ public interface JsonSerializerPolicy extends ContextPolicy<Void>, KeyedPolicy<S
 
 ---
 
-## 2. 编写自定义策略实现（以 FastJSON2 为例）
+## 编写自定义策略实现（以 FastJSON2 为例）
 
 ```java
 package com.mycompany.serializer;
@@ -105,7 +105,7 @@ public class FastJson2SerializerPolicy implements JsonSerializerPolicy {
 
 ---
 
-## 3. 注册 SPI 配置文件
+## 注册 SPI 配置文件
 
 在 `resources/META-INF/services/com.team4u.framework.serializer.json.JsonSerializerPolicy` 中写入实现类的全限定名：
 
