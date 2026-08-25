@@ -130,10 +130,10 @@ List<Item> recommendations = model.recommend(userId);
 ```json
 {
   "id": "translator.live",
-  "type": "map",
+  "type": "expression",
   "rules": [
     {
-      "condition": "LIVE_ROOM_CLOSED",
+      "condition": "code == 'LIVE_ROOM_CLOSED'",
       "value": { "code": "ERR_3001", "defaultMsg": "当前直播间已关闭" }
     }
   ]

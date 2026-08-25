@@ -25,7 +25,7 @@ MatchContext matchCtx = MatchContext.of(source).setAttributes(safeArgs);
 ```mermaid
 graph TD
     In[RawResponse + args] --> Master[translator.master 组合路由器]
-    Master -->|优先级 1| Live[translator.live 直播私有规则<br/>MapRouter 精确映射]
+    Master -->|优先级 1| Live[translator.live 直播私有规则<br/>ExpressionRouter 表达式]
     Master -->|优先级 2| Order[translator.order 订单私有规则<br/>ExpressionRouter 表达式]
     Master -->|优先级 3| Common[translator.common 全局公共规则<br/>ExpressionRouter 通用兜底]
 ```
@@ -38,17 +38,17 @@ graph TD
 ```json
 {
   "id": "translator.live",
-  "type": "map",
+  "type": "expression",
   "rules": [
     {
-      "condition": "ROOM_BANNED",
+      "condition": "code == 'ROOM_BANNED'",
       "value": {
         "code": "LIVE_ROOM_FORBIDDEN",
         "defaultMsg": "该直播间因违规已被封禁"
       }
     },
     {
-      "condition": "ANCHOR_OFFLINE",
+      "condition": "code == 'ANCHOR_OFFLINE'",
       "value": {
         "code": "LIVE_NOT_STARTED",
         "defaultMsg": "主播已离开，去看看其他直播吧"
