@@ -44,42 +44,58 @@ graph TD
 
 ## 完整实战示例：动态 HTTP 客户端连接池
 
-### 1. 定义受配置驱动的运行时组件
-实现 `AutoCloseable` 接口以支持旧连接池资源优雅释放：
+### 1. 定义配置类与受配置驱动的运行时组件
+
+最佳实践是**定义专门的配置类（POJO）**，并让**运行时组件直接持有该配置类实例与底层资源**：
 
 ```java
+import lombok.Data;
 import lombok.Getter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+/**
+ * 1.1 HTTP 客户端结构化配置类
+ */
+@Data
+public class HttpClientConfig {
+    private String name;
+    private String endpoint;
+    private int timeout = 3000;
+    private int maxConnections = 100;
+}
+
+/**
+ * 1.2 受配置驱动的运行时组件（持有配置类与底层连接池，实现 AutoCloseable 优雅关闭）
+ */
 public class DynamicHttpClient implements AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(DynamicHttpClient.class);
 
     @Getter
-    private final String clientName;
-    private final String endpoint;
-    private final int timeout;
+    private final HttpClientConfig config;
     private final boolean isClosed;
 
-    public DynamicHttpClient(String clientName, String endpoint, int timeout) {
-        this.clientName = clientName;
-        this.endpoint = endpoint;
-        this.timeout = timeout;
+    public DynamicHttpClient(HttpClientConfig config) {
+        if (config == null) {
+            throw new IllegalArgumentException("HttpClientConfig must not be null");
+        }
+        this.config = config;
         this.isClosed = false;
-        log.info("初始化 HTTP 客户端连接池: name={}, endpoint={}, timeout={}ms", clientName, endpoint, timeout);
+        log.info("初始化 HTTP 客户端连接池: name={}, endpoint={}, timeout={}ms, maxConnections={}",
+                config.getName(), config.getEndpoint(), config.getTimeout(), config.getMaxConnections());
     }
 
     public String sendRequest(String path) {
         if (isClosed) {
-            throw new IllegalStateException("Client is already closed: " + clientName);
+            throw new IllegalStateException("Client is already closed: " + config.getName());
         }
-        return "Response from [" + endpoint + path + "] within " + timeout + "ms";
+        return "Response from [" + config.getEndpoint() + path + "] within " + config.getTimeout() + "ms";
     }
 
     @Override
     public void close() {
-        log.info("优雅关闭旧的 HTTP 客户端连接池: name={}, endpoint={}", clientName, endpoint);
-        // 执行底层 Apache HttpClient / OkHttp / Netty 连接池销毁
+        log.info("优雅关闭旧的 HTTP 客户端连接池: name={}, endpoint={}", config.getName(), config.getEndpoint());
+        // 执行底层 Apache HttpClient / OkHttp / Netty 连接池销毁与线程池释放
     }
 }
 ```
@@ -92,7 +108,6 @@ public class DynamicHttpClient implements AutoCloseable {
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.serializer.json.JsonUtil;
-import java.util.Map;
 
 public class MultiHttpClientManager {
 
@@ -104,24 +119,22 @@ public class MultiHttpClientManager {
                 configManager,
                 "clients.*", // 明确指定通配符规则，批量监听所有 clients. 开头的配置项
                 rawJsonConfig -> {
-                    Map<String, Object> conf = JsonUtil.toMap(rawJsonConfig);
-                    String name = (String) conf.get("name");
-                    String endpoint = (String) conf.get("endpoint");
-                    int timeout = ((Number) conf.getOrDefault("timeout", 3000)).intValue();
-                    return new DynamicHttpClient(name, endpoint, timeout);
+                    // 反序列化为 HttpClientConfig 配置类并构建运行时组件
+                    HttpClientConfig config = JsonUtil.toBean(rawJsonConfig, HttpClientConfig.class);
+                    return new DynamicHttpClient(config);
                 }
         );
 
         // 模拟配置中心配置:
-        // clients.sms={"name":"sms-client","endpoint":"https://sms.aliyun.com","timeout":5000}
-        // clients.pay={"name":"pay-client","endpoint":"https://pay.alipay.com","timeout":3000}
+        // clients.sms={"name":"sms-client","endpoint":"https://sms.aliyun.com","timeout":5000,"maxConnections":200}
+        // clients.pay={"name":"pay-client","endpoint":"https://pay.alipay.com","timeout":3000,"maxConnections":50}
         
         // 1. 获取指定实例（支持短标识 "sms" 或完整键 "clients.sms"，首次延迟构建，后续 O(1) 缓存命中）
         DynamicHttpClient smsClient = clientRegistry.get("sms");
         System.out.println(smsClient.sendRequest("/send"));
 
         // 2. 当配置中心推送 clients.sms 的更新时：
-        // ConfigDrivenRegistry 会自动构建新 DynamicHttpClient -> 安全替换缓存 -> 优雅关闭旧连接池
+        // ConfigDrivenRegistry 会自动解析新配置 -> 构建新 DynamicHttpClient -> 安全替换缓存 -> 优雅关闭旧连接池
         // clients.pay 等其他实例保持原样运行，不受任何影响
     }
 }
@@ -142,16 +155,13 @@ public class SingleHttpClientManager {
                 configManager,
                 "clients.default", // 精确匹配单个配置键，防止同前缀其他键误触
                 rawJsonConfig -> {
-                    Map<String, Object> conf = JsonUtil.toMap(rawJsonConfig);
-                    String name = (String) conf.get("name");
-                    String endpoint = (String) conf.get("endpoint");
-                    int timeout = ((Number) conf.getOrDefault("timeout", 3000)).intValue();
-                    return new DynamicHttpClient(name, endpoint, timeout);
+                    HttpClientConfig config = JsonUtil.toBean(rawJsonConfig, HttpClientConfig.class);
+                    return new DynamicHttpClient(config);
                 }
         );
 
         // 模拟配置中心配置:
-        // clients.default={"name":"default-client","endpoint":"https://api.example.com","timeout":3000}
+        // clients.default={"name":"default-client","endpoint":"https://api.example.com","timeout":3000,"maxConnections":100}
 
         // 1. 获取全局单例客户端（直接调用无参 get()）
         DynamicHttpClient defaultClient = defaultClientRegistry.get();
