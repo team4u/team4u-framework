@@ -2,7 +2,12 @@
 
 在企业级基础架构中，经常面临“**配置变更 -> 运行时组件实例热重建与安全替换**”的诉求（例如：动态多租户数据源、动态 HTTP 客户端连接池、动态消息队列消费者、动态限流/路由规则）。
 
-`team4u-config-core` 提供了 `ConfigDrivenRegistry<T>` 组件，统一治理对象的创建、热替换与资源优雅销毁。
+`team4u-config-core` 提供了 `ConfigDrivenRegistry<T>` 组件，统一治理重型运行时对象的创建、热替换与资源优雅销毁。
+
+> [!NOTE]
+> **何时使用 `ConfigDrivenRegistry` vs 动态代理 (`createProxy`)？**
+> - **纯配置数据读取**：若只需读取配置属性（如超时时间、开关状态），使用 `@ConfigPrefix` + `configManager.createProxy(...)` 即可获得强类型安全的不可变快照代理。
+> - **重型运行时组件管理**：若配置变更需要**重新构造持有着连接池、线程池或底层句柄的运行时组件**，并在替换后安全调用 `close()` 释放旧资源，则应使用 `ConfigDrivenRegistry<T>`。
 
 ---
 
@@ -39,8 +44,8 @@ graph TD
 
 ## 完整实战示例：动态 HTTP 客户端连接池
 
-### 定义受配置驱动的业务组件
-实现 `AutoCloseable` 接口以支持优雅关闭：
+### 1. 定义受配置驱动的运行时组件
+实现 `AutoCloseable` 接口以支持旧连接池资源优雅释放：
 
 ```java
 import lombok.Getter;
@@ -79,13 +84,9 @@ public class DynamicHttpClient implements AutoCloseable {
 }
 ```
 
-### 初始化 `ConfigDrivenRegistry`
+### 2. 场景一：多实例连接池管理（通配符模式 `clients.*`）
 
-### 初始化 `ConfigDrivenRegistry`
-
-`ConfigDrivenRegistry` 原生支持两种监听模式：
-- **通配符多实例模式（Wildcard Pattern）**：明确传入包含 `*` 通配符的规则（如 `"clients.*"`、`"router.*"`），批量监听前缀匹配项，支持传入短标识（如 `get("sms")`）或完整键（`get("clients.sms")`）。
-- **精确键模式（Exact Key Mode）**：传入精确配置键（如 `"team4u.log.finops"` 或 `"clients"`），精确监听单键变更（防止同前缀其他键误触），支持无参 `get()` 极简读取。
+适用于系统按渠道、租户等维护多个独立连接池的场景（如短信客户端 `clients.sms`、支付客户端 `clients.pay` 等）：
 
 ```java
 import com.team4u.framework.config.core.ConfigManager;
@@ -93,17 +94,16 @@ import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.serializer.json.JsonUtil;
 import java.util.Map;
 
-public class HttpClientRegistryManager {
+public class MultiHttpClientManager {
 
     public static void main(String[] args) {
         ConfigManager configManager = ConfigManager.global();
 
-        // 1. 通配符多实例模式：显式指定 "clients.*" 规则
+        // 注册通配符多实例注册表：显式指定 "clients.*" 规则
         ConfigDrivenRegistry<DynamicHttpClient> clientRegistry = new ConfigDrivenRegistry<>(
                 configManager,
-                "clients.*", // 明确指定通配符规则，批量监听所有 clients. 开头的配置
+                "clients.*", // 明确指定通配符规则，批量监听所有 clients. 开头的配置项
                 rawJsonConfig -> {
-                    // 工厂函数：将 JSON 字符串解析为配置并构造 DynamicHttpClient
                     Map<String, Object> conf = JsonUtil.toMap(rawJsonConfig);
                     String name = (String) conf.get("name");
                     String endpoint = (String) conf.get("endpoint");
@@ -114,34 +114,53 @@ public class HttpClientRegistryManager {
 
         // 模拟配置中心配置:
         // clients.sms={"name":"sms-client","endpoint":"https://sms.aliyun.com","timeout":5000}
+        // clients.pay={"name":"pay-client","endpoint":"https://pay.alipay.com","timeout":3000}
         
-        // 获取实例（支持短标识 "sms" 或完整键 "clients.sms"，首次延迟构建，后续 O(1) 缓存命中）
+        // 1. 获取指定实例（支持短标识 "sms" 或完整键 "clients.sms"，首次延迟构建，后续 O(1) 缓存命中）
         DynamicHttpClient smsClient = clientRegistry.get("sms");
         System.out.println(smsClient.sendRequest("/send"));
 
-        // 当配置中心推送新的 JSON 更新时：
-        // ConfigDrivenRegistry 会自动构建新 DynamicHttpClient -> 替换缓存 -> 自动调用旧 DynamicHttpClient.close()
-
-        // 应用关闭时释放全部资源
-        // clientRegistry.destroy();
+        // 2. 当配置中心推送 clients.sms 的更新时：
+        // ConfigDrivenRegistry 会自动构建新 DynamicHttpClient -> 安全替换缓存 -> 优雅关闭旧连接池
+        // clients.pay 等其他实例保持原样运行，不受任何影响
     }
 }
 ```
 
-### 精确键配置模式示例
+### 3. 场景二：单实例连接池管理（精确键模式 `clients.default`）
 
-针对全局单对象配置（如限流、脱敏、染色规则），无需通配符：
+适用于系统只需维护一个全局默认 HTTP 连接池的场景：
 
 ```java
-// 精确监听单 Key "team4u.log.finops"，零误触
-ConfigDrivenRegistry<FinOpsConfig> finOpsRegistry = new ConfigDrivenRegistry<>(
-        configManager,
-        "team4u.log.finops",
-        json -> JsonUtil.toBean(json, FinOpsConfig.class)
-);
+public class SingleHttpClientManager {
 
-// 读取时直接无参调用
-FinOpsConfig config = finOpsRegistry.get();
+    public static void main(String[] args) {
+        ConfigManager configManager = ConfigManager.global();
+
+        // 注册单实例注册表：显式指定精确键 "clients.default"（无通配符）
+        ConfigDrivenRegistry<DynamicHttpClient> defaultClientRegistry = new ConfigDrivenRegistry<>(
+                configManager,
+                "clients.default", // 精确匹配单个配置键，防止同前缀其他键误触
+                rawJsonConfig -> {
+                    Map<String, Object> conf = JsonUtil.toMap(rawJsonConfig);
+                    String name = (String) conf.get("name");
+                    String endpoint = (String) conf.get("endpoint");
+                    int timeout = ((Number) conf.getOrDefault("timeout", 3000)).intValue();
+                    return new DynamicHttpClient(name, endpoint, timeout);
+                }
+        );
+
+        // 模拟配置中心配置:
+        // clients.default={"name":"default-client","endpoint":"https://api.example.com","timeout":3000}
+
+        // 1. 获取全局单例客户端（直接调用无参 get()）
+        DynamicHttpClient defaultClient = defaultClientRegistry.get();
+        System.out.println(defaultClient.sendRequest("/health"));
+
+        // 2. 当 clients.default 配置变更时：
+        // 自动触发热重载构建新连接池 -> 替换缓存 -> 优雅关闭旧连接池
+    }
+}
 ```
 
 ---
@@ -150,8 +169,8 @@ FinOpsConfig config = finOpsRegistry.get();
 
 | 模式 | 规则写法 | 监听机制 | 读取 API | 适用场景 |
 | :--- | :--- | :--- | :--- | :--- |
-| **通配符多实例模式** | `"router.*"` | `router.*`（`*` 通配符前缀匹配） | `get("order")` 或 `get("router.order")`（自动补全前缀） | 动态路由表、连接池、重试策略集等多实例池 |
-| **精确键模式** | `"app.limit"` | `app.limit`（精确匹配，防误触） | `get()` 或 `get("app.limit")` | 全局限流阈值、日志染色规则、脱敏规则等单对象配置 |
+| **通配符多实例模式** | `"clients.*"` / `"router.*"` | `clients.*`（`*` 通配符前缀匹配） | `get("sms")` 或 `get("clients.sms")`（自动补全前缀） | 多通道连接池、动态路由表、重试策略集等多实例池 |
+| **精确键单实例模式** | `"clients.default"` / `"app.datasource"` | `clients.default`（精确匹配，防误触） | `get()`（无参直取） | 全局单一连接池、数据源、消息消费组等单组件生命周期管理 |
 
 ---
 
