@@ -27,24 +27,24 @@ graph TD
     Swap --> CloseOld["若旧实例实现了 AutoCloseable<br/>自动调用 oldInstance.close 优雅关闭"]
 ```
 
-1. **安全热替换 (Safe Swap)**：
-   - 收到配置变更通知后，**先尝试使用新配置构建新实例**；
-   - 只有在新实例构建成功后，才执行缓存引用的原子替换；
-   - 若新配置存在格式错误、网络不可达等导致构建失败，系统会捕获异常并告警，**继续保留旧实例对外服务**，保证系统高可用与业务连续性。
-2. **资源优雅关闭 (Graceful Shutdown)**：
-   - 当旧实例被替换淘汰，或配置被物理删除/标记失效（Tombstone）时，框架自动检测其实例是否实现了 `java.lang.AutoCloseable` 接口；
-   - 若实现，则自动调用 `close()` 方法释放底层网络连接、线程池或句柄，杜绝连接泄漏和内存溢出。
-3. **延迟初始化与 O(1) 极速读取**：
-   - 首次通过 `get(configKey)` 访问时，按需执行延迟构建（`computeIfAbsent`）；
-   - 后续读取直接命中内部 `ConcurrentHashMap`，无反射与反序列化开销。
-4. **监听器与实例全生命周期销毁 (`destroy()`)**：
-   - 调用 `destroy()` 时，首先注销与 `ConfigManager` 的监听句柄，随后遍历所有已缓存的实例执行 `closeQuietly()` 彻底释放资源。
+- **安全热替换 (Safe Swap)**：
+  - 收到配置变更通知后，**先尝试使用新配置构建新实例**；
+  - 只有在新实例构建成功后，才执行缓存引用的原子替换；
+  - 若新配置存在格式错误、网络不可达等导致构建失败，系统会捕获异常并告警，**继续保留旧实例对外服务**，保证系统高可用与业务连续性。
+- **资源优雅关闭 (Graceful Shutdown)**：
+  - 当旧实例被替换淘汰，或配置被物理删除/标记失效（Tombstone）时，框架自动检测其实例是否实现了 `java.lang.AutoCloseable` 接口；
+  - 若实现，则自动调用 `close()` 方法释放底层网络连接、线程池或句柄，杜绝连接泄漏和内存溢出。
+- **延迟初始化与 O(1) 极速读取**：
+  - 首次通过 `get(configKey)` 访问时，按需执行延迟构建（`computeIfAbsent`）；
+  - 后续读取直接命中内部 `ConcurrentHashMap`，无反射与反序列化开销。
+- **监听器与实例全生命周期销毁 (`destroy()`)**：
+  - 调用 `destroy()` 时，首先注销与 `ConfigManager` 的监听句柄，随后遍历所有已缓存的实例执行 `closeQuietly()` 彻底释放资源。
 
 ---
 
 ## 支持的配置格式与适用范围
 
-### 1. 原生支持：单 Key 文档型配置 (1 Key = 1 Object)
+### 原生支持：单 Key 文档型配置 (1 Key = 1 Object)
 `ConfigDrivenRegistry` 的底层工厂函数契约是 `Function<String, T>`，因此要求**单个 Key 必须承载该组件所需的完整配置内容**：
 
 - **典型格式**：JSON、YAML、XML、自定分隔文本或连接串。
@@ -58,7 +58,7 @@ graph TD
   clients.default={"name":"default-client","endpoint":"https://api.example.com","timeout":3000}
   ```
 
-### 2. 暂不支持：展开式 Properties 属性树 (Flat Key-Value Tree)
+### 暂不支持：展开式 Properties 属性树 (Flat Key-Value Tree)
 `ConfigDrivenRegistry` **目前不支持**由多条散落的独立属性 Key 聚合驱动单个组件，例如：
 
 ```properties
@@ -74,15 +74,15 @@ server.description=${server.name} is running on port ${server.port}
 > [!TIP]
 > **展开式 Properties 属性树的推荐方案**：
 > 如果配置是以扁平散落的属性树形式组织，推荐使用框架的 **[类型安全动态代理 (`ConfigManager.createProxy`)](config-proxy.md)**：
-> 1. 定义标注了 `@ConfigPrefix("server")` 的 Java Bean 配置类；
-> 2. 调用 `configManager.createProxy(ServerConfig.class)`，框架将自动完成多属性的松散绑定（Relaxed Binding）、占位符递归解析（`${...}`）与类型转换；
-> 3. 运行时业务组件直接依赖该动态代理对象即可享受属性级别的实时热更新。
+> - 定义标注了 `@ConfigPrefix("server")` 的 Java Bean 配置类；
+> - 调用 `configManager.createProxy(ServerConfig.class)`，框架将自动完成多属性的松散绑定（Relaxed Binding）、占位符递归解析（`${...}`）与类型转换；
+> - 运行时业务组件直接依赖该动态代理对象即可享受属性级别的实时热更新。
 
 ---
 
 ## 完整实战示例：动态 HTTP 客户端连接池
 
-### 1. 定义配置类与受配置驱动的运行时组件
+### 定义配置类与受配置驱动的运行时组件
 
 最佳实践是**定义专门的配置类（POJO）**，并让**运行时组件直接持有该配置类实例与底层资源**：
 
@@ -93,7 +93,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
 /**
- * 1.1 HTTP 客户端结构化配置类
+ * HTTP 客户端结构化配置类
  */
 @Data
 public class HttpClientConfig {
@@ -104,7 +104,7 @@ public class HttpClientConfig {
 }
 
 /**
- * 1.2 受配置驱动的运行时组件（持有配置类与底层连接池，实现 AutoCloseable 优雅关闭）
+ * 受配置驱动的运行时组件（持有配置类与底层连接池，实现 AutoCloseable 优雅关闭）
  */
 public class DynamicHttpClient implements AutoCloseable {
     private static final Logger log = LoggerFactory.getLogger(DynamicHttpClient.class);
@@ -138,7 +138,7 @@ public class DynamicHttpClient implements AutoCloseable {
 }
 ```
 
-### 2. 场景一：多实例连接池管理（通配符模式 `clients.*`）
+### 场景一：多实例连接池管理（通配符模式 `clients.*`）
 
 适用于系统按渠道、租户等维护多个独立连接池的场景（如短信客户端 `clients.sms`、支付客户端 `clients.pay` 等）：
 
@@ -167,18 +167,18 @@ public class MultiHttpClientManager {
         // clients.sms={"name":"sms-client","endpoint":"https://sms.aliyun.com","timeout":5000,"maxConnections":200}
         // clients.pay={"name":"pay-client","endpoint":"https://pay.alipay.com","timeout":3000,"maxConnections":50}
         
-        // 1. 获取指定实例（支持短标识 "sms" 或完整键 "clients.sms"，首次延迟构建，后续 O(1) 缓存命中）
+        // 获取指定实例（支持短标识 "sms" 或完整键 "clients.sms"，首次延迟构建，后续 O(1) 缓存命中）
         DynamicHttpClient smsClient = clientRegistry.get("sms");
         System.out.println(smsClient.sendRequest("/send"));
 
-        // 2. 当配置中心推送 clients.sms 的更新时：
+        // 当配置中心推送 clients.sms 的更新时：
         // ConfigDrivenRegistry 会自动解析新配置 -> 构建新 DynamicHttpClient -> 安全替换缓存 -> 优雅关闭旧连接池
         // clients.pay 等其他实例保持原样运行，不受任何影响
     }
 }
 ```
 
-### 3. 场景二：单实例连接池管理（精确键模式 `clients.default`）
+### 场景二：单实例连接池管理（精确键模式 `clients.default`）
 
 适用于系统只需维护一个全局默认 HTTP 连接池的场景：
 
@@ -201,11 +201,11 @@ public class SingleHttpClientManager {
         // 模拟配置中心配置:
         // clients.default={"name":"default-client","endpoint":"https://api.example.com","timeout":3000,"maxConnections":100}
 
-        // 1. 获取全局单例客户端（直接调用无参 get()）
+        // 获取全局单例客户端（直接调用无参 get()）
         DynamicHttpClient defaultClient = defaultClientRegistry.get();
         System.out.println(defaultClient.sendRequest("/health"));
 
-        // 2. 当 clients.default 配置变更时：
+        // 当 clients.default 配置变更时：
         // 自动触发热重载构建新连接池 -> 替换缓存 -> 优雅关闭旧连接池
     }
 }
