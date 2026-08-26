@@ -24,6 +24,8 @@ public class ConfigDrivenRegistry<T> {
     @Getter
     private final ConfigManager configManager;
     @Getter
+    private final String keyOrPattern;
+    @Getter
     private final String keyPrefix;
     @Getter
     private final boolean singleKeyMode;
@@ -35,52 +37,46 @@ public class ConfigDrivenRegistry<T> {
 
     /**
      * @param configManager   配置管理器
-     * @param keyOrPrefix     配置键或前缀（如 "router."、"router.*" 或 "team4u.log.finops"）
+     * @param keyOrPattern    配置键或通配符规则（如精确键 "team4u.log.finops" 或通配规则 "router.*"）
      * @param instanceFactory 实例工厂：输入配置内容，输出对象实例
      */
-    public ConfigDrivenRegistry(ConfigManager configManager, String keyOrPrefix, Function<String, T> instanceFactory) {
+    public ConfigDrivenRegistry(ConfigManager configManager, String keyOrPattern, Function<String, T> instanceFactory) {
+        if (keyOrPattern == null || keyOrPattern.trim().isEmpty()) {
+            throw new IllegalArgumentException("keyOrPattern must not be empty");
+        }
         this.configManager = configManager;
+        this.keyOrPattern = keyOrPattern.trim();
         this.instanceFactory = instanceFactory;
 
-        if (keyOrPrefix == null || keyOrPrefix.trim().isEmpty()) {
-            throw new IllegalArgumentException("keyOrPrefix must not be empty");
-        }
-
-        // 判断是否为前缀多实例模式：以 "." 或 ".*" 结尾视为前缀，否则视为单 Key 精确配置
-        if (keyOrPrefix.endsWith(".") || keyOrPrefix.endsWith(".*")) {
+        // 根据是否包含通配符 '*' 判断模式，不进行任何隐式点号转换
+        if (this.keyOrPattern.contains("*")) {
             this.singleKeyMode = false;
-            this.keyPrefix = keyOrPrefix.endsWith(".*")
-                    ? keyOrPrefix.substring(0, keyOrPrefix.length() - 1)
-                    : keyOrPrefix;
-            // 注册变更监听器：前缀通配符匹配（如 "router.*"）
-            this.listenerHandle = this.configManager.registerChangeListener(this.keyPrefix + "*", this::onConfigChanged);
+            // 提取通配符前的前缀部分作为 keyPrefix
+            this.keyPrefix = this.keyOrPattern.substring(0, this.keyOrPattern.indexOf('*'));
         } else {
             this.singleKeyMode = true;
-            this.keyPrefix = keyOrPrefix;
-            // 注册变更监听器：单 Key 精确匹配，防止误触同前缀其他键
-            this.listenerHandle = this.configManager.registerChangeListener(this.keyPrefix, this::onConfigChanged);
+            this.keyPrefix = this.keyOrPattern;
         }
+
+        // 直接按传入的 keyOrPattern 注册变更监听器（精确匹配或带 * 的模糊匹配）
+        this.listenerHandle = this.configManager.registerChangeListener(this.keyOrPattern, this::onConfigChanged);
     }
 
     /**
-     * 创建基于前缀的多实例注册表工厂方法
+     * 创建基于通配符规则的多实例注册表工厂方法（如 "router.*"、"clients.*"）
      *
      * @param configManager   配置管理器
-     * @param prefix          配置前缀（自动补全末尾 "."）
+     * @param pattern         通配符规则（如 "router.*"）
      * @param instanceFactory 实例工厂
      * @param <T>             实例类型
      * @return ConfigDrivenRegistry 实例
      */
-    public static <T> ConfigDrivenRegistry<T> byPrefix(ConfigManager configManager, String prefix, Function<String, T> instanceFactory) {
-        if (prefix == null || prefix.trim().isEmpty()) {
-            throw new IllegalArgumentException("prefix must not be empty");
-        }
-        String normalized = prefix.endsWith(".") ? prefix : prefix + ".";
-        return new ConfigDrivenRegistry<>(configManager, normalized, instanceFactory);
+    public static <T> ConfigDrivenRegistry<T> byPattern(ConfigManager configManager, String pattern, Function<String, T> instanceFactory) {
+        return new ConfigDrivenRegistry<>(configManager, pattern, instanceFactory);
     }
 
     /**
-     * 创建基于单一 Key 的注册表工厂方法
+     * 创建基于精确键的注册表工厂方法（如 "team4u.log.finops"）
      *
      * @param configManager   配置管理器
      * @param key             精确配置键
@@ -93,15 +89,15 @@ public class ConfigDrivenRegistry<T> {
     }
 
     /**
-     * 获取单配置实例（仅适用于单 Key 模式）
+     * 获取单配置实例（仅适用于精确键模式）
      *
      * @return 实例对象
-     * @throws UnsupportedOperationException 当注册表为前缀多实例模式时抛出
+     * @throws UnsupportedOperationException 当注册表为通配符模式时抛出
      */
     public T get() {
         if (!singleKeyMode) {
             throw new UnsupportedOperationException(
-                    "Cannot call no-arg get() on prefix-based registry [" + keyPrefix + "]. Please specify a sub-key.");
+                    "Cannot call no-arg get() on wildcard-based registry [" + keyOrPattern + "]. Please specify a sub-key.");
         }
         return get(this.keyPrefix);
     }
@@ -109,8 +105,8 @@ public class ConfigDrivenRegistry<T> {
     /**
      * 获取实例（支持延迟初始化）
      * <p>
-     * 在前缀多实例模式下，支持传入短标识（如 "order"）或完整配置键（如 "router.order"）；
-     * 在单 Key 模式下，直接传入完整配置键或调用无参 {@link #get()}。
+     * 在通配符模式下，支持传入短标识（如 "order"）或完整配置键（如 "router.order"）；
+     * 在精确键模式下，直接传入完整配置键或调用无参 {@link #get()}。
      * </p>
      *
      * @param configKey 完整配置键或短标识
@@ -137,8 +133,7 @@ public class ConfigDrivenRegistry<T> {
         if (key.startsWith(this.keyPrefix)) {
             return key;
         }
-        String cleanSubKey = key.startsWith(".") ? key.substring(1) : key;
-        return this.keyPrefix + cleanSubKey;
+        return this.keyPrefix + key;
     }
 
     /**

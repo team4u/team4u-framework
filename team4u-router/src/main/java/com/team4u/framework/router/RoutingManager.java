@@ -77,7 +77,7 @@ public class RoutingManager {
         // 构建配置驱动的动态注册表，将配置中心的 JSON/YAML 自动映射为 Router 实例
         this.routerRegistry = new ConfigDrivenRegistry<>(
                 configManager,
-                this.configPrefix,
+                this.configPrefix.endsWith("*") ? this.configPrefix : this.configPrefix + "*",
                 this::buildRouterFromConfig);
     }
 

@@ -29,7 +29,7 @@ public class ConfigDrivenRegistryTest {
     @Test
     public void testLazyLoad() {
         ConfigDrivenRegistry<String> registry = new ConfigDrivenRegistry<>(
-                configManager, "test.", String::toUpperCase);
+                configManager, "test.*", String::toUpperCase);
 
         configSource.putAndRefresh("test.k1", "v1");
 
@@ -40,7 +40,7 @@ public class ConfigDrivenRegistryTest {
     @Test
     public void testHotReload() {
         ConfigDrivenRegistry<String> registry = new ConfigDrivenRegistry<>(
-                configManager, "test.", String::toUpperCase);
+                configManager, "test.*", String::toUpperCase);
 
         configSource.putAndRefresh("test.k1", "v1");
         Assert.assertEquals("V1", registry.get("test.k1"));
@@ -58,6 +58,7 @@ public class ConfigDrivenRegistryTest {
                 configManager, configKey, String::toUpperCase);
 
         Assert.assertTrue(registry.isSingleKeyMode());
+        Assert.assertEquals(configKey, registry.getKeyPrefix());
 
         configSource.putAndRefresh(configKey, "v1");
         // 初次加载：无参 get() 与有参 get(configKey)
@@ -74,18 +75,34 @@ public class ConfigDrivenRegistryTest {
     }
 
     @Test
-    public void testPrefixModeSubKeyResolution() {
-        ConfigDrivenRegistry<String> registry = ConfigDrivenRegistry.byPrefix(
-                configManager, "test", String::toUpperCase);
+    public void testExactKeyWithoutWildcardDoesNotAutoAppendDot() {
+        // 验证传入 "clients" 时作为精确 Key，不自作主张添加 "." 或 "*"
+        ConfigDrivenRegistry<String> registry = new ConfigDrivenRegistry<>(
+                configManager, "clients", String::toUpperCase);
+
+        Assert.assertTrue(registry.isSingleKeyMode());
+        Assert.assertEquals("clients", registry.getKeyPrefix());
+
+        configSource.putAndRefresh("clients", "v1");
+        Assert.assertEquals("V1", registry.get());
+
+        // 验证对 clients.sms 等子项无感知
+        configSource.putAndRefresh("clients.sms", "v2");
+        Assert.assertEquals("V1", registry.get());
+    }
+
+    @Test
+    public void testPatternModeSubKeyResolution() {
+        ConfigDrivenRegistry<String> registry = ConfigDrivenRegistry.byPattern(
+                configManager, "test.*", String::toUpperCase);
 
         Assert.assertFalse(registry.isSingleKeyMode());
         Assert.assertEquals("test.", registry.getKeyPrefix());
 
         configSource.putAndRefresh("test.k1", "v1");
 
-        // 短标识、带点短标识、完整 Key 均能解析并命中同一实例
+        // 短标识与完整 Key 均能解析并命中同一实例
         Assert.assertEquals("V1", registry.get("k1"));
-        Assert.assertEquals("V1", registry.get(".k1"));
         Assert.assertEquals("V1", registry.get("test.k1"));
 
         // 更新配置后，通过短标识也能读到最新值
@@ -94,16 +111,16 @@ public class ConfigDrivenRegistryTest {
     }
 
     @Test(expected = UnsupportedOperationException.class)
-    public void testPrefixModeNoArgGetThrowsException() {
-        ConfigDrivenRegistry<String> registry = ConfigDrivenRegistry.byPrefix(
-                configManager, "test.", String::toUpperCase);
+    public void testPatternModeNoArgGetThrowsException() {
+        ConfigDrivenRegistry<String> registry = ConfigDrivenRegistry.byPattern(
+                configManager, "test.*", String::toUpperCase);
         registry.get();
     }
 
     @Test
     public void testSafeSwap() {
         ConfigDrivenRegistry<String> registry = new ConfigDrivenRegistry<>(
-                configManager, "test.", val -> {
+                configManager, "test.*", val -> {
             if ("error".equals(val)) {
                 throw new RuntimeException("Invalid config");
             }
@@ -128,7 +145,7 @@ public class ConfigDrivenRegistryTest {
         AtomicInteger closeCount = new AtomicInteger(0);
 
         ConfigDrivenRegistry<MockInstance> registry = new ConfigDrivenRegistry<>(
-                configManager, "test.", name -> new MockInstance(name, closeCount));
+                configManager, "test.*", name -> new MockInstance(name, closeCount));
 
         configSource.putAndRefresh("test.k1", "i1");
         MockInstance i1 = registry.get("test.k1");
@@ -153,7 +170,7 @@ public class ConfigDrivenRegistryTest {
         AtomicInteger factoryCount = new AtomicInteger(0);
 
         ConfigDrivenRegistry<String> registry = new ConfigDrivenRegistry<>(
-                configManager, "test.", value -> {
+                configManager, "test.*", value -> {
             factoryCount.incrementAndGet();
             return value.toUpperCase();
         });
