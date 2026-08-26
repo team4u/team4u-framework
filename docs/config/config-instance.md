@@ -98,10 +98,10 @@ public class HttpClientRegistryManager {
     public static void main(String[] args) {
         ConfigManager configManager = ConfigManager.global();
 
-        // 方式 1：通过通配符规则创建多实例注册表（显式指定 "clients.*" 通配模式）
-        ConfigDrivenRegistry<DynamicHttpClient> clientRegistry = ConfigDrivenRegistry.byPattern(
+        // 1. 通配符多实例模式：显式指定 "clients.*" 规则
+        ConfigDrivenRegistry<DynamicHttpClient> clientRegistry = new ConfigDrivenRegistry<>(
                 configManager,
-                "clients.*", // 明确指定通配符规则，监听所有 clients. 开头的配置
+                "clients.*", // 明确指定通配符规则，批量监听所有 clients. 开头的配置
                 rawJsonConfig -> {
                     // 工厂函数：将 JSON 字符串解析为配置并构造 DynamicHttpClient
                     Map<String, Object> conf = JsonUtil.toMap(rawJsonConfig);
@@ -115,14 +115,14 @@ public class HttpClientRegistryManager {
         // 模拟配置中心配置:
         // clients.sms={"name":"sms-client","endpoint":"https://sms.aliyun.com","timeout":5000}
         
-        // 1. 获取实例（支持短标识 "sms" 或完整键 "clients.sms"，首次延迟构建，后续 O(1) 缓存命中）
+        // 获取实例（支持短标识 "sms" 或完整键 "clients.sms"，首次延迟构建，后续 O(1) 缓存命中）
         DynamicHttpClient smsClient = clientRegistry.get("sms");
         System.out.println(smsClient.sendRequest("/send"));
 
-        // 2. 当配置中心推送新的 JSON 更新时：
+        // 当配置中心推送新的 JSON 更新时：
         // ConfigDrivenRegistry 会自动构建新 DynamicHttpClient -> 替换缓存 -> 自动调用旧 DynamicHttpClient.close()
 
-        // 3. 应用关闭时释放全部资源
+        // 应用关闭时释放全部资源
         // clientRegistry.destroy();
     }
 }
@@ -134,7 +134,7 @@ public class HttpClientRegistryManager {
 
 ```java
 // 精确监听单 Key "team4u.log.finops"，零误触
-ConfigDrivenRegistry<FinOpsConfig> finOpsRegistry = ConfigDrivenRegistry.byKey(
+ConfigDrivenRegistry<FinOpsConfig> finOpsRegistry = new ConfigDrivenRegistry<>(
         configManager,
         "team4u.log.finops",
         json -> JsonUtil.toBean(json, FinOpsConfig.class)
@@ -148,10 +148,10 @@ FinOpsConfig config = finOpsRegistry.get();
 
 ## 模式与 API 对比
 
-| 模式 | 规则写法 | 创建方式 | 监听机制 | 读取 API | 适用场景 |
-| :--- | :--- | :--- | :--- | :--- | :--- |
-| **通配符多实例模式** | `"router.*"` | `ConfigDrivenRegistry.byPattern(cm, "router.*", factory)` 或直接构造 | `router.*`（`*` 通配符前缀匹配） | `get("order")` 或 `get("router.order")`（自动补全前缀） | 动态路由表、连接池、重试策略集等多实例池 |
-| **精确键模式** | `"app.limit"` | `ConfigDrivenRegistry.byKey(cm, "app.limit", factory)` 或直接构造 | `app.limit`（精确匹配，防误触） | `get()` 或 `get("app.limit")` | 全局限流阈值、日志染色规则、脱敏规则等单对象配置 |
+| 模式 | 规则写法 | 监听机制 | 读取 API | 适用场景 |
+| :--- | :--- | :--- | :--- | :--- |
+| **通配符多实例模式** | `"router.*"` | `router.*`（`*` 通配符前缀匹配） | `get("order")` 或 `get("router.order")`（自动补全前缀） | 动态路由表、连接池、重试策略集等多实例池 |
+| **精确键模式** | `"app.limit"` | `app.limit`（精确匹配，防误触） | `get()` 或 `get("app.limit")` | 全局限流阈值、日志染色规则、脱敏规则等单对象配置 |
 
 ---
 
