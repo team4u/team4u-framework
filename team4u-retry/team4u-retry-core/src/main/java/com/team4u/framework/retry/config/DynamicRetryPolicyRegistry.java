@@ -14,7 +14,7 @@ import lombok.Getter;
  */
 public class DynamicRetryPolicyRegistry {
 
-    private static final String DEFAULT_PREFIX = "retry.policy.";
+    private static final String DEFAULT_PREFIX = "retry.policy.*";
 
     /**
      * 注册表实例
