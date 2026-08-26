@@ -54,7 +54,7 @@ public class ConfigDrivenRegistryTest {
     @Test
     public void testSingleKeyModeAndNoArgGet() {
         String configKey = "team4u.log.finops";
-        ConfigDrivenRegistry<String> registry = ConfigDrivenRegistry.byKey(
+        ConfigDrivenRegistry<String> registry = new ConfigDrivenRegistry<>(
                 configManager, configKey, String::toUpperCase);
 
         Assert.assertTrue(registry.isSingleKeyMode());
@@ -93,7 +93,7 @@ public class ConfigDrivenRegistryTest {
 
     @Test
     public void testPatternModeSubKeyResolution() {
-        ConfigDrivenRegistry<String> registry = ConfigDrivenRegistry.byPattern(
+        ConfigDrivenRegistry<String> registry = new ConfigDrivenRegistry<>(
                 configManager, "test.*", String::toUpperCase);
 
         Assert.assertFalse(registry.isSingleKeyMode());
@@ -112,7 +112,7 @@ public class ConfigDrivenRegistryTest {
 
     @Test(expected = UnsupportedOperationException.class)
     public void testPatternModeNoArgGetThrowsException() {
-        ConfigDrivenRegistry<String> registry = ConfigDrivenRegistry.byPattern(
+        ConfigDrivenRegistry<String> registry = new ConfigDrivenRegistry<>(
                 configManager, "test.*", String::toUpperCase);
         registry.get();
     }

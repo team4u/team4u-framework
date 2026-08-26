@@ -63,32 +63,6 @@ public class ConfigDrivenRegistry<T> {
     }
 
     /**
-     * 创建基于通配符规则的多实例注册表工厂方法（如 "router.*"、"clients.*"）
-     *
-     * @param configManager   配置管理器
-     * @param pattern         通配符规则（如 "router.*"）
-     * @param instanceFactory 实例工厂
-     * @param <T>             实例类型
-     * @return ConfigDrivenRegistry 实例
-     */
-    public static <T> ConfigDrivenRegistry<T> byPattern(ConfigManager configManager, String pattern, Function<String, T> instanceFactory) {
-        return new ConfigDrivenRegistry<>(configManager, pattern, instanceFactory);
-    }
-
-    /**
-     * 创建基于精确键的注册表工厂方法（如 "team4u.log.finops"）
-     *
-     * @param configManager   配置管理器
-     * @param key             精确配置键
-     * @param instanceFactory 实例工厂
-     * @param <T>             实例类型
-     * @return ConfigDrivenRegistry 实例
-     */
-    public static <T> ConfigDrivenRegistry<T> byKey(ConfigManager configManager, String key, Function<String, T> instanceFactory) {
-        return new ConfigDrivenRegistry<>(configManager, key, instanceFactory);
-    }
-
-    /**
      * 获取单配置实例（仅适用于精确键模式）
      *
      * @return 实例对象
