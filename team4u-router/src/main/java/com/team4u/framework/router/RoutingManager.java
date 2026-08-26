@@ -187,17 +187,11 @@ public class RoutingManager {
      * 获取指定标识的路由器
      */
     private Router getRouter(String routerId) {
-        // 智能处理：如果 routerId 已经包含前缀，则不再重复拼接
-        String fullKey = (StringUtil.isNotEmpty(configPrefix) && routerId.startsWith(configPrefix))
-                ? routerId
-                : this.configPrefix + routerId;
-
-        Router router = routerRegistry.get(fullKey);
+        Router router = routerRegistry.get(routerId);
         if (router == null) {
             // 当路由器未找到时，记录 DEBUG 级别的日志辅助排障
             if (log.isDebugEnabled()) {
-                log.debug("Route unmatch: Router [{}] (Config key: [{}]) not found or failed to initialize.",
-                        routerId, fullKey);
+                log.debug("Route unmatch: Router [{}] not found or failed to initialize.", routerId);
             }
         }
         return router;

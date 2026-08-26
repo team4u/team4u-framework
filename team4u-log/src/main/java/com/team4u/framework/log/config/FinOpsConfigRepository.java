@@ -56,7 +56,7 @@ public class FinOpsConfigRepository {
                 return this.config;
             }
         });
-        FinOpsConfig loaded = this.registry.get(CONFIG_KEY);
+        FinOpsConfig loaded = this.registry.get();
         this.config = loaded != null ? loaded : FinOpsConfig.defaults();
     }
 

@@ -90,7 +90,7 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
             }
         });
 
-        List<DyeingRule> loadedRules = this.registry.get(CONFIG_KEY);
+        List<DyeingRule> loadedRules = this.registry.get();
         this.activeRules = loadedRules != null ? loadedRules : Collections.emptyList();
     }
 

@@ -67,7 +67,7 @@ public class MaskRuleRepository {
         });
 
         // 触发首次拉取
-        this.registry.get(CONFIG_KEY);
+        this.registry.get();
     }
 
     /**
@@ -133,7 +133,7 @@ public class MaskRuleRepository {
 
     private Map<String, Map<String, String>> currentRules() {
         if (registry != null) {
-            Map<String, Map<String, String>> rules = registry.get(CONFIG_KEY);
+            Map<String, Map<String, String>> rules = registry.get();
             if (rules != null) {
                 return rules;
             }

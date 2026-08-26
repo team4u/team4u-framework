@@ -52,19 +52,52 @@ public class ConfigDrivenRegistryTest {
     }
 
     @Test
-    public void testPrefixWithoutDotUsesStartsWithSemantics() {
-        // 模拟 FinOpsConfigRepository 场景，前缀就是 CONFIG_KEY
+    public void testSingleKeyModeAndNoArgGet() {
         String configKey = "team4u.log.finops";
-        ConfigDrivenRegistry<String> registry = new ConfigDrivenRegistry<>(
+        ConfigDrivenRegistry<String> registry = ConfigDrivenRegistry.byKey(
                 configManager, configKey, String::toUpperCase);
 
+        Assert.assertTrue(registry.isSingleKeyMode());
+
         configSource.putAndRefresh(configKey, "v1");
-        // 初次加载
+        // 初次加载：无参 get() 与有参 get(configKey)
+        Assert.assertEquals("V1", registry.get());
         Assert.assertEquals("V1", registry.get(configKey));
 
-        // 更新配置：验证此时前缀自身作为 key 也能触发热重载
+        // 更新配置：验证热重载
         configSource.putAndRefresh(configKey, "v2");
-        Assert.assertEquals("V2", registry.get(configKey));
+        Assert.assertEquals("V2", registry.get());
+
+        // 单 Key 模式下，同前缀的其他 Key 变更不会误触
+        configSource.putAndRefresh("team4u.log.finops_extra", "v3");
+        Assert.assertEquals("V2", registry.get());
+    }
+
+    @Test
+    public void testPrefixModeSubKeyResolution() {
+        ConfigDrivenRegistry<String> registry = ConfigDrivenRegistry.byPrefix(
+                configManager, "test", String::toUpperCase);
+
+        Assert.assertFalse(registry.isSingleKeyMode());
+        Assert.assertEquals("test.", registry.getKeyPrefix());
+
+        configSource.putAndRefresh("test.k1", "v1");
+
+        // 短标识、带点短标识、完整 Key 均能解析并命中同一实例
+        Assert.assertEquals("V1", registry.get("k1"));
+        Assert.assertEquals("V1", registry.get(".k1"));
+        Assert.assertEquals("V1", registry.get("test.k1"));
+
+        // 更新配置后，通过短标识也能读到最新值
+        configSource.putAndRefresh("test.k1", "v2");
+        Assert.assertEquals("V2", registry.get("k1"));
+    }
+
+    @Test(expected = UnsupportedOperationException.class)
+    public void testPrefixModeNoArgGetThrowsException() {
+        ConfigDrivenRegistry<String> registry = ConfigDrivenRegistry.byPrefix(
+                configManager, "test.", String::toUpperCase);
+        registry.get();
     }
 
     @Test
