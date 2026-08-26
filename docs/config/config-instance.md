@@ -42,6 +42,44 @@ graph TD
 
 ---
 
+## 支持的配置格式与适用范围
+
+### 1. 原生支持：单 Key 文档型配置 (1 Key = 1 Object)
+`ConfigDrivenRegistry` 的底层工厂函数契约是 `Function<String, T>`，因此要求**单个 Key 必须承载该组件所需的完整配置内容**：
+
+- **典型格式**：JSON、YAML、XML、自定分隔文本或连接串。
+- **配置示例**：
+  ```properties
+  # 场景 A：通配符多实例模式 (clients.*)
+  clients.sms={"name":"sms-client","endpoint":"https://sms.aliyun.com","timeout":5000}
+  clients.pay={"name":"pay-client","endpoint":"https://pay.alipay.com","timeout":3000}
+
+  # 场景 B：精确键单实例模式 (clients.default)
+  clients.default={"name":"default-client","endpoint":"https://api.example.com","timeout":3000}
+  ```
+
+### 2. 暂不支持：展开式 Properties 属性树 (Flat Key-Value Tree)
+`ConfigDrivenRegistry` **目前不支持**由多条散落的独立属性 Key 聚合驱动单个组件，例如：
+
+```properties
+# ⚠️ 展开式属性树（当前 ConfigDrivenRegistry 无法直接聚合解析）
+server.name=team4u-demo
+server.port=8080
+server.connect-timeout=5000
+server.db.url=jdbc:mysql://localhost:3306/test
+server.db.username=root
+server.description=${server.name} is running on port ${server.port}
+```
+
+> [!TIP]
+> **展开式 Properties 属性树的推荐方案**：
+> 如果配置是以扁平散落的属性树形式组织，推荐使用框架的 **[类型安全动态代理 (`ConfigManager.createProxy`)](config-proxy.md)**：
+> 1. 定义标注了 `@ConfigPrefix("server")` 的 Java Bean 配置类；
+> 2. 调用 `configManager.createProxy(ServerConfig.class)`，框架将自动完成多属性的松散绑定（Relaxed Binding）、占位符递归解析（`${...}`）与类型转换；
+> 3. 运行时业务组件直接依赖该动态代理对象即可享受属性级别的实时热更新。
+
+---
+
 ## 完整实战示例：动态 HTTP 客户端连接池
 
 ### 1. 定义配置类与受配置驱动的运行时组件
