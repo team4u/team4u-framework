@@ -81,6 +81,10 @@ public class DynamicHttpClient implements AutoCloseable {
 
 ### 初始化 `ConfigDrivenRegistry`
 
+`ConfigDrivenRegistry` 原生支持两种工作模式：
+- **前缀多实例模式（Prefix Mode）**：以 `.` 或 `.*` 结尾（如 `"clients."`、`"router."`），自动监听 `prefix.*`，支持传入短标识（如 `get("sms")`）或完整键（`get("clients.sms")`）。
+- **单 Key 模式（Single Key Mode）**：精确配置键（如 `"team4u.log.finops"`），精确监听单键变更（防止同前缀其他键误触），支持无参 `get()` 极简读取。
+
 ```java
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
@@ -92,10 +96,10 @@ public class HttpClientRegistryManager {
     public static void main(String[] args) {
         ConfigManager configManager = ConfigManager.global();
 
-        // 创建配置驱动的实例注册表
-        ConfigDrivenRegistry<DynamicHttpClient> clientRegistry = new ConfigDrivenRegistry<>(
+        // 方式 1：通过工厂方法创建前缀多实例注册表
+        ConfigDrivenRegistry<DynamicHttpClient> clientRegistry = ConfigDrivenRegistry.byPrefix(
                 configManager,
-                "clients.", // 监听 "clients.*" 配置前缀
+                "clients", // 自动规范化为 "clients." 并监听 "clients.*"
                 rawJsonConfig -> {
                     // 工厂函数：将 JSON 字符串解析为配置并构造 DynamicHttpClient
                     Map<String, Object> conf = JsonUtil.toMap(rawJsonConfig);
@@ -109,8 +113,8 @@ public class HttpClientRegistryManager {
         // 模拟配置中心配置:
         // clients.sms={"name":"sms-client","endpoint":"https://sms.aliyun.com","timeout":5000}
         
-        // 1. 获取实例（首次调用延迟构建，后续 O(1) 缓存命中）
-        DynamicHttpClient smsClient = clientRegistry.get("clients.sms");
+        // 1. 获取实例（支持短标识 "sms" 或完整键 "clients.sms"，首次延迟构建，后续 O(1) 缓存命中）
+        DynamicHttpClient smsClient = clientRegistry.get("sms");
         System.out.println(smsClient.sendRequest("/send"));
 
         // 2. 当配置中心推送新的 JSON 更新时：
@@ -121,6 +125,31 @@ public class HttpClientRegistryManager {
     }
 }
 ```
+
+### 单 Key 配置模式示例
+
+针对全局单对象配置（如限流、脱敏、染色规则）：
+
+```java
+// 精确监听单 Key "team4u.log.finops"，零误触
+ConfigDrivenRegistry<FinOpsConfig> finOpsRegistry = ConfigDrivenRegistry.byKey(
+        configManager,
+        "team4u.log.finops",
+        json -> JsonUtil.toBean(json, FinOpsConfig.class)
+);
+
+// 读取时直接无参调用
+FinOpsConfig config = finOpsRegistry.get();
+```
+
+---
+
+## 模式与 API 对比
+
+| 模式 | 创建方式 | 监听规则 | 读取 API | 适用场景 |
+| :--- | :--- | :--- | :--- | :--- |
+| **多实例前缀模式** | `ConfigDrivenRegistry.byPrefix(cm, "router", factory)` 或构造传入 `"router."` | `router.*`（通配符匹配） | `get("order")` 或 `get("router.order")`（自动补全前缀） | 动态路由表、连接池、重试策略集等多实例池 |
+| **单 Key 模式** | `ConfigDrivenRegistry.byKey(cm, "app.limit", factory)` 或构造传入 `"app.limit"` | `app.limit`（精确匹配，防误触） | `get()` 或 `get("app.limit")` | 全局限流阈值、日志染色规则、脱敏规则等单对象配置 |
 
 ---
 

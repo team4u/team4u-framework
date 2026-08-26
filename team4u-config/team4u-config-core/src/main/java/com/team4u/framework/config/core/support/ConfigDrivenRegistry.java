@@ -25,6 +25,8 @@ public class ConfigDrivenRegistry<T> {
     private final ConfigManager configManager;
     @Getter
     private final String keyPrefix;
+    @Getter
+    private final boolean singleKeyMode;
     private final Function<String, T> instanceFactory;
     private final AutoCloseable listenerHandle;
 
@@ -33,29 +35,110 @@ public class ConfigDrivenRegistry<T> {
 
     /**
      * @param configManager   配置管理器
-     * @param keyPrefix       配置前缀，例如：router.
+     * @param keyOrPrefix     配置键或前缀（如 "router."、"router.*" 或 "team4u.log.finops"）
      * @param instanceFactory 实例工厂：输入配置内容，输出对象实例
      */
-    public ConfigDrivenRegistry(ConfigManager configManager, String keyPrefix, Function<String, T> instanceFactory) {
+    public ConfigDrivenRegistry(ConfigManager configManager, String keyOrPrefix, Function<String, T> instanceFactory) {
         this.configManager = configManager;
-        this.keyPrefix = keyPrefix;
         this.instanceFactory = instanceFactory;
 
-        // 注册变更监听器：当前采用 startsWith 语义，keyPrefix + "*" 会匹配所有同前缀键
-        this.listenerHandle = this.configManager.registerChangeListener(this.keyPrefix + "*", this::onConfigChanged);
+        if (keyOrPrefix == null || keyOrPrefix.trim().isEmpty()) {
+            throw new IllegalArgumentException("keyOrPrefix must not be empty");
+        }
+
+        // 判断是否为前缀多实例模式：以 "." 或 ".*" 结尾视为前缀，否则视为单 Key 精确配置
+        if (keyOrPrefix.endsWith(".") || keyOrPrefix.endsWith(".*")) {
+            this.singleKeyMode = false;
+            this.keyPrefix = keyOrPrefix.endsWith(".*")
+                    ? keyOrPrefix.substring(0, keyOrPrefix.length() - 1)
+                    : keyOrPrefix;
+            // 注册变更监听器：前缀通配符匹配（如 "router.*"）
+            this.listenerHandle = this.configManager.registerChangeListener(this.keyPrefix + "*", this::onConfigChanged);
+        } else {
+            this.singleKeyMode = true;
+            this.keyPrefix = keyOrPrefix;
+            // 注册变更监听器：单 Key 精确匹配，防止误触同前缀其他键
+            this.listenerHandle = this.configManager.registerChangeListener(this.keyPrefix, this::onConfigChanged);
+        }
+    }
+
+    /**
+     * 创建基于前缀的多实例注册表工厂方法
+     *
+     * @param configManager   配置管理器
+     * @param prefix          配置前缀（自动补全末尾 "."）
+     * @param instanceFactory 实例工厂
+     * @param <T>             实例类型
+     * @return ConfigDrivenRegistry 实例
+     */
+    public static <T> ConfigDrivenRegistry<T> byPrefix(ConfigManager configManager, String prefix, Function<String, T> instanceFactory) {
+        if (prefix == null || prefix.trim().isEmpty()) {
+            throw new IllegalArgumentException("prefix must not be empty");
+        }
+        String normalized = prefix.endsWith(".") ? prefix : prefix + ".";
+        return new ConfigDrivenRegistry<>(configManager, normalized, instanceFactory);
+    }
+
+    /**
+     * 创建基于单一 Key 的注册表工厂方法
+     *
+     * @param configManager   配置管理器
+     * @param key             精确配置键
+     * @param instanceFactory 实例工厂
+     * @param <T>             实例类型
+     * @return ConfigDrivenRegistry 实例
+     */
+    public static <T> ConfigDrivenRegistry<T> byKey(ConfigManager configManager, String key, Function<String, T> instanceFactory) {
+        return new ConfigDrivenRegistry<>(configManager, key, instanceFactory);
+    }
+
+    /**
+     * 获取单配置实例（仅适用于单 Key 模式）
+     *
+     * @return 实例对象
+     * @throws UnsupportedOperationException 当注册表为前缀多实例模式时抛出
+     */
+    public T get() {
+        if (!singleKeyMode) {
+            throw new UnsupportedOperationException(
+                    "Cannot call no-arg get() on prefix-based registry [" + keyPrefix + "]. Please specify a sub-key.");
+        }
+        return get(this.keyPrefix);
     }
 
     /**
      * 获取实例（支持延迟初始化）
+     * <p>
+     * 在前缀多实例模式下，支持传入短标识（如 "order"）或完整配置键（如 "router.order"）；
+     * 在单 Key 模式下，直接传入完整配置键或调用无参 {@link #get()}。
+     * </p>
      *
-     * @param configKey 完整配置键
+     * @param configKey 完整配置键或短标识
      * @return 实例对象
      */
     public T get(String configKey) {
-        return instanceCache.computeIfAbsent(configKey, key -> {
+        String fullKey = resolveFullKey(configKey);
+        return instanceCache.computeIfAbsent(fullKey, key -> {
             String rawConfig = configManager.getString(key).orElse(null);
             return createInstance(key, rawConfig);
         });
+    }
+
+    /**
+     * 解析完整配置键
+     */
+    private String resolveFullKey(String key) {
+        if (key == null || key.trim().isEmpty()) {
+            return this.keyPrefix;
+        }
+        if (singleKeyMode) {
+            return key;
+        }
+        if (key.startsWith(this.keyPrefix)) {
+            return key;
+        }
+        String cleanSubKey = key.startsWith(".") ? key.substring(1) : key;
+        return this.keyPrefix + cleanSubKey;
     }
 
     /**

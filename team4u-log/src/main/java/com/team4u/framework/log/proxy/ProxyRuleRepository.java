@@ -66,7 +66,7 @@ public class ProxyRuleRepository {
             }
         });
         // 触发首次拉取
-        this.registry.get(CONFIG_KEY);
+        this.registry.get();
     }
 
     /**
@@ -92,7 +92,7 @@ public class ProxyRuleRepository {
         if (registry == null) {
             return null;
         }
-        Map<String, ProxyRule> rules = registry.get(CONFIG_KEY);
+        Map<String, ProxyRule> rules = registry.get();
         return rules == null ? null : rules.get(className);
     }
 

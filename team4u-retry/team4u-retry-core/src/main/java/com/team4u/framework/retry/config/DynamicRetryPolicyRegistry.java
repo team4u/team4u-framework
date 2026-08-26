@@ -50,10 +50,10 @@ public class DynamicRetryPolicyRegistry {
     /**
      * 根据策略标识获取重试策略
      *
-     * @param policyId 策略标识（不含前缀）
+     * @param policyId 策略标识（支持短标识如 "db-retry" 或完整前缀键如 "retry.policy.db-retry"）
      * @return 重试策略实例，若不存在则返回 null
      */
     public static RetryPolicy getPolicy(String policyId) {
-        return registry.get(DEFAULT_PREFIX + policyId);
+        return registry.get(policyId);
     }
 }
