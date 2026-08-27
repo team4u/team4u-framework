@@ -19,7 +19,7 @@ public class InterfaceProxyMain {
         if (!"Hello, Team4u!".equals(result)) {
             throw new IllegalStateException("JDK interface proxy failed: " + result);
         }
-        if (!proxy.getClass().getName().startsWith("com.sun.proxy.") && !java.lang.reflect.Proxy.isProxyClass(proxy.getClass())) {
+        if (!java.lang.reflect.Proxy.isProxyClass(proxy.getClass())) {
             throw new IllegalStateException("Expected a JDK dynamic proxy: " + proxy.getClass().getName());
         }
         System.out.println(result);

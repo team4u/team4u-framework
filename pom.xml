@@ -484,6 +484,7 @@
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-invoker-plugin</artifactId>
                         <version>3.6.0</version>
+                        <inherited>false</inherited>
                         <configuration>
                             <projectsDirectory>src/it</projectsDirectory>
                             <cloneProjectsTo>${project.build.directory}/it</cloneProjectsTo>
@@ -494,7 +495,6 @@
                             <streamLogs>true</streamLogs>
                             <pomIncludes>
                                 <pomInclude>consumer-minimal/pom.xml</pomInclude>
-                                <pomInclude>consumer-serializer-api/pom.xml</pomInclude>
                                 <pomInclude>consumer-serializer-jackson/pom.xml</pomInclude>
                                 <pomInclude>consumer-interface-proxy/pom.xml</pomInclude>
                             </pomIncludes>
@@ -519,6 +519,7 @@
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-invoker-plugin</artifactId>
                         <version>3.6.0</version>
+                        <inherited>false</inherited>
                         <configuration>
                             <projectsDirectory>src/it</projectsDirectory>
                             <cloneProjectsTo>${project.build.directory}/release-contracts-it</cloneProjectsTo>
@@ -529,7 +530,6 @@
                             <streamLogs>true</streamLogs>
                             <pomIncludes>
                                 <pomInclude>consumer-minimal/pom.xml</pomInclude>
-                                <pomInclude>consumer-serializer-api/pom.xml</pomInclude>
                                 <pomInclude>consumer-serializer-jackson/pom.xml</pomInclude>
                                 <pomInclude>consumer-interface-proxy/pom.xml</pomInclude>
                             </pomIncludes>

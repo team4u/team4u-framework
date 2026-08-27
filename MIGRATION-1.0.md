@@ -25,7 +25,7 @@ Developers can run the currently green external-consumer set with:
 mvn -Pconsumer-it -DskipTests verify
 ```
 
-The set currently covers minimal base, serializer API, explicit Jackson provider, and JDK interface proxy consumers. `consumer-config-core` is a known transition guard: its scalar/binder path runs, but its runtime tree still carries proxy, ByteBuddy, and Jackson. Run it explicitly with `-Dinvoker.test=consumer-config-core`; it joins the default gate in Task 9.
+The set currently covers minimal base, explicit Jackson provider, and JDK interface proxy consumers. `consumer-serializer-api` is a known transition guard: the current no-provider error names only `JsonSerializerPolicy` and omits the Jackson artifact or custom-provider instruction, so run it explicitly with `-Dinvoker.test=consumer-serializer-api` until Task 7. `consumer-config-core` is also explicit: its scalar/binder path runs, but its runtime tree still carries proxy, ByteBuddy, and Jackson; it joins the default gate in Task 9.
 
 The release baseline gate is:
 
@@ -33,11 +33,11 @@ The release baseline gate is:
 mvn -Prelease-contracts -DskipTests verify
 ```
 
-It runs the same four currently green consumers, executes their mains, and validates or records each runtime dependency tree. Later tasks strengthen it to cover provider leakage repository-wide without changing the profile entry point.
+It runs the same three currently green consumers, executes their mains, and validates or records each runtime dependency tree. Its staged selection is deliberately the extension point that Task 7 and Task 18 strengthen without speculative infrastructure.
 
 ## Explicit serializer provider choice
 
-Applications using JSON APIs must choose a provider explicitly. Add `com.team4u:team4u-serializer-jackson` to the application (or provide a custom `JsonSerializerPolicy`). Depending only on `team4u-serializer-json` is supported, but JSON calls fail fast with an `IllegalStateException` when no provider is present.
+Applications using JSON APIs must choose a provider explicitly. Add `com.team4u:team4u-serializer-jackson` to the application, or provide/register a custom `JsonSerializerPolicy`. Depending only on `team4u-serializer-json` is supported, but JSON calls fail fast with an `IllegalStateException`; Task 7 updates that message to state both choices explicitly.
 
 After importing it, depend on concrete Team4u artifacts without versions.
 
