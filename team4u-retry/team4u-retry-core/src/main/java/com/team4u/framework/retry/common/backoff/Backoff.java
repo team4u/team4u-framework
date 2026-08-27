@@ -1,5 +1,7 @@
 package com.team4u.framework.retry.common.backoff;
 
+import com.team4u.framework.retry.config.BackoffConfig;
+
 /**
  * 失败退避策略接口
  * <p>
@@ -17,6 +19,18 @@ public interface Backoff {
         if (attempt <= 0) {
             throw new IllegalArgumentException("attempt must be greater than 0");
         }
+    }
+
+    /**
+     * 返回当前退避策略的可持久化配置。
+     *
+     * @return 退避配置
+     */
+    default BackoffConfig toConfig() {
+        throw new UnsupportedOperationException(
+                "Backoff implementation does not support durable serialization: "
+                        + getClass().getName()
+                        + "; provide a custom RetryRecordSerializer or implement toConfig()");
     }
 
     /**

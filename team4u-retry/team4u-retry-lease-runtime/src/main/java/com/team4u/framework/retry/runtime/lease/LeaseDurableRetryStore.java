@@ -1,118 +1,135 @@
 package com.team4u.framework.retry.runtime.lease;
 
-import com.team4u.framework.lease.api.LeaseAdminService;
-import com.team4u.framework.lease.api.LeaseBackend;
-import com.team4u.framework.lease.api.LeaseProducer;
-import com.team4u.framework.lease.api.LeaseQueryService;
-import com.team4u.framework.lease.enums.LeaseAdminResult;
-import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
-import com.team4u.framework.lease.enums.LeaseTaskOutcome;
-import com.team4u.framework.lease.enums.LeaseTaskState;
-import com.team4u.framework.lease.model.*;
+import com.team4u.framework.lease.Leases;
+import com.team4u.framework.lease.api.Submission;
+import com.team4u.framework.lease.api.Task;
+import com.team4u.framework.lease.api.TaskOperationResult;
+import com.team4u.framework.lease.api.TaskPatch;
+import com.team4u.framework.lease.api.TaskQueue;
+import com.team4u.framework.lease.api.TaskResult;
+import com.team4u.framework.lease.api.TaskSnapshot;
+import com.team4u.framework.lease.api.TaskStatus;
+import com.team4u.framework.lease.spi.LeaseBackend;
 import com.team4u.framework.retry.managed.dispatch.DispatchResult;
 import com.team4u.framework.retry.managed.dispatch.RetryDispatchCommand;
 import com.team4u.framework.retry.managed.dispatch.RetryDispatcher;
+import com.team4u.framework.retry.managed.model.RetryRequest;
+import com.team4u.framework.retry.managed.model.RetryState;
 import com.team4u.framework.retry.managed.model.RetryStatus;
 import com.team4u.framework.retry.managed.store.RetryQueryService;
 import com.team4u.framework.retry.managed.store.RetryStore;
-import com.team4u.framework.retry.managed.store.record.*;
-import com.team4u.framework.retry.managed.store.serialize.JsonRetryRecordSerializer;
+import com.team4u.framework.retry.managed.store.record.CancelRecord;
+import com.team4u.framework.retry.managed.store.record.FailureRecord;
+import com.team4u.framework.retry.managed.store.record.ProcessingRecord;
+import com.team4u.framework.retry.managed.store.record.RetryCreateRequest;
+import com.team4u.framework.retry.managed.store.record.RetryRecord;
+import com.team4u.framework.retry.managed.store.record.SubmitRecord;
+import com.team4u.framework.retry.managed.store.record.SuccessRecord;
 import com.team4u.framework.retry.managed.store.serialize.RetryRecordSerializer;
 
 import java.time.Duration;
+import java.time.Instant;
+import java.util.Collections;
 import java.util.Objects;
 import java.util.Optional;
 
 /**
- * 通过 lease API 实现 durable retry 逻辑仓储。
+ * Durable retry store backed by a queue-scoped lease task API.
  */
 public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, RetryQueryService {
 
-    private static final long PREPARED_INTENT_DELAY_MILLIS = Duration.ofDays(3650L).toMillis();
+    private static final Duration DEFAULT_FOREGROUND_RECOVERY_TIMEOUT = Duration.ofMinutes(5L);
 
-    private final LeaseProducer producer;
-    private final LeaseAdminService adminService;
-    private final LeaseQueryService queryService;
-    private final String taskGroup;
+    private final TaskQueue queue;
     private final RetryRecordSerializer serializer;
+    private final long foregroundRecoveryTimeoutMillis;
 
     public LeaseDurableRetryStore(LeaseBackend backend) {
-        this(backend, JsonRetryRecordSerializer.INSTANCE);
-    }
-
-    public LeaseDurableRetryStore(LeaseBackend backend, RetryRecordSerializer serializer) {
-        this(backend, backend, backend, RetryLeaseTaskGroups.DEFAULT_RECOVERY_TASK_GROUP, serializer);
+        this(Leases.queue(backend, RetryTaskQueues.DEFAULT_RECOVERY_QUEUE));
     }
 
     public LeaseDurableRetryStore(
-            LeaseProducer producer,
-            LeaseAdminService adminService,
-            LeaseQueryService queryService,
-            String taskGroup) {
-        this(producer, adminService, queryService, taskGroup, JsonRetryRecordSerializer.INSTANCE);
+            LeaseBackend backend, RetryRecordSerializer serializer) {
+        this(Leases.queue(backend, RetryTaskQueues.DEFAULT_RECOVERY_QUEUE), serializer);
     }
 
     public LeaseDurableRetryStore(
-            LeaseProducer producer,
-            LeaseAdminService adminService,
-            LeaseQueryService queryService,
-            String taskGroup,
-            RetryRecordSerializer serializer) {
+            LeaseBackend backend, RetryRecordSerializer serializer,
+            Duration foregroundRecoveryTimeout) {
+        this(Leases.queue(backend, RetryTaskQueues.DEFAULT_RECOVERY_QUEUE),
+                serializer, foregroundRecoveryTimeout);
+    }
+
+    public LeaseDurableRetryStore(TaskQueue queue) {
+        this(queue, LeaseRetryRecordSerializer.INSTANCE);
+    }
+
+    public LeaseDurableRetryStore(TaskQueue queue, RetryRecordSerializer serializer) {
+        this(queue, serializer, DEFAULT_FOREGROUND_RECOVERY_TIMEOUT);
+    }
+
+    public LeaseDurableRetryStore(
+            TaskQueue queue, RetryRecordSerializer serializer,
+            Duration foregroundRecoveryTimeout) {
+        if (queue == null) {
+            throw new IllegalArgumentException("TaskQueue must not be null");
+        }
         if (serializer == null) {
             throw new IllegalArgumentException("RetryRecordSerializer must not be null");
         }
-        this.producer = producer;
-        this.adminService = adminService;
-        this.queryService = queryService;
-        this.taskGroup = (taskGroup == null || taskGroup.trim().isEmpty())
-                ? RetryLeaseTaskGroups.DEFAULT_RECOVERY_TASK_GROUP
-                : taskGroup;
+        this.foregroundRecoveryTimeoutMillis =
+                requireExactPositiveMillis(foregroundRecoveryTimeout);
+        this.queue = queue;
         this.serializer = serializer;
+    }
+
+    public long foregroundRecoveryTimeoutMillis() {
+        return foregroundRecoveryTimeoutMillis;
+    }
+
+    public String queueName() {
+        return queue.name();
     }
 
     @Override
     public SubmitRecord createIfAbsent(RetryCreateRequest request) {
-        // 构建重试记录领域模型，此时尚未获得全局 ID
+        if (request == null) {
+            throw new IllegalArgumentException("RetryCreateRequest must not be null");
+        }
+        validateCreateRequest(request);
+        Instant foregroundDeadline = Instant.now().plusMillis(foregroundRecoveryTimeoutMillis);
         RetryRecord record = RetryRecord.builder()
                 .request(request.getRequest())
                 .state(request.getInitialState())
                 .build();
-        // 通过租约系统的幂等发布接口进行存盘
-        LeasePublishResult publishResult = producer.publishIfAbsent(LeasePublishRequest.builder()
-                .taskGroup(taskGroup)
-                .taskType(request.getRequest().getTaskType())
-                .payload(serializer.serialize(record))
-                // 租约侧使用“类型|幂等键”作为业务唯一性校验，确保存储层不产生冗余任务
-                .businessKey(businessKey(request.getRequest().getTaskType(), request.getRequest().getIdempotencyKey()))
-                // 初始意图设为超长延迟，防止任务在未分派前被后台节点误取
-                .delayMillis(PREPARED_INTENT_DELAY_MILLIS)
-                .build());
+        record.getState().setNextRunAt(foregroundDeadline);
 
-        // 若任务已存在，通过反序列化获取当前存储中的最新状态
-        RetryRecord resolved = publishResult.getRecord() == null
-                ? record
-                : deserialize(publishResult.getRecord());
-
-        // 回填持久化生成的任务 ID 到领域模型中
-        resolved.setTaskId(publishResult.getTaskId());
-        if (resolved.getRequest() != null) {
-            resolved.getRequest().setTaskId(publishResult.getTaskId());
+        Submission submission = queue.submit(Task.of(request.getRequest().getTaskType(),
+                        serializer.serialize(record))
+                .deduplicationKey(request.getRequest().getIdempotencyKey())
+                .delay(Duration.ofMillis(foregroundRecoveryTimeoutMillis)));
+        TaskSnapshot snapshot = submission.getTask();
+        RetryRecord resolved = submission.isCreated()
+                ? record : serializer.deserialize(snapshot.getPayload());
+        if (!submission.isCreated()) {
+            validateExistingTaskId(resolved, request);
         }
+        fillTaskId(resolved, submission.getTaskId());
 
         return SubmitRecord.builder()
-                .created(publishResult.isCreated())
+                .created(submission.isCreated())
                 .record(resolved)
                 .build();
     }
 
     @Override
     public Optional<RetryRecord> get(String taskId) {
-        return queryService.get(taskId).map(this::deserialize);
+        return queue.get(taskId).map(this::deserialize);
     }
 
     @Override
     public Optional<RetryRecord> findByIdempotencyKey(String taskType, String idempotencyKey) {
-        return queryService.getByBusinessKey(taskGroup, businessKey(taskType, idempotencyKey)).map(this::deserialize);
+        return queue.get(taskType, idempotencyKey).map(this::deserialize);
     }
 
     @Override
@@ -122,11 +139,12 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
         record.getState().setStatus(RetryStatus.SUCCEEDED);
         record.getState().setNextRunAt(null);
         record.getState().setSucceededAt(success.getSucceededAt());
-        // 执行成功后，通过 admin 服务正常关闭租约任务，并持久化最终状态
-        assertApplied("closeSucceeded", taskId, adminService.close(taskId, LeaseCloseRequest.builder()
-                .outcome(LeaseTaskOutcome.SUCCEEDED)
-                .payload(serializer.serialize(record))
-                .build()));
+        if (success.getAttempts() != null) {
+            record.getState().setAttempts(success.getAttempts());
+        }
+        TaskResult result = TaskResult.success(
+                serializer.serialize(record), Collections.<String, String>emptyMap());
+        assertApplied("completeSucceeded", taskId, queue.complete(taskId, result));
     }
 
     @Override
@@ -138,13 +156,13 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
         record.getState().setLastErrorCode(failure.getErrorCode());
         record.getState().setLastErrorMessage(failure.getErrorMessage());
         record.getState().setFailedAt(failure.getFailedAt());
-        // 标记为重试耗尽导致的任务终结
-        assertApplied("closeFailed", taskId, adminService.close(taskId, LeaseCloseRequest.builder()
-                .outcome(LeaseTaskOutcome.FAILED)
-                .failureReason(LeaseTaskFailureReason.RETRY_EXHAUSTED)
-                .errorMessage(failure.getErrorMessage())
-                .payload(serializer.serialize(record))
-                .build()));
+        if (failure.getAttempts() != null) {
+            record.getState().setAttempts(failure.getAttempts());
+        }
+        TaskResult result = TaskResult.failure(
+                failure.getErrorMessage(), serializer.serialize(record),
+                Collections.<String, String>emptyMap());
+        assertApplied("completeFailed", taskId, queue.complete(taskId, result));
     }
 
     @Override
@@ -155,35 +173,35 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
         record.getState().setNextRunAt(null);
         record.getState().setLastErrorMessage(cancel.getReason());
         record.getState().setCancelledAt(cancel.getCancelledAt());
-        // 标记为用户取消
-        assertApplied("cancel", taskId, adminService.close(taskId, LeaseCloseRequest.builder()
-                .outcome(LeaseTaskOutcome.CANCELLED)
-                .errorMessage(cancel.getReason())
-                .payload(serializer.serialize(record))
-                .build()));
+        assertApplied("completeCancelled", taskId, queue.complete(taskId,
+                TaskResult.cancel(cancel.getReason(), serializer.serialize(record),
+                        Collections.<String, String>emptyMap())));
     }
 
     @Override
     public void markProcessing(String taskId, ProcessingRecord record) {
-        // 注意：分布式环境下的 PROCESSING 状态由 Lease 系统自身的 RUNNING 状态隐含表达，减少写放大。
+        // Queue RUNNING state already represents processing, avoiding a write per attempt.
     }
 
     @Override
     public DispatchResult dispatch(RetryDispatchCommand command) {
+        if (command == null) {
+            throw new IllegalArgumentException("RetryDispatchCommand must not be null");
+        }
         RetryRecord record = required(command.getRecord().getTaskId());
-        // 更新内存状态准备持久化
         record.getState().setStatus(RetryStatus.WAITING_RETRY);
         record.getState().setAttempts(command.getTransition().getAttempts());
         record.getState().setNextRunAt(command.getTransition().getNextRunAt());
         record.getState().setLastErrorCode(command.getTransition().getLastErrorCode());
         record.getState().setLastErrorMessage(command.getTransition().getLastErrorMessage());
+        record.getState().setBackendTaskId(record.getTaskId());
 
-        // 调用租约系统的重新调度接口，更新载荷的同时设定下一次可见时间（退避延迟）
-        assertApplied("updateAndSchedule", record.getTaskId(),
-                adminService.updateAndReschedule(LeaseUpdateRequest.builder()
-                        .taskId(record.getTaskId())
-                        .payload(serializer.serialize(record))
-                        .build(), command.getDelayMillis()));
+        assertApplied("updateAndReschedule", record.getTaskId(),
+                queue.updateAndReschedule(TaskPatch.builder()
+                                .taskId(record.getTaskId())
+                                .payload(serializer.serialize(record))
+                                .build(),
+                        Duration.ofMillis(command.getDelayMillis())));
 
         return DispatchResult.builder()
                 .taskId(record.getTaskId())
@@ -193,32 +211,114 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
     }
 
     private RetryRecord required(String taskId) {
-        return get(taskId).orElseThrow(() -> new IllegalStateException("Retry task not found: " + taskId));
+        return get(taskId).orElseThrow(
+                () -> new IllegalStateException("Retry task not found: " + taskId));
     }
 
-    private RetryRecord deserialize(LeaseTaskRecord record) {
-        RetryRecord retryRecord = serializer.deserialize(record.getPayload());
-        retryRecord.setTaskId(record.getTaskId());
-        if (retryRecord.getRequest() != null) {
-            retryRecord.getRequest().setTaskId(record.getTaskId());
-        }
-        if (retryRecord.getState() != null) {
-            retryRecord.getState().setBackendTaskId(record.getTaskId());
-            if (record.getState() == LeaseTaskState.RUNNING) {
-                retryRecord.getState().setStatus(RetryStatus.PROCESSING);
-                retryRecord.getState().setNextRunAt(null);
+    private RetryRecord deserialize(TaskSnapshot snapshot) {
+        RetryRecord record = serializer.deserialize(snapshot.getPayload());
+        fillTaskId(record, snapshot.getTaskId());
+        if (record.getState() != null) {
+            record.getState().setBackendTaskId(snapshot.getTaskId());
+            if (snapshot.getStatus() == TaskStatus.RUNNING) {
+                record.getState().setStatus(RetryStatus.PROCESSING);
+                record.getState().setNextRunAt(null);
             }
         }
-        return retryRecord;
+        return record;
     }
 
-    private String businessKey(String taskType, String idempotencyKey) {
-        return taskType + "|" + idempotencyKey;
-    }
-
-    private void assertApplied(String operation, String taskId, LeaseAdminResult result) {
-        if (result != LeaseAdminResult.APPLIED) {
-            throw new LeaseAdminOperationException(operation, taskId, result);
+    private void fillTaskId(RetryRecord record, String taskId) {
+        record.setTaskId(taskId);
+        if (record.getRequest() != null) {
+            record.getRequest().setTaskId(taskId);
         }
+    }
+
+    private void assertApplied(String operation, String taskId, TaskOperationResult result) {
+        if (result != TaskOperationResult.APPLIED) {
+            throw new TaskQueueOperationException(operation, taskId, result);
+        }
+    }
+
+    private static void validateCreateRequest(RetryCreateRequest request) {
+        RetryRequest retryRequest = request.getRequest();
+        if (retryRequest == null) {
+            throw new IllegalArgumentException("RetryCreateRequest.request must not be null");
+        }
+        requireText(retryRequest.getTaskType(), "RetryCreateRequest.request.taskType");
+        if (isBlank(retryRequest.getIdempotencyKey())) {
+            throw new IllegalArgumentException(
+                    "RetryCreateRequest.request.idempotencyKey must not be blank");
+        }
+        if (retryRequest.getRecovery() == null
+                || isBlank(retryRequest.getRecovery().getTaskType())) {
+            throw new IllegalArgumentException(
+                    "RetryCreateRequest.request.recovery.taskType must not be blank");
+        }
+        if (retryRequest.getPolicy() == null) {
+            throw new IllegalArgumentException(
+                    "RetryCreateRequest.request.policy must not be null");
+        }
+        if (retryRequest.getCreatedAt() == null) {
+            throw new IllegalArgumentException(
+                    "RetryCreateRequest.request.createdAt must not be null");
+        }
+        RetryState initialState = request.getInitialState();
+        if (initialState == null) {
+            throw new IllegalArgumentException(
+                    "RetryCreateRequest.initialState must not be null");
+        }
+        if (initialState.getStatus() == null) {
+            throw new IllegalArgumentException(
+                    "RetryCreateRequest.initialState.status must not be null");
+        }
+        if (initialState.getAttempts() < 0) {
+            throw new IllegalArgumentException(
+                    "RetryCreateRequest.initialState.attempts must not be negative");
+        }
+    }
+
+    private static void validateExistingTaskId(RetryRecord resolved, RetryCreateRequest request) {
+        String requestTaskId = request.getRequest().getTaskId();
+        if (requestTaskId != null && !requestTaskId.equals(resolved.getRequest().getTaskId())) {
+            throw new IllegalArgumentException(
+                    "Existing retry task id does not match request.taskId");
+        }
+    }
+
+    private static long requireExactPositiveMillis(Duration duration) {
+        if (duration == null) {
+            throw new IllegalArgumentException(
+                    "foregroundRecoveryTimeout must not be null");
+        }
+        if (duration.isNegative() || duration.isZero()) {
+            throw new IllegalArgumentException(
+                    "foregroundRecoveryTimeout must contain positive milliseconds");
+        }
+        if (duration.getNano() % 1_000_000L != 0L) {
+            throw new IllegalArgumentException(
+                    "foregroundRecoveryTimeout must be exact in milliseconds");
+        }
+        try {
+            long millis = duration.toMillis();
+            if (millis <= 0L) {
+                throw new ArithmeticException("non-positive");
+            }
+            return millis;
+        } catch (ArithmeticException ex) {
+            throw new IllegalArgumentException(
+                    "foregroundRecoveryTimeout must fit in positive milliseconds", ex);
+        }
+    }
+
+    private static void requireText(String value, String name) {
+        if (isBlank(value)) {
+            throw new IllegalArgumentException(name + " must not be blank");
+        }
+    }
+
+    private static boolean isBlank(String value) {
+        return value == null || value.trim().isEmpty();
     }
 }

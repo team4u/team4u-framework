@@ -15,4 +15,8 @@ public class SuccessRecord {
      * 成功完成的时间
      */
     private Instant succeededAt;
+    /**
+     * 成功前已执行的总尝试次数
+     */
+    private Integer attempts;
 }

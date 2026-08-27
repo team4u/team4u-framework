@@ -4,6 +4,7 @@ import com.team4u.framework.base.convert.ConvertUtil;
 import com.team4u.framework.retry.config.BackoffConfig;
 import lombok.EqualsAndHashCode;
 
+import java.util.Collections;
 import java.util.Map;
 
 /**
@@ -35,6 +36,14 @@ public class FixedBackoff implements Backoff {
     public long calculateMillis(int attempt) {
         Backoff.validateAttempt(attempt);
         return delayMillis;
+    }
+
+    @Override
+    public BackoffConfig toConfig() {
+        BackoffConfig config = new BackoffConfig();
+        config.setType("fixed");
+        config.setParams(Collections.<String, Object>singletonMap("delay", delayMillis));
+        return config;
     }
 
     /**

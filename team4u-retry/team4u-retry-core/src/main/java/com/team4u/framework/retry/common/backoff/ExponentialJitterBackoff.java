@@ -51,6 +51,13 @@ public class ExponentialJitterBackoff implements Backoff {
         return ThreadLocalRandom.current().nextLong(initialDelayMillis, maxCalculatedDelay + 1L);
     }
 
+    @Override
+    public BackoffConfig toConfig() {
+        BackoffConfig config = exponentialBackoff.toConfig();
+        config.setType("exponentialJitter");
+        return config;
+    }
+
     /**
      * 带随机抖动的指数级退避策略工厂
      */

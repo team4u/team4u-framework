@@ -4,6 +4,7 @@ import com.team4u.framework.base.convert.ConvertUtil;
 import com.team4u.framework.retry.config.BackoffConfig;
 import lombok.EqualsAndHashCode;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -53,10 +54,23 @@ public class ExponentialBackoff implements Backoff {
     public long calculateMillis(int attempt) {
         Backoff.validateAttempt(attempt);
         double calculatedDelay = initialDelayMillis * Math.pow(multiplier, attempt - 1);
-        if (Double.isNaN(calculatedDelay) || Double.isInfinite(calculatedDelay) || calculatedDelay >= maxDelayMillis) {
+        if (Double.isNaN(calculatedDelay) || Double.isInfinite(calculatedDelay)
+                || calculatedDelay >= maxDelayMillis) {
             return maxDelayMillis;
         }
         return (long) calculatedDelay;
+    }
+
+    @Override
+    public BackoffConfig toConfig() {
+        BackoffConfig config = new BackoffConfig();
+        config.setType("exponential");
+        Map<String, Object> params = new LinkedHashMap<String, Object>();
+        params.put("initialDelay", initialDelayMillis);
+        params.put("multiplier", multiplier);
+        params.put("maxDelay", maxDelayMillis);
+        config.setParams(params);
+        return config;
     }
 
     /**

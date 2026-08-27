@@ -8,7 +8,7 @@ import com.team4u.framework.retry.proxy.invocation.InvocationRecoveryData;
 import com.team4u.framework.retry.proxy.serialize.JacksonRetryContextSerializer;
 import com.team4u.framework.retry.proxy.serialize.RetryContextSerializer;
 import com.team4u.framework.retry.managed.recovery.RecoveryContext;
-import com.team4u.framework.retry.managed.recovery.RecoveryHandler;
+import com.team4u.framework.retry.managed.recovery.StringRecoveryHandler;
 import lombok.Getter;
 import lombok.Setter;
 
@@ -23,7 +23,7 @@ import java.util.Map;
  * <p>
  * 给基于代理注解模式托管的重试任务使用，负责反射调用真实的目标组件。
  */
-public class InvocationReplay implements RecoveryHandler<String> {
+public class InvocationReplay implements StringRecoveryHandler {
 
     public static final String TASK_NAME = "ProxyInvocationReplay";
     private static final Map<String, Class<?>> PRIMITIVE_TYPES = primitiveTypes();

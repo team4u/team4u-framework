@@ -210,7 +210,12 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
             }
             // Completed 只在 durable SUCCEEDED 写入成功后才成立。
             try {
-                store.markSucceeded(record.getTaskId(), SuccessRecord.builder().succeededAt(Instant.now()).build());
+                Instant succeededAt = Instant.now();
+                store.markSucceeded(record.getTaskId(), SuccessRecord.builder()
+                        .succeededAt(succeededAt)
+                        .attempts(failedAttemptsSoFar + 1)
+                        .build());
+                record.getState().setSucceededAt(succeededAt);
             } catch (RuntimeException ex) {
                 throw new DurableSuccessWriteException(record.getTaskId(), ex);
             }
@@ -276,11 +281,15 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
      * 标记任务为最终失败。
      */
     private void markFinalFailure(RetryRecord record, int attempts, FailureRecord failure) {
-        store.markFailed(record.getTaskId(), failure);
+        FailureRecord durableFailure = failure.getAttempts() == null
+                ? failure.toBuilder().attempts(attempts).build()
+                : failure;
+        store.markFailed(record.getTaskId(), durableFailure);
         record.getState().setAttempts(attempts);
         record.getState().setStatus(RetryStatus.FAILED);
-        record.getState().setLastErrorCode(failure.getErrorCode());
-        record.getState().setLastErrorMessage(failure.getErrorMessage());
+        record.getState().setLastErrorCode(durableFailure.getErrorCode());
+        record.getState().setLastErrorMessage(durableFailure.getErrorMessage());
+        record.getState().setFailedAt(durableFailure.getFailedAt());
         record.getState().setNextRunAt(null);
     }
 

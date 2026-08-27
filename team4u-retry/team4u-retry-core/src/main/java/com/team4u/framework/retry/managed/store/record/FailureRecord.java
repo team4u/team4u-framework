@@ -9,7 +9,7 @@ import java.time.Instant;
  * 失败异常记录。
  */
 @Data
-@Builder
+@Builder(toBuilder = true)
 public class FailureRecord {
     /**
      * 异常或者失败代码
@@ -23,4 +23,8 @@ public class FailureRecord {
      * 失败发生的时间
      */
     private Instant failedAt;
+    /**
+     * 最终失败前已执行的总尝试次数
+     */
+    private Integer attempts;
 }

@@ -5,21 +5,17 @@ import java.lang.reflect.InvocationHandler;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Proxy;
-import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.SQLException;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
+import java.util.TreeMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 可观测的数据源装饰器
- * <p>
- * 该类通过对 {@link DataSource}、{@link Connection} 和 {@link PreparedStatement} 进行三层动态代理，
- * 拦截并统计 SQL 的执行行为。主要用于单元测试中验证“热点路径优化”，例如确保 `publishIfAbsent` 仅产生单次插入，
- * 或者 `acquire` 在无竞争时仅产生必要的查询和更新。
+ * JDBC observer used by module tests to assert SQL shape, statement count and bound parameters.
  */
 final class ObservedDataSource {
 
@@ -27,6 +23,10 @@ final class ObservedDataSource {
     private final AtomicInteger executionCount = new AtomicInteger();
     private final List<SqlInterceptor> interceptors = new CopyOnWriteArrayList<SqlInterceptor>();
     private final List<String> executedSql = new CopyOnWriteArrayList<String>();
+    private final List<List<Object>> executedParameters = new CopyOnWriteArrayList<List<Object>>();
+    private String currentSql;
+    private final TreeMap<Integer, Object> currentParameters = new TreeMap<Integer, Object>();
+
     private ObservedDataSource(DataSource delegate) {
         this.dataSource = proxyDataSource(delegate);
     }
@@ -45,14 +45,20 @@ final class ObservedDataSource {
 
     void resetCount() {
         executionCount.set(0);
-    }
-
-    void addInterceptor(SqlInterceptor interceptor) {
-        interceptors.add(interceptor);
+        executedSql.clear();
+        executedParameters.clear();
     }
 
     List<String> executedSql() {
         return new ArrayList<String>(executedSql);
+    }
+
+    List<List<Object>> executedParameters() {
+        return new ArrayList<List<Object>>(executedParameters);
+    }
+
+    void addInterceptor(SqlInterceptor interceptor) {
+        interceptors.add(interceptor);
     }
 
     private DataSource proxyDataSource(final DataSource delegate) {
@@ -61,8 +67,8 @@ final class ObservedDataSource {
             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
                 try {
                     Object result = method.invoke(delegate, args);
-                    if (result instanceof Connection) {
-                        return proxyConnection((Connection) result);
+                    if (result instanceof java.sql.Connection) {
+                        return proxyConnection((java.sql.Connection) result);
                     }
                     return result;
                 } catch (InvocationTargetException e) {
@@ -72,8 +78,8 @@ final class ObservedDataSource {
         });
     }
 
-    private Connection proxyConnection(final Connection delegate) {
-        return proxy(Connection.class, new InvocationHandler() {
+    private java.sql.Connection proxyConnection(final java.sql.Connection delegate) {
+        return proxy(java.sql.Connection.class, new InvocationHandler() {
             @Override
             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
                 try {
@@ -81,9 +87,7 @@ final class ObservedDataSource {
                     String name = method.getName();
                     if ((result instanceof PreparedStatement)
                             && ("prepareStatement".equals(name) || "prepareCall".equals(name))
-                            && args != null
-                            && args.length > 0
-                            && args[0] instanceof String) {
+                            && args != null && args.length > 0 && args[0] instanceof String) {
                         return proxyPreparedStatement((PreparedStatement) result, (String) args[0]);
                     }
                     return result;
@@ -98,17 +102,24 @@ final class ObservedDataSource {
         return proxy(PreparedStatement.class, new InvocationHandler() {
             @Override
             public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+                String name = method.getName();
                 try {
-                    String name = method.getName();
-                    if ("execute".equals(name)
-                            || "executeUpdate".equals(name)
-                            || "executeQuery".equals(name)
-                            || "executeLargeUpdate".equals(name)) {
+                    if (name.startsWith("set") && args != null && args.length >= 2
+                            && args[0] instanceof Integer) {
+                        currentParameters.put((Integer) args[0], args[1]);
+                    }
+                    if ("execute".equals(name) || "executeUpdate".equals(name)
+                            || "executeQuery".equals(name) || "executeLargeUpdate".equals(name)) {
                         beforeExecute(sql);
                     }
                     return method.invoke(delegate, args);
                 } catch (InvocationTargetException e) {
                     throw e.getCause();
+                } finally {
+                    if ("execute".equals(name) || "executeUpdate".equals(name)
+                            || "executeQuery".equals(name) || "executeLargeUpdate".equals(name)) {
+                        currentParameters.clear();
+                    }
                 }
             }
         });
@@ -118,6 +129,7 @@ final class ObservedDataSource {
         executionCount.incrementAndGet();
         String normalizedSql = normalize(sql);
         executedSql.add(normalizedSql);
+        executedParameters.add(new ArrayList<Object>(currentParameters.values()));
         for (SqlInterceptor interceptor : interceptors) {
             interceptor.beforeExecute(normalizedSql);
         }

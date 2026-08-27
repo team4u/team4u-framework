@@ -15,11 +15,11 @@ import java.sql.SQLFeatureNotSupportedException;
 import java.util.logging.Logger;
 
 /**
- * JDBC 租约后端测试支持类
+ * Minimal H2 MySQL-mode datasource and schema initializer for JDBC contract tests.
  */
 final class JdbcLeaseBackendTestSupport {
 
-    private static final String SCHEMA_RESOURCE = "schema/lease_task_mysql.sql";
+    private static final String SCHEMA_RESOURCE = "lease_task_h2.sql";
 
     private JdbcLeaseBackendTestSupport() {
     }
@@ -65,15 +65,12 @@ final class JdbcLeaseBackendTestSupport {
         }
     }
 
-    /**
-     * 极简的数据源实现，仅供测试使用
-     */
     private static class SimpleDataSource implements DataSource {
         private final String url;
         private final String user;
         private final String password;
 
-        public SimpleDataSource(String url, String user, String password) {
+        SimpleDataSource(String url, String user, String password) {
             this.url = url;
             this.user = user;
             this.password = password;

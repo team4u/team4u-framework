@@ -38,7 +38,7 @@
 
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
-| **[租约任务组件](docs/lease/README.md)** | `team4u-lease` | 独占租约与排他性长任务调度框架。通过可过期租约令牌与乐观锁版本控制实现安全抢占、心跳自动续约、故障接管、业务键幂等建档与优雅停机。 | [概览](docs/lease/README.md) · [快速开始](docs/lease/quick-start.md) |
+| **[租约任务组件](docs/lease/README.md)** | `team4u-lease` | 排他任务调度框架。通过队列化 Task/Worker/Result API 提供延迟调度、精确类型订阅、心跳续约、故障接管与业务键幂等建档，支持 Memory 与 MySQL 持久化后端。 | [概览](docs/lease/README.md) · [快速开始](docs/lease/quick-start.md) |
 | **[通用重试组件](docs/retry/README.md)** | `team4u-retry` | 统一重试治理框架。支持进程内即时同步/异步重试 (`INLINE`)，以及基于租约持久化的跨进程后台托管补偿重试 (`MANAGED`)，支持 `@Retryable` 注解与动态策略下发。 | [概览](docs/retry/README.md) · [快速开始](docs/retry/quick-start.md) |
 
 ---
