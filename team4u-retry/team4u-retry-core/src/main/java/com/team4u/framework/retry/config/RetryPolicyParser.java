@@ -2,8 +2,9 @@ package com.team4u.framework.retry.config;
 
 import com.team4u.framework.base.util.ClassUtil;
 import com.team4u.framework.serializer.json.JsonUtil;
-import com.team4u.framework.retry.common.backoff.BackoffRegistry;
 import com.team4u.framework.retry.api.RetryPolicy;
+import com.team4u.framework.retry.common.backoff.Backoff;
+import com.team4u.framework.retry.common.backoff.BackoffRegistry;
 
 import java.util.Collection;
 import java.util.Collections;
@@ -41,6 +42,9 @@ public class RetryPolicyParser {
             backoffCfg = new BackoffConfig();
         }
 
+        // 该校验先于异常类加载，保持既有错误优先级
+        Backoff backoff = BackoffRegistry.global().createBackoff(backoffCfg);
+
         // 注册需要通过重试来处理的异常类型
         Set<Class<? extends Throwable>> retryOnExceptions =
                 loadExceptionClasses(config.getRetryOnExceptions(), "retryOnExceptions");
@@ -53,7 +57,7 @@ public class RetryPolicyParser {
                 .maxRetries(config.getMaxRetries())
                 .condition(config.getCondition())
                 .foregroundMaxRetries(foregroundMaxRetries)
-                .backoff(BackoffRegistry.global().createBackoff(backoffCfg))
+                .backoff(backoff)
                 .retryOnExceptions(retryOnExceptions)
                 .abortOnExceptions(abortOnExceptions)
                 .build();
