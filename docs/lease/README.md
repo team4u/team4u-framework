@@ -37,18 +37,30 @@ import java.util.concurrent.TimeUnit;
 
 public final class FirstTaskDemo {
     public static void main(String[] args) throws Exception {
+        // 1. 创建一个名为 orders 的任务队列。
+        //    InMemoryLeaseBackend 把任务存在当前 JVM 里，适合本地运行和学习。
         TaskQueue orders = Leases.queue(new InMemoryLeaseBackend(), "orders");
+
+        // 2. 提交任务。
+        //    "order.cancel" 是任务类型，用来匹配 Worker 里的 handler；
+        //    payload 是传给 handler 的字符串数据，这里用一个简单的 JSON 表示订单号。
         Submission submission = orders.submit(
                 Task.of("order.cancel", "{\"orderId\":\"O-1001\"}"));
 
+        // 3. 创建并启动 Worker。Worker 会不断从 orders 队列取任务。
         TaskWorker worker = orders.worker()
+                // 只处理 order.cancel 类型的任务；其他类型会留给能处理它们的 Worker。
                 .handle("order.cancel", context -> {
+                    // context.getPayload() 就是提交任务时传入的字符串。
                     System.out.println("处理任务: " + context.getPayload());
+                    // handler 返回 success 后，框架会把任务状态写成 SUCCEEDED。
                     return TaskResult.success();
                 })
                 .build()
                 .start();
 
+        // 4. 主线程轮询任务状态，直到 Worker 写回最终结果。
+        //    Worker 在另一个线程执行，所以这里不能提交后立刻查询一次就结束。
         try {
             long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(5);
             TaskStatus status = null;
@@ -66,6 +78,7 @@ public final class FirstTaskDemo {
             }
             System.out.println("任务最终状态: " + status);
         } finally {
+            // 5. 服务退出前关闭 Worker，避免线程泄漏。
             worker.shutdown();
         }
     }
@@ -99,6 +112,7 @@ Worker 执行前会先获得一份带到期时间的执行权。可以把它想�
 
 ```java
 Task.of("order.cancel", payload)
+        // 相同 queue + taskType + deduplicationKey 只会创建一条任务记录。
         .deduplicationKey("O-1001");
 ```
 
