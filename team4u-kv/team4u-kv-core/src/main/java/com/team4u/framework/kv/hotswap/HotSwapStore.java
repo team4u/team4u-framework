@@ -1,7 +1,9 @@
 package com.team4u.framework.kv.hotswap;
 
 import com.team4u.framework.kv.KvStore;
+import com.team4u.framework.kv.StoreWrapper;
 import com.team4u.framework.proxy.ProxyBuilder;
+import com.team4u.framework.proxy.core.ProxyException;
 import com.team4u.framework.proxy.support.Swappable;
 import lombok.extern.slf4j.Slf4j;
 
@@ -43,12 +45,21 @@ public final class HotSwapStore {
      * 包装初始存储，返回支持运行时热交换的 {@link KvStore} 代理
      * <p>
      * 返回对象同时实现了 {@link Swappable}，业务侧以 {@link KvStore} 类型持有即可。
+     * 初始存储实现 {@link StoreWrapper} 时，代理额外实现 {@link StoreWrapper}，
+     * {@code unwrap()} 经鸭子类型转发到<b>当前</b>委托——能力解析（见
+     * {@link com.team4u.framework.kv.KvStores}）在热交换后仍指向新存储。
+     * 已知边界：交换到未实现 StoreWrapper 的存储后，{@code unwrap()} 调用会以
+     * {@link ProxyException} 失败。
      * </p>
      */
     public static KvStore wrap(KvStore initial) {
         Objects.requireNonNull(initial, "initial store");
-        return ProxyBuilder.forClass(KvStore.class)
-                .delegate(initial)
+        ProxyBuilder<KvStore> builder = ProxyBuilder.forClass(KvStore.class)
+                .delegate(initial);
+        if (initial instanceof StoreWrapper) {
+            builder.withInterfaces(StoreWrapper.class);
+        }
+        return builder
                 .enableHotswap()
                 .build();
     }

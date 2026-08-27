@@ -6,6 +6,7 @@ import com.team4u.framework.kv.KvRecord;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.SpaceKey;
+import com.team4u.framework.kv.StoreWrapper;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Clock;
@@ -40,11 +41,13 @@ import java.util.Objects;
  *     <li>即使 L1 缓存实现尚未淘汰条目，读取也会按记录自身的过期时间戳兜底判定，
  *     不会返回已过期数据</li>
  * </ul>
+ * 支持能力解析（见 {@link com.team4u.framework.kv.KvStores}）：实现
+ * {@link StoreWrapper} 暴露内层 L2，锁管理器等能力协商组件可穿透本装饰层。
  *
  * @author jay.wu
  */
 @Slf4j
-public class TieredStore implements KvStore, AutoCloseable {
+public class TieredStore implements KvStore, AutoCloseable, StoreWrapper {
 
 
     private final KvStore l2;
@@ -124,6 +127,11 @@ public class TieredStore implements KvStore, AutoCloseable {
             removeL1Quietly(key);
         }
         return renewed;
+    }
+
+    @Override
+    public KvStore unwrap() {
+        return l2;
     }
 
     /**

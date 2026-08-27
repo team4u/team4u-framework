@@ -4,6 +4,7 @@ import com.team4u.framework.kv.CasCapable;
 import com.team4u.framework.kv.KvRecord;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.KvStoreException;
+import com.team4u.framework.kv.KvStores;
 import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.SpaceKey;
 import lombok.extern.slf4j.Slf4j;
@@ -31,6 +32,9 @@ import java.util.concurrent.TimeUnit;
  * <p>
  * 互斥范围由底层存储决定：内存实现为进程内互斥；数据库/Redis 等共享存储为跨实例互斥。
  * 底层存储必须实现 {@link CasCapable}，否则构造期快速失败。
+ * 装饰链自动解析——可传入 ObservedStore/TieredStore 等装饰过的存储，
+ * 构造期经 {@link KvStores#capabilityOf} 沿装饰链找到 CasCapable 存储；
+ * 锁操作直达解析后的底层存储（不经过缓存/观测装饰层），避免缓存层让续约读到陈旧令牌。
  * 适合「尽量互斥」场景（任务防重、缓存刷新防击穿）；
  * 高精度互斥（金融扣减等）请结合业务幂等或专业锁组件。
  * </p>
@@ -56,12 +60,15 @@ public class KvLockManager implements AutoCloseable {
     }
 
     public KvLockManager(KvStore store, Clock clock, Config config) {
-        if (!(store instanceof CasCapable)) {
-            throw new KvStoreException("Lock requires a CasCapable store, got: "
+        CasCapable resolved = KvStores.capabilityOf(store, CasCapable.class);
+        if (resolved == null) {
+            throw new KvStoreException("Lock requires a CasCapable store (through decorator chains), got: "
                     + store.getClass().getName());
         }
-        this.store = store;
-        this.casStore = (CasCapable) store;
+        // 锁的全部操作（get/put/remove/expire/CAS）直达解析后的底层存储：
+        // 若经缓存装饰层续约，读到陈旧令牌会破坏续约正确性
+        this.store = (KvStore) resolved;
+        this.casStore = resolved;
         this.clock = clock;
         this.config = Objects.requireNonNull(config, "config");
         this.ownerId = config.getOwnerId() != null ? config.getOwnerId()

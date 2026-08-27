@@ -4,6 +4,7 @@ import com.team4u.framework.kv.KvEvent;
 import com.team4u.framework.kv.KvListener;
 import com.team4u.framework.kv.KvRecord;
 import com.team4u.framework.kv.KvStore;
+import com.team4u.framework.kv.KvStores;
 import com.team4u.framework.kv.ScanCapable;
 import com.team4u.framework.kv.SpaceKey;
 import lombok.extern.slf4j.Slf4j;
@@ -11,7 +12,6 @@ import lombok.extern.slf4j.Slf4j;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
 
@@ -26,6 +26,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * <p>
  * 与 {@code InMemoryKvStore} 的原生 watch 相比：只能发现「两次轮询之间」的
  * 最终状态，同键多次变更会合并为一次事件。
+ * 支持装饰过的存储（构造期自动沿装饰链解析内层 ScanCapable，见 {@link KvStores}）；
+ * 轮询的 scan/get 直达解析后的底层存储，保证读取新鲜度（不被 L1 缓存延迟）。
  * </p>
  *
  * @author jay.wu
@@ -42,12 +44,14 @@ public class PollingWatcher implements AutoCloseable {
     private final Thread poller;
 
     public PollingWatcher(KvStore store, long pollIntervalMillis) {
-        if (!(store instanceof ScanCapable)) {
+        ScanCapable resolved = KvStores.capabilityOf(store, ScanCapable.class);
+        if (resolved == null) {
             throw new IllegalArgumentException(
                     "PollingWatcher requires a ScanCapable store, got: "
-                            + store.getClass().getName());
+                            + store.getClass().getName() + "（含装饰链解析）");
         }
-        this.store = Objects.requireNonNull(store, "store");
+        // 轮询的 scan 与 get 直达解析后的底层存储：经 L1 缓存读取会把事件延迟到缓存 TTL 之后
+        this.store = (KvStore) resolved;
         this.pollIntervalMillis = pollIntervalMillis;
         this.poller = new Thread(this::pollLoop, "kv-polling-watcher");
         this.poller.setDaemon(true);
