@@ -34,3 +34,4 @@ Second review remediation: complete (docs: remove remaining provider leakage amb
 Task 2 review remediation: complete (fix(ci): track serializer provider transition).
 Task 3 review remediation: complete (fix(base): preserve retry fallback and migration records).
 Task 4 complete: locked the 53-case Spring Ant matrix and Criterion adapter/null behavior; commit `test(criterion): characterize wildcard semantics`.
+Task 4 review remediation: complete; corrected the local record confusion without changing the committed 53-case matrix or tests.
