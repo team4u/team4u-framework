@@ -14,6 +14,7 @@ package com.team4u.framework.kv;
  *
  * @author jay.wu
  */
+@lombok.Getter
 public final class SpaceKey {
 
     private static final char SEPARATOR = ':';
@@ -40,14 +41,6 @@ public final class SpaceKey {
 
     public static SpaceKey of(String space, String key) {
         return new SpaceKey(space, key);
-    }
-
-    public String getSpace() {
-        return space;
-    }
-
-    public String getKey() {
-        return key;
     }
 
     @Override

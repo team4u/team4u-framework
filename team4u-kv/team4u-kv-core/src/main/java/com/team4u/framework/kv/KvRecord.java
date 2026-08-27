@@ -1,5 +1,7 @@
 package com.team4u.framework.kv;
 
+import lombok.Getter;
+
 import java.util.Objects;
 
 /**
@@ -13,10 +15,13 @@ import java.util.Objects;
  *
  * @author jay.wu
  */
+@Getter
 public final class KvRecord {
 
-    private final String value;
+    /** 过期时间戳（epoch 毫秒），0 为永不过期 */
     private final long expireAt;
+
+    private final String value;
 
     private KvRecord(String value, long expireAt) {
         this.value = Objects.requireNonNull(value, "value");
@@ -64,17 +69,6 @@ public final class KvRecord {
      */
     public static KvRecord of(String value, long ttlMillis, long now) {
         return new KvRecord(value, expireAtOf(ttlMillis, now));
-    }
-
-    public String getValue() {
-        return value;
-    }
-
-    /**
-     * @return 过期时间戳（epoch 毫秒），0 为永不过期
-     */
-    public long getExpireAt() {
-        return expireAt;
     }
 
     public boolean canExpire() {

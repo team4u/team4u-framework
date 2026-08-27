@@ -6,8 +6,7 @@ import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.KvStoreException;
 import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.SpaceKey;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.Clock;
 import java.util.Objects;
@@ -38,9 +37,9 @@ import java.util.concurrent.TimeUnit;
  *
  * @author jay.wu
  */
+@Slf4j
 public class KvLockManager implements AutoCloseable {
 
-    private static final Logger log = LoggerFactory.getLogger(KvLockManager.class);
 
     private final KvStore store;
     private final CasCapable casStore;

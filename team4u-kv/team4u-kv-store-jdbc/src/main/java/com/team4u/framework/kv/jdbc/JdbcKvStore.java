@@ -7,8 +7,7 @@ import com.team4u.framework.kv.KvStoreException;
 import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.ScanCapable;
 import com.team4u.framework.kv.SpaceKey;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import javax.sql.DataSource;
 import java.sql.Connection;
@@ -39,9 +38,9 @@ import java.util.Objects;
  *
  * @author jay.wu
  */
+@Slf4j
 public class JdbcKvStore implements KvStore, CasCapable, ScanCapable, AutoCloseable {
 
-    private static final Logger log = LoggerFactory.getLogger(JdbcKvStore.class);
 
     /**
      * 建表 DDL：H2 与 MySQL 均兼容
