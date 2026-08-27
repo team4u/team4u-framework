@@ -95,12 +95,17 @@ public class ObservedStore implements KvStore {
     }
 
     private void opLog(String op, SpaceKey key, String value, long start, boolean hit) {
+        // 日志未启用时跳过脱敏与截断计算，避免热路径白算
+        if (!log.isDebugEnabled() && !log.isWarnEnabled()) {
+            return;
+        }
         long cost = System.currentTimeMillis() - start;
+        boolean slow = cost >= config.getSlowOpThresholdMillis();
         String masked = excerpt(value == null ? null : masker.mask(key, value));
-        if (cost >= config.getSlowOpThresholdMillis()) {
+        if (slow) {
             log.warn("KV_SLOW|{}|{}|{}|{}|{}|{}", op, key, hit,
                     value == null ? -1 : value.length(), masked, cost);
-        } else if (log.isDebugEnabled()) {
+        } else {
             log.debug("KV|{}|{}|{}|{}|{}|{}", op, key, hit,
                     value == null ? -1 : value.length(), masked, cost);
         }

@@ -27,7 +27,7 @@ public interface KvStore {
 
 ## 实现契约
 
-所有实现必须遵守（接口 Javadoc 同文）：
+所有实现必须遵守（完整版见 `KvStore` 接口 Javadoc）：
 
 | 契约 | 说明 |
 | :--- | :--- |
@@ -78,7 +78,7 @@ if (store instanceof CasCapable) {
 
 ## 内存实现：InMemoryKvStore
 
-基于 `ConcurrentHashMap`，声明全部能力，时间源可注入：
+基于 `ConcurrentHashMap`，声明 CAS / 扫描 / 订阅全部能力（无原生 TTL，靠惰性判定），时间源可注入：
 
 ```java
 // 默认系统时钟

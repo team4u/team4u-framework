@@ -72,7 +72,9 @@ public class JdbcKvStore implements KvStore, CasCapable, ScanCapable, AutoClosea
     }
 
     private void executeDdl() {
-        String ddl = DEFAULT_DDL.replace("kv_store", config.getTableName());
+        String ddl = DEFAULT_DDL
+                .replace("kv_store", config.getTableName())
+                .replace("VARCHAR(4000)", config.getValueColumnDefinition());
         try (Connection conn = dataSource.getConnection(); Statement st = conn.createStatement()) {
             st.execute(ddl);
         } catch (SQLException e) {
@@ -93,9 +95,11 @@ public class JdbcKvStore implements KvStore, CasCapable, ScanCapable, AutoClosea
                     return null;
                 }
                 KvRecord record = KvRecord.ofRaw(rs.getString(1), rs.getLong(2));
-                if (record.isExpired(now())) {
-                    // 惰性清理：读到的过期行顺手删除
-                    deleteQuietly(key);
+                long now = now();
+                if (record.isExpired(now)) {
+                    // 惰性清理：读到的过期行顺手删除（仅删除当时已确认过期的行，
+                    // 防止误删并发新写入——谓词使用读取时刻的时间）
+                    deleteQuietly(key, now);
                     return null;
                 }
                 return record;
@@ -129,7 +133,8 @@ public class JdbcKvStore implements KvStore, CasCapable, ScanCapable, AutoClosea
                             + " VALUES (?, ?, ?, ?)",
                     key.getSpace(), key.getKey(), record.getValue(), record.getExpireAt()) > 0;
         } catch (KvStoreException e) {
-            if (e.getCause() instanceof SQLException) {
+            if (isUniqueViolation(e)) {
+                // 并发写入撞唯一索引：转为 UPDATE
                 return executeUpdate(
                         "UPDATE " + config.getTableName() + " SET kv_value=?, expire_at=?"
                                 + " WHERE space=? AND name=?",
@@ -137,6 +142,19 @@ public class JdbcKvStore implements KvStore, CasCapable, ScanCapable, AutoClosea
             }
             throw e;
         }
+    }
+
+    /**
+     * 仅唯一约束冲突（SQLState 23*）视为并发写入，其余（连接故障等）原样抛出，
+     * 防止基础设施故障被误判为「键已存在」
+     */
+    private static boolean isUniqueViolation(KvStoreException e) {
+        if (!(e.getCause() instanceof SQLException)) {
+            return false;
+        }
+        String sqlState = ((SQLException) e.getCause()).getSQLState();
+        return e.getCause() instanceof java.sql.SQLIntegrityConstraintViolationException
+                || (sqlState != null && sqlState.startsWith("23"));
     }
 
     private boolean putIfAbsent(SpaceKey key, KvRecord record) {
@@ -150,8 +168,11 @@ public class JdbcKvStore implements KvStore, CasCapable, ScanCapable, AutoClosea
                             + " VALUES (?, ?, ?, ?)",
                     key.getSpace(), key.getKey(), record.getValue(), record.getExpireAt()) > 0;
         } catch (KvStoreException e) {
-            // 唯一索引冲突 = 键已存在
-            return false;
+            if (isUniqueViolation(e)) {
+                // 唯一索引冲突 = 键已存在
+                return false;
+            }
+            throw e;
         }
     }
 
@@ -162,8 +183,8 @@ public class JdbcKvStore implements KvStore, CasCapable, ScanCapable, AutoClosea
                         + " WHERE space=? AND name=? AND (expire_at = 0 OR expire_at > ?)",
                 key.getSpace(), key.getKey(), now()) > 0;
         if (!removed) {
-            // 顺手清理可能存在的过期残留行
-            deleteQuietly(key);
+            // 顺手清理可能存在的过期残留行（仅存活过期行）
+            deleteQuietly(key, now());
         }
         return removed;
     }
@@ -238,10 +259,11 @@ public class JdbcKvStore implements KvStore, CasCapable, ScanCapable, AutoClosea
         }
     }
 
-    private void deleteQuietly(SpaceKey key) {
+    private void deleteQuietly(SpaceKey key, long expiredBefore) {
         try {
             executeUpdate("DELETE FROM " + config.getTableName()
-                    + " WHERE space=? AND name=?", key.getSpace(), key.getKey());
+                            + " WHERE space=? AND name=? AND expire_at > 0 AND expire_at <= ?",
+                    key.getSpace(), key.getKey(), expiredBefore);
         } catch (RuntimeException e) {
             log.warn("Lazy delete expired row failed|key={}", key, e);
         }
@@ -274,5 +296,11 @@ public class JdbcKvStore implements KvStore, CasCapable, ScanCapable, AutoClosea
          * 启动时是否自动建表（不存在则创建）
          */
         private boolean autoCreateTable = true;
+
+        /**
+         * 值列的 DDL 类型定义。默认 VARCHAR(4000)，
+         * JSON 等长值场景可调整为 TEXT 等大字段类型
+         */
+        private String valueColumnDefinition = "VARCHAR(4000)";
     }
 }

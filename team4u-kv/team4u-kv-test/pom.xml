@@ -18,11 +18,12 @@
             <artifactId>team4u-kv-core</artifactId>
             <version>${project.version}</version>
         </dependency>
-        <!-- 契约测试基类位于 main 源码（供下游模块继承），junit 需编译期可见 -->
+        <!-- 契约测试基类位于 main 源码（供下游模块继承），junit 以 provided 传递，
+             对齐 team4u-lease-test 惯例，不泄漏给消费者 -->
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
-            <scope>compile</scope>
+            <scope>provided</scope>
         </dependency>
     </dependencies>
 </project>

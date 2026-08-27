@@ -6,6 +6,8 @@ import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.SpaceKey;
 import com.team4u.framework.kv.memory.InMemoryKvStore;
 import com.team4u.framework.kv.test.TestKvContext.SettableClock;
+import java.time.Clock;
+
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -181,6 +183,62 @@ public class KvLockManagerTest {
             fail("closed manager must reject new acquire");
         } catch (IllegalStateException expected) {
             assertTrue(expected.getMessage().contains("closed"));
+        }
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void nonPositiveLeaseRejected() {
+        manager.tryAcquire("job", 0);
+    }
+
+    /**
+     * 真实时钟验证心跳自动续约：lease 400ms + 心跳 100ms，
+     * 无续约时锁 400ms 后过期，有心跳时持续存活
+     */
+    @Test
+    public void heartbeatRenewsLeaseAutomatically() throws Exception {
+        InMemoryKvStore realStore = new InMemoryKvStore();   // 系统时钟
+        KvLockManager beating = new KvLockManager(realStore,
+                Clock.systemUTC(),
+                new KvLockManager.Config().setHeartbeatIntervalMillis(100));
+        KvLockManager idle = new KvLockManager(realStore,
+                Clock.systemUTC(),
+                new KvLockManager.Config().setHeartbeatIntervalMillis(3600_000));
+        try {
+            KvLock beat = beating.tryAcquire("heartbeat", 400);
+            KvLock still = idle.tryAcquire("idle", 400);
+            assertNotNull(beat);
+            assertNotNull(still);
+
+            Thread.sleep(900);   // > 2×lease：无续约的锁必然过期
+
+            assertTrue("心跳续约使锁持续存活", beat.isHeld());
+            assertFalse("无心跳的锁已过期", still.isHeld());
+        } finally {
+            beating.close();
+            idle.close();
+        }
+    }
+
+    /**
+     * 短租约触发自适应心跳：lease 300ms + 配置间隔 10s，
+     * 心跳自动收缩到 lease/3，锁存活超过 lease
+     */
+    @Test
+    public void heartbeatIntervalAdaptsToShortLease() throws Exception {
+        InMemoryKvStore realStore = new InMemoryKvStore();
+        KvLockManager manager = new KvLockManager(realStore,
+                Clock.systemUTC(),
+                new KvLockManager.Config().setHeartbeatIntervalMillis(10_000));
+        try {
+            KvLock lock = manager.tryAcquire("short", 300);
+            assertNotNull(lock);
+
+            Thread.sleep(700);   // > 2×lease
+
+            assertTrue("自适应心跳应保证短租约锁存活", lock.isHeld());
+        } finally {
+            manager.close();
         }
     }
 
