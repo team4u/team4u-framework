@@ -61,6 +61,7 @@ record.expire(60_000, now); // 续期后的新记录，原记录不变
 | 能力接口 | 方法 | 典型实现 | 用途 |
 | :--- | :--- | :--- | :--- |
 | `CasCapable` | `compareAndSet(key, expectedValue, update)`<br/>`compareAndRemove(key, expectedValue)` | memory（compute）、jdbc（条件 UPDATE）、redis（Lua） | 锁的 fencing 安全续期/释放 |
+| `CounterCapable` | `incrementAndGet(key, delta)` | memory（`AtomicLong`）、jdbc（`SELECT FOR UPDATE` 行锁）、redis（`INCRBY`） | 序号生成（team4u-id）、计数器 |
 | `ScanCapable` | `scan(space)`<br/>`pruneExpired(space, maxBatch)` | memory、jdbc、redis（SCAN） | 轮询订阅、过期清理 |
 | `WatchCapable` | `watch(space, listener)` | memory（写入路径同步分发） | 变更订阅 |
 | `NativeTtlCapable` | 标记接口 | redis | 清理器跳过该存储 |
@@ -80,7 +81,7 @@ if (store instanceof CasCapable) {
 
 ## 内存实现：InMemoryKvStore
 
-基于 `ConcurrentHashMap`，声明 CAS / 扫描 / 订阅全部能力（无原生 TTL，靠惰性判定），时间源可注入：
+基于 `ConcurrentHashMap`，声明 CAS / 计数 / 扫描 / 订阅全部能力（无原生 TTL，靠惰性判定），时间源可注入：
 
 ```java
 // 默认系统时钟

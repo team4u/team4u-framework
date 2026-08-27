@@ -1,6 +1,7 @@
 package com.team4u.framework.kv.memory;
 
 import com.team4u.framework.kv.CasCapable;
+import com.team4u.framework.kv.CounterCapable;
 import com.team4u.framework.kv.KvEvent;
 import com.team4u.framework.kv.KvListener;
 import com.team4u.framework.kv.KvRecord;
@@ -18,6 +19,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 内存键值存储
@@ -28,17 +30,23 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * 提供主动清理入口（写多读少的冷键由清理器调用 pruneExpired 止血）。
  * </p>
  * 时间源可注入（{@link Clock}），便于测试中虚拟时间推进。
- * 实现 {@link CasCapable}、{@link ScanCapable}、{@link WatchCapable} 全部能力。
+ * 实现 {@link CasCapable}、{@link ScanCapable}、{@link WatchCapable}、
+ * {@link CounterCapable} 全部能力。
  *
  * @author jay.wu
  */
 @Slf4j
-public class InMemoryKvStore implements KvStore, CasCapable, ScanCapable, WatchCapable, AutoCloseable {
+public class InMemoryKvStore implements KvStore, CasCapable, ScanCapable, WatchCapable,
+        CounterCapable, AutoCloseable {
 
 
     private final ConcurrentHashMap<SpaceKey, KvRecord> map = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<KvListener>> listeners =
             new ConcurrentHashMap<>();
+    /**
+     * 计数器与记录值域分开维护，互不干扰
+     */
+    private final ConcurrentHashMap<SpaceKey, AtomicLong> counters = new ConcurrentHashMap<>();
     private final Clock clock;
 
     public InMemoryKvStore() {
@@ -205,6 +213,11 @@ public class InMemoryKvStore implements KvStore, CasCapable, ScanCapable, WatchC
     }
 
     @Override
+    public long incrementAndGet(SpaceKey key, long delta) {
+        return counters.computeIfAbsent(key, k -> new AtomicLong()).addAndGet(delta);
+    }
+
+    @Override
     public AutoCloseable watch(String space, KvListener listener) {
         CopyOnWriteArrayList<KvListener> list =
                 listeners.computeIfAbsent(space, k -> new CopyOnWriteArrayList<>());
@@ -216,6 +229,7 @@ public class InMemoryKvStore implements KvStore, CasCapable, ScanCapable, WatchC
     public void close() {
         map.clear();
         listeners.clear();
+        counters.clear();
     }
 
     private void fire(KvEvent event) {

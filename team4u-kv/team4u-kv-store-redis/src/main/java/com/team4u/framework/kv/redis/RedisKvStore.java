@@ -1,6 +1,7 @@
 package com.team4u.framework.kv.redis;
 
 import com.team4u.framework.kv.CasCapable;
+import com.team4u.framework.kv.CounterCapable;
 import com.team4u.framework.kv.KvRecord;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.KvStoreException;
@@ -34,6 +35,8 @@ import java.util.concurrent.TimeUnit;
  *     {@code setIfAbsent(key, value, timeout)}</li>
  *     <li><b>Lua CAS</b>（实现 {@link CasCapable}）：单脚本原子完成
  *     「比较值 → 替换/删除」，是分布式锁的可靠底座</li>
+ *     <li><b>INCRBY 原子计数</b>（实现 {@link CounterCapable}）：
+ *     计数键与普通值键共享物理键空间，同一键不可混用两种语义</li>
  *     <li><b>SCAN 扫描</b>：{@code scan(space)} 以 SCAN 游标遍历
  *     {@code space:*} 前缀（不使用阻塞的 KEYS）</li>
  * </ul>
@@ -43,7 +46,7 @@ import java.util.concurrent.TimeUnit;
  * @author jay.wu
  */
 public class RedisKvStore implements KvStore, CasCapable, ScanCapable, NativeTtlCapable,
-        AutoCloseable {
+        CounterCapable, AutoCloseable {
 
     /**
      * 值匹配则替换（ARGV1=期望值, ARGV2=新值, ARGV3=新TTL毫秒，0 为持久化）
@@ -165,6 +168,19 @@ public class RedisKvStore implements KvStore, CasCapable, ScanCapable, NativeTtl
             return result != null && result == 1;
         } catch (DataAccessException e) {
             throw new KvStoreException("CompareAndRemove failed|key=" + key, e);
+        }
+    }
+
+    @Override
+    public long incrementAndGet(SpaceKey key, long delta) {
+        try {
+            Long value = redis.opsForValue().increment(physical(key), delta);
+            if (value == null) {
+                throw new KvStoreException("Increment returned null|key=" + key);
+            }
+            return value;
+        } catch (DataAccessException e) {
+            throw new KvStoreException("IncrementAndGet failed|key=" + key, e);
         }
     }
 

@@ -10,7 +10,7 @@
 
 ## 契约内容
 
-`AbstractKvStoreContractTest` 固化了 13 项行为契约：
+`AbstractKvStoreContractTest` 固化了 15 项行为契约：
 
 | 类别 | 契约 |
 | :--- | :--- |
@@ -18,6 +18,7 @@
 | 过期语义 | 过期数据不可见；`get` 返回的 `expireAt` 精确（±50ms）；过期数据不阻塞 `IF_ABSENT`；`expire` 续期保值 |
 | 原子性 | **并发 `IF_ABSENT` 恰好一个胜者**（8 线程竞争） |
 | CAS | 值匹配替换/删除；值不匹配失败；键过期后 CAS 失败 |
+| 计数 | 键不存在从 0 开始；返回递增后精确值；计数与值域互不干扰；**并发递增不丢失**（8 线程 × 100 次） |
 | 扫描 | `scan` 过滤键空间与过期；`pruneExpired` 批量清理 |
 | 订阅 | `watch` 收到 PUT/REMOVE 事件 |
 

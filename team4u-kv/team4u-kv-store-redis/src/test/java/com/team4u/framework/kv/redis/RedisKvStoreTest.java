@@ -1,5 +1,6 @@
 package com.team4u.framework.kv.redis;
 
+import com.team4u.framework.kv.CounterCapable;
 import com.team4u.framework.kv.KvRecord;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.KvStoreException;
@@ -10,6 +11,7 @@ import com.team4u.framework.kv.test.TestKvContext.SettableClock;
 import org.junit.Before;
 import org.junit.Test;
 import org.mockito.ArgumentCaptor;
+import org.springframework.dao.QueryTimeoutException;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.RedisScript;
@@ -20,6 +22,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
@@ -123,6 +126,27 @@ public class RedisKvStoreTest {
         when(redis.persist(KEY)).thenReturn(true);
         assertTrue(store.expire(SpaceKey.of("user", "u1"), 0));
         verify(redis).persist(KEY);
+    }
+
+    @Test
+    public void incrementAndGetMapsToIncrBy() {
+        assertTrue(store instanceof CounterCapable);
+
+        when(valueOps.increment(KEY, 5)).thenReturn(5L);
+        assertEquals(5, ((CounterCapable) store).incrementAndGet(SpaceKey.of("user", "u1"), 5));
+    }
+
+    @Test
+    public void incrementFailureWrappedAsStoreException() {
+        CounterCapable counter = (CounterCapable) store;
+        when(valueOps.increment(anyString(), any(Long.class)))
+                .thenThrow(new QueryTimeoutException("timeout"));
+        try {
+            counter.incrementAndGet(SpaceKey.of("user", "u1"), 1);
+            fail("expected KvStoreException");
+        } catch (KvStoreException e) {
+            assertTrue(e.getCause() instanceof QueryTimeoutException);
+        }
     }
 
     @SuppressWarnings("unchecked")

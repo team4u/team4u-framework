@@ -19,7 +19,7 @@
 组件分为三层：
 
 - **核心层**：`KvStore` 只有 4 个原子操作（`get` / `put` / `remove` / `expire`），恰好是锁、幂等、TTL 缓存的最小完备集。没有一个是「内存实现容易、外部存储做不动」的操作——每个都能映射到 Redis 原生命令（GET / SET+NX / DEL / EXPIRE）或一组简单 SQL（原子性由唯一索引/行锁保证）；
-- **能力层**：需要更多能力的实现按接口声明——`CasCapable`（原子比较替换）、`ScanCapable`（扫描与清理）、`WatchCapable`（变更订阅）、`NativeTtlCapable`（原生过期）。调用方按 `instanceof` 协商，接口即文档；
+- **能力层**：需要更多能力的实现按接口声明——`CasCapable`（原子比较替换）、`CounterCapable`（原子计数）、`ScanCapable`（扫描与清理）、`WatchCapable`（变更订阅）、`NativeTtlCapable`（原生过期）。调用方按 `instanceof` 协商，接口即文档；
 - **组合层**：分层缓存、观测、重试、热交换都是可自由拼装的装饰器（`TieredStore` / `ObservedStore` / `RetryableStore` / `HotSwapStore`），不引入继承体系。
 
 ```mermaid
@@ -57,6 +57,7 @@ graph LR
 | `KvRecord` | 不可变记录：值 + 过期时间戳（epoch 毫秒，`0` 为永不过期） |
 | `KvStore` | 核心接口：`get` / `put`(SET\|IF_ABSENT) / `remove` / `expire` |
 | `CasCapable` | 原子比较替换/删除（按值精确匹配），锁与所有权安全续期的基础 |
+| `CounterCapable` | 键级原子计数（`incrementAndGet`），序号生成（`team4u-id`）的基础 |
 | `ScanCapable` | 按键空间扫描存活键、批量物理清理过期残留 |
 | `WatchCapable` | 订阅键空间的变更事件（PUT / REMOVE） |
 | `NativeTtlCapable` | 标记存储自身支持过期淘汰（如 Redis），清理器自动跳过 |
@@ -64,7 +65,7 @@ graph LR
 | `TieredStore` | L1 本地缓存（base 的 `Cache`）+ L2 远程存储装饰器 |
 | `KvLockManager` / `KvLock` | 持有者令牌 + 心跳续约 + fencing 安全释放的分布式锁 |
 | `ExpiringValue<V>` | 过期值源：cache-aside / refresh-ahead / singleflight 声明化 |
-| `AbstractKvStoreContractTest` | 13 项行为契约测试基类，保证多后端行为一致 |
+| `AbstractKvStoreContractTest` | 15 项行为契约测试基类，保证多后端行为一致 |
 
 ## 设计目标
 
