@@ -16,7 +16,28 @@ Team4u 1.0 publishes one dependency-management POM. Import the root POM; there i
         </dependency>
     </dependencies>
 </dependencyManagement>
+
+## CI and consumer contract profiles
+
+Developers can run the currently green external-consumer set with:
+
+```bash
+mvn -Pconsumer-it -DskipTests verify
 ```
+
+The set currently covers the serializer API, explicit Jackson provider, and JDK interface proxy consumers. The minimal and config-core transition guards can be selected explicitly with `-Dinvoker.test=consumer-minimal` or `-Dinvoker.test=consumer-config-core`; they become default gates in later convergence tasks after their dependency splits land.
+
+The release baseline gate is:
+
+```bash
+mvn -Prelease-contracts -DskipTests verify
+```
+
+It runs the same currently green consumer set and records each runtime dependency tree. Later tasks strengthen it to cover provider leakage repository-wide without changing the profile entry point.
+
+## Explicit serializer provider choice
+
+Applications using JSON APIs must choose a provider explicitly. Add `com.team4u:team4u-serializer-jackson` to the application (or provide a custom `JsonSerializerPolicy`). Depending only on `team4u-serializer-json` is supported, but JSON calls fail fast with an `IllegalStateException` when no provider is present.
 
 After importing it, depend on concrete Team4u artifacts without versions.
 

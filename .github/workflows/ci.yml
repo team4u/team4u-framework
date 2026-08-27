@@ -1,0 +1,28 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        java: ['8', '11', '17', '21']
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+          cache: maven
+      - name: Build
+        run: mvn -DskipTests clean install
+      - name: Test
+        run: mvn test
+      - name: Consumer contracts
+        run: mvn -Pconsumer-it -DskipTests verify
+      - name: Release contracts
+        run: mvn -Prelease-contracts -DskipTests verify
