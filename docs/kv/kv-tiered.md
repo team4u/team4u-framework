@@ -1,6 +1,15 @@
 # 分层存储
 
-`TieredStore` 是 L1 本地缓存 + L2 远程存储的装饰器：L1 复用 base 的 `Cache` 抽象（默认 `TimedCache`，也可传 LRU/LFU 等任意实现），L2 是任意 `KvStore`。API 与核心接口完全一致，业务无感知。
+## 为什么需要分层
+
+远程存储（数据库、Redis）每次读写都是一次网络往返。会话、配置这类**读多写少**的数据，绝大多数读完全可以由本机内存直接回答——这就是两层结构：
+
+- **L1（本地缓存）**：当前进程内存里的副本，读取是纳秒级、零网络开销；只对当前实例可见；
+- **L2（远程存储）**：权威数据所在（JDBC、Redis 或任意 `KvStore` 实现），所有实例共享。
+
+`TieredStore` 把这两层包成一个普通 `KvStore`：读请求先问 L1，问不到才去 L2；写请求两边都写。API 与核心接口完全一致，业务代码无感知。
+
+L1 本身复用 base 组件的 `Cache` 抽象——默认按时间过期（`TimedCache`），也可以换成按容量淘汰的 LRU/LFU 等任意实现。
 
 ```java
 // 推荐构造：TimedCache L1 + 墓碑
@@ -22,7 +31,7 @@ KvStore tiered = new TieredStore(
 | 路径 | 行为 |
 | :--- | :--- |
 | **读** | L1 命中直接返回（零远程开销）；未命中穿透 L2，命中后回填 L1 |
-| **写** | 写直通（write-through）：先写 L2，成功后同步更新 L1；`IF_ABSENT` 失败不触碰 L1 |
+| **写** | 写直通（write-through）：先写 L2 成功，再同步更新 L1——缓存与存储始终一起变，读到的不会是没写进去的；`IF_ABSENT` 失败不触碰 L1 |
 | **删** | 删除 L2 后在 L1 写入带有效期的**墓碑**，窗口内读取直接判空，不再访问 L2 |
 
 正确性兜底：即使 L1 缓存实现尚未淘汰条目，读取也按记录自身的 `expireAt` 判定，**绝不返回已过期数据**（契约测试 `NeverEvictCache` 桩专门验证：永不清理的 L1 下过期数据依然不可见）。
@@ -37,6 +46,10 @@ KvStore tiered = new TieredStore(
 | `negativeTtlMillis` | L2 未命中时缓存「不存在」：窗口内同键读取不再穿透 L2（防击穿） | 窗口内外部直写 L2 的数据本实例不可见 |
 
 覆盖写（`put` SET）会同时清除墓碑；`expire` 成功后失效 L1 待下次读取回填，键不存在时保留既有 L1 状态。
+
+**墓碑防的是什么场景？** 删除要在 L2 和 L1 各执行一次，中间有缝隙：一个并发读恰好在删除前从 L2 读到了旧值，删除完成后才把这份旧值回填进 L1——删除看起来「没生效」。墓碑是一个带有效期的小标记，删除时抢先占住 L1 的位置：窗口内读取直接判空，也不给晚到的旧值回填留机会（回填前会检查墓碑；多实例共享 L2 时还能顺带挡住副本同步延迟带来的同款问题）。
+
+**L1 条目有两种「到期」。** 每个缓存条目自带 L1 TTL（构造器第二个参数）；条目里包裹的记录又自带 `expireAt`。任一到期，读取都会回源 L2——即使缓存实现还没来得及物理删除该条目（读取时按记录自身过期时间兜底判定），所以**绝不会读到已过期数据**（契约测试用「永不清理的 L1」专门验证过这一点）。
 
 ## 并发契约（重要）
 
@@ -58,15 +71,22 @@ tiered.close();      // 清空 L1 + 静默关闭 L2（若 AutoCloseable）
 1. 通过 `HotSwapStore` 更换 L2 底层存储后，**必须调用 `evictAll()`**——旧代墓碑会屏蔽新存储的真实数据（最多一个墓碑窗口）；
 2. `close()` 会级联关闭 L2：把 TieredStore 包进 HotSwapStore 再 swap 出来时，旧实例由 Safe Swap 自动 `close()`，L2 不会泄漏。
 
-## 效果示例
+## 效果示意
+
+一次写入 + 1000 次读取，L1 有效期 60 秒：
 
 ```java
-CountingL2 l2 = ...;                       // 统计 L2 读取次数
-TieredStore tiered = new TieredStore(l2, 60_000, new TieredStore.Config());
+KvStore l2 = new JdbcKvStore(dataSource);                  // 权威存储
+KvStore tiered = new TieredStore(l2, 60_000, new TieredStore.Config());
 
-l2.put(key, KvRecord.of("v1"), PutMode.SET);
-tiered.get(key);   // 未命中 → 穿透 L2 → 回填
-tiered.get(key);   // 命中 L1，L2 读取次数不变
+tiered.put(SpaceKey.of("app.config", "feature.x"), KvRecord.of("on"), PutMode.SET);
+
+for (int i = 0; i < 1000; i++) {
+    tiered.get(SpaceKey.of("app.config", "feature.x"));   // 业务照常读
+}
+// 第 1 次读：L1 未命中 → 穿透 L2 → 回填 L1
+// 第 2~1000 次读：全部命中 L1
+// L2 实际只承受 1 次写 + 1 次读（数据库视角：读压力下降 99.9%）
 ```
 
-典型的读多写少场景下，L2 读压力下降一个数量级以上；配合 `negativeTtlMillis` 可同时防「不存在的键」被恶意或失误打穿。
+典型的读多写少场景下，L2 读压力下降一个数量级以上；配合 `negativeTtlMillis` 可同时防「不存在的键」被恶意或失误打穿到 L2。代价是本实例在 L1 TTL 窗口内可能读到**最多滞后 60 秒**的数据——用一致性换性能，TTL 就是这个交换的旋钮。

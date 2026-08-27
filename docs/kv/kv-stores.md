@@ -43,7 +43,8 @@ CREATE TABLE IF NOT EXISTS kv_store (
 - `put(SET)`：先 UPDATE，0 行转 INSERT，并发冲突再回退 UPDATE（经典 upsert）；
 - CAS：`UPDATE ... WHERE ... AND kv_value = ? AND 未过期` / 同型 DELETE，行锁保证原子；
 - `get` 读到过期行顺手删除（惰性清理）；`pruneExpired` 按 `LIMIT maxBatch` 分批删除；
-- 值长度上限 4000 字符（表结构决定），更大值请使用 Redis 后端或自行扩列。
+- 值默认为 `VARCHAR(4000)`；存 JSON 等长值时通过 `Config.setValueColumnDefinition("TEXT")` 定制（建表时生效），或使用 Redis 后端；
+- 连接故障等基础设施异常抛 `KvStoreException`，与「键已存在」（`IF_ABSENT` 返回 false）严格区分，可安全与 `RetryableStore` 组合。
 
 ## Redis：RedisKvStore
 
