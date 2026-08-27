@@ -24,6 +24,7 @@
         <module>team4u-retry</module>
         <module>team4u-serializer</module>
         <module>team4u-kv</module>
+        <module>team4u-id</module>
     </modules>
 
     <properties>
