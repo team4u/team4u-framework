@@ -91,6 +91,15 @@ public class DynamicRateLimiterManager {
 开发轻量级后台同步任务，根据动态过滤条件从数据表中拉取分页数据，并将处理结果批量入库。
 
 ### 代码实现
+先引入独立模块 `team4u-base-jdbc`：
+
+```xml
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-base-jdbc</artifactId>
+</dependency>
+```
+
 ```java
 import com.team4u.framework.base.jdbc.InsertBuilder;
 import com.team4u.framework.base.jdbc.JdbcUtil;
