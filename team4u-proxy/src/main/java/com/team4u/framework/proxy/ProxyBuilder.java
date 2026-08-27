@@ -3,7 +3,6 @@ package com.team4u.framework.proxy;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.ProxyEngine;
 import com.team4u.framework.proxy.core.ProxyException;
-import com.team4u.framework.proxy.engine.ByteBuddyProxyEngine;
 import com.team4u.framework.proxy.engine.JdkProxyEngine;
 import com.team4u.framework.proxy.interceptor.DelegateInterceptor;
 import com.team4u.framework.proxy.interceptor.EmptyValueInterceptor;
@@ -223,13 +222,45 @@ public final class ProxyBuilder<T> {
         if (primaryType.isInterface() && interfaces.stream().allMatch(Class::isInterface)) {
             return JdkProxyEngine.INSTANCE;
         }
-
-        if (ByteBuddyProxyEngine.INSTANCE.supports(primaryType)) {
-            return ByteBuddyProxyEngine.INSTANCE;
+        ProxyEngine engine = loadByteBuddyEngine();
+        if (engine.supports(primaryType)) {
+            return engine;
         }
 
-        throw new ProxyException("No suitable proxy engine found for class: " + primaryType.getName() +
-                ". Ensure it is not a final class or unsupported type.");
+        throw new ProxyException("No suitable proxy engine found for class: " + primaryType.getName()
+                + ". Ensure it is not a final class or unsupported type.");
+    }
+
+    private ProxyEngine loadByteBuddyEngine() {
+        Class<?> engineClass;
+        try {
+            engineClass = Class.forName(
+                    "com.team4u.framework.proxy.engine.ByteBuddyProxyEngine",
+                    true,
+                    ProxyBuilder.class.getClassLoader());
+        } catch (ClassNotFoundException e) {
+            throw missingByteBuddy(e);
+        } catch (LinkageError e) {
+            throw missingByteBuddy(e);
+        }
+
+        try {
+            Object instance = engineClass.getField("INSTANCE").get(null);
+            return (ProxyEngine) instance;
+        } catch (IllegalAccessException | NoSuchFieldException e) {
+            throw new ProxyException("Cannot access ByteBuddy proxy engine INSTANCE", e);
+        } catch (ClassCastException e) {
+            throw new ProxyException("ByteBuddy proxy engine does not implement ProxyEngine", e);
+        } catch (LinkageError e) {
+            throw missingByteBuddy(e);
+        }
+    }
+
+    private ProxyException missingByteBuddy(Throwable cause) {
+        return new ProxyException(
+                "Class proxy requires the optional dependency net.bytebuddy:byte-buddy.\n"
+                        + "JDK interface proxies run without ByteBuddy.",
+                cause);
     }
 
     /**

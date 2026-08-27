@@ -15,7 +15,15 @@
 ```
 
 > [!NOTE]
-> `team4u-proxy` 内部已自动传递依赖 ByteBuddy，无需手动额外声明。
+> JDK 接口代理只需要 `team4u-proxy` 本身。为普通类创建代理时，ByteBuddy 不再自动传递，需要显式加入以下依赖：
+>
+> ```xml
+> <dependency>
+>     <groupId>net.bytebuddy</groupId>
+>     <artifactId>byte-buddy</artifactId>
+>     <version>1.14.12</version>
+> </dependency>
+> ```
 
 ---
 
