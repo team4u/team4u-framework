@@ -7,8 +7,7 @@ import com.team4u.framework.kv.SpaceKey;
 import com.team4u.framework.kv.lock.KvLock;
 import com.team4u.framework.kv.lock.KvLockManager;
 import com.team4u.framework.serializer.json.JsonUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.Clock;
 import java.util.Objects;
@@ -36,9 +35,9 @@ import java.util.function.Supplier;
  * @param <V> 值类型
  * @author jay.wu
  */
+@Slf4j
 public class ExpiringValue<V> {
 
-    private static final Logger log = LoggerFactory.getLogger(ExpiringValue.class);
 
     private final KvStore store;
     private final String space;

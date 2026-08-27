@@ -5,8 +5,7 @@ import com.team4u.framework.kv.NativeTtlCapable;
 import com.team4u.framework.kv.ScanCapable;
 import com.team4u.framework.kv.lock.KvLock;
 import com.team4u.framework.kv.lock.KvLockManager;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.List;
 import java.util.Objects;
@@ -27,9 +26,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * @author jay.wu
  */
+@Slf4j
 public class KvCleaner implements AutoCloseable {
 
-    private static final Logger log = LoggerFactory.getLogger(KvCleaner.class);
 
     private final List<KvStore> stores = new CopyOnWriteArrayList<>();
     private final long intervalMillis;

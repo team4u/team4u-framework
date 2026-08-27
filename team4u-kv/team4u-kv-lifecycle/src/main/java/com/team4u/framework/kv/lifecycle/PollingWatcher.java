@@ -6,8 +6,7 @@ import com.team4u.framework.kv.KvRecord;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.ScanCapable;
 import com.team4u.framework.kv.SpaceKey;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.HashMap;
 import java.util.List;
@@ -31,9 +30,9 @@ import java.util.concurrent.CopyOnWriteArrayList;
  *
  * @author jay.wu
  */
+@Slf4j
 public class PollingWatcher implements AutoCloseable {
 
-    private static final Logger log = LoggerFactory.getLogger(PollingWatcher.class);
 
     private final KvStore store;
     private final long pollIntervalMillis;

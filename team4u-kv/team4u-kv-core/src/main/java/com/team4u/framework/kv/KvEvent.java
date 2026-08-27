@@ -5,6 +5,7 @@ package com.team4u.framework.kv;
  *
  * @author jay.wu
  */
+@lombok.Getter
 public class KvEvent {
 
     /**
@@ -31,21 +32,6 @@ public class KvEvent {
         this.type = type;
         this.key = key;
         this.newValue = newValue;
-    }
-
-    public Type getType() {
-        return type;
-    }
-
-    public SpaceKey getKey() {
-        return key;
-    }
-
-    /**
-     * @return PUT 事件的新值；REMOVE 事件为 {@code null}
-     */
-    public String getNewValue() {
-        return newValue;
     }
 
     @Override

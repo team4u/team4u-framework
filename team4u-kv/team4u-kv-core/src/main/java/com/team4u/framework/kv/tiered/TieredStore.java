@@ -6,8 +6,7 @@ import com.team4u.framework.kv.KvRecord;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.SpaceKey;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.time.Clock;
 import java.util.Objects;
@@ -44,9 +43,9 @@ import java.util.Objects;
  *
  * @author jay.wu
  */
+@Slf4j
 public class TieredStore implements KvStore, AutoCloseable {
 
-    private static final Logger log = LoggerFactory.getLogger(TieredStore.class);
 
     private final KvStore l2;
     private final Cache<SpaceKey, Entry> l1;
@@ -194,6 +193,7 @@ public class TieredStore implements KvStore, AutoCloseable {
     /**
      * L1 缓存条目：值记录或删除墓碑
      */
+    @lombok.Getter
     public static final class Entry {
 
         private final KvRecord record;
@@ -210,10 +210,6 @@ public class TieredStore implements KvStore, AutoCloseable {
 
         public static Entry ofTombstone(long untilEpochMillis) {
             return new Entry(null, untilEpochMillis);
-        }
-
-        KvRecord getRecord() {
-            return record;
         }
 
         boolean isEffectiveTombstone(long now) {

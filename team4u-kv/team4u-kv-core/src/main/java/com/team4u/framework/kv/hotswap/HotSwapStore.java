@@ -3,8 +3,7 @@ package com.team4u.framework.kv.hotswap;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.proxy.ProxyBuilder;
 import com.team4u.framework.proxy.support.Swappable;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import lombok.extern.slf4j.Slf4j;
 
 import java.util.Objects;
 import java.util.concurrent.Executors;
@@ -28,9 +27,9 @@ import java.util.concurrent.TimeUnit;
  *
  * @author jay.wu
  */
+@Slf4j
 public final class HotSwapStore {
 
-    private static final Logger log = LoggerFactory.getLogger(HotSwapStore.class);
 
     /**
      * 延迟关闭的共享守护线程调度器：不阻塞业务线程，不阻止 JVM 退出
