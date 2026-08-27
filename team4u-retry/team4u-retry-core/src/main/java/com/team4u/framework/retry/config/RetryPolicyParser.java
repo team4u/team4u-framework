@@ -5,6 +5,11 @@ import com.team4u.framework.serializer.json.JsonUtil;
 import com.team4u.framework.retry.common.backoff.BackoffRegistry;
 import com.team4u.framework.retry.api.RetryPolicy;
 
+import java.util.Collection;
+import java.util.Collections;
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * 重试策略工厂类
  * <p>
@@ -27,14 +32,8 @@ public class RetryPolicyParser {
         RetryPolicyConfig config = JsonUtil.toBean(jsonConfig, RetryPolicyConfig.class);
 
         // 初始化策略构建器并配置基础重试次数与条件
-        RetryPolicy.Builder builder = RetryPolicy.builder()
-                .maxRetries(config.getMaxRetries())
-                .condition(config.getCondition());
-
         // 设置前台最大重试次数（如果配置存在）
-        if (config.getForegroundMaxRetries() != null) {
-            builder.foregroundMaxRetries(config.getForegroundMaxRetries());
-        }
+        Integer foregroundMaxRetries = config.getForegroundMaxRetries();
 
         // 处理退避策略配置，若未配置则使用默认退避规则
         BackoffConfig backoffCfg = config.getBackoff();
@@ -42,61 +41,55 @@ public class RetryPolicyParser {
             backoffCfg = new BackoffConfig();
         }
 
-        // 根据配置从注册中心创建对应的退避实例并关联到策略中
-        builder.backoff(BackoffRegistry.global().createBackoff(backoffCfg));
-
         // 注册需要通过重试来处理的异常类型
-        if (config.getRetryOnExceptions() != null) {
-            for (String className : config.getRetryOnExceptions()) {
-                addExceptionToBuilder(builder, className, "retryOnExceptions", true);
-            }
-        }
+        Set<Class<? extends Throwable>> retryOnExceptions =
+                loadExceptionClasses(config.getRetryOnExceptions(), "retryOnExceptions");
 
         // 注册需要立即停止重试的异常类型
-        if (config.getAbortOnExceptions() != null) {
-            for (String className : config.getAbortOnExceptions()) {
-                addExceptionToBuilder(builder, className, "abortOnExceptions", false);
-            }
-        }
+        Set<Class<? extends Throwable>> abortOnExceptions =
+                loadExceptionClasses(config.getAbortOnExceptions(), "abortOnExceptions");
 
-        return builder.build();
+        return RetryPolicy.builder()
+                .maxRetries(config.getMaxRetries())
+                .condition(config.getCondition())
+                .foregroundMaxRetries(foregroundMaxRetries)
+                .backoff(BackoffRegistry.global().createBackoff(backoffCfg))
+                .retryOnExceptions(retryOnExceptions)
+                .abortOnExceptions(abortOnExceptions)
+                .build();
     }
 
     /**
-     * 将异常类名加载并添加到构建器中
+     * 将配置中的异常类名加载并验证为异常类型集合
      *
-     * @param builder   重试策略构建器
-     * @param className 异常类全限定名
-     * @param fieldName 对应的配置字段名（用于报错提示）
-     * @param isRetry   标识是否为重试异常（true 为重试，false 为中止）
+     * @param classNames 异常类全限定名集合，允许为 {@code null}
+     * @param fieldName  对应的配置字段名（用于报错提示）
+     * @return 已验证的异常类型集合，配置为 {@code null} 或空集合时返回空集合
      */
-    @SuppressWarnings("unchecked")
-    private static void addExceptionToBuilder(
-            RetryPolicy.Builder builder,
-            String className,
-            String fieldName,
-            boolean isRetry) {
-        try {
-            // 加载异常类
-            Class<?> clazz = ClassUtil.loadClass(className);
-            // 验证加载的类是否继承自 Throwable
-            if (!Throwable.class.isAssignableFrom(clazz)) {
-                throw new IllegalArgumentException(
-                        "Invalid retry policy config. " + fieldName + " contains non-Throwable class: " + className);
-            }
-            // 根据类型分别注册到构建器中
-            if (isRetry) {
-                builder.retryOn((Class<? extends Throwable>) clazz);
-            } else {
-                builder.abortOn((Class<? extends Throwable>) clazz);
-            }
-        } catch (Exception e) {
-            if (e instanceof IllegalArgumentException) {
-                throw (IllegalArgumentException) e;
-            }
-            // 异常类加载失败或解析出错时统一抛出非法参数异常
-            throw new IllegalArgumentException(
-                    "Invalid retry policy config. Failed to load " + fieldName + " class: " + className, e);
+    private static Set<Class<? extends Throwable>> loadExceptionClasses(
+            Collection<String> classNames,
+            String fieldName) {
+        if (classNames == null) {
+            return Collections.emptySet();
         }
+
+        Set<Class<? extends Throwable>> classes = new HashSet<>();
+        for (String className : classNames) {
+            try {
+                Class<?> clazz = ClassUtil.loadClass(className);
+                if (!Throwable.class.isAssignableFrom(clazz)) {
+                    throw new IllegalArgumentException(
+                            "Invalid retry policy config. " + fieldName + " contains non-Throwable class: " + className);
+                }
+                classes.add(clazz.asSubclass(Throwable.class));
+            } catch (Exception e) {
+                if (e instanceof IllegalArgumentException) {
+                    throw (IllegalArgumentException) e;
+                }
+                throw new IllegalArgumentException(
+                        "Invalid retry policy config. Failed to load " + fieldName + " class: " + className, e);
+            }
+        }
+        return classes;
     }
 }
