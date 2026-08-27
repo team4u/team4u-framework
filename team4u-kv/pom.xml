@@ -10,36 +10,16 @@
     </parent>
 
     <artifactId>team4u-kv</artifactId>
-    <description>键值存储抽象与装饰器：分层存储(TieredStore)、热交换存储(HotSwapStore)</description>
+    <packaging>pom</packaging>
+    <description>键值存储套件：核心抽象、装饰器、锁、值生命周期、多后端存储与契约测试</description>
 
-    <dependencies>
-        <dependency>
-            <groupId>com.team4u</groupId>
-            <artifactId>team4u-base</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.team4u</groupId>
-            <artifactId>team4u-proxy</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
-            <optional>true</optional>
-        </dependency>
-
-        <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-simple</artifactId>
-        </dependency>
-        <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
-        </dependency>
-    </dependencies>
+    <modules>
+        <module>team4u-kv-core</module>
+        <module>team4u-kv-lock</module>
+        <module>team4u-kv-lifecycle</module>
+        <module>team4u-kv-retryable</module>
+        <module>team4u-kv-store-jdbc</module>
+        <module>team4u-kv-store-redis</module>
+        <module>team4u-kv-test</module>
+    </modules>
 </project>

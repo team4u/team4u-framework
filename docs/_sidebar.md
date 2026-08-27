@@ -12,6 +12,7 @@
 * **服务治理与分布式协同**
   * [租约与排他任务组件](lease/README.md)
   * [通用重试治理组件](retry/README.md)
+  * [键值存储组件](kv/README.md)
 
 * **数据安全与日志治理**
   * [数据脱敏组件](mask/README.md)

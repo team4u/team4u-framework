@@ -36,6 +36,7 @@
         <junit.version>4.13.2</junit.version>
         <byte-buddy.version>1.14.12</byte-buddy.version>
         <spring.version>5.3.39</spring.version>
+        <spring-data-redis.version>2.7.18</spring-data-redis.version>
         <slf4j.version>1.7.36</slf4j.version>
         <jackson.version>2.16.1</jackson.version>
         <logback.version>1.2.13</logback.version>
@@ -66,6 +67,17 @@
                 <groupId>org.springframework</groupId>
                 <artifactId>spring-context</artifactId>
                 <version>${spring.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>org.springframework.data</groupId>
+                <artifactId>spring-data-redis</artifactId>
+                <version>${spring-data-redis.version}</version>
+                <exclusions>
+                    <exclusion>
+                        <groupId>org.slf4j</groupId>
+                        <artifactId>slf4j-api</artifactId>
+                    </exclusion>
+                </exclusions>
             </dependency>
             <dependency>
                 <groupId>org.springframework</groupId>
