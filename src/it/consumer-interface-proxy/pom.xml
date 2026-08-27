@@ -25,12 +25,6 @@
         <dependency>
             <groupId>com.team4u</groupId>
             <artifactId>team4u-proxy</artifactId>
-            <exclusions>
-                <exclusion>
-                    <groupId>net.bytebuddy</groupId>
-                    <artifactId>byte-buddy</artifactId>
-                </exclusion>
-            </exclusions>
         </dependency>
     </dependencies>
 
