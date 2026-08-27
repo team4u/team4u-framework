@@ -82,4 +82,10 @@ Minor findings fixed:
 - Root module/POM audit found no `team4u-id` module in the convergence worktree baseline.
 - `git status --short` before commit was limited to the plan, progress file, and this report.
 - Fence-state scanning found one unclosed Task 8 grep-example fence introduced by review remediation. The closing marker was restored without changing the command or architecture text; the final plan has 174 balanced fence markers and no open residue.
-- Final checks confirmed balanced fences, exactly sequential Task 1-18 headings, no `TODO`/`TBD` markers, `git diff --check` success, the Task 11/18 revisions above, and documentation-only modified paths.
+- Final checks confirmed balanced fences, exactly sequential Task 1-18 headings, no unfinished markers, `git diff --check` success, the Task 11/18 revisions above, and documentation-only modified paths.
+
+## Second Review Remediation
+
+- Task 10 `lease-jdbc` and Task 14 `translator` permit a Jackson provider only as a direct test dependency; production callers explicitly supply `team4u-serializer-jackson` or another provider.
+- The `release-contracts` contract checks runtime transitive leakage of both `team4u-serializer-jackson` and `com.fasterxml.jackson` across published upstream library POMs.
+- Task 18's dependency graph is explicitly representative; exhaustive release coverage remains the artifact manifest and contract gates.

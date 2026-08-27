@@ -30,3 +30,4 @@
 | 18. JMH Evidence, Performance Copy Cleanup, Release Gate | Pending |
 
 Review remediation: complete. Commit subject: `docs: fix convergence plan review findings`.
+Second review remediation: complete (docs: remove remaining provider leakage ambiguity).
