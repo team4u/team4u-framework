@@ -10,8 +10,12 @@ public class NoProviderMain {
             throw new IllegalStateException("JSON API unexpectedly succeeded without a provider: " + json);
         } catch (IllegalStateException expected) {
             String message = String.valueOf(expected.getMessage());
-            if (!message.contains("JsonSerializerPolicy")) {
-                throw new IllegalStateException("No-provider error is not clear: " + message, expected);
+            boolean namesJacksonProvider = message.contains("com.team4u:team4u-serializer-jackson");
+            boolean explainsCustomProvider = message.contains("custom") && message.contains("JsonSerializerPolicy");
+            if (!namesJacksonProvider && !explainsCustomProvider) {
+                throw new IllegalStateException(
+                        "No-provider error does not explain the Jackson provider or a custom JsonSerializerPolicy: " + message,
+                        expected);
             }
             System.out.println(message);
         }
