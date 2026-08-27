@@ -132,12 +132,12 @@ String value = config.get(SpaceKey.of("app.config", "feature.x")) == null
 ## 单元测试（零外部依赖）
 
 ```java
-class OrderServiceTest {
+public class OrderServiceTest {
 
     private final TestKvContext kv = TestKvContext.create();
 
     @Test
-    void idempotentCallback() {
+    public void idempotentCallback() {
         OrderService service = new OrderService(kv.store());
         service.onPaymentCallback("o1001");
         service.onPaymentCallback("o1001");
@@ -145,7 +145,7 @@ class OrderServiceTest {
     }
 
     @Test
-    void sessionExpires() {
+    public void sessionExpires() {
         OrderService service = new OrderService(kv.store());
         service.createSession("u1");
         kv.advanceSeconds(3600);                 // 虚拟时间精确推进

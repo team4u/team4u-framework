@@ -97,7 +97,12 @@ public class ExpiringValue<V> {
         if (refreshAheadMillis > 0
                 && record.canExpire()
                 && record.getExpireAt() - clock.millis() <= refreshAheadMillis) {
-            loadAndSave(spaceKey, "refreshAhead");
+            try {
+                loadAndSave(spaceKey, "refreshAhead");
+            } catch (RuntimeException e) {
+                // 续期失败不影响返回旧值：旧值在过期前仍可用，下次 get() 自动重试
+                log.warn("Refresh ahead failed, keep serving old value|key={}", spaceKey, e);
+            }
         }
         return decode(record);
     }

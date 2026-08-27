@@ -44,6 +44,10 @@ public class KvCleaner implements AutoCloseable {
 
     public KvCleaner(String space, long intervalMillis, int maxBatchSize,
                      KvLockManager lockManager) {
+        if (intervalMillis <= 0 || maxBatchSize <= 0) {
+            throw new IllegalArgumentException(
+                    "intervalMillis and maxBatchSize must be positive");
+        }
         this.intervalMillis = intervalMillis;
         this.maxBatchSize = maxBatchSize;
         this.lockManager = lockManager;

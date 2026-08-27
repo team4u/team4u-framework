@@ -17,8 +17,27 @@
 内存实现零依赖，API 即核心接口，适合单测与单实例临时数据：
 
 ```java
-KvStore kv = new InMemoryKvStore();
+package demo;
 
+import com.team4u.framework.kv.KvRecord;
+import com.team4u.framework.kv.KvStore;
+import com.team4u.framework.kv.PutMode;
+import com.team4u.framework.kv.SpaceKey;
+import com.team4u.framework.kv.memory.InMemoryKvStore;
+
+public final class FirstKvDemo {
+    public static void main(String[] args) {
+        KvStore kv = new InMemoryKvStore();
+        SpaceKey key = SpaceKey.of("user.session", "u1");
+        kv.put(key, KvRecord.of("token-abc", 3600_000, System.currentTimeMillis()), PutMode.SET);
+        System.out.println(kv.get(key).getValue());   // 输出: token-abc
+    }
+}
+```
+
+下面的片段默认持有 `kv`（内存或任意后端）：
+
+```java
 SpaceKey key = SpaceKey.of("user.session", "u1");
 
 // 写：值 + 有效期（毫秒），0 为永不过期
@@ -89,6 +108,7 @@ KvStore kv2 = new ObservedStore(                       // 审计日志、慢操�
 ```java
 KvLockManager lockManager = new KvLockManager(kvStore);
 
+// acquire 为阻塞获取：超时抛受检异常 KvLockTimeoutException，外层方法需声明或捕获
 try (KvLock lock = lockManager.acquire("report.daily", 30_000, 5_000)) {
     // 临界区：锁由后台线程自动续约，不会因超时被误放
     doGenerate();
@@ -116,12 +136,13 @@ Token token = wechatToken.get();   // 未过期直接返回；到期自动加载
 ## 单元测试：零外部依赖
 
 ```java
-class OrderServiceTest {
+// 示例为 JUnit 4 风格（与框架测试栈一致）
+public class OrderServiceTest {
 
     private final TestKvContext kv = TestKvContext.create();
 
     @Test
-    void idempotentCallback() {
+    public void idempotentCallback() {
         OrderService service = new OrderService(kv.store());
         service.onPaymentCallback("o1001");
         service.onPaymentCallback("o1001");

@@ -153,6 +153,26 @@ public class RedisKvStoreTest {
         ((com.team4u.framework.kv.ScanCapable) store).scan("user");
     }
 
+    @Test(expected = KvStoreException.class)
+    public void infraFailureWrappedAsKvStoreException() {
+        when(redis.opsForValue()).thenThrow(
+                new org.springframework.data.redis.RedisConnectionFailureException("down"));
+        store.get(SpaceKey.of("user", "u1"));
+    }
+
+    @Test
+    public void casRejectsAlreadyExpiredUpdate() {
+        // update 的过期时间早于当前时钟（时钟回拨/陈旧记录）：CAS 直接失败，
+        // 不得把「本应立即过期」的写入钳成永不过期键
+        clock.advance(1000);
+        KvRecord staleUpdate = KvRecord.ofRaw("token-b", 500);   // expireAt < now
+
+        boolean success = ((com.team4u.framework.kv.CasCapable) store).compareAndSet(
+                SpaceKey.of("lock", "job"), "token-a", staleUpdate);
+
+        assertFalse(success);
+    }
+
     @Test
     public void keyPrefixApplied() {
         RedisKvStore prefixed = new RedisKvStore(redis, "app1:", clock);

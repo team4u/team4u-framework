@@ -82,53 +82,69 @@ public class RedisKvStore implements KvStore, CasCapable, ScanCapable, NativeTtl
 
     @Override
     public KvRecord get(SpaceKey key) {
-        String physicalKey = physical(key);
-        String value = redis.opsForValue().get(physicalKey);
-        if (value == null) {
-            return null;
+        try {
+            String physicalKey = physical(key);
+            String value = redis.opsForValue().get(physicalKey);
+            if (value == null) {
+                return null;
+            }
+            Long ttlMillis = redis.getExpire(physicalKey, TimeUnit.MILLISECONDS);
+            if (ttlMillis == null || ttlMillis < 0) {
+                // -1：无过期；-2：键不存在（GET 与 PTTL 间被删除，视为不存在）
+                return ttlMillis != null && ttlMillis == -2 ? null : KvRecord.of(value);
+            }
+            return KvRecord.ofRaw(value, clock.millis() + ttlMillis);
+        } catch (DataAccessException e) {
+            throw new KvStoreException("Get failed|key=" + key, e);
         }
-        Long ttlMillis = redis.getExpire(physicalKey, TimeUnit.MILLISECONDS);
-        if (ttlMillis == null || ttlMillis < 0) {
-            // -1：无过期；-2：键不存在（GET 与 PTTL 间被删除，视为不存在）
-            return ttlMillis != null && ttlMillis == -2 ? null : KvRecord.of(value);
-        }
-        return KvRecord.ofRaw(value, clock.millis() + ttlMillis);
     }
 
     @Override
     public boolean put(SpaceKey key, KvRecord record, PutMode mode) {
         Objects.requireNonNull(record, "record");
         String physicalKey = physical(key);
-        if (mode == PutMode.IF_ABSENT) {
-            Boolean success = record.canExpire()
-                    ? redis.opsForValue().setIfAbsent(physicalKey, record.getValue(),
-                    record.getExpireAt() - clock.millis(), TimeUnit.MILLISECONDS)
-                    : redis.opsForValue().setIfAbsent(physicalKey, record.getValue());
-            return Boolean.TRUE.equals(success);
+        try {
+            if (mode == PutMode.IF_ABSENT) {
+                Boolean success = record.canExpire()
+                        ? redis.opsForValue().setIfAbsent(physicalKey, record.getValue(),
+                        record.getExpireAt() - clock.millis(), TimeUnit.MILLISECONDS)
+                        : redis.opsForValue().setIfAbsent(physicalKey, record.getValue());
+                return Boolean.TRUE.equals(success);
+            }
+            if (record.canExpire()) {
+                redis.opsForValue().set(physicalKey, record.getValue(),
+                        record.getExpireAt() - clock.millis(), TimeUnit.MILLISECONDS);
+            } else {
+                redis.opsForValue().set(physicalKey, record.getValue());
+            }
+            return true;
+        } catch (DataAccessException e) {
+            throw new KvStoreException("Put failed|key=" + key + "|mode=" + mode, e);
         }
-        if (record.canExpire()) {
-            redis.opsForValue().set(physicalKey, record.getValue(),
-                    record.getExpireAt() - clock.millis(), TimeUnit.MILLISECONDS);
-        } else {
-            redis.opsForValue().set(physicalKey, record.getValue());
-        }
-        return true;
     }
 
     @Override
     public boolean remove(SpaceKey key) {
-        Boolean removed = redis.delete(physical(key));
-        return Boolean.TRUE.equals(removed);
+        try {
+            Boolean removed = redis.delete(physical(key));
+            return Boolean.TRUE.equals(removed);
+        } catch (DataAccessException e) {
+            throw new KvStoreException("Remove failed|key=" + key, e);
+        }
     }
 
     @Override
     public boolean expire(SpaceKey key, long ttlMillis) {
-        String physicalKey = physical(key);
-        if (ttlMillis <= 0) {
-            // 对齐 KvStore 契约：非正 TTL 表示改为永不过期（PERSIST 语义）
-            return Boolean.TRUE.equals(redis.persist(physicalKey));
+        try {
+            String physicalKey = physical(key);
+            if (ttlMillis <= 0) {
+                // 对齐 KvStore 契约：非正 TTL 表示改为永不过期（PERSIST 语义）
+                return Boolean.TRUE.equals(redis.persist(physicalKey));
+            }
+            return Boolean.TRUE.equals(redis.expire(physicalKey, ttlMillis, TimeUnit.MILLISECONDS));
+        } catch (DataAccessException e) {
+            throw new KvStoreException("Expire failed|key=" + key, e);
         }
-        return Boolean.TRUE.equals(redis.expire(physicalKey, ttlMillis, TimeUnit.MILLISECONDS));
     }
 
     @Override
@@ -142,10 +158,14 @@ public class RedisKvStore implements KvStore, CasCapable, ScanCapable, NativeTtl
 
     @Override
     public boolean compareAndRemove(SpaceKey key, String expectedValue) {
-        Long result = redis.execute(CAS_REMOVE_SCRIPT,
-                java.util.Collections.singletonList(physical(key)),
-                expectedValue);
-        return result != null && result == 1;
+        try {
+            Long result = redis.execute(CAS_REMOVE_SCRIPT,
+                    java.util.Collections.singletonList(physical(key)),
+                    expectedValue);
+            return result != null && result == 1;
+        } catch (DataAccessException e) {
+            throw new KvStoreException("CompareAndRemove failed|key=" + key, e);
+        }
     }
 
     @Override

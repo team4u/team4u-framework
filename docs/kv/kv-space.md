@@ -15,12 +15,15 @@ Spaces.global().register(new SpacePolicy()
 Space<Session> sessions = Spaces.global().use("user.session", kvStore);
 
 sessions.put("u1", new Session("token-abc"));            // 使用默认 TTL
-sessions.put("u1", session, 1800_000);                   // 指定 TTL
 Session session = sessions.get("u1");                    // 自动反序列化，缺失返回 null
-
-boolean first = sessions.putIfAbsent("order-1", "1", 24 * 3600_000L);  // 幂等控制
+sessions.put("u1", session, 1800_000);                   // 指定 TTL
 sessions.expire("u1", 60_000);                           // 续期
 sessions.remove("u1");                                   // 删除
+
+// 幂等控制：另注册一个 String 值类型的键空间
+Spaces.global().register(new SpacePolicy().setName("payment.idem"));
+Space<String> idem = Spaces.global().use("payment.idem", kvStore);
+boolean first = idem.putIfAbsent("order-1", "1", 24 * 3600_000L);
 ```
 
 未注册的键空间在 `use` 时快速失败，避免拼写错误静默产生新空间。
@@ -39,7 +42,7 @@ Space<Session> after = Spaces.global().use("user.session", kvStore);
 // 已构建的 Space 不受影响；新构建的 Space 使用新策略——与配置中心的快照热更语义一致
 ```
 
-策略对象可由配置中心下发后重新注册（对象仅四个字段，天然适合 JSON 映射），实现 TTL 等行为的热调整。
+策略对象可由配置中心下发后重新注册（对象仅三个字段，天然适合 JSON 映射），实现 TTL 等行为的热调整。
 
 ## 设计边界
 

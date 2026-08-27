@@ -18,7 +18,7 @@
 
 组件分为三层：
 
-- **核心层**：`KvStore` 只有 4 个原子操作（`get` / `put` / `remove` / `expire`），恰好是锁、幂等、TTL 缓存的最小完备集。没有一个是「内存实现容易、外部存储做不动」的操作——每个都能映射到 Redis 原生命令（GET / SET+NX / DEL / EXPIRE）或一条 SQL；
+- **核心层**：`KvStore` 只有 4 个原子操作（`get` / `put` / `remove` / `expire`），恰好是锁、幂等、TTL 缓存的最小完备集。没有一个是「内存实现容易、外部存储做不动」的操作——每个都能映射到 Redis 原生命令（GET / SET+NX / DEL / EXPIRE）或一组简单 SQL（原子性由唯一索引/行锁保证）；
 - **能力层**：需要更多能力的实现按接口声明——`CasCapable`（原子比较替换）、`ScanCapable`（扫描与清理）、`WatchCapable`（变更订阅）、`NativeTtlCapable`（原生过期）。调用方按 `instanceof` 协商，接口即文档；
 - **组合层**：分层缓存、观测、重试、热交换都是可自由拼装的装饰器（`TieredStore` / `ObservedStore` / `RetryableStore` / `HotSwapStore`），不引入继承体系。
 
@@ -74,6 +74,46 @@ graph LR
 - **跨实现一致**：过期精度、SETNX 原子性、CAS 语义、异常约定在接口 Javadoc 固化为契约，并由 `team4u-kv-test` 的契约测试在 CI 强制；
 - **轻量可测**：内存实现零依赖；所有 TTL/租约逻辑注入 `Clock`，测试用虚拟时钟精确推进时间。
 
+## 快速上手
+
+下面这个例子可以在单进程内直接运行（仅依赖 `team4u-kv-core`）：
+
+```java
+package demo;
+
+import com.team4u.framework.kv.KvRecord;
+import com.team4u.framework.kv.KvStore;
+import com.team4u.framework.kv.PutMode;
+import com.team4u.framework.kv.SpaceKey;
+import com.team4u.framework.kv.memory.InMemoryKvStore;
+
+public final class FirstKvDemo {
+    public static void main(String[] args) {
+        // 1. 内存存储：零依赖，行为与 JDBC/Redis 实现一致（同一套契约测试保证）
+        KvStore kv = new InMemoryKvStore();
+        SpaceKey key = SpaceKey.of("user.session", "u1");
+
+        // 2. 写入：值 + 有效期（毫秒），0 为永不过期
+        kv.put(key, KvRecord.of("token-abc", 3600_000, System.currentTimeMillis()), PutMode.SET);
+
+        // 3. 读取：不存在或已过期返回 null
+        System.out.println(kv.get(key).getValue());
+
+        // 4. 原子写（SETNX）：仅当键不存在时成功——幂等控制与锁的基础
+        System.out.println(kv.put(key, KvRecord.of("new"), PutMode.IF_ABSENT));  // false：键已存在
+    }
+}
+```
+
+你应该看到：
+
+```text
+token-abc
+false
+```
+
+更完整的路径（类型化门面、分层存储、锁、Token 续期）见[快速开始](quick-start.md)。
+
 ## 模块结构
 
 ```text
@@ -91,7 +131,7 @@ team4u-kv
 | :--- | :--- | :--- |
 | `team4u-kv-core` | base、proxy、policy、serializer-json | 必需 |
 | `team4u-kv-lock` | kv-core | 使用锁时 |
-| `team4u-kv-lifecycle` | kv-core、kv-lock | 使用值续期/订阅/清理时 |
+| `team4u-kv-lifecycle` | kv-core、kv-lock、serializer-json | 使用值续期/订阅/清理时 |
 | `team4u-kv-retryable` | kv-core、retry-core | 存储抖动治理时 |
 | `team4u-kv-store-jdbc` | kv-core | 数据库存储时 |
 | `team4u-kv-store-redis` | kv-core、spring-data-redis | Redis 存储时 |

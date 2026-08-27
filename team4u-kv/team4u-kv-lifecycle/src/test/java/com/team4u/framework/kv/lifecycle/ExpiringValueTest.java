@@ -158,6 +158,52 @@ public class ExpiringValueTest {
     }
 
     @Test
+    public void loaderFailureOnAbsentPropagates() {
+        ExpiringValue<String> broken = ExpiringValue.<String>builder(String.class)
+                .store(store)
+                .key("auth", "broken")
+                .loader(() -> {
+                    throw new IllegalStateException("third-party down");
+                })
+                .fixedTtl(10_000)
+                .clock(clock)
+                .build();
+
+        try {
+            broken.get();
+            fail("absent 路径 loader 失败必须传播");
+        } catch (IllegalStateException expected) {
+            assertEquals("third-party down", expected.getMessage());
+        }
+    }
+
+    @Test
+    public void refreshAheadFailureReturnsOldValue() {
+        token.get();   // token-1 已缓存
+
+        // 进入刷新窗口，但加载器持续失败：get() 应返回旧值而非抛异常
+        clock.advance(8500);
+        AtomicInteger failures = new AtomicInteger();
+        ExpiringValue<String> flaky = ExpiringValue.<String>builder(String.class)
+                .store(store)
+                .key("auth", "wechat_token")
+                .loader(() -> {
+                    failures.incrementAndGet();
+                    throw new IllegalStateException("refresh down");
+                })
+                .fixedTtl(10_000)
+                .refreshAhead(2000)
+                .clock(clock)
+                .build();
+
+        assertEquals("续期失败不影响返回旧值", "token-1", flaky.get());
+        assertEquals(1, failures.get());
+
+        // 旧值仍有效（尚未真正过期）
+        assertEquals("token-1", flaky.get());
+    }
+
+    @Test
     public void valuePersistedInStoreAsRecord() {
         token.get();
         KvRecord record = store.get(SpaceKey.of("auth", "wechat_token"));

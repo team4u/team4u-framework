@@ -61,12 +61,6 @@ public final class KvRecord {
      * @param ttlMillis 有效时长（毫秒），小于等于 0 视为永不过期；溢出时饱和为极大值
      * @param now       当前时间（epoch 毫秒）
      */
-    /**
-     * 自指定时间起 ttl 毫秒后过期的记录
-     *
-     * @param ttlMillis 有效时长（毫秒），小于等于 0 视为永不过期；溢出时饱和为极大值
-     * @param now       当前时间（epoch 毫秒）
-     */
     public static KvRecord of(String value, long ttlMillis, long now) {
         return new KvRecord(value, expireAtOf(ttlMillis, now));
     }

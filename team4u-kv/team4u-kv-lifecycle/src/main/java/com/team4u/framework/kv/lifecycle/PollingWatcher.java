@@ -60,12 +60,22 @@ public class PollingWatcher implements AutoCloseable {
      * @return 关闭句柄，取消订阅
      */
     public AutoCloseable watch(String space, KvListener listener) {
+        if (!running) {
+            throw new IllegalStateException("PollingWatcher already closed");
+        }
         List<KvListener> list =
                 listeners.computeIfAbsent(space, k -> new CopyOnWriteArrayList<>());
         list.add(listener);
         // 首次订阅以空快照开始，只推送订阅后的增量
         snapshots.computeIfAbsent(space, k -> new ConcurrentHashMap<>());
-        return () -> list.remove(listener);
+        return () -> {
+            list.remove(listener);
+            if (list.isEmpty()) {
+                // 最后一个订阅者退出后回收该键空间的注册项与快照
+                listeners.remove(space, list);
+                snapshots.remove(space);
+            }
+        };
     }
 
     private void pollLoop() {

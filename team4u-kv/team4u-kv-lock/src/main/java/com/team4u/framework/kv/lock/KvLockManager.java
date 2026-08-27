@@ -79,6 +79,10 @@ public class KvLockManager implements AutoCloseable {
      */
     public KvLock tryAcquire(String name, long leaseMillis) {
         Objects.requireNonNull(name, "name");
+        if (leaseMillis <= 0) {
+            // 永不过期的锁在进程崩溃后无法自愈，直接拒绝
+            throw new IllegalArgumentException("leaseMillis must be positive: " + leaseMillis);
+        }
         checkRunning();
         String token = ownerId + ":" + UUID.randomUUID();
 
@@ -135,6 +139,7 @@ public class KvLockManager implements AutoCloseable {
     boolean renew(HeldLock held) {
         KvRecord current = store.get(lockKey(held.name));
         if (current == null || !current.getValue().equals(held.token)) {
+            heldLocks.remove(held.name, held);
             return false;
         }
         boolean renewed = casStore.compareAndSet(
@@ -142,6 +147,8 @@ public class KvLockManager implements AutoCloseable {
                 held.token,
                 current.expire(held.leaseMillis, clock.millis()));
         if (!renewed) {
+            // 锁已丢失（被接管）：移出心跳列表，避免每轮空转告警
+            heldLocks.remove(held.name, held);
             log.warn("Lock renew lost (taken over by others?)|lock={}", held.name);
         }
         return renewed;
@@ -168,7 +175,9 @@ public class KvLockManager implements AutoCloseable {
 
     private void heartbeatLoop() {
         while (running) {
-            sleep(config.getHeartbeatIntervalMillis());
+            if (!sleep(heartbeatIntervalMillis())) {
+                return;
+            }
             if (!running) {
                 return;
             }
@@ -182,6 +191,18 @@ public class KvLockManager implements AutoCloseable {
         }
     }
 
+    /**
+     * 心跳间隔自适应：取配置值与「最短持有租约的 1/3」中的较小者，
+     * 保证短租约锁在过期前至少有两个续约窗口
+     */
+    private long heartbeatIntervalMillis() {
+        long interval = config.getHeartbeatIntervalMillis();
+        for (HeldLock held : heldLocks.values()) {
+            interval = Math.min(interval, Math.max(1, held.leaseMillis / 3));
+        }
+        return interval;
+    }
+
     private SpaceKey lockKey(String name) {
         return SpaceKey.of(config.getSpace(), name);
     }
@@ -192,11 +213,16 @@ public class KvLockManager implements AutoCloseable {
         }
     }
 
-    private void sleep(long millis) {
+    /**
+     * @return false 表示线程被中断，调用方应退出循环（避免 sleep 立即再抛导致忙转）
+     */
+    private boolean sleep(long millis) {
         try {
             Thread.sleep(millis);
+            return true;
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
+            return false;
         }
     }
 

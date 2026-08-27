@@ -40,7 +40,7 @@
 | :--- | :--- | :--- | :--- |
 | **[租约任务组件](lease/README.md)** | `team4u-lease` | 排他任务调度框架。通过队列化 Task/Worker/Result API 提供延迟调度、精确类型订阅、心跳续约、故障接管与业务键幂等建档，支持 Memory 与 MySQL 持久化后端。 | [概览](lease/README.md) · [快速开始](lease/quick-start.md) |
 | **[通用重试组件](retry/README.md)** | `team4u-retry` | 统一重试治理框架。支持进程内即时同步/异步重试 (`INLINE`)，以及基于租约持久化的跨进程后台托管补偿重试 (`MANAGED`)，支持 `@Retryable` 注解与动态策略下发。 | [概览](retry/README.md) · [快速开始](retry/quick-start.md) |
-| **[键值存储组件](kv/README.md)** | `team4u-kv` | 最小核心 + 装饰器的键值存储套件。4 操作 `KvStore` 核心与 CAS/扫描/订阅能力协商，分层缓存 (`TieredStore`)、热交换 (`HotSwapStore`)、观测、重试装饰器，CAS 化分布式锁、过期值源（refresh-ahead/singleflight）与 memory/JDBC/Redis 多后端契约测试。 | [概览](kv/README.md) |
+| **[键值存储组件](kv/README.md)** | `team4u-kv` | 最小核心 + 装饰器的键值存储套件。4 操作 `KvStore` 核心与 CAS/扫描/订阅能力协商，分层缓存 (`TieredStore`)、热交换 (`HotSwapStore`)、观测、重试装饰器，CAS 化分布式锁、过期值源（refresh-ahead/singleflight）与 memory/JDBC/Redis 多后端契约测试。 | [概览](kv/README.md) · [快速开始](kv/quick-start.md) |
 
 ---
 
