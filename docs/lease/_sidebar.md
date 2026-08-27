@@ -1,4 +1,4 @@
-* [新人指南](README.md)
+* [简介](README.md)
 * [快速开始](quick-start.md)
 * [任务模型](lease-model.md)
 * [Worker 处理](lease-worker.md)

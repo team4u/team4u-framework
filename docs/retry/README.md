@@ -1,11 +1,25 @@
-# team4u-retry： Java 重试组件
+# 通用重试组件 (team4u-retry)
+
+# 背景
 
 `team4u-retry` 帮你把“失败的调用再试一次”写成明确、可控的代码。它解决两类常见问题：
 
 - 调用下游短暂失败，想马上在当前请求里重试几次并拿到结果。
 - 前几次失败后不想继续占着用户线程，希望把剩余重试存下来，交给后台慢慢补偿。
 
-## 先选模式
+---
+
+# 设计
+
+## 设计理念
+
+组件提供两种接入模式，但用同一套 `RetryPolicy` 描述“最多再试几次、每次等多久、哪些异常才重试”。这样业务代码可以在进程内同步或异步执行，也可以把未完成的重试持久化后交给后台 Worker。
+
+`maxRetries` 不包含首次执行：`2` 表示最多总共执行 3 次。MANAGED 还必须配置 `foregroundMaxRetries`，它表示首次执行之后前台额外尝试几次；任务进入后台时已失败次数不会归零。
+
+---
+
+## 模式选择
 
 | 你要做的事 | 选这个 | 一句话效果 |
 | :--- | :--- | :--- |
@@ -14,7 +28,11 @@
 
 简单判断：**等得起、必须有返回值，用 INLINE；等不起或进程重启后也必须继续补偿，用 MANAGED。**
 
-## 最小 INLINE 示例
+---
+
+## 快速上手
+
+### 最小 INLINE 示例
 
 ```java
 import com.team4u.framework.retry.api.Retries;
@@ -53,7 +71,7 @@ public class SmsClientDemo {
 
 `RetryPolicy` 就是“最多再试几次 + 每次等多久 + 哪些异常才重试”。若 3 次都失败，最后一次的业务异常会直接抛给调用方。
 
-## 最小 MANAGED 示例
+### 最小 MANAGED 示例
 
 MANAGED 比 INLINE 多三件事：要指定后台恢复处理器；要传幂等键；要用 `ManagedRetryRuntime` 启动后台线程。完整可运行示例如下：
 
@@ -147,15 +165,9 @@ public class PayNotifyDemo {
 
 Memory 后端只适合演示和单进程测试。部署到多个进程时，把 `new InMemoryLeaseBackend()` 换成 JDBC 后端，后台任务才能被共享和接管。
 
-## 新人阅读顺序
+---
 
-1. [快速开始](quick-start.md)：分别跑通 INLINE 和 MANAGED。
-2. [进程内重试 INLINE](retry-inline.md)：同步、异步和异常判定。
-3. [托管持久化重试 MANAGED](retry-managed.md)：后台恢复、故障边界和生产配置。
-4. [退避策略](retry-strategy.md)：选择每次重试之间等多久。
-5. [注解与代理](retry-proxy.md)、[Spring 整合](retry-spring.md)、[实战案例](retry-sample.md)：需要声明式接入时再看。
-
-## 一页概览
+## 核心概念
 
 - `Retries.inline()`: 进程内重试入口。
 - `Retries.managed(runtime.client())`: 托管重试入口。
@@ -165,4 +177,14 @@ Memory 后端只适合演示和单进程测试。部署到多个进程时，把 
 - `ManagedRetryRuntime`: 组装队列、存储和后台 Worker。
 - `ManagedSubmitResult`: 前台完成、已交后台、命中已有任务、终态失败或基础设施拒绝。
 
-`maxRetries` 不包含首次执行：`2` 表示最多总共执行 3 次。MANAGED 还必须配置 `foregroundMaxRetries`，它表示首次执行之后前台额外尝试几次；任务进入后台时已失败次数不会归零。
+---
+
+## 文档导航
+
+- [快速开始](quick-start.md)：分别跑通 INLINE 和 MANAGED
+- [进程内重试 INLINE](retry-inline.md)：同步、异步和异常判定
+- [托管持久化重试 MANAGED](retry-managed.md)：后台恢复、故障边界和生产配置
+- [退避策略](retry-strategy.md)：选择每次重试之间等多久
+- [注解与代理](retry-proxy.md)：声明式接入
+- [Spring 整合](retry-spring.md)：Spring 环境装配
+- [实战案例](retry-sample.md)：业务场景落地
