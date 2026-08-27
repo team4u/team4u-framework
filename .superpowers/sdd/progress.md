@@ -13,7 +13,7 @@
 | 1. Root Maven Foundation, Flatten Aggregators, License | Complete |
 | 2. Matrix CI, External Consumers, Dependency Baselines | Complete |
 | 3. Split base-jdbc and Delete Base SpringUtil | Complete |
-| 4. Lock Current Ant Wildcard Semantics | Pending |
+| 4. Lock Current Ant Wildcard Semantics | Complete |
 | 5. Base PathPatternMatcher and Criterion Adapter | Pending |
 | 6. Proxy One Artifact and Optional ByteBuddy | Pending |
 | 7. Serializer Provider Contracts and Upstream Cleanup | Pending |
@@ -33,3 +33,4 @@ Review remediation: complete. Commit subject: `docs: fix convergence plan review
 Second review remediation: complete (docs: remove remaining provider leakage ambiguity).
 Task 2 review remediation: complete (fix(ci): track serializer provider transition).
 Task 3 review remediation: complete (fix(base): preserve retry fallback and migration records).
+Task 4 complete: locked the 53-case Spring Ant matrix and Criterion adapter/null behavior; commit `test(criterion): characterize wildcard semantics`.
