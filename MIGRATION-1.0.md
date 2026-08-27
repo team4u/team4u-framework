@@ -25,7 +25,7 @@ Developers can run the currently green external-consumer set with:
 mvn -Pconsumer-it -DskipTests verify
 ```
 
-The set currently covers the serializer API, explicit Jackson provider, and JDK interface proxy consumers. The minimal and config-core transition guards can be selected explicitly with `-Dinvoker.test=consumer-minimal` or `-Dinvoker.test=consumer-config-core`; they become default gates in later convergence tasks after their dependency splits land.
+The set currently covers minimal base, serializer API, explicit Jackson provider, and JDK interface proxy consumers. `consumer-config-core` is a known transition guard: its scalar/binder path runs, but its runtime tree still carries proxy, ByteBuddy, and Jackson. Run it explicitly with `-Dinvoker.test=consumer-config-core`; it joins the default gate in Task 9.
 
 The release baseline gate is:
 
@@ -33,7 +33,7 @@ The release baseline gate is:
 mvn -Prelease-contracts -DskipTests verify
 ```
 
-It runs the same currently green consumer set and records each runtime dependency tree. Later tasks strengthen it to cover provider leakage repository-wide without changing the profile entry point.
+It runs the same four currently green consumers, executes their mains, and validates or records each runtime dependency tree. Later tasks strengthen it to cover provider leakage repository-wide without changing the profile entry point.
 
 ## Explicit serializer provider choice
 

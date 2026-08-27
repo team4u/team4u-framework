@@ -11,7 +11,7 @@
 | --- | --- |
 | 0. Convergence plan acceptance checkpoint | Complete |
 | 1. Root Maven Foundation, Flatten Aggregators, License | Complete |
-| 2. Matrix CI, External Consumers, Dependency Baselines | Incomplete (default 3-consumer gate green; transition RED/release/full gates unresolved) |
+| 2. Matrix CI, External Consumers, Dependency Baselines | Complete |
 | 3. Split base-jdbc and Delete Base SpringUtil | Pending |
 | 4. Lock Current Ant Wildcard Semantics | Pending |
 | 5. Base PathPatternMatcher and Criterion Adapter | Pending |
