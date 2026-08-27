@@ -89,6 +89,25 @@ String token = tokenCache.getOrCreate("user_1001", () -> "TOKEN_ABC_999");
 
 ---
 
+## 可刷新值 (`RefreshableValue`)
+
+```java
+import com.team4u.framework.base.refresh.RefreshableValue;
+import java.time.Duration;
+
+// 远端配置的本地影子：每 10 秒后台刷新，源端故障时冷却退避
+RefreshableValue<GlobalConfig> config = RefreshableValue.<GlobalConfig>builder()
+        .name("global.config")
+        .loader(ctx -> loadGlobalConfigFromDb())
+        .refreshEvery(Duration.ofSeconds(10))
+        .background()
+        .build();
+
+GlobalConfig c = config.get();   // 热路径：一次 volatile 读
+```
+
+---
+
 ## 流式 SQL 构造 (`InsertBuilder` / `JdbcUtil`)
 
 ```java
@@ -113,5 +132,6 @@ JdbcUtil.execute(dataSource, insertBuilder.getSql(), insertBuilder.getParams());
 - 深入分段锁与双缓存流水线：[动态实例与单例工厂](base-instance.md)
 - 探索高性能预解析模板引擎：[文本模板解析器 (TextTemplate)](base-template.md)
 - 查看本地缓存体系与淘汰策略：[通用轻量缓存体系](base-cache.md)
+- 了解单值影子刷新与并发契约：[可刷新值 (RefreshableValue)](base-refresh.md)
 - 深入强类型转换器注册表：[类型转换器体系 (ConvertUtil)](base-convert.md)
 - 了解流式 SQL 构造器与极简 CRUD：[极简 JDBC 构建工具 (JdbcUtil)](base-jdbc.md)

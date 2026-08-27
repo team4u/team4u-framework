@@ -3,6 +3,7 @@
 * [动态实例与单例工厂](base-instance.md)
 * [文本模板解析器 (TextTemplate)](base-template.md)
 * [通用轻量缓存体系](base-cache.md)
+* [可刷新值 (RefreshableValue)](base-refresh.md)
 * [类型转换器体系 (ConvertUtil)](base-convert.md)
 * [极简 JDBC 构建工具 (JdbcUtil)](base-jdbc.md)
 * [实战案例](base-sample.md)
