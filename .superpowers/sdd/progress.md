@@ -10,7 +10,7 @@
 | Task | Status |
 | --- | --- |
 | 0. Convergence plan acceptance checkpoint | Complete |
-| 1. Root Maven Foundation, Flatten Aggregators, License | Pending |
+| 1. Root Maven Foundation, Flatten Aggregators, License | Complete |
 | 2. Matrix CI, External Consumers, Dependency Baselines | Pending |
 | 3. Split base-jdbc and Delete Base SpringUtil | Pending |
 | 4. Lock Current Ant Wildcard Semantics | Pending |

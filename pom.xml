@@ -404,8 +404,14 @@
                                     <version>[1.8,)</version>
                                 </requireJavaVersion>
                                 <requireProperty>
+                                    <property>maven.compiler.source</property>
+                                    <regex>^1\.8$</regex>
+                                    <message>Team4u production source compatibility must be Java 8 (maven.compiler.source=1.8).</message>
+                                </requireProperty>
+                                <requireProperty>
                                     <property>maven.compiler.target</property>
-                                    <message>Team4u production bytecode remains Java 8.</message>
+                                    <regex>^1\.8$</regex>
+                                    <message>Team4u production bytecode compatibility must be Java 8 (maven.compiler.target=1.8).</message>
                                 </requireProperty>
                             </rules>
                         </configuration>
@@ -437,7 +443,6 @@
                         <artifactId>maven-javadoc-plugin</artifactId>
                         <configuration>
                             <doclint>none</doclint>
-                            <failOnError>false</failOnError>
                         </configuration>
                         <executions>
                             <execution>
