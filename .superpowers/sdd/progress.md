@@ -12,7 +12,7 @@
 | 0. Convergence plan acceptance checkpoint | Complete |
 | 1. Root Maven Foundation, Flatten Aggregators, License | Complete |
 | 2. Matrix CI, External Consumers, Dependency Baselines | Complete |
-| 3. Split base-jdbc and Delete Base SpringUtil | Pending |
+| 3. Split base-jdbc and Delete Base SpringUtil | Complete |
 | 4. Lock Current Ant Wildcard Semantics | Pending |
 | 5. Base PathPatternMatcher and Criterion Adapter | Pending |
 | 6. Proxy One Artifact and Optional ByteBuddy | Pending |

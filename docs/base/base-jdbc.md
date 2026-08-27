@@ -1,7 +1,12 @@
 # 极简 JDBC 构建工具 (JdbcUtil)
 
-在开发轻量级扩展插件（如 `team4u-config-db`、`team4u-lease-jdbc`）或独立数据处理任务时，为了避免引入 MyBatis、Hibernate 等重量级 ORM 框架，`team4u-base` 提供了极简的 SQL 构建器与原生 JDBC 执行工具。
-
+在开发轻量级扩展插件（如 `team4u-config-db`、`team4u-lease-jdbc`）或独立数据处理任务时，为了避免引入 MyBatis、Hibernate 等重量级 ORM 框架，`team4u-base-jdbc` 提供极简的 SQL 构建器与原生 JDBC 执行工具。
+```xml
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-base-jdbc</artifactId>
+</dependency>
+```
 ---
 
 ## 核心构建器一览

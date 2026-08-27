@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.spring;
 
-import com.team4u.framework.base.util.SpringUtil;
+import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.retry.inline.DefaultInlineRetryClient;
 import com.team4u.framework.retry.inline.InlineRetryClient;
 import com.team4u.framework.retry.managed.client.ManagedRetryClient;
@@ -58,7 +58,7 @@ public class SpringRetryInterceptor implements MethodInterceptor {
     /**
      * 从 BeanFactory 获取指定类型的 Bean。
      * <p>
-     * 如果当前的 {@code beanFactory} 中不存在，则尝试通过 {@link SpringUtil} 静态查找。
+     * 如果当前的 {@code beanFactory} 中不存在，则尝试通过 {@link BeanManager} 静态查找。
      *
      * @param clazz        Bean 类型
      * @param defaultValue 默认值
@@ -70,7 +70,7 @@ public class SpringRetryInterceptor implements MethodInterceptor {
             return beanFactory.getBean(clazz);
         } catch (BeansException e) {
             try {
-                return SpringUtil.getBean(clazz);
+                return BeanManager.getInstance().getBean(clazz);
             } catch (Exception ex) {
                 return defaultValue;
             }

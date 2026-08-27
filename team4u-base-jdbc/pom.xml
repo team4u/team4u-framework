@@ -2,30 +2,20 @@
 <project xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
          xmlns="http://maven.apache.org/POM/4.0.0"
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
     <parent>
         <groupId>com.team4u</groupId>
         <artifactId>team4u-framework</artifactId>
         <version>1.0.0-SNAPSHOT</version>
-        <relativePath>../../pom.xml</relativePath>
     </parent>
-    <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>team4u-config-db</artifactId>
+    <artifactId>team4u-base-jdbc</artifactId>
 
     <dependencies>
         <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
-        </dependency>
-        <dependency>
             <groupId>com.team4u</groupId>
-            <artifactId>team4u-config-core</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.team4u</groupId>
-            <artifactId>team4u-base-jdbc</artifactId>
-            <version>${project.version}</version>
+            <artifactId>team4u-base</artifactId>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>
