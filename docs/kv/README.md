@@ -1,24 +1,30 @@
-# 键值存储组件
+# 键值存储组件 (team4u-kv)
 
 # 背景
 
-业务系统中存在大量键值（Key-Value）形态的数据：会话缓存、第三方Token、分布式锁、幂等标识等。如果每个业务各自选型并直接对接存储，会带来读写逻辑重复、通用能力（过期、原子写、CAS）行为不一致、单元测试依赖外部存储等问题。
+业务系统里到处都是键值形态的数据：会话缓存、第三方 Token、分布式锁、幂等标识、任务结果。如果每个业务各自选型并直接对接存储（Map、Redis、数据库表），会遇到三个问题：
 
-team4u-kv 将键值操作抽象为最小核心接口 `KvStore`（4 类原子操作），以**可选能力接口**扩展原子替换/扫描/订阅等能力，以**装饰器**组合分层缓存、重试、观测、热交换等横切关注点，在此之上提供 CAS 化分布式锁与值生命周期（过期续期、订阅、清理）。
+- 同一套读写逻辑在不同存储间重复实现，切换存储要改业务代码；
+- 过期、原子写入、比较替换这些通用能力分散在各业务里，行为不一致；
+- 单元测试依赖外部存储（Redis、数据库），难以轻量运行。
+
+`team4u-kv` 做一件事：**把键值操作收敛为最小的 `KvStore` 核心接口，其余一切能力都通过「能力接口」和「装饰器」叠加**。换存储不改业务代码，通用语义（过期、SETNX、CAS）跨存储一致，单测用内存实现零依赖。
+
+---
 
 # 设计
 
 ## 设计理念
 
-- **最小核心**：核心接口只有 `get` / `put`(SET|IF_ABSENT) / `remove` / `expire` 四类原子操作，恰好覆盖锁、幂等、TTL 缓存的最小完备集，且每个操作都能映射到 Redis 原生命令与 JDBC 单条语句
-- **能力协商**：原子比较替换（`CasCapable`）、扫描清理（`ScanCapable`）、变更订阅（`WatchCapable`）、原生TTL（`NativeTtlCapable`）按实现能力声明，接口即文档
-- **装饰器组合**：分层存储、可观测、可重试、热交换均为可自由拼装的 `KvStore` 装饰器，而非继承体系
-- **复用不重造**：本地缓存复用 base 的 `Cache`/`TimedCache`，热交换复用 proxy 的 `Swappable`，重试复用 retry 的 INLINE 模式，键空间注册表复用 policy 的 `KeyedPolicyRegistry`（COW 无锁读）
-- **契约保证一致性**：`team4u-kv-test` 提供行为契约测试基类，任意新存储实现继承即可验证与内存实现行为一致
+组件分为三层：
+
+- **核心层**：`KvStore` 只有 4 个原子操作（`get` / `put` / `remove` / `expire`），恰好是锁、幂等、TTL 缓存的最小完备集。没有一个是「内存实现容易、外部存储做不动」的操作——每个都能映射到 Redis 原生命令（GET / SET+NX / DEL / EXPIRE）或一条 SQL；
+- **能力层**：需要更多能力的实现按接口声明——`CasCapable`（原子比较替换）、`ScanCapable`（扫描与清理）、`WatchCapable`（变更订阅）、`NativeTtlCapable`（原生过期）。调用方按 `instanceof` 协商，接口即文档；
+- **组合层**：分层缓存、观测、重试、热交换都是可自由拼装的装饰器（`TieredStore` / `ObservedStore` / `RetryableStore` / `HotSwapStore`），不引入继承体系。
 
 ```mermaid
 graph LR
-    A[业务代码] --> SP[Space&lt;V&gt;<br/>类型化键空间门面]
+    A[业务代码] --> SP["Space&lt;V&gt;<br/>类型化键空间门面"]
     A --> L[KvLockManager<br/>分布式锁]
     A --> EV[ExpiringValue<br/>过期值源]
 
@@ -41,102 +47,65 @@ graph LR
     CORE --> X[redis]
 ```
 
+三个治理组件站在装饰器之上：`KvLockManager`（锁）、`ExpiringValue`（过期值续期）、`PollingWatcher`/`KvCleaner`（订阅与清理）。
+
 ## 核心概念
 
-| 概念 | 模块 | 说明 |
-| --- | --- | --- |
-| `KvStore` | core | 核心接口：`get` / `put`(SET\|IF_ABSENT) / `remove` / `expire` |
-| `KvRecord` / `SpaceKey` | core | 不可变记录（值+expireAt）与键标识（`space:key`） |
-| `CasCapable` | core | 原子比较替换/删除：锁与所有权安全续期的基础 |
-| `ScanCapable` / `WatchCapable` / `NativeTtlCapable` | core | 扫描清理 / 变更订阅 / 原生TTL 能力声明 |
-| `InMemoryKvStore` | core | 零依赖内存实现，全能力，Clock 可注入 |
-| `TieredStore` | core | L1(base Cache)+L2 分层装饰器：读穿透回填、写直通、删除墓碑、负缓存 |
-| `ObservedStore` | core | 结构化审计日志、慢操作告警、值脱敏视图 |
-| `HotSwapStore` | core | 运行时原子换后端，Safe Swap + 宽限期关闭 |
-| `Space` / `SpacePolicy` / `Spaces` | core | 类型化键空间门面与策略注册表（COW 热更新） |
-| `KvLockManager` / `KvLock` | lock | 持有者令牌 + 心跳续约 + fencing 安全释放的分布式锁 |
-| `ExpiringValue<V>` | lifecycle | 过期值源：cache-aside / refresh-ahead / singleflight 声明化 |
-| `PollingWatcher` | lifecycle | 基于 ScanCapable 的轮询订阅降级 |
-| `KvCleaner` | lifecycle | 周期清理过期残留（可选锁互斥、跳过原生TTL存储） |
-| `RetryableStore` | retryable | 复用 team4u-retry INLINE 模式的重试装饰器 |
-| `JdbcKvStore` | store-jdbc | 原生JDBC实现：唯一索引 SETNX、条件UPDATE CAS |
-| `RedisKvStore` | store-redis | 原生TTL、SETNX、Lua CAS、SCAN |
-| `AbstractKvStoreContractTest` | test | 多后端行为契约测试基类 |
-| `TestKvContext` | test | 零依赖测试上下文（内存存储+虚拟时钟） |
+| 概念 | 说明 |
+| :--- | :--- |
+| `SpaceKey` | 键标识：`space:key`。键空间（space）实现多业务数据隔离，space 与 key 均不允许包含 `:` |
+| `KvRecord` | 不可变记录：值 + 过期时间戳（epoch 毫秒，`0` 为永不过期） |
+| `KvStore` | 核心接口：`get` / `put`(SET\|IF_ABSENT) / `remove` / `expire` |
+| `CasCapable` | 原子比较替换/删除（按值精确匹配），锁与所有权安全续期的基础 |
+| `ScanCapable` | 按键空间扫描存活键、批量物理清理过期残留 |
+| `WatchCapable` | 订阅键空间的变更事件（PUT / REMOVE） |
+| `NativeTtlCapable` | 标记存储自身支持过期淘汰（如 Redis），清理器自动跳过 |
+| `Space` / `Spaces` | 类型化键空间门面与策略注册表，读写自动 JSON 序列化 |
+| `TieredStore` | L1 本地缓存（base 的 `Cache`）+ L2 远程存储装饰器 |
+| `KvLockManager` / `KvLock` | 持有者令牌 + 心跳续约 + fencing 安全释放的分布式锁 |
+| `ExpiringValue<V>` | 过期值源：cache-aside / refresh-ahead / singleflight 声明化 |
+| `AbstractKvStoreContractTest` | 13 项行为契约测试基类，保证多后端行为一致 |
 
-## 快速开始
+## 设计目标
 
-```java
-// 核心 API：任意存储
-KvStore kv = new InMemoryKvStore();
-kv.put(SpaceKey.of("user.session", "u1"),
-        KvRecord.of("token-abc", 3600_000, System.currentTimeMillis()), PutMode.SET);
-String token = kv.get(SpaceKey.of("user.session", "u1")).getValue();
+- **最小核心**：4 个操作覆盖锁、幂等、TTL 缓存的最小完备集；扫描/批量/订阅全部走能力接口，核心不为长尾需求膨胀；
+- **能力协商**：实现做不到的就不声明，调用方 `instanceof` 探测或快速失败，不出现「实现了但语义错误」的接口；
+- **复用不重造**：本地缓存复用 base 的 `Cache`/`TimedCache`，热交换复用 proxy 的 `Swappable`，重试复用 retry 的 INLINE 模式，键空间注册表复用 policy 的 `KeyedPolicyRegistry`（Copy-On-Write，读路径无锁）；
+- **跨实现一致**：过期精度、SETNX 原子性、CAS 语义、异常约定在接口 Javadoc 固化为契约，并由 `team4u-kv-test` 的契约测试在 CI 强制；
+- **轻量可测**：内存实现零依赖；所有 TTL/租约逻辑注入 `Clock`，测试用虚拟时钟精确推进时间。
 
-// 幂等控制：SETNX 语义
-boolean first = kv.put(SpaceKey.of("idem", "order-1"), KvRecord.of("1"), PutMode.IF_ABSENT);
+## 模块结构
 
-// 类型化门面：注册键空间策略后按类型读写
-Spaces.global().register(new SpacePolicy()
-        .setName("user.session").setValueType(Session.class).setDefaultTtlMillis(3600_000));
-Space<Session> sessions = Spaces.global().use("user.session", kv);
-sessions.put("u1", new Session("token-abc"));
-Session session = sessions.get("u1");
-
-// 分层存储：L1 本地缓存 + L2 任意远程存储
-KvStore tiered = new TieredStore(jdbcStore, 60_000,
-        new TieredStore.Config().setTombstoneTtlMillis(5_000));
-
-// 装饰器自由组合
-KvStore composed = new ObservedStore(
-        new TieredStore(new RetryableStore(redisStore), 30_000, new TieredStore.Config()));
-
-// 分布式锁：fencing 安全
-try (KvLock lock = lockManager.acquire("report.daily", 30_000, 5_000)) {
-    doGenerate();
-}
-
-// 过期值源：Token 续期
-ExpiringValue<Token> wechatToken = ExpiringValue.<Token>builder(Token.class)
-        .store(kv).key("auth", "wechat_token")
-        .loader(() -> wechatClient.getAccessToken())
-        .ttlOf(t -> Duration.ofSeconds(t.getExpiresIn()).toMillis())
-        .refreshAhead(600_000)
-        .scope(ExpiringValue.Scope.CLUSTER)   // 跨实例 singleflight
-        .lockManager(lockManager)
-        .build();
-Token t = wechatToken.get();
+```text
+team4u-kv
+├── team4u-kv-core            # 核心抽象、能力接口、内存实现、装饰器、类型化门面
+├── team4u-kv-lock            # CAS 化分布式锁
+├── team4u-kv-lifecycle       # 过期值源、轮询订阅、清理器
+├── team4u-kv-retryable       # 重试装饰器（复用 team4u-retry）
+├── team4u-kv-store-jdbc      # 原生 JDBC 存储（仅依赖 DataSource）
+├── team4u-kv-store-redis     # Redis 存储（原生 TTL、Lua CAS、SCAN）
+└── team4u-kv-test            # 契约测试基类 + TestKvContext
 ```
 
-## 模块依赖
+| 模块 | 依赖 | 按需引入 |
+| :--- | :--- | :--- |
+| `team4u-kv-core` | base、proxy、policy、serializer-json | 必需 |
+| `team4u-kv-lock` | kv-core | 使用锁时 |
+| `team4u-kv-lifecycle` | kv-core、kv-lock | 使用值续期/订阅/清理时 |
+| `team4u-kv-retryable` | kv-core、retry-core | 存储抖动治理时 |
+| `team4u-kv-store-jdbc` | kv-core | 数据库存储时 |
+| `team4u-kv-store-redis` | kv-core、spring-data-redis | Redis 存储时 |
+| `team4u-kv-test` | kv-core、junit | 为新存储写契约测试时 |
 
-| 模块 | 依赖 | 说明 |
-| --- | --- | --- |
-| `team4u-kv-core` | base、proxy、policy、serializer-json | 核心抽象+内存实现+装饰器+类型化门面 |
-| `team4u-kv-lock` | kv-core | CAS 化分布式锁 |
-| `team4u-kv-lifecycle` | kv-core、kv-lock、serializer-json | 过期值源、轮询订阅、清理器 |
-| `team4u-kv-retryable` | kv-core、retry-core | 重试装饰器 |
-| `team4u-kv-store-jdbc` | kv-core | 原生JDBC存储（仅依赖 DataSource） |
-| `team4u-kv-store-redis` | kv-core、spring-data-redis | Redis存储 |
-| `team4u-kv-test` | kv-core、junit | 契约测试基类、TestKvContext |
+## 文档导航
 
-## 实现契约（摘要）
-
-- **异常**：基础设施故障抛 `KvStoreException`（非受检）；「键不存在/已过期」以 `null`/`false` 表达
-- **过期精度**：`get` 返回的 `expireAt` 必须精确到 epoch 毫秒（0 仅表示永不过期），Redis 实现以 PTTL 换算
-- **原子性**：`put(IF_ABSENT)` 必须原子（Redis SETNX / 数据库唯一索引）；CAS 能力由实现保证原子，否则不实现该接口
-- **expire 语义**：`ttlMillis <= 0` 表示改为永不过期（对应 Redis PERSIST）
-- **值域**：值限定 `String`（JSON 等文本负载），二进制负载规划由后续能力接口扩展
-
-## 一致性边界
-
-- `TieredStore` 跨层组合为尽力而为（墓碑防复活窗口内仍可能被极端交错的回填覆盖），建议 `l1TtlMillis > 0` 使陈旧窗口有上界；多实例间无 L1 失效广播，一致性窗口 = L1 TTL
-- `KvLockManager` 解决误删/误放/宕机锁死；适合「尽量互斥」场景，高精度互斥请叠加业务幂等
-- `PollingWatcher` 只能发现两次轮询之间的最终状态，同键多次变更合并为一次事件
-- `KvCleaner` 为惰性过期的止血机制，需按存储（跳过 NativeTtlCapable）与键空间（`addSpace`）显式注册
-
-## 测试策略
-
-- 每个存储实现继承 `AbstractKvStoreContractTest`（13 项契约：读写、过期、SETNX 原子性、并发单胜者、CAS 语义与过期、扫描、订阅），内存与 H2/JDBC 双实现已在 CI 验证一致
-- 时间相关逻辑全部注入 `Clock`（`TestKvContext.SettableClock` 虚拟推进）
-- 并发语义有专项测试：IF_ABSENT 单胜者、锁竞争单胜者、singleflight 单次加载
+- [快速开始](quick-start.md)：从引入依赖到读写第一个键值
+- [核心抽象](kv-store.md)：`KvStore` 四操作契约、能力接口、内存实现
+- [分层存储](kv-tiered.md)：TieredStore 的读写删路径、墓碑、负缓存与并发边界
+- [装饰器](kv-decorators.md)：ObservedStore、RetryableStore、HotSwapStore 与组合规约
+- [类型化键空间](kv-space.md)：Space / SpacePolicy / Spaces
+- [锁服务](kv-lock.md)：tryAcquire / 心跳续约 / fencing 释放与正确性边界
+- [值生命周期](kv-lifecycle.md)：ExpiringValue、PollingWatcher、KvCleaner
+- [存储后端](kv-stores.md)：JDBC / Redis 实现细节与建表
+- [契约测试](kv-test.md)：AbstractKvStoreContractTest 与新存储接入指南
+- [常见案例](kv-sample.md)：会话缓存、幂等控制、Token 续期、任务结果等待
