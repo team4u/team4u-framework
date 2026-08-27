@@ -1,56 +1,50 @@
 # 实战案例
 
-本章介绍 `team4u-retry` 在外部 API 即时容灾、支付通知可靠补偿及 Spring 声明式代理中的典型用法。
+三个常见场景：短时网络抖动、支付后异步补偿、Spring 代理里的不可序列化上下文。
 
-## 第三方短信发送即时容灾 (INLINE)
+## 1. 验证码短信：INLINE
 
-用户注册时发送验证码短信。当下游短信通道因网络闪断超时时，当前线程按指数退避重试。`maxRetries=2` 表示首次执行后最多再重试 2 次，总尝试上限为 3 次。
+用户注册时必须当场知道验证码是否发送成功，所以选 INLINE。这里只重试网络超时，不重试参数错误。
 
 ```java
 import com.team4u.framework.retry.api.Retries;
 import com.team4u.framework.retry.api.RetryPolicy;
 import com.team4u.framework.retry.common.backoff.Backoffs;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
 
 import java.io.IOException;
 import java.net.SocketTimeoutException;
 
-@Service
 public class SmsService {
 
-    @Autowired
-    private ThirdPartySmsClient smsClient;
-
-    private static final RetryPolicy SMS_RETRY_POLICY = RetryPolicy.builder()
-            .maxRetries(2)
+    private static final RetryPolicy SMS_POLICY = RetryPolicy.builder()
+            .maxRetries(2) // 总共最多发送 3 次
             .backoff(Backoffs.exponential(100, 2.0, 1000))
             .retryOn(SocketTimeoutException.class)
             .retryOn(IOException.class)
+            .abortOn(IllegalArgumentException.class)
             .build();
 
-    public boolean sendVerifyCode(String mobile, String code) {
+    private final ThirdPartySmsClient smsClient;
+
+    public SmsService(ThirdPartySmsClient smsClient) {
+        this.smsClient = smsClient;
+    }
+
+    public boolean sendVerifyCode(String mobile, String code) throws Exception {
         return Retries.inline()
-                .policy(SMS_RETRY_POLICY)
-                .call(() -> {
-                    SmsResponse response = smsClient.send(mobile, code);
-                    return response != null && response.isSuccess();
-                });
+                .policy(SMS_POLICY)
+                .call(() -> smsClient.send(mobile, code));
     }
 }
 ```
 
-## 支付成功商户 Webhook 补偿 (MANAGED)
+如果第一次超时、第二次成功，用户这次注册请求会成功，总共调用短信客户端两次。参数错误会立即抛出，不会浪费短信额度。
 
-用户支付成功后，支付系统向商户服务器发送 Webhook。商户服务可能临时停机或网络异常：
+## 2. 支付成功 Webhook：MANAGED
 
-- 前台执行 1 次，`foregroundMaxRetries=0`；
-- 失败后进入后台，按指数抖动退避重试；
-- `maxRetries=5` 表示总尝试上限为 6 次；
-- 前台与后台共享 `attempts` 计数；
-- 初始 intent 默认 5 分钟内留给前台；进程崩溃或未 handoff 时到期自动由 `RetryTaskWorker` 接管。
+支付完成后要通知商户。用户请求不能一直等商户服务恢复，且服务重启后也必须继续补发，所以选 MANAGED。
 
-以下示例假设 Spring 容器已按[Spring 整合](retry-spring.md)提供 `ManagedRetryClient`，运行 Worker 的进程已注册 `MerchantWebhookRecoveryHandler`。
+前台提交代码：
 
 ```java
 import com.team4u.framework.retry.api.ManagedSubmitResult;
@@ -58,64 +52,68 @@ import com.team4u.framework.retry.api.Retries;
 import com.team4u.framework.retry.api.RetryPolicy;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 import com.team4u.framework.retry.managed.client.ManagedRetryClient;
-import com.team4u.framework.serializer.json.JsonUtil;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
 
-@Service
 public class MerchantNotifyService {
 
-    @Autowired
-    private ManagedRetryClient retryClient;
-
-    @Autowired
-    private MerchantWebhookClient webhookClient;
-
     private static final RetryPolicy NOTIFY_POLICY = RetryPolicy.builder()
-            .maxRetries(5)
-            .foregroundMaxRetries(0)
+            .maxRetries(5)            // 总尝试上限 6 次
+            .foregroundMaxRetries(0)  // 首次失败后立即交后台
             .backoff(Backoffs.exponentialJitter(1000, 3.0, 30 * 60 * 1000L))
             .build();
 
-    public void notifyMerchant(PaymentOrder order) {
-        String payload = JsonUtil.toJsonStr(order);
 
-        ManagedSubmitResult<Void> result = Retries.managed(retryClient)
+    private final ManagedRetryClient retryClient;
+    private final MerchantWebhookClient webhookClient;
+
+    public MerchantNotifyService(
+            ManagedRetryClient retryClient,
+            MerchantWebhookClient webhookClient) {
+        this.retryClient = retryClient;
+        this.webhookClient = webhookClient;
+    }
+
+    public void notifyMerchant(String orderId, String payload) {
+        ManagedSubmitResult<String> result = Retries.managed(retryClient)
                 .taskType("merchant-webhook-notify")
-                .idempotencyKey("NOTIFY|" + order.getOrderNo())
+                .idempotencyKey("notify-" + orderId)
                 .payload(payload)
                 .policy(NOTIFY_POLICY)
                 .call(() -> {
-                    webhookClient.post(order.getNotifyUrl(), payload);
-                    return null;
+                    webhookClient.post(payload);
+                    return "accepted";
                 });
 
         if (result.isCompleted()) {
-            System.out.println("前台通知成功: " + order.getOrderNo());
+            System.out.println("webhook sent now: " + orderId);
         } else if (result.isAccepted()) {
-            System.out.println("已交由后台补偿: " + order.getOrderNo());
+            System.out.println("webhook accepted: " + orderId);
         } else if (result.isFailed()) {
-            Throwable error = ((ManagedSubmitResult.Failed<Void>) result).getError();
-            System.err.println("通知终态失败: " + error.getMessage());
+            Throwable error = ((ManagedSubmitResult.Failed<String>) result).getError();
+            System.err.println("webhook failed: " + error.getMessage());
+        } else if (result.isExisting()) {
+            System.out.println("webhook already accepted: " + orderId);
+        } else {
+            String reason = ((ManagedSubmitResult.Rejected<String>) result).getReason();
+            throw new IllegalStateException("webhook rejected: " + reason);
         }
     }
 }
 ```
 
-后台恢复处理器直接使用字符串 payload。真实业务目标操作和恢复处理器必须幂等，因为这是 at-least-once 交付边界。
+
+后台恢复处理器使用同一套发送逻辑：
 
 ```java
 import com.team4u.framework.retry.managed.recovery.RecoveryContext;
 import com.team4u.framework.retry.managed.recovery.StringRecoveryHandler;
-import com.team4u.framework.serializer.json.JsonUtil;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
 
-@Component
-public class MerchantWebhookRecoveryHandler implements StringRecoveryHandler {
+public final class MerchantWebhookRecoveryHandler implements StringRecoveryHandler {
 
-    @Autowired
-    private MerchantWebhookClient webhookClient;
+    private final MerchantWebhookClient webhookClient;
+
+    public MerchantWebhookRecoveryHandler(MerchantWebhookClient webhookClient) {
+        this.webhookClient = webhookClient;
+    }
 
     @Override
     public String taskName() {
@@ -124,21 +122,20 @@ public class MerchantWebhookRecoveryHandler implements StringRecoveryHandler {
 
     @Override
     public void recover(String payload, RecoveryContext context) throws Exception {
-        PaymentOrder order = JsonUtil.toBean(payload, PaymentOrder.class);
-        System.out.printf(
-                "后台恢复商户通知: orderNo=%s, attempt=%d%n",
-                order.getOrderNo(),
-                context.getAttempt());
-        webhookClient.post(order.getNotifyUrl(), payload);
+        webhookClient.post(payload);
     }
 }
 ```
 
-`context.getAttempt()` 是前后台连续后的当前尝试序号，从 1 开始。若 payload 反序列化或结果序列化发生基础设施异常，Worker 不会伪造业务 `FAILED`；任务保留租约状态，到期后由其他 Worker 凭 fencing 语义接管。
+把这个 handler 注册到运行 `ManagedRetryRuntime` 的进程。前台第一次失败后返回 `Accepted`，后台在第 2 次尝试开始前随机等待约 1 到 3 秒；后续间隔逐步放大，最多等 30 分钟。
 
-## Spring 声明式代理与上下文忽略
+### 必须幂等
 
-提现审核后调用外部银行打款通道，方法参数携带不可序列化的 `HttpServletRequest`：
+商户服务收到的通知可能会重复。例如 Worker 调用成功但结果写回前进程崩溃，任务会被再次接管。商户侧应按 `orderId` 或通知流水号判重；重复通知时直接确认，不要重复扣款或重复改库存。
+
+## 3. Spring 声明式代理：忽略请求上下文
+
+银行打款方法中携带 `HttpServletRequest`。HTTP 请求对象不能跨进程恢复，所以用 `@RetryIgnore` 排除：
 
 ```java
 import com.team4u.framework.retry.proxy.RetryMode;
@@ -156,15 +153,16 @@ public class BankTransferService {
             String transferId,
             Long amountInCents,
             String bankAccount,
-            @RetryIgnore HttpServletRequest request
-    ) {
-        boolean success = thirdPartyBankClient.transfer(
-                transferId, amountInCents, bankAccount);
-        if (!success) {
-            throw new IllegalStateException("银行返回处理中或网络超时");
-        }
+            @RetryIgnore HttpServletRequest request) {
+        bankClient.transfer(transferId, amountInCents, bankAccount);
     }
 }
 ```
 
-后台回放时 `request` 为 `null`，业务逻辑不能读取它。`@Retryable` 的后台 task type 固定为 `ProxyInvocationReplay`，运行 `ManagedRetryRuntime` 的进程必须能通过 `BeanManager` 找到目标 Bean。
+结果：
+
+- 前台打款成功：方法正常返回。
+- 前台失败且策略允许重试：当前 HTTP 请求立即返回，后台稍后用 `transferId/amountInCents/bankAccount` 回放方法。
+- 后台回放时 `request` 为 `null`，方法内部不能读取它。
+
+Spring MANAGED 代理必须显式装配 `ManagedRetryRuntime`，并注册 `InvocationReplay`，见[Spring 整合](retry-spring.md)。

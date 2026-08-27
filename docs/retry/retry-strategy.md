@@ -1,44 +1,86 @@
-# 退避策略与动态配置
+# 退避策略
 
-`team4u-retry` 内置固定、等差、指数与指数抖动退避算法，并支持 LRU 实例缓存与配置中心动态下发。
+退避策略回答一个问题：**这次失败后，下一次等多久再试？**
 
-## 内置退避策略
+`RetryPolicy.maxRetries` 决定最多再试几次；`Backoff` 决定每次之间等多久。`maxRetries` 不包含首次执行，`maxRetries=3` 表示总尝试上限为 4 次。
 
-所有退避策略实现 `Backoff`，可由 `Backoffs` 工厂创建：
+## 怎么选
 
-| 类型 | 构造方式 | 参数 | 适用场景 |
+| 策略 | 写法 | 第 1/2/3 次重试等待 | 适合 |
 | :--- | :--- | :--- | :--- |
-| `fixed` | `Backoffs.fixed(1000)` | `delay` | 低频调用、固定间隔轮询 |
-| `increment` | `Backoffs.increment(500, 200)` | `initialDelay`, `stepMillis` | 渐进式探测服务恢复 |
-| `exponential` | `Backoffs.exponential(100, 2.0, 5000)` | `initialDelay`, `multiplier`, `maxDelay` | 防止持续冲垮过载下游 |
-| `exponentialJitter` | `Backoffs.exponentialJitter(100, 2.0, 5000)` | `initialDelay`, `multiplier`, `maxDelay` | 高并发推荐，打散重试时间 |
+| 固定间隔 | `Backoffs.fixed(1000)` | 1000ms / 1000ms / 1000ms | 下游恢复很快，调用频率低 |
+| 等差递增 | `Backoffs.increment(200, 300)` | 200ms / 500ms / 800ms | 希望逐步放大间隔 |
+| 指数递增 | `Backoffs.exponential(100, 2.0, 5000)` | 100ms / 200ms / 400ms | 下游可能过载，需要快速拉大间隔 |
+| 指数 + 随机抖动 | `Backoffs.exponentialJitter(100, 2.0, 5000)` | 每次在 `[100ms, 理论值]` 内随机 | 多实例同时失败，最常用 |
 
-`maxRetries` 不包含首次执行。例如 `maxRetries=3` 表示首次执行失败后最多再重试 3 次，总尝试上限为 4 次。
+单位都是毫秒。`increment` 的两个参数分别是初始等待和每次增加的步长；第二个参数不是倍率。指数策略的 `multiplier` 是倍率，`maxDelay` 是等待上限。
 
-## 指数抖动算法
+## 实际示例
 
-无抖动的指数退避会让大量请求在相同时间点再次失败重试，形成重试风暴。`ExponentialJitterBackoff` 使用固定下界随机区间：
+固定间隔：适合本地重试或已知 1 秒左右恢复的依赖。
 
-1. 计算 `initialDelay * multiplier^(attempt - 1)`，并用 `maxDelay` 封顶；
-2. 若上限不大于 `initialDelay`，直接返回上限；
-3. 否则在 `[initialDelay, maxCalculatedDelay]` 闭区间内生成随机延迟。
+```java
+import com.team4u.framework.retry.api.RetryPolicy;
+import com.team4u.framework.retry.common.backoff.Backoffs;
 
-因此每次延迟至少为 `initialDelay`，同时不同进程的重试点会被随机打散。
+RetryPolicy policy = RetryPolicy.builder()
+        .maxRetries(3)
+        .backoff(Backoffs.fixed(1000))
+        .build();
+```
 
-## BackoffRegistry 与 LRU 缓存
+等差递增：第一次等 200ms，之后每次多等 300ms。
 
-`BackoffRegistry` 按 `(type, params)` 生成缓存 key，容量为 1024 的 LRU 会复用等值配置创建出的 Backoff。内置类型通过 SPI 自动注册。
+```java
+RetryPolicy policy = RetryPolicy.builder()
+        .maxRetries(3)
+        .backoff(Backoffs.increment(200, 300))
+        .build();
+```
 
-自定义 Backoff 需要同时提供：
+指数递增：第一次 100ms，第二次 200ms，第三次 400ms，最多不超过 5 秒。
 
-- 稳定的 `type` 标识；
-- 可序列化的参数；
-- `Backoff.toConfig()`；
-- 注册在同 registry 中的 `BackoffFactory`，能根据 `type + params` 重建实例。
+```java
+RetryPolicy policy = RetryPolicy.builder()
+        .maxRetries(5)
+        .backoff(Backoffs.exponential(100, 2.0, 5000))
+        .build();
+```
 
-## MANAGED 持久化格式
+指数加抖动：推荐给多进程、高并发场景使用。
 
-`LeaseRetryRecordSerializer` 的当前 schema 为 `version=1`。Backoff 只保存 `type + params`，不保存 Java 类名或字段布局：
+```java
+RetryPolicy policy = RetryPolicy.builder()
+        .maxRetries(5)
+        .backoff(Backoffs.exponentialJitter(100, 2.0, 5000))
+        .build();
+```
+
+## 随机抖动在做什么
+
+无抖动的指数退避会让很多请求在同一个时间点重试，例如都等 100ms、200ms、400ms，下游恢复瞬间会被再次打满。
+
+`exponentialJitter` 的计算方式：
+
+1. 先按指数公式算出本次理论等待：`initialDelay * multiplier^(attempt - 1)`。
+2. 用 `maxDelay` 封顶。
+3. 在 `[initialDelay, 理论等待]` 的闭区间内取随机值。
+
+因此它有一个固定下界：等待不会小于 `initialDelay`。如果理论上限不大于初始值，就直接返回上限。
+
+## 参数校验
+
+常用约束：
+
+- 固定：`delay >= 0`。
+- 递增：`initialDelay >= 0`，`stepMillis >= 0`。
+- 指数：`initialDelay >= 0`，`multiplier > 0`，`maxDelay >= initialDelay`。
+
+不满足时构建策略会直接失败。
+
+## MANAGED 持久化
+
+MANAGED 会把 Backoff 保存成稳定的 `type + params`，当前记录格式为 `version=1`：
 
 ```json
 {
@@ -51,11 +93,22 @@
 }
 ```
 
-内置参数校验是严格的：类型错误、缺失参数或额外参数都会被拒绝。旧 Lease payload 没有 `version=1`，不做兼容迁移。若策略中的异常类型不是 `java.*` Throwable，还必须为 `LeaseRetryRecordSerializer` 构造显式 allowlist，详见[托管持久化重试](retry-managed.md)。
+内置策略包括：
 
-## 动态策略配置
+| type | params |
+| :--- | :--- |
+| `fixed` | `delay` |
+| `increment` | `initialDelay`, `stepMillis` |
+| `exponential` | `initialDelay`, `multiplier`, `maxDelay` |
+| `exponentialJitter` | `initialDelay`, `multiplier`, `maxDelay` |
 
-配置中心可使用 `retry.policy.<policyId>` 存放 JSON 规则：
+解析时参数必须类型正确、数量正确，不能多传未知参数。格式不写 Java 类名，旧版 Lease payload 不做兼容迁移。
+
+自定义 Backoff 需要提供稳定 type、可序列化 params、`toConfig()`，以及注册在同一个 `BackoffRegistry` 的 `BackoffFactory`。无法表达为配置的实现不适合默认持久化格式，应自定义 `RetryRecordSerializer`。
+
+## 动态配置（高级）
+
+配置中心可以按策略名下发 JSON：
 
 ```json
 {
@@ -80,18 +133,11 @@
 }
 ```
 
-解析规则：
+规则：
 
 - `maxRetries` 与 `foregroundMaxRetries` 都不包含首次执行。
-- `foregroundMaxRetries` 只在 MANAGED 中有意义，且不能超过 `maxRetries`。
-- `retryOnExceptions` 与 `abortOnExceptions` 会在解析时加载并校验为 `Throwable` 子类；类不存在或类型不匹配会立即失败。
-- MANAGED 持久化时，非 `java.*` 异常还必须加入 `LeaseRetryRecordSerializer` allowlist。
+- `foregroundMaxRetries` 只用于 MANAGED，且不能超过 `maxRetries`。
+- 异常类会在解析时加载并校验为 Throwable 子类，类不存在或类型不匹配会立即失败。
+- MANAGED 持久化非 `java.*` 异常时，还需要加入 serializer allowlist，见[托管持久化重试](retry-managed.md)。
 
-## 策略查找优先级
-
-按策略名称查找时：
-
-1. `DynamicRetryPolicyRegistry` 中配置中心下发的动态策略；
-2. `NamedRetryPolicyRegistry.global()` 注册的静态策略工厂。
-
-两者都未命中时抛出 `IllegalArgumentException`。
+按名称查找策略时，先查动态配置 `DynamicRetryPolicyRegistry`，再查全局静态注册 `NamedRetryPolicyRegistry.global()`；都没有则抛出 `IllegalArgumentException`。

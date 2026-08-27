@@ -1,78 +1,136 @@
 # 查询与管理
 
-所有操作都从 `TaskQueue` 发起，并自动携带队列名。不同队列之间不能通过 taskId 互查或互操作。
+这一页面向需要看任务状态或做简单运维操作的人。所有操作都从 `TaskQueue` 发起，并且只作用于当前队列。
 
-## 查询任务
+## 最常用：查一个任务
 
-按任务 ID 查询：
+你拿到 `taskId` 后，先查快照确认状态：
 
 ```java
 Optional<TaskSnapshot> task = orders.get("task-id");
 ```
 
-按幂等键查询必须提供 type 和 key：
+如果提交时设置了幂等键，可以按类型和 key 查：
 
 ```java
-Optional<TaskSnapshot> task = orders.get("order.timeout-cancel", "O-1001");
+Optional<TaskSnapshot> task = orders.get("order.cancel", "O-1001");
 ```
 
-分页和过滤：
+常见判断：
+
+```java
+TaskSnapshot snapshot = orders.get("task-id")
+        .orElseThrow(() -> new IllegalStateException("task not found"));
+
+System.out.println(snapshot.getStatus());
+System.out.println(snapshot.getErrorMessage());
+System.out.println(snapshot.getAttemptCount());
+```
+
+也可以按条件分页查询：
 
 ```java
 TaskPage page = orders.list(TaskQuery.builder()
-        .type("order.timeout-cancel")
+        .type("order.cancel")
         .status(TaskStatus.PENDING)
-        .workerId("order-worker-1")
         .page(0)
         .pageSize(50)
         .build());
 
-long total = page.getTotal();
+System.out.println(page.getTotal());
 for (TaskSnapshot task : page.getTasks()) {
     System.out.printf("%s %s attempt=%d%n",
             task.getTaskId(), task.getStatus(), task.getAttemptCount());
 }
 ```
 
-`page` 从 0 开始，`pageSize` 默认 50。列表按 `createdAt`、`taskId` 升序返回；这里只做运维检索，不表示抢占顺序，抢占顺序由优先级、创建时间和可见资格决定。
+`page` 从 0 开始，`pageSize` 默认 50。列表按创建时间排序，用于运维检索；它不代表 Worker 的抢占顺序。
 
-`TaskQuery` 的三个过滤条件都可以为 `null`，但 workerId 过滤通常只在查询 `RUNNING` 任务时有值。
+## 最常用：取消一个任务
 
-## 管理操作结果
+用户撤回请求、需求变更，或者你确认任务不需要再执行时，可以取消：
 
-所有管理方法返回同一个结果枚举：
+```java
+TaskOperationResult result = orders.cancel(
+        "task-id", "order was paid manually");
+```
 
-| `TaskOperationResult` | 含义 |
+只有排队中或执行权已过期的任务能取消。正在执行、成功、失败、已取消的任务会返回冲突值。
+
+## 最常用：重试失败任务
+
+任务已经 `FAILED`，问题修复后想让队列再执行一次：
+
+```java
+TaskOperationResult result = orders.retry(
+        "task-id", Duration.ofMinutes(1));
+```
+
+这里的 `retry` 是运维操作，只作用于 `FAILED` 任务。handler 内部想安排下一次执行时，应返回 `TaskResult.retryAfter(...)`，不要在 handler 里调用这个方法。
+
+调用成功后：
+
+- 状态回到 `PENDING`；
+- `visibleAt` 变为当前时间加 1 分钟；
+- `errorMessage` 清空；
+- `attemptCount` 保留，下一次被 Worker 取走时继续加 1。
+
+## 管理操作返回值
+
+查询以外的主要管理方法都返回 `TaskOperationResult`：
+
+| 值 | 含义 |
 | :--- | :--- |
-| `APPLIED` | 条件满足，状态变更成功 |
-| `TASK_NOT_FOUND` | 当前队列中不存在该任务 |
-| `TERMINAL` | 任务已在 `SUCCEEDED`、`FAILED` 或 `CANCELLED`，拒绝变更 |
-| `ACTIVE_LEASE_PRESENT` | 任务正在被有效 `RUNNING` 租约持有，拒绝管理面写入 |
+| `APPLIED` | 操作成功 |
+| `TASK_NOT_FOUND` | 当前队列没有这个任务 |
+| `TERMINAL` | 任务已是成功、失败或取消，不能再变更 |
+| `ACTIVE_LEASE_PRESENT` | 任务正在被有效执行，不能从管理面覆盖 |
 
-这些方法不会抛出上述业务性冲突；冲突以返回值表达。参数非法、时间非法或后端故障仍会抛出运行时异常。
+```java
+TaskOperationResult result = orders.cancel("task-id", "not needed");
+if (result != TaskOperationResult.APPLIED) {
+    System.out.println("cancel failed: " + result);
+}
+```
 
-## 立即重调度
+## 补记终态
 
-`reschedule` 把 PENDING 或已过期的 RUNNING 任务设置新的可见时间，并清空租约字段：
+有些工作不是 Worker 执行的，例如人工核对后想把排队中的任务直接标记为成功或失败：
+
+```java
+TaskOperationResult result = orders.complete(
+        "task-id",
+        TaskResult.success(
+                "{\"reconciled\":true}",
+                Collections.singletonMap("operator", "ops-1")));
+```
+
+也可以补记失败或取消：
+
+```java
+orders.complete("task-id", TaskResult.failure("manual close"));
+
+orders.cancel("task-id", "cancelled by operator");
+```
+
+`complete` 不接受 `TaskResult.retryAfter(...)`；需要重新调度时使用 `reschedule` 或 `retry`。
+
+## 重新调度
+
+任务还没失败，但你想改变它下次可执行的时间：
 
 ```java
 TaskOperationResult result = orders.reschedule(
         "task-id", Duration.ofMinutes(5));
 ```
 
-应用后：
+成功后任务回到 `PENDING`，`visibleAt` 变为当前时间加 5 分钟，执行权字段和错误信息清空。排队中任务和执行权已过期的任务可以重调度；正在执行和终态任务会被拒绝。
 
-- 状态为 `PENDING`;
-- `visibleAt = now + delay`;
-- `workerId`、`leaseToken`、`leaseExpiresAt` 清空；
-- `errorMessage` 清空；
-- `attemptCount` 不变，下一次抢占后再加 1。
+handler 返回 retry 时已经完成同样的事情，一般不需要再手动 reschedule。
 
-活跃租约和终态会被拒绝。
+## 高级：修改任务数据
 
-## 修改任务数据
-
-`TaskPatch` 是部分更新。未设置的字段保持不变：
+`TaskPatch` 是部分更新，适合运维修复排队中的任务：
 
 ```java
 TaskOperationResult result = orders.update(TaskPatch.builder()
@@ -83,77 +141,32 @@ TaskOperationResult result = orders.update(TaskPatch.builder()
         .build());
 ```
 
-属性语义需要特别注意：
+未设置的字段保持不变。`attributes` 需要注意：
 
 - 未调用 `attributes(...)`：保留原属性；
-- 调用 `attributes(emptyMap())`：清空全部属性；
-- 调用 `attributes(map)`：用这个 map 替换全部属性。
+- 调用 `attributes(Collections.emptyMap())`：清空全部属性；
+- 调用 `attributes(map)`：用新 map 替换全部属性。
 
-`update` 只改元数据，不改变状态和时间。对租约已过期的 `RUNNING` 任务，它会保留 `RUNNING`、原 `workerId` 和原 `leaseExpiresAt`；之后其他 Worker 仍可按过期租约接管。
+`update` 只改数据，不改变状态和执行时间。对执行权已过期的 `RUNNING` 记录，它会保留原状态和旧 Worker 信息；之后其他 Worker 仍可接管。
 
-## 原子修改并重调度
+## 高级：原子修改并重调度
 
-`updateAndReschedule` 把元数据变更和重调度作为一个后端原子操作：
+如果要把修复数据和立即重调度合并成一次后端更新，避免中间被 Worker 抢走：
 
 ```java
 TaskOperationResult result = orders.updateAndReschedule(
         TaskPatch.builder()
                 .taskId("task-id")
-                .type("order.timeout-cancel-v2")
-                .payload("{\"orderId\":\"O-1001\",\"urgent\":true}")
-                .priority(20)
-                .attributes(Collections.singletonMap("traceId", "T-2"))
+                .payload("{\"orderId\":\"O-1001\",\"batch\":\"repaired\"}")
+                .priority(10)
                 .build(),
-        Duration.ofMinutes(5));
+        Duration.ZERO);
 ```
 
-应用后任务变为 `PENDING`，可见时间为 `now + delay`，租约字段和错误信息清空。活跃租约与终态同样被拒绝。
+成功后任务变为 `PENDING`，可见时间为当前时间加 `Duration.ZERO`，执行权字段清空。如果 patch 修改 `type`，新的 `(queue, taskType, deduplicationKey)` 不能已经被其他任务占用。
 
-如果 patch 修改 type，新的三元组不能占用其他任务的 `(queue, taskType, deduplicationKey)` 幂等键。
+## 并发注意事项
 
-## 重试失败任务
+管理面看到 `RUNNING` 但执行权已经过期时，操作仍然可能成功。执行权是否有效由当前时间和 `leaseExpiresAt` 判断，不依赖后台清理任务把状态改回 `PENDING`。
 
-只有 `FAILED` 任务可以通过管理面 `retry` 重新调度：
-
-```java
-TaskOperationResult result = orders.retry("task-id", Duration.ofMinutes(1));
-```
-
-应用后任务为 `PENDING`，错误清空，`attemptCount` 保留并在下一次抢占时继续累计。`PENDING`、有效 `RUNNING`、`SUCCEEDED`、`CANCELLED` 都会被拒绝；其中有效 `RUNNING` 返回 `ACTIVE_LEASE_PRESENT`。
-
-Handler 内部想立即安排下一次执行时应返回 `TaskResult.retryAfter(...)`，不是抛异常后调用管理面 retry。
-
-## 完成和取消
-
-无租约完成任务使用 `complete`，适用于 PENDING 或租约已过期的 RUNNING 任务：
-
-```java
-TaskOperationResult result = orders.complete(
-        "task-id",
-        TaskResult.success(
-                "{\"reconciled\":true}",
-                Collections.singletonMap("traceId", "T-2")));
-```
-
-`complete` 只接受 success、failure 或 cancel，不接受 retry 结果。它按 `TaskResult` 写入终态：
-
-```java
-orders.complete("task-id", TaskResult.failure("manual close", null, null));
-
-orders.complete("task-id", TaskResult.cancel(
-        "cancelled by operator", null, Collections.emptyMap()));
-```
-
-取消有快捷方法，等价于提交带 reason 的 cancel 结果：
-
-```java
-TaskOperationResult result = orders.cancel("task-id", "cancelled by operator");
-```
-
-活跃租约会返回 `ACTIVE_LEASE_PRESENT`，避免管理面覆盖正在执行的 Worker。终态任务返回 `TERMINAL`。
-
-## 管理语义与后台接管
-
-管理面可以在租约过期后修改或完成任务，即使快照仍显示旧的 `RUNNING` 记录。这是因为“租约是否有效”由当前时间和 `leaseExpiresAt` 判断，而不是依赖后台清理任务。
-
-并发窗口下，后端必须原子判断管理条件和租约条件。若管理写回和 Worker 接管竞争，只有一方能成功；调用方应读取最新快照并按业务需要重试或放弃。
+管理操作和 Worker 接管可能同时发生。后端会原子判断条件，只有一方成功。调用方拿到冲突返回值时，应重新查询任务，再决定是否重试操作。

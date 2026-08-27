@@ -1,10 +1,13 @@
 # 快速开始
 
-本文介绍 `team4u-retry` 的两种核心接入方式：**进程内即时重试 (INLINE)** 与 **托管持久化重试 (MANAGED)**。
+先跑通一条路径，再看另一条。两条路径互不依赖：
+
+- [INLINE：当前请求里重试](#路径一-inline当前请求里重试)
+- [MANAGED：失败后交给后台补偿](#路径二-managed失败后交给后台补偿)
 
 ## 引入依赖
 
-### 仅使用 INLINE 模式
+只用 INLINE，引入 `team4u-retry-core`：
 
 ```xml
 <dependency>
@@ -14,16 +17,9 @@
 </dependency>
 ```
 
-### 使用 MANAGED 托管持久化模式
-
-`team4u-retry-lease-runtime` 提供 `ManagedRetryRuntime`。`team4u-lease-memory` 适合单进程测试和演示；生产多进程接管请使用 `team4u-lease-jdbc`。
+使用本文的 MANAGED 示例，再引入运行时和 Memory 后端：
 
 ```xml
-<dependency>
-    <groupId>com.team4u</groupId>
-    <artifactId>team4u-retry-core</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
-</dependency>
 <dependency>
     <groupId>com.team4u</groupId>
     <artifactId>team4u-retry-lease-runtime</artifactId>
@@ -36,7 +32,11 @@
 </dependency>
 ```
 
-## INLINE 同步重试
+Memory 后端用于本机示例和单进程测试。多进程生产环境使用 JDBC，见[部署到多进程](#部署到多进程使用-jdbc)。
+
+## 路径一： INLINE，当前请求里重试
+
+适合“等 200ms、800ms 也可以，但这次调用必须拿到结果”的场景。下面的任务前两次失败，第三次成功：
 
 ```java
 import com.team4u.framework.retry.api.Retries;
@@ -44,167 +44,192 @@ import com.team4u.framework.retry.api.RetryPolicy;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 
 import java.io.IOException;
+import java.util.concurrent.atomic.AtomicInteger;
 
-// maxRetries 不包含首次执行：总共最多执行 3 次。
+AtomicInteger calls = new AtomicInteger();
+
 RetryPolicy policy = RetryPolicy.builder()
-        .maxRetries(2)
-        .backoff(Backoffs.fixed(1000))
+        .maxRetries(2) // 不含首次执行，所以总共最多执行 3 次
+        .backoff(Backoffs.fixed(200))
         .retryOn(IOException.class)
-        .abortOn(IllegalArgumentException.class)
         .build();
 
 String result = Retries.inline()
         .policy(policy)
-        .call(() -> remoteHttpService.call("params"));
+        .call(() -> {
+            if (calls.incrementAndGet() < 3) {
+                throw new IOException("temporary failure");
+            }
+            return "ok";
+        });
 
-System.out.println("执行结果: " + result);
+System.out.println("result=" + result + ", calls=" + calls.get());
 ```
 
-## INLINE 异步重试
+你应该看到：
 
-```java
-import com.team4u.framework.retry.api.Retries;
-import com.team4u.framework.retry.api.RetryPolicy;
-import com.team4u.framework.retry.common.backoff.Backoffs;
-
-import java.util.concurrent.CompletableFuture;
-
-RetryPolicy policy = RetryPolicy.builder()
-        .maxRetries(3)
-        .backoff(Backoffs.exponentialJitter(200, 2.0, 3000))
-        .build();
-
-CompletableFuture<String> future = Retries.inline()
-        .policy(policy)
-        .callAsync(() -> asyncHttpService.callAsync("params"));
-
-future.thenAccept(result -> System.out.println("异步结果: " + result));
+```text
+result=ok, calls=3
 ```
 
-## MANAGED 托管持久化重试
+如果三次都失败，`Retries.inline().call(...)` 会抛出最后一次业务异常，不会包装成框架异常。没有配置 `retryOn` 时，所有非中断异常都会按次数策略重试。
 
-MANAGED 的核心约定：
+## 路径二： MANAGED，失败后交给后台补偿
 
-- `maxRetries` 不包含首次执行，总尝试上限是 `maxRetries + 1`。
-- `foregroundMaxRetries` 同样不包含首次执行，且必须显式配置，不能超过 `maxRetries`。
-- 前台与后台共享同一个持久化 `attempts` 计数，后台会从前台失败次数之后继续。
-- 交付边界是 **at-least-once**：进程崩溃、前台接管超时或租约接管都可能导致恢复逻辑再次执行，业务恢复处理器必须幂等。
+适合通知、补发、外部系统写入这类动作：前台先试一次，失败后不再拖住用户请求，任务被存起来，由后台继续执行。
 
-### 组装并启动运行时
+这个例子有四个角色：
 
-下面的例子使用进程内 Memory 后端。生产环境请将 `InMemoryLeaseBackend` 换成 `new JdbcLeaseBackend(dataSource)` 或 `new JdbcLeaseBackend(dataSource, dialect)`。
+- `notifyMerchant`: 前台业务动作，这里固定失败，用来触发后台接管。
+- `NotifyAgainHandler`: 后台恢复动作，成功后打印 payload。
+- `ManagedRetryRuntime`: 创建后台 Worker 和存储。
+- `Retries.managed(...)`: 提交前台任务和恢复信息。
 
 ```java
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
-import com.team4u.framework.lease.spi.LeaseBackend;
+import com.team4u.framework.retry.api.ManagedSubmitResult;
+import com.team4u.framework.retry.api.Retries;
 import com.team4u.framework.retry.api.RetryPolicy;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 import com.team4u.framework.retry.managed.recovery.RecoveryContext;
 import com.team4u.framework.retry.managed.recovery.RecoveryHandlerRegistry;
 import com.team4u.framework.retry.managed.recovery.StringRecoveryHandler;
 import com.team4u.framework.retry.runtime.lease.ManagedRetryRuntime;
+import java.io.IOException;
+import java.util.concurrent.CountDownLatch;
+import java.util.concurrent.TimeUnit;
 
-import java.time.Duration;
+public class ManagedQuickStart {
 
-class PayNotifyRecoveryHandler implements StringRecoveryHandler {
-    private final PaymentNotifyService paymentNotifyService;
+    public static void main(String[] args) throws Exception {
+        CountDownLatch recovered = new CountDownLatch(1);
 
-    PayNotifyRecoveryHandler(PaymentNotifyService paymentNotifyService) {
-        this.paymentNotifyService = paymentNotifyService;
+        RecoveryHandlerRegistry registry = new RecoveryHandlerRegistry();
+        registry.register(new NotifyAgainHandler(recovered));
+
+        ManagedRetryRuntime runtime = ManagedRetryRuntime
+                .lease(new InMemoryLeaseBackend())
+                .registry(registry)
+                .autoScanRecoveryHandlers(false)
+                .defaultPolicy(retryPolicy())
+                .start();
+
+        try {
+            ManagedSubmitResult<String> result = Retries.managed(runtime.client())
+                    .taskType("pay-notify")
+                    .idempotencyKey("order-1001")
+                    .payload("order-1001")
+                    .policy(retryPolicy())
+                    .call(() -> {
+                        throw new IOException("merchant unavailable");
+                    });
+
+            if (result.isAccepted()) {
+                ManagedSubmitResult.Accepted<String> accepted =
+                        (ManagedSubmitResult.Accepted<String>) result;
+                System.out.println("accepted taskId=" + accepted.getTaskId());
+            }
+
+            if (!recovered.await(3, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("background recovery timed out");
+            }
+        } finally {
+            runtime.close();
+        }
     }
 
-    @Override
-    public String taskName() {
-        return "pay-notify";
+    private static RetryPolicy retryPolicy() {
+        return RetryPolicy.builder()
+                .maxRetries(2)       // 首次之后最多再试 2 次，总共最多 3 次
+                .foregroundMaxRetries(0) // 首次失败后不再占用前台线程
+                .backoff(Backoffs.fixed(200))
+                .build();
     }
 
-    @Override
-    public void recover(String payload, RecoveryContext context) throws Exception {
-        paymentNotifyService.notify(payload);
+    private static final class NotifyAgainHandler implements StringRecoveryHandler {
+        private final CountDownLatch recovered;
+
+        private NotifyAgainHandler(CountDownLatch recovered) {
+            this.recovered = recovered;
+        }
+
+        @Override
+        public String taskName() {
+            return "pay-notify"; // 必须与提交时的 taskType 相同
+        }
+
+        @Override
+        public void recover(String payload, RecoveryContext context) {
+            System.out.println("recovered payload=" + payload
+                    + ", attempt=" + context.getAttempt());
+            recovered.countDown();
+        }
     }
 }
-
-LeaseBackend backend = new InMemoryLeaseBackend();
-RecoveryHandlerRegistry registry = new RecoveryHandlerRegistry();
-registry.register(new PayNotifyRecoveryHandler(paymentNotifyService));
-
-ManagedRetryRuntime runtime = ManagedRetryRuntime.lease(backend)
-        .queueName("payment-retry")
-        .registry(registry)
-        .autoScanRecoveryHandlers(false)
-        .defaultPolicy(RetryPolicy.builder()
-                .maxRetries(5)
-                .foregroundMaxRetries(1)
-                .backoff(Backoffs.exponentialJitter(1000, 2.0, 60_000L))
-                .build())
-        .foregroundRecoveryTimeout(Duration.ofMinutes(5))
-        .workerId("payment-retry-worker-1")
-        .lease(Duration.ofSeconds(30))
-        .pollInterval(Duration.ofMillis(250))
-        .heartbeatEnabled(true)
-        .heartbeatInterval(Duration.ofSeconds(10))
-        .threadName("payment-retry-worker")
-        .start();
 ```
 
-`ManagedRetryRuntime` 默认使用 `retry-recovery` 队列、30 秒租约、250ms 轮询、开启心跳、5 分钟前台接管窗口。业务恢复处理器必须实现 `com.team4u.framework.retry.managed.recovery.StringRecoveryHandler`。推荐像上例一样使用本地 registry 显式注册；`autoScanRecoveryHandlers(true)` 只会向该 runtime 的本地 registry 做 ServiceLoader 扫描，不会修改全局 registry。
+你应该先看到 `accepted taskId=...`，随后看到：
 
-### JDBC 后端
+```text
+recovered payload=order-1001, attempt=2
+```
+
+`attempt=2` 表示这是整条链路的第二次尝试；前台失败算第 1 次，后台恢复算第 2 次。若后台也持续失败，它会按退避时间继续，直到次数耗尽后落为终态失败。
+
+### 结果分支
+
+`ManagedSubmitResult` 有五种结果。入门时先记住前三种：
+
+| 结果 | 含义 | 你通常做什么 |
+| :--- | :--- | :--- |
+| `Completed` | 前台成功 | 使用 `getValue()` |
+| `Accepted` | 前台预算耗尽，任务已交给后台 | 记录 `getTaskId()` 或直接返回“处理中” |
+| `Failed` | 策略判定不再重试 | 处理 `getError()` |
+| `Existing` | 幂等键命中已有任务 | 读取当前状态，不重复提交 |
+| `Rejected` | 存储等基础设施无法接受任务 | 记录日志并按系统故障处理 |
+
+完整分支可查看 [托管持久化重试](retry-managed.md)。
+
+## 部署到多进程使用 JDBC
+
+Memory 只存在当前 JVM 里。多个服务进程要共享任务、互相接管，使用 `team4u-lease-jdbc`：
+
+```xml
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-lease-jdbc</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+</dependency>
+```
+
+MySQL 建表脚本在仓库中的位置：
+
+```text
+team4u-lease/team4u-lease-jdbc/src/main/resources/schema/lease_task_mysql.sql
+```
+
+创建表后，把示例中的后端替换为：
 
 ```java
 import com.team4u.framework.lease.jdbc.JdbcLeaseBackend;
 import com.team4u.framework.lease.jdbc.dialect.MySqlLeaseDbDialect;
-import com.team4u.framework.lease.spi.LeaseBackend;
 
 import javax.sql.DataSource;
 
-LeaseBackend backend = new JdbcLeaseBackend(dataSource, new MySqlLeaseDbDialect());
-ManagedRetryRuntime runtime = ManagedRetryRuntime.lease(backend)
-        // 其余配置与 Memory 示例相同
+ManagedRetryRuntime runtime = ManagedRetryRuntime
+        .lease(new JdbcLeaseBackend(dataSource, new MySqlLeaseDbDialect()))
+        .registry(registry)
+        .autoScanRecoveryHandlers(false)
+        .defaultPolicy(retryPolicy())
         .start();
 ```
 
-### 提交任务
-
-```java
-import com.team4u.framework.retry.api.ManagedSubmitResult;
-import com.team4u.framework.retry.api.Retries;
-import com.team4u.framework.retry.api.RetryPolicy;
-import com.team4u.framework.retry.common.backoff.Backoffs;
-
-ManagedSubmitResult<String> result = Retries.managed(runtime.client())
-        .taskType("pay-notify")
-        .idempotencyKey("order_998811")
-        .payload("{\"orderId\":\"order_998811\"}")
-        .policy(RetryPolicy.builder()
-                .maxRetries(5)
-                .foregroundMaxRetries(1)
-                .backoff(Backoffs.fixed(1000))
-                .build())
-        .call(() -> paymentNotifyService.notify("{\"orderId\":\"order_998811\"}"));
-
-if (result.isCompleted()) {
-    ManagedSubmitResult.Completed<String> completed =
-            (ManagedSubmitResult.Completed<String>) result;
-    System.out.println("前台完成: " + completed.getValue());
-} else if (result.isAccepted()) {
-    ManagedSubmitResult.Accepted<String> accepted =
-            (ManagedSubmitResult.Accepted<String>) result;
-    System.out.println("已交由后台接管, taskId=" + accepted.getTaskId());
-} else if (result.isExisting()) {
-    ManagedSubmitResult.Existing<String> existing =
-            (ManagedSubmitResult.Existing<String>) result;
-    System.out.println("命中已有任务, taskId=" + existing.getTaskId());
-} else if (result.isFailed()) {
-    Throwable error = ((ManagedSubmitResult.Failed<String>) result).getError();
-    System.err.println("终态失败: " + error.getMessage());
-}
-```
+其余 handler、提交代码、结果处理都和 Memory 示例相同。使用 JDBC 后，任务记录会跨进程保留；进程重启后未完成任务可以由后台 Worker 接管。
 
 ## 下一步
 
-- 深入掌握进程内重试与异常拆包机制：[进程内重试 (INLINE)](retry-inline.md)
-- 了解前后台分级、持久化格式与分布式恢复：[托管持久化重试 (MANAGED)](retry-managed.md)
-- 查看退避算法与动态配置下发：[退避策略与动态配置](retry-strategy.md)
-- 开启 `@Retryable` 注解与 Spring 整合：[注解与代理模式](retry-proxy.md) · [Spring 整合](retry-spring.md)
-- 查阅生产级实战案例：[实战案例](retry-sample.md)
+- 想了解同步、异步和异常匹配：[INLINE](retry-inline.md)
+- 想了解后台接管、进程崩溃恢复和生产配置：[MANAGED](retry-managed.md)
+- 想选择固定、递增或指数等待：[退避策略](retry-strategy.md)
+- 想用注解隐藏模板代码：[注解与代理](retry-proxy.md)、[Spring 整合](retry-spring.md)
+- 想看业务场景：[实战案例](retry-sample.md)
