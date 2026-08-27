@@ -14,7 +14,7 @@
 | 2. Matrix CI, External Consumers, Dependency Baselines | Complete |
 | 3. Split base-jdbc and Delete Base SpringUtil | Complete |
 | 4. Lock Current Ant Wildcard Semantics | Complete |
-| 5. Base PathPatternMatcher and Criterion Adapter | Pending |
+| 5. Base PathPatternMatcher and Criterion Adapter | Complete |
 | 6. Proxy One Artifact and Optional ByteBuddy | Pending |
 | 7. Serializer Provider Contracts and Upstream Cleanup | Pending |
 | 8. Config Dependency Inversion and Global Initialization Fix | Pending |
@@ -35,3 +35,5 @@ Task 2 review remediation: complete (fix(ci): track serializer provider transiti
 Task 3 review remediation: complete (fix(base): preserve retry fallback and migration records).
 Task 4 complete: locked the 53-case Spring Ant matrix and Criterion adapter/null behavior; commit `test(criterion): characterize wildcard semantics`.
 Task 4 review remediation: complete; corrected the local record confusion without changing the committed 53-case matrix or tests.
+
+Task 5 complete: added pure Java Base matcher, preserved Criterion adapter semantics, and removed Criterion Spring production coupling.
