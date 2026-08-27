@@ -1,10 +1,121 @@
-# 存储后端实现
+# 存储后端
 
-`TaskQueue` 和 `TaskWorker` 是业务层入口；`LeaseBackend` 是存储 SPI。后端实现者需要理解协议，普通业务调用方不需要。
+普通业务代码只依赖 `TaskQueue` 和 `TaskWorker`。这一页面向两类人：
 
-## SPI 分层
+- 准备把学习项目搬上生产的工程师；
+- 要自己实现存储后端或审查后端正确性的开发者。
 
-`LeaseBackend` 聚合四个窄接口：
+## 选择 Memory 还是 JDBC
+
+| 后端 | 构造方式 | 数据在哪里 | 适用场景 |
+| :--- | :--- | :--- | :--- |
+| Memory | `new InMemoryLeaseBackend()` | 当前 JVM 内存 | 学习、单元测试、单进程任务 |
+| JDBC | `new JdbcLeaseBackend(dataSource)` | MySQL 表 | 多进程部署、重启后任务保留 |
+
+Memory 后端进程退出后任务就消失，不能用于跨进程容灾。生产上多实例部署、发布重启、机器故障后任务仍需存在时，应使用 JDBC 后端。
+
+## Memory 后端
+
+```java
+InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
+TaskQueue orders = Leases.queue(backend, "orders");
+```
+
+测试需要控制时间时可以注入 `Clock`：
+
+```java
+InMemoryLeaseBackend backend =
+        new InMemoryLeaseBackend(Clock.systemUTC());
+```
+
+实现要点：
+
+- 任务按 `taskId` 保存，幂等任务按 `(queue, taskType, deduplicationKey)` 建索引；
+- 每个队列、每个任务类型都有候选索引；
+- 候选按 `priority DESC, createdAt ASC, taskId ASC` 排序；
+- 一个可中断锁保护所有状态变更，保证任务记录和索引同时更新；
+- 同一 JVM 内多个 Worker 也必须通过后端抢占，不能绕过“同一任务同时只给一个 Worker”的约束。
+
+## JDBC 后端
+
+先执行建表脚本。脚本文件在 JDBC 模块 classpath 中：
+
+```text
+schema/lease_task_mysql.sql
+```
+
+然后传入你现有的 `DataSource`：
+
+```java
+JdbcLeaseBackend backend = new JdbcLeaseBackend(dataSource);
+TaskQueue orders = Leases.queue(backend, "orders");
+```
+
+如需显式指定方言：
+
+```java
+JdbcLeaseBackend backend =
+        new JdbcLeaseBackend(dataSource, new MySqlLeaseDbDialect());
+```
+
+默认方言就是 MySQL。`DataSource` 来自 HikariCP、Druid、Spring 或应用服务器；JDBC 后端不内置连接池，也不负责建表。
+
+### 表结构
+
+单表名为 `lease_task`，核心列如下：
+
+| 列 | 作用 |
+| :--- | :--- |
+| `task_id` | 主键 |
+| `queue_name`, `task_type` | 队列和任务类型 |
+| `payload`, `attributes_json` | 业务数据和属性 |
+| `deduplication_key` | 幂等键，与队列、类型组成唯一键 |
+| `status` | 五个状态枚举名 |
+| `visible_at` | 最早可执行时间 |
+| `worker_id`, `lease_token`, `lease_expires_at` | 当前执行权信息 |
+| `attempt_count` | 被抢占次数 |
+| `priority`, `created_at`, `version` | 排序、创建时间和乐观锁版本 |
+| `error_message` | 失败或取消原因 |
+
+关键约束和索引：
+
+```sql
+PRIMARY KEY (task_id),
+UNIQUE KEY uk_lease_task_dedup (queue_name, task_type, deduplication_key),
+KEY idx_lease_task_pending (queue_name, status, task_type, visible_at, priority, created_at, task_id),
+KEY idx_lease_task_expired (queue_name, status, task_type, lease_expires_at, priority, created_at, task_id),
+KEY idx_lease_task_query (queue_name, task_type, status, worker_id, created_at, task_id)
+```
+
+标识列使用 `utf8mb4_bin`，所以队列名、任务类型和幂等键区分大小写。数据库时间和执行时间使用毫秒时间戳。
+
+### 抢占如何保持排他
+
+MySQL 方案不是先查再改，而是“候选查询 + 条件更新”：
+
+1. 查询当前队列、当前订阅类型下可见的 `PENDING` 任务，以及执行权已过期的 `RUNNING` 任务；
+2. 按 `priority DESC, created_at ASC, task_id ASC` 排序；
+3. 对候选执行条件 `UPDATE`，只有版本和状态仍满足时才写入新的执行权；
+4. 成功后 `attempt_count` 加 1，`version` 加 1。
+
+每个执行权都有新的 `lease_token`。心跳和结果写回必须带同一个 `taskId + workerId + leaseToken`，并且执行权未过期。这样即使旧 Worker 恢复，也不能覆盖新 Worker 的结果。
+
+### 生产风险
+
+当前 JDBC 测试主要运行在 H2 的 MySQL 兼容模式上，并用单独测试校验 DDL 语法特征、索引和大小写行为。仓库测试还没有连接真实 MySQL。
+
+首次上生产前应至少完成：
+
+1. 在目标 MySQL 版本上执行 `lease_task_mysql.sql`；
+2. 用真实连接跑一次应用启动和任务执行；
+3. 观察抢占 SQL 的执行计划，确认索引被使用；
+4. 在多实例环境下验证发布、重启和任务接管。
+
+表结构是破坏性版本。旧版本 `lease_task` 表不能直接给新代码使用，需要按当前 schema 迁移或重建。
+
+## 自定义后端：SPI
+
+如果要接入其他数据库或存储，实现这个接口：
 
 ```java
 public interface LeaseBackend extends LeasePublisher, LeaseRuntimeClient,
@@ -12,129 +123,30 @@ public interface LeaseBackend extends LeasePublisher, LeaseRuntimeClient,
 }
 ```
 
+四个接口的职责：
+
 | 接口 | 方法 | 职责 |
 | :--- | :--- | :--- |
-| `LeasePublisher` | `submit` | 建档和幂等冲突处理 |
-| `LeaseRuntimeClient` | `acquire`, `heartbeat`, `close`, `release` | 抢占、续租、终态和 retry release |
-| `LeaseAdminService` | `complete`, `reschedule`, `retry`, `update`, `updateAndReschedule` | 无租约管理操作 |
-| `LeaseQueryService` | `get`, `getByDeduplicationKey`, `list` | queue-scoped 查询和分页 |
+| `LeasePublisher` | `submit` | 创建任务和幂等冲突处理 |
+| `LeaseRuntimeClient` | `acquire`, `heartbeat`, `close`, `release` | Worker 执行权、心跳和结果写回 |
+| `LeaseAdminService` | `complete`, `reschedule`, `retry`, `update`, `updateAndReschedule` | 无执行权的查询和管理变更 |
+| `LeaseQueryService` | `get`, `getByDeduplicationKey`, `list` | 队列内查询和分页 |
 
-运行时结果：
+运行时协议对象：
 
-| `RuntimeResult` | 含义 |
+| 对象 | 作用 |
 | :--- | :--- |
-| `APPLIED` | 写回成功 |
-| `LEASE_LOST` | token、worker 或租约有效期不匹配 |
-| `TASK_NOT_FOUND` | 任务不存在 |
-| `TERMINAL` | 任务已是终态 |
+| `TaskSubscription.of(queue, taskTypes)` | Worker 的精确类型订阅 |
+| `LeaseGrant` | 抢占成功后的任务快照和执行权 |
+| `LeaseHandle` | `taskId + workerId + leaseToken` 校验三元组 |
+| `LeaseCompletion` | 成功、失败或取消的终态写回 |
+| `LeaseRetry` | 延迟重试和可选数据更新 |
 
-管理结果为 `APPLIED`、`TASK_NOT_FOUND`、`TERMINAL`、`ACTIVE_LEASE_PRESENT`。SPI 的时间使用毫秒值，业务 API 的 `Duration`/`Instant` 在 core 门面中完成转换。
+SPI 使用毫秒时间；业务 API 的 `Duration` 和 `Instant` 由 core 层转换。
 
-核心运行时协议对象：
+### 契约测试
 
-- `TaskSubscription.of(queue, taskTypes)`: 精确类型订阅，不允许通配符；
-- `LeaseGrant`: 抢占成功后的 `RUNNING` 快照和租约；
-- `LeaseHandle`: `(taskId, workerId, leaseToken)` fencing 三元组；
-- `LeaseCompletion`: 终态和可选 payload/attributes patch;
-- `LeaseRetry`: retry delay 和可选 patch。
-
-## InMemoryLeaseBackend
-
-构造函数：
-
-```java
-InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
-
-InMemoryLeaseBackend controlledBackend =
-        new InMemoryLeaseBackend(Clock.systemUTC());
-```
-
-实现结构：
-
-- `tasksById`: 按 taskId 保存任务记录；
-- `tasksByDedupKey`: 按 `(queue, taskType, deduplicationKey)` 保存幂等索引；
-- `candidates`: `queue -> taskType -> CandidateSet` 的可见候选索引；
-- 每个 `CandidateSet` 使用 `TreeSet` 保存 `priority DESC, createdAt ASC, taskId ASC` 的候选顺序；
-- 一个可中断 `ReentrantLock` 保护所有状态变更，保证任务记录和索引同锁原子更新。
-
-抢占时按订阅 type 遍历候选集，在符合条件的候选中做全局优先级比较；成功后写入新的 worker、token 和租约到期时间。同一 JVM 内多 Worker 也必须经过该索引和锁，不能绕过排他约束。
-
-Memory 后端适合测试和单进程排他。进程重启后任务消失，不能用于跨进程容灾。
-
-## JdbcLeaseBackend
-
-构造函数：
-
-```java
-JdbcLeaseBackend backend = new JdbcLeaseBackend(dataSource);
-
-JdbcLeaseBackend mysqlBackend =
-        new JdbcLeaseBackend(dataSource, new MySqlLeaseDbDialect());
-```
-
-`DataSource` 由调用方的连接池提供。后端每次操作从 `DataSource` 获取连接，由底层 JDBC 工具负责释放；它不内置连接池或自动建表。
-
-### MySQL schema
-
-执行 JDBC 模块 classpath 中的：
-
-```text
-schema/lease_task_mysql.sql
-```
-
-表结构要点：
-
-- 单表 `lease_task`，主键 `task_id`;
-- `status` 存五个状态枚举名；
-- `worker_id`、`lease_token`、`lease_expires_at` 只在有效执行记录上存在；
-- `visible_at` 控制延迟任务资格；
-- `attempt_count` 在抢占时递增；
-- `version` 是乐观锁版本；
-- `attributes_json` 保存 String 属性的 JSON 编码；
-- 唯一键 `uk_lease_task_dedup (queue_name, task_type, deduplication_key)`;
-- 抢占索引分别覆盖可执行 `PENDING` 和过期 `RUNNING`;
-- 查询索引覆盖 type/status/worker 过滤与排序。
-
-关键标识列使用 `utf8mb4_bin` 二进制排序，保证 queue、type 和 dedup key 区分大小写。DDL 使用 MySQL 8 兼容的内联索引语法，不依赖 MySQL 不支持的 `CREATE INDEX IF NOT EXISTS`。
-
-### 抢占和 fencing
-
-MySQL 方言生成 typed `UNION ALL` 候选查询：
-
-- 第一段查找同 queue、精确 `task_type IN (...)`、`PENDING` 且 `visible_at <= now` 的任务；
-- 第二段查找同 queue、精确 type、`RUNNING` 且 `lease_expires_at <= now` 的过期任务；
-- 外层按 `priority DESC, created_at ASC, task_id ASC` 排序并限制候选数量。
-
-随后对候选执行条件 UPDATE：
-
-- 校验 taskId、queue、精确 task type 和期望 `version`;
-- 校验任务仍满足 `PENDING 可见` 或 `RUNNING 租约过期`;
-- 写入 `RUNNING`、新 worker、新 token、新到期时间；
-- `attempt_count + 1`、`version + 1`。
-
-CAS 成功后，后端还会用本次写入的 `queue/taskId/workerId/leaseToken/version` 精确重读所有权。如果极端并发下租约已被其他 Worker 再次接管，旧调用不会把别人的 handle 交给调用方，而是返回未抢到任务。
-
-心跳和写回都携带 `taskId + workerId + leaseToken`，并要求租约未过期。心跳使用单调表达式，较晚执行的短心跳不会缩短已被更新的租约时间。
-
-### 管理面条件更新
-
-`complete`、`reschedule`、`update` 和 `updateAndReschedule` 都是条件 UPDATE：
-
-- 终态拒绝；
-- `RUNNING` 且租约未过期拒绝为 `ACTIVE_LEASE_PRESENT`;
-- `RUNNING` 且租约已过期时允许管理面操作；
-- `updateAndReschedule` 在同一条 UPDATE 中应用元数据、清租约并写入新的可见时间；
-- `retry` 只允许 `FAILED` 任务回到 `PENDING`。
-
-查询分页使用 `LIMIT/OFFSET`。offset 超过 `Integer.MAX_VALUE` 时会直接拒绝，避免整数溢出生成负偏移。
-
-### 测试状态
-
-JDBC 模块当前使用 H2 MySQL mode 执行契约测试，并有单独测试校验 MySQL DDL 语法特征、二进制排序和索引列。真实 MySQL 连接的集成测试尚未接入 Maven 测试流程；首次在真实 MySQL 执行 schema 和抢占压测前，不应假定 H2 已覆盖所有 MySQL 行为差异。
-
-## 自定义后端
-
-引入测试支撑模块：
+自定义后端应引入测试支撑模块：
 
 ```xml
 <dependency>
@@ -145,7 +157,7 @@ JDBC 模块当前使用 H2 MySQL mode 执行契约测试，并有单独测试校
 </dependency>
 ```
 
-实现 `LeaseBackend` 后，继承契约测试并覆盖 `createBackend()`:
+然后继承契约测试：
 
 ```java
 public class MyLeaseBackendContractTest extends AbstractLeaseRuntimeContractTest {
@@ -156,16 +168,11 @@ public class MyLeaseBackendContractTest extends AbstractLeaseRuntimeContractTest
 }
 ```
 
-除运行时契约外，还应分别继承：
+还应分别运行：
 
 - `AbstractLeaseStateSemanticsContractTest`
 - `AbstractLeaseAdminContractTest`
 - `AbstractLeaseQueryContractTest`
 - `AbstractLeaseEpochOverflowContractTest`
 
-这些基类固定了五态流转、精确类型订阅、dedup 三元组作用域、大小写、优先级、租约接管、fencing、管理面条件、属性 patch 语义和毫秒时间溢出拒绝。通过全部契约后，自定义后端才能接入 `Leases.queue(...)` 和 `TaskWorker`。
-
-自定义实现还要遵守两个一致性点：
-
-- 状态记录和候选索引必须同事务或同锁更新，避免出现“记录已变更但索引仍可抢占”的窗口；
-- 幂等 key 冲突提交后必须重新读取现有任务并返回 `created=false`，不能只依赖插入异常。
+这些测试固定了五态流转、精确类型订阅、幂等键三元组、优先级、执行权接管、fencing、管理面条件和毫秒溢出行为。全部通过后，自定义后端才能接入 `Leases.queue(...)` 和 `TaskWorker`。

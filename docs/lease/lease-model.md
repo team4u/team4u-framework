@@ -1,70 +1,74 @@
-# 任务模型与状态机
+# 任务模型
+
+这一页解释任务从提交到结束的样子。你不需要先理解数据库表或后端协议；只看 `TaskQueue` 看到的对象就够了。
 
 ## 核心对象
 
-| 对象 | 说明 |
-| :--- | :--- |
-| `Task` | 发布任务的不可变输入：类型、String payload、可选幂等键、延迟、优先级和属性 |
-| `Submission` | 提交结果：`taskId`、是否新建、提交后的 `TaskSnapshot` |
-| `TaskSnapshot` | 后端当前可见的任务快照，包含状态、时间、尝试次数和业务数据 |
-| `TaskResult` | Handler 的处理决策：成功、失败、取消或延迟重试 |
-| `TaskContext` | Handler 可见的任务上下文，不暴露租约句柄 |
+| 对象 | 你什么时候遇到 | 作用 |
+| :--- | :--- | :--- |
+| `Task` | 提交任务时 | 你要创建的任务：类型、字符串 payload、延迟、优先级、幂等键和属性 |
+| `Submission` | 调用 `submit` 后 | 提交结果：任务 ID、是否新建、提交时的任务快照 |
+| `TaskSnapshot` | 查询任务时 | 后端当前记录的任务状态和数据 |
+| `TaskContext` | handler 执行时 | handler 能看到的任务内容，不包含执行权细节 |
+| `TaskResult` | handler 返回时 | 告诉 Worker 任务成功、失败、取消，还是稍后再试 |
 
-`Task.of(type, payload)` 是最小创建方式，其余字段通过返回新实例的派生方法配置：
+最小任务只需要两个字段：
 
 ```java
-Task task = Task.of("payment.reconcile", "{\"paymentId\":\"P-1001\"}")
-        .deduplicationKey("P-1001")
-        .delay(Duration.ofMinutes(5))
-        .priority(20)
-        .attribute("tenant", "team4u")
-        .attributes(Collections.singletonMap("traceId", "T-1001"));
+Task task = Task.of("order.cancel", "{\"orderId\":\"O-1001\"}");
 ```
 
-`attributes(...)` 会替换之前设置的全部属性；`attribute(...)` 是逐项追加。属性值必须是 `String` 且不能为 `null`。
+也可以继续配置：
 
-## 状态机
-
-任务只有五个状态：
-
-```mermaid
-stateDiagram-v2
-    [*] --> PENDING: submit
-    PENDING --> RUNNING: acquire
-    RUNNING --> PENDING: retry / reschedule / lease expires and another worker acquires
-    PENDING --> SUCCEEDED: complete(success)
-    PENDING --> FAILED: complete(failure)
-    PENDING --> CANCELLED: complete(cancel)
-    RUNNING --> SUCCEEDED: close(success)
-    RUNNING --> FAILED: close(failure)
-    RUNNING --> CANCELLED: close(cancel)
-    SUCCEEDED --> [*]
-    FAILED --> [*]
-    CANCELLED --> [*]
+```java
+Task task = Task.of("order.timeout-cancel", "{\"orderId\":\"O-1001\"}")
+        .deduplicationKey("O-1001")
+        .delay(Duration.ofMinutes(15))
+        .priority(10)
+        .attribute("traceId", "T-1001");
 ```
 
-| 状态 | 含义 | 租约字段 |
+`payload` 和 `attributes` 的值都是字符串。你可以放 JSON、普通文本或自己的编码格式；组件不解析内容。
+
+## 五个状态
+
+| 英文状态 | 中文理解 | 什么时候出现 |
 | :--- | :--- | :--- |
-| `PENDING` | 已建档，尚未被抢占；只有当前时间到达 `visibleAt` 才可抢占 | 必须为空 |
-| `RUNNING` | 某个 Worker 持有有效租约并应处理任务 | 必须有 `workerId` 和 `leaseExpiresAt` |
-| `SUCCEEDED` | 成功终态 | 必须为空 |
-| `FAILED` | 失败终态 | 必须为空 |
-| `CANCELLED` | 取消终态 | 必须为空 |
+| `PENDING` | 排队中 | 任务已创建，还没有 Worker 取走；到达 `visibleAt` 之前即使排队中也不会被取走 |
+| `RUNNING` | 执行中 | 某个 Worker 已取走任务，正在调用 handler |
+| `SUCCEEDED` | 成功 | handler 返回 success，或管理面补记成功 |
+| `FAILED` | 失败 | handler 返回 failure、抛普通异常，或管理面补记失败 |
+| `CANCELLED` | 已取消 | handler 返回 cancel，或管理面取消 |
 
-租约过期时记录不会立即从 `RUNNING` 变成 `PENDING`；它会保留旧的 Worker 信息，直到下一个 Worker 抢占成功并写入新的租约。`FAILED` 只有管理面 `retry(...)` 能重新进入 `PENDING`。
+前三个常见流转是：
 
-## 交付语义
+```text
+PENDING -> RUNNING -> SUCCEEDED
+PENDING -> RUNNING -> FAILED
+PENDING -> RUNNING -> CANCELLED
+```
 
-`team4u-lease` 是 **at-least-once** 调度。以下情况都会导致同一任务再次执行：
+如果 handler 说“现在做不了，稍后再试”：
 
-- Worker 进程崩溃或被强制终止；
-- 心跳失败且租约到期；
-- Handler 已完成业务动作，但终态写回因网络或数据库失败；
-- 前一个 Worker 被暂停很久后恢复，业务逻辑继续执行。
+```text
+PENDING -> RUNNING -> PENDING -> RUNNING -> ...
+```
 
-因此 handler 和外部系统必须按业务键做幂等。租约和 fencing token 只保证同一时刻的写回权归属，不能把业务副作用变成只执行一次。
+对应代码是：
 
-## 幂等建档
+```java
+return TaskResult.retryAfter(Duration.ofSeconds(30));
+```
+
+如果确认不能再继续：
+
+```java
+return TaskResult.failure("inventory is insufficient");
+```
+
+失败任务是终态。运维确认后可以调用 `orders.retry(taskId, delay)` 让它重新排队。不要把有限次业务重试理解成框架自动重试；什么时候继续、什么时候停止，由 handler 或调用方决定。
+
+## 幂等键
 
 `deduplicationKey` 的唯一范围是：
 
@@ -72,55 +76,67 @@ stateDiagram-v2
 (queue, taskType, deduplicationKey)
 ```
 
-- 未设置 key 时，每次提交都会创建新任务；
-- 设置 key 后，同一三元组重复提交返回已有任务；
-- 不同 type 可以使用相同 key；
-- 不同 queue 也可以使用相同 key；
+规则：
+
+- 不设置 key：每次 `submit` 都创建新任务；
+- 设置 key：同一个三元组重复提交时，返回已有任务，`Submission.isCreated()` 为 `false`；
+- 不同 task type 可以使用同一个 key；
+- 不同 queue 也可以使用同一个 key；
 - 三个字段都区分大小写。
 
-重复提交不会把旧 payload 改成新 payload，只返回现有 `TaskSnapshot`。这个机制解决“重复建档”，不解决重复执行。
+重复提交不会更新旧任务的 payload。它只避免重复建档。
 
 ## 时间字段
 
-| 字段 | 类型 | 说明 |
-| :--- | :--- | :--- |
-| `createdAt` | `Instant` | 建档时间 |
-| `visibleAt` | `Instant` | 最早可抢占时间；`submit(delay)` 后为 `createdAt + delay` |
-| `leaseExpiresAt` | `Instant` | 当前租约到期时间；仅 `RUNNING` 任务有值 |
+`TaskSnapshot` 里有三个时间：
 
-`visibleAt` 和 `leaseExpiresAt` 是两类不同门槛：
+| 字段 | 含义 |
+| :--- | :--- |
+| `createdAt` | 任务创建时间 |
+| `visibleAt` | 最早可执行时间；`delay(15分钟)` 会把它设置成创建时间后 15 分钟 |
+| `leaseExpiresAt` | 当前执行权的到期时间；只有 `RUNNING` 任务有值 |
 
-- 到达 `visibleAt` 前，`PENDING` 任务对抢占不可见；
-- 到达 `leaseExpiresAt` 后，其他 Worker 可以接管 `RUNNING` 任务；
-- 抢占和心跳不会修改 `visibleAt`；
-- runtime retry 和管理面重调度会把 `visibleAt` 设置为“当前时间 + delay”。
+`visibleAt` 回答“什么时候可以开始”；`leaseExpiresAt` 回答“这次执行权什么时候失效”。二者无关：
 
-业务 API 的时间参数使用 `Duration`，快照使用 `Instant`。`Duration` 必须能无损转换为毫秒：负数、包含不足 1 毫秒纳秒、或超过毫秒表示范围都会被拒绝。后端还会统一拒绝“当前时间 + 时长”超过 `Long.MAX_VALUE` 的计算。
+- `visibleAt` 未到：任务仍是 `PENDING`，Worker 不会取走；
+- `leaseExpiresAt` 已到：其他 Worker 可以接管这个 `RUNNING` 任务；
+- 接管和续租不会修改 `visibleAt`；
+- handler 返回 retry 或运维重调度时，`visibleAt` 会变成“当前时间 + delay”。
 
-## 排序与尝试
+业务 API 的时间参数使用 `Duration`，快照时间使用 `Instant`。负数、小于 1 毫秒的纳秒，或超过毫秒范围的时长会被拒绝。
 
-抢占候选按以下顺序全局排序，跨越 Worker 订阅的多个 task type：
+## 执行次数
 
-1. `priority` 降序；
-2. `createdAt` 升序；
-3. `taskId` 升序。
+`attemptCount` 表示任务被 Worker 成功取走的次数：
 
-`visibleAt` 是资格过滤条件，不参与排序比较：一个晚创建但高优先级的任务，到达可见时间后会先于早创建的低优先级任务被抢占。
+```text
+提交后：0
+第一次执行：1
+retryAfter 后再次执行：2
+执行权过期并被接管：继续加 1
+```
 
-`attemptCount` 表示任务被成功抢占的次数：
+它不是 handler 抛异常次数，也不是业务失败次数。handler 可以通过 `context.getAttemptCount()` 读取它，用于设置自己的最大尝试次数。
 
-- 新任务为 0；
-- 每次 acquire 成功加 1；
-- runtime retry、租约过期接管、失败后管理面 retry 再抢占，都会在后续 acquire 时继续累计。
+## 交付语义
 
-它不是 handler 抛异常次数，也不是失败任务数量。
+组件提供的是 **at-least-once** 调度：任务会被尽力处理，但业务动作可能发生多次。
 
-## Fencing
+可能出现重复执行的情况包括：
 
-每次抢占成功都会生成新的 `leaseToken`。运行时写回必须携带 `(taskId, workerId, leaseToken)`：
+- Worker 进程崩溃或被强制杀死；
+- handler 已经调用外部系统成功，但任务结果没写回；
+- Worker 长时间暂停后恢复，继续执行旧逻辑；
+- 执行权过期后，其他 Worker 接管。
 
-- token 不匹配或租约已过期时，写回返回 `LEASE_LOST`，不会修改任务；
-- 任务被接管后，旧 Worker 的成功、失败或重试写回都会被拒绝；
-- 这个 fencing 机制防止慢 Worker 在租约丢失后覆盖新 Worker 的结果。
+因此外部业务必须幂等。例如取消订单时以 `orderId` 去重，发送消息时使用业务消息 ID。`deduplicationKey` 只解决重复提交任务，不能代替外部系统幂等。
 
-业务 handler 不接触 `leaseToken`；框架在 `TaskWorker` 内部完成校验和写回。
+## 深入理解：抢占顺序
+
+多个任务都到达 `visibleAt` 后，Worker 按以下顺序选择：
+
+1. `priority` 降序，数字越大越先；
+2. `createdAt` 升序，越早创建越先；
+3. `taskId` 升序，作为稳定排序。
+
+`visibleAt` 只是资格条件，不参与排序。一个后创建但优先级更高的任务，到达可见时间后可以排在更早创建的低优先级任务前面。

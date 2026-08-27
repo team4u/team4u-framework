@@ -1,247 +1,103 @@
-# 实战示例
+# 示例场景
 
-以下示例都使用 String payload。JSON 字符串仅作为业务数据格式示例；组件本身不解析 JSON，也不要求引入任何 JSON 库。
+这页只讲两个容易落地的场景。完整 API 请从[快速开始](quick-start.md)进入。
 
-## 延迟取消未支付订单
+## 场景一：延迟取消未支付订单
 
-任务在创建后 1 秒才可见，便于示例快速完成；生产场景通常配置为 15 分钟。Worker 使用业务单号幂等取消。
+业务规则：订单创建后 15 分钟未支付则取消。为了让示例不用真的等 15 分钟，这里使用 1 秒。
+
+思路分三步：
+
+1. 用户下单时提交一个延迟任务；
+2. 任务到期后 Worker 查询订单支付状态；
+3. 未支付就调用订单服务取消；取消操作必须以 `orderId` 幂等，因为任务可能被重复执行。
 
 ```java
-package demo;
+TaskQueue orders = Leases.queue(new InMemoryLeaseBackend(), "orders");
 
-import com.team4u.framework.lease.Leases;
-import com.team4u.framework.lease.api.Submission;
-import com.team4u.framework.lease.api.Task;
-import com.team4u.framework.lease.api.TaskQuery;
-import com.team4u.framework.lease.api.TaskQueue;
-import com.team4u.framework.lease.api.TaskResult;
-import com.team4u.framework.lease.api.TaskSnapshot;
-import com.team4u.framework.lease.api.TaskStatus;
-import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
-import com.team4u.framework.lease.runtime.TaskWorker;
+Submission submission = orders.submit(Task
+        .of("order.timeout-cancel", "{\"orderId\":\"O-1001\"}")
+        .deduplicationKey("O-1001")
+        .delay(Duration.ofSeconds(1)));
 
-import java.time.Duration;
-import java.util.Collections;
+final CountDownLatch completed = new CountDownLatch(1);
 
-public final class OrderTimeoutCancelDemo {
-    public static void main(String[] args) throws Exception {
-        TaskQueue orders = Leases.queue(new InMemoryLeaseBackend(), "orders");
+try (TaskWorker worker = orders.worker()
+        .handle("order.timeout-cancel", context -> {
+            cancelIfUnpaid(context.getPayload());
+            completed.countDown();
+            return TaskResult.success();
+        })
+        .build()) {
 
-        Submission submission = orders.submit(Task
-                .of("order.timeout-cancel", "{\"orderId\":\"O-1001\"}")
-                .deduplicationKey("O-1001")
-                .delay(Duration.ofSeconds(1))
-                .attribute("source", "checkout"));
-
-        System.out.printf("created=%s taskId=%s%n",
-                submission.isCreated(), submission.getTaskId());
-
-        try (TaskWorker worker = orders.worker()
-                .handle("order.timeout-cancel", context -> {
-                    System.out.printf("attempt=%d cancel %s%n",
-                            context.getAttemptCount(), context.getPayload());
-                    cancelOrder(context.getPayload());
-                    return TaskResult.success(
-                            "{\"orderId\":\"O-1001\",\"cancelled\":true}",
-                            Collections.singletonMap("traceId", "T-1002"));
-                })
-                .lease(Duration.ofSeconds(5))
-                .pollInterval(Duration.ofMillis(20))
-                .build()) {
-
-            worker.start();
-            TaskSnapshot done = waitForStatus(orders, "order.timeout-cancel",
-                    TaskStatus.SUCCEEDED, 5_000L);
-            System.out.printf("final payload=%s%n", done.getPayload());
-        }
+    worker.start();
+    if (!completed.await(5, TimeUnit.SECONDS)) {
+        throw new IllegalStateException("task did not finish in time");
     }
 
-    private static void cancelOrder(String payload) {
-        // 调用订单服务。这里必须以 orderId 做业务幂等。
-        System.out.println("cancel order through order service: " + payload);
-    }
+    TaskSnapshot done = orders.get(submission.getTaskId())
+            .orElseThrow(() -> new IllegalStateException("task not found"));
+    System.out.println(done.getStatus());
+}
+```
 
-    private static TaskSnapshot waitForStatus(
-            TaskQueue orders, String type, TaskStatus status, long timeoutMillis)
-            throws InterruptedException {
-        long deadline = System.nanoTime() + timeoutMillis * 1_000_000L;
-        TaskSnapshot last = null;
-        while (System.nanoTime() < deadline) {
-            for (TaskSnapshot snapshot : orders.list(TaskQuery.builder()
-                    .type(type).build()).getTasks()) {
-                last = snapshot;
-                if (snapshot.getStatus() == status) {
-                    return snapshot;
-                }
+关键点：
+
+- `deduplicationKey("O-1001")` 避免同一个订单重复建档；
+- `delay(Duration.ofSeconds(1))` 让任务 1 秒后才可执行；
+- `cancelIfUnpaid` 内部要向订单服务传业务幂等键；
+- 真实生产把 1 秒改成 15 分钟，并把 Memory 后端换成 JDBC 后端。
+
+如果订单可能提前支付并触发撤回，可以在到期前调用 `orders.cancel(taskId, "order paid")`。查询和取消见[查询与管理](lease-admin.md)。
+
+## 场景二：上游结果未就绪时稍后再查
+
+业务规则：支付完成后要同步渠道结果，但渠道接口刚写入时可能暂时查不到。立即失败会把任务打成终态，更合适的是稍后重试。
+
+思路：
+
+1. 第一次执行发现结果未发布，返回 `retryAfter`；
+2. 到达新的可执行时间后，同一个任务再次被 Worker 取走；
+3. 第二次查到结果，写回成功 payload。
+
+```java
+TaskQueue payments = Leases.queue(new InMemoryLeaseBackend(), "payments");
+AtomicBoolean resultPublished = new AtomicBoolean(false);
+
+payments.submit(Task.of(
+        "payment.result-sync",
+        "{\"paymentId\":\"P-1001\"}").deduplicationKey("P-1001"));
+final CountDownLatch completed = new CountDownLatch(2);
+
+try (TaskWorker worker = payments.worker()
+        .handle("payment.result-sync", context -> {
+            if (!resultPublished.get()) {
+                resultPublished.set(true);
+                completed.countDown();
+                return TaskResult.retryAfter(Duration.ofMillis(100))
+                        .withErrorMessage("payment result is not published");
             }
-            Thread.sleep(20L);
-        }
-        throw new IllegalStateException("timeout, last status="
-                + (last == null ? "none" : last.getStatus()));
+
+            completed.countDown();
+            return TaskResult.success(
+                    "{\"paymentId\":\"P-1001\",\"state\":\"PAID\"}",
+                    Collections.singletonMap("source", "payment-channel"));
+        })
+        .build()) {
+
+    worker.start();
+    if (!completed.await(5, TimeUnit.SECONDS)) {
+        throw new IllegalStateException("task did not finish in time");
     }
 }
 ```
 
-## 上游未就绪时的短周期补偿
+第一次执行后任务仍是 `PENDING`，不是 `FAILED`；示例里的 100 毫秒后会再次执行，生产可以按外部系统写入延迟改成 30 秒或更长。`attemptCount` 从 1 变成 2，可以在 handler 里用它控制最大尝试次数。
 
-第一次执行发现上游结果未发布，返回 `TaskResult.retryAfter`；第二次执行成功并写回新 payload。
-
-```java
-package demo;
-
-import com.team4u.framework.lease.Leases;
-import com.team4u.framework.lease.api.Task;
-import com.team4u.framework.lease.api.TaskQuery;
-import com.team4u.framework.lease.api.TaskQueue;
-import com.team4u.framework.lease.api.TaskResult;
-import com.team4u.framework.lease.api.TaskSnapshot;
-import com.team4u.framework.lease.api.TaskStatus;
-import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
-import com.team4u.framework.lease.runtime.TaskWorker;
-
-import java.time.Duration;
-import java.util.Collections;
-import java.util.concurrent.atomic.AtomicBoolean;
-
-public final class PaymentResultCompensationDemo {
-    public static void main(String[] args) throws Exception {
-        TaskQueue payments = Leases.queue(new InMemoryLeaseBackend(), "payments");
-        AtomicBoolean upstreamResultPublished = new AtomicBoolean(false);
-
-        payments.submit(Task.of(
-                "payment.result-sync",
-                "{\"paymentId\":\"P-1001\"}").deduplicationKey("P-1001"));
-
-        try (TaskWorker worker = payments.worker()
-                .handle("payment.result-sync", context -> {
-                    System.out.printf("attempt=%d payload=%s%n",
-                            context.getAttemptCount(), context.getPayload());
-                    if (!upstreamResultPublished.get()) {
-                        upstreamResultPublished.set(true);
-                        return TaskResult.retryAfter(
-                                        Duration.ofMillis(50),
-                                        "upstream payment result is not published",
-                                        "{\"paymentId\":\"P-1001\",\"checked\":true}",
-                                        Collections.singletonMap("attempt", "1"));
-                    }
-
-                    return TaskResult.success(
-                            "{\"paymentId\":\"P-1001\",\"state\":\"PAID\"}",
-                            Collections.singletonMap("attempt", "2"));
-                })
-                .lease(Duration.ofSeconds(5))
-                .pollInterval(Duration.ofMillis(20))
-                .build()) {
-
-            worker.start();
-            TaskSnapshot done = waitUntilTerminal(payments, "payment.result-sync", 5_000L);
-            if (done.getStatus() != TaskStatus.SUCCEEDED) {
-                throw new IllegalStateException("compensation failed: " + done.getErrorMessage());
-            }
-            System.out.printf("attemptCount=%d payload=%s%n",
-                    done.getAttemptCount(), done.getPayload());
-        }
-    }
-
-    private static TaskSnapshot waitUntilTerminal(
-            TaskQueue queue, String type, long timeoutMillis) throws InterruptedException {
-        long deadline = System.nanoTime() + timeoutMillis * 1_000_000L;
-        TaskSnapshot last = null;
-        while (System.nanoTime() < deadline) {
-            for (TaskSnapshot snapshot : queue.list(TaskQuery.builder()
-                    .type(type).build()).getTasks()) {
-                last = snapshot;
-                if (snapshot.getStatus().isTerminal()) {
-                    return snapshot;
-                }
-            }
-            Thread.sleep(20L);
-        }
-        throw new IllegalStateException("timeout, last status="
-                + (last == null ? "none" : last.getStatus()));
-    }
-}
-```
-
-如果每次执行都会失败并最终耗尽业务上限，handler 应在达到上限时返回 `TaskResult.failure(...)`，让任务进入 `FAILED`，再由运维决定是否调用管理面 retry。
-
-## 运维修复延迟任务
-
-任务原定 1 小时后执行。上游修复完成后，运维把 payload、优先级和可见时间一起原子更新，让任务立即重新调度。
+如果某个错误确定不可能自动恢复，应返回：
 
 ```java
-package demo;
-
-import com.team4u.framework.lease.Leases;
-import com.team4u.framework.lease.api.Task;
-import com.team4u.framework.lease.api.TaskOperationResult;
-import com.team4u.framework.lease.api.TaskPatch;
-import com.team4u.framework.lease.api.TaskQuery;
-import com.team4u.framework.lease.api.TaskQueue;
-import com.team4u.framework.lease.api.TaskResult;
-import com.team4u.framework.lease.api.TaskSnapshot;
-import com.team4u.framework.lease.api.TaskStatus;
-import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
-import com.team4u.framework.lease.runtime.TaskWorker;
-
-import java.time.Duration;
-import java.util.Collections;
-
-public final class AdminRepairDemo {
-    public static void main(String[] args) throws Exception {
-        TaskQueue invoices = Leases.queue(new InMemoryLeaseBackend(), "invoices");
-
-        invoices.submit(Task
-                .of("invoice.repair", "{\"invoiceId\":\"I-1001\",\"batch\":\"old\"}")
-                .deduplicationKey("I-1001")
-                .delay(Duration.ofHours(1)));
-
-        TaskSnapshot before = invoices.get("invoice.repair", "I-1001")
-                .orElseThrow(() -> new IllegalStateException("task was not created"));
-        if (before.getStatus() != TaskStatus.PENDING) {
-            throw new IllegalStateException("task should be pending");
-        }
-
-        TaskOperationResult repaired = invoices.updateAndReschedule(
-                TaskPatch.builder()
-                        .taskId(before.getTaskId())
-                        .payload("{\"invoiceId\":\"I-1001\",\"batch\":\"repaired\"}")
-                        .priority(10)
-                        .attributes(Collections.singletonMap("operator", "ops-1"))
-                        .build(),
-                Duration.ZERO);
-
-        if (repaired != TaskOperationResult.APPLIED) {
-            throw new IllegalStateException("repair failed: " + repaired);
-        }
-
-        try (TaskWorker worker = invoices.worker()
-                .handle("invoice.repair", context -> {
-                    System.out.printf("repair %s with %s%n",
-                            context.getPayload(), context.getAttributes().get("operator"));
-                    return TaskResult.success(context.getPayload(), context.getAttributes());
-                })
-                .lease(Duration.ofSeconds(5))
-                .pollInterval(Duration.ofMillis(20))
-                .build()) {
-
-            worker.start();
-            long deadline = System.nanoTime() + 5_000_000_000L;
-            TaskSnapshot last = null;
-            while (System.nanoTime() < deadline) {
-                last = invoices.list(TaskQuery.builder().type("invoice.repair").build())
-                        .getTasks().stream().findFirst().orElse(null);
-                if (last != null && last.getStatus().isTerminal()) {
-                    break;
-                }
-                Thread.sleep(20L);
-            }
-            if (last == null || last.getStatus() != TaskStatus.SUCCEEDED) {
-                throw new IllegalStateException("repair task did not succeed");
-            }
-        }
-    }
-}
+return TaskResult.failure("payment channel rejected this payment");
 ```
 
-`reschedule`、`retry`、`complete` 和 `cancel` 的完整条件语义见[查询与管理](lease-admin.md)。
+任务进入 `FAILED` 后，修复问题再由运维调用 `payments.retry(taskId, delay)`。
