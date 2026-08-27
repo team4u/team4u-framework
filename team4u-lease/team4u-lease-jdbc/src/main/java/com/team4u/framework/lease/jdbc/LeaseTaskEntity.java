@@ -1,172 +1,242 @@
 package com.team4u.framework.lease.jdbc;
 
-import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
-import com.team4u.framework.lease.enums.LeaseTaskOutcome;
-import com.team4u.framework.lease.enums.LeaseTaskState;
-import com.team4u.framework.lease.model.LeaseGrant;
-import com.team4u.framework.lease.model.LeaseTaskRecord;
-import lombok.AccessLevel;
-import lombok.AllArgsConstructor;
-import lombok.Builder;
-import lombok.Getter;
+import com.team4u.framework.lease.api.TaskStatus;
 
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 租赁任务数据库实体类
- *
- * @author jay.wu
+ * Row representation of lease_task. Times and version are stored as epoch milliseconds.
  */
-@Getter
-@Builder(toBuilder = true)
-@AllArgsConstructor(access = AccessLevel.PRIVATE)
-public class LeaseTaskEntity {
+public final class LeaseTaskEntity {
 
-    /**
-     * 任务唯一标识
-     */
     private final String taskId;
-
-    /**
-     * 任务所属任务分组
-     */
-    private final String taskGroup;
-
-    /**
-     * 任务类型
-     */
+    private final String queueName;
     private final String taskType;
-
-    /**
-     * 业务负载数据
-     */
     private final String payload;
-    /**
-     * 业务幂等键。
-     */
-    private final String businessKey;
-
-    /**
-     * 任务当前状态
-     */
-    private final LeaseTaskState state;
-    private final LeaseTaskOutcome outcome;
-    private final LeaseTaskFailureReason failureReason;
-
-    /**
-     * 任务优先级
-     */
+    private final String deduplicationKey;
+    private final TaskStatus status;
     private final int priority;
-
-    /**
-     * 投递/执行次数
-     */
-    private final int deliveryCount;
-
-    /**
-     * 失败次数
-     */
-    private final int failureCount;
-
-    /**
-     * 当前持有租约的工作节点 ID
-     */
+    private final int attemptCount;
     private final String workerId;
-
-    /**
-     * 租约令牌
-     */
     private final String leaseToken;
-
-    /**
-     * 租约到期毫秒时间戳
-     */
-    private final long leaseExpiresAtMillis;
-
-    /**
-     * 任务下次可见（可被消费）的毫秒时间戳
-     */
-    private final long visibleAtMillis;
-
-    /**
-     * 创建毫秒时间戳
-     */
-    private final long createdAtMillis;
-
-    /**
-     * 最后更新毫秒时间戳
-     */
-    private final long updatedAtMillis;
-
-    /**
-     * 行版本号，用于乐观锁。
-     */
+    private final Long leaseExpiresAt;
+    private final long visibleAt;
+    private final long createdAt;
+    private final long updatedAt;
     private final long version;
-
-    /**
-     * 最后一次执行的错误摘要
-     */
     private final String errorMessage;
-
-    /**
-     * 扩展属性
-     */
     private final Map<String, String> attributes;
 
-    /**
-     * 获取不可变的属性 Map
-     */
+    private LeaseTaskEntity(Builder builder) {
+        this.taskId = builder.taskId;
+        this.queueName = builder.queueName;
+        this.taskType = builder.taskType;
+        this.payload = builder.payload;
+        this.deduplicationKey = builder.deduplicationKey;
+        this.status = builder.status;
+        this.priority = builder.priority;
+        this.attemptCount = builder.attemptCount;
+        this.workerId = builder.workerId;
+        this.leaseToken = builder.leaseToken;
+        this.leaseExpiresAt = builder.leaseExpiresAt;
+        this.visibleAt = builder.visibleAt;
+        this.createdAt = builder.createdAt;
+        this.updatedAt = builder.updatedAt;
+        this.version = builder.version;
+        this.errorMessage = builder.errorMessage;
+        this.attributes = immutableAttributes(builder.attributes);
+    }
+
+    public static Builder builder() {
+        return new Builder();
+    }
+
+    public String getTaskId() {
+        return taskId;
+    }
+
+    public String getQueueName() {
+        return queueName;
+    }
+
+    public String getTaskType() {
+        return taskType;
+    }
+
+    public String getPayload() {
+        return payload;
+    }
+
+    public String getDeduplicationKey() {
+        return deduplicationKey;
+    }
+
+    public TaskStatus getStatus() {
+        return status;
+    }
+
+    public int getPriority() {
+        return priority;
+    }
+
+    public int getAttemptCount() {
+        return attemptCount;
+    }
+
+    public String getWorkerId() {
+        return workerId;
+    }
+
+    public String getLeaseToken() {
+        return leaseToken;
+    }
+
+    public Long getLeaseExpiresAt() {
+        return leaseExpiresAt;
+    }
+
+    public long getVisibleAt() {
+        return visibleAt;
+    }
+
+    public long getCreatedAt() {
+        return createdAt;
+    }
+
+    public long getUpdatedAt() {
+        return updatedAt;
+    }
+
+    public long getVersion() {
+        return version;
+    }
+
+    public String getErrorMessage() {
+        return errorMessage;
+    }
+
     public Map<String, String> getAttributes() {
-        if (attributes == null) {
+        return attributes;
+    }
+
+    private static Map<String, String> immutableAttributes(Map<String, String> values) {
+        if (values == null) {
             return Collections.emptyMap();
         }
-        return Collections.unmodifiableMap(new LinkedHashMap<String, String>(attributes));
+        return Collections.unmodifiableMap(new LinkedHashMap<String, String>(values));
     }
 
-    /**
-     * 转换为租约确认对象
-     */
-    public LeaseGrant toGrant() {
-        return LeaseGrant.builder()
-                .taskId(taskId)
-                .workerId(workerId)
-                .leaseToken(leaseToken)
-                .taskGroup(taskGroup)
-                .taskType(taskType)
-                .payload(payload)
-                .deliveryCount(deliveryCount)
-                .failureCount(failureCount)
-                .attributes(attributes)
-                .createdAtMillis(createdAtMillis)
-                .visibleAtMillis(visibleAtMillis)
-                .leaseExpiresAtMillis(leaseExpiresAtMillis)
-                .build();
-    }
+    public static final class Builder {
+        private String taskId;
+        private String queueName;
+        private String taskType;
+        private String payload;
+        private String deduplicationKey;
+        private TaskStatus status;
+        private int priority;
+        private int attemptCount;
+        private String workerId;
+        private String leaseToken;
+        private Long leaseExpiresAt;
+        private long visibleAt;
+        private long createdAt;
+        private long updatedAt;
+        private long version;
+        private String errorMessage;
+        private Map<String, String> attributes;
 
-    /**
-     * 转换为任务记录对象（用于管理后台展示）
-     */
-    public LeaseTaskRecord toRecord() {
-        return LeaseTaskRecord.builder()
-                .taskId(taskId)
-                .taskGroup(taskGroup)
-                .taskType(taskType)
-                .payload(payload)
-                .businessKey(businessKey)
-                .state(state)
-                .outcome(outcome)
-                .failureReason(failureReason)
-                .workerId(workerId)
-                .priority(priority)
-                .deliveryCount(deliveryCount)
-                .failureCount(failureCount)
-                .createdAtMillis(createdAtMillis)
-                .visibleAtMillis(visibleAtMillis)
-                .leaseExpiresAtMillis(leaseExpiresAtMillis)
-                .errorMessage(errorMessage)
-                .attributes(attributes)
-                .build();
+        private Builder() {
+        }
+
+        public Builder taskId(String taskId) {
+            this.taskId = taskId;
+            return this;
+        }
+
+        public Builder queueName(String queueName) {
+            this.queueName = queueName;
+            return this;
+        }
+
+        public Builder taskType(String taskType) {
+            this.taskType = taskType;
+            return this;
+        }
+
+        public Builder payload(String payload) {
+            this.payload = payload;
+            return this;
+        }
+
+        public Builder deduplicationKey(String deduplicationKey) {
+            this.deduplicationKey = deduplicationKey;
+            return this;
+        }
+
+        public Builder status(TaskStatus status) {
+            this.status = status;
+            return this;
+        }
+
+        public Builder priority(int priority) {
+            this.priority = priority;
+            return this;
+        }
+
+        public Builder attemptCount(int attemptCount) {
+            this.attemptCount = attemptCount;
+            return this;
+        }
+
+        public Builder workerId(String workerId) {
+            this.workerId = workerId;
+            return this;
+        }
+
+        public Builder leaseToken(String leaseToken) {
+            this.leaseToken = leaseToken;
+            return this;
+        }
+
+        public Builder leaseExpiresAt(Long leaseExpiresAt) {
+            this.leaseExpiresAt = leaseExpiresAt;
+            return this;
+        }
+
+        public Builder visibleAt(long visibleAt) {
+            this.visibleAt = visibleAt;
+            return this;
+        }
+
+        public Builder createdAt(long createdAt) {
+            this.createdAt = createdAt;
+            return this;
+        }
+
+        public Builder updatedAt(long updatedAt) {
+            this.updatedAt = updatedAt;
+            return this;
+        }
+
+        public Builder version(long version) {
+            this.version = version;
+            return this;
+        }
+
+        public Builder errorMessage(String errorMessage) {
+            this.errorMessage = errorMessage;
+            return this;
+        }
+
+        public Builder attributes(Map<String, String> attributes) {
+            this.attributes = attributes;
+            return this;
+        }
+
+        public LeaseTaskEntity build() {
+            return new LeaseTaskEntity(this);
+        }
     }
 }

@@ -1,315 +1,368 @@
 package com.team4u.framework.lease;
 
-import com.team4u.framework.lease.api.LeaseBackend;
-import com.team4u.framework.lease.enums.LeaseRuntimeResult;
-import com.team4u.framework.lease.enums.LeaseTaskFailureReason;
-import com.team4u.framework.lease.enums.LeaseTaskOutcome;
-import com.team4u.framework.lease.model.*;
+import com.team4u.framework.lease.api.TaskSnapshot;
+import com.team4u.framework.lease.api.TaskStatus;
+import com.team4u.framework.lease.spi.AcquireCommand;
+import com.team4u.framework.lease.spi.LeaseBackend;
+import com.team4u.framework.lease.spi.LeaseCompletion;
+import com.team4u.framework.lease.spi.LeaseGrant;
+import com.team4u.framework.lease.spi.LeaseHandle;
+import com.team4u.framework.lease.spi.LeaseRetry;
+import com.team4u.framework.lease.spi.RuntimeResult;
+import com.team4u.framework.lease.spi.SubmitResult;
+import com.team4u.framework.lease.spi.TaskSubscription;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.time.Instant;
+import java.util.Arrays;
 import java.util.Collections;
-import java.util.concurrent.CountDownLatch;
-import java.util.concurrent.TimeUnit;
+import java.util.LinkedHashSet;
+import java.util.Map;
+import java.util.Set;
+import java.util.function.Supplier;
 
-/**
- * 租约运行时功能契约测试基类
- * <p>
- * 涵盖了租约生命周期的核心流程：发布、获取、续约（心跳）、关闭以及自动过期逻辑。
- */
 public abstract class AbstractLeaseRuntimeContractTest extends AbstractLeaseContractSupport {
 
-    /**
-     * 测试最基本的发布与获取逻辑。
-     */
     @Test
-    public void testPublishAndAcquireReadyTask() throws Exception {
+    public void testSubmitWithoutDeduplicationKeyAlwaysCreatesTask() {
         LeaseBackend backend = createBackend();
-        String taskId = publish(backend, "pay", "{\"id\":1}");
 
-        // 尝试获取任务，租约有效期 200ms，等待超时 500ms
-        LeaseGrant grant = acquire(backend, "worker-a", 200L, 500L);
+        SubmitResult first = submitResult(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload", null,
+                0L, Collections.<String, String>emptyMap());
+        SubmitResult second = submitResult(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload", null,
+                0L, Collections.<String, String>emptyMap());
 
-        Assert.assertNotNull(grant);
-        Assert.assertEquals(taskId, grant.getTaskId());
-        Assert.assertEquals(DEFAULT_QUEUE, grant.getTaskGroup());
-        Assert.assertEquals("pay", grant.getTaskType());
-        Assert.assertEquals("{\"id\":1}", grant.getPayload());
-        Assert.assertEquals(1, grant.getDeliveryCount());
-        Assert.assertEquals(0, grant.getFailureCount());
-    }
-
-    /**
-     * 测试并发获取任务时的原子性，确保同一个任务只有一个 worker 能够成功获取。
-     */
-    @Test
-    public void testOnlyOneWorkerCanAcquireSameTask() throws Exception {
-        final LeaseBackend backend = createBackend();
-        publish(backend, "pay", "payload");
-
-        final CountDownLatch ready = new CountDownLatch(2);
-        final CountDownLatch start = new CountDownLatch(1);
-        final LeaseGrant[] grants = new LeaseGrant[2];
-
-        Thread first = createAcquireThread(backend, ready, start, grants, 0, "worker-a");
-        Thread second = createAcquireThread(backend, ready, start, grants, 1, "worker-b");
-        first.start();
-        second.start();
-
-        // 等待所有线程就绪
-        Assert.assertTrue(ready.await(1, TimeUnit.SECONDS));
-        // 发令起跑
-        start.countDown();
-        first.join();
-        second.join();
-
-        // 验证有且仅有一个 worker 获取到了租约
-        Assert.assertTrue((grants[0] == null) ^ (grants[1] == null));
+        Assert.assertTrue(first.isCreated());
+        Assert.assertTrue(second.isCreated());
+        Assert.assertNotEquals(first.getTaskId(), second.getTaskId());
+        Assert.assertEquals(TaskStatus.PENDING, first.getSnapshot().getStatus());
+        Assert.assertEquals(TaskStatus.PENDING, second.getSnapshot().getStatus());
     }
 
     @Test
-    public void testCloseSuccessRemovesTaskFromFutureAcquisition() throws Exception {
+    public void testSubmitWithDeduplicationKeyIsIdempotentWithinQueueTypeAndKey() {
         LeaseBackend backend = createBackend();
-        publish(backend, "pay", "payload");
-        LeaseGrant grant = acquire(backend, "worker-a", 200L, 500L);
 
-        Assert.assertEquals(LeaseRuntimeResult.APPLIED,
-                backend.close(grant.getHandle(), LeaseCloseRequest.succeeded()));
-        Assert.assertNull(acquire(backend, "worker-b", 200L, 100L));
+        SubmitResult first = submitResult(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload-v1", "dedup-1",
+                0L, Collections.<String, String>emptyMap());
+        SubmitResult duplicate = submitResult(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload-v2", "dedup-1",
+                0L, Collections.<String, String>emptyMap());
+        SubmitResult differentKey = submitResult(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload", "dedup-2",
+                0L, Collections.<String, String>emptyMap());
+        SubmitResult differentType = submitResult(backend, DEFAULT_QUEUE, MAIL_TASK_TYPE, "payload", "dedup-1",
+                0L, Collections.<String, String>emptyMap());
+        SubmitResult differentQueue = submitResult(backend, "invoices", PAY_TASK_TYPE, "payload", "dedup-1",
+                0L, Collections.<String, String>emptyMap());
+
+        Assert.assertTrue(first.isCreated());
+        Assert.assertFalse(duplicate.isCreated());
+        Assert.assertEquals(first.getTaskId(), duplicate.getTaskId());
+        Assert.assertEquals("payload-v1", duplicate.getSnapshot().getPayload());
+        Assert.assertTrue(differentKey.isCreated());
+        Assert.assertTrue(differentType.isCreated());
+        Assert.assertTrue(differentQueue.isCreated());
+        Assert.assertEquals(first.getTaskId(), backend.getByDeduplicationKey(
+                DEFAULT_QUEUE, PAY_TASK_TYPE, "dedup-1").get().getTaskId());
     }
 
     @Test
-    public void testCloseFailureMakesTaskClosed() throws Exception {
+    public void testQueueTypeAndDeduplicationKeyAreCaseSensitive() throws InterruptedException {
         LeaseBackend backend = createBackend();
-        publish(backend, "pay", "payload");
-        LeaseGrant grant = acquire(backend, "worker-a", 200L, 500L);
+        String lowerDedupTaskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "lower",
+                "Case", 0L, Collections.<String, String>emptyMap());
+        String upperDedupTaskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "upper",
+                "case", 0L, Collections.<String, String>emptyMap(), 9);
+        String capitalTypeTaskId = submit(backend, DEFAULT_QUEUE, "Pay", "capital-type");
+        String capitalQueueTaskId = submit(backend, "Orders", PAY_TASK_TYPE, "capital-queue");
 
-        Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.close(
-                grant.getHandle(), LeaseCloseRequest.failed(LeaseTaskFailureReason.HANDLER_EXCEPTION, "boom")));
-        Assert.assertNull(acquire(backend, "worker-b", 200L, 100L));
+        Assert.assertNotEquals(lowerDedupTaskId, upperDedupTaskId);
+        Assert.assertEquals(lowerDedupTaskId, backend.getByDeduplicationKey(
+                DEFAULT_QUEUE, PAY_TASK_TYPE, "Case").get().getTaskId());
+        Assert.assertEquals(upperDedupTaskId, backend.getByDeduplicationKey(
+                DEFAULT_QUEUE, PAY_TASK_TYPE, "case").get().getTaskId());
+
+        LeaseGrant firstPayTask = assertRunningGrant(acquire(backend, PAY_TASK_TYPE,
+                WORKER_A, LEASE_MILLIS), upperDedupTaskId, WORKER_A);
+        Assert.assertEquals("case", firstPayTask.getSnapshot().getDedupKey());
+        LeaseGrant secondPayTask = assertRunningGrant(acquire(backend, PAY_TASK_TYPE,
+                WORKER_A, LEASE_MILLIS), lowerDedupTaskId, WORKER_A);
+        Assert.assertEquals("Case", secondPayTask.getSnapshot().getDedupKey());
+        Assert.assertNull(acquire(backend, PAY_TASK_TYPE, WORKER_A, LONG_LEASE_MILLIS));
+        LeaseGrant capitalType = assertRunningGrant(
+                acquire(backend, "Pay", WORKER_A, LONG_LEASE_MILLIS),
+                capitalTypeTaskId, WORKER_A);
+        Assert.assertEquals("Pay", capitalType.getSnapshot().getType());
+
+        Assert.assertNull(acquireFromQueue(backend, "orders", PAY_TASK_TYPE, WORKER_B, LONG_LEASE_MILLIS));
+        assertRunningGrant(acquireFromQueue(backend, "Orders", PAY_TASK_TYPE, WORKER_B, LONG_LEASE_MILLIS),
+                capitalQueueTaskId, WORKER_B);
     }
 
     @Test
-    public void testCloseCanUpdatePayload() throws Exception {
+    public void testAcquireReturnsRunningGrant() throws InterruptedException {
         LeaseBackend backend = createBackend();
-        String taskId = publish(backend, "pay", "payload-v1");
-        LeaseGrant grant = acquire(backend, "worker-a", 200L, 500L);
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
 
-        Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.close(
-                grant.getHandle(),
-                LeaseCloseRequest.builder()
-                        .outcome(LeaseTaskOutcome.SUCCEEDED)
-                        .payload("payload-v2")
-                        .build()));
-        Assert.assertEquals("payload-v2", backend.get(taskId).get().getPayload());
+        LeaseGrant grant = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS),
+                taskId, WORKER_A);
+
+        Assert.assertEquals(PAY_TASK_TYPE, grant.getSnapshot().getType());
+        Assert.assertEquals("payload", grant.getSnapshot().getPayload());
+        Assert.assertEquals(1, grant.getSnapshot().getAttemptCount());
+        Assert.assertNotNull(grant.getSnapshot().getLeaseExpiresAt());
     }
 
     @Test
-    public void testWrongLeaseTokenDoesNotMutateTask() throws Exception {
+    public void testPendingTaskIsNotVisibleBeforeDelay() throws InterruptedException {
         LeaseBackend backend = createBackend();
-        String taskId = publish(backend, "pay", "payload");
-        LeaseGrant grant = acquire(backend, "worker-a", 120L, 500L);
-        LeaseHandle wrongHandle = new LeaseHandle(taskId, grant.getHandle().getWorkerId(), "wrong-token");
+        SubmitResult result = submitResult(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload", null,
+                SHORT_DELAY_MILLIS, Collections.<String, String>emptyMap());
 
-        Assert.assertEquals(LeaseRuntimeResult.LEASE_LOST,
-                backend.close(wrongHandle,
-                        LeaseCloseRequest.failed(LeaseTaskFailureReason.HANDLER_EXCEPTION, "wrong")));
-        Assert.assertEquals(LeaseRuntimeResult.LEASE_LOST,
-                backend.release(wrongHandle, LeaseReleaseRequest.of(50L, "wrong")));
-        Assert.assertEquals(LeaseRuntimeResult.LEASE_LOST, backend.heartbeat(wrongHandle, 500L));
+        Assert.assertEquals(TaskStatus.PENDING, result.getSnapshot().getStatus());
+        Assert.assertNull(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS));
 
-        Thread.sleep(150L);
-        LeaseGrant reacquired = acquire(backend, "worker-b", 120L, 300L);
-        Assert.assertNotNull(reacquired);
-        Assert.assertEquals(2, reacquired.getDeliveryCount());
-        Assert.assertEquals(0, reacquired.getFailureCount());
+        waitUntilAfter(result.getSnapshot().getVisibleAt());
+        assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS), result.getTaskId(), WORKER_A);
+    }
+
+    @Test
+    public void testAcquireOnlyReturnsExactlySubscribedTaskType() throws InterruptedException {
+        LeaseBackend backend = createBackend();
+        String mailTaskId = submit(backend, MAIL_TASK_TYPE, "mail-payload");
+
+        Assert.assertNull(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS));
+
+        LeaseGrant grant = assertRunningGrant(acquire(backend, MAIL_TASK_TYPE, WORKER_A, LEASE_MILLIS),
+                mailTaskId, WORKER_A);
+        Assert.assertEquals(MAIL_TASK_TYPE, grant.getSnapshot().getType());
+    }
+
+    @Test
+    public void testAcquireOnlyReturnsExactlySubscribedQueue() throws Exception {
+        LeaseBackend backend = createBackend();
+        submit(backend, "invoices", PAY_TASK_TYPE, "invoice-payload");
+
+        Assert.assertNull(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS));
+        Assert.assertNotNull(acquireFromQueue(backend, "invoices", PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS));
+    }
+
+    @Test
+    public void testAcquireUsesGlobalPriorityThenCreatedAtOrderAcrossTaskTypes() throws Exception {
+        LeaseBackend backend = createBackend();
+        String lowPriorityTaskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "low", 0);
+        Thread.sleep(50L);
+        String firstHighPriorityTaskId = submit(backend, DEFAULT_QUEUE, MAIL_TASK_TYPE, "high-1", 9);
+        Thread.sleep(50L);
+        String secondHighPriorityTaskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "high-2", 9);
+
+        Set<String> taskTypes = new LinkedHashSet<String>(Arrays.asList(
+                PAY_TASK_TYPE, MAIL_TASK_TYPE));
+        TaskSubscription subscription = TaskSubscription.of(DEFAULT_QUEUE, taskTypes);
+        LeaseGrant first = backend.acquire(AcquireCommand.of(
+                subscription, WORKER_A, LONG_LEASE_MILLIS));
+        LeaseGrant second = backend.acquire(AcquireCommand.of(
+                subscription, WORKER_A, LONG_LEASE_MILLIS));
+        LeaseGrant third = backend.acquire(AcquireCommand.of(
+                subscription, WORKER_A, LONG_LEASE_MILLIS));
+
+        assertRunningGrant(first, firstHighPriorityTaskId, WORKER_A);
+        assertRunningGrant(second, secondHighPriorityTaskId, WORKER_A);
+        assertRunningGrant(third, lowPriorityTaskId, WORKER_A);
+    }
+
+    @Test
+    public void testOnlyOneWorkerAcquiresSameTask() throws Exception {
+        LeaseBackend backend = createBackend();
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+        LeaseGrant[] grants = new LeaseGrant[1];
+        LeaseGrant[] competingGrant = new LeaseGrant[1];
+
+        Thread first = startAcquire(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, WORKER_A, LONG_LEASE_MILLIS, grants);
+        waitUntil(new Supplier<Boolean>() {
+            @Override
+            public Boolean get() {
+                return snapshot(backend, DEFAULT_QUEUE, taskId).getStatus() == TaskStatus.RUNNING;
+            }
+        });
+        Thread second = startAcquire(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, WORKER_B, LONG_LEASE_MILLIS,
+                competingGrant);
+
+        first.join(1_000L);
+        second.join(1_000L);
+        Assert.assertNull(competingGrant[0]);
+        Assert.assertNotNull(grants[0]);
+        Assert.assertEquals(1, snapshot(backend, DEFAULT_QUEUE, taskId).getAttemptCount());
+    }
+
+    @Test
+    public void testAttemptCountIncreasesOnEachSuccessfulAcquire() throws Exception {
+        LeaseBackend backend = createBackend();
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+
+        LeaseGrant first = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS),
+                taskId, WORKER_A);
+        Assert.assertEquals(RuntimeResult.APPLIED, backend.release(first.getHandle(),
+                retry(0L, null, null, null)));
+
+        LeaseGrant second = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_B, LEASE_MILLIS),
+                taskId, WORKER_B);
+        Assert.assertEquals(2, second.getSnapshot().getAttemptCount());
+    }
+
+    @Test
+    public void testAttemptCountIncreasesWhenExpiredLeaseIsTakenOver() throws InterruptedException {
+        LeaseBackend backend = createBackend();
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+        LeaseGrant first = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS),
+                taskId, WORKER_A);
+        Instant originalExpiry = first.getSnapshot().getLeaseExpiresAt();
+
+        waitUntilAfter(originalExpiry);
+        LeaseGrant second = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_B, LONG_LEASE_MILLIS),
+                taskId, WORKER_B);
+        Assert.assertEquals(2, second.getSnapshot().getAttemptCount());
     }
 
     @Test
     public void testHeartbeatExtendsLease() throws Exception {
         LeaseBackend backend = createBackend();
-        publish(backend, "pay", "payload");
-        LeaseGrant grant = acquire(backend, "worker-a", 80L, 500L);
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+        LeaseGrant grant = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS),
+                taskId, WORKER_A);
 
-        Thread.sleep(40L);
-        Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.heartbeat(grant.getHandle(), 150L));
-        Thread.sleep(70L);
+        Assert.assertEquals(RuntimeResult.APPLIED,
+                backend.heartbeat(grant.getHandle(), LONG_LEASE_MILLIS));
+        TaskSnapshot extended = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertTrue(extended.getLeaseExpiresAt().isAfter(grant.getSnapshot().getLeaseExpiresAt()));
 
-        Assert.assertNull(acquire(backend, "worker-b", 80L, 20L));
-        Thread.sleep(110L);
-        Assert.assertNotNull(acquire(backend, "worker-b", 80L, 200L));
+        waitUntilAfter(grant.getSnapshot().getLeaseExpiresAt());
+        Assert.assertEquals(TaskStatus.RUNNING, snapshot(backend, DEFAULT_QUEUE, taskId).getStatus());
+        Assert.assertNull(acquire(backend, PAY_TASK_TYPE, WORKER_B, LEASE_MILLIS));
     }
 
     @Test
-    public void testLeaseExpiryMakesTaskVisibleAgainWithoutFailureIncrement() throws Exception {
+    public void testAcquireAndHeartbeatDoNotChangeVisibleAt() throws Exception {
         LeaseBackend backend = createBackend();
-        publish(backend, "pay", "payload");
-        acquire(backend, "worker-a", 80L, 500L);
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+        Instant submittedVisibleAt = snapshot(backend, DEFAULT_QUEUE, taskId).getVisibleAt();
 
-        Thread.sleep(100L);
+        LeaseGrant grant = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS),
+                taskId, WORKER_A);
+        Assert.assertEquals(submittedVisibleAt, grant.getSnapshot().getVisibleAt());
+        Assert.assertEquals(submittedVisibleAt, snapshot(backend, DEFAULT_QUEUE, taskId).getVisibleAt());
 
-        LeaseGrant nextGrant = acquire(backend, "worker-b", 80L, 200L);
-        Assert.assertNotNull(nextGrant);
-        Assert.assertEquals(2, nextGrant.getDeliveryCount());
-        Assert.assertEquals(0, nextGrant.getFailureCount());
+        Assert.assertEquals(RuntimeResult.APPLIED,
+                backend.heartbeat(grant.getHandle(), LONG_LEASE_MILLIS));
+        TaskSnapshot heartbeatSnapshot = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals(submittedVisibleAt, heartbeatSnapshot.getVisibleAt());
+        Assert.assertTrue(heartbeatSnapshot.getLeaseExpiresAt().isAfter(
+                grant.getSnapshot().getLeaseExpiresAt()));
     }
 
     @Test
-    public void testReleaseMakesTaskVisibleAgainWithoutFailureIncrement() throws Exception {
+    public void testWrongLeaseTokenIsRejectedWithoutMutation() throws Exception {
         LeaseBackend backend = createBackend();
-        publish(backend, "pay", "payload");
-        LeaseGrant grant = acquire(backend, "worker-a", 80L, 500L);
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+        LeaseGrant grant = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LONG_LEASE_MILLIS),
+                taskId, WORKER_A);
+        LeaseHandle wrongToken = LeaseHandle.of(taskId, WORKER_A, "wrong-token");
 
-        Assert.assertEquals(LeaseRuntimeResult.APPLIED,
-                backend.release(grant.getHandle(), LeaseReleaseRequest.of(50L)));
-        Assert.assertNull(acquire(backend, "worker-b", 80L, 20L));
-        Thread.sleep(70L);
+        TaskSnapshot before = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals(RuntimeResult.LEASE_LOST, backend.heartbeat(wrongToken, LONG_LEASE_MILLIS));
+        Assert.assertEquals(RuntimeResult.LEASE_LOST, backend.close(wrongToken,
+                LeaseCompletion.succeeded(null, null)));
+        Assert.assertEquals(RuntimeResult.LEASE_LOST, backend.release(wrongToken, retry(0L, null, null, null)));
+        TaskSnapshot after = snapshot(backend, DEFAULT_QUEUE, taskId);
 
-        LeaseGrant nextGrant = acquire(backend, "worker-b", 80L, 200L);
-        Assert.assertNotNull(nextGrant);
-        Assert.assertEquals(2, nextGrant.getDeliveryCount());
-        Assert.assertEquals(0, nextGrant.getFailureCount());
+        Assert.assertEquals(before.getAttemptCount(), after.getAttemptCount());
+        Assert.assertEquals(before.getLeaseExpiresAt(), after.getLeaseExpiresAt());
+        Assert.assertEquals(before.getPayload(), after.getPayload());
+        Assert.assertEquals(before.getErrorMessage(), after.getErrorMessage());
+        Assert.assertEquals(before.getStatus(), after.getStatus());
     }
 
     @Test
-    public void testReleaseCanUpdatePayload() throws Exception {
+    public void testStaleLeaseTokenIsRejectedWithoutMutation() throws Exception {
         LeaseBackend backend = createBackend();
-        String taskId = publish(backend, "pay", "payload-v1");
-        LeaseGrant grant = acquire(backend, "worker-a", 80L, 500L);
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+        LeaseGrant first = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS),
+                taskId, WORKER_A);
 
-        Assert.assertEquals(
-                LeaseRuntimeResult.APPLIED,
-                backend.release(grant.getHandle(), LeaseReleaseRequest.builder()
-                        .delayMillis(50L)
-                        .payload("payload-v2")
-                        .errorMessage("retry")
-                        .build()));
+        waitUntilAfter(first.getSnapshot().getLeaseExpiresAt());
+        LeaseGrant second = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_B, LONG_LEASE_MILLIS),
+                taskId, WORKER_B);
 
-        Thread.sleep(70L);
-        LeaseGrant nextGrant = acquire(backend, "worker-b", 80L, 200L);
-        Assert.assertNotNull(nextGrant);
-        Assert.assertEquals("payload-v2", nextGrant.getPayload());
-        Assert.assertEquals("payload-v2", backend.get(taskId).get().getPayload());
-        Assert.assertEquals("retry", backend.get(taskId).get().getErrorMessage());
+        Assert.assertEquals(RuntimeResult.LEASE_LOST, backend.heartbeat(first.getHandle(), LONG_LEASE_MILLIS));
+        Assert.assertEquals(RuntimeResult.LEASE_LOST, backend.close(first.getHandle(),
+                LeaseCompletion.succeeded(null, null)));
+        Assert.assertEquals(RuntimeResult.LEASE_LOST, backend.release(first.getHandle(),
+                retry(0L, null, null, null)));
+        Assert.assertEquals(WORKER_B, snapshot(backend, DEFAULT_QUEUE, taskId).getWorkerId());
+        Assert.assertEquals(2, snapshot(backend, DEFAULT_QUEUE, taskId).getAttemptCount());
+        Assert.assertEquals(RuntimeResult.APPLIED, backend.close(second.getHandle(),
+                LeaseCompletion.succeeded(null, null)));
     }
 
     @Test
-    public void testReleaseCanUpdateAttributes() throws Exception {
+    public void testReleaseAppliesRetryDelayPayloadErrorAndAttributes() throws Exception {
         LeaseBackend backend = createBackend();
-        String taskId = backend.publish(LeasePublishRequest.builder()
-                .taskGroup(DEFAULT_QUEUE)
-                .taskType("pay")
-                .payload("payload-v1")
-                .attributes(Collections.singletonMap("traceId", "T-1"))
-                .build());
-        LeaseGrant grant = acquire(backend, "worker-a", 80L, 500L);
+        String taskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload-v1", null, 0L,
+                Collections.singletonMap("traceId", "T-1"));
+        LeaseGrant grant = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS),
+                taskId, WORKER_A);
 
-        Assert.assertEquals(
-                LeaseRuntimeResult.APPLIED,
-                backend.release(grant.getHandle(), LeaseReleaseRequest.builder()
-                        .delayMillis(50L)
-                        .attributes(Collections.singletonMap("traceId", "T-2"))
-                        .build()));
+        Assert.assertEquals(RuntimeResult.APPLIED, backend.release(grant.getHandle(),
+                retry(SHORT_DELAY_MILLIS, "payload-v2", "retry", Collections.singletonMap("traceId", "T-2"))));
 
-        Thread.sleep(70L);
-        LeaseGrant nextGrant = acquire(backend, "worker-b", 80L, 200L);
-        Assert.assertNotNull(nextGrant);
-        Assert.assertEquals("T-2", nextGrant.getAttributes().get("traceId"));
-        Assert.assertEquals("T-2", backend.get(taskId).get().getAttributes().get("traceId"));
+        TaskSnapshot pending = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals(TaskStatus.PENDING, pending.getStatus());
+        Assert.assertNull(pending.getWorkerId());
+        Assert.assertNull(pending.getLeaseExpiresAt());
+        Assert.assertEquals("payload-v2", pending.getPayload());
+        Assert.assertEquals("retry", pending.getErrorMessage());
+        Assert.assertEquals("T-2", pending.getAttributes().get("traceId"));
+        Assert.assertEquals(1, pending.getAttemptCount());
+
+        waitUntilAfter(pending.getVisibleAt());
+        LeaseGrant next = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_B, LEASE_MILLIS),
+                taskId, WORKER_B);
+        Assert.assertEquals("payload-v2", next.getSnapshot().getPayload());
+        Assert.assertEquals(2, next.getSnapshot().getAttemptCount());
     }
 
     @Test
-    public void testReleaseWithoutAttributesKeepsOriginalAttributes() throws Exception {
+    public void testReleaseWithoutAttributePatchKeepsAttributes() throws Exception {
         LeaseBackend backend = createBackend();
-        String taskId = backend.publish(LeasePublishRequest.builder()
-                .taskGroup(DEFAULT_QUEUE)
-                .taskType("pay")
-                .payload("payload-v1")
-                .attributes(Collections.singletonMap("traceId", "T-1"))
-                .build());
-        LeaseGrant grant = acquire(backend, "worker-a", 80L, 500L);
+        String taskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload", null, 0L,
+                Collections.singletonMap("traceId", "T-1"));
+        LeaseGrant grant = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS),
+                taskId, WORKER_A);
 
-        Assert.assertEquals(
-                LeaseRuntimeResult.APPLIED,
-                backend.release(grant.getHandle(), LeaseReleaseRequest.of(50L)));
+        Assert.assertEquals(RuntimeResult.APPLIED, backend.release(grant.getHandle(),
+                retry(0L, "payload-v2", "retry", null)));
 
-        Thread.sleep(70L);
-        LeaseGrant nextGrant = acquire(backend, "worker-b", 80L, 200L);
-        Assert.assertNotNull(nextGrant);
-        Assert.assertEquals("T-1", nextGrant.getAttributes().get("traceId"));
-        Assert.assertEquals("T-1", backend.get(taskId).get().getAttributes().get("traceId"));
+        TaskSnapshot pending = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals("payload-v2", pending.getPayload());
+        Assert.assertEquals("T-1", pending.getAttributes().get("traceId"));
     }
 
     @Test
-    public void testReleaseWithEmptyAttributesKeepsOriginalAttributes() throws Exception {
+    public void testReleaseWithEmptyAttributePatchClearsAttributes() throws Exception {
         LeaseBackend backend = createBackend();
-        String taskId = backend.publish(LeasePublishRequest.builder()
-                .taskGroup(DEFAULT_QUEUE)
-                .taskType("pay")
-                .payload("payload-v1")
-                .attributes(Collections.singletonMap("traceId", "T-1"))
-                .build());
-        LeaseGrant grant = acquire(backend, "worker-a", 80L, 500L);
+        String taskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload", null, 0L,
+                Collections.singletonMap("traceId", "T-1"));
+        LeaseGrant grant = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS),
+                taskId, WORKER_A);
 
-        Assert.assertEquals(
-                LeaseRuntimeResult.APPLIED,
-                backend.release(grant.getHandle(), LeaseReleaseRequest.builder()
-                        .delayMillis(50L)
-                        .attributes(Collections.emptyMap())
-                        .build()));
+        Assert.assertEquals(RuntimeResult.APPLIED, backend.release(grant.getHandle(),
+                retry(0L, null, null, Collections.<String, String>emptyMap())));
 
-        Thread.sleep(70L);
-        LeaseGrant nextGrant = acquire(backend, "worker-b", 80L, 200L);
-        Assert.assertNotNull(nextGrant);
-        Assert.assertEquals("T-1", nextGrant.getAttributes().get("traceId"));
-        Assert.assertEquals("T-1", backend.get(taskId).get().getAttributes().get("traceId"));
+        Assert.assertTrue(snapshot(backend, DEFAULT_QUEUE, taskId).getAttributes().isEmpty());
     }
 
-    @Test
-    public void testAcquireRespectsDelayVisibility() throws Exception {
-        LeaseBackend backend = createBackend();
-        publish(backend, "pay", "payload", 80L);
-
-        Assert.assertNull(acquire(backend, "worker-a", 100L, 20L));
-        Thread.sleep(90L);
-        Assert.assertNotNull(acquire(backend, "worker-a", 100L, 200L));
-    }
-
-    @Test
-    public void testAcquireOnlyReturnsSubscribedQueue() throws Exception {
-        LeaseBackend backend = createBackend();
-        backend.publish(com.team4u.framework.lease.model.LeasePublishRequest.builder()
-                .taskGroup("mail")
-                .taskType("send")
-                .payload("payload")
-                .build());
-
-        Assert.assertNull(acquire(backend, "worker-a", 100L, 20L));
-        Assert.assertNotNull(backend.acquire(LeaseAcquireRequest.builder()
-                .workerId("worker-a")
-                .leaseMillis(100L)
-                .waitTimeoutMillis(200L)
-                .subscription(LeaseTaskGroupSubscription.builder().taskGroup("mail").build())
-                .build()));
-    }
-
-    private Thread createAcquireThread(final LeaseBackend backend,
-                                       final CountDownLatch ready,
-                                       final CountDownLatch start,
-                                       final LeaseGrant[] grants,
-                                       final int index,
-                                       final String workerId) {
-        return new Thread(new Runnable() {
-            @Override
-            public void run() {
-                ready.countDown();
-                try {
-                    start.await(1, TimeUnit.SECONDS);
-                    grants[index] = acquire(backend, workerId, 500L, 200L);
-                } catch (Exception e) {
-                    throw new RuntimeException(e);
-                }
-            }
-        });
+    private LeaseRetry retry(long delayMillis, String payload, String errorMessage,
+                             java.util.Map<String, String> attributes) {
+        return LeaseRetry.of(delayMillis, payload, errorMessage, attributes);
     }
 }

@@ -1,12 +1,8 @@
 # Spring 整合与生命周期
 
-`team4u-retry-spring` 模块为 Spring / Spring Boot 应用提供了开箱即用的声明式重试支持、AOP 自动切面与容器级生命周期隔离。
+`team4u-retry-spring` 提供声明式重试 AOP 与容器级线程池生命周期管理。它不会自动创建 `ManagedRetryRuntime` 或 `ManagedRetryClient`；项目需要 MANAGED 时必须显式提供 Bean。
 
----
-
-## 开启 Spring 重试支持 (`@EnableRetry`)
-
-在任意 Spring `@Configuration` 配置类上添加 `@EnableRetry`：
+## 开启注解支持
 
 ```java
 import com.team4u.framework.retry.spring.EnableRetry;
@@ -18,51 +14,33 @@ public class RetrySpringConfig {
 }
 ```
 
-### `@EnableRetry` 内部装配架构：
+`@EnableRetry` 会导入：
 
-```mermaid
-graph TD
-    EnableRetry["@EnableRetry"] --> Conf["RetrySpringConfiguration"]
-    EnableRetry --> Reg["RetryAutoProxyRegistrar"]
-    
-    Reg --> Advisor["RetryAdvisor (Order: LOWEST_PRECEDENCE - 1)<br/>Pointcut: 类级 / 方法级 @Retryable"]
-    Advisor --> Interceptor["SpringRetryInterceptor (DCL 双重检查懒加载)"]
-    
-    Conf --> Exec["@Bean(destroyMethod = 'shutdown')<br/>RetryExecutorManager(false) 容器级线程池"]
-    Conf --> Inline["DefaultInlineRetryClient (注入容器)"]
-    Conf --> HandlerReg["DefaultRecoveryHandlerRegistrar (自动扫描 RecoveryHandler)"]
-```
+- `RetryAutoProxyRegistrar`：为类级或方法级 `@Retryable` 注册 AOP 代理；
+- `RetrySpringConfiguration`：注册 `InlineRetryClient`、容器级 `RetryExecutorManager`、`SpringBeanContainer` 与 `DefaultRecoveryHandlerRegistrar`。
 
-1. **AOP 代理注册 (`RetryAutoProxyRegistrar`)**：
-   - 自动扫描所有类级或方法级带有 `@Retryable` 的 Spring Bean；
-   - 注册切面优先级为 `Ordered.LOWEST_PRECEDENCE - 1`，保证重试逻辑包裹在业务最内层。
-2. **DCL 懒加载拦截器 (`SpringRetryInterceptor`)**：
-   - 拦截器内部采用双重检查锁定（Double-Checked Locking, DCL）按需从 Spring `BeanFactory` 中懒加载解析 `InlineRetryClient` 与 `ManagedRetryClient`，避免 Spring 容器启动期循环依赖。
-3. **`RecoveryHandler` 自动发现与注册**：
-   - `DefaultRecoveryHandlerRegistrar` 启动时自动扫描 Spring 容器中所有实现了 `RecoveryHandler` 或 `StringRecoveryHandler` 的 Bean，并自动完成注册。
-4. **容器级线程池生命周期隔离 (`RetryExecutorManager`)**：
-   - 显式声明 `@Bean(destroyMethod = "shutdown") public RetryExecutorManager retryExecutorManager() { return new RetryExecutorManager(false); }`。
-   - 将 `registerShutdownHook` 设置为 `false`，由 Spring 容器自身的销毁回调（`destroyMethod`）精准管理线程池生命周期，**彻底避免与 JVM ShutdownHook 发生并发关闭冲突，也不会误关其他 Spring Context 正在使用的线程池**。
+`SpringRetryInterceptor` 懒加载解析 Bean：
 
----
+- `InlineRetryClient`：容器中优先，缺省回退 `DefaultInlineRetryClient.getInstance()`；
+- `ManagedRetryClient`：容器中存在则启用 MANAGED 代理；不存在时 INLINE 正常工作，调用 `MANAGED` 方法会抛出 `IllegalStateException`。
 
-## Spring 业务 Bean 声明式使用
+线程池 Bean 使用 `destroyMethod = "shutdown"`，且 `registerShutdownHook=false`，由 Spring 容器管理生命周期，避免误关其他 Context。
+
+## 声明式业务方法
 
 ```java
-import com.team4u.framework.retry.proxy.Retryable;
 import com.team4u.framework.retry.proxy.RetryMode;
+import com.team4u.framework.retry.proxy.Retryable;
 import org.springframework.stereotype.Service;
 
 @Service
 public class OrderRpcService {
 
-    // 进程内即时重试
     @Retryable(policy = "order-rpc-policy", mode = RetryMode.INLINE)
     public String queryRemoteOrder(String orderId) {
         return externalFeignClient.query(orderId);
     }
 
-    // 托管持久化重试（要求返回类型为 void）
     @Retryable(policy = "pay-notify-policy", mode = RetryMode.MANAGED)
     public void notifyMerchantAsync(String orderId, String payload) {
         externalWebhookClient.post(orderId, payload);
@@ -70,34 +48,68 @@ public class OrderRpcService {
 }
 ```
 
----
+MANAGED 代理方法必须返回 `void`。策略中的 `foregroundMaxRetries` 必须显式配置；`maxRetries` 与 `foregroundMaxRetries` 都不包含首次执行。
 
-## Spring 中接入 MANAGED 托管运行时
+## 接入 MANAGED 运行时
 
-当项目需要开启托管持久化重试时，只需额外向 Spring 容器提供 `ManagedRetryRuntime` 与 `ManagedRetryClient` 的 Bean 定义：
+下面的 JDBC 配置会创建 Lease 后端、本地恢复处理器 registry、`ManagedRetryRuntime` 和 `ManagedRetryClient`。`@EnableRetry` 本身不会提供这些 Bean。
 
 ```java
-import com.team4u.framework.lease.api.LeaseBackend;
+import com.team4u.framework.lease.jdbc.JdbcLeaseBackend;
+import com.team4u.framework.lease.jdbc.dialect.MySqlLeaseDbDialect;
+import com.team4u.framework.lease.spi.LeaseBackend;
 import com.team4u.framework.retry.api.RetryPolicy;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 import com.team4u.framework.retry.managed.client.ManagedRetryClient;
+import com.team4u.framework.retry.managed.recovery.RecoveryHandlerRegistry;
+import com.team4u.framework.retry.managed.recovery.StringRecoveryHandler;
+import com.team4u.framework.retry.proxy.InvocationReplay;
 import com.team4u.framework.retry.runtime.lease.ManagedRetryRuntime;
 import com.team4u.framework.retry.spring.EnableRetry;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+
+import javax.sql.DataSource;
+import java.time.Duration;
 
 @Configuration
 @EnableRetry
 public class ManagedRetrySpringConfig {
 
+    @Bean
+    public LeaseBackend leaseBackend(DataSource dataSource) {
+        return new JdbcLeaseBackend(dataSource, new MySqlLeaseDbDialect());
+    }
+
+    @Bean
+    public RecoveryHandlerRegistry retryRecoveryHandlerRegistry(
+            ObjectProvider<StringRecoveryHandler> handlers) {
+        RecoveryHandlerRegistry registry = new RecoveryHandlerRegistry();
+        handlers.forEach(handler -> registry.register(handler));
+        registry.register(new InvocationReplay());
+        return registry;
+    }
+
     @Bean(initMethod = "start", destroyMethod = "shutdown")
-    public ManagedRetryRuntime managedRetryRuntime(LeaseBackend backend) {
+    public ManagedRetryRuntime managedRetryRuntime(
+            LeaseBackend backend,
+            RecoveryHandlerRegistry registry) {
         return ManagedRetryRuntime.lease(backend)
+                .queueName("retry-recovery")
+                .registry(registry)
+                .autoScanRecoveryHandlers(false)
                 .defaultPolicy(RetryPolicy.builder()
                         .maxRetries(5)
-                        .foregroundMaxRetries(1) // 前台尝试 2 次后交由后台
+                        .foregroundMaxRetries(1)
                         .backoff(Backoffs.exponentialJitter(1000, 2.0, 60_000L))
                         .build())
+                .foregroundRecoveryTimeout(Duration.ofMinutes(5))
+                .lease(Duration.ofSeconds(30))
+                .pollInterval(Duration.ofMillis(250))
+                .heartbeatEnabled(true)
+                .heartbeatInterval(Duration.ofSeconds(10))
+                .threadName("managed-retry-worker")
                 .build();
     }
 
@@ -108,3 +120,12 @@ public class ManagedRetrySpringConfig {
 }
 ```
 
+注册语义：
+
+- `ManagedRetryRuntime` 使用传入的本地 registry；这里显式收集 Spring 容器中的 `StringRecoveryHandler`，并注册代理后台回放所需的 `InvocationReplay`。
+- Worker start 时会快照 registry 内容；之后再修改 registry 不影响该 Worker。
+- 如果业务全走 `@Retryable` 且不想手工注册业务 handler，也可以不提供 registry，让 runtime 的 `autoScanRecoveryHandlers(true)` 只扫描本地 registry 的 ServiceLoader 实现。
+- `@EnableRetry` 内部的 `DefaultRecoveryHandlerRegistrar` 会触发 `RecoveryHandlerRegistry.global().autoScan()`。官方 `ManagedRetryRuntime` 不消费这个全局 registry；不要依赖这个副作用注册后台 Worker。
+- `ManagedRetryRuntime.close()` 等价于 `shutdown()`；Spring 示例使用 `destroyMethod = "shutdown"`。若需要等待任务结束，可注入 runtime 后调用 `worker().shutdownGracefully(timeout)`。
+
+生产环境中应确保 `RetryTaskWorker` 与能处理对应 task type 的 handler 部署在同一组进程中。初始 intent 默认 5 分钟后对后台可见；进程崩溃或未 handoff 时会自动接管，恢复处理器必须幂等。

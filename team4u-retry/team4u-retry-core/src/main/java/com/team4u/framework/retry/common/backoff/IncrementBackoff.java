@@ -4,6 +4,7 @@ import com.team4u.framework.base.convert.ConvertUtil;
 import com.team4u.framework.retry.config.BackoffConfig;
 import lombok.EqualsAndHashCode;
 
+import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -44,6 +45,17 @@ public class IncrementBackoff implements Backoff {
     public long calculateMillis(int attempt) {
         Backoff.validateAttempt(attempt);
         return initialDelayMillis + (attempt - 1L) * stepMillis;
+    }
+
+    @Override
+    public BackoffConfig toConfig() {
+        BackoffConfig config = new BackoffConfig();
+        config.setType("increment");
+        Map<String, Object> params = new LinkedHashMap<String, Object>();
+        params.put("initialDelay", initialDelayMillis);
+        params.put("stepMillis", stepMillis);
+        config.setParams(params);
+        return config;
     }
 
     /**

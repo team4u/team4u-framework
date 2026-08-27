@@ -1,125 +1,168 @@
-# Worker 执行与心跳续约
+# Worker 执行模型
 
-`LeaseWorker` 是驱动分布式排他任务拉取、本地分发、后台心跳续约与终态提交的核心执行引擎。
-
----
-
-## 线程模型与架构
-
-每个 `LeaseWorker` 实例维护两个独立的线程机制：
-
-```mermaid
-graph TD
-    subgraph "LeaseWorker 实例"
-        WT["主工作线程 (lease-worker)<br/>执行 acquire 循环与 Handler 处理"]
-        HT["心跳调度线程 (lease-heartbeat-{workerId})<br/>SingleThreadScheduledExecutor (Daemon)"]
-        Flag["processingTask (AtomicBoolean)"]
-    end
-    
-    WT -->|"1. acquire 抢占成功"| Flag
-    WT -->|"2. 启动心跳"| HT
-    HT -.->|"3. 定时或手动 requestHeartbeat"| HB["向后端发送 heartbeat 延长过期时间"]
-    WT -->|"4. 分发执行"| Handler["LeaseTaskHandler / LeaseLifecycleAwareTaskHandler"]
-    Handler -->|"5. 成功/失败/释放"| Client["LeaseRuntimeClient (close / release)"]
-    WT -->|"6. 结束任务, 停止心跳"| HT
-```
-
-1. **主工作线程 (`workerThread`)**：
-   - 命名：默认 `lease-worker`，支持在 `start(String threadName)` 时自定义。
-   - 职责：运行 `run()` 主循环，周期性从 `LeaseRuntimeClient` 抢占待处理任务，分发给本地处理器执行，并在执行完毕后写回终态。
-2. **后台心跳线程池 (`heartbeatExecutor`)**：
-   - 命名：`lease-heartbeat-{workerId}`，守护线程（Daemon）。
-   - 职责：在任务执行期间，以 `heartbeatIntervalMillis` 为周期自动向存储后端发送心跳续租请求。同时响应业务代码触发的手动心跳请求（`context.requestHeartbeat()`）。
-
----
-
-## 策略配置 (`LeaseWorkerPolicy`)
-
-`LeaseWorkerPolicy` 通过流式 Builder 构建，内置完整的参数约束与默认值填充：
-
-| 配置参数 | 类型 | 默认值 | 约束与说明 |
-| :--- | :--- | :--- | :--- |
-| `workerId` | `String` | `lease-worker-{UUID}` | Worker 节点的全局唯一标识，推荐配置为 `IP:PID` 或容器主机名 |
-| `leaseMillis` | `long` | `30,000 ms` | 每次抢占租约锁定时长。**必须大于 0** |
-| `pollWaitMillis` | `long` | `1,000 ms` | 任务队列为空时长轮询休眠等待时间。**必须 $\ge 0$** |
-| `heartbeatEnabled` | `boolean` | `true` | 是否启用后台自动心跳续约 |
-| `heartbeatIntervalMillis` | `long` | `leaseMillis / 3` | 心跳自动续约周期。**必须 $>0$ 且 $< leaseMillis$** |
-| `missingHandlerStrategy` | `MissingHandlerStrategy` | `FAIL_FAST` | 本地未注册对应 `taskType` 时的处理策略：`FAIL_FAST` 或 `RETRY_LATER` |
-| `missingHandlerRetryDelayMillis` | `long` | `pollWaitMillis` | 在 `RETRY_LATER` 模式下任务释放回队列的延迟可见时间。**必须 $\ge 0$** |
-
----
-
-## 核心机制详解
-
-### 自动心跳与并发控制
-
-- **自动周期续约**：任务开始执行后，Worker 立即启动 `HeartbeatTask`，通过 `scheduleAtFixedRate` 周期性执行。每次心跳将 `lease_expires_at` 延后至 `now + leaseMillis`。
-- **手动即时续约**：业务代码如预知后续将执行耗时较长的重计算，可调用 `context.requestHeartbeat()` 触发即时续租。
-- **并发防重 (`AtomicBoolean heartbeating`)**：`HeartbeatTask` 内部通过 CAS 状态锁防止“定时心跳”与“手动心跳”并发重叠执行，保证同一时刻只有一个心跳 RPC/SQL 在路上。
-- **异常降级与租约丢失**：
-  - 心跳若因网络抖动偶发失败，Worker 会记录 WARN 日志，但**不会中断业务处理**。
-  - 若租约已超时被其他 Worker 抢占接管，后端将返回 `LEASE_LOST`。后续任务完成提交 `close` 时，后端同样返回 `LEASE_LOST` 并拒绝覆写，**防止脑裂冲突**。
-
----
-
-### 缺失处理器策略 (`MissingHandlerStrategy`)
-
-当 Worker 抢占到一个任务，但本地 `DefaultLeaseTaskHandlerRegistry` 未找到对应 `taskType` 的 Handler 时：
-
-```mermaid
-graph TD
-    A["Worker 抢占到任务"] --> B{"本地是否注册 Handler?"}
-    B -->|"已注册"| C["正常执行业务逻辑"]
-    B -->|"未注册"| D{"missingHandlerStrategy"}
-    D -->|"FAIL_FAST"| E["close FAILED<br/>failureReason = MISSING_HANDLER<br/>failureCount + 1"]
-    D -->|"RETRY_LATER"| F["release 延迟 missingHandlerRetryDelayMillis 重新入队<br/>failureCount 不增加, outcome 保持 null"]
-```
-
-- **`FAIL_FAST` (默认模式)**：
-  - 立即向存储后端提交 `close(FAILED, MISSING_HANDLER)`，累加 `failureCount`。
-  - **适用场景**：单体应用、所有节点能力对等的微服务集群，快速暴露漏配 Handler 的代码缺陷。
-- **`RETRY_LATER` (平滑升级 / 灰度发布模式)**：
-  - 调用 `release(missingHandlerRetryDelayMillis)`，将任务安全释放回队列，并设定延迟可见（默认等于 `pollWaitMillis`）。
-  - **不计入失败次数**，任务保持 `READY` 状态，等待集群中已完成新版部署、注册了该 Handler 的节点抢占处理。
-  - **适用场景**：多版本滚动发布、微服务异构 Worker 组协同。
-
----
-
-### 生命周期感知型处理器 (`LeaseLifecycleAwareTaskHandler`) 与契约保护
-
-框架支持两类处理器接口：
-
-1. **普通处理器 (`LeaseTaskHandler`)**：
-   - 接口方法：`void handle(LeaseExecutionContext context) throws Exception`。
-   - 自动闭环：方法正常返回，Worker 自动调用 `close(SUCCEEDED)`；方法抛出异常，Worker 自动调用 `close(FAILED, HANDLER_EXCEPTION)`。
-2. **生命周期感知型处理器 (`LeaseLifecycleAwareTaskHandler`)**：
-   - 接口方法：`void handleLifecycle(LeaseLifecycleExecutionContext context) throws Exception`。
-   - 自主控制：处理器通过 `context.close(...)` 或 `context.release(...)` 自行决定任务终态或延迟退避重新入队。
-   - **契约违规保护 (`HANDLER_CONTRACT_VIOLATION`)**：
-     - 若处理器方法返回时，`context.isLifecycleHandled()` 仍为 `false`（即业务代码既未 close 也未 release），Worker 会**强制将其标记为失败**：
-       ```java
-       runtimeClient.close(grant.getHandle(), LeaseCloseRequest.failed(
-               LeaseTaskFailureReason.HANDLER_CONTRACT_VIOLATION,
-               "LeaseLifecycleAwareTaskHandler executed without close/release"
-       ));
-       ```
-     - 彻底避免由于业务遗漏调用而导致任务在数据库中处于僵死状态。
-
----
-
-### 优雅停机 (Graceful Shutdown)
-
-在容器缩容、应用发布（`SIGTERM`）或调用 `close()` 时，Worker 提供两阶段优雅停机保护：
+`TaskWorker` 负责抢占、心跳、调用 handler 和写回结果。业务 handler 只处理 `TaskContext` 并返回 `TaskResult`，不直接操作租约。
 
 ```java
-// 优雅停机，等待当前任务完成，最大等待 10 秒
-boolean stoppedCleanly = worker.shutdownGracefully(10_000L);
+TaskWorker worker = orders.worker()
+        .handle("order.timeout-cancel", context -> {
+            boolean cancelled = cancelOrder(context.getPayload());
+            if (!cancelled) {
+                return TaskResult.retryAfter(Duration.ofSeconds(30))
+                        .withErrorMessage("payment result is unavailable");
+            }
+            return TaskResult.success();
+        })
+        .handle("order.notify", context -> {
+            try {
+                sendNotification(context.getPayload());
+                return TaskResult.success();
+            } catch (TemporaryNotificationException ex) {
+                throw ex;
+            }
+        })
+        .build()
+        .start();
 ```
 
-#### 停机流程：
-1. **标记停止状态**：设置 `shutdown = true, running = false`。
-2. **空闲中断**：如果 Worker 当前处于 `acquireNextGrant()` 阻塞轮询或休眠阶段（`!processingTask.get()`），立即对工作线程发起 `interrupt()`，促使其瞬间退出。
-3. **在跑任务保护**：如果 Worker 正在执行具体任务逻辑（`processingTask.get() == true`），不打断业务执行，允许其在 `timeoutMillis` 期限内完成并提交 `close`。
-4. **等待线程汇合**：主线程等待工作线程退出（`workerThread.join(remaining)`）。
-5. **心跳池清理**：工作线程退出后，安全关闭 `heartbeatExecutor`。若超时仍未退出，执行 `shutdownNow()` 强行终止。
+## 精确类型订阅
 
+`handle(type, handler)` 同时完成两件事：
+
+1. 注册本地 handler；
+2. 把该 type 加入后端抢占订阅。
+
+Worker 的订阅是 `(queue, taskTypes)`，并且 task type 必须精确匹配，不支持通配符。因此：
+
+- 未注册 handler 的类型不会被抢占；
+- 旧版本 Worker 不会抢到新版任务后因缺 handler 而失败；
+- 同一 Builder 中重复注册同一 type 会抛出 `IllegalArgumentException`;
+- 至少注册一个 handler 后才能 build。
+
+同一个 `TaskQueue` 可以创建多个 Worker，不同 Worker 可以处理不同 type 子集。
+
+## TaskResult 映射
+
+| Handler 返回 | Worker 写回 | 任务结果 |
+| :--- | :--- | :--- |
+| `TaskResult.success()` | terminal completion | `SUCCEEDED` |
+| `TaskResult.failure(...)` | terminal completion | `FAILED` |
+| `TaskResult.cancel(...)` | terminal completion | `CANCELLED` |
+| `TaskResult.retryAfter(delay, ...)` | retry release | `PENDING`，`visibleAt = now + delay` |
+| 抛出普通异常 | failure completion | `FAILED`，`errorMessage` 为异常信息 |
+| 返回 `null` | failure completion | `FAILED`，错误为 `TaskHandler returned null` |
+
+可选 patch 语义：
+
+- payload 为 `null` 表示保留原 payload；
+- 未调用 `withAttributes(...)` 或工厂未传 attributes 表示保留原属性；
+- 传入空 attributes map 表示清空属性；
+- failure/cancel 可以写 `errorMessage`，success 不允许写错误；
+- retry 的 delay 必须是非负且可精确转换为毫秒的 `Duration`。
+
+常见写法（这些 `return` 位于 `TaskHandler.handle` 方法内）：
+
+```java
+return TaskResult.success();
+
+return TaskResult.success(
+        "{\"processed\":true}",
+        Collections.singletonMap("traceId", "T-2"));
+
+return TaskResult.failure("inventory is insufficient");
+
+return TaskResult.failure(
+        "inventory is insufficient",
+        "{\"remaining\":0}",
+        Collections.emptyMap());
+
+return TaskResult.cancel();
+
+return TaskResult.retryAfter(Duration.ofMinutes(2));
+
+return TaskResult.retryAfter(
+        Duration.ofMinutes(2),
+        "temporary upstream failure",
+        "{\"nextCursor\":\"C-2\"}",
+        Collections.singletonMap("attempt", "2"));
+```
+
+## 默认配置和可选项
+
+| Builder 方法 | 默认值 | 说明 |
+| :--- | :--- | :--- |
+| `workerId(String)` | `worker-` 加随机 UUID | 多实例部署建议显式指定，便于查询和排障 |
+| `lease(Duration)` | 30 秒 | 抢占成功后的租约长度，必须为正 |
+| `pollInterval(Duration)` | 250 毫秒 | 空闲或抢占失败后的休眠间隔；0 表示连续轮询 |
+| `heartbeatEnabled(boolean)` | `true` | 是否自动续租 |
+| `heartbeatInterval(Duration)` | `lease / 3` | 必须大于 0 且小于 lease |
+| `threadName(String)` | `task-worker-{workerId}` | 工作线程和心跳线程名前缀 |
+
+示例：
+
+```java
+TaskWorker worker = orders.worker()
+        .handle("report.generate", context -> generateReport(context))
+        .workerId("report-worker-1")
+        .lease(Duration.ofMinutes(2))
+        .heartbeatInterval(Duration.ofSeconds(30))
+        .pollInterval(Duration.ofSeconds(1))
+        .threadName("report-worker")
+        .build();
+```
+
+lease 应大于最慢 handler 的正常执行时间，并预留网络重试窗口。长任务建议调大 lease，或把 handler 拆成可重试的小步骤。
+
+## 心跳与接管
+
+启用心跳时，Worker 每次处理任务都会启动独立心跳任务，按间隔调用后端续租。心跳结果不是 handler 的业务结果：
+
+- 心跳失败只记录日志，handler 继续执行；
+- 心跳返回 `LEASE_LOST` 会停止该任务的心跳，但不会主动中断 handler；
+- 租约真正过期后，其他 Worker 可以接管；
+- 旧 Worker 最终写回会被 fencing token 拒绝。
+
+禁用心跳适合非常短、能在 lease 内稳定完成的任务。若任务超过 lease，即使业务已执行，终态写回也会因租约过期而失败。
+
+## 停机
+
+Worker 实现 `AutoCloseable`，可用 try-with-resources 关闭。
+
+```java
+try (TaskWorker worker = orders.worker()
+        .handle("mail.send", context -> sendMail(context))
+        .build()) {
+    worker.start();
+    service.awaitShutdown();
+}
+```
+
+停机方法：
+
+- `shutdownGracefully(Duration timeout)`：停止接新任务，等待当前任务和写回完成，返回是否在超时内停止；
+- `shutdownNow()`：设置停机标记并中断工作线程，同时关闭心跳线程池；
+- `shutdown()`：先按当前 lease 时长尝试优雅停机，超时后执行 `shutdownNow()`;
+- `close()`：等价于 `shutdown()`。
+
+优雅停机不会凭空保证 handler 完成：超过 lease 或租约被其他实例接管时，写回仍会被拒绝。业务必须保持幂等。
+
+## 基础设施异常
+
+普通异常会被 Worker 视为业务失败并写回 `FAILED`。如果 handler 周边的序列化器、外部配置或存储适配器故障不应该终结任务，可以抛出：
+
+```java
+throw new TaskInfrastructureException("payload codec is unavailable", ex);
+```
+
+`TaskWorker` 会放弃本次租约写回，让任务保持 `RUNNING`，等租约过期后由其他 Worker 接管。这是高级故障语义；普通业务失败仍应返回 `TaskResult.failure(...)` 或抛出普通异常。
+
+不要把普通上游失败归类为 `TaskInfrastructureException`，否则任务会等待租约过期而不是立即进入 `FAILED` 或可配置延迟重试。
+
+## 执行线程模型
+
+每个 `TaskWorker` 有：
+
+- 一个工作线程：循环抢占并同步执行 handler；
+- 一个心跳单线程执行器：只为当前正在处理的任务续租；
+- Worker 之间互不共享线程。
+
+因此单个 Worker 同一时刻最多处理一个任务。需要并发时创建多个 `TaskWorker` 或多个进程实例，并让后端的抢占协议保证同一任务只被一个持有者处理。

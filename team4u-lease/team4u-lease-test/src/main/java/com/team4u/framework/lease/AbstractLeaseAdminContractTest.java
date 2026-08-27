@@ -1,264 +1,438 @@
 package com.team4u.framework.lease;
 
-import com.team4u.framework.lease.api.LeaseBackend;
-import com.team4u.framework.lease.enums.*;
-import com.team4u.framework.lease.model.LeaseCloseRequest;
-import com.team4u.framework.lease.model.LeaseGrant;
-import com.team4u.framework.lease.model.LeaseUpdateRequest;
+import com.team4u.framework.lease.api.TaskSnapshot;
+import com.team4u.framework.lease.api.TaskStatus;
+import com.team4u.framework.lease.spi.AdminResult;
+import com.team4u.framework.lease.spi.AdminCompletionCommand;
+import com.team4u.framework.lease.spi.LeaseBackend;
+import com.team4u.framework.lease.spi.LeaseCompletion;
+import com.team4u.framework.lease.spi.LeaseGrant;
+import com.team4u.framework.lease.spi.RescheduleCommand;
+import com.team4u.framework.lease.spi.RetryCommand;
+import com.team4u.framework.lease.spi.RuntimeResult;
+import com.team4u.framework.lease.spi.UpdateCommand;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.time.Instant;
 import java.util.Collections;
 
-/**
- * 租约管理功能契约测试基类
- * <p>
- * 定义了租约管理接口（如重新调度、关闭、重新入队等）的标准行为规范。
- * 不同实现的后端需继承此类并提供具体的实例进行验证。
- */
 public abstract class AbstractLeaseAdminContractTest extends AbstractLeaseContractSupport {
 
     @Test
-    public void testRescheduleOverridesVisibleTime() throws Exception {
+    public void testCompleteIsScopedByQueue() throws InterruptedException {
         LeaseBackend backend = createBackend();
-        // [1] 发布一个 200ms 后可见的任务
-        String taskId = publish(backend, "pay", "payload", 200L);
+        String ordersTaskId = submit(backend, PAY_TASK_TYPE, "orders-payload");
+        String invoicesTaskId = submit(backend, "invoices", PAY_TASK_TYPE, "invoices-payload");
 
-        // [2] 等待一段时间后，将其重新调度为 20ms 后可见
-        Thread.sleep(30L);
-        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.reschedule(taskId, 20L));
-        // [3] 等待重新调度的延迟生效
-        Thread.sleep(40L);
+        Assert.assertEquals(AdminResult.TASK_NOT_FOUND, backend.complete(AdminCompletionCommand.of(
+                "invoices", ordersTaskId, LeaseCompletion.cancelled("wrong queue", null, null))));
 
-        LeaseGrant grant = acquire(backend, "worker-a", 100L, 200L);
-        Assert.assertNotNull(grant);
-        Assert.assertEquals(taskId, grant.getTaskId());
-    }
-
-    /**
-     * 测试管理员手动关闭已取消的任务，确保任务状态更新为 CLOSED。
-     */
-    @Test
-    public void testAdminCloseCancelledMarksTaskClosed() throws Exception {
-        LeaseBackend backend = createBackend();
-        String taskId = publish(backend, "pay", "payload");
-
-        Assert.assertEquals(LeaseAdminResult.APPLIED,
-                backend.close(taskId, LeaseCloseRequest.cancelled("cancelled")));
-
-        // 验证任务无法再被获取
-        Assert.assertNull(acquire(backend, "worker-a", 100L, 50L));
-        // 验证任务详细状态
-        Assert.assertEquals(LeaseTaskState.CLOSED, backend.get(taskId).get().getState());
-        Assert.assertEquals(LeaseTaskOutcome.CANCELLED, backend.get(taskId).get().getOutcome());
-        Assert.assertEquals("cancelled", backend.get(taskId).get().getErrorMessage());
+        TaskSnapshot orders = snapshot(backend, DEFAULT_QUEUE, ordersTaskId);
+        Assert.assertEquals(TaskStatus.PENDING, orders.getStatus());
+        Assert.assertEquals(TaskStatus.PENDING, snapshot(backend, "invoices", invoicesTaskId).getStatus());
+        Assert.assertNotNull(acquireFromQueue(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS));
+        Assert.assertNotNull(acquireFromQueue(backend, "invoices", PAY_TASK_TYPE, WORKER_B, LEASE_MILLIS));
     }
 
     @Test
-    public void testAdminCloseCanUpdatePayload() {
+    public void testCompleteMovesPendingTaskToCancelled() {
         LeaseBackend backend = createBackend();
-        String taskId = publish(backend, "pay", "payload-v1");
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
 
-        Assert.assertEquals(LeaseAdminResult.APPLIED,
-                backend.close(taskId, LeaseCloseRequest.builder()
-                        .outcome(LeaseTaskOutcome.CANCELLED)
-                        .errorMessage("cancelled")
-                        .payload("payload-v2")
-                        .build()));
-        Assert.assertEquals("payload-v2", backend.get(taskId).get().getPayload());
+        Assert.assertEquals(AdminResult.APPLIED, backend.complete(AdminCompletionCommand.of(
+                DEFAULT_QUEUE, taskId, LeaseCompletion.cancelled("not needed", null, null))));
+        Assert.assertEquals(TaskStatus.CANCELLED, snapshot(backend, DEFAULT_QUEUE, taskId).getStatus());
+        Assert.assertEquals("not needed", snapshot(backend, DEFAULT_QUEUE, taskId).getErrorMessage());
     }
 
     @Test
-    public void testAdminCloseRejectsActiveLease() throws Exception {
+    public void testCompleteMovesPendingTaskToSucceededAndPatchesFields() {
         LeaseBackend backend = createBackend();
-        String taskId = publish(backend, "pay", "payload");
-        acquire(backend, "worker-a", 100L, 200L);
+        String taskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload-v1", null, 0L,
+                Collections.singletonMap("traceId", "T-1"));
 
-        Assert.assertEquals(LeaseAdminResult.ACTIVE_LEASE_PRESENT,
-                backend.close(taskId, LeaseCloseRequest.cancelled("cancelled")));
+        Assert.assertEquals(AdminResult.APPLIED, backend.complete(AdminCompletionCommand.of(
+                DEFAULT_QUEUE, taskId, LeaseCompletion.succeeded(
+                        "payload-v2", Collections.singletonMap("traceId", "T-2")))));
+
+        TaskSnapshot completed = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals(TaskStatus.SUCCEEDED, completed.getStatus());
+        Assert.assertEquals("payload-v2", completed.getPayload());
+        Assert.assertNull(completed.getErrorMessage());
+        Assert.assertEquals("T-2", completed.getAttributes().get("traceId"));
     }
 
     @Test
-    public void testRequeueFailedOnlyAppliesToFailedTask() throws Exception {
+    public void testCompleteMovesPendingTaskToFailedAndPatchesFields() {
         LeaseBackend backend = createBackend();
-        String taskId = publish(backend, "pay", "payload");
-        LeaseGrant grant = acquire(backend, "worker-a", 100L, 200L);
+        String taskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload-v1", null, 0L,
+                Collections.singletonMap("traceId", "T-1"));
 
-        Assert.assertEquals(LeaseRuntimeResult.APPLIED, backend.close(
-                grant.getHandle(), LeaseCloseRequest.failed(LeaseTaskFailureReason.HANDLER_EXCEPTION, "boom")));
-        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.rescheduleFailed(taskId, 10L));
+        Assert.assertEquals(AdminResult.APPLIED, backend.complete(AdminCompletionCommand.of(
+                DEFAULT_QUEUE, taskId, LeaseCompletion.failed(
+                        "boom", "payload-v2", Collections.singletonMap("traceId", "T-2")))));
 
-        Thread.sleep(20L);
-        LeaseGrant next = acquire(backend, "worker-b", 100L, 200L);
-        Assert.assertNotNull(next);
-        Assert.assertEquals(1, next.getFailureCount());
-        Assert.assertEquals(2, next.getDeliveryCount());
-        Assert.assertEquals(LeaseAdminResult.CLOSED, backend.rescheduleFailed(next.getTaskId(), 0L));
+        TaskSnapshot completed = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals(TaskStatus.FAILED, completed.getStatus());
+        Assert.assertEquals("payload-v2", completed.getPayload());
+        Assert.assertEquals("boom", completed.getErrorMessage());
+        Assert.assertEquals("T-2", completed.getAttributes().get("traceId"));
     }
 
     @Test
-    public void testRequeueFailedRejectsCancelledTask() {
+    public void testCompleteMovesPendingTaskToCancelledAndPatchesFields() {
         LeaseBackend backend = createBackend();
-        String taskId = publish(backend, "pay", "payload");
+        String taskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload-v1", null, 0L,
+                Collections.singletonMap("traceId", "T-1"));
 
-        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.close(taskId, LeaseCloseRequest.cancelled("cancelled")));
-        Assert.assertEquals(LeaseAdminResult.CLOSED, backend.rescheduleFailed(taskId, 0L));
+        Assert.assertEquals(AdminResult.APPLIED, backend.complete(AdminCompletionCommand.of(
+                DEFAULT_QUEUE, taskId, LeaseCompletion.cancelled(
+                        "cancelled", "payload-v2", Collections.singletonMap("traceId", "T-2")))));
+
+        TaskSnapshot completed = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals(TaskStatus.CANCELLED, completed.getStatus());
+        Assert.assertEquals("payload-v2", completed.getPayload());
+        Assert.assertEquals("cancelled", completed.getErrorMessage());
+        Assert.assertEquals("T-2", completed.getAttributes().get("traceId"));
     }
 
     @Test
-    public void testUpdateChangesTaskContent() {
+    public void testCompleteWithoutAttributePatchKeepsAttributes() {
         LeaseBackend backend = createBackend();
-        String taskId = publish(backend, "pay", "payload");
+        String taskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload", null, 0L,
+                Collections.singletonMap("traceId", "T-1"));
 
-        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.update(LeaseUpdateRequest.builder()
-                .taskId(taskId)
-                .taskType("mail")
-                .payload("changed")
-                .priority(9)
-                .attributes(Collections.singletonMap("traceId", "T-1"))
-                .build()));
+        Assert.assertEquals(AdminResult.APPLIED, backend.complete(AdminCompletionCommand.of(
+                DEFAULT_QUEUE, taskId, LeaseCompletion.failed("boom", null, null))));
 
-        Assert.assertEquals("mail", backend.get(taskId).get().getTaskType());
-        Assert.assertEquals("changed", backend.get(taskId).get().getPayload());
-        Assert.assertEquals(9, backend.get(taskId).get().getPriority());
-        Assert.assertEquals("T-1", backend.get(taskId).get().getAttributes().get("traceId"));
+        TaskSnapshot completed = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals("payload", completed.getPayload());
+        Assert.assertEquals("boom", completed.getErrorMessage());
+        Assert.assertEquals("T-1", completed.getAttributes().get("traceId"));
     }
 
     @Test
-    public void testUpdateWithoutAttributesKeepsOriginalAttributes() {
+    public void testCompleteWithEmptyAttributePatchClearsAttributes() {
         LeaseBackend backend = createBackend();
-        String taskId = backend.publish(com.team4u.framework.lease.model.LeasePublishRequest.builder()
-                .taskGroup(DEFAULT_QUEUE)
-                .taskType("pay")
-                .payload("payload")
-                .attributes(Collections.singletonMap("traceId", "T-1"))
-                .build());
+        String taskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload", null, 0L,
+                Collections.singletonMap("traceId", "T-1"));
 
-        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.update(LeaseUpdateRequest.builder()
-                .taskId(taskId)
-                .payload("changed")
-                .build()));
+        Assert.assertEquals(AdminResult.APPLIED, backend.complete(AdminCompletionCommand.of(
+                DEFAULT_QUEUE, taskId, LeaseCompletion.failed(
+                        "boom", null, Collections.<String, String>emptyMap()))));
 
-        Assert.assertEquals("changed", backend.get(taskId).get().getPayload());
-        Assert.assertEquals("T-1", backend.get(taskId).get().getAttributes().get("traceId"));
+        Assert.assertTrue(snapshot(backend, DEFAULT_QUEUE, taskId).getAttributes().isEmpty());
     }
 
     @Test
-    public void testUpdateWithEmptyAttributesKeepsOriginalAttributes() {
+    public void testCompleteRejectsActiveLease() throws InterruptedException {
         LeaseBackend backend = createBackend();
-        String taskId = backend.publish(com.team4u.framework.lease.model.LeasePublishRequest.builder()
-                .taskGroup(DEFAULT_QUEUE)
-                .taskType("pay")
-                .payload("payload")
-                .attributes(Collections.singletonMap("traceId", "T-1"))
-                .build());
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+        assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LONG_LEASE_MILLIS), taskId, WORKER_A);
 
-        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.update(LeaseUpdateRequest.builder()
-                .taskId(taskId)
-                .attributes(Collections.emptyMap())
-                .build()));
-
-        Assert.assertEquals("payload", backend.get(taskId).get().getPayload());
-        Assert.assertEquals("T-1", backend.get(taskId).get().getAttributes().get("traceId"));
+        Assert.assertEquals(AdminResult.ACTIVE_LEASE_PRESENT, backend.complete(AdminCompletionCommand.of(
+                DEFAULT_QUEUE, taskId, LeaseCompletion.cancelled("not needed", null, null))));
+        Assert.assertEquals(TaskStatus.RUNNING, snapshot(backend, DEFAULT_QUEUE, taskId).getStatus());
     }
 
     @Test
-    public void testAdminCloseWithEmptyAttributesKeepsOriginalAttributes() {
+    public void testCompleteAllowsExpiredLease() throws InterruptedException {
         LeaseBackend backend = createBackend();
-        String taskId = backend.publish(com.team4u.framework.lease.model.LeasePublishRequest.builder()
-                .taskGroup(DEFAULT_QUEUE)
-                .taskType("pay")
-                .payload("payload")
-                .attributes(Collections.singletonMap("traceId", "T-1"))
-                .build());
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+        LeaseGrant grant = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS),
+                taskId, WORKER_A);
 
-        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.close(taskId, LeaseCloseRequest.builder()
-                .outcome(LeaseTaskOutcome.CANCELLED)
-                .attributes(Collections.emptyMap())
-                .build()));
-
-        Assert.assertEquals("T-1", backend.get(taskId).get().getAttributes().get("traceId"));
+        waitUntilAfter(grant.getSnapshot().getLeaseExpiresAt());
+        Assert.assertEquals(AdminResult.APPLIED, backend.complete(AdminCompletionCommand.of(
+                DEFAULT_QUEUE, taskId, LeaseCompletion.cancelled("not needed", null, null))));
+        TaskSnapshot completed = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals(TaskStatus.CANCELLED, completed.getStatus());
+        Assert.assertNull(completed.getWorkerId());
+        Assert.assertNull(completed.getLeaseExpiresAt());
     }
 
     @Test
-    public void testUpdateRejectsActiveLease() throws Exception {
+    public void testCompleteRejectsTerminalTask() {
         LeaseBackend backend = createBackend();
-        String taskId = publish(backend, "pay", "payload");
-        acquire(backend, "worker-a", 200L, 200L);
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
 
-        Assert.assertEquals(LeaseAdminResult.ACTIVE_LEASE_PRESENT, backend.update(LeaseUpdateRequest.builder()
-                .taskId(taskId)
-                .payload("changed")
-                .build()));
-        Assert.assertEquals("payload", backend.get(taskId).get().getPayload());
+        Assert.assertEquals(AdminResult.APPLIED, backend.complete(AdminCompletionCommand.of(
+                DEFAULT_QUEUE, taskId, LeaseCompletion.cancelled("first", null, null))));
+        Assert.assertEquals(AdminResult.TERMINAL, backend.complete(AdminCompletionCommand.of(
+                DEFAULT_QUEUE, taskId, LeaseCompletion.cancelled("second", null, null))));
+        Assert.assertEquals("first", snapshot(backend, DEFAULT_QUEUE, taskId).getErrorMessage());
     }
 
     @Test
-    public void testUpdateRejectsClosedTask() {
+    public void testRescheduleMovesPendingVisibleTimeForward() throws InterruptedException {
         LeaseBackend backend = createBackend();
-        String taskId = publish(backend, "pay", "payload");
-        Assert.assertEquals(LeaseAdminResult.APPLIED,
-                backend.close(taskId, LeaseCloseRequest.cancelled("cancelled")));
+        String taskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload", null,
+                LONG_LEASE_MILLIS, Collections.<String, String>emptyMap());
+        TaskSnapshot pending = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertTrue(pending.getVisibleAt().isAfter(Instant.now()));
+        Assert.assertNull(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS));
+        Assert.assertEquals(AdminResult.APPLIED, backend.reschedule(RescheduleCommand.of(
+                DEFAULT_QUEUE, taskId, 0L)));
 
-        Assert.assertEquals(LeaseAdminResult.CLOSED, backend.update(LeaseUpdateRequest.builder()
-                .taskId(taskId)
-                .payload("changed")
-                .build()));
-        Assert.assertEquals("payload", backend.get(taskId).get().getPayload());
+        TaskSnapshot rescheduled = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals(TaskStatus.PENDING, rescheduled.getStatus());
+        Assert.assertTrue(rescheduled.getVisibleAt().isBefore(pending.getVisibleAt()));
+        assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS), taskId, WORKER_A);
     }
 
     @Test
-    public void testUpdateAllowsExpiredLeaseTask() throws Exception {
+    public void testRescheduleMovesVisibleTimeLater() throws InterruptedException {
         LeaseBackend backend = createBackend();
-        String taskId = publish(backend, "pay", "payload");
-        acquire(backend, "worker-a", 30L, 100L);
-        Thread.sleep(60L);
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+        TaskSnapshot pending = snapshot(backend, DEFAULT_QUEUE, taskId);
 
-        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.update(LeaseUpdateRequest.builder()
-                .taskId(taskId)
-                .payload("changed")
-                .build()));
-        Assert.assertEquals("changed", backend.get(taskId).get().getPayload());
+        Assert.assertEquals(AdminResult.APPLIED, backend.reschedule(RescheduleCommand.of(
+                DEFAULT_QUEUE, taskId, LONG_LEASE_MILLIS)));
+
+        TaskSnapshot rescheduled = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals(TaskStatus.PENDING, rescheduled.getStatus());
+        Assert.assertTrue(rescheduled.getVisibleAt().isAfter(pending.getVisibleAt()));
+        Assert.assertNull(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS));
     }
 
     @Test
-    public void testUpdateAndRescheduleAtomicallyAppliesContentAndVisibility() throws Exception {
+    public void testRescheduleRejectsActiveLeaseAndTerminalTask() throws InterruptedException {
         LeaseBackend backend = createBackend();
-        String taskId = publish(backend, "pay", "payload", 200L);
+        String activeTaskId = submit(backend, PAY_TASK_TYPE, "active");
+        assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LONG_LEASE_MILLIS), activeTaskId, WORKER_A);
+        String terminalTaskId = submit(backend, MAIL_TASK_TYPE, "terminal");
+        Assert.assertEquals(AdminResult.APPLIED, backend.complete(AdminCompletionCommand.of(
+                DEFAULT_QUEUE, terminalTaskId, LeaseCompletion.cancelled("first", null, null))));
 
-        Thread.sleep(30L);
-        Assert.assertEquals(LeaseAdminResult.APPLIED, backend.updateAndReschedule(LeaseUpdateRequest.builder()
-                .taskId(taskId)
-                .taskType("mail")
-                .payload("changed")
-                .priority(9)
-                .attributes(Collections.singletonMap("traceId", "T-2"))
-                .build(), 20L));
-        Thread.sleep(40L);
-
-        LeaseGrant grant = acquire(backend, "worker-a", 100L, 200L);
-        Assert.assertNotNull(grant);
-        Assert.assertEquals(taskId, grant.getTaskId());
-        Assert.assertEquals("mail", grant.getTaskType());
-        Assert.assertEquals("changed", grant.getPayload());
-        Assert.assertEquals("T-2", grant.getAttributes().get("traceId"));
+        Assert.assertEquals(AdminResult.ACTIVE_LEASE_PRESENT, backend.reschedule(RescheduleCommand.of(
+                DEFAULT_QUEUE, activeTaskId, 0L)));
+        Assert.assertEquals(AdminResult.TERMINAL, backend.reschedule(RescheduleCommand.of(
+                DEFAULT_QUEUE, terminalTaskId, 0L)));
     }
 
     @Test
-    public void testAdminOperationsReturnTaskNotFoundForMissingTask() {
+    public void testRetryMovesFailedTaskBackToPending() throws Exception {
         LeaseBackend backend = createBackend();
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+        LeaseGrant grant = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS),
+                taskId, WORKER_A);
+        Assert.assertEquals(RuntimeResult.APPLIED, backend.close(grant.getHandle(),
+                LeaseCompletion.failed("boom", "failed-payload", null)));
 
-        Assert.assertEquals(LeaseAdminResult.TASK_NOT_FOUND, backend.reschedule("missing", 10L));
-        Assert.assertEquals(LeaseAdminResult.TASK_NOT_FOUND,
-                backend.close("missing", LeaseCloseRequest.cancelled("cancelled")));
-        Assert.assertEquals(LeaseAdminResult.TASK_NOT_FOUND, backend.rescheduleFailed("missing", 10L));
-        Assert.assertEquals(LeaseAdminResult.TASK_NOT_FOUND, backend.update(LeaseUpdateRequest.builder()
-                .taskId("missing")
-                .payload("x")
-                .build()));
-        Assert.assertEquals(LeaseAdminResult.TASK_NOT_FOUND, backend.updateAndReschedule(LeaseUpdateRequest.builder()
-                .taskId("missing")
-                .payload("x")
-                .build(), 10L));
+        Assert.assertEquals(AdminResult.APPLIED, backend.retry(RetryCommand.of(
+                DEFAULT_QUEUE, taskId, LONG_LEASE_MILLIS)));
+
+        TaskSnapshot pending = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals(TaskStatus.PENDING, pending.getStatus());
+        Assert.assertNull(pending.getWorkerId());
+        Assert.assertNull(pending.getLeaseExpiresAt());
+        Assert.assertTrue(pending.getVisibleAt().isAfter(Instant.now()));
+        Assert.assertEquals("failed-payload", pending.getPayload());
+    }
+
+    @Test
+    public void testRetryAllowsOnlyFailedTask() throws Exception {
+        LeaseBackend backend = createBackend();
+        String pendingTaskId = submit(backend, PAY_TASK_TYPE, "pending");
+        String runningTaskId = submit(backend, "running", PAY_TASK_TYPE, "running");
+        String terminalTaskId = submit(backend, "terminal", PAY_TASK_TYPE, "terminal");
+
+        assertRunningGrant(acquireFromQueue(backend, "running", PAY_TASK_TYPE, WORKER_A, LONG_LEASE_MILLIS),
+                runningTaskId, WORKER_A);
+        Assert.assertEquals(AdminResult.APPLIED, backend.complete(AdminCompletionCommand.of(
+                "terminal", terminalTaskId, LeaseCompletion.cancelled("cancelled", null, null))));
+
+        Assert.assertEquals(AdminResult.TERMINAL, backend.retry(RetryCommand.of(
+                DEFAULT_QUEUE, pendingTaskId, 0L)));
+        Assert.assertEquals(AdminResult.ACTIVE_LEASE_PRESENT, backend.retry(RetryCommand.of(
+                "running", runningTaskId, 0L)));
+        Assert.assertEquals(AdminResult.TERMINAL, backend.retry(RetryCommand.of(
+                "terminal", terminalTaskId, 0L)));
+    }
+
+    @Test
+    public void testUpdateChangesMutableTaskFields() {
+        LeaseBackend backend = createBackend();
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+
+        Assert.assertEquals(AdminResult.APPLIED, backend.update(update(taskId,
+                MAIL_TASK_TYPE, "changed", Integer.valueOf(9),
+                Collections.singletonMap("traceId", "T-1"), true, null)));
+
+        TaskSnapshot snapshot = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals(MAIL_TASK_TYPE, snapshot.getType());
+        Assert.assertEquals("changed", snapshot.getPayload());
+        Assert.assertEquals(9, snapshot.getPriority());
+        Assert.assertEquals("T-1", snapshot.getAttributes().get("traceId"));
+    }
+
+    @Test
+    public void testUpdateRejectsActiveLeaseAndKeepsTaskUnchanged() throws InterruptedException {
+        LeaseBackend backend = createBackend();
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+        assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LONG_LEASE_MILLIS), taskId, WORKER_A);
+
+        Assert.assertEquals(AdminResult.ACTIVE_LEASE_PRESENT, backend.update(update(taskId,
+                MAIL_TASK_TYPE, "changed", Integer.valueOf(9), null, false, null)));
+
+        TaskSnapshot snapshot = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals(PAY_TASK_TYPE, snapshot.getType());
+        Assert.assertEquals("payload", snapshot.getPayload());
+        Assert.assertEquals(0, snapshot.getPriority());
+    }
+
+    @Test
+    public void testUpdateRejectsTerminalTaskAndKeepsTaskUnchanged() {
+        LeaseBackend backend = createBackend();
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+        Assert.assertEquals(AdminResult.APPLIED, backend.complete(AdminCompletionCommand.of(
+                DEFAULT_QUEUE, taskId, LeaseCompletion.cancelled("cancelled", null, null))));
+
+        Assert.assertEquals(AdminResult.TERMINAL, backend.update(update(taskId,
+                MAIL_TASK_TYPE, "changed", Integer.valueOf(9), null, false, null)));
+
+        TaskSnapshot snapshot = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals(PAY_TASK_TYPE, snapshot.getType());
+        Assert.assertEquals("payload", snapshot.getPayload());
+        Assert.assertEquals(0, snapshot.getPriority());
+    }
+
+    @Test
+    public void testUpdateWithoutAttributePatchKeepsAttributes() {
+        LeaseBackend backend = createBackend();
+        String taskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload", null, 0L,
+                Collections.singletonMap("traceId", "T-1"));
+
+        Assert.assertEquals(AdminResult.APPLIED, backend.update(update(taskId,
+                null, "changed", null, null, false, null)));
+
+        TaskSnapshot snapshot = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals("changed", snapshot.getPayload());
+        Assert.assertEquals("T-1", snapshot.getAttributes().get("traceId"));
+    }
+
+    @Test
+    public void testUpdateWithEmptyAttributePatchClearsAttributes() {
+        LeaseBackend backend = createBackend();
+        String taskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload", null, 0L,
+                Collections.singletonMap("traceId", "T-1"));
+
+        Assert.assertEquals(AdminResult.APPLIED, backend.update(update(taskId,
+                null, "changed", null, Collections.<String, String>emptyMap(), true, null)));
+
+        Assert.assertTrue(snapshot(backend, DEFAULT_QUEUE, taskId).getAttributes().isEmpty());
+    }
+
+    @Test
+    public void testUpdateAllowsTaskAfterLeaseExpiry() throws InterruptedException {
+        LeaseBackend backend = createBackend();
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+        LeaseGrant grant = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS),
+                taskId, WORKER_A);
+
+        waitUntilAfter(grant.getSnapshot().getLeaseExpiresAt());
+        Assert.assertEquals(AdminResult.APPLIED, backend.update(update(taskId,
+                null, "changed", null, null, false, null)));
+        Assert.assertEquals("changed", snapshot(backend, DEFAULT_QUEUE, taskId).getPayload());
+    }
+
+    @Test
+    public void testUpdateExpiredRunningTaskKeepsLeaseOwnership() throws Exception {
+        LeaseBackend backend = createBackend();
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+        LeaseGrant grant = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS),
+                taskId, WORKER_A);
+        Instant leaseExpiresAt = grant.getSnapshot().getLeaseExpiresAt();
+
+        waitUntilAfter(leaseExpiresAt);
+        Assert.assertEquals(AdminResult.APPLIED, backend.update(update(taskId,
+                null, "changed", Integer.valueOf(9), null, false, null)));
+
+        TaskSnapshot updated = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals(TaskStatus.RUNNING, updated.getStatus());
+        Assert.assertEquals(WORKER_A, updated.getWorkerId());
+        Assert.assertEquals(leaseExpiresAt, updated.getLeaseExpiresAt());
+        Assert.assertEquals("changed", updated.getPayload());
+        Assert.assertEquals(9, updated.getPriority());
+
+        assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_B, LONG_LEASE_MILLIS),
+                taskId, WORKER_B);
+    }
+
+    @Test
+    public void testUpdateAndRescheduleExpiredRunningTaskStartsNewCycle() throws Exception {
+        LeaseBackend backend = createBackend();
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+        LeaseGrant grant = assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS),
+                taskId, WORKER_A);
+
+        waitUntilAfter(grant.getSnapshot().getLeaseExpiresAt());
+        Assert.assertEquals(AdminResult.APPLIED, backend.updateAndReschedule(update(taskId,
+                null, "changed", null, null, false, Long.valueOf(0L))));
+
+        TaskSnapshot rescheduled = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals(TaskStatus.PENDING, rescheduled.getStatus());
+        Assert.assertNull(rescheduled.getWorkerId());
+        Assert.assertNull(rescheduled.getLeaseExpiresAt());
+        Assert.assertEquals("changed", rescheduled.getPayload());
+        assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_B, LONG_LEASE_MILLIS),
+                taskId, WORKER_B);
+    }
+
+    @Test
+    public void testUpdateAndRescheduleAppliesUpdateAndVisibilityTogether() throws InterruptedException {
+        LeaseBackend backend = createBackend();
+        String taskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "payload", null, 0L,
+                Collections.singletonMap("traceId", "T-1"));
+
+        Assert.assertEquals(AdminResult.APPLIED, backend.updateAndReschedule(update(taskId,
+                MAIL_TASK_TYPE, "changed", Integer.valueOf(9),
+                Collections.singletonMap("traceId", "T-2"), true, null)));
+
+        TaskSnapshot snapshot = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals(TaskStatus.PENDING, snapshot.getStatus());
+        Assert.assertEquals(MAIL_TASK_TYPE, snapshot.getType());
+        Assert.assertEquals("changed", snapshot.getPayload());
+        Assert.assertEquals(9, snapshot.getPriority());
+        Assert.assertEquals("T-2", snapshot.getAttributes().get("traceId"));
+        Assert.assertFalse(snapshot.getVisibleAt().isAfter(Instant.now()));
+        assertRunningGrant(acquire(backend, MAIL_TASK_TYPE, WORKER_A, LEASE_MILLIS), taskId, WORKER_A);
+    }
+
+    @Test
+    public void testUpdateAndRescheduleDelaysVisibility() throws InterruptedException {
+        LeaseBackend backend = createBackend();
+        String taskId = submit(backend, PAY_TASK_TYPE, "payload");
+
+        Assert.assertEquals(AdminResult.APPLIED, backend.updateAndReschedule(update(taskId,
+                null, "changed", null, null, false, Long.valueOf(LONG_LEASE_MILLIS))));
+
+        TaskSnapshot snapshot = snapshot(backend, DEFAULT_QUEUE, taskId);
+        Assert.assertEquals("changed", snapshot.getPayload());
+        Assert.assertTrue(snapshot.getVisibleAt().isAfter(Instant.now()));
+        Assert.assertNull(acquire(backend, PAY_TASK_TYPE, WORKER_A, LEASE_MILLIS));
+    }
+
+    @Test
+    public void testUpdateAndRescheduleRejectsActiveAndTerminalTasks() throws InterruptedException {
+        LeaseBackend backend = createBackend();
+        String activeTaskId = submit(backend, PAY_TASK_TYPE, "active");
+        assertRunningGrant(acquire(backend, PAY_TASK_TYPE, WORKER_A, LONG_LEASE_MILLIS), activeTaskId, WORKER_A);
+        String terminalTaskId = submit(backend, MAIL_TASK_TYPE, "terminal");
+        Assert.assertEquals(AdminResult.APPLIED, backend.complete(AdminCompletionCommand.of(
+                DEFAULT_QUEUE, terminalTaskId, LeaseCompletion.cancelled("cancelled", null, null))));
+
+        Assert.assertEquals(AdminResult.ACTIVE_LEASE_PRESENT, backend.updateAndReschedule(update(
+                activeTaskId, null, "changed", null, null, false, null)));
+        Assert.assertEquals(AdminResult.TERMINAL, backend.updateAndReschedule(update(
+                terminalTaskId, null, "changed", null, null, false, null)));
+    }
+
+    private UpdateCommand update(String taskId, String taskType, String payload, Integer priority,
+                                 java.util.Map<String, String> attributes, boolean attributesPresent,
+                                 Long delayMillis) {
+        return UpdateCommand.of(DEFAULT_QUEUE, taskId, taskType, payload, priority, attributes,
+                attributesPresent, delayMillis);
     }
 }

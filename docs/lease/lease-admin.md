@@ -1,111 +1,159 @@
-# 运维管控与查询服务
+# 查询与管理
 
-`team4u-lease` 提供了面向控制台检索、巡检大盘、自动化补偿脚本及人工干预的完整查询与管理服务接口。
+所有操作都从 `TaskQueue` 发起，并自动携带队列名。不同队列之间不能通过 taskId 互查或互操作。
 
----
+## 查询任务
 
-## 任务查询服务 (`LeaseQueryService`)
-
-`LeaseQueryService` 提供了根据任务 ID、业务幂等键以及多维组合条件的分页检索能力：
+按任务 ID 查询：
 
 ```java
-import com.team4u.framework.lease.api.LeaseQueryService;
-import com.team4u.framework.lease.enums.LeaseTaskOutcome;
-import com.team4u.framework.lease.enums.LeaseTaskState;
-import com.team4u.framework.lease.model.LeaseQueryRequest;
-import com.team4u.framework.lease.model.LeaseTaskPage;
-import com.team4u.framework.lease.model.LeaseTaskRecord;
+Optional<TaskSnapshot> task = orders.get("task-id");
+```
 
-import java.util.Optional;
+按幂等键查询必须提供 type 和 key：
 
-LeaseQueryService queryService = backend;
+```java
+Optional<TaskSnapshot> task = orders.get("order.timeout-cancel", "O-1001");
+```
 
-// 1. 根据全局唯一 taskId 查询任务快照
-Optional<LeaseTaskRecord> task = queryService.get("lease-task-1001");
-task.ifPresent(record -> {
-    System.out.println("任务状态: " + record.getState());
-    System.out.println("投递尝试次数: " + record.getDeliveryCount());
-    System.out.println("扩展属性: " + record.getAttributes());
-});
+分页和过滤：
 
-// 2. 根据 taskGroup + businessKey 业务唯一键精确查询
-Optional<LeaseTaskRecord> orderTask = queryService.getByBusinessKey("order-center", "ORDER_99882026");
-
-// 3. 多维度条件分页检索（支持状态、结果、失败原因、Worker ID 等过滤）
-LeaseTaskPage page = queryService.list(LeaseQueryRequest.builder()
-        .taskGroup("order-center")
-        .taskType("order-timeout-cancel")
-        .state(LeaseTaskState.CLOSED)
-        .outcome(LeaseTaskOutcome.FAILED)
+```java
+TaskPage page = orders.list(TaskQuery.builder()
+        .type("order.timeout-cancel")
+        .status(TaskStatus.PENDING)
+        .workerId("order-worker-1")
         .page(0)
-        .pageSize(20)
+        .pageSize(50)
         .build());
 
-System.out.printf("符合条件的任务总数: %d, 当前页条数: %d%n", page.getTotal(), page.getItems().size());
-for (LeaseTaskRecord record : page.getItems()) {
-    System.out.printf("失败任务 ID: %s, 失败诱因: %s, 错误详情: %s%n",
-            record.getTaskId(),
-            record.getFailureReason(),
-            record.getErrorMessage());
+long total = page.getTotal();
+for (TaskSnapshot task : page.getTasks()) {
+    System.out.printf("%s %s attempt=%d%n",
+            task.getTaskId(), task.getStatus(), task.getAttemptCount());
 }
 ```
 
----
+`page` 从 0 开始，`pageSize` 默认 50。列表按 `createdAt`、`taskId` 升序返回；这里只做运维检索，不表示抢占顺序，抢占顺序由优先级、创建时间和可见资格决定。
 
-## 运维管控服务 (`LeaseAdminService`)
+`TaskQuery` 的三个过滤条件都可以为 `null`，但 workerId 过滤通常只在查询 `RUNNING` 任务时有值。
 
-针对异常、滞留或需要人工修正的任务，`LeaseAdminService` 提供了重新调度、强制关闭与属性更新能力。
+## 管理操作结果
 
-所有管理操作均返回 `LeaseAdminResult` 状态枚举，便于调用方准确识别执行结果：
+所有管理方法返回同一个结果枚举：
 
-| 返回结果 | 含义 | 说明与处理建议 |
-| :--- | :--- | :--- |
-| **`APPLIED`** | 操作已成功生效。 | 任务状态已更新 |
-| **`TASK_NOT_FOUND`** | 目标任务 ID 不存在。 | 确认 taskId 是否正确 |
-| **`CLOSED`** | 任务已处于终态；或在调用 `rescheduleFailed` 时任务非 `CLOSED+FAILED`。 | 无法重复关闭或重调度非失败任务 |
-| **`ACTIVE_LEASE_PRESENT`** | 目标任务当前正在 `RUNNING` 且持有有效租约（`lease_expires_at >= now`）。 | **安全防御**：拒绝强行覆盖活跃执行中的任务，避免并发数据错乱 |
+| `TaskOperationResult` | 含义 |
+| :--- | :--- |
+| `APPLIED` | 条件满足，状态变更成功 |
+| `TASK_NOT_FOUND` | 当前队列中不存在该任务 |
+| `TERMINAL` | 任务已在 `SUCCEEDED`、`FAILED` 或 `CANCELLED`，拒绝变更 |
+| `ACTIVE_LEASE_PRESENT` | 任务正在被有效 `RUNNING` 租约持有，拒绝管理面写入 |
 
----
+这些方法不会抛出上述业务性冲突；冲突以返回值表达。参数非法、时间非法或后端故障仍会抛出运行时异常。
 
-### 管理操作示例
+## 立即重调度
+
+`reschedule` 把 PENDING 或已过期的 RUNNING 任务设置新的可见时间，并清空租约字段：
 
 ```java
-import com.team4u.framework.lease.api.LeaseAdminService;
-import com.team4u.framework.lease.enums.LeaseAdminResult;
-import com.team4u.framework.lease.model.LeaseCloseRequest;
-import com.team4u.framework.lease.model.LeaseUpdateRequest;
-
-LeaseAdminService adminService = backend;
-
-// 1. 将失败关闭的任务重新拉起进入 READY 队列（立即就绪）
-// 注意：rescheduleFailed 仅对 state=CLOSED 且 outcome=FAILED 的任务生效
-LeaseAdminResult r1 = adminService.rescheduleFailed("lease-task-failed-001", 0L);
-if (r1 == LeaseAdminResult.APPLIED) {
-    System.out.println("已成功将失败任务重新入队调度");
-}
-
-// 2. 重新调度非终态任务（推迟 10 分钟后再可见）
-LeaseAdminResult r2 = adminService.reschedule("lease-task-002", 10 * 60 * 1000L);
-
-// 3. 人工强制关闭任务（标记为 CANCELLED）
-LeaseAdminResult r3 = adminService.close("lease-task-003", 
-        LeaseCloseRequest.cancelled("人工在管理后台取消"));
-
-// 4. 部分更新任务数据与扩展属性 (仅更新非 null 字段)
-LeaseAdminResult r4 = adminService.update(LeaseUpdateRequest.builder()
-        .taskId("lease-task-004")
-        .payload("{\"orderId\": \"1001\", \"corrected\": true}")
-        .priority(50) // 提升优先级
-        .attribute("operator", "admin_jay")
-        .build());
-
-// 5. 原子更新载荷并立即重新调度
-LeaseAdminResult r5 = adminService.updateAndReschedule(
-        LeaseUpdateRequest.builder()
-                .taskId("lease-task-005")
-                .payload("{\"orderId\": \"1005\", \"retryParam\": \"fast\"}")
-                .build(),
-        0L // delayMillis = 0 表示立即就绪
-);
+TaskOperationResult result = orders.reschedule(
+        "task-id", Duration.ofMinutes(5));
 ```
 
+应用后：
+
+- 状态为 `PENDING`;
+- `visibleAt = now + delay`;
+- `workerId`、`leaseToken`、`leaseExpiresAt` 清空；
+- `errorMessage` 清空；
+- `attemptCount` 不变，下一次抢占后再加 1。
+
+活跃租约和终态会被拒绝。
+
+## 修改任务数据
+
+`TaskPatch` 是部分更新。未设置的字段保持不变：
+
+```java
+TaskOperationResult result = orders.update(TaskPatch.builder()
+        .taskId("task-id")
+        .payload("{\"orderId\":\"O-1001\",\"urgent\":true}")
+        .priority(20)
+        .attributes(Collections.singletonMap("traceId", "T-2"))
+        .build());
+```
+
+属性语义需要特别注意：
+
+- 未调用 `attributes(...)`：保留原属性；
+- 调用 `attributes(emptyMap())`：清空全部属性；
+- 调用 `attributes(map)`：用这个 map 替换全部属性。
+
+`update` 只改元数据，不改变状态和时间。对租约已过期的 `RUNNING` 任务，它会保留 `RUNNING`、原 `workerId` 和原 `leaseExpiresAt`；之后其他 Worker 仍可按过期租约接管。
+
+## 原子修改并重调度
+
+`updateAndReschedule` 把元数据变更和重调度作为一个后端原子操作：
+
+```java
+TaskOperationResult result = orders.updateAndReschedule(
+        TaskPatch.builder()
+                .taskId("task-id")
+                .type("order.timeout-cancel-v2")
+                .payload("{\"orderId\":\"O-1001\",\"urgent\":true}")
+                .priority(20)
+                .attributes(Collections.singletonMap("traceId", "T-2"))
+                .build(),
+        Duration.ofMinutes(5));
+```
+
+应用后任务变为 `PENDING`，可见时间为 `now + delay`，租约字段和错误信息清空。活跃租约与终态同样被拒绝。
+
+如果 patch 修改 type，新的三元组不能占用其他任务的 `(queue, taskType, deduplicationKey)` 幂等键。
+
+## 重试失败任务
+
+只有 `FAILED` 任务可以通过管理面 `retry` 重新调度：
+
+```java
+TaskOperationResult result = orders.retry("task-id", Duration.ofMinutes(1));
+```
+
+应用后任务为 `PENDING`，错误清空，`attemptCount` 保留并在下一次抢占时继续累计。`PENDING`、有效 `RUNNING`、`SUCCEEDED`、`CANCELLED` 都会被拒绝；其中有效 `RUNNING` 返回 `ACTIVE_LEASE_PRESENT`。
+
+Handler 内部想立即安排下一次执行时应返回 `TaskResult.retryAfter(...)`，不是抛异常后调用管理面 retry。
+
+## 完成和取消
+
+无租约完成任务使用 `complete`，适用于 PENDING 或租约已过期的 RUNNING 任务：
+
+```java
+TaskOperationResult result = orders.complete(
+        "task-id",
+        TaskResult.success(
+                "{\"reconciled\":true}",
+                Collections.singletonMap("traceId", "T-2")));
+```
+
+`complete` 只接受 success、failure 或 cancel，不接受 retry 结果。它按 `TaskResult` 写入终态：
+
+```java
+orders.complete("task-id", TaskResult.failure("manual close", null, null));
+
+orders.complete("task-id", TaskResult.cancel(
+        "cancelled by operator", null, Collections.emptyMap()));
+```
+
+取消有快捷方法，等价于提交带 reason 的 cancel 结果：
+
+```java
+TaskOperationResult result = orders.cancel("task-id", "cancelled by operator");
+```
+
+活跃租约会返回 `ACTIVE_LEASE_PRESENT`，避免管理面覆盖正在执行的 Worker。终态任务返回 `TERMINAL`。
+
+## 管理语义与后台接管
+
+管理面可以在租约过期后修改或完成任务，即使快照仍显示旧的 `RUNNING` 记录。这是因为“租约是否有效”由当前时间和 `leaseExpiresAt` 判断，而不是依赖后台清理任务。
+
+并发窗口下，后端必须原子判断管理条件和租约条件。若管理写回和 Worker 接管竞争，只有一方能成功；调用方应读取最新快照并按业务需要重试或放弃。
