@@ -222,7 +222,7 @@ public final class ProxyBuilder<T> {
         if (primaryType.isInterface() && interfaces.stream().allMatch(Class::isInterface)) {
             return JdkProxyEngine.INSTANCE;
         }
-        ProxyEngine engine = loadByteBuddyEngine();
+        ProxyEngine engine = loadByteBuddyEngine(primaryType);
         if (engine.supports(primaryType)) {
             return engine;
         }
@@ -231,29 +231,73 @@ public final class ProxyBuilder<T> {
                 + ". Ensure it is not a final class or unsupported type.");
     }
 
-    private ProxyEngine loadByteBuddyEngine() {
-        Class<?> engineClass;
-        try {
-            engineClass = Class.forName(
-                    "com.team4u.framework.proxy.engine.ByteBuddyProxyEngine",
-                    true,
-                    ProxyBuilder.class.getClassLoader());
-        } catch (ClassNotFoundException e) {
-            throw missingByteBuddy(e);
-        } catch (LinkageError e) {
-            throw missingByteBuddy(e);
+    private ProxyEngine loadByteBuddyEngine(Class<?> primaryType) {
+        ClassLoader[] loaders = {
+                Thread.currentThread().getContextClassLoader(),
+                primaryType.getClassLoader(),
+                ProxyBuilder.class.getClassLoader()
+        };
+        Throwable missingCause = null;
+        for (ClassLoader loader : loaders) {
+            if (loader == null) {
+                continue;
+            }
+
+            Class<?> engineClass;
+            try {
+                engineClass = Class.forName(
+                        "com.team4u.framework.proxy.engine.ByteBuddyProxyEngine",
+                        true,
+                        loader);
+            } catch (ClassNotFoundException e) {
+                missingCause = latestMissingCause(missingCause, e);
+                continue;
+            } catch (LinkageError e) {
+                if (isMissingByteBuddy(e)) {
+                    missingCause = latestMissingCause(missingCause, e);
+                    continue;
+                }
+                throw new ProxyException("Cannot load ByteBuddy proxy engine from " + loader, e);
+            }
+
+            try {
+                Object instance = engineClass.getField("INSTANCE").get(null);
+                return (ProxyEngine) instance;
+            } catch (IllegalAccessException | NoSuchFieldException e) {
+                throw new ProxyException("Cannot access ByteBuddy proxy engine INSTANCE", e);
+            } catch (ClassCastException e) {
+                throw new ProxyException("ByteBuddy proxy engine does not implement ProxyEngine", e);
+            } catch (LinkageError e) {
+                if (isMissingByteBuddy(e)) {
+                    missingCause = latestMissingCause(missingCause, e);
+                    continue;
+                }
+                throw new ProxyException("Cannot initialize ByteBuddy proxy engine from " + loader, e);
+            }
         }
 
-        try {
-            Object instance = engineClass.getField("INSTANCE").get(null);
-            return (ProxyEngine) instance;
-        } catch (IllegalAccessException | NoSuchFieldException e) {
-            throw new ProxyException("Cannot access ByteBuddy proxy engine INSTANCE", e);
-        } catch (ClassCastException e) {
-            throw new ProxyException("ByteBuddy proxy engine does not implement ProxyEngine", e);
-        } catch (LinkageError e) {
-            throw missingByteBuddy(e);
+        throw missingByteBuddy(missingCause);
+    }
+
+    private Throwable latestMissingCause(Throwable current, Throwable candidate) {
+        return current == null ? candidate : current;
+    }
+
+    private boolean isMissingByteBuddy(Throwable error) {
+        Throwable current = error;
+        while (current != null) {
+            String text = current.getMessage();
+            boolean missingByteBuddyType =
+                    current instanceof ClassNotFoundException
+                            || current instanceof NoClassDefFoundError;
+            if (missingByteBuddyType
+                    && text != null
+                    && (text.contains("net.bytebuddy") || text.contains("net/bytebuddy"))) {
+                return true;
+            }
+            current = current.getCause();
         }
+        return false;
     }
 
     private ProxyException missingByteBuddy(Throwable cause) {
