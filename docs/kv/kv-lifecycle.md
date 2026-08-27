@@ -9,8 +9,9 @@
 | `get()` 时的状态 | 行为 |
 | :--- | :--- |
 | 未过期且未进刷新窗口 | 直接返回缓存值，零加载开销 |
-| 进入刷新窗口（剩余时间 <= `refreshAhead`） | 本线程同步续期；并发请求经 singleflight 等待，不重复加载。**续期失败不影响返回旧值**（记 warn，下次 `get()` 自动重试） |
-| 不存在 / 已过期 | 加载新值并写入；singleflight 保证并发下仅加载一次 |
+| 进入刷新窗口（剩余时间 <= `refreshAhead`） | 默认本线程同步续期；并发请求经 singleflight 等待同一次结果，不重复加载。**续期失败不影响返回旧值**（记 warn 并进入失败冷却，下次 `get()` 自动重试） |
+| 冷却期内（上次失败后） | 跳过加载尝试，直接返回旧值——源端故障时不会形成顺序请求风暴 |
+| 不存在 / 已过期 | 加载新值并写入；singleflight 保证并发下仅加载一次（硬死期路径不软化，失败抛给调用方） |
 
 ```java
 ExpiringValue<Token> token = ExpiringValue.<Token>builder(Token.class)
@@ -30,7 +31,17 @@ Token t = token.get();      // 业务取值入口
 Token fresh = token.refresh();   // 强制刷新（忽略窗口判断）
 ```
 
-构建参数说明（`refreshLockMillis` / `acquireTimeoutMillis` 默认均为 30 秒，仅 CLUSTER 作用域使用；`clock` 仅测试注入）：
+构建参数说明（`refreshLockMillis` / `acquireTimeoutMillis` 默认均为 30 秒，仅 CLUSTER 作用域使用；`clock` 仅测试注入）。另有两组可选参数：
+
+```java
+// 失败冷却：第 k 次连续失败 → 冷却 min(initial × 2^(k-1), max)，成功即清零
+// 默认 1 秒 ~ 60 秒，无需显式配置；源端故障时刷新窗口内的连续 get() 不会反复打第三方
+.cooldown(1_000, 60_000)
+
+// 异步提前刷新：刷新窗口内 get() 立即返回旧值，续期提交给指定线程池（须显式传入，不引入隐式线程）
+// 不配置则维持默认的同步续期
+.refreshAheadAsync(executor)
+```
 
 ```java
 // 最简配置：LOCAL 作用域（默认），三件套只声明「取值 + 有效期」
@@ -48,10 +59,12 @@ singleflight 两种作用域：
 
 | Scope | 机制 | 适用 |
 | :--- | :--- | :--- |
-| `LOCAL`（默认） | 进程内 per-key 互斥（双重检查） | 单实例，或允许各实例各自加载一次 |
+| `LOCAL`（默认） | 进程内 future 式单飞：并发等待者共享**同一次**加载结果或异常，唤醒后不二次重试 | 单实例，或允许各实例各自加载一次 |
 | `CLUSTER` | 基于 `KvLockManager` 的 KV 锁跨实例互斥 | 多实例共享一份凭证，全局仅一个加载者（防止重复消耗第三方配额） |
 
 CLUSTER 作用域的刷新锁正常路径随 try-with-resources 释放；进程崩溃后靠锁租约 TTL 自动失效自愈。
+
+> 选型提示：值需要**跨实例共享**、全局仅一个加载者时用 `ExpiringValue`；**单进程内**的远端影子（值住内存、零序列化开销、含后台刷新与变更回调）用 [team4u-base 的 RefreshableValue](../base/base-refresh.md)。
 
 ## PollingWatcher：轮询订阅
 
@@ -75,6 +88,7 @@ try (PollingWatcher watcher = new PollingWatcher(jdbcStore, 200)) {  // 200ms �
 - 轮询周期即事件延迟上界（上例 200ms）；
 - 两次轮询之间同键多次变更合并为一次事件（只见最终状态）；
 - 扫描成本与键量成正比，适合键量可控的键空间（任务结果、配置型数据）；
+- 支持装饰过的存储（自动解析内层 ScanCapable；轮询读取直达底层保证新鲜度，不被 L1 缓存延迟）；
 - 内存实现请直接用原生 `WatchCapable`（写入即分发，零延迟、零扫描成本）。
 
 ## KvCleaner：过期清理
@@ -107,6 +121,7 @@ cleaner.close();            // 停止后台线程
 要点：
 
 - 键空间**显式注册**（`addSpace`）——清理是后台写操作，作用域必须显式声明，不做隐式全量扫描；
+- 支持装饰过的存储（自动解析内层 ScanCapable，清理直达底层）；
 - 单键空间异常只记日志，不影响其他键空间；
 - 不传 `lockManager` 时各实例独立清理（幂等操作，可接受）；传入后同一时刻全局仅一个实例执行。
 
