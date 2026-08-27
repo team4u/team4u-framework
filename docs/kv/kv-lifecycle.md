@@ -30,6 +30,18 @@ Token t = token.get();      // 业务取值入口
 Token fresh = token.refresh();   // 强制刷新（忽略窗口判断）
 ```
 
+构建参数说明（`refreshLockMillis` / `acquireTimeoutMillis` 默认均为 30 秒，仅 CLUSTER 作用域使用；`clock` 仅测试注入）：
+
+```java
+// 最简配置：LOCAL 作用域（默认），三件套只声明「取值 + 有效期」
+ExpiringValue<String> apiKey = ExpiringValue.<String>builder(String.class)
+        .store(kvStore)
+        .key("auth", "api_key")
+        .loader(() -> authService.issueKey())   // 怎么取
+        .fixedTtl(300_000)                      // 有效期固定 5 分钟（也可以 ttlOf 按值计算）
+        .build();
+```
+
 `get()` 内聚了检测-加载-保存全流程，**业务侧无需定时任务兜底触发**。刷新失败不影响返回旧值（旧值在过期前仍可用），下次 `get()` 自动重试。
 
 singleflight 两种作用域：
@@ -57,26 +69,40 @@ try (PollingWatcher watcher = new PollingWatcher(jdbcStore, 200)) {  // 200ms �
 }
 ```
 
-边界：轮询周期即事件延迟上界；两次轮询之间同键多次变更合并为一次事件（只见最终状态）；扫描成本与键量成正比，适合键量可控的键空间（任务结果、配置型数据）。内存实现请直接用原生 `WatchCapable`（写入即分发，无延迟）。
+要点与边界：
+
+- 订阅从**当前时刻**开始生效（以空快照为基准），只推送订阅后的增量——订阅前已存在的键不会补发事件；
+- 轮询周期即事件延迟上界（上例 200ms）；
+- 两次轮询之间同键多次变更合并为一次事件（只见最终状态）；
+- 扫描成本与键量成正比，适合键量可控的键空间（任务结果、配置型数据）；
+- 内存实现请直接用原生 `WatchCapable`（写入即分发，零延迟、零扫描成本）。
 
 ## KvCleaner：过期清理
 
 惰性过期使「读取永不返回脏数据」，清理只是**回收存储空间**（写多读少的冷键）。实现 `NativeTtlCapable` 的存储（Redis）自动跳过：
 
 ```java
-KvCleaner cleaner = new KvCleaner("shared",   // 清理锁名前缀（可选锁互斥时区分业务域）
+// 完整构造（四参）：用于多实例共享存储时全局互斥
+KvCleaner cleaner = new KvCleaner(
+        "shared",      // 清理锁名前缀（配合 lockManager 区分业务域）
         60_000,        // 清理间隔
         500,           // 单键空间单次最大删除量（防长事务）
-        lockManager)   // 可选：多实例共享存储时全局互斥（锁租约=2×间隔，宕机自动失效）
-        .addStore(jdbcStore)   // 须为 ScanCapable
+        lockManager)   // 传入后同一时刻全局仅一个实例执行清理
+        .addStore(jdbcStore)   // 待清理存储，须实现 ScanCapable
         .addStore(memoryStore)
         .addSpace("task")      // 显式注册待清理键空间（必填）
         .addSpace("auth");
 
-cleaner.runOnceQuietly();   // 也可挂外部调度平台手工触发
+// 简化构造（两参）：单实例部署、或各实例独立清理时使用
+KvCleaner local = new KvCleaner(60_000, 500)
+        .addStore(memoryStore).addSpace("task");
+
+cleaner.runOnceQuietly();   // 单轮清理；也可不依赖内置线程，挂外部调度平台定期调用
 ...
-cleaner.close();
+cleaner.close();            // 停止后台线程
 ```
+
+后台线程为守护线程：JVM 退出不阻塞；清理动作幂等，多实例并发清理无害（传锁只是为了省重复功）。
 
 要点：
 
@@ -86,11 +112,19 @@ cleaner.close();
 
 ## 组合模式
 
-三件套的典型协作——「凭证续期 + 变更通知 + 空间回收」可以同存储共存：
+三件套可以作用在同一个键空间上，各管一段：「ExpiringValue 负责 token 常新、KvCleaner 回收过期残留、PollingWatcher 通知消费方」：
 
 ```java
-// auth 空间：ExpiringValue 写入 token，KvCleaner 回收过期残留，PollingWatcher 通知消费方
-ExpiringValue<Token> token = ...;
-KvCleaner cleaner = new KvCleaner(null, 60_000, 500, lockManager)
-        .addStore(store).addSpace("auth");
+// auth 空间的三位管家
+ExpiringValue<Token> token = ExpiringValue.<Token>builder(Token.class)
+        .store(store).key("auth", "wechat_token")
+        .loader(() -> wechatClient.getAccessToken())
+        .ttlOf(t -> t.getExpiresIn() * 1000L)
+        .build();                                        // ① 保证 token 常新
+
+KvCleaner cleaner = new KvCleaner("auth", 60_000, 500, lockManager)
+        .addStore(store).addSpace("auth");               // ② 回收过期残留行
+
+PollingWatcher watcher = new PollingWatcher(store, 200); // ③ 变更即通知
+watcher.watch("auth", event -> notifyConsumers(event.getKey()));
 ```
