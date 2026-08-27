@@ -10,9 +10,12 @@ import com.team4u.framework.kv.test.TestKvContext.SettableClock;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -201,6 +204,158 @@ public class ExpiringValueTest {
 
         // 旧值仍有效（尚未真正过期）
         assertEquals("token-1", flaky.get());
+    }
+
+    @Test
+    public void cooldownSuppressesSequentialStorm() {
+        token.get();   // token-1 已缓存
+        clock.advance(8500);   // 进入刷新窗口（剩余 1500ms）
+
+        AtomicInteger failures = new AtomicInteger();
+        ExpiringValue<String> flaky = ExpiringValue.<String>builder(String.class)
+                .store(store)
+                .key("auth", "wechat_token")
+                .loader(() -> {
+                    failures.incrementAndGet();
+                    throw new IllegalStateException("source down");
+                })
+                .fixedTtl(10_000)
+                .refreshAhead(2000)
+                .cooldown(1000, 60_000)
+                .clock(clock)
+                .build();
+
+        // 第一次 get：尝试加载并失败，进入冷却（retryAt = 8500 + 1000 = 9500）
+        assertEquals("token-1", flaky.get());
+        assertEquals(1, failures.get());
+
+        // 冷却期内多次 get：时钟小幅推进但未越过 retryAt，全部跳过加载
+        for (int i = 0; i < 5; i++) {
+            clock.advance(100);
+            assertEquals("token-1", flaky.get());
+        }
+        assertEquals("冷却期内不重复打源端", 1, failures.get());
+
+        // 时钟越过冷却期（now = 9600 > 9500）：再次尝试并再次失败
+        clock.advance(600);
+        assertEquals("token-1", flaky.get());
+        assertEquals("冷却结束后重试", 2, failures.get());
+    }
+
+    @Test
+    public void localSingleflightWaitersShareSingleLoadFailure() throws Exception {
+        token.get();   // token-1 已缓存
+        clock.advance(8500);   // 进入刷新窗口
+
+        int threads = 12;
+        AtomicInteger failures = new AtomicInteger();
+        ExpiringValue<String> flaky = ExpiringValue.<String>builder(String.class)
+                .store(store)
+                .key("auth", "wechat_token")
+                .loader(() -> {
+                    failures.incrementAndGet();
+                    try {
+                        // 让其余线程有时间堆叠到同一在途 future 上
+                        Thread.sleep(100);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                    throw new IllegalStateException("source down");
+                })
+                .fixedTtl(10_000)
+                .refreshAhead(2000)
+                .clock(clock)
+                .build();
+
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        CountDownLatch start = new CountDownLatch(1);
+        List<Future<String>> results = new ArrayList<>();
+        try {
+            for (int i = 0; i < threads; i++) {
+                results.add(pool.submit(() -> {
+                    start.await();
+                    return flaky.get();
+                }));
+            }
+            start.countDown();
+            for (Future<String> result : results) {
+                assertEquals("续期失败时所有等待者拿旧值", "token-1",
+                        result.get(30, TimeUnit.SECONDS));
+            }
+        } finally {
+            pool.shutdownNow();
+        }
+        assertEquals("等待者与赢家共享同一次失败，不再各自重试", 1, failures.get());
+    }
+
+    @Test
+    public void asyncRefreshAheadReturnsOldValueImmediately() {
+        token.get();   // token-1 已缓存
+        clock.advance(8500);   // 进入刷新窗口
+
+        // 捕获任务稍后手动执行的 executor（避免 Runnable::run 退化同步）
+        List<Runnable> capturedTasks = new ArrayList<>();
+        AtomicInteger loads = new AtomicInteger();
+        ExpiringValue<String> async = ExpiringValue.<String>builder(String.class)
+                .store(store)
+                .key("auth", "wechat_token")
+                .loader(() -> {
+                    loads.incrementAndGet();
+                    return "token-async";
+                })
+                .fixedTtl(10_000)
+                .refreshAhead(2000)
+                .refreshAheadAsync(capturedTasks::add)
+                .clock(clock)
+                .build();
+
+        assertEquals("异步模式下立即返回旧值", "token-1", async.get());
+        assertEquals("加载任务只提交未执行", 0, loads.get());
+        assertEquals(1, capturedTasks.size());
+
+        // 在途期间再次 get：输家直接返回旧值，不重复提交
+        assertEquals("token-1", async.get());
+        assertEquals(1, capturedTasks.size());
+
+        // 执行捕获的异步任务：续期完成
+        capturedTasks.get(0).run();
+        assertEquals(1, loads.get());
+
+        // 新值在下个 get() 可见（新记录剩余 TTL 充足，不再触发刷新）
+        assertEquals("token-async", async.get());
+        assertEquals(1, loads.get());
+    }
+
+    @Test
+    public void asyncRefreshAheadFailureDoesNotPropagate() {
+        token.get();   // token-1 已缓存
+        clock.advance(8500);   // 进入刷新窗口
+
+        List<Runnable> capturedTasks = new ArrayList<>();
+        AtomicInteger failures = new AtomicInteger();
+        ExpiringValue<String> async = ExpiringValue.<String>builder(String.class)
+                .store(store)
+                .key("auth", "wechat_token")
+                .loader(() -> {
+                    failures.incrementAndGet();
+                    throw new IllegalStateException("source down");
+                })
+                .fixedTtl(10_000)
+                .refreshAhead(2000)
+                .refreshAheadAsync(capturedTasks::add)
+                .clock(clock)
+                .build();
+
+        assertEquals("token-1", async.get());
+
+        // 异步任务内部失败：只记日志与冷却，绝不传播给调用方
+        capturedTasks.get(0).run();
+        assertEquals(1, failures.get());
+
+        // 冷却期内不再重复提交
+        assertEquals("token-1", async.get());
+        assertEquals(1, capturedTasks.size());
+        assertEquals(1, failures.get());
     }
 
     @Test
