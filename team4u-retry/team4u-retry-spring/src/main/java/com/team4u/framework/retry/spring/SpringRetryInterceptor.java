@@ -70,7 +70,8 @@ public class SpringRetryInterceptor implements MethodInterceptor {
             return beanFactory.getBean(clazz);
         } catch (BeansException e) {
             try {
-                return BeanManager.getInstance().getBean(clazz);
+                T bean = BeanManager.getInstance().getBean(clazz);
+                return bean != null ? bean : defaultValue;
             } catch (Exception ex) {
                 return defaultValue;
             }

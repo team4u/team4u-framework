@@ -32,3 +32,4 @@
 Review remediation: complete. Commit subject: `docs: fix convergence plan review findings`.
 Second review remediation: complete (docs: remove remaining provider leakage ambiguity).
 Task 2 review remediation: complete (fix(ci): track serializer provider transition).
+Task 3 review remediation: complete (fix(base): preserve retry fallback and migration records).

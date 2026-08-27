@@ -2,7 +2,7 @@
 
 # 背景
 
-`team4u-base` 是整个 Team4u Framework 的基石模块。它定义了框架底层的核心抽象，并提供了涵盖**并发实例提供者**、**高性能文本模板解析**、**轻量级本地缓存**、**通用强类型转换**、**极简 JDBC 工具与 SQL 构建器**以及**通用工具类库**等一系列零外部强依赖的高性能基础能力。
+`team4u-base` 是整个 Team4u Framework 的基石模块。它定义了框架底层的核心抽象，并提供了涵盖**并发实例提供者**、**高性能文本模板解析**、**轻量级本地缓存**、**通用强类型转换**以及**通用工具类库**等零外部强依赖的高性能基础能力。轻量 JDBC 工具与 SQL 构建器位于独立模块 `team4u-base-jdbc`。
 
 ---
 
@@ -20,7 +20,7 @@ graph TD
     Base --> Cache["Cache 体系<br/>LRU / LFU / TimedCache"]
     Base --> RV["RefreshableValue<br/>可刷新值（单值远端影子）"]
     Base --> CU["ConvertUtil / TypeConverterRegistry<br/>强类型转换系统"]
-    Base --> JDBC["JdbcUtil / SqlBuilder / InsertBuilder<br/>轻量 JDBC 流式构造器"]
+    BaseJdbc["team4u-base-jdbc<br/>JdbcUtil / SqlBuilder / InsertBuilder<br/>轻量 JDBC 流式构造器"]
     Base --> Util["通用工具集<br/>Reflect, String, Date, Digest, Id, ServiceLoader"]
 ```
 
@@ -36,7 +36,7 @@ graph TD
 | **轻量缓存体系** | `LRUCache`, `LFUCache`, `TimedCache`, `CacheUtil` | 纯 Java 原生实现的内存缓存，支持访问淘汰、频率淘汰与 TTL 自动过期及原子 `getOrCreate` |
 | **可刷新值** | `RefreshableValue<T>` | 单值远端影子的声明式封装：三个时间戳（软死期/硬死期/冷却）+ 单飞 + 变更回调，并发安全开箱即用 |
 | **类型转换体系** | `ConvertUtil`, `TypeConverterRegistry` | 支持标量、时间、集合、数组、枚举与 JavaBean 的全类型安全转换，支持扩展 SPI |
-| **极简 JDBC 构建器** | `JdbcUtil`, `SqlBuilder`, `InsertBuilder`, `UpdateBuilder` | 轻量流式 SQL 拼接与命名参数绑定，支持实体自动下划线映射与自增键返回 |
+| **极简 JDBC 构建器**（`team4u-base-jdbc`） | `JdbcUtil`, `SqlBuilder`, `InsertBuilder`, `UpdateBuilder` | 轻量流式 SQL 拼接与命名参数绑定，支持实体自动下划线映射与自增键返回 |
 | **健壮服务加载器** | `ServiceLoaderUtil` | 强化 Java 原生 SPI，捕获单实现类加载异常，防止单点故障蔓延 |
 
 ---
@@ -49,9 +49,15 @@ com.team4u.framework.base
 ├── config                           # 配置解析接口 (ConfigParser, StringConfigParser)
 ├── convert                          # 类型转换体系 (ConvertUtil, TypeConverterRegistry, 各 TypeConverter)
 ├── instance                         # 实例工厂与提供者 (DynamicInstanceProvider, SingletonFactory, InstanceFactory)
-├── jdbc                             # JDBC 工具与 SQL 构建 (JdbcUtil, SqlBuilder, InsertBuilder, UpdateBuilder, SqlExpression)
 ├── refresh                          # 可刷新值 (RefreshableValue)
 └── util                             # 通用工具类库 (Assert, BeanUtil, ReflectUtil, StringUtil, DateUtil, DigestUtil, IdUtil, TextTemplate, TypeReference, TypeUtil 等)
+```
+
+JDBC 工具位于 `team4u-base-jdbc`，但保留 `com.team4u.framework.base.jdbc` 包名：
+
+```text
+com.team4u.framework.base.jdbc
+└── JdbcUtil / SqlBuilder / InsertBuilder / UpdateBuilder / SqlExpression
 ```
 
 ---
