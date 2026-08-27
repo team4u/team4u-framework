@@ -62,7 +62,7 @@ ExpiringValue<Token> token = ExpiringValue.<Token>builder(Token.class)
 String accessToken = token.get().getAccessToken();
 ```
 
-与旧方案对比：不再需要定时任务兜底触发，多实例并发下不会重复刷新（既省配额又不会互相覆盖）。
+业务侧无需定时任务兜底触发：`get()` 内聚了检测-加载-保存全流程，多实例并发下不会重复刷新（既省配额又不会互相覆盖）。
 
 ## 定时任务防重（分布式锁）
 
