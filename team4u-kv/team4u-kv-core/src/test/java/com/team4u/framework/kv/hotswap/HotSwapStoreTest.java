@@ -2,13 +2,17 @@ package com.team4u.framework.kv.hotswap;
 
 import com.team4u.framework.kv.KvRecord;
 import com.team4u.framework.kv.KvStore;
+import com.team4u.framework.kv.KvStores;
 import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.SpaceKey;
+import com.team4u.framework.kv.memory.InMemoryKvStore;
+import com.team4u.framework.kv.tiered.TieredStore;
 import com.team4u.framework.proxy.support.Swappable;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 
 public class HotSwapStoreTest {
@@ -35,6 +39,24 @@ public class HotSwapStoreTest {
 
         // 业务引用不变，读取已切换到新后端
         assertEquals("v2", proxy.get(key).getValue());
+    }
+
+    /**
+     * 热交换代理透传 StoreWrapper：unwrap 转发到当前委托，
+     * 能力解析在交换后自动指向新存储的内层
+     */
+    @Test
+    public void wrapPreservesUnwrapThroughSwap() {
+        InMemoryKvStore inner1 = new InMemoryKvStore();
+        InMemoryKvStore inner2 = new InMemoryKvStore();
+        KvStore proxy = HotSwapStore.wrap(
+                new TieredStore(inner1, 60_000, new TieredStore.Config()));
+
+        assertSame("交换前解析到初始存储的内层", inner1, KvStores.innermost(proxy));
+
+        HotSwapStore.swap(proxy, new TieredStore(inner2, 60_000, new TieredStore.Config()), false);
+
+        assertSame("交换后 unwrap 转发到新委托，解析随之切换", inner2, KvStores.innermost(proxy));
     }
 
     @Test

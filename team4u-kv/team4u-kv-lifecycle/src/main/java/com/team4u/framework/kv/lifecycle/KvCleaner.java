@@ -1,6 +1,7 @@
 package com.team4u.framework.kv.lifecycle;
 
 import com.team4u.framework.kv.KvStore;
+import com.team4u.framework.kv.KvStores;
 import com.team4u.framework.kv.NativeTtlCapable;
 import com.team4u.framework.kv.ScanCapable;
 import com.team4u.framework.kv.lock.KvLock;
@@ -22,6 +23,8 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * 可选传入 {@link KvLockManager}：多实例部署且存储共享时，全局加锁保证
  * 同一时刻仅一个实例执行清理（锁 fencing 安全，实例崩溃后租约自动释放）。
  * 不传则各实例独立清理（幂等操作，可接受）。
+ * 支持装饰过的存储（自动解析内层 ScanCapable，见 {@link KvStores}）；
+ * 清理直达解析后的底层存储，NativeTtlCapable 跳过判定同样作用于解析结果。
  * </p>
  *
  * @author jay.wu
@@ -58,14 +61,16 @@ public class KvCleaner implements AutoCloseable {
     }
 
     /**
-     * 注册待清理的存储（须实现 {@link ScanCapable}）
+     * 注册待清理的存储（支持装饰过的存储：自动沿装饰链解析内层 {@link ScanCapable}）
      */
     public KvCleaner addStore(KvStore store) {
-        if (!(store instanceof ScanCapable)) {
+        ScanCapable resolved = KvStores.capabilityOf(store, ScanCapable.class);
+        if (resolved == null) {
             throw new IllegalArgumentException(
-                    "KvCleaner requires a ScanCapable store, got: " + store.getClass().getName());
+                    "KvCleaner requires a ScanCapable store, got: " + store.getClass().getName()
+                            + "（含装饰链解析）");
         }
-        stores.add(store);
+        stores.add((KvStore) resolved);
         return this;
     }
 

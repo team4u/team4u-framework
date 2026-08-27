@@ -5,6 +5,7 @@ import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.KvStoreException;
 import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.SpaceKey;
+import com.team4u.framework.kv.StoreWrapper;
 import com.team4u.framework.retry.api.Retries;
 import com.team4u.framework.retry.api.RetryPolicy;
 
@@ -25,10 +26,12 @@ import java.util.Objects;
  *         .retryOn(KvStoreException.class)
  *         .build());
  * }</pre>
+ * 支持能力解析（见 {@link com.team4u.framework.kv.KvStores}）：实现
+ * {@link StoreWrapper} 暴露内层存储，锁管理器等能力协商组件可穿透本装饰层。
  *
  * @author jay.wu
  */
-public class RetryableStore implements KvStore {
+public class RetryableStore implements KvStore, StoreWrapper {
 
     private final KvStore delegate;
     private final RetryPolicy policy;
@@ -40,6 +43,11 @@ public class RetryableStore implements KvStore {
     public RetryableStore(KvStore delegate, RetryPolicy policy) {
         this.delegate = Objects.requireNonNull(delegate, "delegate");
         this.policy = Objects.requireNonNull(policy, "policy");
+    }
+
+    @Override
+    public KvStore unwrap() {
+        return delegate;
     }
 
     /**

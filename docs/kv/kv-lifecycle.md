@@ -68,7 +68,7 @@ CLUSTER 作用域的刷新锁正常路径随 try-with-resources 释放；进程�
 
 ## PollingWatcher：轮询订阅
 
-为不支持 `WatchCapable` 的存储（JDBC、Redis）提供订阅降级：基于 `ScanCapable` 周期对比快照差异，产生 PUT / REMOVE 事件：
+为不支持 `WatchCapable` 的存储（JDBC、Redis）提供订阅降级：基于 `ScanCapable` 周期对比快照差异，产生 PUT / REMOVE 事件（支持装饰过的存储，构造期自动解析内层 ScanCapable）：
 
 ```java
 try (PollingWatcher watcher = new PollingWatcher(jdbcStore, 200)) {  // 200ms 轮询
@@ -88,6 +88,7 @@ try (PollingWatcher watcher = new PollingWatcher(jdbcStore, 200)) {  // 200ms �
 - 轮询周期即事件延迟上界（上例 200ms）；
 - 两次轮询之间同键多次变更合并为一次事件（只见最终状态）；
 - 扫描成本与键量成正比，适合键量可控的键空间（任务结果、配置型数据）；
+- 轮询读取直达解析后的底层存储，不被 L1 缓存延迟事件新鲜度；
 - 支持装饰过的存储（自动解析内层 ScanCapable；轮询读取直达底层保证新鲜度，不被 L1 缓存延迟）；
 - 内存实现请直接用原生 `WatchCapable`（写入即分发，零延迟、零扫描成本）。
 
@@ -120,7 +121,7 @@ cleaner.close();            // 停止后台线程
 
 要点：
 
-- 键空间**显式注册**（`addSpace`）——清理是后台写操作，作用域必须显式声明，不做隐式全量扫描；
+- 键空间**显式注册**（`addSpace`）——清理是后台写操作，作用域必须显式声明，不做隐式全量扫描；支持装饰过的存储（自动解析内层 ScanCapable，原生 TTL 判定作用于解析结果）；
 - 支持装饰过的存储（自动解析内层 ScanCapable，清理直达底层）；
 - 单键空间异常只记日志，不影响其他键空间；
 - 不传 `lockManager` 时各实例独立清理（幂等操作，可接受）；传入后同一时刻全局仅一个实例执行。

@@ -4,6 +4,7 @@ import com.team4u.framework.kv.KvRecord;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.SpaceKey;
+import com.team4u.framework.kv.StoreWrapper;
 import lombok.extern.slf4j.Slf4j;
 
 import java.util.Objects;
@@ -19,11 +20,13 @@ import java.util.Objects;
  * </p>
  * 日志级别约定：常规操作 debug、慢操作 warn、失败 error——生产环境按需调整
  * {@code com.team4u.framework.kv.observed} 的日志级别即可开启/关闭审计。
+ * 支持能力解析（见 {@link com.team4u.framework.kv.KvStores}）：实现
+ * {@link StoreWrapper} 暴露内层存储，锁管理器等能力协商组件可穿透本装饰层。
  *
  * @author jay.wu
  */
 @Slf4j
-public class ObservedStore implements KvStore {
+public class ObservedStore implements KvStore, StoreWrapper {
 
 
     private final KvStore delegate;
@@ -38,6 +41,11 @@ public class ObservedStore implements KvStore {
         this.delegate = Objects.requireNonNull(delegate, "delegate");
         this.config = Objects.requireNonNull(config, "config");
         this.masker = Objects.requireNonNull(masker, "masker");
+    }
+
+    @Override
+    public KvStore unwrap() {
+        return delegate;
     }
 
     @Override

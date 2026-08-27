@@ -2,9 +2,12 @@ package com.team4u.framework.kv.lock;
 
 import com.team4u.framework.kv.KvStoreException;
 import com.team4u.framework.kv.KvRecord;
+import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.SpaceKey;
 import com.team4u.framework.kv.memory.InMemoryKvStore;
+import com.team4u.framework.kv.observed.ObservedStore;
+import com.team4u.framework.kv.tiered.TieredStore;
 import com.team4u.framework.kv.test.TestKvContext.SettableClock;
 import java.time.Clock;
 
@@ -193,7 +196,9 @@ public class KvLockManagerTest {
 
     /**
      * 真实时钟验证心跳自动续约：lease 400ms + 心跳 100ms，
-     * 无续约时锁 400ms 后过期，有心跳时持续存活
+     * 无续约时锁 400ms 后过期，有心跳时持续存活。
+     * 无续约对照组直接写存储（不经管理器）：管理器心跳间隔自适应收缩（lease/3），
+     * 其心跳线程若在注册锁之后才计算首个间隔，会续约「理应闲置」的锁——线程调度竞态，非确定性
      */
     @Test
     public void heartbeatRenewsLeaseAutomatically() throws Exception {
@@ -201,22 +206,20 @@ public class KvLockManagerTest {
         KvLockManager beating = new KvLockManager(realStore,
                 Clock.systemUTC(),
                 new KvLockManager.Config().setHeartbeatIntervalMillis(100));
-        KvLockManager idle = new KvLockManager(realStore,
-                Clock.systemUTC(),
-                new KvLockManager.Config().setHeartbeatIntervalMillis(3600_000));
         try {
             KvLock beat = beating.tryAcquire("heartbeat", 400);
-            KvLock still = idle.tryAcquire("idle", 400);
             assertNotNull(beat);
-            assertNotNull(still);
+            SpaceKey idleKey = SpaceKey.of("kv.lock", "idle");
+            realStore.put(idleKey,
+                    KvRecord.of("no-heartbeat-token", 400, System.currentTimeMillis()),
+                    PutMode.SET);
 
             Thread.sleep(900);   // > 2×lease：无续约的锁必然过期
 
             assertTrue("心跳续约使锁持续存活", beat.isHeld());
-            assertFalse("无心跳的锁已过期", still.isHeld());
+            assertNull("无心跳的锁已过期", realStore.get(idleKey));
         } finally {
             beating.close();
-            idle.close();
         }
     }
 
@@ -250,6 +253,74 @@ public class KvLockManagerTest {
         } catch (KvStoreException expected) {
             assertTrue(expected.getMessage().contains("CasCapable"));
         }
+    }
+
+    /**
+     * 装饰链同样解析失败：ObservedStore(NonCasStore) 沿链找不到 CasCapable
+     */
+    @Test
+    public void nonCasChainFailsFast() {
+        try {
+            new KvLockManager(new ObservedStore(new NonCasStore()));
+            fail("装饰链下无 CasCapable 存储应在构造期失败");
+        } catch (KvStoreException expected) {
+            assertTrue(expected.getMessage().contains("CasCapable"));
+            assertTrue(expected.getMessage().contains(ObservedStore.class.getSimpleName()));
+        }
+    }
+
+    /**
+     * 装饰链下的互斥行为：获取、互斥、释放重取、租约到期接管全链路生效
+     */
+    @Test
+    public void lockThroughDecoratedStoreMutualExclusion() {
+        InMemoryKvStore raw = new InMemoryKvStore(clock);
+        KvLockManager holder = newDecoratedManager(raw);
+        KvLockManager competitor = newDecoratedManager(raw);
+        try {
+            try (KvLock lock = holder.tryAcquire("job", 1000)) {
+                assertNotNull("装饰链下获取锁应成功", lock);
+                assertNull("装饰链下互斥应生效", competitor.tryAcquire("job", 5000));
+            }
+            assertNotNull("释放后可重新获取", holder.tryAcquire("job", 1000));
+
+            clock.advance(1000);
+            assertNotNull("租约到期后可被其他管理器接管", competitor.tryAcquire("job", 5000));
+        } finally {
+            holder.close();
+            competitor.close();
+        }
+    }
+
+    /**
+     * 锁操作直达解析后的底层存储：利用 TieredStore 负缓存做判别——
+     * 预先经装饰层读一次 miss（写入负缓存墓碑），随后经管理器加锁；
+     * 若锁写入走了装饰层，写直通会覆盖墓碑使装饰层读到锁记录，
+     * 而直达实现下装饰层仍读到 null、内层存储已持有令牌。
+     */
+    @Test
+    public void lockOpsBypassDecoratorCache() {
+        InMemoryKvStore raw = new InMemoryKvStore(clock);
+        TieredStore tiered = new TieredStore(raw, 60_000,
+                new TieredStore.Config().setNegativeTtlMillis(60_000));
+        SpaceKey lockKey = SpaceKey.of("kv.lock", "job");
+
+        assertNull("预置负缓存：装饰层读 miss", tiered.get(lockKey));
+
+        KvLockManager manager = new KvLockManager(tiered, clock,
+                new KvLockManager.Config().setHeartbeatIntervalMillis(3600_000));
+        try (KvLock ignored = manager.tryAcquire("job", 60_000)) {
+            assertNotNull(ignored);
+            assertNull("负缓存窗口内装饰层读不到锁：锁写入未经过装饰层", tiered.get(lockKey));
+            assertNotNull("锁令牌已直达内层存储", raw.get(lockKey));
+            assertTrue("锁操作直达内层，续约/持有判定不经过缓存", ignored.isHeld());
+        }
+    }
+
+    private KvLockManager newDecoratedManager(InMemoryKvStore raw) {
+        return new KvLockManager(new ObservedStore(
+                new TieredStore(raw, 60_000, new TieredStore.Config())), clock,
+                new KvLockManager.Config().setHeartbeatIntervalMillis(3600_000));
     }
 
     @Test

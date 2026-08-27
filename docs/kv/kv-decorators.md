@@ -189,14 +189,21 @@ HotSwapStore.swap(kv, new ObservedStore(new TieredStore(redisStore, 30_000,
 
 ### 两个必知的陷阱
 
-**陷阱一：装饰器不透传能力接口。** `instanceof CasCapable` 探测的是装饰器对象本身，永远为 false：
+**陷阱一：装饰器不透传能力接口（已解决：能力自动透传）。** 装饰器只实现 `KvStore`，`instanceof CasCapable` 探测的是装饰器对象本身，永远为 false。为此装饰器（TieredStore/ObservedStore/RetryableStore）统一实现 `StoreWrapper` 暴露内层，`KvStores` 提供沿链解析：
 
 ```java
-KvLockManager m = new KvLockManager(new TieredStore(redisStore, ...));
-// ❌ 构造即抛 KvStoreException: requires a CasCapable store
+// 以下现在都能直接工作——锁管理器、清理器、轮询订阅在构造期沿装饰链解析
+KvLockManager m = new KvLockManager(new ObservedStore(new TieredStore(redisStore, ...)));
+KvCleaner cleaner = new KvCleaner(60_000, 500).addStore(tieredStore).addSpace("task");
+PollingWatcher watcher = new PollingWatcher(tieredStore, 200);
 ```
 
-需要能力协商的组件（锁、清理器、轮询订阅）必须指向**内层真实存储**，或单独持有未装饰的引用。能力透传已列入迭代计划，当前版本文档即契约。
+要点：
+
+- 锁操作**直达解析后的底层存储**（不经过缓存/观测装饰层）——缓存层插在续约读与存储之间会让续约读到陈旧令牌，破坏续约正确性；
+- 轮询订阅的 scan/get 同样直达底层，保证读取新鲜度（不被 L1 缓存延迟到缓存 TTL 之后）；
+- 通用业务代码可用 `KvStores.capabilityOf(kv, CasCapable.class)` 自行解析（返回 null 表示整条链均不支持），`KvStores.innermost(kv)` 剥出最内层真实存储；
+- 边界：经 `HotSwapStore.wrap` 包装的存储会随初始委托透传 `unwrap()`，但**交换到未实现 StoreWrapper 的存储后**，`unwrap()` 调用会以 `ProxyException` 失败——需要长期能力解析的场景应始终交换装饰过的存储。
 
 **陷阱二：关闭语义各不相同。** `TieredStore` 与各存储实现 `AutoCloseable`（TieredStore 会级联关闭 L2）；`ObservedStore`/`RetryableStore` **不实现** `AutoCloseable`——需要关闭内层存储时须单独持有内层引用。被 HotSwapStore 换下的旧洋葱若含 TieredStore，Safe Swap 的自动关闭会连带释放 L2 连接，迁移时无需手工清理。
 

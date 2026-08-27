@@ -76,6 +76,8 @@ if (store instanceof CasCapable) {
 }
 ```
 
+装饰器实现 `StoreWrapper` 暴露内层，`KvStores` 提供沿链解析（`innermost` 剥出最内层真实存储、`capabilityOf` 查找链上首个能力实现）——对装饰过的存储做 `instanceof` 探测前先经它解析。
+
 ## 内存实现：InMemoryKvStore
 
 基于 `ConcurrentHashMap`，声明 CAS / 扫描 / 订阅全部能力（无原生 TTL，靠惰性判定），时间源可注入：

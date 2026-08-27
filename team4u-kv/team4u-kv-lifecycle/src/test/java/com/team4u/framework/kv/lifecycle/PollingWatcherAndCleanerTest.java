@@ -9,6 +9,7 @@ import com.team4u.framework.kv.lock.KvLock;
 import com.team4u.framework.kv.lock.KvLockManager;
 import com.team4u.framework.kv.memory.InMemoryKvStore;
 import com.team4u.framework.kv.test.TestKvContext.SettableClock;
+import com.team4u.framework.kv.tiered.TieredStore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -84,6 +85,29 @@ public class PollingWatcherAndCleanerTest {
         }
     }
 
+    /**
+     * 装饰链下的轮询订阅：构造期解析内层 ScanCapable，事件正常到达
+     * （写入经装饰层写直通，轮询直达内层读取，间接验证新鲜度路径）
+     */
+    @Test
+    public void pollingWatcherWorksThroughDecoratedStore() throws Exception {
+        InMemoryKvStore raw = new InMemoryKvStore();
+        TieredStore tiered = new TieredStore(raw, 60_000, new TieredStore.Config());
+        CountDownLatch putSeen = new CountDownLatch(1);
+
+        try (PollingWatcher watcher = new PollingWatcher(tiered, 20)) {
+            try (AutoCloseable ignored = watcher.watch("task", event -> {
+                if (event.getType() == KvEvent.Type.PUT) {
+                    putSeen.countDown();
+                }
+            })) {
+                tiered.put(SpaceKey.of("task", "t1"), KvRecord.of("v1"), PutMode.SET);
+                assertTrue("装饰链下的 PUT 事件应在轮询窗口内到达",
+                        putSeen.await(5, TimeUnit.SECONDS));
+            }
+        }
+    }
+
     @Test
     public void cleanerPrunesExpiredByRegisteredSpace() {
         SettableClock clock = new SettableClock(0L);
@@ -113,6 +137,27 @@ public class PollingWatcherAndCleanerTest {
         try {
             cleaner.runOnceQuietly();
             assertEquals("原生 TTL 存储不清理", 0, store.pruneCalls.get());
+        } finally {
+            cleaner.close();
+        }
+    }
+
+    /**
+     * 装饰链下的清理：addStore 自动解析内层 ScanCapable，物理清理直达内层存储
+     */
+    @Test
+    public void cleanerPrunesThroughDecoratedStore() {
+        SettableClock clock = new SettableClock(0L);
+        InMemoryKvStore raw = new InMemoryKvStore(clock);
+        TieredStore tiered = new TieredStore(raw, 60_000, new TieredStore.Config());
+        tiered.put(SpaceKey.of("task", "t1"), KvRecord.of("v1", 1000, clock.millis()), PutMode.SET);
+        clock.advance(1000);
+
+        KvCleaner cleaner = new KvCleaner(60_000, 100).addStore(tiered).addSpace("task");
+        try {
+            cleaner.runOnceQuietly();
+            assertEquals("装饰链下解析到内层，过期数据被物理清理",
+                    0, raw.scan("task").size());
         } finally {
             cleaner.close();
         }
