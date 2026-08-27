@@ -4,6 +4,7 @@ import com.team4u.framework.base.cache.Cache;
 import com.team4u.framework.base.cache.TimedCache;
 import com.team4u.framework.kv.KvRecord;
 import com.team4u.framework.kv.KvStore;
+import com.team4u.framework.kv.KvStores;
 import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.SpaceKey;
 import com.team4u.framework.kv.StoreWrapper;
@@ -146,16 +147,14 @@ public class TieredStore implements KvStore, AutoCloseable, StoreWrapper {
         }
     }
 
+    /**
+     * 关闭：清空 L1 后级联静默关闭 L2（尽力而为，关闭异常记 warn 不抛出）。
+     * 内层 L2 被多方共享时不要关闭本装饰器——谁创建整棵洋葱谁负责关闭
+     */
     @Override
     public void close() {
         evictAll();
-        if (l2 instanceof AutoCloseable) {
-            try {
-                ((AutoCloseable) l2).close();
-            } catch (Exception e) {
-                log.warn("Failed to close L2 store {}", l2.getClass().getName(), e);
-            }
-        }
+        KvStores.closeQuietly(l2);
     }
 
     /**

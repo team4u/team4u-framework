@@ -5,6 +5,7 @@ import com.team4u.framework.kv.KvStoreException;
 import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.SpaceKey;
 import com.team4u.framework.kv.memory.InMemoryKvStore;
+import com.team4u.framework.kv.tiered.TieredStore;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -63,11 +64,50 @@ public class ObservedStoreTest {
         }
     }
 
+    @Test
+    public void closeCascadesToInner() {
+        ClosableStore inner = new ClosableStore();
+        ObservedStore store = new ObservedStore(inner);
+
+        store.close();
+
+        assertTrue("关闭装饰器应级联关闭内层存储", inner.closed);
+
+        // 关闭为尽力而为，重复调用不抛异常
+        store.close();
+        assertTrue(inner.closed);
+    }
+
+    @Test
+    public void closeCascadesThroughEntireChain() {
+        ClosableStore l2 = new ClosableStore();
+        ObservedStore outermost = new ObservedStore(
+                new TieredStore(l2, 60_000, new TieredStore.Config()));
+
+        outermost.close();
+
+        assertTrue("关闭最外层应级联释放整棵洋葱（两层装饰直达底层存储）", l2.closed);
+    }
+
     static class FailingStore extends InMemoryKvStore {
 
         @Override
         public KvRecord get(SpaceKey key) {
             throw new KvStoreException("boom");
+        }
+    }
+
+    /**
+     * 记录关闭状态的存储桩
+     */
+    static class ClosableStore extends InMemoryKvStore {
+
+        boolean closed;
+
+        @Override
+        public void close() {
+            closed = true;
+            super.close();
         }
     }
 }

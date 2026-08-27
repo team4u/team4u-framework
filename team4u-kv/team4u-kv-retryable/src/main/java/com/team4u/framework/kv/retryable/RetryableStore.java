@@ -2,6 +2,7 @@ package com.team4u.framework.kv.retryable;
 
 import com.team4u.framework.kv.KvRecord;
 import com.team4u.framework.kv.KvStore;
+import com.team4u.framework.kv.KvStores;
 import com.team4u.framework.kv.KvStoreException;
 import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.SpaceKey;
@@ -31,7 +32,7 @@ import java.util.Objects;
  *
  * @author jay.wu
  */
-public class RetryableStore implements KvStore, StoreWrapper {
+public class RetryableStore implements KvStore, StoreWrapper, AutoCloseable {
 
     private final KvStore delegate;
     private final RetryPolicy policy;
@@ -91,6 +92,16 @@ public class RetryableStore implements KvStore, StoreWrapper {
             }
             throw new KvStoreException("Retryable operation finally failed|op=" + op, e);
         }
+    }
+
+    /**
+     * 关闭级联：静默关闭内层存储（尽力而为，关闭异常记 warn 不抛出），
+     * 关闭本装饰器即释放其包裹的整棵洋葱。
+     * 所有权约定——内层存储被多方共享时不要关闭外层装饰器，谁创建整棵洋葱谁负责关闭
+     */
+    @Override
+    public void close() {
+        KvStores.closeQuietly(delegate);
     }
 
     @FunctionalInterface

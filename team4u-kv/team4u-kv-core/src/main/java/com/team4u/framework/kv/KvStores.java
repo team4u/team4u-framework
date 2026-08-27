@@ -1,5 +1,7 @@
 package com.team4u.framework.kv;
 
+import lombok.extern.slf4j.Slf4j;
+
 import java.util.Objects;
 
 /**
@@ -12,9 +14,27 @@ import java.util.Objects;
  *
  * @author jay.wu
  */
+@Slf4j
 public final class KvStores {
 
     private KvStores() {
+    }
+
+    /**
+     * 静默关闭存储（若实现 {@link AutoCloseable}），关闭异常仅记录日志。
+     * <p>
+     * 所有装饰器的 close 级联语义统一走此入口：关闭最外层装饰器即释放整棵洋葱。
+     * </p>
+     */
+    public static void closeQuietly(KvStore store) {
+        if (!(store instanceof AutoCloseable)) {
+            return;
+        }
+        try {
+            ((AutoCloseable) store).close();
+        } catch (Exception e) {
+            log.warn("Failed to close kv store {}", store.getClass().getName(), e);
+        }
     }
 
     /**

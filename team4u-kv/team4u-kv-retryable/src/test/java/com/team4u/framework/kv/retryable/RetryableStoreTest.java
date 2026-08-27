@@ -71,6 +71,20 @@ public class RetryableStoreTest {
         }
     }
 
+    @Test
+    public void closeCascadesToInner() {
+        ClosableFlakyStore inner = new ClosableFlakyStore(0);
+        RetryableStore store = new RetryableStore(inner);
+
+        store.close();
+
+        assertTrue("关闭装饰器应级联关闭内层存储", inner.closed);
+
+        // 关闭为尽力而为，重复调用不抛异常
+        store.close();
+        assertTrue(inner.closed);
+    }
+
     /**
      * 前 failTimes 次抛基础设施异常的存储桩
      */
@@ -115,6 +129,23 @@ public class RetryableStoreTest {
         @Override
         public boolean expire(SpaceKey key, long ttlMillis) {
             return !flaky();
+        }
+    }
+
+    /**
+     * 记录关闭状态的存储桩
+     */
+    static class ClosableFlakyStore extends FlakyStore implements AutoCloseable {
+
+        volatile boolean closed;
+
+        ClosableFlakyStore(int failTimes) {
+            super(failTimes);
+        }
+
+        @Override
+        public void close() {
+            closed = true;
         }
     }
 }
