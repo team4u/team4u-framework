@@ -50,3 +50,36 @@ The inherited plan used bare artifact IDs as Maven `-pl` selectors (for example,
 - Pre-commit HEAD: `11e1eec32a2704befa1976c1dd4d828011b24f21`
 - Committed paths: the two audited documents, `.superpowers/sdd/progress.md`, and this report.
 - This report intentionally records the commit subject rather than a self-referential commit SHA.
+
+## First Review Remediation
+
+Critical findings fixed:
+
+- Task 11 no longer treats `team4u-bean-spring` as an available dependency: its interim graph uses `team4u-bean`, and the plan states that Task 16 performs the migration to `team4u-bean-spring`.
+- Task 18 now requires an exact 40-leaf published-artifact manifest and `scripts/check-release-contracts.sh`, which compares that manifest independently against both direct root modules and root `com.team4u` dependency management. The final gate installs first, then runs `consumer-it`, `release-contracts`, release packaging, the artifact-manifest script, and an Aliyun repository assertion. Benchmark output alone is not called final release evidence.
+
+Important findings fixed:
+
+- Task 1 RED now uses an assertion that exits non-zero while the Aliyun repository remains present; Task 2 RED includes a genuinely failing minimal-consumer dependency assertion instead of relying on Maven's permissive unknown-profile behavior.
+- Task 2 defines the `consumer-config-core` fixture as a transition guard, runs it explicitly after Task 9, and installs artifacts before invoker consumers in CI and release gates.
+- Task 8 owns a manager-consistent `ConfigProxyContext`; Task 9 supplies a public no-arg `ServiceLoaderConfigProxyCreator` that receives that context. Proxy tests are split according to whether they test the legacy proxy implementation or pure core behavior, and no-provider tests remain in core.
+- Task 18 release commands are complete and deterministic; the former incomplete dependency summary is no longer the final assertion.
+
+Minor findings fixed:
+
+- Task 3's omitted Step 2 was restored so checklist numbering is complete.
+- Task 4/5 wildcard examples now cover literal backslashes and exact `/`-delimited `**` segments, including escaped-star and `***` cases.
+- Task 7 forbids converting Jackson leaks into runtime scope and permits direct Jackson only where adapter source currently requires it.
+- Task 8's grep guard excludes its deliberately retained `TestConfigProxyCreator` fixture.
+
+## Remediation Verification
+
+- `git diff --check` passed.
+- `rg '^### Task '` found exactly 18 task headings, numbered sequentially 1 through 18.
+- Unfinished marker scan found neither unfinished marker in the reviewed plan.
+- Heartbeat scan found only the baseline statement that KV heartbeat was already fixed and remains out of scope.
+- Artifact-manifest audit: the current root reactor exposes 29 concrete modules; the Task 18 manifest contains 40 leaves after the planned splits, with no grouping POM.
+- Root module/POM audit found no `team4u-id` module in the convergence worktree baseline.
+- `git status --short` before commit was limited to the plan, progress file, and this report.
+- Fence-state scanning found one unclosed Task 8 grep-example fence introduced by review remediation. The closing marker was restored without changing the command or architecture text; the final plan has 174 balanced fence markers and no open residue.
+- Final checks confirmed balanced fences, exactly sequential Task 1-18 headings, no `TODO`/`TBD` markers, `git diff --check` success, the Task 11/18 revisions above, and documentation-only modified paths.

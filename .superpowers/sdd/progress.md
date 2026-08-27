@@ -28,3 +28,5 @@
 | 16. Split bean-spring as Plain Spring Configuration | Pending |
 | 17. Log Core/Governance Split with Injected Serializer and Interceptors | Pending |
 | 18. JMH Evidence, Performance Copy Cleanup, Release Gate | Pending |
+
+Review remediation: complete. Commit subject: `docs: fix convergence plan review findings`.
