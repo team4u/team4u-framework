@@ -6,8 +6,9 @@
 
     <parent>
         <groupId>com.team4u</groupId>
-        <artifactId>team4u-retry</artifactId>
+        <artifactId>team4u-framework</artifactId>
         <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../../pom.xml</relativePath>
     </parent>
 
     <artifactId>team4u-retry-spring</artifactId>
