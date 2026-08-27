@@ -108,24 +108,16 @@ GlobalConfig c = config.get();   // 热路径：一次 volatile 读
 
 ---
 
-## 流式 SQL 构造 (`InsertBuilder` / `JdbcUtil`)
+## JDBC 工具依赖变更
 
-```java
-import com.team4u.framework.base.jdbc.InsertBuilder;
-import com.team4u.framework.base.jdbc.JdbcUtil;
+自 1.0 起，`InsertBuilder`、`UpdateBuilder`、`SqlBuilder`、`SqlExpression` 与 `JdbcUtil` 位于 `team4u-base-jdbc`：
 
-// 流式构建 INSERT INTO 语句
-InsertBuilder insertBuilder = new InsertBuilder("system_config")
-        .column("config_type", "router")
-        .column("config_key", "order-router")
-        .column("config_value", "{...}")
-        .columnIfNotNull("remark", null); // 为 null 自动跳过
-
-// 执行插入
-JdbcUtil.execute(dataSource, insertBuilder.getSql(), insertBuilder.getParams());
+```xml
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-base-jdbc</artifactId>
+</dependency>
 ```
-
----
 
 ## 下一步
 

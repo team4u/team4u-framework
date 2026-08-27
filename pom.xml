@@ -38,6 +38,7 @@
 
     <modules>
         <module>team4u-base</module>
+        <module>team4u-base-jdbc</module>
         <module>team4u-policy</module>
         <module>team4u-criterion</module>
         <module>team4u-config/team4u-config-core</module>
@@ -92,6 +93,11 @@
             <dependency>
                 <groupId>com.team4u</groupId>
                 <artifactId>team4u-base</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-base-jdbc</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
