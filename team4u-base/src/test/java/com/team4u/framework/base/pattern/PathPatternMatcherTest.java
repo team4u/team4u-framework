@@ -118,6 +118,21 @@ public class PathPatternMatcherTest {
     }
 
     @Test
+    public void terminalRulesBridgeOrRejectTrailingSeparators() {
+        assertCase(97, "a/*", "a/", true);
+        assertCase(98, "aa/a", "aa/", false);
+        assertCase(99, "*", "", false);
+        assertCase(100, "a/*/", "a", false);
+        assertCase(101, "a/*/", "a/", true);
+        assertCase(102, "**/a", "a/", true);
+        assertCase(103, "a/**/b", "a/b/", true);
+        assertCase(104, "a/**", "a/b/", true);
+        assertCase(105, "a/**", "a//", true);
+        assertCase(106, "a/***", "a/x/", false);
+        assertCase(107, "a/*/*", "a/b//", true);
+    }
+
+    @Test
     public void multipleDoubleStarSegmentsCrossDirectories() {
         assertCase(74, "**/x/**", "x", true);
         assertCase(75, "**/x/**", "a/x", true);

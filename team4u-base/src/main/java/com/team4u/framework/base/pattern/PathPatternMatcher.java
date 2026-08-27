@@ -19,6 +19,7 @@ public final class PathPatternMatcher {
 
     private static final char SEPARATOR = '/';
     private static final String DOUBLE_STAR = "**";
+    private static final String SINGLE_STAR = "*";
 
     private PathPatternMatcher() {
     }
@@ -45,49 +46,78 @@ public final class PathPatternMatcher {
 
         String[] patternSegments = tokenize(pattern);
         String[] pathSegments = tokenize(path);
+        boolean tokenAlignment = tokensAlign(patternSegments, pathSegments);
 
+        if (!endsWithSeparator(path)) {
+            return tokenAlignment && (!endsWithSeparator(pattern) || hasExactDoubleStar(patternSegments));
+        }
+
+        return (tokenAlignment && (endsWithSeparator(pattern) || hasExactDoubleStar(patternSegments)))
+                || terminalStarBridgesFinalSeparator(patternSegments, pathSegments);
+    }
+
+    private static boolean tokensAlign(String[] patternSegments, String[] pathSegments) {
         // dp[i][j] is true when pattern segments i and path segments j consume
         // equal remainders. A ** segment consumes zero or more path segments.
         boolean[][] dp = new boolean[patternSegments.length + 1][pathSegments.length + 1];
         dp[patternSegments.length][pathSegments.length] = true;
 
-        for (int j = 0; j < pathSegments.length; j++) {
-            dp[patternSegments.length][j] = false;
-        }
-
         for (int i = patternSegments.length - 1; i >= 0; i--) {
             boolean crossesDirectories = patternSegments[i].equals(DOUBLE_STAR);
 
             for (int j = pathSegments.length; j >= 0; j--) {
-                boolean result = crossesDirectories && dp[i + 1][j];
+                boolean result = false;
 
-                if (j < pathSegments.length && crossesDirectories && dp[i][j + 1]) {
+                if (crossesDirectories) {
+                    result = dp[i + 1][j] || (j < pathSegments.length && dp[i][j + 1]);
+                } else if (j < pathSegments.length && dp[i + 1][j + 1]
+                        && matchSegment(patternSegments[i], pathSegments[j])) {
                     result = true;
-                } else if (j < pathSegments.length && dp[i + 1][j + 1]) {
-                    result = result || matchSegment(patternSegments[i], pathSegments[j]);
                 }
 
                 dp[i][j] = result;
             }
         }
 
-        if (!dp[0][0]) {
+        return dp[0][0];
+    }
+
+    private static boolean terminalStarBridgesFinalSeparator(
+            String[] patternSegments, String[] pathSegments) {
+        if (patternSegments.length != pathSegments.length + 1
+                || !SINGLE_STAR.equals(patternSegments[patternSegments.length - 1])) {
             return false;
         }
 
-        // Empty separator-delimited tokens are ignored, but a raw trailing
-        // separator remains observable. Matching it requires a terminal **
-        // pattern segment; ordinary patterns and redundant ** segments do not
-        // consume that final separator.
-        if (path.endsWith(String.valueOf(SEPARATOR)) != pattern.endsWith(String.valueOf(SEPARATOR))) {
-            return patternSegments.length > pathSegments.length;
+        // Spring's terminal segment-local * can account for the path ending at
+        // a separator only when every preceding segment is exhausted one-to-one.
+        // Segment-crossing ** does not participate in this one-token bridge.
+        for (int i = 0; i < pathSegments.length; i++) {
+            if (DOUBLE_STAR.equals(patternSegments[i])
+                    || !matchSegment(patternSegments[i], pathSegments[i])) {
+                return false;
+            }
         }
 
         return true;
     }
 
+    private static boolean hasExactDoubleStar(String[] patternSegments) {
+        for (String segment : patternSegments) {
+            if (DOUBLE_STAR.equals(segment)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
     private static boolean hasLeadingSeparator(String value) {
         return !value.isEmpty() && value.charAt(0) == SEPARATOR;
+    }
+
+    private static boolean endsWithSeparator(String value) {
+        return !value.isEmpty() && value.charAt(value.length() - 1) == SEPARATOR;
     }
 
     private static String[] tokenize(String value) {
