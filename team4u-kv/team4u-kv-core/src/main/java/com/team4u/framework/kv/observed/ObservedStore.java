@@ -1,6 +1,7 @@
 package com.team4u.framework.kv.observed;
 
 import com.team4u.framework.kv.KvRecord;
+import com.team4u.framework.kv.KvStores;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.SpaceKey;
@@ -26,7 +27,7 @@ import java.util.Objects;
  * @author jay.wu
  */
 @Slf4j
-public class ObservedStore implements KvStore, StoreWrapper {
+public class ObservedStore implements KvStore, StoreWrapper, AutoCloseable {
 
 
     private final KvStore delegate;
@@ -122,6 +123,16 @@ public class ObservedStore implements KvStore, StoreWrapper {
     private void failLog(String op, SpaceKey key, long start, RuntimeException e) {
         log.error("KV_FAIL|{}|{}|costMs={}|error={}", op, key,
                 System.currentTimeMillis() - start, e.getMessage(), e);
+    }
+
+    /**
+     * 关闭级联：静默关闭内层存储（尽力而为，关闭异常记 warn 不抛出），
+     * 关闭本装饰器即释放其包裹的整棵洋葱。
+     * 所有权约定——内层存储被多方共享时不要关闭外层装饰器，谁创建整棵洋葱谁负责关闭
+     */
+    @Override
+    public void close() {
+        KvStores.closeQuietly(delegate);
     }
 
     /**

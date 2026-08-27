@@ -79,6 +79,22 @@ public class HotSwapStoreTest {
         assertFalse(oldStore.closed);
     }
 
+    /**
+     * 代理的 close() 经鸭子类型转发到当前存储：换下的旧存储原样返回（未关闭）
+     */
+    @Test
+    public void proxyCloseClosesCurrentStore() throws Exception {
+        TrackingStore initial = new TrackingStore();
+        TrackingStore current = new TrackingStore();
+        KvStore proxy = HotSwapStore.wrap(initial);
+
+        HotSwapStore.swap(proxy, current, false);
+        ((AutoCloseable) proxy).close();
+
+        assertTrue("close 关闭的是当前存储", current.closed);
+        assertFalse("旧存储由 swap 的关闭策略负责，此处保持未关闭", initial.closed);
+    }
+
     @Test(expected = IllegalArgumentException.class)
     public void swapOnPlainStoreFailsFast() {
         HotSwapStore.swap(new TrackingStore(), new TrackingStore(), false);

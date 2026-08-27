@@ -48,7 +48,10 @@ public final class HotSwapStore {
      * 初始存储实现 {@link StoreWrapper} 时，代理额外实现 {@link StoreWrapper}，
      * {@code unwrap()} 经鸭子类型转发到<b>当前</b>委托——能力解析（见
      * {@link com.team4u.framework.kv.KvStores}）在热交换后仍指向新存储。
-     * 已知边界：交换到未实现 StoreWrapper 的存储后，{@code unwrap()} 调用会以
+     * 初始存储实现 {@link AutoCloseable} 时，代理额外实现 {@link AutoCloseable}，
+     * {@code close()} 同样经鸭子类型转发到<b>当前</b>委托——与装饰器的级联关闭语义一致；
+     * 换下的旧洋葱由 Safe Swap 的交换重载负责关闭。
+     * 已知边界：交换到未实现对应接口的存储后，{@code unwrap()}/{@code close()} 调用会以
      * {@link ProxyException} 失败。
      * </p>
      */
@@ -58,6 +61,10 @@ public final class HotSwapStore {
                 .delegate(initial);
         if (initial instanceof StoreWrapper) {
             builder.withInterfaces(StoreWrapper.class);
+        }
+        if (initial instanceof AutoCloseable) {
+            // close() 经鸭子类型转发到当前存储：与装饰器级联关闭语义一致
+            builder.withInterfaces(AutoCloseable.class);
         }
         return builder
                 .enableHotswap()
