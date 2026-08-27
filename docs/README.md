@@ -64,7 +64,7 @@
 | **[对象容器组件](bean/README.md)** | `team4u-bean` | 轻量级 Bean 容器与对象管理门面。通过 `BeanFactory`/`BeanRegistry` 职责隔离与 Provider 链式查找，实现非 Spring 环境本地管理与 Spring 容器无缝桥接。 | [概览](bean/README.md) · [快速开始](bean/quick-start.md) |
 | **[动态代理组件](proxy/README.md)** | `team4u-proxy` | 统一代理门面与 AOP 拦截器链。自适应 JDK Proxy / ByteBuddy 双引擎，开箱提供方法委托 (鸭子类型)、调用链追踪 (`Tracker`)、运行时热替换 (`HotSwap`) 与空对象防 NPE 代理。 | [概览](proxy/README.md) · [快速开始](proxy/quick-start.md) |
 | **[序列化组件](serializer/README.md)** | `team4u-serializer` | 统一 JSON 序列化门面 (`JsonUtil`)。基于 SPI 自动扫描与优先级加载，原生提供高性能 Jackson 驱动，支持复杂泛型 `TypeReference` 提取与容错解析。 | [概览](serializer/README.md) · [快速开始](serializer/quick-start.md) |
-| **[核心基础组件](base/README.md)** | `team4u-base` | 框架基石与通用工具库。提供分段锁动态实例创建 (`DynamicInstanceProvider`)、高性能预解析文本模板 (`TextTemplate`)、通用缓存 (`LRU/LFU/TimedCache`)、类型转换器与 JDBC 构建工具。 | [概览](base/README.md) · [快速开始](base/quick-start.md) |
+| **[核心基础组件](base/README.md)** | `team4u-base` | 框架基石与通用工具库。提供分段锁动态实例创建 (`DynamicInstanceProvider`)、高性能预解析文本模板 (`TextTemplate`)、通用缓存 (`LRU/LFU/TimedCache`)、可刷新值 (`RefreshableValue`)、类型转换器与 JDBC 构建工具。 | [概览](base/README.md) · [快速开始](base/quick-start.md) |
 
 ---
 
