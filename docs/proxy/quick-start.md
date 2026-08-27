@@ -25,6 +25,7 @@
 > </dependency>
 > ```
 
+引擎按当前线程上下文加载器、目标类型加载器、`ProxyBuilder` 定义加载器的顺序尝试。支持可同时定义引擎与 ByteBuddy 的 child-first/plugin 加载器。若 `ProxyBuilder` 定义在父加载器、引擎按普通父委派解析、而 ByteBuddy 只存在于普通子加载器，则父加载器定义的引擎无法看见该依赖；此时应把 ByteBuddy 放到引擎可见的父加载器，或使用能同时定义二者的加载器。
 ---
 
 ## 基础用法：接口代理与委托

@@ -25,7 +25,7 @@ Developers can run the currently green external-consumer set with:
 mvn -Pconsumer-it -DskipTests verify
 ```
 
-The set currently covers minimal base, explicit Jackson provider, and JDK interface proxy consumers. `consumer-serializer-api` is a known transition guard: the current no-provider error names only `JsonSerializerPolicy` and omits the Jackson artifact or custom-provider instruction, so run it explicitly with `-Dinvoker.test=consumer-serializer-api` until Task 7. `consumer-config-core` is also explicit: its scalar/binder path runs, but its runtime tree still carries proxy, ByteBuddy, and Jackson; it joins the default gate in Task 9.
+The set currently covers minimal base, explicit Jackson provider, and JDK interface proxy consumers. `consumer-serializer-api` is a known transition guard: the current no-provider error names only `JsonSerializerPolicy` and omits the Jackson artifact or custom-provider instruction, so run it explicitly with `-Dinvoker.test=consumer-serializer-api` until Task 7. `consumer-config-core` is also explicit: its scalar/binder path runs, but its runtime tree still carries proxy and Jackson; it joins the default gate in Task 9.
 
 The release baseline gate is:
 
@@ -46,6 +46,22 @@ After importing it, depend on concrete Team4u artifacts without versions.
 Applications using `JdbcUtil`, `InsertBuilder`, `UpdateBuilder`, `SqlBuilder`, or `SqlExpression` must add `com.team4u:team4u-base-jdbc`; package and class names are unchanged and `team4u-base` no longer carries JDBC or Spring.
 
 `com.team4u.framework.base.util.SpringUtil` is deleted. Replace it with `BeanManager.getInstance().getBean(...)` after registering a `BeanFactory`/bean provider compatible with `com.team4u.framework.bean.BeanManager`.
+
+## Optional ByteBuddy for class proxies
+
+`team4u-proxy` supports JDK interface proxies without ByteBuddy. Add ByteBuddy directly only when proxying a concrete class:
+
+```xml
+<dependency>
+    <groupId>net.bytebuddy</groupId>
+    <artifactId>byte-buddy</artifactId>
+    <version>1.14.12</version>
+</dependency>
+```
+
+The same rule applies to concrete-class proxy paths in `team4u-config-core`, `team4u-log`, and `team4u-retry-proxy`. Their interface proxy paths do not require ByteBuddy.
+
+The engine is attempted from the thread context loader, the target type's loader, and then `ProxyBuilder`'s defining loader. Child-first/plugin loaders that can define both the engine and ByteBuddy are supported. A JVM visibility boundary remains if `ProxyBuilder` is parent-defined, the engine is ordinary parent-delegated, and only a normal child loader carries ByteBuddy: a parent-defined engine class cannot resolve types visible only to that child. Place ByteBuddy in the parent visible to the engine, or use a loader that defines both.
 
 ## Removed grouping artifacts
 

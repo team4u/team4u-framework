@@ -50,8 +50,70 @@ public class ProxyOptionalByteBuddyTest {
         loader = newClassLoaderWithoutByteBuddy();
         loaderResource = loader;
         final String failure = runIsolated(loader, "runClass");
-        if (!MISSING_BYTE_BUDDY_MESSAGE.equals(failure)) {
+        if (!failure.startsWith(MISSING_BYTE_BUDDY_MESSAGE + "|")) {
             throw new AssertionError("Expected missing ByteBuddy message but was:\n" + failure);
+        }
+        if (!failure.contains("net.bytebuddy") && !failure.contains("net/bytebuddy")) {
+            throw new AssertionError("Expected ByteBuddy missing-dependency cause but was:\n" + failure);
+        }
+    }
+
+    @Test
+    public void childFirstEngineLoaderCanSupplyByteBuddyEngine() throws Exception {
+        ClassLoader child = new ChildFirstEngineClassLoader();
+        ClassLoader original = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(child);
+        try {
+            Class<?> serviceClass = child.loadClass(ParentVisibleService.class.getName());
+            Object target = serviceClass.getDeclaredConstructor().newInstance();
+            Object proxy = ProxyBuilder.forClass(serviceClass)
+                    .withDelegate(target)
+                    .build();
+            Object value = serviceClass.getMethod("serve").invoke(proxy);
+            if (!"service".equals(value)) {
+                throw new AssertionError("Child-first class proxy did not delegate");
+            }
+        } finally {
+            Thread.currentThread().setContextClassLoader(original);
+        }
+    }
+
+    @Test
+    public void engineLinkageFailureIsNotReportedAsMissingByteBuddy() throws Exception {
+        BrokenEngineClassLoader broken = new BrokenEngineClassLoader();
+        ClassLoader original = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(broken);
+        try {
+            Class<?> serviceClass = ParentVisibleService.class;
+            Object target = serviceClass.getDeclaredConstructor().newInstance();
+            Object proxy = ProxyBuilder.forClass(serviceClass)
+                    .withDelegate(target)
+                    .build();
+            serviceClass.getMethod("serve").invoke(proxy);
+            throw new AssertionError("Expected class proxy failure");
+        } catch (ProxyException e) {
+            if (MISSING_BYTE_BUDDY_MESSAGE.equals(e.getMessage())) {
+                throw new AssertionError("Linkage failure was mislabeled as missing ByteBuddy", e);
+            }
+            if (!(e.getCause() instanceof VerifyError)) {
+                throw new AssertionError("Expected preserved VerifyError cause", e);
+            }
+        } finally {
+            Thread.currentThread().setContextClassLoader(original);
+        }
+    }
+
+    @Test
+    public void finalClassWithByteBuddyKeepsUnsupportedTargetError() {
+        try {
+            ProxyBuilder.forClass(FinalService.class)
+                    .withDelegate(new FinalService())
+                    .build();
+            throw new AssertionError("Expected final-class proxy failure");
+        } catch (ProxyException e) {
+            if (!e.getMessage().startsWith("No suitable proxy engine found for class:")) {
+                throw new AssertionError("Unexpected final-class failure", e);
+            }
         }
     }
 
@@ -62,7 +124,13 @@ public class ProxyOptionalByteBuddyTest {
                 loader);
         Method run = runner.getMethod(methodName);
         run.setAccessible(true);
-        return (String) run.invoke(null);
+        ClassLoader original = Thread.currentThread().getContextClassLoader();
+        Thread.currentThread().setContextClassLoader(loader);
+        try {
+            return (String) run.invoke(null);
+        } finally {
+            Thread.currentThread().setContextClassLoader(original);
+        }
     }
 
     private static URLClassLoader newClassLoaderWithoutByteBuddy() throws IOException {
@@ -123,6 +191,8 @@ public class ProxyOptionalByteBuddyTest {
         }
 
         private static String runClass(ClassLoader loader) {
+            ClassLoader original = Thread.currentThread().getContextClassLoader();
+            Thread.currentThread().setContextClassLoader(loader);
             try {
                 Class<?> builderClass = Class.forName(ProxyBuilder.class.getName(), true, loader);
                 Class<?> serviceClass = Class.forName(
@@ -143,9 +213,11 @@ public class ProxyOptionalByteBuddyTest {
                     current = current.getCause();
                 }
                 if (current instanceof ProxyException) {
-                    return current.getMessage();
+                    return current.getMessage() + "|" + current.getCause();
                 }
                 return "class proxy failed unexpectedly: " + describe(current);
+            } finally {
+                Thread.currentThread().setContextClassLoader(original);
             }
         }
 
@@ -172,6 +244,103 @@ public class ProxyOptionalByteBuddyTest {
     }
 
     public static class IsolatedService {
+        public String serve() {
+            return "service";
+        }
+    }
+
+    private static final class ChildFirstEngineClassLoader extends ClassLoader {
+        private Class<?> engineClass;
+
+        private ChildFirstEngineClassLoader() throws IOException {
+            super(newClassLoaderWithoutByteBuddy());
+        }
+
+        @Override
+        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+            if (name.equals("com.team4u.framework.proxy.engine.ByteBuddyProxyEngine")) {
+                Class<?> found = findLoadedClass(name);
+                if (found == null) {
+                    found = defineChildEngine();
+                }
+                if (resolve) {
+                    resolveClass(found);
+                }
+                return found;
+            }
+            return super.loadClass(name, resolve);
+        }
+
+        private synchronized Class<?> defineChildEngine() throws ClassNotFoundException {
+            if (engineClass != null) {
+                return engineClass;
+            }
+            byte[] bytes = readResource("com/team4u/framework/proxy/engine/ByteBuddyProxyEngine.class");
+            engineClass = defineClass(
+                    "com.team4u.framework.proxy.engine.ByteBuddyProxyEngine",
+                    bytes, 0, bytes.length);
+            resolveClass(engineClass);
+            return engineClass;
+        }
+
+        private byte[] readResource(String resource) {
+            try {
+                java.net.URL url = getParent().getResource(resource);
+                if (url == null) {
+                    ClassLoader system = ClassLoader.getSystemClassLoader();
+                    url = loadEngineResourceFromSystem(system, resource);
+                }
+                if (url == null) {
+                    throw new IllegalStateException("Missing test resource: " + resource);
+                }
+                try (java.io.InputStream input = url.openStream()) {
+                    java.io.ByteArrayOutputStream output = new java.io.ByteArrayOutputStream();
+                    byte[] buffer = new byte[4096];
+                    int count;
+                    while ((count = input.read(buffer)) != -1) {
+                        output.write(buffer, 0, count);
+                    }
+                    return output.toByteArray();
+                }
+            } catch (IOException e) {
+                throw new IllegalStateException("Cannot read test resource: " + resource, e);
+            }
+        }
+
+        private java.net.URL loadEngineResourceFromSystem(ClassLoader loader, String resource)
+                throws IOException {
+            while (loader != null) {
+                java.net.URL url = loader.getResource(resource);
+                if (url != null) {
+                    return url;
+                }
+                loader = loader.getParent();
+            }
+            return ClassLoader.getSystemResource(resource);
+        }
+    }
+
+    private static final class BrokenEngineClassLoader extends ClassLoader {
+        private BrokenEngineClassLoader() {
+            super(ProxyOptionalByteBuddyTest.class.getClassLoader());
+        }
+
+        @Override
+        protected Class<?> loadClass(String name, boolean resolve) throws ClassNotFoundException {
+            if (name.equals("com.team4u.framework.proxy.engine.ByteBuddyProxyEngine")) {
+                throw new VerifyError("Deliberate engine verification failure");
+            }
+            return super.loadClass(name, resolve);
+        }
+    }
+
+    public static class ParentVisibleService {
+        public String serve() {
+            return "service";
+        }
+    }
+
+    public static final class FinalService {
         public String serve() {
             return "service";
         }
