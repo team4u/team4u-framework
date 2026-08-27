@@ -17,7 +17,7 @@ import java.util.concurrent.TimeUnit;
 /**
  * KV 分布式锁：持有者令牌 + 心跳续约 + fencing 安全释放
  * <p>
- * 解决旧式 {@code putIfAbsent + TTL + 无条件删除} 锁的三个正确性缺陷：
+ * 提供三项正确性保证：
  * </p>
  * <ul>
  *     <li><b>误删防护</b>：释放经 {@link CasCapable#compareAndRemove} 仅删除
