@@ -1,14 +1,14 @@
 package com.team4u.framework.criterion.compiler.impl;
 
+import com.team4u.framework.base.pattern.PathPatternMatcher;
 import org.junit.Assert;
 import org.junit.Test;
-import org.springframework.util.AntPathMatcher;
 
 /**
- * Characterizes the Spring AntPathMatcher behavior currently delegated to by
- * WildcardCriterionCompiler.
+ * Locks the Team4u Ant-style semantics delegated to by WildcardCriterionCompiler.
  *
- * <p>The default matcher configuration uses these semantics:</p>
+ * <p>The Spring 5.3.39 AntPathMatcher was the historical source of this matrix.
+ * Task 5 moved execution to Base without changing these observations.</p>
  *
  * <ul>
  *     <li>the separator is {@code /}</li>
@@ -17,14 +17,13 @@ import org.springframework.util.AntPathMatcher;
  *     <li>{@code **} crosses directories only when a slash-delimited segment is exactly
  *     {@code **}; {@code ***} and longer runs of stars remain segment-local stars</li>
  *     <li>backslash is an ordinary literal character, not an escape</li>
- *     <li>leading, trailing, and repeated separators are normalized by tokenization, except
- *     that a pattern's leading separator must match a path's leading separator</li>
+ *     <li>leading, trailing, and repeated separators follow the locked boundary
+ *     behavior captured by the matrix</li>
  * </ul>
  *
- * <p>Raw null behavior is deliberately not attributed to Criterion:
- * {@link AntPathMatcher#match(String, String)} throws {@code NullPointerException} for a
- * null pattern and returns {@code false} for a null path. Criterion adapter null behavior
- * is locked separately in {@code WildcardQuickstartTest}.</p>
+ * <p>Null behavior is layer-specific: the Base matcher throws
+ * {@code NullPointerException} for a null pattern and returns false for a null path.
+ * {@code WildcardQuickstartTest}.</p>
  */
 public class WildcardAntCharacterizationTest {
 
@@ -84,10 +83,8 @@ public class WildcardAntCharacterizationTest {
             {"a***b", "a/b", "false"}
     };
 
-    private final AntPathMatcher matcher = new AntPathMatcher();
-
     @Test
-    public void matrixCharacterizesCurrentAntPathMatcherBehavior() {
+    public void matrixCharacterizesBaseMatcherBehavior() {
         Assert.assertEquals("Characterization matrix count", CASES.length, 53);
 
         for (int i = 0; i < CASES.length; i++) {
@@ -95,7 +92,7 @@ public class WildcardAntCharacterizationTest {
             String pattern = expected[0];
             String path = expected[1];
             boolean expectedResult = Boolean.parseBoolean(expected[2]);
-            boolean actualResult = matcher.match(pattern, path);
+            boolean actualResult = PathPatternMatcher.match(pattern, path);
 
             Assert.assertEquals("Matrix case " + i + " pattern=" + quote(pattern)
                             + ", path=" + quote(path) + ", expected=" + expectedResult,
@@ -104,13 +101,13 @@ public class WildcardAntCharacterizationTest {
     }
 
     @Test(expected = NullPointerException.class)
-    public void nullPatternFailsInRawMatcher() {
-        matcher.match(null, "a");
+    public void nullPatternFailsInBaseMatcher() {
+        PathPatternMatcher.match(null, "a");
     }
 
     @Test
-    public void nullPathReturnsFalseInRawMatcher() {
-        Assert.assertFalse(matcher.match("a", null));
+    public void nullPathReturnsFalseInBaseMatcher() {
+        Assert.assertFalse(PathPatternMatcher.match("a", null));
     }
 
     private static String quote(String value) {

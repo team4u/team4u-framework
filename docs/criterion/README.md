@@ -84,7 +84,7 @@ Criterion 具备以下核心设计特色：
 | **空值与存在性** | `address is null`，`items is not empty` | 判断目标对象是否为 null，或集合/字符串是否为空（`is null`, `is not null`, `is empty`, `is not empty`） |
 | **概率灰度** | `it prob 0.3` | 按照指定浮点概率随机命中（如 `0.3` 表示 30% 概率） |
 | **哈希分流** | `userId hash 0.2` | 基于目标字段 Hash 取模（MurmurHash64）实现稳定一致性灰度分流，支持盐值（`salt`） |
-| **正则与通配** | `email =~ '.*@example\\.com$'`，`name like 'J*'` | 正则表达式匹配（`=~` / `regex`）与 AntPath 通配符匹配（`like`） |
+| **正则与通配** | `email =~ '.*@example\\.com$'`，`name like 'J*'` | 正则表达式匹配（`=~` / `regex`）与 Base 提供的 Team4u Ant 风格通配符匹配（`like`） |
 | **极简语法糖** | `18`，`'SUCCESS'` | `18` 等价于 `it == 18`；`'admin'` 等价于 `it == 'admin'` |
 | **类型转换器** | `createTime:date > '2023-01-01'`，`followers:size > 1000` | 支持 `:date`、`:size`、`:version`、`:number`、`:string` 前置转换 |
 | **动态变量** | `age >= $minAge && userLevel in $allowedLevels` | 以 `$` 开头的变量自动从 `MatchContext` 的 attributes 中获取 |
