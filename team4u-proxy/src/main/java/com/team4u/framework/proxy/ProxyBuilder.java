@@ -232,17 +232,7 @@ public final class ProxyBuilder<T> {
     }
 
     private ProxyEngine loadByteBuddyEngine(Class<?> primaryType) {
-        ClassLoader[] loaders = {
-                Thread.currentThread().getContextClassLoader(),
-                primaryType.getClassLoader(),
-                ProxyBuilder.class.getClassLoader()
-        };
-        Throwable missingCause = null;
-        for (ClassLoader loader : loaders) {
-            if (loader == null) {
-                continue;
-            }
-
+        for (ClassLoader loader : candidateLoaders(primaryType)) {
             Class<?> engineClass;
             try {
                 engineClass = Class.forName(
@@ -250,14 +240,14 @@ public final class ProxyBuilder<T> {
                         true,
                         loader);
             } catch (ClassNotFoundException e) {
-                missingCause = latestMissingCause(missingCause, e);
                 continue;
             } catch (LinkageError e) {
                 if (isMissingByteBuddy(e)) {
-                    missingCause = latestMissingCause(missingCause, e);
                     continue;
                 }
                 throw new ProxyException("Cannot load ByteBuddy proxy engine from " + loader, e);
+            } catch (SecurityException e) {
+                throw new ProxyException("Cannot access candidate loader for ByteBuddy proxy engine", e);
             }
 
             try {
@@ -267,37 +257,63 @@ public final class ProxyBuilder<T> {
                 throw new ProxyException("Cannot access ByteBuddy proxy engine INSTANCE", e);
             } catch (ClassCastException e) {
                 throw new ProxyException("ByteBuddy proxy engine does not implement ProxyEngine", e);
+            } catch (SecurityException e) {
+                throw new ProxyException("Cannot reflect ByteBuddy proxy engine INSTANCE", e);
             } catch (LinkageError e) {
                 if (isMissingByteBuddy(e)) {
-                    missingCause = latestMissingCause(missingCause, e);
                     continue;
                 }
                 throw new ProxyException("Cannot initialize ByteBuddy proxy engine from " + loader, e);
             }
         }
 
-        throw missingByteBuddy(missingCause);
+        throw missingByteBuddy(null);
     }
 
-    private Throwable latestMissingCause(Throwable current, Throwable candidate) {
-        return current == null ? candidate : current;
+    private ClassLoader[] candidateLoaders(Class<?> primaryType) {
+        ClassLoader contextLoader;
+        try {
+            contextLoader = Thread.currentThread().getContextClassLoader();
+        } catch (SecurityException e) {
+            throw new ProxyException("Cannot obtain thread context class loader for ByteBuddy proxy engine", e);
+        }
+
+        ClassLoader[] loaders = {
+                contextLoader,
+                primaryType.getClassLoader(),
+                ProxyBuilder.class.getClassLoader()
+        };
+        Set<ClassLoader> distinct = new LinkedHashSet<>();
+        for (ClassLoader loader : loaders) {
+            if (loader != null) {
+                distinct.add(loader);
+            }
+        }
+        return distinct.toArray(new ClassLoader[0]);
     }
 
     private boolean isMissingByteBuddy(Throwable error) {
         Throwable current = error;
         while (current != null) {
-            String text = current.getMessage();
-            boolean missingByteBuddyType =
-                    current instanceof ClassNotFoundException
-                            || current instanceof NoClassDefFoundError;
-            if (missingByteBuddyType
-                    && text != null
-                    && (text.contains("net.bytebuddy") || text.contains("net/bytebuddy"))) {
+            if (current instanceof NoClassDefFoundError
+                    && isInByteBuddyPackage(current.getMessage())) {
                 return true;
             }
             current = current.getCause();
         }
         return false;
+    }
+
+    private boolean isInByteBuddyPackage(String className) {
+        if (className == null) {
+            return false;
+        }
+        String normalized = className.replace('.', '/');
+        int detail = normalized.indexOf(' ');
+        if (detail >= 0) {
+            normalized = normalized.substring(0, detail);
+        }
+        return normalized.equals("net/bytebuddy") || normalized.startsWith("net/bytebuddy/");
     }
 
     private ProxyException missingByteBuddy(Throwable cause) {

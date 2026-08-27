@@ -59,7 +59,7 @@ Applications using `JdbcUtil`, `InsertBuilder`, `UpdateBuilder`, `SqlBuilder`, o
 </dependency>
 ```
 
-The same rule applies to concrete-class proxy paths in `team4u-config-core`, `team4u-log`, and `team4u-retry-proxy`. Their interface proxy paths do not require ByteBuddy.
+The same rule applies to the concrete-class proxy paths behind `ConfigProxyFactory.createLiveProxy`, `ConfigProxyFactory.createPinnedProxy`, `LogProxyFactory.createProxy`, `LogProxyFactory.createDynamicProxy`, and `RetryProxyFactory.createProxy`. Interface-only paths in those artifacts do not require ByteBuddy; if the entry point accepts and uses a concrete target class, its path does.
 
 The engine is attempted from the thread context loader, the target type's loader, and then `ProxyBuilder`'s defining loader. Child-first/plugin loaders that can define both the engine and ByteBuddy are supported. A JVM visibility boundary remains if `ProxyBuilder` is parent-defined, the engine is ordinary parent-delegated, and only a normal child loader carries ByteBuddy: a parent-defined engine class cannot resolve types visible only to that child. Place ByteBuddy in the parent visible to the engine, or use a loader that defines both.
 
