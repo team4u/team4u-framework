@@ -45,7 +45,7 @@ Task 8 complete: creator resolution and lazy global initialization landed at `8b
 
 Task 9 complete: split config proxy/Spring adapters, kept proxy creation explicit, and verified active consumers plus release packaging.
 
-Task 10 complete: added deterministic memory/JDBC lease quickstarts, enforced lease-core and lease-jdbc runtime boundaries, documented explicit JSON provider choice, and verified the full reactor plus release gates. Review remediation corrected the malformed Jackson/Spring Enforcer patterns and the Task 10 RED record; commit `fix(lease): enforce framework dependency bans`.
+Task 10 complete: added deterministic memory/JDBC lease quickstarts, enforced lease-core and lease-jdbc runtime boundaries, documented explicit JSON provider choice, and verified the full reactor plus release gates. Review remediation corrected the Enforcer patterns to scope-aware five-field form; the prior failed probe was a four-field construction, not a wildcard limitation. Final correction commit: `fix(lease): use scope-aware enforcer patterns`.
 
 Task 11 complete: split managed governance and config-driven retry policies out of retry-core, replaced `Retries.managed(...)` with `ManagedRetries.with(...)`, and kept retry-core free of managed/config dependencies. Full reactor, consumer/release gates, and release packaging passed after one unrelated KV timing rerun; commit `refactor(retry): split managed governance without core cycles`.
 
