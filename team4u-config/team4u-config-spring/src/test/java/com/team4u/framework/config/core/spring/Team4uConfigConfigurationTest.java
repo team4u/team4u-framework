@@ -13,10 +13,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
 
+import java.io.File;
+import java.nio.file.Files;
+import java.security.CodeSource;
 import java.util.Collections;
 import java.util.Map;
-
-import java.security.CodeSource;
+import java.util.jar.JarFile;
 public class Team4uConfigConfigurationTest {
 
     @After
@@ -45,9 +47,13 @@ public class Team4uConfigConfigurationTest {
     @Test
     public void springFactoriesMetadataAndAutoConfigurationClassAreAbsent() throws Exception {
         CodeSource source = Team4uConfigConfiguration.class.getProtectionDomain().getCodeSource();
-        String location = source.getLocation().toExternalForm();
-        Assert.assertNull(getClass().getClassLoader().getResource(
-                jarResourcePath(location, "META-INF/spring.factories")));
+        Assert.assertNotNull(source);
+        File codeSourceFile = new File(source.getLocation().toURI());
+        Assert.assertTrue("config-spring classes must exist: " + codeSourceFile,
+                codeSourceFile.exists());
+        Assert.assertFalse("team4u-config-spring must not publish spring.factories",
+                containsSpringFactories(codeSourceFile));
+
         try {
             Class.forName("com.team4u.framework.config.core.spring.Team4uConfigAutoConfiguration");
             Assert.fail("old auto-configuration class must not be published");
@@ -58,10 +64,15 @@ public class Team4uConfigConfigurationTest {
         }
     }
 
-    private static String jarResourcePath(String codeSourceLocation, String resource) {
-        Assert.assertTrue("config-spring test must run from its module classes: " + codeSourceLocation,
-                codeSourceLocation.endsWith("/target/classes/"));
-        return codeSourceLocation.substring(codeSourceLocation.indexOf("!/") + 2) + resource;
+    private static boolean containsSpringFactories(File codeSourceFile) throws Exception {
+        if (codeSourceFile.isDirectory()) {
+            return !Files.notExists(
+                    new File(codeSourceFile, "META-INF/spring.factories").toPath());
+        }
+
+        try (JarFile jar = new JarFile(codeSourceFile)) {
+            return jar.getJarEntry("META-INF/spring.factories") != null;
+        }
     }
 
     @Configuration
