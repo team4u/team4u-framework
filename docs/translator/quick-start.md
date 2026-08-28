@@ -17,7 +17,7 @@
 ```
 
 > [!NOTE]
-> `team4u-translator` 内部已传递引入 `team4u-router`、`team4u-criterion` 与 `team4u-policy`，无需重复引入基础依赖。
+> `team4u-translator` 内部已传递引入 router core（`team4u-router`）、`team4u-criterion` 与 `team4u-policy`，不会传递 `team4u-router-proxy`。JSON 路由配置解析需要显式添加 `team4u-serializer-jackson`，或注册自定义 `JsonSerializerPolicy`。
 
 ---
 
