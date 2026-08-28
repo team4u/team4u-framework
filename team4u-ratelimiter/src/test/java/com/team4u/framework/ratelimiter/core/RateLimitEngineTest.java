@@ -91,19 +91,20 @@ public class RateLimitEngineTest {
 
     @Test
     public void rulesSortedByPriorityFirstDenyStops() {
+        // 越小优先级越高（与 ContextPolicy 约定一致）：high=-1000 先执行，low=0 后执行
         rules("multi", "["
                 + "{\"id\":\"low\",\"algorithm\":\"fixed-window\",\"windowMillis\":10000,\"threshold\":1,\"priority\":0},"
-                + "{\"id\":\"high\",\"algorithm\":\"fixed-window\",\"windowMillis\":10000,\"threshold\":1,\"priority\":10}"
+                + "{\"id\":\"high\",\"algorithm\":\"fixed-window\",\"windowMillis\":10000,\"threshold\":1,\"priority\":-1000}"
                 + "]");
 
-        // 全部通过：返回最后一条（priority 最低的 low）通过结果
+        // 全部通过：返回最后一条（priority 最大的 low）通过结果
         RateLimitResult passed = engine.acquire("multi", null);
         assertTrue(passed.isAllowed());
         assertEquals(RateLimitReason.PASS, passed.getReason());
         assertEquals("low", passed.getRuleId());
         assertEquals("multi", passed.getPoint());
 
-        // 第二次：high（priority 10）先执行并拒绝，首拒即停
+        // 第二次：high（priority -1000）先执行并拒绝，首拒即停
         RateLimitResult denied = engine.acquire("multi", null);
         assertFalse(denied.isAllowed());
         assertEquals("high", denied.getRuleId());
@@ -273,9 +274,29 @@ public class RateLimitEngineTest {
     }
 
     @Test
-    public void historyWindowWithoutHistoryPathRejected() {
-        rules("bad", "[{\"id\":\"a\",\"algorithm\":\"history-window\",\"windowMillis\":1,\"threshold\":1}]");
+    public void configOnConfiglessAlgorithmRejected() {
+        // fixed-window 未声明配置类型（Void），携带 config 应在加载期报错而非静默忽略
+        rules("bad", "[{\"id\":\"a\",\"algorithm\":\"fixed-window\",\"windowMillis\":1,\"threshold\":1,"
+                + "\"config\":{\"path\":\"x\"}}]");
         assertConfigError("bad");
+    }
+
+    @Test
+    public void historyWindowWithoutConfigUsesDefaultPath() {
+        // 未配置 config 时算法按无参构造取默认值：path 默认 history，调用方零配置
+        rules("dflt", "[{\"id\":\"a\",\"algorithm\":\"history-window\",\"windowMillis\":1000,\"threshold\":1}]");
+        Map<String, Object> context = Collections.singletonMap("history",
+                Collections.singletonList(kv.clock().millis()));
+        assertFalse("默认路径取到上下文 history 属性：已有 1 条历史且阈值 1，拒绝",
+                engine.acquire("dflt", context).isAllowed());
+    }
+
+    @Test
+    public void invalidAlgorithmConfigRejected() {
+        // config 字段类型不匹配（path 应为字符串却给了对象）在加载期报错
+        rules("typ", "[{\"id\":\"a\",\"algorithm\":\"history-window\",\"windowMillis\":1,\"threshold\":1,"
+                + "\"config\":{\"path\":{\"a\":1}}}]");
+        assertConfigError("typ");
     }
 
     @Test
@@ -290,7 +311,7 @@ public class RateLimitEngineTest {
     @Test
     public void historyWindowRunsStatelessWithoutStore() {
         rules("hist", "[{\"id\":\"hw\",\"algorithm\":\"history-window\","
-                + "\"windowMillis\":1000,\"threshold\":1,\"historyPath\":\"client.history\"}]");
+                + "\"windowMillis\":1000,\"threshold\":1,\"config\":{\"path\":\"client.history\"}}]");
         Map<String, Object> context = Collections.singletonMap("client",
                 Collections.singletonMap("history", Collections.singletonList(kv.clock().millis())));
 

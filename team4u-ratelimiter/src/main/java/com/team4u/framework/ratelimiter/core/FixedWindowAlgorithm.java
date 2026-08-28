@@ -42,7 +42,7 @@ public class FixedWindowAlgorithm implements RateLimitAlgorithm {
     }
 
     @Override
-    public RateLimitResult tryAcquire(RateLimitRule rule, KvStore store, String key,
+    public RateLimitResult tryAcquire(RateLimitRule rule, Object config, KvStore store, String key,
                                       Object context, long nowMillis, int permits) {
         CounterCapable counter = capabilityOf(store);
         long n = counter.incrementAndGet(

@@ -47,7 +47,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *     {@code KvStores.capabilityOf} 逐一校验</li>
  * </ul>
  * <p>
- * 裁决流程：规则列表按 priority 降序稳定排序，逐条执行、首拒即停；
+ * 裁决流程：规则列表按 priority 升序稳定排序（越小优先级越高，与策略组件 ContextPolicy 约定一致），逐条执行、首拒即停；
  * 全部通过返回最后一条通过规则的结果。存储故障按规则 {@code failOpen} 处置：
  * true 记 warn 后视为该条通过继续，false 立即返回 STORE_ERROR 拒绝。
  * </p>
@@ -149,7 +149,7 @@ public class RateLimitEngine implements AutoCloseable {
 
             RateLimitResult result;
             try {
-                result = algorithm.tryAcquire(rule, store, key, context, now, permits);
+                result = algorithm.tryAcquire(rule, rule.getConfig(), store, key, context, now, permits);
             } catch (KvStoreException e) {
                 if (rule.isFailOpen()) {
                     log.warn("RateLimitEngine|failOpen|point={}|ruleId={}|key={}",
@@ -209,12 +209,12 @@ public class RateLimitEngine implements AutoCloseable {
      * 规则列表解析与校验（配置驱动注册表工厂，热更新失败保旧实例）
      * <p>
      * 校验项：列表非空、id 非空唯一且不含 ':'、算法已注册、windowMillis&gt;0、
-     * threshold&gt;0、无状态算法（history-window）必须配置 historyPath、
+     * threshold&gt;0、config 按算法声明的类型转换成功（算法不接受 config 时禁止携带）、
      * 有状态算法的存储可解析且具备全部所需能力、键模板不含 ':' 可被解析。
      * 任一失败抛 {@link RateLimitConfigException}。
      * </p>
      *
-     * @return 按 priority 降序稳定排序的不可变规则列表
+     * @return 按 priority 升序稳定排序（越小优先级越高）的不可变规则列表
      */
     static List<RateLimitRule> parseRules(String json,
                                           KeyedPolicyRegistry<String, RateLimitAlgorithm> algorithms,
@@ -252,14 +252,10 @@ public class RateLimitEngine implements AutoCloseable {
                         + "|id=" + rule.getId());
             }
             boolean stateless = algorithm.requiredCapabilities().length == 0;
-            if (stateless) {
-                if (rule.getHistoryPath() == null || rule.getHistoryPath().trim().isEmpty()) {
-                    throw new RateLimitConfigException("Stateless algorithm requires historyPath"
-                            + "|id=" + rule.getId() + "|algorithm=" + rule.getAlgorithm());
-                }
-            } else {
+            if (!stateless) {
                 validateStoreCapabilities(rule, algorithm, defaultStore);
             }
+            rule.setConfig(configOf(rule, algorithm));
             if (rule.getKey() != null && rule.getKey().indexOf(':') >= 0) {
                 throw new RateLimitConfigException("Rate limit rule key must not contain ':'"
                         + "|id=" + rule.getId() + "|key=" + rule.getKey());
@@ -268,7 +264,7 @@ public class RateLimitEngine implements AutoCloseable {
         }
 
         List<RateLimitRule> sorted = new ArrayList<>(parsed);
-        sorted.sort(Comparator.comparingInt(RateLimitRule::getPriority).reversed());
+        sorted.sort(Comparator.comparingInt(RateLimitRule::getPriority));
         return Collections.unmodifiableList(sorted);
     }
 
@@ -278,6 +274,35 @@ public class RateLimitEngine implements AutoCloseable {
     private static void templatesProbe(String key) {
         if (key != null) {
             new TextTemplate(key);
+        }
+    }
+
+    /**
+     * 规则 config 转换为算法声明的类型化实例并写回规则
+     * <p>
+     * 算法未声明配置类型（{@code Void}）时规则不得携带 config（防配置写错位置被静默忽略）；
+     * 已声明但未配置时以无参构造取默认值（算法配置字段自带缺省，实现约定优于配置）。
+     * </p>
+     */
+    private static Object configOf(RateLimitRule rule, RateLimitAlgorithm algorithm) {
+        Class<?> configType = algorithm.configType();
+        Object raw = rule.getConfig();
+        if (configType == Void.class) {
+            if (raw != null) {
+                throw new RateLimitConfigException("Rate limit algorithm does not accept config"
+                        + "|id=" + rule.getId() + "|algorithm=" + rule.getAlgorithm());
+            }
+            return null;
+        }
+        if (raw == null) {
+            return ReflectUtil.newInstance(configType);
+        }
+        try {
+            return JsonUtil.toBean(JsonUtil.toJsonStr(raw), configType);
+        } catch (RuntimeException e) {
+            throw new RateLimitConfigException("Invalid rate limit rule config"
+                    + "|id=" + rule.getId() + "|algorithm=" + rule.getAlgorithm()
+                    + "|configType=" + configType.getName(), e);
         }
     }
 

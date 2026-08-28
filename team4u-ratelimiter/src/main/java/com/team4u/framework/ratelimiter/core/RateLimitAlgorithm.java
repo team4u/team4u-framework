@@ -30,9 +30,24 @@ public interface RateLimitAlgorithm extends KeyedPolicy<String> {
     Class<?>[] requiredCapabilities();
 
     /**
+     * 声明算法私有配置的类型
+     * <p>
+     * 规则中的 {@code config} 对象在加载期按此类型反序列化为类型化实例并写回规则
+     * （未配置时以无参构造取默认值）；{@link Void} 表示算法不接受私有配置，
+     * 规则中出现 {@code config} 将在加载期报错。全算法共享的参数
+     * （windowMillis/threshold 等）保留在规则模型，不进入本通道。
+     * </p>
+     */
+    default Class<?> configType() {
+        return Void.class;
+    }
+
+    /**
      * 执行一次限流裁决
      *
      * @param rule      限流规则（已通过加载期校验）
+     * @param config    算法私有配置（{@link #configType()} 的类型化实例；
+     *                  算法无私有配置时为 {@code null}）
      * @param store     规则解析出的存储；无状态算法为 {@code null}
      * @param key       计数键（{@code ruleId + "." + 渲染后的键模板}），算法自行组装 SpaceKey
      * @param context   检查上下文（Map 或 Bean，history-window 据此提取历史时间戳）
@@ -40,6 +55,6 @@ public interface RateLimitAlgorithm extends KeyedPolicy<String> {
      * @param permits   本次申请的许可数（0 = 窥探：仅计数不占用）
      * @return 裁决结果（拒绝 reason=THRESHOLD；存储故障抛 {@code KvStoreException} 由引擎按 failOpen 处置）
      */
-    RateLimitResult tryAcquire(RateLimitRule rule, KvStore store, String key,
+    RateLimitResult tryAcquire(RateLimitRule rule, Object config, KvStore store, String key,
                                Object context, long nowMillis, int permits);
 }

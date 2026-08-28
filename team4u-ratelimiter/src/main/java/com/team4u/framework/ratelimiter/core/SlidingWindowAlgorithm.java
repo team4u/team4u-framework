@@ -54,7 +54,7 @@ public class SlidingWindowAlgorithm implements RateLimitAlgorithm {
     }
 
     @Override
-    public RateLimitResult tryAcquire(RateLimitRule rule, KvStore store, String key,
+    public RateLimitResult tryAcquire(RateLimitRule rule, Object config, KvStore store, String key,
                                       Object context, long nowMillis, int permits) {
         ScoredWindowCapable window = capabilityOf(store);
         SpaceKey spaceKey = SpaceKey.of(RateLimitEngine.DEFAULT_SPACE, key);

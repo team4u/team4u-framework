@@ -24,18 +24,24 @@ public class HistoryWindowAlgorithmTest {
 
     private final HistoryWindowAlgorithm algorithm = new HistoryWindowAlgorithm();
 
-    private static RateLimitRule rule(long windowMillis, long threshold, String historyPath) {
+    private static RateLimitRule rule(long windowMillis, long threshold, String path) {
         RateLimitRule rule = new RateLimitRule();
         rule.setId("hw");
         rule.setAlgorithm(HistoryWindowAlgorithm.KEY);
         rule.setWindowMillis(windowMillis);
         rule.setThreshold(threshold);
-        rule.setHistoryPath(historyPath);
+        rule.setConfig(configOf(path));
         return rule;
     }
 
+    private static HistoryWindowAlgorithm.Config configOf(String path) {
+        HistoryWindowAlgorithm.Config config = new HistoryWindowAlgorithm.Config();
+        config.setPath(path);
+        return config;
+    }
+
     private RateLimitResult acquire(RateLimitRule rule, Object context, long nowMillis, int permits) {
-        return algorithm.tryAcquire(rule, null, "hw.client", context, nowMillis, permits);
+        return algorithm.tryAcquire(rule, rule.getConfig(), null, "hw.client", context, nowMillis, permits);
     }
 
     @Test
@@ -93,6 +99,12 @@ public class HistoryWindowAlgorithmTest {
         RateLimitResult result = acquire(rule, new HashMap<String, Object>(), 1500, 1);
         assertTrue(result.isAllowed());
         assertEquals(Long.valueOf(1L), result.getRemaining());
+    }
+
+    @Test
+    public void defaultPathIsHistoryConvention() {
+        // 未配置 path 时默认取上下文 history 属性（约定优于配置，调用方零配置）
+        assertEquals("history", new HistoryWindowAlgorithm.Config().getPath());
     }
 
     @Test

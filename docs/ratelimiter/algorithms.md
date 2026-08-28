@@ -61,12 +61,12 @@
 
 ## 历史窗口（history-window）
 
-**语义**：epoch 对齐的固定窗口，计数来源是**调用方携带的历史时间戳列表**（经 `rule.historyPath` 点路径从检查上下文提取），服务端零存储、无状态，是唯一不解析 `store` 配置的算法。
+**语义**：epoch 对齐的固定窗口，计数来源是**调用方携带的历史时间戳列表**（经规则 `config.path` 点路径从检查上下文提取），服务端零存储、无状态，是唯一不解析 `store` 配置的算法。
 
 - **epoch 对齐**：`windowStart = (now / windowMillis) * windowMillis`，窗口边界落在 `windowMillis` 的整数倍时刻；`now` 进入下一个 `windowStart` 周期后计数自然归零，无需任何清理动作；
 - **未来时间戳计入当前窗口**：历史中 `ts >= windowStart` 的条目全部计入——客户端时钟超前的记录不放大额度，统一计入当前窗口消耗，杜绝「把请求记到未来窗口里腾额度」的口径漏洞；
 - 裁决：`count + permits <= threshold` 放行；
-- `historyPath` 点路径导航：`a.b.0.c` 形式，Map 按键取值、List 按数字下标取值、Bean 读公有 getter；路径缺失或终点非 List 视为空历史（空历史 = 无约束放行）；列表元素仅支持 `Number` 与 `Date`（转 epoch 毫秒），其余元素跳过；
+- `config.path` 点路径导航：`a.b.0.c` 形式，Map 按键取值、List 按数字下标取值、Bean 读公有 getter；**默认 `history`**——调用方将历史置于约定属性下即可零配置（`config` 整体可省）；路径缺失或终点非 List 视为空历史（空历史 = 无约束放行）；列表元素仅支持 `Number` 与 `Date`（转 epoch 毫秒），其余元素跳过；
 - `decisionTimeMillis` 供客户端回填记录，保证双方时钟基准一致（协作协议详见[快速开始 · 推荐场景案例](quick-start.md#推荐场景完整案例app-客户端推荐频控)）。
 
 **信任边界**：历史由调用方携带、天然可伪造。本算法是**合作式限流**（客户端自我节流），不能作为服务端防刷手段；对抗性场景使用服务端状态的 `fixed-window` / `sliding-window`。
