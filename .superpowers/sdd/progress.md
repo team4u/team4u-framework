@@ -22,7 +22,7 @@
 | 10. Lease Boundary Before Retry Migration | Complete |
 | 11. Retry Core/Managed/Dynamic Split Without Cycles | Complete |
 | 12. KV Space Split and Proxy-Free HotSwapStore | Complete |
-| 13. Router Core and Router Proxy Split | Pending |
+| 13. Router Core and Router Proxy Split | Complete |
 | 14. Translator Convergence After Router | Pending |
 | 15. Split Mask Core, Jackson Adapter, and Dynamic Config | Pending |
 | 16. Split bean-spring as Plain Spring Configuration | Pending |
@@ -50,3 +50,5 @@ Task 10 complete: added deterministic memory/JDBC lease quickstarts, enforced le
 Task 11 complete: split managed governance and config-driven retry policies out of retry-core, replaced `Retries.managed(...)` with `ManagedRetries.with(...)`, and kept retry-core free of managed/config dependencies. Full reactor, consumer/release gates, and release packaging passed after one unrelated KV timing rerun; commit `refactor(retry): split managed governance without core cycles`.
 
 Task 12 complete: moved typed JSON Spaces to `team4u-kv-space`, moved HotSwapStore to a KV-local `HotSwap` contract with JDK proxies and stable creation-time capability interfaces, and removed proxy/policy/serializer production coupling from kv-core. No KV heartbeat work was included.
+
+Task 13 complete: moved the declarative proxy adapter to `team4u-router-proxy` with unchanged FQCNs, kept router core free of proxy/bean/config-proxy/Jackson runtime edges, and documented the explicit adapter dependency.

@@ -22,6 +22,12 @@
             <artifactId>team4u-serializer-jackson</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.team4u</groupId>
+                    <artifactId>team4u-config-proxy</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
         <dependency>
             <groupId>com.team4u</groupId>
@@ -44,17 +50,6 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>com.team4u</groupId>
-            <artifactId>team4u-bean</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.team4u</groupId>
-            <artifactId>team4u-proxy</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-
-        <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
         </dependency>
@@ -63,6 +58,12 @@
             <artifactId>team4u-config-test</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.team4u</groupId>
+                    <artifactId>team4u-config-proxy</artifactId>
+                </exclusion>
+            </exclusions>
         </dependency>
 
         <dependency>
@@ -72,6 +73,45 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>enforce-router-core-boundary</id>
+                        <goals><goal>enforce</goal></goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <excludes>
+                                        <exclude>com.team4u:team4u-proxy:*:*:compile</exclude>
+                                        <exclude>com.team4u:team4u-proxy:*:*:runtime</exclude>
+                                        <exclude>com.team4u:team4u-bean:*:*:compile</exclude>
+                                        <exclude>com.team4u:team4u-bean:*:*:runtime</exclude>
+                                        <exclude>com.team4u:team4u-router-proxy:*:*:compile</exclude>
+                                        <exclude>com.team4u:team4u-router-proxy:*:*:runtime</exclude>
+                                        <exclude>com.team4u:team4u-config-proxy:*:*:compile</exclude>
+                                        <exclude>com.team4u:team4u-config-proxy:*:*:runtime</exclude>
+                                        <exclude>net.bytebuddy:*:*:*:compile</exclude>
+                                        <exclude>net.bytebuddy:*:*:*:runtime</exclude>
+                                        <exclude>com.team4u:team4u-serializer-jackson:*:*:compile</exclude>
+                                        <exclude>com.team4u:team4u-serializer-jackson:*:*:runtime</exclude>
+                                        <exclude>com.fasterxml.jackson*:*:*:*:compile</exclude>
+                                        <exclude>com.fasterxml.jackson*:*:*:*:runtime</exclude>
+                                    </excludes>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
+
 </project>

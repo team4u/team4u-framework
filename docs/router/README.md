@@ -16,7 +16,7 @@
 - **缺乏白盒诊断能力**：当复杂规则未命中预期分支时，排查过程犹如黑盒，难以还原计算轨迹。
 - **侵入性过高**：业务调用方必须显式编写路由查询逻辑，破坏了代码整洁度与业务内聚性。
 
-`team4u-router` 是一个轻量级、插件化、配置驱动的 Java 业务路由框架。它将复杂的业务决策逻辑从核心业务流程中彻底解耦，通过声明式的规则配置（支持 JSON）实现动态分流，并提供纳秒级规则计算与白盒 Trace 诊断能力。
+`team4u-router` 是一个轻量级、插件化、配置驱动的 Java 业务路由框架。它将复杂的业务决策逻辑从核心业务流程中彻底解耦，通过声明式的规则配置（支持 JSON）实现动态分流，并提供纳秒级规则计算与白盒 Trace 诊断能力。`@Routed`、`RoutedProxyFactory` 与 Bean 定位能力位于 `team4u-router-proxy` 适配模块。
 
 ---
 
@@ -24,7 +24,7 @@
 
 ## 设计理念
 
-`team4u-router` 的核心哲学是“**配置即路由规则，路由驱动业务执行**”。框架将路由生命周期分为：**规则解析与缓存 -> 拦截器链推进 -> 策略路由计算 -> 目标 Bean 定位与执行**。
+`team4u-router` 的核心哲学是“**配置即路由规则，路由驱动业务执行**”。框架将路由生命周期分为：**规则解析与缓存 -> 拦截器链推进 -> 策略路由计算 -> 目标 Bean 定位与执行**。其中目标 Bean 定位与声明式代理由 `team4u-router-proxy` 提供。
 
 ```mermaid
 graph TD
@@ -108,7 +108,7 @@ com.team4u.framework.router
 ├── core                             # 路由器内置实现 (AbstractRouter, MapRouter, ExpressionRouter, WeightRouter, CompositeRouter)
 ├── factory                          # 路由器工厂与注册表 (RouterFactoryRegistry, MapRouterFactory, ExpressionRouterFactory, WeightRouterFactory, CompositeRouterFactory)
 ├── parser                           # 路由配置解析器 (DefaultRoutePolicyParser)
-├── proxy                            # 声明式路由与代理支持 (@Routed, @RouteContext, RoutedProxyFactory, RoutedBeanLocator, BeanResolver, RoutedMethodInterceptor)
+├── proxy                            # team4u-router-proxy 模块：声明式路由与代理支持 (@Routed, @RouteContext, RoutedProxyFactory, RoutedBeanLocator, BeanResolver, RoutedMethodInterceptor)
 ├── spi                              # SPI 扩展接口 (RouterFactory, RoutePolicyParser)
 ├── RouterBootstrap.java             # 全局引导与配置锁 (Locked / Frozen 状态机)
 └── RoutingManager.java              # 路由管理器统一门面 (Facade)
