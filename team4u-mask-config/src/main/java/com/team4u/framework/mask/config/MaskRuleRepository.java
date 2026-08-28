@@ -8,6 +8,7 @@ import com.team4u.framework.serializer.json.JsonUtil;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
+import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -124,9 +125,27 @@ public class MaskRuleRepository implements MaskRuleResolver {
      * @param rules className -> (fieldName -> maskPolicyKey)
      */
     public void setRuleCache(Map<String, Map<String, String>> rules) {
-        this.manualRuleCache = rules != null ? rules : new HashMap<>();
+        this.manualRuleCache = immutableRuleSnapshot(rules);
     }
 
+    private static Map<String, Map<String, String>> immutableRuleSnapshot(
+            Map<String, Map<String, String>> rules) {
+        if (rules == null) {
+            return Collections.emptyMap();
+        }
+
+        Map<String, Map<String, String>> snapshot = new HashMap<>();
+        for (Map.Entry<String, Map<String, String>> classEntry : rules.entrySet()) {
+            Map<String, String> classRules = classEntry.getValue();
+            if (classRules != null) {
+                classRules = Collections.unmodifiableMap(new HashMap<>(classRules));
+            }
+            snapshot.put(classEntry.getKey(), classRules);
+        }
+
+        validateRules(snapshot);
+        return Collections.unmodifiableMap(snapshot);
+    }
     /**
      * 检索脱敏规则
      *
@@ -139,17 +158,26 @@ public class MaskRuleRepository implements MaskRuleResolver {
 
         // 精确匹配具体的类名（优先级最高，允许特殊类覆盖全局规则）
         Map<String, String> classRules = rules.get(className);
-        if (classRules != null && classRules.containsKey(fieldName)) {
-            String classRule = classRules.get(fieldName);
-            if (classRule == null) {
-                throw new IllegalArgumentException("Mask rule must not be null: "
-                        + className + "." + fieldName);
+        if (rules.containsKey(className)) {
+            if (classRules == null) {
+                throw new IllegalArgumentException("Mask class rules must not be null: "
+                        + className);
             }
-            return classRule;
+            if (classRules.containsKey(fieldName)) {
+                String classRule = classRules.get(fieldName);
+                if (classRule == null) {
+                    throw new IllegalArgumentException("Mask rule must not be null: "
+                            + className + "." + fieldName);
+                }
+                return classRule;
+            }
         }
 
         // 兜底匹配：全局通配符规则（配置了 "*" 的字段）
         Map<String, String> globalRules = rules.get("*");
+        if (rules.containsKey("*") && globalRules == null) {
+            throw new IllegalArgumentException("Mask class rules must not be null: *");
+        }
         if (globalRules != null && globalRules.containsKey(fieldName)) {
             String globalRule = globalRules.get(fieldName);
             if (globalRule == null) {
