@@ -25,7 +25,9 @@ public class TranslatorQuickstartTest {
             + "\"No stock for ${action}: ${rawCode}/${rawMessage}\"}},"
             + "{\"condition\":\"code == 'DB_TIMEOUT'\","
             + "\"value\":{\"code\":\"SYSTEM_BUSY\",\"defaultMsg\":\"System busy (${rawCode})\"}},"
-            + "{\"condition\":\"code == 'PARTIAL'\",\"value\":{\"logLevel\":\"WARN\"}}"
+            + "{\"condition\":\"code == 'PARTIAL_MSG'\",\"value\":{\"defaultMsg\":"
+            + "\"Partial failure: ${rawMessage}\"}},"
+            + "{\"condition\":\"code == 'PARTIAL_CODE'\",\"value\":{\"code\":\"PARTIAL_DONE\"}}"
             + "]}";
 
     private TestConfigContext configContext;
@@ -38,6 +40,7 @@ public class TranslatorQuickstartTest {
 
         RoutingManager routingManager = RoutingManager.builder()
                 .configManager(configContext.getConfigManager())
+                .useGlobalInterceptors(false)
                 .build();
         translator = new DefaultResponseTranslator(routingManager);
     }
@@ -82,14 +85,23 @@ public class TranslatorQuickstartTest {
         Map<String, Object> args = new HashMap<>();
         args.put("traceId", "trace-002");
 
-        TranslatedResponse response = translator.translate(
-                RawResponse.of("ORDER", "PARTIAL", "partial definition"),
+        TranslatedResponse messageOnly = translator.translate(
+                RawResponse.of("ORDER", "PARTIAL_MSG", "partial message"),
                 "translator.quickstart",
                 args);
 
-        Assert.assertEquals("PARTIAL", response.getCode());
-        Assert.assertEquals("partial definition", response.getMessage());
-        Assert.assertEquals("trace-002", response.getTraceId());
+        Assert.assertEquals("PARTIAL_MSG", messageOnly.getCode());
+        Assert.assertEquals("Partial failure: partial message", messageOnly.getMessage());
+        Assert.assertEquals("trace-002", messageOnly.getTraceId());
+
+        TranslatedResponse codeOnly = translator.translate(
+                RawResponse.of("ORDER", "PARTIAL_CODE", "partial code"),
+                "translator.quickstart",
+                args);
+
+        Assert.assertEquals("PARTIAL_DONE", codeOnly.getCode());
+        Assert.assertEquals("partial code", codeOnly.getMessage());
+        Assert.assertEquals("trace-002", codeOnly.getTraceId());
     }
 
     @Test
