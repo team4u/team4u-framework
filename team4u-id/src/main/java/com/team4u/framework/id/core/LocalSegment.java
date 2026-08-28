@@ -77,7 +77,7 @@ class LocalSegment {
                     // 并发取段已完成
                     continue;
                 }
-                long total = counter.incrementAndGet(key, size);
+                long total = counter.incrementAndGet(key, size, 0);
                 long base = total - size;
                 if (count != null && !recycle && base >= count) {
                     exhausted = true;

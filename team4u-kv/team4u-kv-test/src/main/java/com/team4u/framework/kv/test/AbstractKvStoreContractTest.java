@@ -250,14 +250,14 @@ public abstract class AbstractKvStoreContractTest {
         SpaceKey key = SpaceKey.of("contract", "counter");
 
         // 键不存在从 0 开始：首次调用返回 delta
-        assertEquals(1, counter.incrementAndGet(key, 1));
+        assertEquals(1, counter.incrementAndGet(key, 1, 0));
         // 返回值为递增后的精确当前值
-        assertEquals(3, counter.incrementAndGet(key, 2));
-        assertEquals(3, counter.incrementAndGet(key, 0));
+        assertEquals(3, counter.incrementAndGet(key, 2, 0));
+        assertEquals(3, counter.incrementAndGet(key, 0, 0));
         // 计数器与普通值域互不干扰
         SpaceKey other = SpaceKey.of("contract", "counter-value");
         store.put(other, KvRecord.of("v1"), PutMode.SET);
-        assertEquals(4, counter.incrementAndGet(key, 1));
+        assertEquals(4, counter.incrementAndGet(key, 1, 0));
         assertEquals("v1", store.get(other).getValue());
     }
 
@@ -277,7 +277,7 @@ public abstract class AbstractKvStoreContractTest {
                 pool.submit(() -> {
                     start.await();
                     for (int j = 0; j < incrementsPerThread; j++) {
-                        counter.incrementAndGet(key, 1);
+                        counter.incrementAndGet(key, 1, 0);
                     }
                     return null;
                 });
@@ -289,7 +289,7 @@ public abstract class AbstractKvStoreContractTest {
             pool.shutdownNow();
         }
         assertEquals("counter must not lose updates",
-                threads * incrementsPerThread, counter.incrementAndGet(key, 0));
+                threads * incrementsPerThread, counter.incrementAndGet(key, 0, 0));
     }
 
     @Test
