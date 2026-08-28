@@ -1,6 +1,6 @@
 # 快速开始
 
-本文介绍如何在纯 Java 与 Spring Boot 环境下使用 `team4u-bean` 进行对象管理。
+本文介绍如何在纯 Java 与 Spring 环境下使用 `team4u-bean` / `team4u-bean-spring` 进行对象管理。
 
 ---
 
@@ -51,26 +51,30 @@ public class BeanQuickStart {
 
 ---
 
-## Spring 环境无缝桥接
+## Spring 环境显式桥接
 
-当你的通用 SDK 运行在 Spring Boot 环境中时，只需将 `SpringBeanContainer` 声明为一个 Spring Bean：
+当你的通用 SDK 运行在 Spring 环境中时，添加 `team4u-bean-spring`，并在应用配置类显式导入共享配置：
+
+```xml
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-bean-spring</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+</dependency>
+```
 
 ```java
-import com.team4u.framework.bean.provider.SpringBeanContainer;
-import org.springframework.context.annotation.Bean;
+import com.team4u.framework.bean.spring.Team4uBeanConfiguration;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 
 @Configuration
+@Import(Team4uBeanConfiguration.class)
 public class FrameworkBeanConfig {
-
-    @Bean
-    public SpringBeanContainer springBeanContainer() {
-        // 当该 Bean 被 Spring 初始化时，自动实现 ApplicationContextAware 并挂载到 BeanManager
-        return new SpringBeanContainer();
-    }
 }
 ```
 
+`Team4uBeanConfiguration` 会注册唯一的 `SpringBeanContainer`。该 Bean 被 Spring 初始化时自动注入 `ApplicationContext` 并挂载到 `BeanManager`。
 在任何业务代码或底层 SDK 内部，无需引入 `@Autowired` 注解，即可透明读取 Spring 托管的 Bean：
 
 ```java

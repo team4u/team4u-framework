@@ -25,7 +25,7 @@
 | 13. Router Core and Router Proxy Split | Complete |
 | 14. Translator Convergence After Router | Complete |
 | 15. Split Mask Core, Jackson Adapter, and Dynamic Config | Complete |
-| 16. Split bean-spring as Plain Spring Configuration | Pending |
+| 16. Split bean-spring as Plain Spring Configuration | Complete |
 | 17. Log Core/Governance Split with Injected Serializer and Interceptors | Pending |
 | 18. JMH Evidence, Performance Copy Cleanup, Release Gate | Pending |
 
@@ -56,3 +56,5 @@ Task 13 complete: moved the declarative proxy adapter to `team4u-router-proxy` w
 Task 14 complete: added a real JSON-policy translator quickstart without router mocks, test-scoped config-test and the Jackson provider, enforced the router-core-only compile/runtime boundary, and documented the explicit provider/adapter split. Commit `test(translator): lock post-router boundary`.
 
 Task 15 complete: split mask core, Jackson adapter, and config-driven rules with unchanged adapter FQCNs, fail-closed policy resolution, and deterministic global resolver installation. Review remediation made explicit null initial/hot/manual rules fail closed, added ownership-aware atomic global uninstall, restored `FastMasker` and Jackson `MaskConfig` APIs, broadened the Spring Enforcer patterns with negative probes, and corrected the quickstart/full-reactor evidence. Final remediation commit: `fix(mask): close dynamic rule and lifecycle gaps`. Final review remediation rejects manual null class/field maps before publication, deep snapshots caller maps, and verifies the 54 split-module tests; publication remains pending.
+
+Task 16 complete: split the unchanged-FQCN Spring adapter into plain `team4u-bean-spring`, kept bean core Spring-free, and moved retry-spring to shared explicit configuration. Full clean tests, consumer/release contracts, release packaging, Java 8 bytecode, dependency guards, and exact Git rename checks passed; one unrelated KV timing test passed on focused rerun after a transient consumer-it verify failure. Report: `.superpowers/sdd/task-16-report.md`.

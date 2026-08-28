@@ -8,22 +8,28 @@
         <groupId>com.team4u</groupId>
         <artifactId>team4u-framework</artifactId>
         <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../pom.xml</relativePath>
     </parent>
 
-    <artifactId>team4u-bean</artifactId>
+    <artifactId>team4u-bean-spring</artifactId>
 
     <dependencies>
         <dependency>
-            <groupId>org.slf4j</groupId>
-            <artifactId>slf4j-api</artifactId>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-bean</artifactId>
+            <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>org.projectlombok</groupId>
-            <artifactId>lombok</artifactId>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-context</artifactId>
         </dependency>
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-test</artifactId>
         </dependency>
     </dependencies>
 
@@ -34,7 +40,7 @@
                 <artifactId>maven-enforcer-plugin</artifactId>
                 <executions>
                     <execution>
-                        <id>enforce-no-spring</id>
+                        <id>enforce-plain-spring-boundary</id>
                         <goals>
                             <goal>enforce</goal>
                         </goals>
@@ -42,10 +48,11 @@
                             <rules>
                                 <bannedDependencies>
                                     <excludes>
-                                        <exclude>org.springframework*:*:*:*:compile</exclude>
-                                        <exclude>org.springframework*:*:*:*:runtime</exclude>
+                                        <exclude>org.springframework.boot:*:*:*:compile</exclude>
+                                        <exclude>org.springframework.boot:*:*:*:runtime</exclude>
+                                        <exclude>org.springframework.boot:*:*:*:test</exclude>
                                     </excludes>
-                                    <message>bean core must remain Spring-free; use team4u-bean-spring for the adapter</message>
+                                    <message>bean-spring is a plain Spring 5.3 adapter, not a Boot auto-configuration module</message>
                                 </bannedDependencies>
                             </rules>
                         </configuration>

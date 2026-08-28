@@ -1,7 +1,7 @@
 # Team4u 1.0 Migration Guide
 
 ## Maven dependency management
-Team4u 1.0 publishes one dependency-management POM. Import the root POM; there is no separate BOM artifact. The Task 15 reactor and root BOM manage 38 concrete framework leaves.
+Team4u 1.0 publishes one dependency-management POM. Import the root POM; there is no separate BOM artifact. The Task 16 reactor and root BOM manage 39 concrete framework leaves.
 
 ```xml
 <dependencyManagement>
@@ -64,6 +64,26 @@ Managed retry governance moved from `team4u-retry-core` to `team4u-retry-managed
 | 1.0 | Removed `Retries.managed(ManagedRetryClient)` | Use `ManagedRetries.with(client)` from `team4u-retry-managed`; `Retries` supports INLINE only. |
 | 1.0 | Moved `com.team4u.framework.retry.api.ManagedSubmitResult` | Use `com.team4u.framework.retry.managed.ManagedSubmitResult`. |
 | 1.0 | Moved `com.team4u.framework.retry.config.DynamicRetryPolicyRegistry` | Use `com.team4u.framework.retry.dynamic.DynamicRetryPolicyRegistry` from `team4u-retry-config`. |
+
+## Bean Spring adapter split
+
+`com.team4u.framework.bean.provider.SpringBeanContainer` keeps its FQCN but moved from `team4u-bean` to `team4u-bean-spring`. Pure Java local-container users keep only `team4u-bean`; it has no Spring compile, test, runtime, or source edge.
+
+Spring users add `com.team4u:team4u-bean-spring`, remove manual `@Bean SpringBeanContainer` declarations, and import the plain configuration explicitly:
+
+```java
+@Configuration
+@Import(Team4uBeanConfiguration.class)
+public class ApplicationConfiguration {
+}
+```
+
+`team4u-retry-spring` now depends on `team4u-bean-spring`; its `RetrySpringConfiguration` imports `Team4uBeanConfiguration`, so `@EnableRetry` still supplies exactly one adapter without application-side manual wiring.
+
+| Version | Removed or moved API | Migration |
+| --- | --- | --- |
+| 1.0 | Moved `SpringBeanContainer` from `team4u-bean` | FQCN is unchanged; add `team4u-bean-spring` and replace manual `@Bean` wiring with `@Import(Team4uBeanConfiguration.class)`. |
+| 1.0 | Removed `RetrySpringConfiguration.springBeanContainer()` | Use `@EnableRetry`; the imported shared configuration registers one `SpringBeanContainer`. |
 
 ## Mask adapter and dynamic config split
 

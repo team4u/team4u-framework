@@ -1,6 +1,6 @@
 package com.team4u.framework.retry.spring;
 
-import com.team4u.framework.bean.provider.SpringBeanContainer;
+import com.team4u.framework.bean.spring.Team4uBeanConfiguration;
 import com.team4u.framework.retry.inline.DefaultInlineRetryClient;
 import com.team4u.framework.retry.inline.InlineRetryClient;
 import com.team4u.framework.retry.common.concurrent.RetryExecutorManager;
@@ -15,6 +15,7 @@ import org.springframework.beans.factory.ListableBeanFactory;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
 import org.springframework.context.annotation.Role;
 import org.springframework.core.Ordered;
 
@@ -24,6 +25,7 @@ import org.springframework.core.Ordered;
  * 负责注册 AOP 切面、拦截器以及相关的基础设施 Bean，以支持在 Spring 环境下使用重试功能。
  */
 @Configuration
+@Import(Team4uBeanConfiguration.class)
 public class RetrySpringConfiguration {
 
     /**
@@ -58,11 +60,6 @@ public class RetrySpringConfiguration {
     @Bean(destroyMethod = "shutdown")
     public RetryExecutorManager retryExecutorManager() {
         return new RetryExecutorManager(false);
-    }
-
-    @Bean
-    public SpringBeanContainer springBeanContainer() {
-        return new SpringBeanContainer();
     }
 
     /**

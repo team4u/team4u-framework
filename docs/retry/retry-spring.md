@@ -31,7 +31,7 @@ public class OrderRpcService {
 }
 ```
 
-`@EnableRetry` 会注册 INLINE 客户端、容器级调度线程池和 Spring Bean 容器适配。没有 `ManagedRetryClient` Bean 时 INLINE 正常工作；调用 `MANAGED` 方法会快速失败。
+`@EnableRetry` 会注册 INLINE 客户端、容器级调度线程池和 Spring Bean 容器适配器。适配器由 `RetrySpringConfiguration` 显式 `@Import(Team4uBeanConfiguration.class)` 提供；这个配置来自 `team4u-bean-spring`，一个上下文只会注册一个 `SpringBeanContainer`。没有 `ManagedRetryClient` Bean 时 INLINE 正常工作；调用 `MANAGED` 方法会快速失败。
 
 策略可通过动态配置或 `NamedRetryPolicyRegistry` 提供。`maxRetries` 不包含首次执行；INLINE 策略不需要 `foregroundMaxRetries`。
 
