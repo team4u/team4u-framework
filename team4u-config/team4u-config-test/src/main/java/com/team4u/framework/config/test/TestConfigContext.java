@@ -9,6 +9,7 @@ import lombok.Getter;
  * 配置管理测试上下文工具类
  * <p>
  * 封装了零延迟热重载的 ConfigManager 及 InMemoryConfigSource，专门用于加速和简化单元测试。
+ * 代理能力由 team4u-config-proxy 依赖通过 ServiceLoader 提供。
  * </p>
  */
 @Getter
@@ -26,7 +27,6 @@ public class TestConfigContext {
 
     public TestConfigContext(String sourceName, int priority) {
         this.source = new InMemoryConfigSource(sourceName, priority);
-        // team4u-config-proxy is supplied by the ServiceLoader-backed proxy provider.
         this.configManager = ConfigManager.builder()
                 .addSource(source)
                 .addWatcher(source)
