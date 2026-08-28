@@ -27,6 +27,8 @@ import java.util.function.Supplier;
 public class HotReloadManagerTest {
 
     private static final long TIMEOUT_SECONDS = 5;
+    private static final long BLOCKING_CALLBACK_TIMEOUT_SECONDS = 15;
+    private static final long CONCURRENT_PROGRESS_TIMEOUT_SECONDS = 2;
 
     private final TrackingSource source = new TrackingSource();
     private final Supplier<List<ConfigSource>> sources = () -> Collections.singletonList(source);
@@ -67,7 +69,7 @@ public class HotReloadManagerTest {
         AtomicInteger commits = new AtomicInteger();
         manager = newManager(2_000, (generation, snapshot) -> {
             commits.incrementAndGet();
-            return true;
+            return new HotReloadManager.ReloadEvent(snapshot(11, "old"), snapshot);
         });
 
         source.put("key", "first");
@@ -89,7 +91,7 @@ public class HotReloadManagerTest {
         AtomicInteger commits = new AtomicInteger();
         manager = newManager(50, (generation, snapshot) -> {
             commits.incrementAndGet();
-            return true;
+            return new HotReloadManager.ReloadEvent(snapshot(11, "old"), snapshot);
         });
 
         source.put("key", "first");
@@ -108,7 +110,7 @@ public class HotReloadManagerTest {
         AtomicInteger commits = new AtomicInteger();
         manager = newManager(2_000, (generation, snapshot) -> {
             commits.incrementAndGet();
-            return true;
+            return new HotReloadManager.ReloadEvent(snapshot(11, "old"), snapshot);
         });
 
         source.put("key", "first");
@@ -127,7 +129,7 @@ public class HotReloadManagerTest {
         AtomicInteger commits = new AtomicInteger();
         manager = newManager(0, (generation, snapshot) -> {
             commits.incrementAndGet();
-            return true;
+            return new HotReloadManager.ReloadEvent(snapshot(11, "old"), snapshot);
         });
 
         source.put("key", "old");
@@ -148,13 +150,136 @@ public class HotReloadManagerTest {
                 readPendingTask());
     }
 
+    @Test
+    public void committedReloadReturnsEventAndNotifiesOutsideExecutionLock() throws Exception {
+        ConfigSnapshot oldSnapshot = snapshot(11, "old");
+        AtomicReference<HotReloadManager.ReloadEvent> notifiedEvent = new AtomicReference<>();
+        AtomicInteger notifications = new AtomicInteger();
+        CountDownLatch firstNotifierEntered = new CountDownLatch(1);
+        CountDownLatch releaseFirstNotifier = new CountDownLatch(1);
+        AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
+        manager = newManager(
+                (generation, snapshot) -> new HotReloadManager.ReloadEvent(oldSnapshot, snapshot),
+                event -> {
+                    try {
+                        int invocation = notifications.incrementAndGet();
+                        if (invocation == 1) {
+                            firstNotifierEntered.countDown();
+                            awaitRelease(releaseFirstNotifier, BLOCKING_CALLBACK_TIMEOUT_SECONDS);
+                        }
+                        if (invocation == 2) {
+                            notifiedEvent.set(event);
+                        }
+                    } catch (Throwable failure) {
+                        callbackFailure.compareAndSet(null, failure);
+                    }
+                });
+
+        source.put("key", "new");
+        Future<?> firstReload = executor.submit(manager::signalChange);
+        Assert.assertTrue(firstNotifierEntered.await(5, TimeUnit.SECONDS));
+
+        AtomicReference<Throwable> secondFailure = new AtomicReference<>();
+        Thread secondReload = new Thread(() -> {
+            try {
+                source.put("key", "second");
+                manager.signalChange();
+            } catch (Throwable failure) {
+                secondFailure.set(failure);
+            }
+        }, "hot-reload-notifier-concurrency");
+        secondReload.start();
+        waitFor("second commit and callback must finish while the first callback is blocked",
+                () -> source.startedLoads.get() == 2 && notifications.get() == 2,
+                CONCURRENT_PROGRESS_TIMEOUT_SECONDS);
+
+        releaseFirstNotifier.countDown();
+        firstReload.get(5, TimeUnit.SECONDS);
+        secondReload.join(TimeUnit.SECONDS.toMillis(5));
+        Assert.assertFalse(secondReload.isAlive());
+        Assert.assertNull(secondFailure.get());
+        Assert.assertNull(callbackFailure.get());
+
+        HotReloadManager.ReloadEvent event = notifiedEvent.get();
+        Assert.assertNotNull(event);
+        Assert.assertSame(oldSnapshot, event.oldSnapshot);
+        Assert.assertEquals("second", event.newSnapshot.getEntries().get("key").getValue());
+    }
+
+    @Test
+    public void staleReloadReturnsNoEventAndNeverNotifies() {
+        AtomicBoolean notified = new AtomicBoolean();
+        manager = newManager((generation, snapshot) -> null, event -> notified.set(true));
+
+        source.put("key", "new");
+        manager.signalChange();
+
+        Assert.assertFalse(notified.get());
+    }
+
+    @Test
+    public void notifierFailureDoesNotChangeCommittedSnapshot() {
+        AtomicInteger notifications = new AtomicInteger();
+        manager = newManager(
+                (generation, snapshot) -> new HotReloadManager.ReloadEvent(snapshot(11, "old"), snapshot),
+                event -> {
+                    notifications.incrementAndGet();
+                    throw new IllegalStateException("expected notifier failure");
+                });
+
+        source.put("key", "new");
+        manager.signalChange();
+
+        Assert.assertEquals(1, notifications.get());
+    }
+
+    private HotReloadManager newManager(ReloadCommitter committer, ReloadNotifier notifier) {
+        return new HotReloadManager(
+                sources,
+                new SnapshotAggregator(),
+                new AtomicLong(),
+                0,
+                committer,
+                notifier);
+    }
+
+    private static ConfigSnapshot snapshot(long version, String value) {
+        return new ConfigSnapshot(version, Collections.singletonMap(
+                "key", new ConfigEntry("key", value, "tracking", 0)));
+    }
+
+    private static void awaitRelease(CountDownLatch latch, long timeoutSeconds) {
+        try {
+            if (!latch.await(timeoutSeconds, TimeUnit.SECONDS)) {
+                throw new IllegalStateException(
+                        "timed out after " + timeoutSeconds + "s waiting for latch release");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+    }
+
+    private static void waitFor(String message, BooleanSupplier condition, long timeoutSeconds)
+            throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
+        while (!condition.getAsBoolean()) {
+            if (System.nanoTime() >= deadline) {
+                throw new AssertionError(message);
+            }
+            TimeUnit.MILLISECONDS.sleep(10);
+        }
+    }
+
     private HotReloadManager newManager(long delay, ReloadCommitter committer) {
         return new HotReloadManager(
                 sources,
                 new SnapshotAggregator(),
                 new AtomicLong(),
                 delay,
-                committer);
+                committer,
+                event -> {
+                });
     }
 
     private Object readPendingTask() throws Exception {

@@ -25,6 +25,8 @@ import java.util.function.BooleanSupplier;
 public class ConfigGlobalLifecycleConcurrencyTest {
 
     private static final long TIMEOUT_SECONDS = 5;
+    private static final long BLOCKING_CALLBACK_TIMEOUT_SECONDS = 15;
+    private static final long CONCURRENT_PROGRESS_TIMEOUT_SECONDS = 2;
 
     private ExecutorService executor;
 
@@ -84,10 +86,13 @@ public class ConfigGlobalLifecycleConcurrencyTest {
         registration.start();
 
         waitFor("late source must be registered before refresh queues",
-                () -> ConfigSourceRegistry.global().getPolicies().contains(lateSource));
+                () -> ConfigSourceRegistry.global().getPolicies().contains(lateSource),
+                TIMEOUT_SECONDS);
         waitFor("registration refresh must block on the global monitor",
                 () -> registration.getState() == Thread.State.BLOCKED
-                        && isWaitingAt(registration, "refreshGlobalIfInitialized"));
+                        && isWaitingAt(registration, "refreshGlobalIfInitialized"),
+                TIMEOUT_SECONDS);
+
         Assert.assertTrue(registration.isAlive());
 
         releaseLoad.countDown();
@@ -115,15 +120,28 @@ public class ConfigGlobalLifecycleConcurrencyTest {
         source.put("concurrent.key", "old");
         ConfigBootstrap.global().addSource(source);
 
+        Thread initializationThread = executor.submit(() -> Thread.currentThread()).get(5, TimeUnit.SECONDS);
         Future<ConfigManager> initialization = executor.submit(ConfigManager::global);
         Assert.assertTrue(source.loadEntered.await(5, TimeUnit.SECONDS));
 
-        Future<?> reset = executor.submit(() -> ConfigBootstrap.global().resetForTests());
-        waitFor("reset must serialize with in-flight global initialization", () -> !reset.isDone());
+        AtomicReference<Throwable> resetFailure = new AtomicReference<>();
+        Thread reset = new Thread(() -> {
+            try {
+                ConfigBootstrap.global().resetForTests();
+            } catch (Throwable failure) {
+                resetFailure.set(failure);
+            }
+        }, "config-reset-serialization");
+        reset.start();
+        waitFor("reset must wait for concurrent global initialization", reset::isAlive,
+                TIMEOUT_SECONDS);
+        Assert.assertEquals(Thread.State.TIMED_WAITING, initializationThread.getState());
 
         releaseLoad.countDown();
         ConfigManager initialized = initialization.get(5, TimeUnit.SECONDS);
-        reset.get(5, TimeUnit.SECONDS);
+        reset.join(TimeUnit.SECONDS.toMillis(5));
+        Assert.assertFalse(reset.isAlive());
+        Assert.assertNull(resetFailure.get());
 
         Assert.assertSame(initialized, ConfigManager.global());
 
@@ -218,8 +236,91 @@ public class ConfigGlobalLifecycleConcurrencyTest {
         Assert.assertEquals(1, watcher.destroyCount.get());
     }
 
-    private static void waitFor(String message, BooleanSupplier condition) throws InterruptedException {
-        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIMEOUT_SECONDS);
+    @Test
+    public void blockedReloadListenerDoesNotHoldReloadOrManagerLifecycleLocks() throws Exception {
+        AtomicReference<Runnable> signalReference = new AtomicReference<>();
+        RecordingWatcher source = new RecordingWatcher(signalReference);
+        source.put("listener.key", "old");
+        ConfigSourceRegistry sources = new ConfigSourceRegistry();
+        ConfigWatcherRegistry watchers = new ConfigWatcherRegistry();
+        sources.register(source);
+        watchers.register(source);
+
+        DefaultConfigManager manager = new DefaultConfigManager(
+                sources, watchers, new PropertyConverterRegistry(), null, 0);
+        CountDownLatch firstCallbackEntered = new CountDownLatch(1);
+        CountDownLatch releaseFirstCallback = new CountDownLatch(1);
+        AtomicInteger callbacks = new AtomicInteger();
+        AtomicReference<String> secondCallbackValue = new AtomicReference<>();
+        AtomicReference<Throwable> callbackFailure = new AtomicReference<>();
+        manager.registerChangeListener("listener.key", (key, oldValue, newValue) -> {
+            try {
+                int invocation = callbacks.incrementAndGet();
+                firstCallbackEntered.countDown();
+                if (invocation == 1) {
+                    awaitUnchecked(releaseFirstCallback, BLOCKING_CALLBACK_TIMEOUT_SECONDS);
+                }
+                if (invocation == 2) {
+                    secondCallbackValue.set(newValue);
+                }
+            } catch (Throwable failure) {
+                callbackFailure.compareAndSet(null, failure);
+            }
+        });
+
+        source.put("listener.key", "first");
+        Future<?> firstReload = executor.submit(signalReference.get()::run);
+        Assert.assertTrue(firstCallbackEntered.await(5, TimeUnit.SECONDS));
+
+        AtomicReference<Throwable> secondFailure = new AtomicReference<>();
+        Thread secondReload = new Thread(() -> {
+            try {
+                source.put("listener.key", "second");
+                signalReference.get().run();
+            } catch (Throwable failure) {
+                secondFailure.set(failure);
+            }
+        }, "config-second-reload");
+        secondReload.start();
+
+        AtomicReference<Throwable> resetFailure = new AtomicReference<>();
+        Thread reset = new Thread(() -> {
+            try {
+                manager.resetForTests();
+            } catch (Throwable failure) {
+                resetFailure.set(failure);
+            }
+        }, "config-reset-while-listener-blocked");
+        try {
+            waitFor("second commit and callback must finish while first callback remains blocked",
+                    () -> "second".equals(manager.currentSnapshot().getEntries().get("listener.key").getValue())
+                            && callbacks.get() == 2
+                            && "second".equals(secondCallbackValue.get()),
+                    CONCURRENT_PROGRESS_TIMEOUT_SECONDS);
+
+            reset.start();
+            waitFor("manager reset must execute while the first listener callback is blocked",
+                    () -> reset.getState() == Thread.State.TERMINATED,
+                    CONCURRENT_PROGRESS_TIMEOUT_SECONDS);
+            Assert.assertNull(resetFailure.get());
+            Assert.assertTrue(manager.currentSnapshot().getEntries().isEmpty());
+            Assert.assertEquals(1, source.destroyCount.get());
+        } finally {
+            releaseFirstCallback.countDown();
+        }
+
+        firstReload.get(5, TimeUnit.SECONDS);
+        secondReload.join(TimeUnit.SECONDS.toMillis(5));
+        reset.join(TimeUnit.SECONDS.toMillis(5));
+        Assert.assertFalse(secondReload.isAlive());
+        Assert.assertFalse(reset.isAlive());
+        Assert.assertNull(secondFailure.get());
+        Assert.assertNull(callbackFailure.get());
+    }
+
+    private static void waitFor(String message, BooleanSupplier condition, long timeoutSeconds)
+            throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(timeoutSeconds);
         while (!condition.getAsBoolean()) {
             if (System.nanoTime() >= deadline) {
                 throw new AssertionError(message);
@@ -233,10 +334,22 @@ public class ConfigGlobalLifecycleConcurrencyTest {
         return stack.length > 0 && methodName.equals(stack[0].getMethodName());
     }
 
-    private static void awaitUnchecked(CountDownLatch latch) {
+    private static boolean isBlockedInReset(Thread thread) {
+        StackTraceElement[] stack = thread.getStackTrace();
+        for (StackTraceElement frame : stack) {
+            if ("resetForTests".equals(frame.getMethodName())
+                    && "ConfigBootstrap".equals(frame.getClassName())) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private static void awaitUnchecked(CountDownLatch latch, long timeoutSeconds) {
         try {
-            if (!latch.await(5, TimeUnit.SECONDS)) {
-                throw new IllegalStateException("timed out waiting for latch release");
+            if (!latch.await(timeoutSeconds, TimeUnit.SECONDS)) {
+                throw new IllegalStateException(
+                        "timed out after " + timeoutSeconds + "s waiting for latch release");
             }
         } catch (InterruptedException e) {
             Thread.currentThread().interrupt();
@@ -292,7 +405,6 @@ public class ConfigGlobalLifecycleConcurrencyTest {
             super("recording-watcher", 1);
             this.signalRef = signalRef;
         }
-
         @Override
         public void init() {
             initCount.incrementAndGet();
