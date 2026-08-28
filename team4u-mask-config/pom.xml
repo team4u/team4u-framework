@@ -79,8 +79,8 @@
                                         <exclude>com.team4u:team4u-serializer-jackson:*:*:runtime</exclude>
                                         <exclude>com.fasterxml.jackson*:*:*:*:compile</exclude>
                                         <exclude>com.fasterxml.jackson*:*:*:*:runtime</exclude>
-                                        <exclude>org.springframework:*:*:*:compile</exclude>
-                                        <exclude>org.springframework:*:*:*:runtime</exclude>
+                                        <exclude>org.springframework*:*:*:*:compile</exclude>
+                                        <exclude>org.springframework*:*:*:*:runtime</exclude>
                                     </excludes>
                                     <message>mask-config owns config rules but must not depend on serializer or Jackson adapters.</message>
                                 </bannedDependencies>

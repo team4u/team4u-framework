@@ -32,6 +32,7 @@ MaskBootstrap.global().start(configManager);
 
 - **配置 Key**：`team4u.mask.rules`
 - **数据结构**：`Map<className, Map<fieldName, maskTypeKey>>`
+- **显式 null 规则**：字段规则值为 `null` 时初始化失败；热更新保留上一版有效规则。未配置的字段仍表示不脱敏。
 
 ```json
 {
@@ -77,19 +78,25 @@ graph TD
 public String findRule(String className, String fieldName) {
     Map<String, Map<String, String>> rules = currentRules();
 
-    // 1. 精确匹配类名（优先级最高，允许特殊类覆盖全局规则）
+    // 1. 精确匹配类名（优先级最高；containsKey 区分“未配置”与显式 null）
     Map<String, String> classRules = rules.get(className);
-    if (classRules != null) {
+    if (classRules != null && classRules.containsKey(fieldName)) {
         String classRule = classRules.get(fieldName);
-        if (classRule != null) {
-            return classRule;
+        if (classRule == null) {
+            throw new IllegalArgumentException("Mask rule must not be null: "
+                    + className + "." + fieldName);
         }
+        return classRule;
     }
 
     // 2. 兜底匹配：全局通配符规则（配置了 "*" 的字段）
     Map<String, String> globalRules = rules.get("*");
-    if (globalRules != null) {
-        return globalRules.get(fieldName);
+    if (globalRules != null && globalRules.containsKey(fieldName)) {
+        String globalRule = globalRules.get(fieldName);
+        if (globalRule == null) {
+            throw new IllegalArgumentException("Mask rule must not be null: *." + fieldName);
+        }
+        return globalRule;
     }
 
     return null;

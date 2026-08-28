@@ -28,7 +28,7 @@ public class MaskRuleRepository implements MaskRuleResolver {
      */
     private volatile Map<String, Map<String, String>> manualRuleCache = new HashMap<>();
 
-    private ConfigDrivenRegistry<Map<String, Map<String, String>>> registry;
+    private volatile ConfigDrivenRegistry<Map<String, Map<String, String>>> registry;
 
     private MaskRuleRepository() {
     }
@@ -55,10 +55,11 @@ public class MaskRuleRepository implements MaskRuleResolver {
             throw e;
         }
 
-        if (this.registry != null) {
-            this.registry.destroy();
-        }
+        ConfigDrivenRegistry<Map<String, Map<String, String>>> oldRegistry = this.registry;
         this.registry = newRegistry;
+        if (oldRegistry != null) {
+            oldRegistry.destroy();
+        }
         MaskRuleResolver.Global.install(this);
     }
 
@@ -70,13 +71,12 @@ public class MaskRuleRepository implements MaskRuleResolver {
      */
     public synchronized void reset() {
         this.manualRuleCache = new HashMap<>();
-        if (this.registry != null) {
-            this.registry.destroy();
-            this.registry = null;
+        ConfigDrivenRegistry<Map<String, Map<String, String>>> currentRegistry = this.registry;
+        this.registry = null;
+        if (currentRegistry != null) {
+            currentRegistry.destroy();
         }
-        if (MaskRuleResolver.Global.get() == this) {
-            MaskRuleResolver.Global.reset();
-        }
+        MaskRuleResolver.Global.uninstall(this);
     }
 
     private Map<String, Map<String, String>> parseRules(String json) {
@@ -89,10 +89,32 @@ public class MaskRuleRepository implements MaskRuleResolver {
                     new TypeReference<Map<String, Map<String, String>>>() {
                     },
                     false);
-            return rules != null ? rules : new HashMap<>();
+            if (rules == null) {
+                return new HashMap<>();
+            }
+            validateRules(rules);
+            return rules;
+        } catch (IllegalArgumentException e) {
+            throw e;
         } catch (Exception e) {
             log.error("MaskRuleRepository|parseConfig|error|msg={}", e.getMessage());
             throw new IllegalArgumentException("Invalid mask rule config", e);
+        }
+    }
+
+    private static void validateRules(Map<String, Map<String, String>> rules) {
+        for (Map.Entry<String, Map<String, String>> classEntry : rules.entrySet()) {
+            Map<String, String> classRules = classEntry.getValue();
+            if (classRules == null) {
+                throw new IllegalArgumentException("Mask class rules must not be null: "
+                        + classEntry.getKey());
+            }
+            for (Map.Entry<String, String> fieldEntry : classRules.entrySet()) {
+                if (fieldEntry.getValue() == null) {
+                    throw new IllegalArgumentException("Mask rule must not be null: "
+                            + classEntry.getKey() + "." + fieldEntry.getKey());
+                }
+            }
         }
     }
 
@@ -117,17 +139,23 @@ public class MaskRuleRepository implements MaskRuleResolver {
 
         // 精确匹配具体的类名（优先级最高，允许特殊类覆盖全局规则）
         Map<String, String> classRules = rules.get(className);
-        if (classRules != null) {
+        if (classRules != null && classRules.containsKey(fieldName)) {
             String classRule = classRules.get(fieldName);
-            if (classRule != null) {
-                return classRule;
+            if (classRule == null) {
+                throw new IllegalArgumentException("Mask rule must not be null: "
+                        + className + "." + fieldName);
             }
+            return classRule;
         }
 
         // 兜底匹配：全局通配符规则（配置了 "*" 的字段）
         Map<String, String> globalRules = rules.get("*");
-        if (globalRules != null) {
-            return globalRules.get(fieldName);
+        if (globalRules != null && globalRules.containsKey(fieldName)) {
+            String globalRule = globalRules.get(fieldName);
+            if (globalRule == null) {
+                throw new IllegalArgumentException("Mask rule must not be null: *." + fieldName);
+            }
+            return globalRule;
         }
 
         return null;

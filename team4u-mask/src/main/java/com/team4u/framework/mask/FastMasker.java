@@ -5,7 +5,7 @@ import com.team4u.framework.policy.util.PolicyScanner;
 /**
  * High-performance fail-closed mask facade.
  */
-public final class FastMasker {
+public class FastMasker {
 
     private static final MaskPolicyRegistry REGISTRY =
             new MaskPolicyRegistry(MaskPolicy.class);
@@ -15,7 +15,7 @@ public final class FastMasker {
         PolicyScanner.registerFromServiceLoader(REGISTRY);
     }
 
-    private FastMasker() {
+    public FastMasker() {
     }
 
     public static void register(MaskPolicy policy) {

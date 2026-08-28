@@ -1,10 +1,18 @@
 package com.team4u.framework.mask;
 
 import com.team4u.framework.policy.api.KeyedPolicy;
+import org.junit.After;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.lang.reflect.Constructor;
+import java.lang.reflect.Modifier;
 public class MaskQuickstartTest {
+
+    @After
+    public void tearDown() {
+        MaskRuleResolver.Global.reset();
+    }
 
     @Test
     public void maskBuiltInPoliciesWithStaticFacade() {
@@ -36,16 +44,41 @@ public class MaskQuickstartTest {
         Assert.assertNull(MaskRuleResolver.Global.get().findRule("com.example.User", "mobile"));
     }
 
+    @Test
+    public void globalRuleResolverUninstallUsesOwnershipComparison() {
+        MaskRuleResolver owner = (className, fieldName) -> "MOBILE";
+        MaskRuleResolver newer = (className, fieldName) -> "EMAIL";
+
+        MaskRuleResolver.Global.install(owner);
+        Assert.assertFalse(MaskRuleResolver.Global.uninstall(newer));
+        Assert.assertSame(owner, MaskRuleResolver.Global.get());
+
+        Assert.assertTrue(MaskRuleResolver.Global.uninstall(owner));
+        Assert.assertSame(MaskRuleResolver.NO_OP, MaskRuleResolver.Global.get());
+        Assert.assertFalse(MaskRuleResolver.Global.uninstall(owner));
+        Assert.assertNull(MaskRuleResolver.Global.get().findRule("com.example.User", "mobile"));
+    }
+
 
     @Test
-    public void maskPolicyRemovesKeyedPolicyCompatibility() {
+    public void maskPolicyPreservesKeyedPolicyCompatibility() {
         Assert.assertTrue(KeyedPolicy.class.isAssignableFrom(PassportMaskPolicy.class));
     }
+    @Test
     public void annotationDeclaresMaskPolicyWithoutSerializerDependency() {
         Mask annotation = AnnotatedValue.class.getDeclaredFields()[0].getAnnotation(Mask.class);
 
         Assert.assertNotNull(annotation);
         Assert.assertSame(MaskType.MOBILE, annotation.value());
+    }
+
+    @Test
+    public void fastMaskerKeepsPublicExtensionSurface() throws Exception {
+        Assert.assertFalse(Modifier.isFinal(FastMasker.class.getModifiers()));
+
+        Constructor<FastMasker> constructor = FastMasker.class.getDeclaredConstructor();
+        Assert.assertTrue(Modifier.isPublic(constructor.getModifiers()));
+        Assert.assertNotNull(constructor.newInstance());
     }
 
     private static final class PassportMaskPolicy implements MaskPolicy {

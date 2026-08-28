@@ -23,4 +23,30 @@ public class MaskConfig {
         this.maxStringLength = maxStringLength;
         return this;
     }
+
+    @Override
+    public boolean equals(Object obj) {
+        if (this == obj) {
+            return true;
+        }
+        if (!(obj instanceof MaskConfig)) {
+            return false;
+        }
+        MaskConfig other = (MaskConfig) obj;
+        return other.canEqual(this) && maxStringLength == other.maxStringLength;
+    }
+
+    @Override
+    public int hashCode() {
+        return 59 + Integer.hashCode(maxStringLength);
+    }
+
+    @Override
+    public String toString() {
+        return "MaskConfig(maxStringLength=" + maxStringLength + ")";
+    }
+
+    protected boolean canEqual(Object obj) {
+        return obj instanceof MaskConfig;
+    }
 }
