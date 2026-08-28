@@ -20,12 +20,6 @@
         </dependency>
         <dependency>
             <groupId>com.team4u</groupId>
-            <artifactId>team4u-serializer-jackson</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.team4u</groupId>
             <artifactId>team4u-base</artifactId>
             <version>${project.version}</version>
         </dependency>

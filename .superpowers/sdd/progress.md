@@ -38,3 +38,5 @@ Task 4 review remediation: complete; corrected the local record confusion withou
 Task 5 complete: added pure Java Base matcher, preserved Criterion adapter semantics, and removed Criterion Spring production coupling.
 
 Task 6 complete: kept the one-artifact public ProxyBuilder API, made ByteBuddy optional and reflectively loaded, added isolated/consumer proofs, and committed `refactor(proxy): make bytebuddy optional`.
+
+Task 7 complete: enforced serializer provider boundaries, cleaned unused translator/mask test providers, and recorded retry-lease-runtime as the permanent Jackson durable-schema integration exception; review remediation complete.
