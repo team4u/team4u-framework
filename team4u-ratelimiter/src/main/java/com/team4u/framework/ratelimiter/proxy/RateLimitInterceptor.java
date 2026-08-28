@@ -4,7 +4,9 @@ import com.team4u.framework.base.util.ReflectUtil;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
 import com.team4u.framework.ratelimiter.api.RateLimitException;
+import com.team4u.framework.ratelimiter.api.RateLimitResult;
 import com.team4u.framework.ratelimiter.api.RateLimiters;
+
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Parameter;
@@ -35,14 +37,15 @@ public class RateLimitInterceptor implements MethodInterceptor {
             return invocation.proceed();
         }
 
-        try {
-            RateLimiters.acquire(pointOf(annotation), argsContext(invocation, targetClass),
-                    annotation.permits());
-        } catch (RateLimitException e) {
+        RateLimitResult result = RateLimiters.acquire(pointOf(annotation),
+                argsContext(invocation, targetClass), annotation.permits());
+        if (!result.isAllowed()) {
             if (annotation.reject() == RateLimitReject.NULL_VALUE) {
                 return defaultValueOf(method.getReturnType());
             }
-            throw e;
+            // 拒绝在本边界转为异常：被代理方法的签名携带不了裁决结果，
+            // 异常是穿越该边界的传输手段（编程式路径由调用方自行决定抛什么）
+            throw new RateLimitException(result);
         }
         return invocation.proceed();
     }

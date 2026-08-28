@@ -84,10 +84,10 @@ engine.destroy();   // 释放配置监听
 // 初始化（也可以注入时钟：init(configManager, store, clock)）
 RateLimiters.init(configManager, kvStore);
 
-// acquire：放行返回裁决结果，拒绝抛 RateLimitException（携带完整裁决）
+// acquire：返回完整裁决结果，拒绝不抛异常（与引擎同构——「否」是判定服务的正常产出）
 RateLimitResult result = RateLimiters.acquire("order.create", context);
 
-// tryAcquire：仅返回是否放行，不抛限流异常
+// tryAcquire：仅返回是否放行
 boolean allowed = RateLimiters.tryAcquire("order.create", context);
 
 RateLimiters.destroy();   // 复位引用，供测试隔离
@@ -106,13 +106,13 @@ result.getRetryAfterMillis();  // 建议重试等待毫秒数；无意义（如�
 result.getDecisionTimeMillis();// 裁决时刻（epoch 毫秒）；history-window 场景供客户端回填记录
 result.getReason();            // 裁决原因：NO_RULE / PASS / THRESHOLD / STORE_ERROR
 
-// 拒绝时从异常提取（acquire 入口）
-try {
-    RateLimiters.acquire("order.create", context);
-} catch (RateLimitException e) {
-    RateLimitResult denied = e.getResult();
+// 拒绝是数据不是错误：何时抛、抛什么由调用方决定
+if (!result.isAllowed()) {
+    throw new TooManyRequestsException(result.getRetryAfterMillis());
 }
 ```
+
+`RateLimitException` 仅在**注解接入**的 `EXCEPTION` 模式（默认）下抛出——被代理方法的签名携带不了裁决结果，异常是穿越该边界的传输手段；编程式路径一律返回结果。
 
 各字段在不同算法下的取值差异（remaining / retryAfter 何时有值）见[算法详解](algorithms.md#结果字段对照)。
 
@@ -214,15 +214,14 @@ team4u.ratelimiter.recommend.feed=[{"id":"client-history","algorithm":"history-w
 // 请求体携带客户端本地记录的请求历史（时间戳毫秒列表）
 Map<String, Object> request = ...;   // 如 {"history": [1755900000000, 1755900015000], ...}
 
-try {
-    RateLimitResult result = RateLimiters.acquire("recommend.feed", request);
-    // 协作协议：把服务端裁决时刻回填给客户端，作为双方一致的时钟基准
-    long decisionTime = result.getDecisionTimeMillis();
-    return renderFeed(request, decisionTime);
-} catch (RateLimitException e) {
-    // e.getResult().getRetryAfterMillis()：当前窗口剩余时间，可转成 UI 提示
-    throw new TooManyRequestsException(e.getResult().getRetryAfterMillis());
+RateLimitResult result = RateLimiters.acquire("recommend.feed", request);
+if (!result.isAllowed()) {
+    // retryAfterMillis = 当前窗口剩余时间，可转成 UI 提示
+    throw new TooManyRequestsException(result.getRetryAfterMillis());
 }
+// 协作协议：把服务端裁决时刻回填给客户端，作为双方一致的时钟基准
+long decisionTime = result.getDecisionTimeMillis();
+return renderFeed(request, decisionTime);
 ```
 
 **客户端**协作协议：

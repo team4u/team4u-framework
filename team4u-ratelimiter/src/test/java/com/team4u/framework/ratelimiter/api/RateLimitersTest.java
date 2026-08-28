@@ -53,20 +53,19 @@ public class RateLimitersTest {
     }
 
     @Test
-    public void acquireThrowsRateLimitExceptionOnDeny() {
+    public void acquireReturnsDeniedResultWithoutThrowing() {
         TestConfigContext config = configWithThresholdOne();
         TestKvContext kv = TestKvContext.create();
         try {
             RateLimiters.init(config.getConfigManager(), kv.store(), kv.clock());
-            RateLimiters.acquire("api.point", null);
-            try {
-                RateLimiters.acquire("api.point", null);
-                fail("expected RateLimitException");
-            } catch (RateLimitException e) {
-                assertEquals("api.point", e.getResult().getPoint());
-                assertEquals("fw", e.getResult().getRuleId());
-                assertEquals(RateLimitReason.THRESHOLD, e.getResult().getReason());
-            }
+            assertTrue(RateLimiters.acquire("api.point", null).isAllowed());
+
+            // 拒绝不是异常：返回完整裁决结果（规则/原因可提取），何时抛由调用方决定
+            RateLimitResult denied = RateLimiters.acquire("api.point", null);
+            assertFalse("阈值 1：第二次拒绝", denied.isAllowed());
+            assertEquals("api.point", denied.getPoint());
+            assertEquals("fw", denied.getRuleId());
+            assertEquals(RateLimitReason.THRESHOLD, denied.getReason());
         } finally {
             RateLimiters.destroy();
             config.destroy();
