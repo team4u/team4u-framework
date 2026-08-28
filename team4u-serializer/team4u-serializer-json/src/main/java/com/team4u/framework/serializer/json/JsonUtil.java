@@ -145,7 +145,9 @@ public class JsonUtil {
      */
     public static JsonSerializerPolicy getPolicy() {
         if (defaultPolicy == null) {
-            throw new IllegalStateException("未在类路径下找到可用的 JSON 序列化策略实现（JsonSerializerPolicy）。");
+            throw new IllegalStateException("No JsonSerializerPolicy is available. "
+                    + "Add com.team4u:team4u-serializer-jackson, or register/provide a custom "
+                    + "JsonSerializerPolicy via ServiceLoader.");
         }
         return defaultPolicy;
     }

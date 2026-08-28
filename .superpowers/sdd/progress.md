@@ -16,7 +16,7 @@
 | 4. Lock Current Ant Wildcard Semantics | Complete |
 | 5. Base PathPatternMatcher and Criterion Adapter | Complete |
 | 6. Proxy One Artifact and Optional ByteBuddy | Complete |
-| 7. Serializer Provider Contracts and Upstream Cleanup | Pending |
+| 7. Serializer Provider Contracts and Upstream Cleanup | Complete |
 | 8. Config Dependency Inversion and Global Initialization Fix | Pending |
 | 9. Split config-proxy and config-spring | Pending |
 | 10. Lease Boundary Before Retry Migration | Pending |

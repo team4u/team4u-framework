@@ -42,7 +42,9 @@ graph TD
 | 模块 ArtifactId | 说明 | 核心依赖 |
 | :--- | :--- | :--- |
 | **`team4u-serializer-json`** | 统一门面与 SPI 策略接口定义（`JsonUtil`, `JsonSerializerPolicy`） | `team4u-base`, `team4u-policy` |
-| **`team4u-serializer-jackson`** | 基于 Jackson 实现的官方序列化驱动 | `team4u-serializer-json`, `jackson-databind`, `jackson-datatype-jsr310` |
+| **`team4u-serializer-jackson`** | 基于 Jackson 实现的官方序列化驱动；由应用或显式集成模块添加 | `team4u-serializer-json`, `jackson-databind`, `jackson-datatype-jsr310` |
+
+`team4u-serializer-json` 只提供 API，不传递任何 JSON 引擎。使用 `JsonUtil` 的应用必须显式添加 `team4u-serializer-jackson`，或通过 ServiceLoader 注册自定义 `JsonSerializerPolicy`。上游库只能在测试中使用官方 Jackson provider；生产 provider 归应用和显式集成模块所有。
 
 ---
 

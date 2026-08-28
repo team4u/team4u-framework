@@ -65,6 +65,8 @@ graph TD
 | `RouterFactory` | 路由器 SPI 工厂接口，支持基于 `key()` 扩展自定义路由器类型 |
 | `RoutePolicyParser` | 路由策略解析器 SPI 接口，默认基于 JSON 反序列化（`DefaultRoutePolicyParser`），支持自定义替换（如 YAML） |
 
+使用默认 JSON 路由配置的应用必须显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。
+
 ## 设计目标
 
 - **配置驱动与热更新**：无缝对接 `team4u-config`，配置修改后路由实例秒级热重载，无需重启应用。

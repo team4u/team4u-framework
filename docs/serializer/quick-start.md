@@ -17,7 +17,7 @@
 ```
 
 > [!TIP]
-> 如果你在开发通用 SDK 并不希望强绑定 Jackson，你的 SDK 仅需引入抽象模块 `team4u-serializer-json`，把具体的驱动实现交由最终业务宿主工程决定。
+> 如果你在开发通用 SDK 并不希望强绑定 Jackson，你的 SDK 仅需引入抽象模块 `team4u-serializer-json`，把具体的驱动实现交由最终业务宿主工程决定。宿主工程必须添加 `com.team4u:team4u-serializer-jackson`，或在 `META-INF/services/com.team4u.framework.serializer.json.JsonSerializerPolicy` 中注册自定义实现；否则第一次真实 JSON 转换会抛出 `IllegalStateException` 并给出这两个选择。
 
 ---
 

@@ -71,6 +71,8 @@ graph LR
 | **`team4u-config-db`** | 数据库配置扩展：基于 JDBC 的关系型数据库配置全量加载与低开销时间戳轮询监听器 | `team4u-config-core`, JDBC / DataSource |
 | **`team4u-config-test`** | 单元测试支持：提供 `TestConfigContext` 内存隔离配置环境，默认 0 延迟同步热重载 | `team4u-config-core` |
 
+使用 `JsonPropertyConverter` 的应用必须显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。
+
 ---
 
 ## 组件位置与包结构
