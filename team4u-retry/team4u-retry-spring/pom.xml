@@ -31,7 +31,7 @@
         </dependency>
         <dependency>
             <groupId>com.team4u</groupId>
-            <artifactId>team4u-bean</artifactId>
+            <artifactId>team4u-bean-spring</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>

@@ -48,6 +48,7 @@
         <module>team4u-config/team4u-config-test</module>
         <module>team4u-proxy</module>
         <module>team4u-bean</module>
+        <module>team4u-bean-spring</module>
         <module>team4u-router</module>
         <module>team4u-router-proxy</module>
         <module>team4u-translator</module>
@@ -151,6 +152,11 @@
             <dependency>
                 <groupId>com.team4u</groupId>
                 <artifactId>team4u-bean</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-bean-spring</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

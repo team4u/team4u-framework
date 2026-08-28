@@ -57,4 +57,4 @@ public class CustomAliyunSmsSender implements SmsSender {
     }
 }
 ```
-当配置了 `SpringBeanContainer` 时，`BeanManager.getInstance().loadBean(SmsSender.class, ...)` 会优先从 Spring 容器检索到 `CustomAliyunSmsSender`（`order=100` 优先于 `LocalBeanContainer` 的 `MAX_VALUE`），从而实现透明无缝的定制替换！
+当应用引入 `team4u-bean-spring` 并显式 `@Import(Team4uBeanConfiguration.class)` 后，`BeanManager.getInstance().loadBean(SmsSender.class, ...)` 会优先从 Spring 容器检索到 `CustomAliyunSmsSender`（`order=100` 优先于 `LocalBeanContainer` 的 `MAX_VALUE`），从而实现透明无缝的定制替换！

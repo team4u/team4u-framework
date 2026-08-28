@@ -1,10 +1,44 @@
-# Spring 容器无缝桥接
+# Spring 容器显式桥接 (team4u-bean-spring)
 
-当开发一个供多个业务团队使用的通用中间件或 SDK 时，宿主工程通常是 Spring Boot 项目。`SpringBeanContainer` 实现了“两套体系，一套接口”的透明桥接。
+`team4u-bean` 提供纯 Java 的 `BeanManager` 和本地容器。`team4u-bean-spring` 只提供 Spring 5.3 适配器和一条显式配置入口：`Team4uBeanConfiguration`。
 
 ---
 
-## 桥接工作原理
+## 依赖与接入
+
+应用配置类显式 `@Import` 该配置；没有 Boot starter、`spring.factories` 或自动配置类：
+
+```xml
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-bean</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-bean-spring</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+</dependency>
+```
+
+```java
+import com.team4u.framework.bean.spring.Team4uBeanConfiguration;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+
+@Configuration
+@Import(Team4uBeanConfiguration.class)
+public class ApplicationConfiguration {
+}
+```
+
+`Team4uBeanConfiguration` 是普通 Spring `@Configuration`，只注册一个 `@Bean SpringBeanContainer`。应用仍可使用组件扫描，但这个配置必须显式导入，保证依赖选择和上下文装配可见。
+
+---
+
+## 桥接行为
+
+`SpringBeanContainer` 保持原有 FQCN：`com.team4u.framework.bean.provider.SpringBeanContainer`。Spring 初始化它时注入 `ApplicationContext`，并把它注册到 `BeanManager` 的有序 Provider 链：
 
 ```mermaid
 sequenceDiagram
@@ -16,10 +50,10 @@ sequenceDiagram
     participant LC as LocalBeanContainer (order=MAX)
 
     Note over SC,SpCtx: Spring 启动并注入 ApplicationContext
-    SC->>BM: 自动调用 addProvider(this) 注册自身并重排序
+    SC->>BM: addProvider(this) 注册自身并重排序
 
     App->>BM: getBean(OrderService.class)
-    BM->>SC: 1. 优先向 SpringBeanContainer 查找
+    BM->>SC: 按优先级查找
     SC->>SpCtx: getBean(OrderService.class)
     alt Spring 容器中存在
         SpCtx-->>SC: 返回 Spring 托管 Bean
@@ -27,76 +61,38 @@ sequenceDiagram
         BM-->>App: 返回 Bean
     else Spring 容器中未找到
         SC-->>BM: 返回 null
-        BM->>LC: 2. 回退向 LocalBeanContainer 查找
-        LC-->>BM: 返回本地 Bean
-        BM-->>App: 返回 Bean
+        BM->>LC: 回退本地 Bean
+        LC-->>App: 返回本地 Bean 或 null
     end
 ```
 
+可用行为包括：
+
+- 按名称、类型和类型集合从 `BeanManager` 读取 Spring Bean。
+- 在活动 `ConfigurableApplicationContext` 中动态注册 singleton。
+- 上下文关闭或未激活后，查询返回空值，动态注册返回 `false`。
+
 ---
 
-## `SpringBeanContainer` 核心实现细节
+## 从 1.0 前迁移
+
+`SpringBeanContainer` 的类名和包名不变，但从 `team4u-bean` 移到了 `team4u-bean-spring`：
+
+1. 纯 Java 本地容器使用方继续只依赖 `team4u-bean`。
+2. Spring 使用方添加 `team4u-bean-spring`。
+3. 删除手写的 `@Bean SpringBeanContainer` 方法。
+4. 在应用配置类上添加 `@Import(Team4uBeanConfiguration.class)`。
 
 ```java
-package com.team4u.framework.bean.provider;
-
-public class SpringBeanContainer implements BeanFactory, BeanRegistry, ApplicationContextAware {
-
-    private ApplicationContext applicationContext;
-
-    @Override
-    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
-        this.applicationContext = applicationContext;
-        // 自动将当前容器注入全局 BeanManager 门面并重排优先级
-        BeanManager.getInstance().addProvider(this);
-    }
-
-    @Override
-    public int getOrder() {
-        return 100; // 优先级高于 LocalBeanContainer (Integer.MAX_VALUE)
-    }
-
-    @Override
-    public <T> boolean registerBean(String beanName, T bean) {
-        if (!isContextActive()) {
-            return false;
-        }
-
-        // 向 Spring 运行时动态注册单例 Bean
-        if (applicationContext instanceof ConfigurableApplicationContext) {
-            ConfigurableListableBeanFactory beanFactory = 
-                    ((ConfigurableApplicationContext) applicationContext).getBeanFactory();
-            if (!beanFactory.containsSingleton(beanName)) {
-                beanFactory.registerSingleton(beanName, bean);
-                return true;
-            }
-        }
-        return false;
-    }
+// Before: 手动声明适配器
+@Bean
+public SpringBeanContainer springBeanContainer() {
+    return new SpringBeanContainer();
 }
-```
 
----
-
-## 接入方式
-
-在 Spring Boot 应用的配置类中注册 `SpringBeanContainer`：
-
-```java
-import com.team4u.framework.bean.provider.SpringBeanContainer;
-import org.springframework.context.annotation.Bean;
-import org.springframework.context.annotation.Configuration;
-
+// After: 显式导入共享配置
 @Configuration
-public class Team4uBeanAutoConfiguration {
-
-    @Bean
-    public SpringBeanContainer springBeanContainer() {
-        return new SpringBeanContainer();
-    }
+@Import(Team4uBeanConfiguration.class)
+public class ApplicationConfiguration {
 }
 ```
-
-### 核心优势
-- **完全解耦**：底层 SDK 内部无需在代码中引入任何 Spring 强依赖注解（如 `@Autowired`、`@Component`），直接使用 `BeanManager.getInstance().getBean(...)`；
-- **环境自适应**：在单元测试或纯 Java 运行环境下，代码自动回退到 `LocalBeanContainer`，保证测试和脚本秒级启动。
