@@ -232,6 +232,7 @@ public final class ProxyBuilder<T> {
     }
 
     private ProxyEngine loadByteBuddyEngine(Class<?> primaryType) {
+        Throwable bestMissingCause = null;
         for (ClassLoader loader : candidateLoaders(primaryType)) {
             Class<?> engineClass;
             try {
@@ -240,9 +241,13 @@ public final class ProxyBuilder<T> {
                         true,
                         loader);
             } catch (ClassNotFoundException e) {
+                if (bestMissingCause == null) {
+                    bestMissingCause = e;
+                }
                 continue;
             } catch (LinkageError e) {
                 if (isMissingByteBuddy(e)) {
+                    bestMissingCause = e;
                     continue;
                 }
                 throw new ProxyException("Cannot load ByteBuddy proxy engine from " + loader, e);
@@ -261,13 +266,14 @@ public final class ProxyBuilder<T> {
                 throw new ProxyException("Cannot reflect ByteBuddy proxy engine INSTANCE", e);
             } catch (LinkageError e) {
                 if (isMissingByteBuddy(e)) {
+                    bestMissingCause = e;
                     continue;
                 }
                 throw new ProxyException("Cannot initialize ByteBuddy proxy engine from " + loader, e);
             }
         }
 
-        throw missingByteBuddy(null);
+        throw missingByteBuddy(bestMissingCause);
     }
 
     private ClassLoader[] candidateLoaders(Class<?> primaryType) {
@@ -278,10 +284,26 @@ public final class ProxyBuilder<T> {
             throw new ProxyException("Cannot obtain thread context class loader for ByteBuddy proxy engine", e);
         }
 
+        ClassLoader targetLoader;
+        try {
+            targetLoader = primaryType.getClassLoader();
+        } catch (SecurityException e) {
+            throw new ProxyException(
+                    "Cannot obtain target type class loader for ByteBuddy proxy engine", e);
+        }
+
+        ClassLoader builderLoader;
+        try {
+            builderLoader = ProxyBuilder.class.getClassLoader();
+        } catch (SecurityException e) {
+            throw new ProxyException(
+                    "Cannot obtain proxy builder class loader for ByteBuddy proxy engine", e);
+        }
+
         ClassLoader[] loaders = {
                 contextLoader,
-                primaryType.getClassLoader(),
-                ProxyBuilder.class.getClassLoader()
+                targetLoader,
+                builderLoader
         };
         Set<ClassLoader> distinct = new LinkedHashSet<>();
         for (ClassLoader loader : loaders) {

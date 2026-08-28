@@ -53,11 +53,18 @@ public class ProxyOptionalByteBuddyTest {
         loader = newClassLoaderWithoutByteBuddy();
         loaderResource = loader;
         final String failure = runIsolated(loader, "runClass");
-        if (!failure.startsWith(MISSING_BYTE_BUDDY_MESSAGE + "|")) {
-            throw new AssertionError("Expected missing ByteBuddy message but was:\n" + failure);
+        String[] fields = failure.split("\\|", 3);
+        if (fields.length != 3 || !MISSING_BYTE_BUDDY_MESSAGE.equals(fields[0])) {
+            throw new AssertionError("Expected missing ByteBuddy result but was:\n" + failure);
         }
-        if (!failure.contains("net.bytebuddy") && !failure.contains("net/bytebuddy")) {
-            throw new AssertionError("Expected ByteBuddy missing-dependency cause but was:\n" + failure);
+        String causeClass = fields[1];
+        String causeMessage = fields[2];
+        boolean expectedCauseType = "java.lang.ClassNotFoundException".equals(causeClass)
+                || "java.lang.NoClassDefFoundError".equals(causeClass);
+        if (!expectedCauseType || !isByteBuddyClassName(causeMessage)) {
+            throw new AssertionError(
+                    "Expected a ByteBuddy-attributed missing-dependency cause but class="
+                            + causeClass + ", message=" + causeMessage);
         }
     }
 
@@ -237,6 +244,18 @@ public class ProxyOptionalByteBuddyTest {
         }
     }
 
+    private boolean isByteBuddyClassName(String className) {
+        if (className == null) {
+            return false;
+        }
+        String normalized = className.replace('.', '/');
+        int detail = normalized.indexOf(' ');
+        if (detail >= 0) {
+            normalized = normalized.substring(0, detail);
+        }
+        return normalized.equals("net/bytebuddy") || normalized.startsWith("net/bytebuddy/");
+    }
+
     private void assertLinkageErrorIsInternal(ClassLoader loader) throws Exception {
         ClassLoader original = Thread.currentThread().getContextClassLoader();
         Thread.currentThread().setContextClassLoader(loader);
@@ -392,7 +411,13 @@ public class ProxyOptionalByteBuddyTest {
                     current = current.getCause();
                 }
                 if (current instanceof ProxyException) {
-                    return current.getMessage() + "|" + current.getCause();
+                    return current.getMessage()
+                            + "|"
+                            + (current.getCause() == null
+                                    ? "null"
+                                    : current.getCause().getClass().getName()
+                                            + "|"
+                                            + String.valueOf(current.getCause().getMessage()));
                 }
                 return "class proxy failed unexpectedly: " + describe(current);
             } finally {
