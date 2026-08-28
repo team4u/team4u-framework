@@ -70,7 +70,7 @@ graph LR
 
 - **最小核心**：4 个操作覆盖锁、幂等、TTL 缓存的最小完备集；扫描/批量/订阅全部走能力接口，核心不为长尾需求膨胀；
 - **能力协商**：实现做不到的就不声明，调用方 `instanceof` 探测或快速失败，不出现「实现了但语义错误」的接口；
-- **复用不重造**：本地缓存复用 base 的 `Cache`/`TimedCache`，热交换复用 proxy 的 `Swappable`，重试复用 retry 的 INLINE 模式，键空间注册表复用 policy 的 `KeyedPolicyRegistry`（Copy-On-Write，读路径无锁）；
+- **复用不重造**：本地缓存复用 base 的 `Cache`/`TimedCache`，热交换使用 KV 本地 `HotSwap` 契约与 JDK 动态代理，重试复用 retry 的 INLINE 模式，键空间注册表复用 policy 的 `KeyedPolicyRegistry`（Copy-On-Write，读路径无锁）；
 - **跨实现一致**：过期精度、SETNX 原子性、CAS 语义、异常约定在接口 Javadoc 固化为契约，并由 `team4u-kv-test` 的契约测试在 CI 强制；
 - **轻量可测**：内存实现零依赖；所有 TTL/租约逻辑注入 `Clock`，测试用虚拟时钟精确推进时间。
 
@@ -118,7 +118,8 @@ false
 
 ```text
 team4u-kv
-├── team4u-kv-core            # 核心抽象、能力接口、内存实现、装饰器、类型化门面
+├── team4u-kv-core            # 核心抽象、能力接口、内存实现、装饰器、热交换
+├── team4u-kv-space           # Space / Spaces / SpacePolicy 类型化 JSON 门面
 ├── team4u-kv-lock            # CAS 化分布式锁
 ├── team4u-kv-lifecycle       # 过期值源、轮询订阅、清理器
 ├── team4u-kv-retryable       # 重试装饰器（复用 team4u-retry）
@@ -129,7 +130,8 @@ team4u-kv
 
 | 模块 | 依赖 | 按需引入 |
 | :--- | :--- | :--- |
-| `team4u-kv-core` | base、proxy、policy、serializer-json | 必需 |
+| `team4u-kv-core` | base、slf4j-api | 必需 |
+| `team4u-kv-space` | kv-core、policy、serializer-json | 使用类型化 JSON 键空间时 |
 | `team4u-kv-lock` | kv-core | 使用锁时 |
 | `team4u-kv-lifecycle` | kv-core、kv-lock、serializer-json | 使用值续期/订阅/清理时 |
 | `team4u-kv-retryable` | kv-core、retry-core | 存储抖动治理时 |
@@ -137,7 +139,7 @@ team4u-kv
 | `team4u-kv-store-redis` | kv-core、spring-data-redis | Redis 存储时 |
 | `team4u-kv-test` | kv-core、junit | 为新存储写契约测试时 |
 
-`Space` 与 `ExpiringValue` 的 JSON 值编解码由应用显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。
+`Space` 位于 `team4u-kv-space`，JSON 值编解码由应用显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。`team4u-kv-core` 的 `KvStore`、装饰器与热交换路径不需要 JSON、policy、proxy、Jackson 或 ByteBuddy。
 
 ## 文档导航
 

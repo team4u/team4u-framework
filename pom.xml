@@ -65,6 +65,7 @@
         <module>team4u-serializer/team4u-serializer-json</module>
         <module>team4u-serializer/team4u-serializer-jackson</module>
         <module>team4u-kv/team4u-kv-core</module>
+        <module>team4u-kv/team4u-kv-space</module>
         <module>team4u-kv/team4u-kv-lock</module>
         <module>team4u-kv/team4u-kv-lifecycle</module>
         <module>team4u-kv/team4u-kv-retryable</module>
@@ -232,6 +233,11 @@
             <dependency>
                 <groupId>com.team4u</groupId>
                 <artifactId>team4u-kv-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-kv-space</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

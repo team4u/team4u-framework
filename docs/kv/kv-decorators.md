@@ -126,7 +126,7 @@ KvStore retryable = new RetryableStore(delegate, RetryPolicy.builder()
 
 ## HotSwapStore：在线换后端
 
-存储迁移、故障转移的共同诉求：**换底层存储，业务代码手里的引用不能变**。HotSwapStore 基于代理组件的热交换能力（volatile 替换，对所有线程立即可见）实现。
+存储迁移、故障转移的共同诉求：**换底层存储，业务代码手里的引用不能变**。HotSwapStore 使用 `AtomicReference` 与 JDK 动态代理实现原子替换，不依赖 team4u-proxy。
 
 ### 基本用法
 
@@ -141,6 +141,14 @@ KvStore old = HotSwapStore.swap(kv, redisStore, false);  // 不关闭，调用�
 ```
 
 三条重载都返回被换下的旧存储；前两条返回的旧存储**已被（或将被）关闭**，不要再使用。
+
+需要绕过 Safe Swap 自行管理生命周期时，将代理强转为 KV 本地接口 `com.team4u.framework.kv.HotSwap`：
+
+```java
+KvStore old = (KvStore) ((HotSwap) kv).hotswap(newStore);
+```
+
+`hotswap` 只原子替换并返回旧存储，不关闭它。代理的公开接口集合在 `wrap` 时固定：始终实现 `KvStore` 与 `HotSwap`；仅当初始存储分别实现 `StoreWrapper` / `AutoCloseable` 时才额外公开这两个接口。后续交换不会增加接口，也不会移除已公开接口；新存储缺少已公开能力时，对应调用明确失败。
 
 ### Safe Swap：先建好，再换
 
@@ -203,7 +211,7 @@ PollingWatcher watcher = new PollingWatcher(tieredStore, 200);
 - 锁操作**直达解析后的底层存储**（不经过缓存/观测装饰层）——缓存层插在续约读与存储之间会让续约读到陈旧令牌，破坏续约正确性；
 - 轮询订阅的 scan/get 同样直达底层，保证读取新鲜度（不被 L1 缓存延迟到缓存 TTL 之后）；
 - 通用业务代码可用 `KvStores.capabilityOf(kv, CasCapable.class)` 自行解析（返回 null 表示整条链均不支持），`KvStores.innermost(kv)` 剥出最内层真实存储；
-- 边界：经 `HotSwapStore.wrap` 包装的存储会随初始委托透传 `unwrap()`，但**交换到未实现 StoreWrapper 的存储后**，`unwrap()` 调用会以 `ProxyException` 失败——需要长期能力解析的场景应始终交换装饰过的存储。
+- 边界：经 `HotSwapStore.wrap` 包装的存储会随初始委托透传 `unwrap()`，但**交换到未实现 StoreWrapper 的存储后**，`unwrap()` 调用会以 `IllegalStateException` 明确失败——需要长期能力解析的场景应始终交换装饰过的存储。
 
 ### 关闭语义
 
