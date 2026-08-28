@@ -1,6 +1,6 @@
 # 结构化流式日志 (Loggers)
 
-`Loggers` 是 `team4u-log` 提供的流式日志构建器。它采用延迟执行模型，在调用 `.log()` 前仅进行对象装配，最后统一交付底层日志引擎处理。
+`Loggers` 是 `team4u-log-core` 提供的流式日志构建器。它采用延迟执行模型，在调用 `.log()` 前仅进行对象装配，最后统一交付底层日志引擎处理。事件与输出格式解耦：core 默认明文/`toString`，governance 安装 Jackson 后输出 JSON。
 
 ---
 

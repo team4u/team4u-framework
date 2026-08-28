@@ -55,7 +55,8 @@
         <module>team4u-mask</module>
         <module>team4u-mask-jackson</module>
         <module>team4u-mask-config</module>
-        <module>team4u-log</module>
+        <module>team4u-log-core</module>
+        <module>team4u-log-governance</module>
         <module>team4u-lease/team4u-lease-core</module>
         <module>team4u-lease/team4u-lease-test</module>
         <module>team4u-lease/team4u-lease-memory</module>
@@ -191,7 +192,12 @@
             </dependency>
             <dependency>
                 <groupId>com.team4u</groupId>
-                <artifactId>team4u-log</artifactId>
+                <artifactId>team4u-log-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-log-governance</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -318,6 +324,11 @@
                 <version>${spring.version}</version>
             </dependency>
             <dependency>
+                <groupId>org.springframework</groupId>
+                <artifactId>spring-aop</artifactId>
+                <version>${spring.version}</version>
+            </dependency>
+            <dependency>
                 <groupId>org.springframework.data</groupId>
                 <artifactId>spring-data-redis</artifactId>
                 <version>${spring-data-redis.version}</version>
@@ -356,6 +367,16 @@
                 <artifactId>mockito-inline</artifactId>
                 <version>${mockito.version}</version>
                 <scope>test</scope>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>${jackson.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-core</artifactId>
+                <version>${jackson.version}</version>
             </dependency>
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
@@ -559,6 +580,7 @@
                                 <pomInclude>consumer-serializer-api/pom.xml</pomInclude>
                                 <pomInclude>consumer-serializer-jackson/pom.xml</pomInclude>
                                 <pomInclude>consumer-interface-proxy/pom.xml</pomInclude>
+                                <pomInclude>consumer-log-governance/pom.xml</pomInclude>
                             </pomIncludes>
                         </configuration>
                         <executions>
@@ -596,6 +618,7 @@
                                 <pomInclude>consumer-serializer-api/pom.xml</pomInclude>
                                 <pomInclude>consumer-serializer-jackson/pom.xml</pomInclude>
                                 <pomInclude>consumer-interface-proxy/pom.xml</pomInclude>
+                                <pomInclude>consumer-log-governance/pom.xml</pomInclude>
                             </pomIncludes>
                         </configuration>
                         <executions>
