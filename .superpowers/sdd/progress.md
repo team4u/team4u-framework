@@ -51,4 +51,4 @@ Task 11 complete: split managed governance and config-driven retry policies out 
 
 Task 12 complete: moved typed JSON Spaces to `team4u-kv-space`, moved HotSwapStore to a KV-local `HotSwap` contract with JDK proxies and stable creation-time capability interfaces, and removed proxy/policy/serializer production coupling from kv-core. No KV heartbeat work was included.
 
-Task 13 complete: moved the declarative proxy adapter to `team4u-router-proxy` with unchanged FQCNs, kept router core free of proxy/bean/config-proxy/Jackson runtime edges, and documented the explicit adapter dependency.
+Task 13 complete: moved the declarative proxy adapter to `team4u-router-proxy` with unchanged FQCNs, kept router core free of proxy/bean/config-proxy/Jackson compile/runtime edges, and documented the explicit adapter dependency and concrete-class ByteBuddy fallback. Review remediation corrected the Enforcer field-order record to valid scope-aware five-field shorthand (classifier omitted); compile/runtime rejection and test allowance were independently proven, and the working POM rules were unchanged.
