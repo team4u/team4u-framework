@@ -22,7 +22,7 @@ No Task 8 implementation is included.
 - Corrected convergence-plan evidence and expiry language:
   - config-core's external guard is now RED for `team4u-proxy` only
   - mask/log keep direct Jackson until Tasks 15/17 and never own the serializer provider
-  - retry-lease-runtime is the explicit direct-Jackson integration exception until its retry/runtime split
+  - retry-lease-runtime is a permanent direct-Jackson integration, not a Task 11 expiry
 - Tracked Task 7 as complete.
 
 ## RED Evidence
@@ -173,7 +173,7 @@ com.team4u:team4u-retry-lease-runtime:jar:1.0.0-SNAPSHOT
    \- com.fasterxml.jackson.core:jackson-core:jar:2.16.1:compile
 ```
 
-None of the ten modules contains `team4u-serializer-jackson` in its runtime tree. Mask/log direct Jackson is temporary and expires in Tasks 15/17. Retry-lease-runtime direct Jackson is an explicit production integration exception until its retry/runtime boundary work.
+None of the ten modules contains `team4u-serializer-jackson` in its runtime tree. Mask/log direct Jackson is temporary and expires in Tasks 15/17. Retry-lease-runtime direct Jackson is a permanent explicit production integration exception: `LeaseRetryRecordSerializer` uses the Jackson tree API for a versioned durable schema, field-level validation, and a throwable allowlist, requirements the generic serializer SPI intentionally does not model.
 
 ## Config-Core Exact RED
 
@@ -200,12 +200,14 @@ The only banned edge is `team4u-proxy:compile`. There is no `team4u-serializer-j
 ## Dependency Cleanup Audit
 
 - `config-core`: compile provider changed to test scope.
-- `retry-core`, `kv-core`, `kv-lifecycle`, `lease-jdbc`, `router`, `translator`: existing direct test-scope provider declarations remain. Their production code calls `JsonUtil`/serializer APIs and their tests exercise those paths, so the test providers are live rather than dead declarations.
-- `mask`, `log`: provider remains test scope; direct Jackson remains compile because production source imports Jackson APIs. Explicit expiry: Tasks 15 and 17.
-- `retry-lease-runtime`: direct Jackson compile dependency remains explicit because production source implements a Jackson integration. No provider or runtime-scope workaround was added.
+- `retry-core`, `kv-core`, `kv-lifecycle`, `lease-jdbc`, `router`: direct test-scope provider declarations remain. Their production code calls `JsonUtil`/serializer APIs and current tests execute those paths, so the providers are live test dependencies.
+- `translator`: removed its direct test-scope provider declaration. Neither production nor test source currently references `JsonUtil` or another path that selects a `JsonSerializerPolicy`; Task 14's planned integration quickstart will add the dependency it actually needs.
+- `mask`: removed its direct test-scope provider declaration. Current tests use the direct Jackson adapter API without executing `JsonUtil`; Task 15's planned `team4u-mask-jackson` quickstart will own its provider dependency. Its published direct `jackson-databind` edge remains `<optional>true</optional>` until Task 15, so consumers choose the adapter/Jackson dependency explicitly.
+- `log`: provider remains test scope because current tests execute `JsonUtil`; direct Jackson remains nonoptional compile because production source imports Jackson APIs. Consumers of the current monolith therefore receive Jackson until the Task 17 split.
+- `retry-lease-runtime`: direct Jackson compile dependency remains explicit and nonoptional because `LeaseRetryRecordSerializer` uses the Jackson tree API for a versioned durable schema, field-level validation, and a throwable allowlist; the generic serializer SPI intentionally cannot model that contract. This is the release allowlist's sole pre-split explicit integration exception. No provider or runtime-scope workaround was added.
 
 ## Residual Risks
 
 - Mask/log still publish direct Jackson dependencies until their planned splits.
-- Retry-lease-runtime remains a direct Jackson integration until its planned boundary work.
+- Retry-lease-runtime permanently carries direct, nonoptional Jackson as the durable-record integration exception.
 - No standalone JDK 8 is installed; Java 8 evidence is Enforcer plus bytecode major version 52.
