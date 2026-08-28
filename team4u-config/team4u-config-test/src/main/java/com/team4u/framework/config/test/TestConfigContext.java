@@ -26,7 +26,7 @@ public class TestConfigContext {
 
     public TestConfigContext(String sourceName, int priority) {
         this.source = new InMemoryConfigSource(sourceName, priority);
-        // Task 9 拆分前显式保留测试工具的代理能力；0 延时实现同步热重载
+        // team4u-config-proxy is supplied by the ServiceLoader-backed proxy provider.
         this.configManager = ConfigManager.builder()
                 .addSource(source)
                 .addWatcher(source)

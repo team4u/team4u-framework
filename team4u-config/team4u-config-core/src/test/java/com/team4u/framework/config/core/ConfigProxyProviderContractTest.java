@@ -36,8 +36,7 @@ public class ConfigProxyProviderContractTest {
 
     @Test
     public void explicitCreatorTakesPrecedenceOverServiceLoader() {
-        // ServiceLoader registration is deliberately not tested here until Task 9 introduces
-        // the proxy artifact's service file. Explicit injection remains deterministic.
+        // The ServiceLoader proxy provider is the fallback after the explicit creator.
         InMemoryConfigSource source = new InMemoryConfigSource("explicit-precedence", 1);
         source.put("app.name", "explicit");
 
