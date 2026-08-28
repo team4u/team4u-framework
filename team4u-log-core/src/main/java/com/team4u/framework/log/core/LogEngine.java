@@ -10,7 +10,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicReference;
-
+import java.util.function.UnaryOperator;
 /**
  * Core logging engine with an explicitly owned serializer and interceptor set.
  */
@@ -55,7 +55,7 @@ public final class LogEngine {
             if (previous == engine) {
                 return previous;
             }
-            engine.setAppender(previous.appender);
+            engine.internalSetAppender(previous.appender);
             GLOBAL.set(engine);
             return previous;
         }
@@ -75,9 +75,37 @@ public final class LogEngine {
             if (current != expected) {
                 return false;
             }
-            previous.setAppender(current.appender);
+            previous.internalSetAppender(current.appender);
             GLOBAL.set(previous);
             return true;
+        }
+    }
+
+    public static LogAppender setGlobalAppender(LogAppender appender) {
+        return updateGlobalAppender(current -> appender);
+    }
+
+    public static boolean compareAndSetGlobalAppender(LogAppender expect, LogAppender update) {
+        synchronized (GLOBAL_MONITOR) {
+            LogEngine engine = GLOBAL.get();
+            if (engine.appender != expect) {
+                return false;
+            }
+            engine.internalSetAppender(update);
+            return true;
+        }
+    }
+
+    public static LogAppender updateGlobalAppender(UnaryOperator<LogAppender> transform) {
+        Objects.requireNonNull(transform, "transform");
+        synchronized (GLOBAL_MONITOR) {
+            LogEngine engine = GLOBAL.get();
+            LogAppender previous = engine.appender;
+            LogAppender next = transform.apply(previous);
+            if (next != previous) {
+                engine.internalSetAppender(next);
+            }
+            return previous;
         }
     }
 
@@ -94,20 +122,61 @@ public final class LogEngine {
     }
 
     public void setAppender(LogAppender appender) {
+        synchronized (GLOBAL_MONITOR) {
+            internalSetAppender(appender);
+        }
+    }
+
+    public boolean compareAndSetAppender(LogAppender expect, LogAppender update) {
+        synchronized (GLOBAL_MONITOR) {
+            if (appender != expect) {
+                return false;
+            }
+            internalSetAppender(update);
+            return true;
+        }
+    }
+
+    /**
+     * Resets core-owned state while retaining this engine's explicit serializer and injected interceptors.
+     */
+    public void reset() {
+        RuntimeException firstError = null;
+        try {
+            setAppender(new Slf4jLogAppender());
+        } catch (RuntimeException error) {
+            firstError = error;
+        }
+        try {
+            interceptorManager.resetCore();
+        } catch (RuntimeException error) {
+            firstError = addSuppressed(firstError, error);
+        }
+        try {
+            serializer.reset();
+        } catch (RuntimeException error) {
+            firstError = addSuppressed(firstError, error);
+        }
+        if (firstError != null) {
+            throw firstError;
+        }
+    }
+
+    private RuntimeException addSuppressed(RuntimeException firstError, RuntimeException error) {
+        if (firstError == null) {
+            return error;
+        }
+        if (firstError != error) {
+            firstError.addSuppressed(error);
+        }
+        return firstError;
+    }
+
+    private void internalSetAppender(LogAppender appender) {
         LogAppender next = appender != null ? appender : new Slf4jLogAppender();
         this.appender = next;
         bindAppender(next);
     }
-
-    /**
-     * Resets core state while retaining this engine's explicit serializer.
-     */
-    public void reset() {
-        setAppender(new Slf4jLogAppender());
-        interceptorManager.reset();
-        serializer.reset();
-    }
-
     public void processAndOutput(LogEvent event) {
         boolean passed = interceptorManager.execute(event);
         if (!passed || event.isSuppressed()) {

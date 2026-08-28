@@ -1,0 +1,2 @@
+com.team4u.framework.log.pipeline.interceptor.FirstCleanupTestInterceptor
+com.team4u.framework.log.pipeline.interceptor.SecondCleanupTestInterceptor

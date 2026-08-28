@@ -1,6 +1,5 @@
 package com.team4u.framework.log.pipeline.interceptor;
 
-import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.log.core.LogEvent;
 import com.team4u.framework.log.pipeline.LogInterceptor;
 import org.slf4j.MDC;
@@ -23,12 +22,16 @@ public class MdcEnrichInterceptor implements LogInterceptor {
     }
 
     /**
-     * 获取链路 ID 填充拦截器单例实例
+     * 获取兼容旧 API 的共享实例。新引擎默认使用 {@link #create()} 创建独立实例。
      *
      * @return MdcEnrichInterceptor 实例
      */
     public static MdcEnrichInterceptor getInstance() {
         return INSTANCE;
+    }
+
+    public static MdcEnrichInterceptor create() {
+        return new MdcEnrichInterceptor();
     }
 
     /**
@@ -37,7 +40,7 @@ public class MdcEnrichInterceptor implements LogInterceptor {
      * @param traceIdKey 键名（例如 "requestId"）
      */
     public void setTraceIdKey(String traceIdKey) {
-        if (StringUtil.isNotBlank(traceIdKey)) {
+        if (traceIdKey != null && !traceIdKey.trim().isEmpty()) {
             this.traceIdKey = traceIdKey;
         }
     }
@@ -55,9 +58,8 @@ public class MdcEnrichInterceptor implements LogInterceptor {
 
     @Override
     public boolean handle(LogEvent event) {
-        // 直接从 MDC 中获取指定的键值
         String traceId = MDC.get(traceIdKey);
-        if (StringUtil.isNotBlank(traceId)) {
+        if (traceId != null && !traceId.trim().isEmpty()) {
             event.setTraceId(traceId);
         }
         return true;

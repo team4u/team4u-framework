@@ -3,6 +3,7 @@ package com.team4u.framework.log;
 import com.team4u.framework.config.test.TestConfigContext;
 import com.team4u.framework.log.core.LogEngine;
 import com.team4u.framework.log.core.LogEvent;
+import com.team4u.framework.log.config.FinOpsConfigRepository;
 import com.team4u.framework.log.pipeline.interceptor.RateLimitInterceptor;
 import com.team4u.framework.log.proxy.LogProxyFactory;
 import com.team4u.framework.log.support.TestLogHelper;
@@ -86,31 +87,34 @@ public class LogGovernanceQuickstartTest {
     }
 
     @Test
-    public void finOpsErrorLimitHotUpdateChangesNewSignaturesImmediately() {
+    public void finOpsErrorLimitSuppressesThirdSameSignatureEventAfterCounterReset() {
         LogBootstrap.start(LogBootstrap.Options.builder()
                 .configManager(configContext.getConfigManager())
                 .build());
 
-        LogEvent first = errorEvent("finops-first");
-        Assert.assertTrue(RateLimitInterceptor.getInstance().handle(first));
-        LogEvent second = errorEvent("finops-first");
-        Assert.assertFalse(RateLimitInterceptor.getInstance().handle(second));
-        Assert.assertTrue(second.isSuppressed());
+        LogEngine engine = LogEngine.getInstance();
+        RateLimitInterceptor rate = engine.getInterceptorManager()
+                .getInterceptor(RateLimitInterceptor.class);
+        Assert.assertEquals(1, FinOpsConfigRepository.getInstance().get().getErrorLimitPerSecond());
+        Assert.assertTrue(rate.handle(errorEvent("same-signature")));
 
         configContext.put("team4u.log.finops",
                 "{\"maxLogLength\":500,\"maxStringLength\":2000,\"errorLimitPerSecond\":2}");
-        RateLimitInterceptor.getInstance().stop();
+        Assert.assertEquals(2, FinOpsConfigRepository.getInstance().get().getErrorLimitPerSecond());
+        rate.stop();
 
-        for (int i = 0; i < 3; i++) {
-            LogEvent event = errorEvent("finops-hot-" + i);
-            Assert.assertTrue(RateLimitInterceptor.getInstance().handle(event));
-        }
+        Assert.assertTrue(rate.handle(errorEvent("same-signature")));
+        Assert.assertTrue(rate.handle(errorEvent("same-signature")));
+        LogEvent third = errorEvent("same-signature");
+        Assert.assertFalse(rate.handle(third));
+        Assert.assertTrue(third.isSuppressed());
     }
 
     private LogEvent errorEvent(String action) {
         return new LogEvent().setLoggerName(getClass().getName()).setAction(action)
                 .setException(new RuntimeException("finops"));
     }
+
     private String proxyConfig() {
         return "{\"" + PaymentService.class.getName() + "\":{"
                 + "\"methods\":[\"pay\"],"

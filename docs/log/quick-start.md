@@ -15,7 +15,7 @@
 </dependency>
 ```
 
-核心默认使用 `PlainTextLogSerializer`：`LogEngine.toJson(LogEvent)` 和 `TestLogHelper.lastJson()` 返回事件的 `toString` 明文，而不是 JSON。需要自定义格式时，通过 `LogEngine.builder().serializer(...)` 显式注入 `LogSerializer`，并通过 `.interceptor(...)` / `.interceptors(...)` 注入拦截器。
+核心默认使用 `PlainTextLogSerializer`：`LogEngine.toJson(LogEvent)` 和 `TestLogHelper.lastJson()` 返回未经脱敏的 RAW/UNMASKED `toString` 明文，而不是 JSON；可能包含手机号、身份证等敏感值。需要自定义格式时，通过 `LogEngine.builder().serializer(...)` 显式注入 `LogSerializer`，并通过 `.interceptor(...)` / `.interceptors(...)` 注入拦截器。
 
 需要 Jackson JSON、配置驱动脱敏/染色/FinOps、动态代理或 Spring AOP 时，只引入治理 artifact：
 
@@ -76,7 +76,7 @@ public class OrderService {
 }
 ```
 
-在 `team4u-log-core` 中，`LogEngine.toJson(event)` 是安全的明文/`toString` 输出。启动 `team4u-log-governance` 后，活动 serializer 变为 Jackson，同一条事件输出 JSON：
+在 `team4u-log-core` 中，`LogEngine.toJson(event)` 是未经脱敏的 RAW/UNMASKED 明文 `toString` 输出。启动 `team4u-log-governance` 后，活动 serializer 变为 Jackson，同一条事件输出 JSON：
 
 ```json
 {
@@ -106,7 +106,7 @@ try {
     Loggers.of(OrderService.class).action("CreateOrder").success().log();
 
     LogEvent event = helper.lastEvent();
-    String serialized = helper.lastJson(); // core: plain text; governance started: JSON
+    String serialized = helper.lastJson(); // core: RAW/UNMASKED plain text; governance started: JSON
 } finally {
     helper.stop();
 }

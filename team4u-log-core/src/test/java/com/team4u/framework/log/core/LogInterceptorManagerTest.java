@@ -38,6 +38,24 @@ public class LogInterceptorManagerTest {
     }
 
     @Test
+    public void equalButDistinctInterceptorsMayCoexist() {
+        LogInterceptorManager manager = new LogInterceptorManager();
+        EqualInterceptor first = new EqualInterceptor();
+        EqualInterceptor second = new EqualInterceptor();
+
+        manager.register(first);
+        manager.register(second);
+
+        Assert.assertEquals(first, second);
+        Assert.assertEquals(1, count(manager, first));
+        Assert.assertEquals(1, count(manager, second));
+
+        manager.unregister(first);
+        Assert.assertEquals(0, count(manager, first));
+        Assert.assertEquals(1, count(manager, second));
+    }
+
+    @Test
     public void customInterceptorReset() {
         LogInterceptorManager manager = new LogInterceptorManager();
         MockInterceptor mock = new MockInterceptor();
@@ -67,6 +85,22 @@ public class LogInterceptorManagerTest {
             }
         }
         return count;
+    }
+    private static class EqualInterceptor implements LogInterceptor {
+        @Override
+        public boolean equals(Object obj) {
+            return obj != null && getClass() == obj.getClass();
+        }
+
+        @Override
+        public int hashCode() {
+            return getClass().hashCode();
+        }
+
+        @Override
+        public boolean handle(LogEvent event) {
+            return true;
+        }
     }
 
     @Setter

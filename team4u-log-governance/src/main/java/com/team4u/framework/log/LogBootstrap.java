@@ -32,6 +32,7 @@ public final class LogBootstrap {
     private volatile Options activeOptions;
     private volatile LogEngine installedEngine;
     private volatile LogEngine previousEngine;
+    private volatile RateLimitInterceptor installedRate;
 
     private LogBootstrap() {
     }
@@ -60,6 +61,14 @@ public final class LogBootstrap {
         return INSTANCE.state.get();
     }
 
+    static LogEngine getInstalledEngineForTest() {
+        return INSTANCE.installedEngine;
+    }
+
+    static LogEngine getPreviousEngineForTest() {
+        return INSTANCE.previousEngine;
+    }
+
     private void startInternal(Options options) {
         synchronized (lifecycleMonitor) {
             State current = state.get();
@@ -74,26 +83,50 @@ public final class LogBootstrap {
             try {
                 assembledEngine = assembleEngine(options);
                 installedEngine = assembledEngine;
+                installedRate = assembledEngine.getInterceptorManager()
+                        .getInterceptor(RateLimitInterceptor.class);
                 previousEngine = LogEngine.install(assembledEngine);
                 applyOptions(options);
                 activeOptions = options;
                 transitionTo(State.STARTED);
                 logLifecycle("start", "initial", options, startedAt, null, false);
             } catch (RuntimeException e) {
-                if (assembledEngine != null) {
-                    if (LogEngine.getInstance() == assembledEngine) {
-                        LogEngine.restore(assembledEngine, previousEngine);
-                    }
-                    assembledEngine.reset();
+                RuntimeException cleanupError = cleanupFailedStart(assembledEngine);
+                if (cleanupError != null) {
+                    e.addSuppressed(cleanupError);
                 }
-                installedEngine = null;
-                previousEngine = null;
-                rollbackToStopped();
                 activeOptions = null;
                 transitionTo(State.FAILED);
                 logLifecycle("start", "initial", options, startedAt, e, true);
                 throw e;
             }
+        }
+    }
+
+    private RuntimeException cleanupFailedStart(LogEngine assembledEngine) {
+        RuntimeException firstError = null;
+        try {
+            if (assembledEngine != null) {
+                try {
+                    if (LogEngine.getInstance() == assembledEngine) {
+                        LogEngine.restore(assembledEngine, previousEngine);
+                    }
+                } catch (RuntimeException error) {
+                    firstError = error;
+                }
+                try {
+                    assembledEngine.reset();
+                } catch (RuntimeException error) {
+                    firstError = addSuppressed(firstError, error);
+                }
+            }
+
+            firstError = stopRepositories(firstError);
+            return firstError;
+        } finally {
+            installedEngine = null;
+            previousEngine = null;
+            installedRate = null;
         }
     }
 
@@ -120,8 +153,11 @@ public final class LogBootstrap {
                 } catch (RuntimeException rollbackError) {
                     rollbackFailed = true;
                     activeOptions = null;
-                    rollbackToStopped();
                     reconfigureError.addSuppressed(rollbackError);
+                    RuntimeException cleanupError = stopComponents();
+                    if (cleanupError != null) {
+                        reconfigureError.addSuppressed(cleanupError);
+                    }
                     transitionTo(State.FAILED);
                 }
                 logLifecycle("reconfigure", "reconfigure", options, startedAt, reconfigureError, true);
@@ -143,7 +179,10 @@ public final class LogBootstrap {
             transitionTo(State.STOPPING);
             long startedAt = System.nanoTime();
             try {
-                stopComponents();
+                RuntimeException error = stopComponents();
+                if (error != null) {
+                    throw error;
+                }
                 activeOptions = null;
                 transitionTo(State.STOPPED);
                 logLifecycle("stop", "stop", null, startedAt, null, false);
@@ -165,7 +204,12 @@ public final class LogBootstrap {
 
     private void applyOptions(Options options) {
         TargetedDyeingInterceptor.getInstance().setCriteria(options.getCriteria());
-        RateLimitInterceptor.getInstance().setErrorLimitPerSecond(() ->
+        RateLimitInterceptor rate = installedRate;
+        if (rate == null) {
+            rate = installedEngine.getInterceptorManager().getInterceptor(RateLimitInterceptor.class);
+            installedRate = rate;
+        }
+        rate.setErrorLimitPerSecond(() ->
                 FinOpsConfigRepository.getInstance().get().getErrorLimitPerSecond());
 
         MaskBootstrap.global().start(options.getConfigManager());
@@ -175,29 +219,39 @@ public final class LogBootstrap {
         installedEngine.getSerializer().reset();
     }
 
-    private void rollbackToStopped() {
+    private RuntimeException stopComponents() {
+        RuntimeException firstError;
         try {
-            stopComponents();
-        } catch (RuntimeException rollbackError) {
-            log.warn("LogBootstrap|rollback|error|msg={}", rollbackError.getMessage(), rollbackError);
+            firstError = restoreEngine();
+        } finally {
+            installedEngine = null;
+            previousEngine = null;
         }
+
+        try {
+            firstError = stopRepositories(firstError);
+        } finally {
+            RateLimitInterceptor rate = installedRate;
+            if (rate != null) {
+                try {
+                    rate.resetErrorLimitPerSecond();
+                    rate.stop();
+                } catch (RuntimeException error) {
+                    firstError = addSuppressed(firstError, error);
+                } finally {
+                    installedRate = null;
+                }
+            }
+        }
+        return firstError;
     }
 
-    private void stopComponents() {
-        restoreEngine();
-        RuntimeException firstError = null;
-
+    private RuntimeException stopRepositories(RuntimeException firstError) {
         firstError = stopRepository(new ProxyRepositoryStop(), firstError);
         firstError = stopRepository(new FinOpsRepositoryStop(), firstError);
         firstError = stopRepository(new TargetedRepositoryStop(), firstError);
         firstError = stopRepository(new MaskRepositoryStop(), firstError);
-
-        RateLimitInterceptor.getInstance().resetErrorLimitPerSecond();
-        RateLimitInterceptor.getInstance().stop();
-
-        if (firstError != null) {
-            throw firstError;
-        }
+        return firstError;
     }
 
     private interface RepositoryStop {
@@ -233,38 +287,46 @@ public final class LogBootstrap {
         try {
             repository.stop();
         } catch (RuntimeException e) {
-            if (error == null) {
-                error = e;
-            } else if (error != e) {
-                error.addSuppressed(e);
-            }
+            error = addSuppressed(error, e);
         }
         return error;
     }
 
-    private void restoreEngine() {
+    private RuntimeException restoreEngine() {
         LogEngine engine = installedEngine;
         LogEngine previous = previousEngine;
         if (engine == null || previous == null) {
-            return;
+            return null;
         }
-        boolean restored = LogEngine.restore(engine, previous);
+
+        RuntimeException firstError = null;
         try {
-            if (restored) {
+            if (LogEngine.restore(engine, previous)) {
                 engine.reset();
             } else {
                 // Ownership moved on; reset without touching the newer global appender.
                 engine.setAppender(new Slf4jLogAppender());
-                engine.getInterceptorManager().reset();
+                engine.getInterceptorManager().resetCore();
                 engine.getSerializer().reset();
             }
+        } catch (RuntimeException error) {
+            firstError = error;
         } finally {
             installedEngine = null;
             previousEngine = null;
         }
+        return firstError;
     }
 
-
+    private RuntimeException addSuppressed(RuntimeException firstError, RuntimeException error) {
+        if (firstError == null) {
+            return error;
+        }
+        if (firstError != error) {
+            firstError.addSuppressed(error);
+        }
+        return firstError;
+    }
 
     private void transitionTo(State next) {
         state.set(next);
