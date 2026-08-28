@@ -1,7 +1,7 @@
 # Team4u 1.0 Migration Guide
 
 ## Maven dependency management
-Team4u 1.0 publishes one dependency-management POM. Import the root POM; there is no separate BOM artifact. The Task 12 reactor and root BOM manage 35 concrete framework leaves.
+Team4u 1.0 publishes one dependency-management POM. Import the root POM; there is no separate BOM artifact. The Task 13 reactor and root BOM manage 36 concrete framework leaves.
 
 ```xml
 <dependencyManagement>
@@ -52,6 +52,9 @@ Add `com.team4u:team4u-config-proxy` to let `ConfigManager.createProxy(...)` dis
 
 `HotSwapStore.wrap(KvStore)` still returns `KvStore`, but its proxy no longer implements `com.team4u.framework.proxy.support.Swappable`. For direct atomic replacement, cast to `com.team4u.framework.kv.HotSwap`, call `hotswap(newDelegate)`, and manage the returned old store yourself. The proxy always implements `KvStore` and `HotSwap`; it additionally implements `StoreWrapper` and `AutoCloseable` only when the initial delegate does. That interface set is fixed at wrap time and cannot change after later swaps.
 
+## Router declarative proxy split
+
+`@Routed`, `@RouteContext`, `RoutedProxyFactory`, `RoutedBeanLocator`, `BeanResolver`, and `RoutedMethodInterceptor` moved from `team4u-router` to `team4u-router-proxy`; every FQCN is unchanged. Add `com.team4u:team4u-router-proxy` when creating routed interface proxies or resolving routed beans. Keep `team4u-router` for `RoutingManager`, routing policy parsing, trace, and interceptors; `team4u-translator` remains router-core-only. Router core never publishes proxy, bean, config-proxy, ByteBuddy, or Jackson production dependencies.
 ## Retry module split
 
 Managed retry governance moved from `team4u-retry-core` to `team4u-retry-managed`, and config-driven retry policies moved to `team4u-retry-config`.

@@ -15,7 +15,7 @@
 
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
-| **[路由组件](router/README.md)** | `team4u-router` | 插件化业务路由框架。支持精准映射 (`Map`)、规则表达式 (`Expression`)、权重分流 (`Weight`) 与组合代理 (`Composite`) 四种路由器，提供基于注解的声明式路由 (`@Routed`) 与白盒 Trace 诊断。 | [概览](router/README.md) · [快速开始](router/quick-start.md) |
+| **[路由组件](router/README.md)** | `team4u-router` / `team4u-router-proxy` | 插件化业务路由框架。router 支持 Map、Expression、Weight 与 Composite 路由、Trace 与拦截器；`team4u-router-proxy` 提供 `@Routed` 声明式接口代理与 Bean 定位。 | [概览](router/README.md) · [快速开始](router/quick-start.md) · [声明式路由](router/router-declarative.md) |
 | **[Criterion 表达式组件](criterion/README.md)** | `team4u-criterion` | 纳秒级业务规则 DSL 表达式引擎。支持类 SQL 自然语法、JIT 闭包直出、0 GC 数值宽容比较、白盒 Trace 执行树与外部属性延迟加载 (`LazyAttributeResolver`)。 | [概览](criterion/README.md) · [快速开始](criterion/quick-start.md) |
 | **[契约翻译组件](translator/README.md)** | `team4u-translator` | 统一契约与响应翻译框架。将上游/底层原始响应 (`RawResponse`) 经由路由规则映射并渲染为统一对外契约 (`TranslatedResponse`)，内置模板变量插值与多级降级策略。 | [概览](translator/README.md) · [快速开始](translator/quick-start.md) |
 

@@ -1,6 +1,17 @@
 # 声明式路由与动态代理
 
-在企业级架构中，将底层路由决策逻辑与上层业务代码彻底解耦是保持架构整洁的关键。`team4u-router` 提供了基于注解的声明式路由机制：业务方只需声明业务接口并标注注解，框架通过动态代理自动拦截方法调用，完成参数提取、动态 ID 渲染、路由判定与目标 Bean 定位分派。
+声明式路由属于独立适配模块 `team4u-router-proxy`。`@Routed`、`@RouteContext`、`RoutedProxyFactory`、`RoutedBeanLocator`、`BeanResolver` 与 `RoutedMethodInterceptor` 的 FQCN 保持不变，但需要在 `team4u-router` 之外显式引入该适配模块：
+
+```xml
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-router-proxy</artifactId>
+</dependency>
+```
+
+只使用 `RoutingManager`、路由策略、Trace 或拦截器时，无需引入该模块；`team4u-translator` 也只依赖 router core。
+
+在企业级架构中，将底层路由决策逻辑与上层业务代码彻底解耦是保持架构整洁的关键。`team4u-router-proxy` 提供了基于注解的声明式路由机制：业务方只需声明业务接口并标注注解，框架通过动态代理自动拦截方法调用，完成参数提取、动态 ID 渲染、路由判定与目标 Bean 定位分派。
 
 ---
 
