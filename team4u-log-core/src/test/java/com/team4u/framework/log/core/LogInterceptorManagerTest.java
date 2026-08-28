@@ -9,6 +9,10 @@ import lombok.Setter;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.List;
+
+import static com.team4u.framework.policy.api.ContextPolicy.HIGH;
+import static com.team4u.framework.policy.api.ContextPolicy.LOW;
 public class LogInterceptorManagerTest {
 
     @Test
@@ -38,10 +42,10 @@ public class LogInterceptorManagerTest {
     }
 
     @Test
-    public void equalButDistinctInterceptorsMayCoexist() {
+    public void equalButDistinctInterceptorsStayIndependentlyOrderedAndOwned() {
         LogInterceptorManager manager = new LogInterceptorManager();
-        EqualInterceptor first = new EqualInterceptor();
-        EqualInterceptor second = new EqualInterceptor();
+        EqualInterceptor first = new EqualInterceptor(HIGH);
+        EqualInterceptor second = new EqualInterceptor(LOW);
 
         manager.register(first);
         manager.register(second);
@@ -49,10 +53,41 @@ public class LogInterceptorManagerTest {
         Assert.assertEquals(first, second);
         Assert.assertEquals(1, count(manager, first));
         Assert.assertEquals(1, count(manager, second));
+        Assert.assertEquals(HIGH, first.priority());
+        Assert.assertEquals(LOW, second.priority());
+        int firstPosition = position(manager, first);
+        int secondPosition = position(manager, second);
+        Assert.assertTrue("equal instances with different priorities must stay distinct: "
+                + firstPosition + " vs " + secondPosition,
+                firstPosition >= 0 && secondPosition >= 0 && firstPosition < secondPosition);
 
         manager.unregister(first);
+
         Assert.assertEquals(0, count(manager, first));
         Assert.assertEquals(1, count(manager, second));
+        Assert.assertTrue(position(manager, second) >= 0);
+    }
+
+    @Test
+    public void unregisterRemovesDefaultFromCoreOwnership() {
+        LogInterceptorManager manager = new LogInterceptorManager();
+        RateLimitInterceptor original = rate(manager);
+
+        manager.unregister(original);
+        manager.resetCore();
+
+        Assert.assertTrue(original.handle(error("after-unregister")));
+        original.stop();
+        Assert.assertTrue(original.handle(error("after-unregister")));
+        Assert.assertTrue(original.handle(error("after-unregister")));
+
+        RateLimitInterceptor replacement = RateLimitInterceptor.create();
+        replacement.setErrorLimitPerSecond(() -> 0);
+        manager.register(replacement);
+        manager.resetCore();
+        LogEvent resetEvent = error("after-unregister");
+        Assert.assertFalse(replacement.handle(resetEvent));
+        Assert.assertTrue(resetEvent.isSuppressed());
     }
 
     @Test
@@ -77,6 +112,16 @@ public class LogInterceptorManagerTest {
         Assert.assertTrue(manager.shouldProcessDisabledLevel(event));
     }
 
+    private int position(LogInterceptorManager manager, LogInterceptor target) {
+        List<LogInterceptor> interceptors = manager.getInterceptors();
+        for (int i = 0; i < interceptors.size(); i++) {
+            if (interceptors.get(i) == target) {
+                return i;
+            }
+        }
+        return -1;
+    }
+
     private int count(LogInterceptorManager manager, LogInterceptor target) {
         int count = 0;
         for (LogInterceptor interceptor : manager.getInterceptors()) {
@@ -86,7 +131,32 @@ public class LogInterceptorManagerTest {
         }
         return count;
     }
+
+    private RateLimitInterceptor rate(LogInterceptorManager manager) {
+        for (LogInterceptor interceptor : manager.getInterceptors()) {
+            if (interceptor instanceof RateLimitInterceptor) {
+                return (RateLimitInterceptor) interceptor;
+            }
+        }
+        throw new AssertionError("Rate interceptor not installed");
+    }
+
+    private LogEvent error(String action) {
+        return new LogEvent().setAction(action).setException(new RuntimeException(action));
+    }
+
     private static class EqualInterceptor implements LogInterceptor {
+        private final int priority;
+
+        private EqualInterceptor(int priority) {
+            this.priority = priority;
+        }
+
+        @Override
+        public int priority() {
+            return priority;
+        }
+
         @Override
         public boolean equals(Object obj) {
             return obj != null && getClass() == obj.getClass();

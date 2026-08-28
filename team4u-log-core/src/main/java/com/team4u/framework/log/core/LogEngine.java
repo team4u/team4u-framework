@@ -21,6 +21,7 @@ public final class LogEngine {
 
     private final LogSerializer serializer;
     private final LogInterceptorManager interceptorManager;
+    private final Object appenderMonitor = new Object();
     private volatile LogAppender appender = new Slf4jLogAppender();
 
     private LogEngine(Builder builder) {
@@ -31,7 +32,7 @@ public final class LogEngine {
         for (LogInterceptor interceptor : builder.interceptors) {
             interceptorManager.register(interceptor);
         }
-        bindAppender(appender);
+        bindAppenderSerializer(appender);
     }
 
     public static Builder builder() {
@@ -55,7 +56,8 @@ public final class LogEngine {
             if (previous == engine) {
                 return previous;
             }
-            engine.internalSetAppender(previous.appender);
+            LogAppender transferred = previous.snapshotAppender();
+            engine.setLocalAppender(transferred);
             GLOBAL.set(engine);
             return previous;
         }
@@ -75,7 +77,8 @@ public final class LogEngine {
             if (current != expected) {
                 return false;
             }
-            previous.internalSetAppender(current.appender);
+            LogAppender transferred = current.snapshotAppender();
+            previous.setLocalAppender(transferred);
             GLOBAL.set(previous);
             return true;
         }
@@ -88,11 +91,7 @@ public final class LogEngine {
     public static boolean compareAndSetGlobalAppender(LogAppender expect, LogAppender update) {
         synchronized (GLOBAL_MONITOR) {
             LogEngine engine = GLOBAL.get();
-            if (engine.appender != expect) {
-                return false;
-            }
-            engine.internalSetAppender(update);
-            return true;
+            return engine.compareAndSetLocalAppender(expect, update);
         }
     }
 
@@ -100,12 +99,7 @@ public final class LogEngine {
         Objects.requireNonNull(transform, "transform");
         synchronized (GLOBAL_MONITOR) {
             LogEngine engine = GLOBAL.get();
-            LogAppender previous = engine.appender;
-            LogAppender next = transform.apply(previous);
-            if (next != previous) {
-                engine.internalSetAppender(next);
-            }
-            return previous;
+            return engine.updateLocalAppender(transform);
         }
     }
 
@@ -122,19 +116,11 @@ public final class LogEngine {
     }
 
     public void setAppender(LogAppender appender) {
-        synchronized (GLOBAL_MONITOR) {
-            internalSetAppender(appender);
-        }
+        setLocalAppender(appender);
     }
 
     public boolean compareAndSetAppender(LogAppender expect, LogAppender update) {
-        synchronized (GLOBAL_MONITOR) {
-            if (appender != expect) {
-                return false;
-            }
-            internalSetAppender(update);
-            return true;
-        }
+        return compareAndSetLocalAppender(expect, update);
     }
 
     /**
@@ -172,11 +158,41 @@ public final class LogEngine {
         return firstError;
     }
 
-    private void internalSetAppender(LogAppender appender) {
-        LogAppender next = appender != null ? appender : new Slf4jLogAppender();
-        this.appender = next;
-        bindAppender(next);
+    private LogAppender snapshotAppender() {
+        synchronized (appenderMonitor) {
+            return appender;
+        }
     }
+
+    private void setLocalAppender(LogAppender appender) {
+        LogAppender next = appender != null ? appender : new Slf4jLogAppender();
+        synchronized (appenderMonitor) {
+            this.appender = next;
+            bindAppenderSerializer(next);
+        }
+    }
+
+    private boolean compareAndSetLocalAppender(LogAppender expect, LogAppender update) {
+        synchronized (appenderMonitor) {
+            if (appender != expect) {
+                return false;
+            }
+            setLocalAppender(update);
+            return true;
+        }
+    }
+
+    private LogAppender updateLocalAppender(UnaryOperator<LogAppender> transform) {
+        synchronized (appenderMonitor) {
+            LogAppender previous = appender;
+            LogAppender next = transform.apply(previous);
+            if (next != previous) {
+                setLocalAppender(next);
+            }
+            return previous;
+        }
+    }
+
     public void processAndOutput(LogEvent event) {
         boolean passed = interceptorManager.execute(event);
         if (!passed || event.isSuppressed()) {
@@ -193,7 +209,7 @@ public final class LogEngine {
         return serializer.serialize(event);
     }
 
-    private void bindAppender(LogAppender appender) {
+    private void bindAppenderSerializer(LogAppender appender) {
         if (appender instanceof SerializerAwareLogAppender) {
             ((SerializerAwareLogAppender) appender).bindSerializer(serializer);
         }

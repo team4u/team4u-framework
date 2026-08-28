@@ -59,7 +59,7 @@ public class LogInterceptorManager {
 
     public void unregister(LogInterceptor interceptor) {
         synchronized (coreMonitor) {
-            chain.unregister(interceptor);
+            chain.unregisterIf(existing -> existing == interceptor);
             coreInterceptors.remove(interceptor);
         }
     }
