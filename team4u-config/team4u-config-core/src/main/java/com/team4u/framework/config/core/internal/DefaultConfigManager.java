@@ -94,7 +94,8 @@ public class DefaultConfigManager implements ConfigManager {
                 this.aggregator,
                 this.versionGenerator,
                 debounceWindowMs,
-                this::commitReload);
+                this::commitReload,
+                this::fireChangeEvents);
         // 启动各配置源的监控任务
         reconcileWatchers();
 
@@ -165,18 +166,14 @@ public class DefaultConfigManager implements ConfigManager {
         }
     }
 
-    private boolean commitReload(long generation, ConfigSnapshot newSnapshot) {
-        ConfigSnapshot oldSnapshot;
+    private HotReloadManager.ReloadEvent commitReload(long generation, ConfigSnapshot newSnapshot) {
         synchronized (lifecycleMonitor) {
             if (!hotReloadManager.isReloadCurrent(generation)) {
-                return false;
+                return null;
             }
-            oldSnapshot = snapshotRef.getAndSet(newSnapshot);
+            ConfigSnapshot oldSnapshot = snapshotRef.getAndSet(newSnapshot);
+            return new HotReloadManager.ReloadEvent(oldSnapshot, newSnapshot);
         }
-
-        // Listener callbacks run only after manager and reload locks are released.
-        fireChangeEvents(new HotReloadManager.ReloadEvent(oldSnapshot, newSnapshot));
-        return true;
     }
 
     /**

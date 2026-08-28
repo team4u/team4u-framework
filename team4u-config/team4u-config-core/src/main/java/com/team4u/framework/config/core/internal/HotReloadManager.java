@@ -14,10 +14,14 @@ import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
 /**
- * Aggregates and commits a reload on behalf of a manager-owned lifecycle.
+ * Atomically commits a reload snapshot and returns the committed event.
  */
 interface ReloadCommitter {
-    boolean commitReload(long generation, ConfigSnapshot newSnapshot);
+    HotReloadManager.ReloadEvent commitReload(long generation, ConfigSnapshot newSnapshot);
+}
+
+interface ReloadNotifier {
+    void onReloadSuccess(HotReloadManager.ReloadEvent event);
 }
 
 public class HotReloadManager {
@@ -27,6 +31,7 @@ public class HotReloadManager {
     private final Supplier<List<ConfigSource>> configSourcesSupplier;
     private final SnapshotAggregator aggregator;
     private final ReloadCommitter committer;
+    private final ReloadNotifier notifier;
     private final ScheduledExecutorService debounceExecutor;
     private final AtomicLong versionGenerator;
     private final Object reloadExecutionMonitor = new Object();
@@ -44,12 +49,14 @@ public class HotReloadManager {
                      SnapshotAggregator aggregator,
                      AtomicLong versionGenerator,
                      long debounceWindowMs,
-                     ReloadCommitter committer) {
+                     ReloadCommitter committer,
+                     ReloadNotifier notifier) {
         this.configSourcesSupplier = configSourcesSupplier;
         this.aggregator = aggregator;
         this.versionGenerator = versionGenerator;
         this.debounceWindowMs = debounceWindowMs;
         this.committer = committer;
+        this.notifier = notifier;
         this.debounceExecutor = new ScheduledThreadPoolExecutor(1, r -> {
             Thread t = new Thread(r, "team4u-config-reload");
             t.setDaemon(true);
@@ -119,6 +126,7 @@ public class HotReloadManager {
     }
 
     private void runReload(long token) {
+        HotReloadManager.ReloadEvent event;
         synchronized (reloadExecutionMonitor) {
             try {
                 if (!isReloadCurrent(token)) {
@@ -132,12 +140,10 @@ public class HotReloadManager {
                     return;
                 }
 
-                boolean committed = committer.commitReload(token, newSnapshot);
-                if (committed) {
-                    log.info("Config reloaded to version {}", newSnapshot.getVersion());
-                }
+                event = committer.commitReload(token, newSnapshot);
             } catch (Exception e) {
                 log.error("Failed to hot reload configuration. Keeping the current snapshot.", e);
+                return;
             } finally {
                 synchronized (this) {
                     if (token == pendingReloadToken) {
@@ -145,6 +151,16 @@ public class HotReloadManager {
                         pendingReloadTask = null;
                     }
                 }
+            }
+        }
+
+        // No reload, manager lifecycle, or HotReloadManager monitor is held here.
+        if (event != null) {
+            log.info("Config reloaded to version {}", event.newSnapshot.getVersion());
+            try {
+                notifier.onReloadSuccess(event);
+            } catch (Exception e) {
+                log.error("Config reload succeeded, but notifying listeners failed", e);
             }
         }
     }
