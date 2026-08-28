@@ -64,7 +64,7 @@ next(name)
 | `Sequences` | 序号门面：`next`（耗尽抛异常）、`tryNext`（耗尽返回 null，额度语义）、`nextFormatted`（模板渲染） |
 | `SequenceService` | 门面默认实现：组装规则加载、分组、计数、号段四个关注点 |
 | `SeqRule` | 序号规则：存储名、分组、start/step/maxValue/recycle、segment、format 一条 JSON 说清 |
-| `CounterCapable` | kv 组件原子计数能力：`incrementAndGet(key, delta)`，内存/JDBC/Redis 三后端内置 |
+| `CounterCapable` | kv 组件原子计数能力：`incrementAndGet(key, delta, ttlMillis)`（id 组件传 `ttl=0` 永不过期，周期重置靠换键），内存/JDBC/Redis 三后端内置 |
 | `GroupKeyPolicy` | 分组键策略（`KeyedPolicy`）：输出分组标识参与计数键，分组变化即重新计数 |
 | `DateGroupKeyPolicy` | 内置策略 `DATE`：按时间格式生成分组标识（yyyyMMdd 按天、yyyyMM 按月），时钟可注入 |
 | `ExtGroupKeyPolicy` | 内置策略 `EXT`：分组标识取调用上下文扩展属性（按商户、渠道等业务维度） |

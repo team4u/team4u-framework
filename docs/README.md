@@ -34,13 +34,15 @@
 
 ### 服务治理与分布式协同
 
-提供分布式排他任务调度与统一容灾重试治理能力。
+提供分布式排他任务调度、统一容灾重试治理与键值/序号/限流基础能力。
 
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
 | **[租约任务组件](lease/README.md)** | `team4u-lease` | 排他任务调度框架。通过队列化 Task/Worker/Result API 提供延迟调度、精确类型订阅、心跳续约、故障接管与业务键幂等建档，支持 Memory 与 MySQL 持久化后端。 | [概览](lease/README.md) · [快速开始](lease/quick-start.md) |
 | **[通用重试组件](retry/README.md)** | `team4u-retry` | 统一重试治理框架。支持进程内即时同步/异步重试 (`INLINE`)，以及基于租约持久化的跨进程后台托管补偿重试 (`MANAGED`)，支持 `@Retryable` 注解与动态策略下发。 | [概览](retry/README.md) · [快速开始](retry/quick-start.md) |
-| **[键值存储组件](kv/README.md)** | `team4u-kv` | 最小核心 + 装饰器的键值存储套件。4 操作 `KvStore` 核心与 CAS/扫描/订阅能力协商，分层缓存 (`TieredStore`)、热交换 (`HotSwapStore`)、观测、重试装饰器，CAS 化分布式锁、过期值源（refresh-ahead/singleflight）与 memory/JDBC/Redis 多后端契约测试。 | [概览](kv/README.md) · [快速开始](kv/quick-start.md) |
+| **[键值存储组件](kv/README.md)** | `team4u-kv` | 最小核心键值抽象与能力协商框架。四操作核心接口 + CAS/扫描/订阅/计数/计分窗口能力接口 + 装饰器洋葱（分层、观测、重试、热交换），内置内存/JDBC/Redis 后端与跨后端契约测试。 | [概览](kv/README.md) · [快速开始](kv/quick-start.md) |
+| **[序号生成组件](id/README.md)** | `team4u-id` | 配置驱动的序号生成框架。基于 `KvStore` 原子计数能力 (`CounterCapable`)，一条 JSON 规则支持分组重置、额度耗尽、循环使用、本地号段加速与模板化单号，内存/JDBC/Redis 后端行为一致。 | [概览](id/README.md) · [快速开始](id/quick-start.md) |
+| **[限流组件](ratelimiter/README.md)** | `team4u-ratelimiter` | 配置驱动的多算法限流框架。基于 `KvStore` 能力协商提供固定窗口、令牌桶、精确滑动窗口与客户端历史窗口四种算法，一条 JSON 规则支持键模板维度计数、多存储分工、failOpen 故障策略与 `@RateLimit` 注解代理，热更新生效。 | [概览](ratelimiter/README.md) · [快速开始](ratelimiter/quick-start.md) |
 
 ---
 

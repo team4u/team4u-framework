@@ -4,11 +4,11 @@
 
 ## 后端对比
 
-| 后端 | 模块 | `IF_ABSENT` | CAS | 计数 | 扫描 | 原生TTL | 互斥范围 |
-| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
-| `InMemoryKvStore` | kv-core | `compute` | `compute` | `AtomicLong` | 遍历 | 惰性判定 | 当前进程 |
-| `JdbcKvStore` | kv-store-jdbc | 唯一索引 | 条件 UPDATE | 行锁 | SQL | 惰性判定 | 连接该库的实例 |
-| `RedisKvStore` | kv-store-redis | SETNX | Lua 脚本 | `INCRBY` | SCAN | ✅ | 连接该 Redis 的实例 |
+| 后端 | 模块 | `IF_ABSENT` | CAS | 计数 | 计分窗口 | 扫描 | 原生TTL | 互斥范围 |
+| :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
+| `InMemoryKvStore` | kv-core | `compute` | `compute` | `AtomicLong` | 独立窗口结构 | 遍历 | 惰性判定 | 当前进程 |
+| `JdbcKvStore` | kv-store-jdbc | 唯一索引 | 条件 UPDATE | 行锁 | ❌ 未实现 | SQL | 惰性判定 | 连接该库的实例 |
+| `RedisKvStore` | kv-store-redis | SETNX | Lua 脚本 | `INCRBY` | ZSET + Lua | SCAN | ✅ | 连接该 Redis 的实例 |
 
 ## JDBC：JdbcKvStore
 
@@ -48,6 +48,10 @@ CREATE TABLE IF NOT EXISTS kv_counter (
 );
 ```
 
+`incrementAndGet(key, delta, ttlMillis)` 的 TTL 契约在行锁事务内完成：`ttl > 0` 时键创建（或过期重置）当刻记录截止时间，到期后的首次递增先归零再累加（等效键消失后重建），后续递增不刷新截止时间。
+
+计分窗口（`ScoredWindowCapable`）**暂未实现**——多语句的「裁剪 → 计数 → 条件添加」在 SQL 上无轻量原子等价物，宁缺毋滥不做「实现了但语义错误」的接口。需要滑动窗口语义（如 team4u-ratelimiter 的 `sliding-window`）时使用内存或 Redis 后端。
+
 行为细节：
 
 - `put(IF_ABSENT)`：先删除同键已过期记录（避免过期数据阻塞 SETNX），再 INSERT，撞 `(space, name)` 唯一索引即返回 false；
@@ -79,7 +83,8 @@ KvStore kv = new RedisKvStore(stringRedisTemplate, "app1:", clock);
 | `remove` | `DEL` |
 | `expire` | `PEXPIRE` / `PERSIST`（`ttl<=0` 对齐契约语义） |
 | CAS | Lua 脚本：`GET` 值匹配则 `SET`/`DEL`，单脚本原子 |
-| 计数 | `INCRBY key delta`（键不存在从 0 开始） |
+| 计数 | `INCRBY key delta`（键不存在从 0 开始；`ttl>0` 时经 Lua「INCRBY + 首次 PEXPIRE」原子生效，后续递增不刷新 TTL） |
+| 计分窗口 | Lua 脚本：`ZREMRANGEBYSCORE` 裁剪 → `ZCARD` 计数 → 条件 `ZADD` 准入 → `PEXPIRE` 刷新，单脚本原子 |
 | `scan` | `SCAN MATCH space:*`（游标遍历，不用阻塞的 `KEYS`） |
 
 要点：
@@ -87,7 +92,7 @@ KvStore kv = new RedisKvStore(stringRedisTemplate, "app1:", clock);
 - 实现 `NativeTtlCapable`：过期由 Redis 淘汰，`pruneExpired` 恒返回 0，清理器自动跳过；
 - 键前缀会同时作用于物理键与 `scan` 的匹配模式；
 - 值为原样字符串（不做 JSON 包装），与内存/JDBC 实现存储格式一致；
-- 计数键与普通值键共享物理键空间，同一键上混用两种语义行为未定义（非整数值上 `INCRBY` 会失败），调用方应避免。
+- 计数键、计分窗口键与普通值键共享物理键空间，同一键上混用两种语义行为未定义（非整数值上 `INCRBY` 会失败），调用方应避免。
 
 ## 自定义后端
 

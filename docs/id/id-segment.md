@@ -8,7 +8,7 @@
 规则配置 `segment`（号段长度）大于 0 时启用号段模式：一次从计数器批量取回 N 个序号缓存本地，取号直接走本地内存，号段耗尽再取下一批。
 
 ```text
-next ──► 本地号段 cursor/end ──耗尽──► incrementAndGet(key, N) ──► 计数器(直增 N)
+next ──► 本地号段 cursor/end ──耗尽──► incrementAndGet(key, N, 0) ──► 计数器(直增 N)
               │
               └── 未耗尽：CAS 发号，零存储访问、零锁竞争
 ```
@@ -32,7 +32,7 @@ next ──► 本地号段 cursor/end ──耗尽──► incrementAndGet(key
 ### 并发模型
 
 - 发号路径：`cursor` CAS 无锁递增，读路径零竞争；
-- 段切换：实例锁内串行执行 `incrementAndGet(key, segmentSize)`，取段返回值即段边界，天然 singleflight；
+- 段切换：实例锁内串行执行 `incrementAndGet(key, segmentSize, 0)`（TTL 传 0 = 永不过期，周期重置靠换键），取段返回值即段边界，天然 singleflight；
 - 游标不回退：`cursor` 单调递增，段切换仅发布新的 `end`，不存在「回写游标」路径，杜绝重复发号。
 
 ### 耗尽标记
