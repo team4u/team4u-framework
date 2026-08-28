@@ -1,7 +1,7 @@
 # Team4u 1.0 Migration Guide
 
 ## Maven dependency management
-Team4u 1.0 publishes one dependency-management POM. Import the root POM; there is no separate BOM artifact. The Task 13 reactor and root BOM manage 36 concrete framework leaves.
+Team4u 1.0 publishes one dependency-management POM. Import the root POM; there is no separate BOM artifact. The Task 15 reactor and root BOM manage 38 concrete framework leaves.
 
 ```xml
 <dependencyManagement>
@@ -65,9 +65,17 @@ Managed retry governance moved from `team4u-retry-core` to `team4u-retry-managed
 | 1.0 | Moved `com.team4u.framework.retry.api.ManagedSubmitResult` | Use `com.team4u.framework.retry.managed.ManagedSubmitResult`. |
 | 1.0 | Moved `com.team4u.framework.retry.config.DynamicRetryPolicyRegistry` | Use `com.team4u.framework.retry.dynamic.DynamicRetryPolicyRegistry` from `team4u-retry-config`. |
 
+## Mask adapter and dynamic config split
+
+`team4u-mask` is now the core artifact and still depends only on `team4u-base` and `team4u-policy`. Add `com.team4u:team4u-mask-jackson` for the unchanged `com.team4u.framework.mask.jackson` classes and Jackson serialization. Add `com.team4u:team4u-mask-config` for config-driven rules; it depends on config-core and serializer-json, and the application must supply `team4u-serializer-jackson` or another registered `JsonSerializerPolicy`.
+
+`MaskRuleRepository` keeps `com.team4u.framework.mask.config.MaskRuleRepository` and now implements the core `MaskRuleResolver` SPI. `MaskBootstrap` moved without a compatibility class from `com.team4u.framework.mask.MaskBootstrap` to `com.team4u.framework.mask.config.MaskBootstrap`; update the import and add `team4u-mask-config`. Jackson serialization reads dynamic rules through the core global resolver, so it does not depend on mask-config.
+
+Unknown mask policy keys, null, empty, and whitespace keys now throw `IllegalArgumentException`. Only explicit `NONE` preserves the original value; update accidental fallback usages to register a real `MaskPolicy`.
+
 ## Explicit serializer provider choice
 
-Applications using JSON APIs must choose a provider explicitly. Add `com.team4u:team4u-serializer-jackson` to the application, or provide/register a custom `JsonSerializerPolicy` through `META-INF/services/com.team4u.framework.serializer.json.JsonSerializerPolicy`. Depending only on `team4u-serializer-json` is supported, but the first non-null/non-empty JSON call fails fast with an `IllegalStateException` naming both choices. The same requirement applies to JSON paths in config-core, retry-core, kv-space/kv-lifecycle, lease-jdbc, router, translator, mask, and log. Until Tasks 15 and 17, mask and log may directly depend on Jackson for their current adapters but never pass `team4u-serializer-jackson`. `team4u-retry-lease-runtime` permanently carries nonoptional Jackson for its durable-record integration and therefore supplies Jackson to consumers directly; this is distinct from an application-owned `JsonUtil` provider, and the artifact never passes `team4u-serializer-jackson`.
+Applications using JSON APIs must choose a provider explicitly. Add `com.team4u:team4u-serializer-jackson` to the application, or provide/register a custom `JsonSerializerPolicy` through `META-INF/services/com.team4u.framework.serializer.json.JsonSerializerPolicy`. Depending only on `team4u-serializer-json` is supported, but the first non-null/non-empty JSON call fails fast with an `IllegalStateException` naming both choices. The same requirement applies to JSON paths in config-core, retry-core, kv-space/kv-lifecycle, lease-jdbc, router, translator, mask-config, and log. `team4u-mask-jackson` owns direct Jackson API for its serializer adapter; it never passes `team4u-serializer-jackson`. `team4u-retry-lease-runtime` permanently carries nonoptional Jackson for its durable-record integration and therefore supplies Jackson to consumers directly; this is distinct from an application-owned `JsonUtil` provider, and the artifact never passes `team4u-serializer-jackson`.
 
 After importing it, depend on concrete Team4u artifacts without versions.
 

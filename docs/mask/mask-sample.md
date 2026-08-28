@@ -1,6 +1,6 @@
 # 实战案例
 
-本章介绍 `team4u-mask` 在 HTTP API 出参保护、第三方回调报文动态治理与网关日志安全打印中的典型生产实践。
+本章介绍 `team4u-mask` 及其按需引入的 Jackson/配置中心适配模块在 HTTP API 出参保护、第三方回调报文动态治理与网关日志安全打印中的典型生产实践。
 
 ---
 
@@ -88,7 +88,7 @@ public class UserController {
 ### 启动规则监听并在回调中安全打印日志
 ```java
 import com.team4u.framework.config.core.ConfigManager;
-import com.team4u.framework.mask.MaskBootstrap;
+import com.team4u.framework.mask.config.MaskBootstrap;
 import com.team4u.framework.serializer.json.JsonUtil;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.web.bind.annotation.*;

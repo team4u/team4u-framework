@@ -8,7 +8,7 @@ import com.fasterxml.jackson.databind.annotation.JsonSerialize;
 import com.fasterxml.jackson.databind.ser.std.StdSerializer;
 import com.team4u.framework.mask.Mask;
 import com.team4u.framework.mask.MaskType;
-import com.team4u.framework.mask.config.MaskRuleRepository;
+import com.team4u.framework.mask.MaskRuleResolver;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -20,19 +20,24 @@ import java.util.Map;
 
 public class JacksonMaskModuleTest {
 
-    private final MaskRuleRepository repository = MaskRuleRepository.getInstance();
+    private final Map<String, Map<String, String>> repository = new LinkedHashMap<>();
+    private final MaskRuleResolver resolver = (className, fieldName) -> {
+        Map<String, String> classRules = repository.get(className);
+        return classRules != null ? classRules.get(fieldName) : null;
+    };
     private ObjectMapper objectMapper;
 
     @Before
     public void setUp() {
-        repository.reset();
+        MaskRuleResolver.Global.install(resolver);
         objectMapper = new ObjectMapper();
         objectMapper.registerModule(new JacksonMaskModule());
     }
 
     @After
     public void tearDown() {
-        repository.reset();
+        MaskRuleResolver.Global.reset();
+        repository.clear();
     }
 
     @Test
@@ -53,7 +58,7 @@ public class JacksonMaskModuleTest {
         Map<String, String> fieldRules = new LinkedHashMap<>();
         fieldRules.put("mobile", MaskType.MOBILE.name());
         rules.put(ExternalRulePayload.class.getName(), fieldRules);
-        repository.setRuleCache(rules);
+        repository.put(ExternalRulePayload.class.getName(), fieldRules);
 
         String json = objectMapper.writeValueAsString(new ExternalRulePayload());
         Assert.assertEquals("{\"mobile\":13812345678}", json);
@@ -65,7 +70,7 @@ public class JacksonMaskModuleTest {
         Map<String, String> fieldRules = new LinkedHashMap<>();
         fieldRules.put("token", MaskType.NULL.name());
         rules.put(LinkedHashMap.class.getName(), fieldRules);
-        repository.setRuleCache(rules);
+        repository.put(LinkedHashMap.class.getName(), fieldRules);
 
         MapHolder payload = new MapHolder();
         payload.data.put("token", "secret");
@@ -81,7 +86,7 @@ public class JacksonMaskModuleTest {
         Map<String, String> fieldRules = new LinkedHashMap<>();
         fieldRules.put("email", MaskType.EMAIL.name());
         rules.put(LinkedHashMap.class.getName(), fieldRules);
-        repository.setRuleCache(rules);
+        repository.put(LinkedHashMap.class.getName(), fieldRules);
 
         ContextualMapHolder payload = new ContextualMapHolder();
         payload.data.put("email", "jay.wuy@gmail.com");

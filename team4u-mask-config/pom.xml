@@ -9,27 +9,50 @@
     </parent>
     <modelVersion>4.0.0</modelVersion>
 
-    <artifactId>team4u-mask</artifactId>
+    <artifactId>team4u-mask-config</artifactId>
 
     <dependencies>
         <dependency>
             <groupId>com.team4u</groupId>
-            <artifactId>team4u-base</artifactId>
+            <artifactId>team4u-mask</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
             <groupId>com.team4u</groupId>
-            <artifactId>team4u-policy</artifactId>
+            <artifactId>team4u-config-core</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
-            <groupId>junit</groupId>
-            <artifactId>junit</artifactId>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-serializer-json</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-config-test</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+            <exclusions>
+                <exclusion>
+                    <groupId>com.team4u</groupId>
+                    <artifactId>team4u-config-proxy</artifactId>
+                </exclusion>
+            </exclusions>
+        </dependency>
+        <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-serializer-jackson</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
             <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
         </dependency>
     </dependencies>
 
@@ -40,7 +63,7 @@
                 <artifactId>maven-enforcer-plugin</artifactId>
                 <executions>
                     <execution>
-                        <id>enforce-mask-core-boundary</id>
+                        <id>enforce-mask-config-boundary</id>
                         <goals>
                             <goal>enforce</goal>
                         </goals>
@@ -48,24 +71,18 @@
                             <rules>
                                 <bannedDependencies>
                                     <excludes>
-                                        <exclude>com.team4u:team4u-config-core:*:*:compile</exclude>
-                                        <exclude>com.team4u:team4u-config-core:*:*:runtime</exclude>
-                                        <exclude>com.team4u:team4u-config-proxy:*:*:compile</exclude>
-                                        <exclude>com.team4u:team4u-config-proxy:*:*:runtime</exclude>
-                                        <exclude>com.team4u:team4u-serializer-json:*:*:compile</exclude>
-                                        <exclude>com.team4u:team4u-serializer-json:*:*:runtime</exclude>
-                                        <exclude>com.team4u:team4u-serializer-jackson:*:*:compile</exclude>
-                                        <exclude>com.team4u:team4u-serializer-jackson:*:*:runtime</exclude>
                                         <exclude>com.team4u:team4u-mask-jackson:*:*:compile</exclude>
                                         <exclude>com.team4u:team4u-mask-jackson:*:*:runtime</exclude>
-                                        <exclude>com.team4u:team4u-mask-config:*:*:compile</exclude>
-                                        <exclude>com.team4u:team4u-mask-config:*:*:runtime</exclude>
+                                        <exclude>com.team4u:team4u-config-proxy:*:*:compile</exclude>
+                                        <exclude>com.team4u:team4u-config-proxy:*:*:runtime</exclude>
+                                        <exclude>com.team4u:team4u-serializer-jackson:*:*:compile</exclude>
+                                        <exclude>com.team4u:team4u-serializer-jackson:*:*:runtime</exclude>
                                         <exclude>com.fasterxml.jackson*:*:*:*:compile</exclude>
                                         <exclude>com.fasterxml.jackson*:*:*:*:runtime</exclude>
                                         <exclude>org.springframework:*:*:*:compile</exclude>
                                         <exclude>org.springframework:*:*:*:runtime</exclude>
                                     </excludes>
-                                    <message>mask core must remain a pure Java artifact with no adapter dependencies.</message>
+                                    <message>mask-config owns config rules but must not depend on serializer or Jackson adapters.</message>
                                 </bannedDependencies>
                             </rules>
                         </configuration>

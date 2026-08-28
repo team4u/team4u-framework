@@ -1,8 +1,8 @@
-# 数据脱敏组件 (team4u-mask)
+# 数据脱敏组件 (mask / mask-jackson / mask-config)
 
 # 背景
 
-随着数据安全与隐私合规要求的日益严格，用户敏感数据（如手机号、身份证号、银行卡号、姓名、邮箱、详细地址等）在日志记录、接口出参以及数据导出等场景下必须进行统一的脱敏处理。
+Task 15 将脱敏能力拆为三个 artifact：`team4u-mask` 是核心脱敏模块，提供编程式极速脱敏 (`FastMasker`) 与注解声明 (`@Mask`)；`team4u-mask-jackson` 提供 Jackson 序列化适配；`team4u-mask-config` 提供配置中心动态规则与生命周期引导。
 
 传统的手动脱敏方案通常面临如下痛点：
 
@@ -11,7 +11,7 @@
 - **规则调整需重新发版**：合规政策调整（例如掩码规则微调）必须修改代码并重新编译上线。
 - **Unicode 与 Emoji 乱码截断**：常规 `String.substring` 在处理 4 字节 Emoji 或生僻字（Surrogate Pair 代理对）时，容易截断半个字符导致乱码或乱码异常。
 
-`team4u-mask` 是一个轻量级、高性能、支持动态治理的 Java 数据脱敏模块。它提供了 **编程式极速脱敏 (`FastMasker`)**、**注解式声明脱敏 (`@Mask`)** 与 **配置中心动态规则 (`team4u.mask.rules`)** 三位一体的防护体系。
+`team4u-mask` 是一个轻量级、高性能的核心脱敏模块。它提供了 **编程式极速脱敏 (`FastMasker`)** 与 **注解式声明脱敏 (`@Mask`)**；配置中心动态规则由 `team4u-mask-config` 提供。
 
 ---
 
@@ -50,12 +50,12 @@ graph TD
 
 ## 核心特性
 
-- **高性能无锁策略路由**：底层基于 `team4u-policy` 的 `KeyedPolicyRegistry` 读写分离架构，核心路径无反射、无正则开销。
+- **高性能线程安全策略路由**：复用 `team4u-policy` 的 `KeyedPolicyRegistry` 与标准 `ServiceLoader`，核心路径无正则、Jackson 或配置依赖。
 - **内置 15 种标准脱敏算法**：开箱覆盖姓名（支持中英文智能区分）、手机号、身份证、银行卡、邮箱、地址、密码、居中百分比掩码等。
-- **Jackson 无侵入自动脱敏**：注册 `JacksonMaskModule` 后，自动接管 JavaBean 与 Map 的 JSON 序列化输出，内存对象中的真实值完全不受影响。当前 `team4u-mask` 生产源码仍直接使用 Jackson API，直接 Jackson 依赖保留到 Task 15 拆分为 `team4u-mask-jackson`；它不传递 `team4u-serializer-jackson`。
-- **JsonUtil 输出脱敏**：通过 `JsonUtil` 输出 Map 的应用仍需显式添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。
-- **配置中心动态治理 (`team4u.mask.rules`)**：联动 `team4u-config`，无需修改代码即可针对特定 Class、第三方 DTO 或全局字段名动态下发脱敏规则。
-- **Unicode CodePoint 安全机制**：所有字符串长度计算与截取严格基于 Unicode CodePoint 算法，完美兼容 Emoji 与生僻字。
+- **未知策略 fail-closed**：未注册、null、空串或空白策略标识抛出 `IllegalArgumentException`；只有显式 `NONE` 返回原文。
+- **Jackson 无侵入自动脱敏**：添加 `team4u-mask-jackson` 并注册 `JacksonMaskModule` 后，自动接管 JavaBean 与 Map 的 JSON 序列化输出；它使用核心 `MaskRuleResolver`，不依赖 mask-config。
+- **配置中心动态治理 (`team4u.mask.rules`)**：添加 `team4u-mask-config` 并启动 `MaskBootstrap`；规则解析通过 serializer-json，应用需显式提供 `team4u-serializer-jackson` 或自定义 `JsonSerializerPolicy`。
+- **Unicode CodePoint 安全机制**：所有字符串长度计算与截取严格基于 Unicode CodePoint 算法，兼容 Emoji 与生僻字。
 - **超长报文截断保护 (`MaskConfig`)**：支持配置 `maxStringLength`，防止超大报文或 Base64 文本打满磁盘日志。
 
 ---
@@ -67,9 +67,9 @@ graph TD
 | `FastMasker` | `com.team4u.framework.mask.FastMasker` | 极速脱敏核心门面，提供 `mask(value, MaskType)` 与 `mask(value, String)` |
 | `MaskType` | `com.team4u.framework.mask.MaskType` | 内置标准脱敏策略枚举（`MOBILE`、`NAME`、`ID_CARD_NO`、`BANK_CARD_NO` 等 15 种） |
 | `MaskPolicy` | `com.team4u.framework.mask.MaskPolicy` | 脱敏策略 SPI 接口（继承 `KeyedPolicy<String>`），支持业务自由扩展 |
-| `@Mask` | `com.team4u.framework.mask.Mask` | 字段级声明式脱敏注解，指定执行的 `MaskType` |
+| `MaskRuleResolver` | `com.team4u.framework.mask.MaskRuleResolver` | 纯 Java 动态规则解析 SPI；默认 no-op，可安装/重置核心全局 resolver |
 | `MaskRuleRepository` | `com.team4u.framework.mask.config.MaskRuleRepository` | 动态规则仓库，支持类精确匹配与 `*` 全局通配匹配，支持配置中心热更 |
-| `MaskBootstrap` | `com.team4u.framework.mask.MaskBootstrap` | 全局引导类，绑定 `ConfigManager` 并启动动态脱敏规则热重载监听 |
+| `MaskBootstrap` | `com.team4u.framework.mask.config.MaskBootstrap` | 全局引导类，绑定 `ConfigManager`，安装/卸载核心 resolver 并启动动态规则热重载监听 |
 | `JacksonMaskModule` | `com.team4u.framework.mask.jackson.JacksonMaskModule` | Jackson 模块，自动注册动态序列化修饰器 |
 | `MaskUtils` | `com.team4u.framework.mask.MaskUtils` | Unicode CodePoint 字符安全计算与掩码工具类 |
 
@@ -77,17 +77,10 @@ graph TD
 
 ## 组件位置与包结构
 
+三个 artifact 的生产包如下：
+
 ```text
-com.team4u.framework.mask
-├── config                           # 规则管理
-│   └── MaskRuleRepository.java      # 动态脱敏规则仓库 (team4u.mask.rules)
-├── jackson                          # Jackson 序列化脱敏集成
-│   ├── DynamicMaskSerializerModifier.java # 动态序列化修饰器
-│   ├── JacksonMaskModule.java       # Jackson 脱敏模块
-│   ├── JacksonSerializationContext.java  # 序列化上下文工具
-│   ├── MaskConfig.java              # 序列化上下文配置 (maxStringLength)
-│   ├── MaskStringSerializer.java    # 字符串脱敏序列化器
-│   └── MaskableMapSerializer.java   # Map 动态脱敏序列化器
+team4u-mask: com.team4u.framework.mask
 ├── policy                           # 内置脱敏策略实现 (15 种)
 │   ├── AddressMaskPolicy.java       # 地址 (保留前9字符)
 │   ├── B1A1MaskPolicy.java          # 仅显示前1后1
@@ -106,10 +99,19 @@ com.team4u.framework.mask
 │   └── Percent66MaskPolicy.java     # 居中掩码66%
 ├── FastMasker.java                  # 极速脱敏核心门面
 ├── Mask.java                        # 字段脱敏注解
-├── MaskBootstrap.java               # 动态规则启动引导类
+├── MaskPolicyRegistry.java          # 复用 policy 线程安全策略注册表
+├── MaskRuleResolver.java            # 动态规则 SPI / 全局生命周期
 ├── MaskPolicy.java                  # 策略 SPI 接口
 ├── MaskType.java                    # 标准脱敏枚举
 └── MaskUtils.java                   # Unicode 字符安全工具类
+```
+
+```text
+team4u-mask-jackson: com.team4u.framework.mask.jackson
+└── JacksonMaskModule / DynamicMaskSerializerModifier / serializers
+
+team4u-mask-config: com.team4u.framework.mask.config
+└── MaskBootstrap / MaskRuleRepository
 ```
 
 ---

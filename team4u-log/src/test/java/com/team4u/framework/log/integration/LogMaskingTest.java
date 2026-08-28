@@ -2,6 +2,7 @@ package com.team4u.framework.log.integration;
 
 import com.team4u.framework.log.Loggers;
 import com.team4u.framework.log.support.TestLogHelper;
+import com.team4u.framework.mask.MaskRuleResolver;
 import com.team4u.framework.mask.config.MaskRuleRepository;
 import lombok.Data;
 import org.junit.After;
@@ -27,7 +28,9 @@ public class LogMaskingTest {
 
     private void refreshRules(Map<String, Map<String, String>> rules) {
         // 直接设置规则缓存，无需通过反射
-        MaskRuleRepository.getInstance().setRuleCache(rules);
+        MaskRuleRepository repository = MaskRuleRepository.getInstance();
+        repository.setRuleCache(rules);
+        MaskRuleResolver.Global.install(repository);
     }
 
     @After

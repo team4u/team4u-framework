@@ -8,7 +8,7 @@ import com.fasterxml.jackson.databind.ser.BeanSerializerModifier;
 import com.fasterxml.jackson.databind.ser.std.MapSerializer;
 import com.fasterxml.jackson.databind.type.MapType;
 import com.team4u.framework.mask.Mask;
-import com.team4u.framework.mask.config.MaskRuleRepository;
+import com.team4u.framework.mask.MaskRuleResolver;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -45,7 +45,7 @@ public class DynamicMaskSerializerModifier extends BeanSerializerModifier {
 
             // 2. 使用外部规则库配置
             // 规则仅在构建序列化器时执行，提升性能
-            String externalRule = MaskRuleRepository.getInstance().findRule(className, fieldName);
+            String externalRule = MaskRuleResolver.Global.get().findRule(className, fieldName);
             if (externalRule != null) {
                 if (isStringProperty(writer)) {
                     writer.assignSerializer(new MaskStringSerializer(externalRule));

@@ -1,12 +1,12 @@
 # 扩展机制与 Unicode 安全
 
-`team4u-mask` 具备良好的开放性与健壮性，支持开发者自由扩展自定义脱敏算法，并内置了针对大文本的超长截断保护与多字节 Unicode CodePoint 安全计算。
+`team4u-mask` 支持自由扩展自定义脱敏算法；`team4u-mask-jackson` 额外内置针对大文本的超长截断保护，二者均基于 Unicode CodePoint 安全计算。
 
 ---
 
 ## 扩展自定义脱敏策略 (`MaskPolicy`)
 
-所有脱敏算法均实现 `MaskPolicy` 接口（继承自 `KeyedPolicy<String>`）。
+所有脱敏算法均实现 `team4u-mask` 的 `MaskPolicy` 接口（继续继承 `team4u-policy` 的 `KeyedPolicy<String>`）。
 
 ### 步骤 1：编写自定义策略实现类
 ```java
@@ -46,7 +46,7 @@ String maskedPassport = FastMasker.mask("E12345678", "PASSPORT"); // E1*****78
 ```text
 com.mycompany.mask.PassportMaskPolicy
 ```
-在 `FastMasker` 类加载时，会自动通过 `PolicyScanner.registerFromServiceLoader()` 加载并注册该策略。
+在 `FastMasker` 类加载时，会通过 Java 标准 `ServiceLoader` 加载并注册该策略。
 
 ---
 

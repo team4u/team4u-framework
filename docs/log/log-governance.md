@@ -79,7 +79,7 @@
 
 ## 动态数据脱敏 (`team4u.mask.rules`)
 
-`team4u-log` 与 `team4u-mask` 深度联动。在 Jackson 序列化输出阶段，自动应用配置中心下发的动态脱敏规则：
+`team4u-log` 与 `team4u-mask-config` 深度联动。在 `team4u-mask-jackson` 序列化输出阶段，自动应用配置中心下发的动态脱敏规则：
 
 ```json
 {
