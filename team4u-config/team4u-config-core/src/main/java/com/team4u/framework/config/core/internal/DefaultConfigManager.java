@@ -125,16 +125,20 @@ public class DefaultConfigManager implements ConfigManager {
     }
 
     public static void refreshGlobalIfInitialized() {
-        DefaultConfigManager current = global;
-        if (current != null) {
-            current.refresh();
+        // ConfigManager.class serializes global initialization, refresh, and reset.
+        synchronized (ConfigManager.class) {
+            DefaultConfigManager current = global;
+            if (current != null) {
+                current.refresh();
+            }
         }
     }
 
     public static DefaultConfigManager globalOrNullForTests() {
-        return global;
+        synchronized (ConfigManager.class) {
+            return global;
+        }
     }
-
     /**
      * Discards the global manager reference without initializing an absent manager.
      * Test cleanup must destroy the manager first through ConfigBootstrap.resetForTests().

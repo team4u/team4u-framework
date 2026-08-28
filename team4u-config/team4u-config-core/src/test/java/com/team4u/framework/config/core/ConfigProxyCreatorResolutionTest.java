@@ -48,11 +48,6 @@ public class ConfigProxyCreatorResolutionTest {
         return "explicit";
     }
 
-    public static void assertServiceLoaderCreatorIsUsed() {
-        ConfigManager manager = ConfigManager.builder().build();
-        manager.createProxy("app", Object.class);
-    }
-
     private static class CountingCreator implements ConfigProxyCreator {
         private final AtomicInteger calls = new AtomicInteger();
 

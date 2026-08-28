@@ -10,7 +10,6 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.ScheduledThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
-import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicLong;
 import java.util.function.Supplier;
 
@@ -30,10 +29,11 @@ public class HotReloadManager {
     private final ReloadCommitter committer;
     private final ScheduledExecutorService debounceExecutor;
     private final AtomicLong versionGenerator;
+    private final Object reloadExecutionMonitor = new Object();
     private volatile long debounceWindowMs;
-    private final AtomicBoolean pendingTaskAssigned = new AtomicBoolean(false);
-    private volatile ScheduledFuture<?> pendingTask;
-    private long generation;
+    private long reloadToken;
+    private long pendingReloadToken;
+    private ScheduledFuture<?> pendingReloadTask;
     private boolean acceptingReloads = true;
 
     public synchronized void setDebounceWindowMs(long debounceWindowMs) {
@@ -57,86 +57,95 @@ public class HotReloadManager {
         });
     }
 
-    /**
-     * The signal path does not retain this monitor while entering manager lifecycle code.
-     */
     public void signalChange() {
-        long reloadGeneration;
+        long token;
         long delay;
+
         synchronized (this) {
             if (!acceptingReloads) {
                 return;
             }
-            reloadGeneration = generation;
+            token = ++reloadToken;
             delay = debounceWindowMs;
         }
 
         if (delay <= 0) {
-            doReload(reloadGeneration);
+            runReload(token);
             return;
         }
 
-        scheduleDebouncedReload(reloadGeneration, delay);
+        scheduleReload(token, delay);
     }
 
-    private void scheduleDebouncedReload(long reloadGeneration, long delay) {
-        // Manager lifecycle methods may cancel synchronously; never schedule under this monitor.
+    private void scheduleReload(long token, long delay) {
+        ScheduledFuture<?> task;
         synchronized (this) {
-            if (pendingTaskAssigned.get()) {
+            if (!acceptingReloads || token != reloadToken) {
                 return;
             }
-            pendingTaskAssigned.set(true);
-        }
 
-        ScheduledFuture<?> task = debounceExecutor.schedule(
-                () -> doReload(reloadGeneration), delay, TimeUnit.MILLISECONDS);
-        pendingTask = task;
+            cancelPendingTaskLocked();
+            pendingReloadToken = token;
+            // schedule() only touches the executor and can safely be called under this monitor.
+            task = debounceExecutor.schedule(() -> runReload(token), delay, TimeUnit.MILLISECONDS);
+            pendingReloadTask = task;
+        }
+    }
+
+    private synchronized void cancelPendingTaskLocked() {
+        if (pendingReloadTask != null) {
+            pendingReloadTask.cancel(false);
+            pendingReloadTask = null;
+        }
+        pendingReloadToken = 0L;
     }
 
     public void cancelPendingReload() {
         synchronized (this) {
-            generation++;
+            reloadToken++;
             acceptingReloads = false;
-        }
-        ScheduledFuture<?> task = pendingTask;
-        pendingTask = null;
-        pendingTaskAssigned.set(false);
-        if (task != null) {
-            task.cancel(false);
+            cancelPendingTaskLocked();
         }
     }
 
     public synchronized void resumeAcceptingReloads() {
-        generation++;
+        reloadToken++;
         acceptingReloads = true;
+        cancelPendingTaskLocked();
     }
 
-    public synchronized boolean isReloadCurrent(long reloadGeneration) {
-        return acceptingReloads && reloadGeneration == generation;
+    public synchronized boolean isReloadCurrent(long token) {
+        return acceptingReloads && token == reloadToken;
     }
 
-    private void doReload(long reloadGeneration) {
-        try {
-            synchronized (this) {
-                if (!acceptingReloads || reloadGeneration != generation) {
+    private void runReload(long token) {
+        synchronized (reloadExecutionMonitor) {
+            try {
+                if (!isReloadCurrent(token)) {
                     return;
                 }
-            }
 
-            long nextVersion = versionGenerator.incrementAndGet();
-            ConfigSnapshot newSnapshot = aggregator.aggregate(configSourcesSupplier.get(), nextVersion);
+                long nextVersion = versionGenerator.incrementAndGet();
+                ConfigSnapshot newSnapshot = aggregator.aggregate(configSourcesSupplier.get(), nextVersion);
 
-            synchronized (this) {
-                if (!acceptingReloads || reloadGeneration != generation) {
+                if (!isReloadCurrent(token)) {
                     return;
                 }
-            }
 
-            if (committer.commitReload(reloadGeneration, newSnapshot)) {
-                log.info("Config reloaded to version {}", newSnapshot.getVersion());
+                boolean committed = committer.commitReload(token, newSnapshot);
+                if (committed) {
+                    log.info("Config reloaded to version {}", newSnapshot.getVersion());
+                }
+            } catch (Exception e) {
+                log.error("Failed to hot reload configuration. Keeping the current snapshot.", e);
+            } finally {
+                synchronized (this) {
+                    if (token == pendingReloadToken) {
+                        pendingReloadToken = 0L;
+                        pendingReloadTask = null;
+                    }
+                }
             }
-        } catch (Exception e) {
-            log.error("Failed to hot reload configuration. Keeping the current snapshot.", e);
         }
     }
 

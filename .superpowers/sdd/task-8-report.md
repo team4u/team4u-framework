@@ -2,86 +2,130 @@
 
 ## Base
 
-- Base commit: `ed6c2cfa43c3b23ccdf00df53ce8aa6edc39e95a`
-- Task8 implementation commit under review: `8bebace4cba1d0dbf119755f481d0ab6d21c3063`
+- Task8 implementation commit: `8bebace4cba1d0dbf119755f481d0ab6d21c3063`
+- First concurrency/provider remediation commit: `c280f08afe12a78505eaefa41d4e47687262c419`
 - Worktree: `.worktrees/framework-convergence`
-- Original RED worktree: `/tmp/team4u-task8-red`, removed after its two untracked RED tests were superseded by retained GREEN coverage.
+- Current fix commit: the dirty changes after `c280f08`, committed as `fix(config): preserve refresh and repeated debounce`
 
-## Review REDs And Remediation
+## Exact RED At c280
 
-The post-review fix addressed these concrete findings without changing the Task8 architecture:
+The disposable baseline worktree `/tmp/task8-red` ran the new retained tests against the unchanged `c280f08` implementation.
 
-- `docs/config/quick-start.md` used a nonexistent `new ConfigProxyFactory()` constructor. The transition example now uses a Java 8 anonymous `ConfigProxyCreator` with the generic `<T> create(...)` method, constructs `ConfigProxyFactory(context.converterRegistry())`, and delegates to `createLiveProxy(context.manager(), prefix, configType)`. The complete snippet was compiled with `javac -source 8 -target 8` against the current worktree classes.
-- Bootstrap methods no longer retain the bootstrap monitor while refreshing a global manager. Registration remains serialized on the bootstrap instance; global initialization, refresh, and reset serialize on `ConfigManager.class`; manager lifecycle operations use the manager lifecycle monitor.
-- Reload aggregation no longer holds the `HotReloadManager` monitor while entering manager lifecycle code. A manager-owned committer switches snapshots under the lifecycle monitor, and listener callbacks run after manager and reload monitors are released.
-- Reload generations invalidate both in-flight aggregation and queued debounce tasks. Reset cancels acceptance, destroys watchers, clears runtime state, and a later refresh resumes reload acceptance under the lifecycle monitor.
-- No `GlobalLifecycleMonitor` file was retained, `ConfigProxyFactory` has no unsafe no-arg constructor, and all lifecycle helpers introduced by remediation are used by production reset/refresh paths or the retained concurrency test. `DefaultConfigManager.discardGlobalForTests()` is test-only, used only after production reset, and is called by the dedicated concurrency test cleanup.
-- `ServiceLoader` iteration failures are wrapped in an `IllegalStateException` naming provider discovery, preserving the original `ServiceConfigurationError` cause and provider implementation name.
+`ConfigGlobalLifecycleConcurrencyTest.lateRegistrationWaitsForInitializationAndRefreshesSameGlobal` failed after 10.02 seconds with:
 
-## API And Behavior
+```text
+java.lang.AssertionError: registration refresh must block on the global monitor
+```
+
+The late source was already registered while global initialization was blocked in its source load; `refreshGlobalIfInitialized()` read a still-null global and returned instead of waiting for initialization and refreshing that same manager.
+
+`internal.HotReloadManagerTest` ran 5 tests with 2 failures and 0 errors:
+
+- `twoSequentialPositiveDelayReloadsBothCommit`: timed out waiting for the second commit because `pendingTaskAssigned` was never cleared after the first debounce task ran.
+- `newerSignalInvalidatesRunningReloadAndKeepsNewPendingHandle`: the stale running reload committed (`expected:<0> but was:<1>`), and the newer pending task handle was not preserved.
+
+The baseline worktree was removed after these results were recorded.
+
+## Production Behavior
+
+### Serialized Global Refresh
+
+`ConfigManager.class` now serializes absent-global initialization, initialized-global refresh, test read/discard of the global reference, and bootstrap reset:
+
+- `DefaultConfigManager.global()` initializes only under the class monitor.
+- `refreshGlobalIfInitialized()` reads and refreshes `global` under the same class monitor. A late bootstrap registration during initialization waits, then refreshes the manager created by that initialization rather than silently returning on a stale null read.
+- `globalOrNullForTests()` reads under the class monitor.
+- `discardGlobalForTests()` clears the reference under the class monitor after the production reset path has destroyed the manager.
+- Manager `refresh()` remains serialized separately by the manager lifecycle monitor.
+
+### Reload-Token Algorithm
+
+`HotReloadManager` replaces the one-shot pending-task latch with monotonic invalidation:
+
+- `signalChange()` allocates `token = ++reloadToken` under the manager monitor and chooses the current debounce delay.
+- A positive delay calls `scheduleReload(token, delay)`. If acceptance or token currency changed while scheduling, the signal does nothing. Otherwise it cancels any prior pending task without interrupting a running body, records `pendingReloadToken`, schedules the new task, and stores `pendingReloadTask`.
+- `cancelPendingReload()` increments `reloadToken`, stops accepting, and clears the pending handle.
+- `resumeAcceptingReloads()` increments `reloadToken`, resumes acceptance, and clears any stale pending handle before later signals.
+- `runReload(token)` executes under a separate reload-execution monitor. It rechecks currency before aggregation and before commit. A stale running body returns without loading again, committing, or clearing a newer pending handle. Its cleanup clears the handle only when `token == pendingReloadToken`.
+- The manager committer performs the final currency check under the manager lifecycle monitor, swaps the snapshot, and fires listeners only after manager and reload monitors are released.
+
+Consequences:
+
+- Sequential positive-delay changes can each commit after their debounce windows; completing a task no longer permanently disables future debounce.
+- A later pending signal cancels only the earlier queued body and aggregates once with the latest state.
+- Reset/resume invalidates both a running aggregation and a queued task.
+- A stale running reload cannot overwrite a newer signal, and it cannot erase the newer pending task handle.
+
+## Provider Contracts
 
 - `ConfigProxyCreator.create(ConfigProxyContext, String, Class<T>)` is the core-owned proxy boundary.
 - `ConfigProxyContext` exposes the owning `ConfigManager` and exact manager `PropertyConverterRegistry`.
-- `Builder.configBinder(...)` was replaced by `Builder.proxyCreator(...)`.
-- Creator resolution is explicit builder value, then at most one `ServiceLoader<ConfigProxyCreator>`, then absent. Multiple providers fail fast with both implementation names.
+- Creator resolution is explicit builder value, then at most one `ServiceLoader<ConfigProxyCreator>` provider, then absent. Two providers fail fast with both implementation names.
+- Provider construction/discovery failures are wrapped in an `IllegalStateException` naming provider discovery and retaining the original `ServiceConfigurationError`/cause and provider implementation name.
 - A missing creator makes `createProxy` fail fast with the `team4u-config-proxy` guidance and never substitutes a bound POJO.
-- `DefaultConfigBinder.bind(...)` remains explicit snapshot binding only.
-- Final prefix composition happens before caching and creator invocation.
-- `ConfigManager.global()` is lazy and resettable. Bootstrap registration and `lock()` refresh an initialized global; reset does not initialize an absent global.
-- `ConfigProxyFactory implements ConfigProxyCreator` is the temporary Task8 bridge. Its creator method requires a non-null context and uses the context converter registry, rather than adding a no-arg constructor.
-
-## Concurrency Semantics
-
-- `ConfigManager.class` serializes absent-global initialization and bootstrap reset. A reset entering during initialization waits, then clears the newly initialized result.
-- Normal reset preserves the global manager instance while destroying watchers, invalidating reload state, clearing listeners/proxy cache, clearing registries, unlocking bootstrap, and rebuilding an empty snapshot.
-- An in-flight reload may finish source aggregation after reset, but its generation is stale: it cannot switch the snapshot or fire listeners.
-- A queued debounce reload is canceled by generation invalidation; a later `refresh()` resumes acceptance under the manager lifecycle monitor.
-- A synchronous change listener may reset the same manager without deadlock because callbacks do not own manager lifecycle or reload monitors.
+- `ConfigProxyFactory implements ConfigProxyCreator` remains the temporary Task8 bridge and requires a non-null context with the context converter registry.
+- `DefaultConfigBinder.bind(...)` remains explicit snapshot binding only; final prefix composition happens before proxy caching/creator invocation.
 
 ## Retained Tests
 
-Original Task8 GREEN coverage:
+Exact current counts:
 
-- `ConfigPureJavaQuickstartTest`
-- `ConfigProxyProviderContractTest`
-- `ConfigProxyCreatorResolutionTest`
-- `ConfigGlobalInitializationTest`
+- `ConfigGlobalLifecycleConcurrencyTest`: 7 tests.
+  - `resetOfAbsentGlobalDoesNotInitializeIt`
+  - `lateRegistrationWaitsForInitializationAndRefreshesSameGlobal`
+  - `normalResetPreservesGlobalInstance`
+  - `resetWaitsForConcurrentInitializationAndClearsItsResult`
+  - `resetInvalidatesInFlightReloadAndRefreshResumesAcceptance`
+  - `resetCancelsQueuedReload`
+  - `synchronousReloadListenerCanResetManagerWithoutDeadlock`
+- `internal.HotReloadManagerTest`: 5 tests.
+  - `queuedCancellationPreventsReloadBodyFromExecuting`
+  - `resetThenResumeAcceptsANewSignal`
+  - `twoSequentialPositiveDelayReloadsBothCommit`
+  - `laterPendingSignalCancelsEarlierQueuedReloadBody`
+  - `newerSignalInvalidatesRunningReloadAndKeepsNewPendingHandle`
 
-Final review coverage:
+The single reflective read in `HotReloadManagerTest` is intentionally narrow: after proving the stale running reload cannot commit, it verifies that the stale cleanup did not null the newer `pendingReloadTask` handle. It does not drive production behavior through reflection.
 
-- `ConfigGlobalLifecycleConcurrencyTest`: 6 tests covering absent reset, instance-preserving reset, reset serialization with initialization, in-flight reload invalidation and refresh resumption, queued reload cancellation, and listener-triggered reset without deadlock.
-- `ConfigProxyCreatorServiceLoaderTest`: 4 tests covering zero, one, and two providers plus wrapped provider construction failure.
-- `ConfigProxyFactoryContextTest`: verifies the interim factory bridge uses the converter registry supplied by `ConfigProxyContext` rather than a captured factory registry.
-- `ConfigProxyProviderContractTest.creatorNullResultFailsFastWithTypeAndPrefix` verifies null creator results fail fast.
+Other retained Task8 coverage:
 
-Handoff-focused tests had already passed before final wrap-up: selected focused tests 22/22 and config-core 102/102. The final full reactor below also contains all retained config-core tests.
+- `ConfigPureJavaQuickstartTest`: 3 tests.
+- `ConfigProxyProviderContractTest`: 4 tests.
+- `ConfigProxyCreatorResolutionTest`: 1 test.
+- `ConfigGlobalInitializationTest`: 3 tests.
+- `ConfigProxyCreatorServiceLoaderTest`: 4 tests.
+- `ConfigProxyFactoryContextTest`: 1 test.
+
+Focused command and result:
+
+```bash
+mvn -q -Dtest=ConfigGlobalLifecycleConcurrencyTest,internal.HotReloadManagerTest test
+```
+
+Result: 12/12 passed, exit 0.
 
 ## Verification
 
-All final commands ran at dirty Task8 HEAD `8bebace` with remediation changes present:
+All commands below ran at dirty Task8 fix state after `c280f08`, before the final commit:
 
-- Java 8 quick-start snippet compile: passed with `-source 8 -target 8` (only modern-JDK source-option warnings).
+- Config-core full module: `mvn -q clean test` passed; 26 suites, 108 tests, 0 failures, 0 errors, 0 skipped.
+- Config acceptance: `mvn -q -pl :team4u-config-core,:team4u-config-db,:team4u-config-test -am test` passed.
+- Worktree artifact install for external consumers: `mvn -q -DskipTests install` passed.
 - Affected downstream: `mvn -q -pl :team4u-log,:team4u-router,:team4u-retry-core -am test` passed; log 97/97, router 69/69, retry-core 72/72.
-- Worktree install for consumer resolution: `mvn -q -DskipTests install` passed.
-- Explicit config consumer: main and Java 8 compile passed. Its runtime tree remains the intentional proxy-only RED guard and contains `com.team4u:team4u-proxy:1.0.0-SNAPSHOT:compile`; applying the fixture predicate reports that single banned edge.
+- Explicit config consumer standalone: `mvn -q clean verify` ran Java 8 compilation and `ConfigCoreMain` successfully. The Invoker fixture is the required RED path.
+- Exact proxy-only RED: `mvn -q -Pconsumer-it -Dinvoker.test=consumer-config-core -DskipTests verify` exited 1 as required. The generated runtime tree has exactly one banned edge: `com.team4u:team4u-proxy:jar:1.0.0-SNAPSHOT:compile`; no ByteBuddy, Jackson, or Spring edge.
 - Active consumers: `mvn -q -Pconsumer-it -DskipTests verify` passed for minimal, serializer-api, serializer-jackson, and interface-proxy.
-- Release contracts: `mvn -q -Prelease-contracts -DskipTests verify` passed for the same four active consumers.
-- Full reactor: `mvn -q clean test` passed with 218 suites, 1,433 tests, 0 failures, 0 errors, 0 skipped.
+- Active release contracts: `mvn -q -Prelease-contracts -DskipTests verify` passed for the same four consumers.
+- Full reactor: `mvn -q clean test` passed; 219 suites, 1,439 tests, 0 failures, 0 errors, 0 skipped.
 - Release packaging: `mvn -q -Prelease -DskipTests clean package` passed.
-- Effective POM: 742,201 bytes and no `maven.aliyun.com` repository.
-- Java 8 bytecode: all 659 production class files report class-file version 52.
+- Java 8 bytecode: all 659 production class files report class-file major version 52.
+- Effective root POM: 742,201 bytes; no `maven.aliyun.com` repository.
 - `git diff --check` passed.
+- Post-transient-edit compile recheck: config-core `mvn -q -DskipTests compile` passed after restoring the intended dirty diff exactly.
 
 ## Documentation And Boundaries
 
-- Quick-start proxy example is complete and Java 8-valid; no quick-start sections were deleted.
-- Existing migration/breaking-change ledger rows remain unchanged by this review fix.
+- The Java 8 quick-start transition example remains valid and unchanged by this final fix.
 - No Task9 `team4u-config-proxy` module, service registration, Spring split, or `team4u-id` code was introduced.
-- The explicit config consumer remains RED for `team4u-proxy` until Task9 removes the proxy implementation from config-core.
-
-## Files
-
-- Production: `ConfigBootstrap`, `ConfigManager`, `DefaultConfigManager`, `HotReloadManager`, `ConfigProxyFactory`.
-- Tests: concurrency, ServiceLoader, factory-context, provider contract, creator resolution, and global initialization updates.
-- SDD records: this report and convergence progress.
-- User-facing docs: corrected config quick-start transition example.
+- `consumer-config-core` remains the intentional proxy-only Task9 RED guard; it joins active gates after Task9 removes the proxy edge from config-core.
+- Current dirty files before commit: `DefaultConfigManager`, `HotReloadManager`, the two retained config-core tests above, and new internal `HotReloadManagerTest`; tracked progress records the remediation.

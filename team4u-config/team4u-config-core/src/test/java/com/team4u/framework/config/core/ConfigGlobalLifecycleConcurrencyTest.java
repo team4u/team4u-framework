@@ -1,10 +1,11 @@
 package com.team4u.framework.config.core;
 
 import com.team4u.framework.config.core.internal.DefaultConfigManager;
+import com.team4u.framework.config.core.spi.ConfigSource;
 import com.team4u.framework.config.core.spi.ConfigSourceRegistry;
 import com.team4u.framework.config.core.spi.ConfigWatcherRegistry;
-import com.team4u.framework.config.core.spi.InMemoryConfigSource;
 import com.team4u.framework.config.core.convert.PropertyConverterRegistry;
+import com.team4u.framework.config.core.spi.InMemoryConfigSource;
 import org.junit.After;
 import org.junit.Assert;
 import org.junit.Before;
@@ -19,8 +20,11 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
+import java.util.function.BooleanSupplier;
 
 public class ConfigGlobalLifecycleConcurrencyTest {
+
+    private static final long TIMEOUT_SECONDS = 5;
 
     private ExecutorService executor;
 
@@ -53,7 +57,7 @@ public class ConfigGlobalLifecycleConcurrencyTest {
 
         Assert.assertNull(DefaultConfigManager.globalOrNullForTests());
 
-        BlockingSource source = new BlockingSource("absent-reset", false);
+        BlockingSource source = new BlockingSource("absent-reset", false, new CountDownLatch(1));
         source.put("absent.key", "value");
         ConfigBootstrap.global().addSource(source);
 
@@ -61,6 +65,38 @@ public class ConfigGlobalLifecycleConcurrencyTest {
 
         Assert.assertEquals(1, source.loadCount.get());
         Assert.assertNotNull(DefaultConfigManager.globalOrNullForTests());
+    }
+
+    @Test
+    public void lateRegistrationWaitsForInitializationAndRefreshesSameGlobal() throws Exception {
+        CountDownLatch releaseLoad = new CountDownLatch(1);
+        BlockingSource source = new BlockingSource("late-registration-init", true, releaseLoad);
+        source.put("initial.key", "initial");
+        ConfigBootstrap.global().addSource(source);
+
+        Future<ConfigManager> initialization = executor.submit(ConfigManager::global);
+        Assert.assertTrue(source.loadEntered.await(5, TimeUnit.SECONDS));
+
+        InMemoryConfigSource lateSource = new InMemoryConfigSource("late-registration-source", 2);
+        lateSource.put("late.key", "late");
+        Thread registration = new Thread(() -> ConfigBootstrap.global().addSource(lateSource),
+                "config-late-registration");
+        registration.start();
+
+        waitFor("late source must be registered before refresh queues",
+                () -> ConfigSourceRegistry.global().getPolicies().contains(lateSource));
+        waitFor("registration refresh must block on the global monitor",
+                () -> registration.getState() == Thread.State.BLOCKED
+                        && isWaitingAt(registration, "refreshGlobalIfInitialized"));
+        Assert.assertTrue(registration.isAlive());
+
+        releaseLoad.countDown();
+        ConfigManager initialized = initialization.get(5, TimeUnit.SECONDS);
+        registration.join(TimeUnit.SECONDS.toMillis(5));
+        Assert.assertFalse(registration.isAlive());
+
+        Assert.assertSame(initialized, ConfigManager.global());
+        Assert.assertEquals("late", initialized.getString("late.key").orElse(null));
     }
 
     @Test
@@ -74,7 +110,8 @@ public class ConfigGlobalLifecycleConcurrencyTest {
 
     @Test
     public void resetWaitsForConcurrentInitializationAndClearsItsResult() throws Exception {
-        BlockingSource source = new BlockingSource("concurrent-init", true);
+        CountDownLatch releaseLoad = new CountDownLatch(1);
+        BlockingSource source = new BlockingSource("concurrent-init", true, releaseLoad);
         source.put("concurrent.key", "old");
         ConfigBootstrap.global().addSource(source);
 
@@ -82,21 +119,22 @@ public class ConfigGlobalLifecycleConcurrencyTest {
         Assert.assertTrue(source.loadEntered.await(5, TimeUnit.SECONDS));
 
         Future<?> reset = executor.submit(() -> ConfigBootstrap.global().resetForTests());
-        Thread.sleep(100);
-        Assert.assertFalse("reset must serialize with in-flight global initialization", reset.isDone());
+        waitFor("reset must serialize with in-flight global initialization", () -> !reset.isDone());
 
-        source.releaseLoad.countDown();
+        releaseLoad.countDown();
         ConfigManager initialized = initialization.get(5, TimeUnit.SECONDS);
         reset.get(5, TimeUnit.SECONDS);
 
         Assert.assertSame(initialized, ConfigManager.global());
+
         Assert.assertTrue(initialized.currentSnapshot().getEntries().isEmpty());
         Assert.assertTrue(ConfigSourceRegistry.global().getPolicies().isEmpty());
     }
 
     @Test
     public void resetInvalidatesInFlightReloadAndRefreshResumesAcceptance() throws Exception {
-        BlockingSource source = new BlockingSource("in-flight-reload", false);
+        CountDownLatch releaseLoad = new CountDownLatch(1);
+        BlockingSource source = new BlockingSource("in-flight-reload", false, releaseLoad);
         source.put("hot.key", "old");
         RecordingWatcher watcher = new RecordingWatcher();
         ConfigBootstrap.global().addSource(source).addWatcher(watcher);
@@ -112,7 +150,7 @@ public class ConfigGlobalLifecycleConcurrencyTest {
                 reset.get(1, TimeUnit.SECONDS) == null);
         Assert.assertEquals(1, watcher.destroyCount.get());
 
-        source.releaseLoad.countDown();
+        releaseLoad.countDown();
         reload.get(5, TimeUnit.SECONDS);
 
         Assert.assertTrue(manager.currentSnapshot().getEntries().isEmpty());
@@ -146,7 +184,6 @@ public class ConfigGlobalLifecycleConcurrencyTest {
         signal.get().run();
 
         ConfigBootstrap.global().resetForTests();
-        Thread.sleep(150);
 
         Assert.assertTrue(manager.currentSnapshot().getEntries().isEmpty());
         Assert.assertEquals(1, watcher.destroyCount.get());
@@ -181,17 +218,44 @@ public class ConfigGlobalLifecycleConcurrencyTest {
         Assert.assertEquals(1, watcher.destroyCount.get());
     }
 
+    private static void waitFor(String message, BooleanSupplier condition) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(TIMEOUT_SECONDS);
+        while (!condition.getAsBoolean()) {
+            if (System.nanoTime() >= deadline) {
+                throw new AssertionError(message);
+            }
+            TimeUnit.MILLISECONDS.sleep(10);
+        }
+    }
+
+    private static boolean isWaitingAt(Thread thread, String methodName) {
+        StackTraceElement[] stack = thread.getStackTrace();
+        return stack.length > 0 && methodName.equals(stack[0].getMethodName());
+    }
+
+    private static void awaitUnchecked(CountDownLatch latch) {
+        try {
+            if (!latch.await(5, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("timed out waiting for latch release");
+            }
+        } catch (InterruptedException e) {
+            Thread.currentThread().interrupt();
+            throw new IllegalStateException(e);
+        }
+    }
+
     private static final class BlockingSource extends InMemoryConfigSource {
         private final AtomicBoolean blockFirstLoad;
         private final AtomicBoolean blockReload = new AtomicBoolean();
         private final CountDownLatch loadEntered = new CountDownLatch(1);
-        private final CountDownLatch releaseLoad = new CountDownLatch(1);
+        private CountDownLatch releaseLoad;
         private final AtomicInteger loadCount = new AtomicInteger();
         private volatile boolean firstLoad = true;
 
-        private BlockingSource(String name, boolean blockFirstLoad) {
+        private BlockingSource(String name, boolean blockFirstLoad, CountDownLatch releaseLoad) {
             super(name, 1);
             this.blockFirstLoad = new AtomicBoolean(blockFirstLoad);
+            this.releaseLoad = releaseLoad;
         }
 
         @Override
