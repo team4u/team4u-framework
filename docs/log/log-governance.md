@@ -1,6 +1,6 @@
 # 动态治理与 FinOps 成本保护
 
-`team4u-log` 将日志治理从“代码硬编码”提升为“**配置驱动与组件自治**”。无需重启应用，即可在线调整染色范围、脱敏规则与成本保护阈值。
+`team4u-log-governance` 将日志治理从“代码硬编码”提升为“**配置驱动与组件自治**”。无需重启应用，即可在线调整染色范围、脱敏规则与成本保护阈值。
 
 ---
 
@@ -46,7 +46,7 @@
 
 ## FinOps 成本保护与限流 (`team4u.log.finops`)
 
-在分布式系统中，突发流量、大报文或死循环报错极易导致日志存储成本失控。`team4u-log` 提供了多维度的 FinOps 成本防线。
+在分布式系统中，突发流量、大报文或死循环报错极易导致日志存储成本失控。`team4u-log-governance` 提供了多维度的 FinOps 成本防线。
 
 - **配置 Key**：`team4u.log.finops`
 
@@ -79,7 +79,7 @@
 
 ## 动态数据脱敏 (`team4u.mask.rules`)
 
-`team4u-log` 与 `team4u-mask-config` 深度联动。在 `team4u-mask-jackson` 序列化输出阶段，自动应用配置中心下发的动态脱敏规则：
+`team4u-log-governance` 与 `team4u-mask-config` / `team4u-mask-jackson` 显式集成。在 Jackson 序列化输出阶段，自动应用配置中心下发的动态脱敏规则：
 
 ```json
 {

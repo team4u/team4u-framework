@@ -1,6 +1,6 @@
 # 架构原理与模型设计
 
-`team4u-log` 的底层模型、流水线编排与单元测试支持设计。
+`team4u-log-core` 的底层模型、流水线编排与单元测试支持设计。core 默认 serializer 是 `PlainTextLogSerializer`；`LogEngine.builder()` 可显式注入 serializer 与拦截器。`team4u-log-governance` 的 `LogBootstrap` 安装 `JacksonLogSerializer` 与治理拦截器。
 
 ---
 
@@ -52,7 +52,7 @@ graph TD
     I2 --> I3["RateLimitInterceptor<br/>priority: LOW (200)<br/>异常特征限流, 抑制高频错误日志"]
     I3 --> Check{"是否通过 / 未被 suppressed"}
     Check -->|"否"| Drop["终止输出"]
-    Check -->|"是"| Serializer["JacksonLogSerializer<br/>执行 JacksonMaskModule 脱敏与超长截断"]
+    Check -->|"是"| Serializer["活动 LogSerializer<br/>core 默认明文 / governance Jackson"]
     Serializer --> Appender["LogAppender<br/>Slf4jLogAppender / MemoryLogAppender"]
 ```
 
@@ -67,7 +67,7 @@ graph TD
 
 | 追加器实现 | 作用 | 适用场景 |
 | :--- | :--- | :--- |
-| `Slf4jLogAppender` | 默认追加器，调用底层 SLF4J `Logger.info/warn/error` 输出 JSON 字符串 | 生产环境与常规开发环境 |
+| `Slf4jLogAppender` | 默认追加器，调用底层 SLF4J `Logger.info/warn/error` 输出事件或序列化文本 | 生产环境与常规开发环境 |
 | `MemoryLogAppender` | 内存追加器，将 `LogEvent` 保存在内存列表 (`List<LogEvent>`) 中 | 单元测试断言与日志捕获 |
 | `CompositeLogAppender` | 组合追加器，将日志广播分发至内部维护的多个 `LogAppender` | 结合单测助手同时输出控制台与内存 |
 
@@ -104,9 +104,9 @@ public class OrderServiceTest {
             Assert.assertEquals("success", event.getStatus());
             Assert.assertEquals("ORD_1001", event.get("orderId"));
 
-            // 3. 获取序列化后的 JSON 字符串并断言脱敏
-            String json = helper.lastJson();
-            Assert.assertTrue(json.contains("\"mobile\":\"138*****000\""));
+            // 3. lastJson 使用当前全局 engine 的活动 serializer；仅 governance Jackson + mask 规则下才是 JSON
+            String serialized = helper.lastJson();
+            // governance 场景可断言 json.contains("\"mobile\":\"138*****000\"")
 
         } finally {
             // 4. 关闭助手，恢复原始环境

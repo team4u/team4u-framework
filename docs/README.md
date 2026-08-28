@@ -51,7 +51,7 @@
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
 | **[数据脱敏组件](mask/README.md)** | `team4u-mask` / `team4u-mask-jackson` / `team4u-mask-config` | 纯 Java 核心脱敏、Jackson 序列化适配与配置中心动态规则，按需显式引入。 | [概览](mask/README.md) · [快速开始](mask/quick-start.md) |
-| **[结构化日志组件](log/README.md)** | `team4u-log` | 结构化动态日志治理框架。提供流式 JSON 日志 (`Loggers`)、方法级切面追踪 (`@AutoLogTrace`)、动态条件染色提权 (`team4u.log.dyeing`) 与 FinOps 成本保护限流。 | [概览](log/README.md) · [快速开始](log/quick-start.md) |
+| **[结构化日志组件](log/README.md)** | `team4u-log-core` / `team4u-log-governance` | 流式结构化日志核心默认明文输出；治理 artifact 显式集成 Jackson、配置热更新、脱敏、方法代理、染色与 FinOps 限流。 | [概览](log/README.md) · [快速开始](log/quick-start.md) |
 
 ---
 
@@ -135,10 +135,15 @@
         <artifactId>team4u-mask-config</artifactId>
     </dependency>
 
-    <!-- 结构化日志模块 -->
+    <!-- 结构化日志核心（默认明文输出） -->
     <dependency>
         <groupId>com.team4u</groupId>
-        <artifactId>team4u-log</artifactId>
+        <artifactId>team4u-log-core</artifactId>
+    </dependency>
+    <!-- Jackson / 配置 / 脱敏 / 代理 / Spring 治理按需显式引入 -->
+    <dependency>
+        <groupId>com.team4u</groupId>
+        <artifactId>team4u-log-governance</artifactId>
     </dependency>
 </dependencies>
 ```

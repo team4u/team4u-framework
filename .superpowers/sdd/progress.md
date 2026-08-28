@@ -26,7 +26,7 @@
 | 14. Translator Convergence After Router | Complete |
 | 15. Split Mask Core, Jackson Adapter, and Dynamic Config | Complete |
 | 16. Split bean-spring as Plain Spring Configuration | Complete |
-| 17. Log Core/Governance Split with Injected Serializer and Interceptors | Pending |
+| 17. Log Core/Governance Split with Injected Serializer and Interceptors | Complete |
 | 18. JMH Evidence, Performance Copy Cleanup, Release Gate | Pending |
 
 Review remediation: complete. Commit subject: `docs: fix convergence plan review findings`.
@@ -58,3 +58,5 @@ Task 14 complete: added a real JSON-policy translator quickstart without router 
 Task 15 complete: split mask core, Jackson adapter, and config-driven rules with unchanged adapter FQCNs, fail-closed policy resolution, and deterministic global resolver installation. Review remediation made explicit null initial/hot/manual rules fail closed, added ownership-aware atomic global uninstall, restored `FastMasker` and Jackson `MaskConfig` APIs, broadened the Spring Enforcer patterns with negative probes, and corrected the quickstart/full-reactor evidence. Final remediation commit: `fix(mask): close dynamic rule and lifecycle gaps`. Final review remediation rejects manual null class/field maps before publication, deep snapshots caller maps, and verifies the 54 split-module tests; publication remains pending.
 
 Task 16 complete: split the unchanged-FQCN Spring adapter into plain `team4u-bean-spring`, kept bean core Spring-free, and moved retry-spring to shared explicit configuration. Full clean tests, consumer/release contracts, release packaging, Java 8 bytecode, dependency guards, and exact Git rename checks passed; one unrelated KV timing test passed on focused rerun after a transient consumer-it verify failure. Report: `.superpowers/sdd/task-16-report.md`.
+
+Task 17 complete: split provider-free log core from governance runtime with unchanged moved FQCNs, explicit Jackson/provider ownership in governance, a single-dependency external consumer, migration and log-doc updates, full clean tests, consumer/release gates, release packaging, and Java 8 bytecode. Report: `.superpowers/sdd/task-17-report.md`.

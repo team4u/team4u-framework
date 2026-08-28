@@ -1,6 +1,6 @@
 # 实战案例
 
-本章提供 `team4u-log` 在常见核心业务场景中的最佳实践代码。
+本章提供 `team4u-log-core` / `team4u-log-governance` 在常见核心业务场景中的最佳实践代码。以下 JSON 示例均假定已启动 `LogBootstrap`；core 默认输出明文/`toString`。
 
 ---
 

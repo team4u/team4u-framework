@@ -2,6 +2,7 @@
 
 ## Maven dependency management
 Team4u 1.0 publishes one dependency-management POM. Import the root POM; there is no separate BOM artifact. The Task 16 reactor and root BOM manage 39 concrete framework leaves.
+Team4u 1.0 publishes one dependency-management POM. Import the root POM; there is no separate BOM artifact. The Task 17 reactor and root BOM manage 40 concrete framework leaves.
 
 ```xml
 <dependencyManagement>
@@ -25,7 +26,7 @@ Developers can run the currently green external-consumer set with:
 mvn -Pconsumer-it -DskipTests verify
 ```
 
-The default set covers minimal base, config-core, provider-free serializer API, explicit Jackson provider, and JDK interface proxy consumers. Since Task 9, `consumer-config-core` proves that scalar config and explicit binding have no proxy, ByteBuddy, Jackson, or Spring runtime edge.
+The default set covers minimal base, config-core, provider-free serializer API, explicit Jackson provider, JDK interface proxy, and log-governance consumers. Since Task 9, `consumer-config-core` proves that scalar config and explicit binding have no proxy, ByteBuddy, Jackson, or Spring runtime edge. Since Task 17, `consumer-log-governance` depends only on BOM-managed `team4u-log-governance`, proves the transitive Jackson provider at runtime, and verifies that `LogBootstrap.start/stop` exchanges the engine as the documented owner.
 
 The release baseline gate is:
 
@@ -33,7 +34,7 @@ The release baseline gate is:
 mvn -Prelease-contracts -DskipTests verify
 ```
 
-It runs the same five active consumers, executes their mains, and validates or records each runtime dependency tree.
+It runs the same six active consumers, executes their mains, and validates or records each runtime dependency tree.
 
 ## Config proxy creation
 
@@ -65,6 +66,19 @@ Managed retry governance moved from `team4u-retry-core` to `team4u-retry-managed
 | 1.0 | Moved `com.team4u.framework.retry.api.ManagedSubmitResult` | Use `com.team4u.framework.retry.managed.ManagedSubmitResult`. |
 | 1.0 | Moved `com.team4u.framework.retry.config.DynamicRetryPolicyRegistry` | Use `com.team4u.framework.retry.dynamic.DynamicRetryPolicyRegistry` from `team4u-retry-config`. |
 
+## Log core and governance split
+
+The old `com.team4u:team4u-log` artifact is removed with no compatibility/bridge artifact. All production and test FQCNs are unchanged; packages simply moved from `team4u-log` to `team4u-log-core` or `team4u-log-governance` according to ownership.
+
+| Version | Removed or moved API | Migration |
+| --- | --- | --- |
+| 1.0 | Removed `team4u-log` with no replacement artifact | Use `team4u-log-core` for provider-free logging and `team4u-log-governance` for bootstrap and governance. |
+| 1.0 | `LogBootstrap` moved artifact | Add `team4u-log-governance`; its FQCN `com.team4u.framework.log.LogBootstrap` is unchanged. |
+| 1.0 | Jackson, Config, Mask, Proxy, Criterion, and Spring integrations moved artifact | Add `team4u-log-governance`; `team4u-log-core` has no corresponding dependency or source edge. |
+| 1.0 | `LogEngine.reset()` no longer stops governance | Call `LogBootstrap.stop()` first; core reset resets appender, interceptors, and serializer state without changing bootstrap ownership. |
+| 1.0 | `LogEngine.toJson(LogEvent)` may be plain text | Core defaults to `toString`; install a custom serializer or use governance Jackson when JSON is required. |
+| 1.0 | Governance carries the Jackson provider | Depend only on `team4u-log-governance`; it supplies `team4u-serializer-jackson` and Jackson transitively at runtime. |
+
 ## Bean Spring adapter split
 
 `com.team4u.framework.bean.provider.SpringBeanContainer` keeps its FQCN but moved from `team4u-bean` to `team4u-bean-spring`. Pure Java local-container users keep only `team4u-bean`; it has no Spring compile, test, runtime, or source edge.
@@ -95,7 +109,7 @@ Unknown mask policy keys, null, empty, and whitespace keys now throw `IllegalArg
 
 ## Explicit serializer provider choice
 
-Applications using JSON APIs must choose a provider explicitly. Add `com.team4u:team4u-serializer-jackson` to the application, or provide/register a custom `JsonSerializerPolicy` through `META-INF/services/com.team4u.framework.serializer.json.JsonSerializerPolicy`. Depending only on `team4u-serializer-json` is supported, but the first non-null/non-empty JSON call fails fast with an `IllegalStateException` naming both choices. The same requirement applies to JSON paths in config-core, retry-core, kv-space/kv-lifecycle, lease-jdbc, router, translator, mask-config, and log. `team4u-mask-jackson` owns direct Jackson API for its serializer adapter; it never passes `team4u-serializer-jackson`. `team4u-retry-lease-runtime` permanently carries nonoptional Jackson for its durable-record integration and therefore supplies Jackson to consumers directly; this is distinct from an application-owned `JsonUtil` provider, and the artifact never passes `team4u-serializer-jackson`.
+Applications using JSON APIs must choose a provider explicitly. Add `com.team4u:team4u-serializer-jackson` to the application, or provide/register a custom `JsonSerializerPolicy` through `META-INF/services/com.team4u.framework.serializer.json.JsonSerializerPolicy`. Depending only on `team4u-serializer-json` is supported, but the first non-null/non-empty JSON call fails fast with an `IllegalStateException` naming both choices. The same requirement applies to JSON paths in config-core, retry-core, kv-space/kv-lifecycle, lease-jdbc, router, translator, and mask-config. `team4u-mask-jackson` owns direct Jackson API for its serializer adapter; it never passes `team4u-serializer-jackson`. `team4u-retry-lease-runtime` permanently carries nonoptional Jackson for its durable-record integration and therefore supplies Jackson to consumers directly; this is distinct from an application-owned `JsonUtil` provider, and the artifact never passes `team4u-serializer-jackson`. Log governance is the logging exception: depending on `team4u-log-governance` alone transitively supplies `team4u-serializer-jackson` for its bootstrap and `JsonUtil` runtime.
 
 After importing it, depend on concrete Team4u artifacts without versions.
 
