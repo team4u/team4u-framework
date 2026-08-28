@@ -19,7 +19,7 @@
 | 7. Serializer Provider Contracts and Upstream Cleanup | Complete |
 | 8. Config Dependency Inversion and Global Initialization Fix | Complete |
 | 9. Split config-proxy and config-spring | Complete |
-| 10. Lease Boundary Before Retry Migration | Pending |
+| 10. Lease Boundary Before Retry Migration | Complete |
 | 11. Retry Core/Managed/Dynamic Split Without Cycles | Pending |
 | 12. KV Space Split and Proxy-Free HotSwapStore | Pending |
 | 13. Router Core and Router Proxy Split | Pending |
@@ -42,3 +42,7 @@ Task 6 complete: kept the one-artifact public ProxyBuilder API, made ByteBuddy o
 Task 7 complete: enforced serializer provider boundaries, cleaned unused translator/mask test providers, and recorded retry-lease-runtime as the permanent Jackson durable-schema integration exception; review remediation complete.
 
 Task 8 complete: creator resolution and lazy global initialization landed at `8bebace`; review remediation serialized global/reset and reload lifecycle operations, added ServiceLoader failure coverage, and verified Java 8 quick start. Final operational remediation added callback split, repeated-debounce tokens, retained 16 focused lifecycle/reload tests, and confirmed the intentional proxy-only Task9 RED. Final fix commit: `fix(config): dispatch reload listeners outside locks`.
+
+Task 9 complete: split config proxy/Spring adapters, kept proxy creation explicit, and verified active consumers plus release packaging.
+
+Task 10 complete: added deterministic memory/JDBC lease quickstarts, enforced lease-core and lease-jdbc runtime boundaries, documented explicit JSON provider choice, and verified the full reactor plus release gates.

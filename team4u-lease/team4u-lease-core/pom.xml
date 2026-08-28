@@ -31,10 +31,44 @@
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-simple</artifactId>
+            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-enforcer-plugin</artifactId>
+                <executions>
+                    <execution>
+                        <id>enforce-lease-core-boundary</id>
+                        <goals>
+                            <goal>enforce</goal>
+                        </goals>
+                        <configuration>
+                            <rules>
+                                <bannedDependencies>
+                                    <excludes>
+                                        <exclude>com.team4u:team4u-config*:compile,runtime</exclude>
+                                        <exclude>com.team4u:team4u-retry*:compile,runtime</exclude>
+                                        <exclude>com.team4u:team4u-kv*:compile,runtime</exclude>
+                                        <exclude>com.team4u:team4u-serializer-jackson:compile,runtime</exclude>
+                                        <exclude>com.fasterxml.jackson*:compile,runtime</exclude>
+                                        <exclude>org.springframework*:compile,runtime</exclude>
+                                    </excludes>
+                                    <message>lease-core must stay independent of Config, Retry, KV, Jackson, and Spring.</message>
+                                </bannedDependencies>
+                            </rules>
+                        </configuration>
+                    </execution>
+                </executions>
+            </plugin>
+        </plugins>
+    </build>
 </project>
