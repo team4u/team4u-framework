@@ -59,7 +59,11 @@ public class ConfigProxyCreatorResolutionTest {
         @Override
         public <T> T create(ConfigProxyContext context, String prefix, Class<T> configType) {
             calls.incrementAndGet();
-            return null;
+            try {
+                return configType.newInstance();
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(e);
+            }
         }
     }
 
@@ -69,7 +73,11 @@ public class ConfigProxyCreatorResolutionTest {
         @Override
         public <T> T create(ConfigProxyContext context, String prefix, Class<T> configType) {
             calls.incrementAndGet();
-            return null;
+            try {
+                return configType.newInstance();
+            } catch (ReflectiveOperationException e) {
+                throw new IllegalStateException(e);
+            }
         }
     }
 }

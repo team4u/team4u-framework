@@ -35,9 +35,12 @@ public class ConfigBootstrap {
      *
      * @param source 配置源实例
      */
-    public synchronized ConfigBootstrap addSource(ConfigSource source) {
-        checkLocked();
-        ConfigSourceRegistry.global().register(source);
+    public ConfigBootstrap addSource(ConfigSource source) {
+        synchronized (this) {
+            checkLocked();
+            ConfigSourceRegistry.global().register(source);
+        }
+        // Registration never crosses directly into manager lifecycle locks.
         DefaultConfigManager.refreshGlobalIfInitialized();
         return this;
     }
@@ -47,9 +50,12 @@ public class ConfigBootstrap {
      *
      * @param watcher 监听器实例
      */
-    public synchronized ConfigBootstrap addWatcher(ConfigWatcher watcher) {
-        checkLocked();
-        ConfigWatcherRegistry.global().register(watcher);
+    public ConfigBootstrap addWatcher(ConfigWatcher watcher) {
+        synchronized (this) {
+            checkLocked();
+            ConfigWatcherRegistry.global().register(watcher);
+        }
+        // Registration never crosses directly into manager lifecycle locks.
         DefaultConfigManager.refreshGlobalIfInitialized();
         return this;
     }
@@ -59,9 +65,12 @@ public class ConfigBootstrap {
      *
      * @param converter 转换器实例
      */
-    public synchronized ConfigBootstrap addConverter(PropertyConverter<?> converter) {
-        checkLocked();
-        PropertyConverterRegistry.global().register(converter);
+    public ConfigBootstrap addConverter(PropertyConverter<?> converter) {
+        synchronized (this) {
+            checkLocked();
+            PropertyConverterRegistry.global().register(converter);
+        }
+        // Registration never crosses directly into manager lifecycle locks.
         DefaultConfigManager.refreshGlobalIfInitialized();
         return this;
     }
@@ -71,23 +80,31 @@ public class ConfigBootstrap {
      * <p>
      * 调用后将禁止任何新的注册操作，建议在应用启动完成（如 Spring 启动成功）后调用。
      */
-    public synchronized void lock() {
-        this.locked = true;
+    public void lock() {
+        synchronized (this) {
+            this.locked = true;
+        }
+        // Locking follows registration without retaining the bootstrap monitor.
         DefaultConfigManager.refreshGlobalIfInitialized();
     }
 
     /**
      * 仅用于测试场景，清理全局注册表并解除锁定。
      */
-    public synchronized void resetForTests() {
-        DefaultConfigManager current = DefaultConfigManager.globalOrNullForTests();
-        if (current != null) {
-            current.resetForTests();
+    public void resetForTests() {
+        // ConfigManager.class is the only global lifecycle monitor.
+        synchronized (ConfigManager.class) {
+            DefaultConfigManager current = DefaultConfigManager.globalOrNullForTests();
+            synchronized (this) {
+                ConfigSourceRegistry.global().unregisterAll();
+                ConfigWatcherRegistry.global().unregisterAll();
+                PropertyConverterRegistry.global().unregisterAll();
+                this.locked = false;
+            }
+            if (current != null) {
+                current.resetForTests();
+            }
         }
-        ConfigSourceRegistry.global().unregisterAll();
-        ConfigWatcherRegistry.global().unregisterAll();
-        PropertyConverterRegistry.global().unregisterAll();
-        this.locked = false;
     }
 
     /**

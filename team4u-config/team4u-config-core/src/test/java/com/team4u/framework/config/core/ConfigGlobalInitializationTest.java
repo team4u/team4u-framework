@@ -74,8 +74,6 @@ public class ConfigGlobalInitializationTest {
         InMemoryConfigSource source = new InMemoryConfigSource("reusable-after-reset", 1);
         source.put("bootstrap.key", "value");
         ConfigBootstrap.global().addSource(source).lock();
-        DefaultConfigManager.refreshGlobalIfInitialized();
-
         Assert.assertEquals("value", ConfigManager.global().getString("bootstrap.key").orElse(null));
     }
 
