@@ -69,13 +69,14 @@ com.team4u.it:consumer-log-governance:jar:1.0.0-SNAPSHOT
 - `LogBootstrap.stop()` restores the previous engine only while the governance engine is still the global owner. If ownership moved externally, it leaves the newer owner and appender untouched, resets the detached governance engine, cleans repositories, and still enters `STOPPED`.
 - `LogEngine.reset()` does not stop governance. It resets the appender, engine-owned default/SPI interceptor state, and serializer state while retaining explicitly injected interceptors.
 - Engine appender ownership is covered by install/restore tests: a replacement receives the prior appender, serializer-aware appenders rebind, restore transfers the appender back, and stale ownership restoration fails without changing the newer owner.
-- Appender ownership has two lock layers. Each engine serializes read-transform-write, compare-and-set, set, and serializer binding with its private `appenderMonitor`; instance mutations never take `GLOBAL_MONITOR`. Static install/restore/global appender operations own the global pointer under `GLOBAL_MONITOR`, then call one engine-local helper at a time. Transfers snapshot one engine's appender, release that local lock, and bind the next engine, so no operation holds two engine locks and the order is always global-to-local. Transform callbacks run under the owning engine's local monitor and skip rebinding when the returned identity is unchanged.
+- Appender ownership has two lock layers. Static install/restore/global appender operations own the global pointer under `GLOBAL_MONITOR`, then call one engine-local helper at a time. Transfers snapshot one engine's appender, release that local lock, and bind the next engine, so no operation holds two engine locks and the order is always global-to-local. Instance set/CAS first checks ownership lock-free: detached engines mutate only their private `appenderMonitor`, while a current owner rechecks under `GLOBAL_MONITOR` before the local set/CAS. If ownership is lost while waiting, the operation exits global synchronization and completes detached. This serializes current-global writes with install/restore and preserves an install snapshot against a lost update without making detached writes wait on unrelated global operations.
+- Transform callbacks and `SerializerAwareLogAppender.bindSerializer` callbacks must be nonblocking and MUST NOT call back into any engine/global appender mutation API. Both can execute while global ownership and the owning engine's local appender synchronization are held; binding can also occur during local-only ownership synchronization.
 - `TestLogHelper` owns a private `HelperCompositeLogAppender` with a volatile stopped marker. Starts wrap atomically; stops remove only that helper's memory appender and collapse only stopped single-child helper composites. It never mutates or collapses a user composite and has no static ownership map.
 - `LogInterceptorManager` tracks engine-owned interceptors in an identity set guarded against concurrent unregister/reset. Duplicate suppression and removal use instance identity, so equal-but-distinct custom interceptors remain distinct.
 - The governance quickstart starts at configured FinOps limit 1, updates the live repository to limit 2 after bootstrap start, clears only the rate counter with `rate.stop()`, and proves two passes followed by suppression of the third same-signature event.
 - Rate behavior also covers the default threshold, reset semantics, and preservation of governance policy across independent engine resets.
 
-These behaviors are locked by `LogQuickstartTest` (7 tests), `LogBootstrapTest` (7 tests), `EngineAppenderAtomicityTest` (3 tests), `EngineAppenderLockingTest` (1 test), `EngineRuntimeIsolationTest` (4 tests), `TestLogHelperOwnershipTest` (5 tests), `RateLimitInterceptorTest` (8 tests), `LogGovernanceQuickstartTest` (2 tests), and related integration tests.
+These behaviors are locked by `LogQuickstartTest` (7 tests), `LogBootstrapTest` (7 tests), `EngineAppenderAtomicityTest` (3 tests), `EngineAppenderLockingTest` (2 tests), `EngineRuntimeIsolationTest` (4 tests), `TestLogHelperOwnershipTest` (5 tests), `RateLimitInterceptorTest` (8 tests), `LogGovernanceQuickstartTest` (2 tests), and related integration tests.
 ## Source Boundary
 
 `team4u-log-core` contains 23 production files and 20 test files. It has no governance/Jackson/Spring/ByteBuddy/Config/Mask/Criterion/Proxy/provider source reference or dependency. Its only production dependency tree is `team4u-base`, `team4u-policy`, and `slf4j-api`.
@@ -171,15 +172,15 @@ Fresh full clean test evidence:
 
 - 252 Surefire report files.
 - 1,562 tests, 0 failures, 0 errors, 0 skipped.
-- `team4u-log-core`: 74 tests, 0 failures/errors/skipped in the original full clean run; 76 tests, 0 failures/errors/skipped after the identity/locking remediation.
+- `team4u-log-core`: 74 tests, 0 failures/errors/skipped in the original full clean run; 77 tests, 0 failures/errors/skipped after the identity/locking remediation.
 - `team4u-log-governance`: 61 tests, 0 failures/errors/skipped.
 
 Final focused identity and locking remediation evidence:
 
-- `-pl :team4u-log-core -Dtest=LogInterceptorManagerTest,EngineAppenderLockingTest,EngineAppenderAtomicityTest,TestLogHelperOwnershipTest,CompositeLogAppenderSerializerRaceTest,EngineRuntimeIsolationTest -DfailIfNoSpecifiedTests=false test`: exit 0, 20/20.
-- The focused set covers identity removal/core ownership, detached-engine locking, global/instance atomicity, helper ownership races, serializer-aware composite binding, and independent engine runtime state.
-- `-pl :team4u-log-core test`: exit 0, 76/76.
-- `-pl :team4u-log-core,:team4u-log-governance -am test`: exit 0, 76/76 core and 61/61 governance.
+- `-pl :team4u-log-core -Dtest=EngineAppenderLockingTest,LogInterceptorManagerTest,EngineAppenderAtomicityTest,TestLogHelperOwnershipTest -DfailIfNoSpecifiedTests=false test`: exit 0, 16/16.
+- The focused set covers detached-engine locking/current-global transfer serialization, identity removal and core ownership, global/instance atomicity, and helper ownership races.
+- `-pl :team4u-log-core test`: exit 0, 77/77.
+- `-pl :team4u-log-core,:team4u-log-governance -am test`: exit 0, 77/77 core and 61/61 governance.
 
 Historical full clean ownership/remediation evidence:
 
@@ -194,9 +195,9 @@ All Maven commands used the absolute root POM `-f /root/code/team4u-framework/.w
 
 1. Focused log-core ownership/atomicity/manager/rate/isolation/cleanup/helper tests: exit 0.
 2. Focused log-governance cleanup/ownership/quickstart/Jackson tests: exit 0.
-3. Full `team4u-log-core test`: exit 0, 76/76 after the final identity/locking remediation (74/74 in the earlier full clean run).
+3. Full `team4u-log-core test`: exit 0, 77/77 after the final identity/locking remediation (74/74 in the earlier full clean run).
 4. Full `team4u-log-governance test`: exit 0, 61/61.
-5. Combined `-pl :team4u-log-core,:team4u-log-governance -am test`: exit 0, 135/135 across the two log modules.
+5. Combined `-pl :team4u-log-core,:team4u-log-governance -am test`: exit 0, 138/138 across the two log modules.
 6. Full reactor `clean test`: exit 0, 252 report files and 1,562 tests / 0 failures / 0 errors / 0 skipped.
 7. Focused `-Pconsumer-it -Dinvoker.test=consumer-log-governance verify`: exit 0.
 8. Full `-Pconsumer-it -DskipTests verify`: exit 0; all six consumers passed sequentially.
@@ -234,7 +235,7 @@ team4u-log-governance-1.0.0-SNAPSHOT-javadoc.jar
 - The cleanup test name incorrectly described full registry reset semantics. It is now `engineResetFailuresStillStopCoreRepositories`; deterministic cleanup SPI resources remain under `src/test/resources` only.
 - Active documentation no longer calls core output "safe plain/安全明文". README, log README/quick-start, and related pages explicitly call it RAW/UNMASKED and warn that sensitive values are not masked.
 - Jackson governance coverage is restored in the split (`JacksonLogSerializerTest`, 11 tests), and all report/source/test/JAR/classfile counts were refreshed from the final verification run.
-- Final remediation removes unregister by equality via identity `unregisterIf`, proves equal-but-distinct interceptors remain independently ordered at different priorities, gives each engine its own appender monitor (global-to-single-local ordering), and proves a detached-engine write completes while an unrelated global transform is blocked; core 76/76 and governance 61/61 are green together.
+- Final remediation removes unregister by equality via identity `unregisterIf`, proves equal-but-distinct interceptors remain independently ordered at different priorities, gives each engine its own appender monitor, and serializes current-global instance writes with install/restore under global ownership; core 77/77 and governance 61/61 are green together.
 
 ## Concerns
 
