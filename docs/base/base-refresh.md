@@ -44,7 +44,7 @@ GlobalConfig c = config.get();   // 热路径：一次 volatile 读
 
 ```text
 ① 值未加载          → 阻塞加载（所有模式一致，get() 永不返回首载前的 null）
-② now <  staleAfter → 返回当前值（热路径：一次 volatile 读 + 一次比较，零分配）
+② now <  staleAfter → 返回当前值（热路径：一次 volatile 读 + 一次比较，低分配）
 ③ 已关闭            → 有值返值；未加载抛 IllegalStateException
 ④ now >= hardAfter  → 阻塞重载，绕过冷却；失败异常抛给调用方（maxStale 是正确性边界）
 ⑤ now <  retryAt    → 返回当前值（冷却兜底，不打源端）

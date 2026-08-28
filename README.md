@@ -16,7 +16,7 @@
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
 | **[路由组件](docs/router/README.md)** | `team4u-router` / `team4u-router-proxy` | 插件化业务路由框架。router 支持 Map、Expression、Weight 与 Composite 路由、Trace 与拦截器；`team4u-router-proxy` 提供 `@Routed` 声明式接口代理与 Bean 定位。 | [概览](docs/router/README.md) · [快速开始](docs/router/quick-start.md) · [声明式路由](docs/router/router-declarative.md) |
-| **[Criterion 表达式组件](docs/criterion/README.md)** | `team4u-criterion` | 纳秒级业务规则 DSL 表达式引擎。支持类 SQL 自然语法、JIT 闭包直出、0 GC 数值宽容比较、白盒 Trace 执行树与外部属性延迟加载 (`LazyAttributeResolver`)。 | [概览](docs/criterion/README.md) · [快速开始](docs/criterion/quick-start.md) |
+| **[Criterion 表达式组件](docs/criterion/README.md)** | `team4u-criterion` | 低开销业务规则 DSL 表达式引擎。支持类 SQL 自然语法、JIT 闭包直出、低分配数值宽容比较、白盒 Trace 执行树与外部属性延迟加载 (`LazyAttributeResolver`)。 | [概览](docs/criterion/README.md) · [快速开始](docs/criterion/quick-start.md) · [基准](benchmarks/README.md) |
 | **[契约翻译组件](docs/translator/README.md)** | `team4u-translator` | 统一契约与响应翻译框架。将上游/底层原始响应 (`RawResponse`) 经由路由规则映射并渲染为统一对外契约 (`TranslatedResponse`)，内置模板变量插值与多级降级策略。 | [概览](docs/translator/README.md) · [快速开始](docs/translator/quick-start.md) |
 
 ---
@@ -160,5 +160,5 @@
 - **轻量与解耦（Lightweight & Decoupled）**：核心模块不强制绑定 Spring 或重量级中间件，既可在纯 Java / CLI 环境高效运行，又能与 Spring 生态无缝整合。
 - **配置即规则（Configuration as Rule）**：将变动频繁的业务规则（路由、策略、脱敏、重试、错误映射）外部化与配置化，支持运行时热更新与动态生效。
 - **策略可插拔（Extensible by Policy）**：核心扩展点均基于策略模式与统一注册器设计，支持 SPI、Spring Bean 与运行时手动注册。
-- **极致性能与 0 GC（High Performance & Low Allocation）**：关键路径采用无锁设计、Copy-On-Write 机制、JIT 闭包预编译与原生类型快速比较，杜绝频繁 GC 抖动。
+- **性能与低分配（High Performance & Low Allocation）**：关键路径采用无锁设计、Copy-On-Write 机制、JIT 闭包预编译与原生类型快速比较，降低高频调用的临时分配和 GC 压力；实测值与环境说明见 JMH 基准。
 - **白盒可观测（White-Box Observability）**：关键决策链路（如表达式判定、动态路由、重试接管、方法耗时）内置 Trace 诊断树，让复杂逻辑透明直观。
