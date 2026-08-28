@@ -7,7 +7,7 @@ import com.team4u.framework.serializer.json.JsonUtil;
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 import com.team4u.framework.retry.managed.client.ManagedRetryClient;
-import com.team4u.framework.retry.api.ManagedSubmitResult;
+import com.team4u.framework.retry.managed.ManagedSubmitResult;
 import com.team4u.framework.retry.managed.submit.RetryTaskSpec;
 import com.team4u.framework.retry.proxy.invocation.InvocationArgSnapshot;
 import com.team4u.framework.retry.proxy.invocation.InvocationRecoveryData;

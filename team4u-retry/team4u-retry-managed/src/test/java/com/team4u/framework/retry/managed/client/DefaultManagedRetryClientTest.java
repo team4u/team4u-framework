@@ -1,9 +1,9 @@
 package com.team4u.framework.retry.managed.client;
 
+import com.team4u.framework.retry.managed.ManagedSubmitResult;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 import com.team4u.framework.retry.managed.client.DefaultManagedRetryClient;
 import com.team4u.framework.retry.managed.client.DurableSuccessWriteException;
-import com.team4u.framework.retry.api.ManagedSubmitResult;
 import com.team4u.framework.retry.api.RecoverySpec;
 import com.team4u.framework.retry.managed.submit.RetryTaskSpec;
 import com.team4u.framework.retry.managed.model.RetryRequest;

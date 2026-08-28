@@ -5,8 +5,8 @@ import com.team4u.framework.lease.api.TaskQueue;
 import com.team4u.framework.lease.api.TaskSnapshot;
 import com.team4u.framework.lease.api.TaskStatus;
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
-import com.team4u.framework.retry.api.ManagedSubmitResult;
-import com.team4u.framework.retry.api.Retries;
+import com.team4u.framework.retry.managed.ManagedSubmitResult;
+import com.team4u.framework.retry.managed.ManagedRetries;
 import com.team4u.framework.retry.api.RetryPolicy;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 import com.team4u.framework.retry.managed.model.RetryStatus;
@@ -214,7 +214,7 @@ public class ManagedRetryRuntimeTest {
             String idempotencyKey,
             int maxRetries,
             int foregroundMaxRetries) {
-        return Retries.managed(runtime.client())
+        return ManagedRetries.with(runtime.client())
                 .taskType("payment")
                 .idempotencyKey(idempotencyKey)
                 .payload("payload-" + idempotencyKey)

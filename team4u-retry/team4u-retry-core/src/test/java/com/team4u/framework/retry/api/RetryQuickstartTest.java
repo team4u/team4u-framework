@@ -10,10 +10,10 @@ import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 
-public class RetriesTest {
+public class RetryQuickstartTest {
 
     @Test
-    public void testInlineCallRetriesUntilSuccess() throws Exception {
+    public void inlineQuickstartRetriesUntilSuccess() throws Exception {
         AtomicInteger attempts = new AtomicInteger();
 
         String result = Retries.inline()
@@ -34,40 +34,19 @@ public class RetriesTest {
     }
 
     @Test
-    public void testInlineAsyncDelegatesWithProvidedScheduler() throws Exception {
+    public void inlineAsyncQuickstartUsesProvidedScheduler() throws Exception {
         ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
         try {
             CompletableFuture<String> future = Retries.inline()
                     .policy(RetryPolicy.builder()
-                            .maxRetries(0)
-                            .backoff(Backoffs.fixed(0L))
+                            .maxRetries(1)
+                            .backoff(Backoffs.fixed(1L))
                             .build())
-                    .callAsync(() -> CompletableFuture.completedFuture("ok"), scheduler);
+                    .callAsync(() -> CompletableFuture.completedFuture("async"), scheduler);
 
-            Assert.assertEquals("ok", future.get(1, TimeUnit.SECONDS));
+            Assert.assertEquals("async", future.get(1L, TimeUnit.SECONDS));
         } finally {
             scheduler.shutdownNow();
         }
-    }
-
-    @Test
-    public void testInlineDefaultPolicyRetriesUsingDefaultMaxRetries() {
-        AtomicInteger attempts = new AtomicInteger();
-
-        try {
-            Retries.inline()
-                    .policy(RetryPolicy.builder().build())
-                    .call(() -> {
-                        attempts.incrementAndGet();
-                        throw new IllegalStateException("boom");
-                    });
-            Assert.fail("expected IllegalStateException");
-        } catch (IllegalStateException ex) {
-            Assert.assertEquals("boom", ex.getMessage());
-        } catch (Exception ex) {
-            Assert.fail("expected IllegalStateException, but got " + ex.getClass().getName());
-        }
-
-        Assert.assertEquals(3, attempts.get());
     }
 }

@@ -46,6 +46,16 @@ Add `com.team4u:team4u-config-proxy` to let `ConfigManager.createProxy(...)` dis
 
 `team4u-lease-jdbc` publishes only its intended production edges: `lease-core`, `base`, `base-jdbc`, `serializer-json`, and `slf4j-api`. It never carries the Jackson provider. Applications using JSON attributes must add `team4u-serializer-jackson` or provide another registered `JsonSerializerPolicy` themselves.
 
+## Retry module split
+
+Managed retry governance moved from `team4u-retry-core` to `team4u-retry-managed`, and config-driven retry policies moved to `team4u-retry-config`.
+
+| Version | Removed or moved API | Migration |
+| --- | --- | --- |
+| 1.0 | Removed `Retries.managed(ManagedRetryClient)` | Use `ManagedRetries.with(client)` from `team4u-retry-managed`; `Retries` supports INLINE only. |
+| 1.0 | Moved `com.team4u.framework.retry.api.ManagedSubmitResult` | Use `com.team4u.framework.retry.managed.ManagedSubmitResult`. |
+| 1.0 | Moved `com.team4u.framework.retry.config.DynamicRetryPolicyRegistry` | Use `com.team4u.framework.retry.dynamic.DynamicRetryPolicyRegistry` from `team4u-retry-config`. |
+
 ## Explicit serializer provider choice
 
 Applications using JSON APIs must choose a provider explicitly. Add `com.team4u:team4u-serializer-jackson` to the application, or provide/register a custom `JsonSerializerPolicy` through `META-INF/services/com.team4u.framework.serializer.json.JsonSerializerPolicy`. Depending only on `team4u-serializer-json` is supported, but the first non-null/non-empty JSON call fails fast with an `IllegalStateException` naming both choices. The same requirement applies to JSON paths in config-core, retry-core, kv-core/kv-lifecycle, lease-jdbc, router, translator, mask, and log. Until Tasks 15 and 17, mask and log may directly depend on Jackson for their current adapters but never pass `team4u-serializer-jackson`. `team4u-retry-lease-runtime` permanently carries nonoptional Jackson for its durable-record integration and therefore supplies Jackson to consumers directly; this is distinct from an application-owned `JsonUtil` provider, and the artifact never passes `team4u-serializer-jackson`.

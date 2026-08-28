@@ -5,7 +5,7 @@ MANAGED 把“还要继续重试”这件事记录到任务队列：前台先执
 入门只需要记住四个对象：
 
 - `ManagedRetryRuntime`: 组装存储和后台 Worker，应用启动时创建。
-- `Retries.managed(...)`: 提交前台动作、恢复 payload 和幂等键。
+- `ManagedRetries.with(...)`: 提交前台动作、恢复 payload 和幂等键（来自 `team4u-retry-managed`）。
 - `StringRecoveryHandler`: 后台真正执行补偿动作。
 - `ManagedSubmitResult`: 告诉你前台完成了，还是任务已交给后台。
 

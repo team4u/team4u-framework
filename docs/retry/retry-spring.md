@@ -121,7 +121,7 @@ public void notifyMerchantAsync(String orderId, String payload) {
 }
 ```
 
-需要返回值时不要用 MANAGED 代理；改用 `Retries.managed(...)` 并在提交时保存 payload，或直接使用 INLINE。
+需要返回值时不要用 MANAGED 代理；改用 `ManagedRetries.with(...)` 并在提交时保存 payload，或直接使用 INLINE。
 
 ## 生命周期注意点
 
