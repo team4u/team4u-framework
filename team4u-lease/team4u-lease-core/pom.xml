@@ -59,8 +59,8 @@
                                         <exclude>com.team4u:team4u-retry*:compile,runtime</exclude>
                                         <exclude>com.team4u:team4u-kv*:compile,runtime</exclude>
                                         <exclude>com.team4u:team4u-serializer-jackson:compile,runtime</exclude>
-                                        <exclude>com.fasterxml.jackson*:compile,runtime</exclude>
-                                        <exclude>org.springframework*:compile,runtime</exclude>
+                                        <exclude>com.fasterxml.jackson*:*:compile,runtime</exclude>
+                                        <exclude>org.springframework*:*:compile,runtime</exclude>
                                     </excludes>
                                     <message>lease-core must stay independent of Config, Retry, KV, Jackson, and Spring.</message>
                                 </bannedDependencies>

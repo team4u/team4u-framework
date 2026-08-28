@@ -45,4 +45,4 @@ Task 8 complete: creator resolution and lazy global initialization landed at `8b
 
 Task 9 complete: split config proxy/Spring adapters, kept proxy creation explicit, and verified active consumers plus release packaging.
 
-Task 10 complete: added deterministic memory/JDBC lease quickstarts, enforced lease-core and lease-jdbc runtime boundaries, documented explicit JSON provider choice, and verified the full reactor plus release gates.
+Task 10 complete: added deterministic memory/JDBC lease quickstarts, enforced lease-core and lease-jdbc runtime boundaries, documented explicit JSON provider choice, and verified the full reactor plus release gates. Review remediation corrected the malformed Jackson/Spring Enforcer patterns and the Task 10 RED record; commit `fix(lease): enforce framework dependency bans`.
