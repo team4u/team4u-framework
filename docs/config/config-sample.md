@@ -56,68 +56,18 @@ public class ApplicationConfigBootstrap {
 
 ---
 
-## Spring Boot 自动装配集成
+## Spring 显式导入集成
 
-`team4u-config-core` 内置了 `Team4uConfigAutoConfiguration`，可无缝融入 Spring 生态。
+`team4u-config-spring` 提供普通 Spring `@Configuration`。应用配置必须显式导入：
 
-### 自动装配原理
 ```java
 @Configuration
-public class Team4uConfigAutoConfiguration {
-    @Bean
-    @PolicyAutoRegister
-    public ConfigSourceRegistry globalSourceRegistry() {
-        return ConfigSourceRegistry.global();
-    }
-
-    @Bean
-    @PolicyAutoRegister
-    public ConfigWatcherRegistry globalWatcherRegistry() {
-        return ConfigWatcherRegistry.global();
-    }
-
-    @Bean
-    @PolicyAutoRegister
-    public PropertyConverterRegistry globalConverterRegistry() {
-        return PropertyConverterRegistry.global();
-    }
-
-    @Bean
-    public ConfigManager globalConfigManager() {
-        return ConfigManager.global();
-    }
-
-    @Bean
-    public ApplicationListener<ContextRefreshedEvent> configRefresher() {
-        return event -> DefaultConfigManager.global().refresh();
-    }
+@Import(Team4uConfigConfiguration.class)
+public class ApplicationConfiguration {
 }
 ```
 
-### 在业务 Spring Bean 中使用配置代理
-```java
-@Configuration
-public class AppConfigDeclaration {
-
-    @Bean
-    public ServerConfig serverConfig(ConfigManager configManager) {
-        // 创建并注册单例代理 Bean，实时响应配置热更新
-        return configManager.createProxy(ServerConfig.class);
-    }
-}
-
-@Service
-public class OrderService {
-
-    @Autowired
-    private ServerConfig serverConfig;
-
-    public void handleOrder() {
-        int timeout = serverConfig.getConnectTimeout();
-        // 实时获取最新配置
-    }
-}
-```
+该模块不提供 `META-INF/spring.factories`，也没有 Boot 自动装配语义。
 
 ---
 
@@ -129,7 +79,7 @@ public class OrderService {
 - **默认 0 延迟同步重载**：内置 `debounceWindow(0)`，写入配置后当前线程立即完成重载，彻底消除 `Thread.sleep` 等待。
 - **内存完全隔离**：独立构建 `InMemoryConfigSource`，不污染全局单例。
 - **完备的动态操作 API**：`put`、`delete`（Tombstone 失效）、`remove`（物理清除）。
-- **保留代理能力**：内部显式注入当前 `ConfigProxyCreator` 过渡实现；Task 9 拆分后由 `team4u-config-test` 引入的代理模块继续提供。
+- **自动启用代理能力**：`team4u-config-test` 引入 `team4u-config-proxy`，`TestConfigContext.createProxy` 使用其 ServiceLoader 实现。
 
 ### 单元测试代码示例
 ```java

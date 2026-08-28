@@ -14,7 +14,7 @@
 </dependency>
 ```
 
-本文的键值读取和显式绑定不引入 Spring。强类型代理是可选能力；在 `team4u-config-proxy` 发布前，代理实现仍临时保留在 core 中。拆分完成后需要额外引入：
+本文的键值读取和显式绑定不引入 Spring、代理或 ByteBuddy。强类型代理是独立能力，需要额外引入：
 
 ```xml
 <dependency>
@@ -24,7 +24,7 @@
 </dependency>
 ```
 
-`JsonPropertyConverter` 的 JSON 路径仍按模块文档单独选择 JSON 引擎。在 `team4u-config-proxy` 发布前，`ConfigManager.builder().proxyCreator(...)` 是唯一启用代理的方式；未提供创建器时，`createProxy` 会快速失败，不会退回绑定 POJO。`team4u-config-test` 的 `TestConfigContext` 已在内部注入当前过渡实现。
+该适配器会通过 ServiceLoader 自动注册 `ConfigProxyCreator`，并携带普通 Java Bean 代理所需的 ByteBuddy 运行时依赖。未提供创建器且未引入适配器时，`createProxy` 会快速失败，不会退回绑定 POJO。
 
 若需使用关系型数据库（MySQL/PostgreSQL/H2 等）作为配置源，额外引入：
 
@@ -140,24 +140,12 @@ public class DbConfig {
 
 ```java
 import com.team4u.framework.config.core.ConfigManager;
-import com.team4u.framework.config.core.ConfigProxyContext;
-import com.team4u.framework.config.core.ConfigProxyCreator;
-import com.team4u.framework.config.core.proxy.ConfigProxyFactory;
 
 public class ProxyQuickStart {
     public static void main(String[] args) {
-
-        // 过渡期显式提供创建器；Task 9 后可直接引入 team4u-config-proxy
-        ConfigProxyCreator creator = new ConfigProxyCreator() {
-            @Override
-            public <T> T create(ConfigProxyContext context, String prefix, Class<T> configType) {
-                return new ConfigProxyFactory(context.converterRegistry())
-                        .createLiveProxy(context.manager(), prefix, configType);
-            }
-        };
+        // team4u-config-proxy 通过 ServiceLoader 自动提供创建器
         ConfigManager manager = ConfigManager.builder()
                 .addSource(source)
-                .proxyCreator(creator)
                 .build();
 
         // 创建实时动态代理对象（Live Mode）
@@ -171,7 +159,6 @@ public class ProxyQuickStart {
     }
 }
 ```
-
 ---
 
 ## 下一步

@@ -25,7 +25,7 @@ Developers can run the currently green external-consumer set with:
 mvn -Pconsumer-it -DskipTests verify
 ```
 
-The default set covers minimal base, provider-free serializer API, explicit Jackson provider, and JDK interface proxy consumers. `consumer-config-core` remains explicit until Task 9: after Task 7 its runtime tree is free of Jackson/ByteBuddy but still carries `team4u-proxy`.
+The default set covers minimal base, config-core, provider-free serializer API, explicit Jackson provider, and JDK interface proxy consumers. Since Task 9, `consumer-config-core` proves that scalar config and explicit binding have no proxy, ByteBuddy, Jackson, or Spring runtime edge.
 
 The release baseline gate is:
 
@@ -33,13 +33,12 @@ The release baseline gate is:
 mvn -Prelease-contracts -DskipTests verify
 ```
 
-It runs the same four active consumers, executes their mains, and validates or records each runtime dependency tree. `consumer-config-core` joins when Task 9 removes its remaining proxy edge.
+It runs the same five active consumers, executes their mains, and validates or records each runtime dependency tree.
 
 ## Config proxy creation
 
 `ConfigManager.Builder.configBinder(...)` is removed; it never controlled live proxy construction. Use `DefaultConfigBinder.bind(...)` directly for a one-time bound POJO. `createProxy(...)` now resolves only `ConfigManager.Builder.proxyCreator(...)`, followed by a single ServiceLoader implementation. With neither source it fails fast and recommends `com.team4u:team4u-config-proxy` or a custom `ConfigProxyCreator`; a bound POJO is never returned as a substitute proxy.
-
-Until Task 9 publishes `team4u-config-proxy`, explicitly provide a `ConfigProxyCreator`; `TestConfigContext` does this internally and remains usable. The first call to `ConfigManager.global()` now initializes the global manager, and `ConfigBootstrap` refreshes an already-initialized global after source, watcher, converter, or lock operations. Late registrations are therefore visible without a caller-side refresh.
+Add `com.team4u:team4u-config-proxy` to let `ConfigManager.createProxy(...)` discover `ServiceLoaderConfigProxyCreator` automatically; explicit `ConfigProxyCreator` injection remains supported. The first call to `ConfigManager.global()` now initializes the global manager, and `ConfigBootstrap` refreshes an already-initialized global after source, watcher, converter, or lock operations. Late registrations are therefore visible without a caller-side refresh.
 
 ## Explicit serializer provider choice
 
@@ -65,7 +64,7 @@ Applications using `JdbcUtil`, `InsertBuilder`, `UpdateBuilder`, `SqlBuilder`, o
 </dependency>
 ```
 
-The same rule applies to the concrete-class proxy paths behind `ConfigProxyFactory.createLiveProxy`, `ConfigProxyFactory.createPinnedProxy`, `LogProxyFactory.createProxy`, `LogProxyFactory.createDynamicProxy`, and `RetryProxyFactory.createProxy`. Interface-only paths in those artifacts do not require ByteBuddy; if the entry point accepts and uses a concrete target class, its path does.
+The same rule applies to `LogProxyFactory.createProxy`, `LogProxyFactory.createDynamicProxy`, and `RetryProxyFactory.createProxy`. `team4u-config-proxy` is the exception: it always builds concrete class proxies, so it carries ByteBuddy as an explicit runtime dependency. Adding `team4u-config-proxy` alone is sufficient; do not add a second ByteBuddy dependency for config proxies.
 
 The engine is attempted from the thread context loader, the target type's loader, and then `ProxyBuilder`'s defining loader. Child-first/plugin loaders that can define both the engine and ByteBuddy are supported. A JVM visibility boundary remains if `ProxyBuilder` is parent-defined, the engine is ordinary parent-delegated, and only a normal child loader carries ByteBuddy: a parent-defined engine class cannot resolve types visible only to that child. Place ByteBuddy in the parent visible to the engine, or use a loader that defines both.
 

@@ -18,7 +18,7 @@
 | 6. Proxy One Artifact and Optional ByteBuddy | Complete |
 | 7. Serializer Provider Contracts and Upstream Cleanup | Complete |
 | 8. Config Dependency Inversion and Global Initialization Fix | Complete |
-| 9. Split config-proxy and config-spring | Pending |
+| 9. Split config-proxy and config-spring | Complete |
 | 10. Lease Boundary Before Retry Migration | Pending |
 | 11. Retry Core/Managed/Dynamic Split Without Cycles | Pending |
 | 12. KV Space Split and Proxy-Free HotSwapStore | Pending |

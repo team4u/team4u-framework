@@ -67,11 +67,13 @@ graph LR
 
 | 模块 | 说明 | 核心依赖 |
 | :--- | :--- | :--- |
-| **`team4u-config-core`** | 核心配置引擎：快照聚合、显式绑定、可选代理创建、占位符解析、防抖热重载与过渡 Spring 自动装配 | `team4u-base`, `team4u-policy`, `team4u-proxy`, `team4u-serializer-json` |
+| **`team4u-config-core`** | 核心配置引擎：快照聚合、显式绑定、代理创建 SPI、占位符解析与防抖热重载 | `team4u-base`, `team4u-policy`, `team4u-serializer-json` |
+| **`team4u-config-proxy`** | 类型安全代理适配器：保留原有 FQCN，并通过唯一 ServiceLoader 实现自动装配 | `team4u-config-core`, `team4u-proxy`, ByteBuddy(runtime) |
+| **`team4u-config-spring`** | 显式 `@Import` 的 Spring 注册表配置 | `team4u-config-core`, `team4u-policy`, Spring |
 | **`team4u-config-db`** | 数据库配置扩展：基于 JDBC 的关系型数据库配置全量加载与低开销时间戳轮询监听器 | `team4u-config-core`, JDBC / DataSource |
-| **`team4u-config-test`** | 单元测试支持：提供 `TestConfigContext` 内存隔离配置环境，默认 0 延迟同步热重载，并显式注入过渡代理创建器 | `team4u-config-core` |
+| **`team4u-config-test`** | 单元测试支持：提供 `TestConfigContext` 内存隔离配置环境，默认 0 延迟同步热重载并自动发现代理实现 | `team4u-config-core`, `team4u-config-proxy` |
 
-`createProxy` 需要显式 `ConfigProxyCreator` 或唯一的 ServiceLoader 实现；当前代理实现仍暂留在 core，Task 9 会拆分为 `team4u-config-proxy`。
+`createProxy` 需要显式 `ConfigProxyCreator`，或类路径上唯一的 `team4u-config-proxy` ServiceLoader 实现。
 使用 `JsonPropertyConverter` 的应用必须显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。
 
 ---
@@ -84,14 +86,19 @@ com.team4u.framework.config
 │   ├── annotation                   # 声明式注解 (@ConfigPrefix, @ConfigKey, @ConfigRequired, @ConfigConverter)
 │   ├── convert                      # 属性类型转换器 (PropertyConverter, JsonPropertyConverter, PropertyConverterRegistry)
 │   ├── domain                       # 领域模型与异常 (ConfigSnapshot, ConfigEntry, ConfigMissingException, ConfigConversionException)
-│   ├── internal                     # 核心内部实现 (DefaultConfigManager, DefaultConfigBinder, PlaceholderResolver, HotReloadManager, SnapshotAggregator)
-│   ├── proxy                        # 动态代理核心 (ConfigProxyFactory, ConfigMethodInterceptor, SnapshotAware)
-│   ├── spi                          # SPI 接口与内置源 (ConfigSource, ConfigSourceRegistry, ConfigWatcher, ConfigWatcherRegistry, ConfigBinder, InMemoryConfigSource, PropertiesConfigSource, SystemEnvConfigSource)
-│   ├── spring                       # Spring 自动装配 (Team4uConfigAutoConfiguration)
-│   ├── support                      # 配置驱动支持 (ConfigDrivenRegistry)
-│   ├── ConfigBootstrap.java         # 全局引导与锁定控制
-│   ├── ConfigChangeListener.java    # 变更监听函数式接口
-│   └── ConfigManager.java           # 配置管理器门面与 Builder
+│   ├── internal                         # 核心内部实现 (DefaultConfigManager, DefaultConfigBinder, PlaceholderResolver, HotReloadManager, SnapshotAggregator)
+│   ├── spi                              # SPI 接口与内置源 (ConfigSource, ConfigSourceRegistry, ConfigWatcher, ConfigWatcherRegistry, ConfigBinder, InMemoryConfigSource, PropertiesConfigSource, SystemEnvConfigSource)
+│   ├── support                          # 配置驱动支持 (ConfigDrivenRegistry)
+│   ├── ConfigBootstrap.java             # 全局引导与锁定控制
+│   ├── ConfigChangeListener.java        # 变更监听函数式接口
+│   └── ConfigManager.java               # 配置管理器门面与 Builder
+├── core.proxy                          # 类型安全代理适配器 (team4u-config-proxy)
+│   ├── ServiceLoaderConfigProxyCreator.java
+│   ├── ConfigProxyFactory.java
+│   ├── ConfigMethodInterceptor.java
+│   └── SnapshotAware.java
+├── core.spring                         # 显式导入的 Spring 配置 (team4u-config-spring)
+│   └── Team4uConfigConfiguration.java
 ├── db                               # 数据库扩展模块 (team4u-config-db)
 │   ├── DbConfigOptions.java         # 数据表与字段自定义映射选项
 │   ├── DbConfigSource.java          # 数据库配置全量加载源

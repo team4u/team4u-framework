@@ -1,6 +1,6 @@
 # 类型安全代理与注解
 
-`ConfigManager` 通过 `ConfigProxyCreator` 创建实时代理，使配置访问如同操作本地普通 Java Bean 一样自然、类型安全且具备编译期检查。未显式提供创建器且类路径上没有 ServiceLoader 实现时，`createProxy` 会快速失败，不会退回绑定 POJO。`team4u-config-test` 在过渡期内部注入当前实现；发布后的 `team4u-config-proxy` artifact 会通过 ServiceLoader 自动提供实现。
+`ConfigManager` 通过 `ConfigProxyCreator` 创建实时代理，使配置访问如同操作本地普通 Java Bean 一样自然、类型安全且具备编译期检查。引入 `team4u-config-proxy` 后，唯一 ServiceLoader 实现会被自动发现；该适配器也携带普通 Java Bean 代理所需的 ByteBuddy 运行时依赖。未显式提供创建器且未引入适配器时，`createProxy` 会快速失败，不会退回绑定 POJO。
 
 ---
 
