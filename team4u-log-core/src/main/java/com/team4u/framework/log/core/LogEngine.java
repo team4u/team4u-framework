@@ -95,6 +95,14 @@ public final class LogEngine {
         }
     }
 
+    /**
+     * Atomically updates the current global engine's appender. The callback must be
+     * nonblocking and MUST NOT call any engine or global appender mutation API; it may
+     * execute while global ownership and the owner's local appender monitor are held.
+     *
+     * @param transform appender transform
+     * @return previous global appender
+     */
     public static LogAppender updateGlobalAppender(UnaryOperator<LogAppender> transform) {
         Objects.requireNonNull(transform, "transform");
         synchronized (GLOBAL_MONITOR) {
@@ -116,10 +124,25 @@ public final class LogEngine {
     }
 
     public void setAppender(LogAppender appender) {
+        if (isCurrentGlobal()) {
+            synchronized (GLOBAL_MONITOR) {
+                if (isCurrentGlobal()) {
+                    setLocalAppender(appender);
+                    return;
+                }
+            }
+        }
         setLocalAppender(appender);
     }
 
     public boolean compareAndSetAppender(LogAppender expect, LogAppender update) {
+        if (isCurrentGlobal()) {
+            synchronized (GLOBAL_MONITOR) {
+                if (isCurrentGlobal()) {
+                    return compareAndSetLocalAppender(expect, update);
+                }
+            }
+        }
         return compareAndSetLocalAppender(expect, update);
     }
 
@@ -162,6 +185,10 @@ public final class LogEngine {
         synchronized (appenderMonitor) {
             return appender;
         }
+    }
+
+    private boolean isCurrentGlobal() {
+        return GLOBAL.get() == this;
     }
 
     private void setLocalAppender(LogAppender appender) {

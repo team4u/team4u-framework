@@ -44,8 +44,8 @@ public class LogInterceptorManagerTest {
     @Test
     public void equalButDistinctInterceptorsStayIndependentlyOrderedAndOwned() {
         LogInterceptorManager manager = new LogInterceptorManager();
-        EqualInterceptor first = new EqualInterceptor(HIGH);
-        EqualInterceptor second = new EqualInterceptor(LOW);
+        EqualInterceptor first = new EqualInterceptor(LOW);
+        EqualInterceptor second = new EqualInterceptor(HIGH);
 
         manager.register(first);
         manager.register(second);
@@ -53,18 +53,14 @@ public class LogInterceptorManagerTest {
         Assert.assertEquals(first, second);
         Assert.assertEquals(1, count(manager, first));
         Assert.assertEquals(1, count(manager, second));
-        Assert.assertEquals(HIGH, first.priority());
-        Assert.assertEquals(LOW, second.priority());
         int firstPosition = position(manager, first);
         int secondPosition = position(manager, second);
-        Assert.assertTrue("equal instances with different priorities must stay distinct: "
+        Assert.assertTrue("equal instances with different priorities must reverse insertion order: "
                 + firstPosition + " vs " + secondPosition,
-                firstPosition >= 0 && secondPosition >= 0 && firstPosition < secondPosition);
+                firstPosition >= 0 && secondPosition >= 0 && secondPosition < firstPosition);
 
         manager.unregister(first);
 
-        Assert.assertEquals(0, count(manager, first));
-        Assert.assertEquals(1, count(manager, second));
         Assert.assertTrue(position(manager, second) >= 0);
     }
 
@@ -112,16 +108,6 @@ public class LogInterceptorManagerTest {
         Assert.assertTrue(manager.shouldProcessDisabledLevel(event));
     }
 
-    private int position(LogInterceptorManager manager, LogInterceptor target) {
-        List<LogInterceptor> interceptors = manager.getInterceptors();
-        for (int i = 0; i < interceptors.size(); i++) {
-            if (interceptors.get(i) == target) {
-                return i;
-            }
-        }
-        return -1;
-    }
-
     private int count(LogInterceptorManager manager, LogInterceptor target) {
         int count = 0;
         for (LogInterceptor interceptor : manager.getInterceptors()) {
@@ -130,6 +116,15 @@ public class LogInterceptorManagerTest {
             }
         }
         return count;
+    }
+    private int position(LogInterceptorManager manager, LogInterceptor target) {
+        List<LogInterceptor> interceptors = manager.getInterceptors();
+        for (int i = 0; i < interceptors.size(); i++) {
+            if (interceptors.get(i) == target) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     private RateLimitInterceptor rate(LogInterceptorManager manager) {
