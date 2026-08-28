@@ -14,6 +14,7 @@
   * [通用重试治理组件](retry/README.md)
   * [键值存储组件](kv/README.md)
   * [序号生成组件](id/README.md)
+  * [限流组件](ratelimiter/README.md)
 
 * **数据安全与日志治理**
   * [数据脱敏组件](mask/README.md)

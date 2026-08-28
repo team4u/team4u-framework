@@ -24,6 +24,23 @@
 
 能力类契约按 `instanceof` 自动跳过——内存实现全量执行，只有 `ScanCapable` 的后端才跑扫描契约。
 
+## 契约层次
+
+`team4u-kv-test` 的基类是分层继承的，新存储按需继承到最深层级（不实现的能力自动跳过）：
+
+```text
+AbstractKvStoreContractTest               # 基础 15 项契约（四操作/过期/原子性/CAS/计数/扫描/订阅）
+└── AbstractCounterTtlContractTest        # + 计数 TTL 契约 3 项（instanceof CounterCapable 才执行）
+    └── AbstractScoredWindowCapableContractTest   # + 计分窗口契约 7 项（instanceof ScoredWindowCapable 才执行）
+```
+
+| 基类 | 补充契约 |
+| :--- | :--- |
+| `AbstractCounterTtlContractTest` | `incrementAndGet(key, delta, ttlMillis)` 的 TTL 语义：过期后从 0 重新计数；后续递增不刷新 TTL；`ttlMillis <= 0` 永不过期 |
+| `AbstractScoredWindowCapableContractTest` | `offer` 的窗口语义：score 等于 cutoff 被裁剪；maxCount 内条件添加；超限**整体拒绝且不添加**；members 为空的窥探永不拒绝；键 TTL 到期整键消失重来；每次成功操作刷新 TTL；oldestScore 为最老成员 |
+
+计数与窗口是有 TTL/裁剪语义的能力，仅靠基础契约覆盖不到，因此独立成层——计数型后端（如 JDBC）继承 `AbstractCounterTtlContractTest`，窗口型后端（如 Redis）继承最底层的 `AbstractScoredWindowCapableContractTest` 一次拿全三套契约。
+
 ## 为新存储接入
 
 ```java
