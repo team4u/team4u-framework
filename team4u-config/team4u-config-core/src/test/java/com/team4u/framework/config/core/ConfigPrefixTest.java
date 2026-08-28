@@ -57,6 +57,21 @@ public class ConfigPrefixTest {
         NoAnnotationConfig config = manager.createProxy(NoAnnotationConfig.class);
         Assert.assertEquals("http://localhost", config.getUrl());
     }
+    @Test
+    public void testAnnotationPrefixesDoNotShareCallerPrefixCacheEntries() {
+        Map<String, ConfigEntry> entries = new HashMap<>();
+        long now = System.currentTimeMillis();
+        entries.put("app.db.url", new ConfigEntry("app.db.url", "root", "mock", now));
+        entries.put("prod.app.db.url", new ConfigEntry("prod.app.db.url", "prod", "mock", now));
+
+        ConfigManager manager = createConfigManager(entries);
+
+        DbConfig rootConfig = manager.createProxy(DbConfig.class);
+        DbConfig prodConfig = manager.createProxy("prod", DbConfig.class);
+
+        Assert.assertEquals("root", rootConfig.getUrl());
+        Assert.assertEquals("prod", prodConfig.getUrl());
+    }
 
     private ConfigManager createConfigManager(Map<String, ConfigEntry> entries) {
         ConfigSnapshot snapshot = new ConfigSnapshot(1L, entries);
@@ -66,7 +81,7 @@ public class ConfigPrefixTest {
         PropertyConverterRegistry converterRegistry = new PropertyConverterRegistry();
 
         DefaultConfigManager manager = new DefaultConfigManager(sourceRegistry, watcherRegistry, converterRegistry,
-                null, 0) {
+                new TestConfigProxyCreator(), 0) {
             @Override
             public ConfigSnapshot currentSnapshot() {
                 return snapshot;

@@ -20,6 +20,7 @@ public class ConfigBeanProxyTest {
                 .addSource(source)
                 .addWatcher(source)
                 .debounceWindow(0)
+                .proxyCreator(new TestConfigProxyCreator())
                 .build();
 
         // 为普通 Java Bean 创建代理
@@ -49,6 +50,7 @@ public class ConfigBeanProxyTest {
                 .addSource(source)
                 .addWatcher(source)
                 .debounceWindow(0)
+                .proxyCreator(new TestConfigProxyCreator())
                 .build();
 
         AppBeanWithDefault config = manager.createProxy("app", AppBeanWithDefault.class);

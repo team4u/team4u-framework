@@ -5,8 +5,10 @@ import com.team4u.framework.config.core.convert.PropertyConverterRegistry;
 import com.team4u.framework.config.core.domain.ConfigEntry;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import com.team4u.framework.config.core.internal.DefaultConfigManager;
-import com.team4u.framework.config.core.proxy.ConfigProxyFactory;
-import com.team4u.framework.config.core.spi.*;
+import com.team4u.framework.config.core.spi.ConfigSource;
+import com.team4u.framework.config.core.spi.ConfigWatcher;
+import com.team4u.framework.config.core.spi.ConfigSourceRegistry;
+import com.team4u.framework.config.core.spi.ConfigWatcherRegistry;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -26,17 +28,6 @@ public class DefaultConfigManagerTest {
         MockSource source = new MockSource("MockSource", 1, loadCount, initialData);
         MockWatcher watcher = new MockWatcher();
 
-        // 模拟绑定器以使用代理工厂执行绑定
-        ConfigBinder binder = new ConfigBinder() {
-            private final ConfigProxyFactory factory = new ConfigProxyFactory(new PropertyConverterRegistry());
-
-            @Override
-            public <T> T bind(ConfigSnapshot snapshot, String prefix, Class<T> type) {
-                // 这里的简单测试可以跳过或返回 null
-                return null;
-            }
-        };
-
         ConfigSourceRegistry sourceRegistry = new ConfigSourceRegistry();
         sourceRegistry.register(source);
 
@@ -47,7 +38,7 @@ public class DefaultConfigManagerTest {
                 sourceRegistry,
                 watcherRegistry,
                 new PropertyConverterRegistry(),
-                binder,
+                null,
                 500);
 
         Assert.assertEquals(1, watcher.initCount.get());
@@ -123,12 +114,7 @@ public class DefaultConfigManagerTest {
                 sourceRegistry,
                 watcherRegistry,
                 new PropertyConverterRegistry(),
-                new ConfigBinder() {
-                    @Override
-                    public <T> T bind(ConfigSnapshot snapshot, String prefix, Class<T> type) {
-                        return null;
-                    }
-                },
+                null,
                 0);
 
         AtomicReference<String> seenValue = new AtomicReference<>();

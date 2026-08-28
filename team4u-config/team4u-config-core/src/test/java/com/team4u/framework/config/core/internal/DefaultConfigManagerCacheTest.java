@@ -1,7 +1,8 @@
 package com.team4u.framework.config.core.internal;
 
+import com.team4u.framework.config.core.ConfigProxyCreator;
+import com.team4u.framework.config.core.TestConfigProxyCreator;
 import com.team4u.framework.config.core.convert.PropertyConverterRegistry;
-import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import com.team4u.framework.config.core.proxy.SnapshotAware;
 import com.team4u.framework.config.core.spi.*;
 import org.junit.Assert;
@@ -31,22 +32,10 @@ public class DefaultConfigManagerCacheTest {
             }
         };
 
-        AtomicInteger bindCount = new AtomicInteger(0);
-        TestBean testBean = new TestBean();
-
-        ConfigBinder configBinder = new ConfigBinder() {
-            @Override
-            public <T> T bind(ConfigSnapshot snapshot, String prefix, Class<T> type) {
-                bindCount.incrementAndGet();
-                if (type == TestBean.class && "bean".equals(prefix)) {
-                    return (T) testBean;
-                }
-                return null;
-            }
-        };
+        ConfigProxyCreator creator = new TestConfigProxyCreator();
 
         DefaultConfigManager manager = new DefaultConfigManager(sourceRegistry, watcherRegistry,
-                new PropertyConverterRegistry(), configBinder, 500);
+                new PropertyConverterRegistry(), creator, 500);
 
         // 测试 Bean 代理缓存
         TestConfig proxy1 = manager.createProxy("app", TestConfig.class);
@@ -56,15 +45,6 @@ public class DefaultConfigManagerCacheTest {
         // 测试不同前缀
         TestConfig proxy3 = manager.createProxy("other", TestConfig.class);
         Assert.assertNotSame("不同前缀应返回不同代理实例", proxy1, proxy3);
-
-        // 测试 Bean 绑定缓存
-        TestBean result1 = manager.createProxy("bean", TestBean.class);
-        TestBean result2 = manager.createProxy("bean", TestBean.class);
-
-        Assert.assertSame("多次调用 createProxy 绑定对象应返回同一实例", result1, result2);
-        // 由于现在默认使用代理，ConfigBinder 不再被调用
-        Assert.assertEquals("由于使用了代理，ConfigBinder.bind 不应被调用", 0, bindCount.get());
-        Assert.assertTrue("结果应该是代理对象", result1 instanceof SnapshotAware);
     }
 
     public static class TestConfig {

@@ -2,6 +2,8 @@ package com.team4u.framework.config.core.proxy;
 
 import com.team4u.framework.base.util.ReflectUtil;
 import com.team4u.framework.config.core.ConfigManager;
+import com.team4u.framework.config.core.ConfigProxyContext;
+import com.team4u.framework.config.core.ConfigProxyCreator;
 import com.team4u.framework.config.core.convert.PropertyConverterRegistry;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import com.team4u.framework.proxy.ProxyBuilder;
@@ -15,7 +17,7 @@ import java.util.function.Supplier;
  * Bean 字段的初始值作为配置缺失时的兜底默认值。
  * </p>
  */
-public class ConfigProxyFactory {
+public class ConfigProxyFactory implements ConfigProxyCreator {
 
     /**
      * 属性转换器注册表，用于在创建代理时传递给拦截器
@@ -24,6 +26,11 @@ public class ConfigProxyFactory {
 
     public ConfigProxyFactory(PropertyConverterRegistry converterRegistry) {
         this.converterRegistry = converterRegistry;
+    }
+
+    @Override
+    public <T> T create(ConfigProxyContext context, String prefix, Class<T> configType) {
+        return createLiveProxy(context.manager(), prefix, configType);
     }
 
     /**
@@ -46,7 +53,6 @@ public class ConfigProxyFactory {
      * @param fixedSnapshot 被绑定的固定快照实例
      * @param prefix        配置键前缀
      * @param type          目标 Bean 类型
-     * @param <T>           强类型
      * @return 代理对象实例
      */
     public <T> T createPinnedProxy(ConfigSnapshot fixedSnapshot, String prefix, Class<T> type) {

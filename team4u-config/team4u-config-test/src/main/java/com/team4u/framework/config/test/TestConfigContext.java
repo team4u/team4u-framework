@@ -1,7 +1,9 @@
 package com.team4u.framework.config.test;
 
 import com.team4u.framework.config.core.ConfigManager;
+import com.team4u.framework.config.core.ConfigProxyContext;
 import com.team4u.framework.config.core.internal.DefaultConfigManager;
+import com.team4u.framework.config.core.proxy.ConfigProxyFactory;
 import com.team4u.framework.config.core.spi.InMemoryConfigSource;
 import lombok.Getter;
 
@@ -26,11 +28,12 @@ public class TestConfigContext {
 
     public TestConfigContext(String sourceName, int priority) {
         this.source = new InMemoryConfigSource(sourceName, priority);
-        // 使用 Builder 构建零延时同步重载的 ConfigManager
+        // Task 9 拆分前显式保留测试工具的代理能力；0 延时实现同步热重载
         this.configManager = ConfigManager.builder()
                 .addSource(source)
                 .addWatcher(source)
-                .debounceWindow(0) // 0延时，实现测试环境同步热重载
+                .debounceWindow(0)
+                .proxyCreator(TestConfigContext::createConfigProxy)
                 .build();
     }
 
@@ -65,6 +68,11 @@ public class TestConfigContext {
      */
     public <T> T createProxy(String prefix, Class<T> configType) {
         return configManager.createProxy(prefix, configType);
+    }
+
+    private static <T> T createConfigProxy(ConfigProxyContext context, String prefix, Class<T> configType) {
+        return new ConfigProxyFactory(context.converterRegistry())
+                .createLiveProxy(context.manager(), prefix, configType);
     }
 
     /**

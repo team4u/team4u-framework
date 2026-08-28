@@ -6,7 +6,6 @@ import com.team4u.framework.config.core.convert.PropertyConverterRegistry;
 import com.team4u.framework.config.core.domain.ConfigEntry;
 import com.team4u.framework.config.core.domain.ConfigMissingException;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
-import com.team4u.framework.config.core.proxy.ConfigProxyFactory;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -76,8 +75,8 @@ public class ConfigAnnotationTest {
     }
 
     private ConfigManager createMockManager(ConfigSnapshot snapshot) {
-        return new ConfigManager() {
-            private final PropertyConverterRegistry converterRegistry = new PropertyConverterRegistry();
+        final ConfigManager[] managerRef = new ConfigManager[1];
+        ConfigManager manager = new ConfigManager() {
 
             @Override
             public ConfigSnapshot currentSnapshot() {
@@ -86,7 +85,18 @@ public class ConfigAnnotationTest {
 
             @Override
             public <T> T createProxy(String prefix, Class<T> type) {
-                return new ConfigProxyFactory(converterRegistry).createLiveProxy(this, prefix, type);
+                return new TestConfigProxyCreator().create(
+                        new ConfigProxyContext() {
+                            @Override
+                            public ConfigManager manager() {
+                                return managerRef[0];
+                            }
+
+                            @Override
+                            public PropertyConverterRegistry converterRegistry() {
+                                return new PropertyConverterRegistry();
+                            }
+                        }, prefix, type);
             }
 
             @Override
@@ -95,6 +105,8 @@ public class ConfigAnnotationTest {
                 };
             }
         };
+        managerRef[0] = manager;
+        return manager;
     }
 
     public static class OssConfig {

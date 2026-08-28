@@ -129,6 +129,7 @@ public class OrderService {
 - **默认 0 延迟同步重载**：内置 `debounceWindow(0)`，写入配置后当前线程立即完成重载，彻底消除 `Thread.sleep` 等待。
 - **内存完全隔离**：独立构建 `InMemoryConfigSource`，不污染全局单例。
 - **完备的动态操作 API**：`put`、`delete`（Tombstone 失效）、`remove`（物理清除）。
+- **保留代理能力**：内部显式注入当前 `ConfigProxyCreator` 过渡实现；Task 9 拆分后由 `team4u-config-test` 引入的代理模块继续提供。
 
 ### 单元测试代码示例
 ```java

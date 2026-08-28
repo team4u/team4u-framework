@@ -67,10 +67,11 @@ graph LR
 
 | 模块 | 说明 | 核心依赖 |
 | :--- | :--- | :--- |
-| **`team4u-config-core`** | 核心配置引擎：快照聚合、动态代理、松散绑定、占位符解析、防抖热重载与 Spring 自动装配 | `team4u-base`, `team4u-policy`, `team4u-proxy`, `team4u-serializer-json` |
+| **`team4u-config-core`** | 核心配置引擎：快照聚合、显式绑定、可选代理创建、占位符解析、防抖热重载与过渡 Spring 自动装配 | `team4u-base`, `team4u-policy`, `team4u-proxy`, `team4u-serializer-json` |
 | **`team4u-config-db`** | 数据库配置扩展：基于 JDBC 的关系型数据库配置全量加载与低开销时间戳轮询监听器 | `team4u-config-core`, JDBC / DataSource |
-| **`team4u-config-test`** | 单元测试支持：提供 `TestConfigContext` 内存隔离配置环境，默认 0 延迟同步热重载 | `team4u-config-core` |
+| **`team4u-config-test`** | 单元测试支持：提供 `TestConfigContext` 内存隔离配置环境，默认 0 延迟同步热重载，并显式注入过渡代理创建器 | `team4u-config-core` |
 
+`createProxy` 需要显式 `ConfigProxyCreator` 或唯一的 ServiceLoader 实现；当前代理实现仍暂留在 core，Task 9 会拆分为 `team4u-config-proxy`。
 使用 `JsonPropertyConverter` 的应用必须显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。
 
 ---

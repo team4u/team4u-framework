@@ -5,12 +5,12 @@ import com.team4u.framework.base.util.CollectionUtil;
 import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.config.core.ConfigChangeListener;
 import com.team4u.framework.config.core.ConfigManager;
+import com.team4u.framework.config.core.ConfigProxyContext;
+import com.team4u.framework.config.core.ConfigProxyCreator;
 import com.team4u.framework.config.core.annotation.ConfigPrefix;
 import com.team4u.framework.config.core.convert.PropertyConverterRegistry;
 import com.team4u.framework.config.core.domain.ConfigEntry;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
-import com.team4u.framework.config.core.proxy.ConfigProxyFactory;
-import com.team4u.framework.config.core.spi.ConfigBinder;
 import com.team4u.framework.config.core.spi.ConfigSourceRegistry;
 import com.team4u.framework.config.core.spi.ConfigWatcher;
 import com.team4u.framework.config.core.spi.ConfigWatcherRegistry;
@@ -32,12 +32,10 @@ import java.util.concurrent.atomic.AtomicReference;
 public class DefaultConfigManager implements ConfigManager {
 
     private static final Logger log = LoggerFactory.getLogger(DefaultConfigManager.class);
-    private static final DefaultConfigManager GLOBAL = new DefaultConfigManager(
-            ConfigSourceRegistry.global(),
-            ConfigWatcherRegistry.global(),
-            PropertyConverterRegistry.global(),
-            new DefaultConfigBinder(),
-            500);
+    private static final String PROXY_PROVIDER_UNAVAILABLE_MESSAGE =
+            "Config proxy provider is unavailable: add com.team4u:team4u-config-proxy "
+                    + "or provide a ConfigProxyCreator implementation.";
+    private static volatile DefaultConfigManager global;
     /**
      * 当前生效的配置快照引用
      */
@@ -47,14 +45,8 @@ public class DefaultConfigManager implements ConfigManager {
      */
     private final ConfigSourceRegistry sourceRegistry;
     private final ConfigWatcherRegistry watcherRegistry;
-    /**
-     * 对象绑定器
-     */
-    private final ConfigBinder configBinder;
-    /**
-     * 代理工厂
-     */
-    private final ConfigProxyFactory proxyFactory;
+    private final ConfigProxyCreator proxyCreator;
+    private final ConfigProxyContext proxyContext;
     /**
      * 聚合器，负责合并各配置源数据
      */
@@ -76,18 +68,22 @@ public class DefaultConfigManager implements ConfigManager {
     private final Object watcherLifecycleMonitor = new Object();
 
     /**
-     * @param debounceWindowMs 防抖延迟时间（毫秒）。传入 0 或负数时，变更信号将同步立即执行重载，
-     *                         可用于单元测试环境中完全消除 {@code Thread.sleep} 等待。
+     * @param sourceRegistry     配置源注册表
+     * @param watcherRegistry    配置监听器注册表
+     * @param converterRegistry  属性转换器注册表
+     * @param proxyCreator       代理创建器；可为 null，表示未提供代理能力
+     * @param debounceWindowMs   防抖延迟时间（毫秒）。传入 0 或负数时同步立即执行重载，
+     *                           可用于单元测试环境消除等待。
      */
     public DefaultConfigManager(ConfigSourceRegistry sourceRegistry,
                                 ConfigWatcherRegistry watcherRegistry,
                                 PropertyConverterRegistry converterRegistry,
-                                ConfigBinder configBinder,
+                                ConfigProxyCreator proxyCreator,
                                 long debounceWindowMs) {
         this.sourceRegistry = sourceRegistry;
         this.watcherRegistry = watcherRegistry;
-        this.configBinder = configBinder;
-        this.proxyFactory = new ConfigProxyFactory(converterRegistry);
+        this.proxyCreator = proxyCreator;
+        this.proxyContext = new DefaultConfigProxyContext(this, converterRegistry);
 
         // 执行初始化的同步配置加载
         initialLoad();
@@ -115,7 +111,33 @@ public class DefaultConfigManager implements ConfigManager {
      * 获取全局标准单例配置管理引擎
      */
     public static DefaultConfigManager global() {
-        return GLOBAL;
+        DefaultConfigManager current = global;
+        if (current != null) {
+            return current;
+        }
+        synchronized (DefaultConfigManager.class) {
+            if (global == null) {
+                ConfigManager globalManager = Builder.buildGlobal();
+                if (!(globalManager instanceof DefaultConfigManager)) {
+                    throw new IllegalStateException(
+                            "Config global manager must be DefaultConfigManager: "
+                                    + globalManager.getClass().getName());
+                }
+                global = (DefaultConfigManager) globalManager;
+            }
+            return global;
+        }
+    }
+
+    public static void refreshGlobalIfInitialized() {
+        DefaultConfigManager current = global;
+        if (current != null) {
+            current.refresh();
+        }
+    }
+
+    public static DefaultConfigManager globalOrNullForTests() {
+        return global;
     }
 
     /**
@@ -187,47 +209,28 @@ public class DefaultConfigManager implements ConfigManager {
     @Override
     @SuppressWarnings("unchecked")
     public <T> T createProxy(String prefix, Class<T> configType) {
-        return (T) proxyInstanceProvider.get(new ProxyKey(prefix, configType));
+        String finalPrefix = resolveProxyPrefix(prefix, configType);
+        if (proxyCreator == null) {
+            throw new IllegalStateException(PROXY_PROVIDER_UNAVAILABLE_MESSAGE);
+        }
+        return (T) proxyInstanceProvider.get(new ProxyKey(finalPrefix, configType));
     }
 
-    /**
-     * 执行实际的代理或绑定操作
-     * <p>
-     * 处理逻辑如下：
-     * <ul>
-     * <li>识别配置类上的配置前缀注解并进行路径叠加</li>
-     * <li>创建并返回支持热更新的动态代理对象</li>
-     * <li>若代理创建失败（例如 final 类），则调用绑定器将配置映射到 Bean 属性中</li>
-     * </ul>
-     * </p>
-     */
-    private Object doCreateProxy(String prefix, Class<?> configType) {
-        String finalPrefix = prefix;
-
+    private String resolveProxyPrefix(String prefix, Class<?> configType) {
         ConfigPrefix annotation = configType.getAnnotation(ConfigPrefix.class);
-        if (annotation != null) {
-            String classPrefix = annotation.value();
-            if (StringUtil.isBlank(finalPrefix)) {
-                finalPrefix = classPrefix;
-            } else {
-                finalPrefix = finalPrefix + "." + classPrefix;
-            }
+        if (annotation == null) {
+            return prefix == null ? "" : prefix;
         }
 
-        if (finalPrefix == null) {
-            finalPrefix = "";
+        String classPrefix = annotation.value();
+        if (StringUtil.isBlank(prefix)) {
+            return classPrefix == null ? "" : classPrefix;
         }
+        return prefix + "." + classPrefix;
+    }
 
-        // 优先尝试创建实时代理
-        try {
-            return proxyFactory.createLiveProxy(this, finalPrefix, configType);
-        } catch (Exception e) {
-            // 如果代理创建失败（例如 final 类），则尝试进行单次绑定
-            if (configBinder != null) {
-                return configBinder.bind(currentSnapshot(), finalPrefix, configType);
-            }
-            throw new IllegalStateException("无法为类型创建代理且未配置绑定器: " + configType.getName(), e);
-        }
+    private Object doCreateProxy(String prefix, Class<?> configType) {
+        return proxyCreator.create(proxyContext, prefix, configType);
     }
 
     @Override
@@ -317,25 +320,24 @@ public class DefaultConfigManager implements ConfigManager {
      * 销毁实例，释放线程池与监听器资源
      */
     public void destroy() {
+        destroyActiveWatchers();
+        hotReloadManager.destroy();
+    }
+
+    private void destroyActiveWatchers() {
         synchronized (watcherLifecycleMonitor) {
             for (ConfigWatcher watcher : new ArrayList<>(activeWatchers)) {
                 destroyWatcher(watcher);
             }
             activeWatchers.clear();
         }
-        hotReloadManager.destroy();
     }
 
     /**
      * 仅用于测试场景，重置运行时状态但保留全局单例对象本身。
      */
     public void resetForTests() {
-        synchronized (watcherLifecycleMonitor) {
-            for (ConfigWatcher watcher : new ArrayList<>(activeWatchers)) {
-                destroyWatcher(watcher);
-            }
-            activeWatchers.clear();
-        }
+        destroyActiveWatchers();
         hotReloadManager.cancelPendingReload();
         listeners.clear();
         proxyInstanceProvider.clear();
@@ -360,6 +362,27 @@ public class DefaultConfigManager implements ConfigManager {
         ListenerRegistration(String pattern, ConfigChangeListener listener) {
             this.pattern = pattern;
             this.listener = listener;
+        }
+    }
+
+    private static class DefaultConfigProxyContext implements ConfigProxyContext {
+        private final DefaultConfigManager manager;
+        private final PropertyConverterRegistry converterRegistry;
+
+        private DefaultConfigProxyContext(DefaultConfigManager manager,
+                                         PropertyConverterRegistry converterRegistry) {
+            this.manager = manager;
+            this.converterRegistry = converterRegistry;
+        }
+
+        @Override
+        public ConfigManager manager() {
+            return manager;
+        }
+
+        @Override
+        public PropertyConverterRegistry converterRegistry() {
+            return converterRegistry;
         }
     }
 

@@ -1,6 +1,6 @@
 # 类型安全代理与注解
 
-`team4u-config` 提供了基于动态代理的高级面向对象配置绑定能力，使配置的访问如同操作本地普通 Java Bean 一样自然、类型安全且具备编译期检查。
+`ConfigManager` 通过 `ConfigProxyCreator` 创建实时代理，使配置访问如同操作本地普通 Java Bean 一样自然、类型安全且具备编译期检查。未显式提供创建器且类路径上没有 ServiceLoader 实现时，`createProxy` 会快速失败，不会退回绑定 POJO。`team4u-config-test` 在过渡期内部注入当前实现；发布后的 `team4u-config-proxy` artifact 会通过 ServiceLoader 自动提供实现。
 
 ---
 

@@ -4,13 +4,15 @@ import com.team4u.framework.config.core.annotation.ConfigPrefix;
 import com.team4u.framework.config.core.convert.PropertyConverter;
 import com.team4u.framework.config.core.convert.PropertyConverterRegistry;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
-import com.team4u.framework.config.core.internal.DefaultConfigBinder;
 import com.team4u.framework.config.core.internal.DefaultConfigManager;
 import com.team4u.framework.config.core.spi.*;
 import com.team4u.framework.policy.api.PolicyRegistry;
 import com.team4u.framework.policy.util.PolicyScanner;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.Optional;
+import java.util.ServiceLoader;
 
 /**
  * 配置管理中心系统总控门面接口
@@ -129,7 +131,7 @@ public interface ConfigManager {
         private final ConfigSourceRegistry sourceRegistry;
         private final ConfigWatcherRegistry watcherRegistry;
         private final PropertyConverterRegistry converterRegistry;
-        private ConfigBinder configBinder;
+        private ConfigProxyCreator proxyCreator;
         /**
          * 防抖时间窗口（毫秒），默认 500ms。设置为 0 或负数时，变更信号将同步执行重载，
          * 适用于单元测试环境以消除 {@code Thread.sleep} 等待。
@@ -208,6 +210,17 @@ public interface ConfigManager {
         }
 
         /**
+         * 设置配置代理创建器
+         *
+         * @param proxyCreator 代理创建器实例
+         * @return 当前 Builder 实例
+         */
+        public Builder proxyCreator(ConfigProxyCreator proxyCreator) {
+            this.proxyCreator = proxyCreator;
+            return this;
+        }
+
+        /**
          * 手动添加配置源
          *
          * @param source 配置源实例
@@ -253,17 +266,6 @@ public interface ConfigManager {
         }
 
         /**
-         * 设置自定义配置绑定器
-         *
-         * @param configBinder 绑定器实例
-         * @return 当前 Builder 实例
-         */
-        public Builder configBinder(ConfigBinder configBinder) {
-            this.configBinder = configBinder;
-            return this;
-        }
-
-        /**
          * 设置防抖时间窗口
          * <p>
          * 生产环境默认 500ms，可有效过滤密集变更；测试环境传入 0 可实现变更信号同步执行重载，
@@ -284,11 +286,34 @@ public interface ConfigManager {
          * @return 配置管理器实例
          */
         public ConfigManager build() {
-            if (configBinder == null) {
-                configBinder = new DefaultConfigBinder();
+            return new DefaultConfigManager(sourceRegistry, watcherRegistry, converterRegistry,
+                    resolveProxyCreator(), debounceWindowMs);
+        }
+
+        private ConfigProxyCreator resolveProxyCreator() {
+            if (proxyCreator != null) {
+                return proxyCreator;
             }
-            return new DefaultConfigManager(sourceRegistry, watcherRegistry, converterRegistry, configBinder,
-                    debounceWindowMs);
+
+            List<ConfigProxyCreator> discovered = new ArrayList<>();
+            for (ConfigProxyCreator candidate : ServiceLoader.load(
+                    ConfigProxyCreator.class, contextClassLoader())) {
+                discovered.add(candidate);
+            }
+            if (discovered.isEmpty()) {
+                return null;
+            }
+            if (discovered.size() == 1) {
+                return discovered.get(0);
+            }
+            throw new IllegalStateException(
+                    "Multiple ConfigProxyCreator implementations were found: " + discovered);
+        }
+
+        private static ClassLoader contextClassLoader() {
+            ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
+            return classLoader == null
+                    ? ConfigProxyCreator.class.getClassLoader() : classLoader;
         }
     }
 }
