@@ -61,7 +61,7 @@ kv.expire(key, 60_000);
 
 ## 类型化门面：Space
 
-固定键空间与值类型的场景，注册策略后按类型读写，值自动 JSON 序列化：
+类型化门面位于 `team4u-kv-space`，需要额外引入该模块，并为 JSON 编解码显式选择引擎（例如 `team4u-serializer-jackson`，或注册自定义 `JsonSerializerPolicy`）：
 
 ```java
 Spaces.global().register(new SpacePolicy()

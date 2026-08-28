@@ -2,6 +2,7 @@
 
 | Version | Breaking change | Migration |
 | --- | --- | --- |
+| 1.0 | Typed Space APIs moved to team4u-kv-space and HotSwapStore no longer implements proxy Swappable | Add team4u-kv-space for Space, Spaces, and SpacePolicy. Cast HotSwapStore.wrap(...) results to com.team4u.framework.kv.HotSwap instead of proxy Swappable; the proxy interface set is fixed at wrap time. |
 | 1.0 | team4u-proxy no longer passes ByteBuddy transitively | Interface-only consumers need no change. Concrete-class proxy consumers must add `net.bytebuddy:byte-buddy` explicitly; this also applies to team4u-log and retry-proxy. `team4u-config-proxy` owns ByteBuddy at runtime, so adding that adapter alone is sufficient for config class proxies. |
 | 1.0 | Removed pure grouping artifacts team4u-config/kv/lease/retry/serializer | Depend directly on concrete artifacts managed by the root BOM. |
 | 1.0 | Managed retry and config-driven retry policies moved out of retry-core | Add team4u-retry-managed for ManagedRetries, ManagedRetryClient, managed records/store APIs, and ManagedSubmitResult; add team4u-retry-config for DynamicRetryPolicyRegistry. Retries now supports INLINE only, and the moved retry FQCNs change as documented in MIGRATION-1.0.md. |

@@ -1,37 +1,42 @@
 package com.team4u.framework.kv.hotswap;
 
+import com.team4u.framework.kv.HotSwap;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.StoreWrapper;
-import com.team4u.framework.proxy.ProxyBuilder;
-import com.team4u.framework.proxy.core.ProxyException;
-import com.team4u.framework.proxy.support.Swappable;
 import lombok.extern.slf4j.Slf4j;
 
+import java.lang.reflect.InvocationHandler;
+import java.lang.reflect.InvocationTargetException;
+import java.lang.reflect.Method;
+import java.lang.reflect.Proxy;
 import java.util.Objects;
 import java.util.concurrent.Executors;
 import java.util.concurrent.ScheduledExecutorService;
 import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicReference;
 
 /**
  * 热交换键值存储：运行时原子替换底层存储，业务持有的引用不变
  * <p>
- * 基于 {@code ProxyBuilder} 的热交换能力（volatile delegate 替换，对所有线程立即可见）实现，
  * 任意 {@link KvStore} 实现均可包装，无需继承特定基类。适用于在线切换后端、
  * 存储迁移、故障转移等场景。
  * </p>
  * <p>
+ * 返回代理的能力接口在创建时固定：总是实现 {@link KvStore} 与 {@link HotSwap}；
+ * 初始存储实现 {@link StoreWrapper} 时额外实现 {@link StoreWrapper}，实现
+ * {@link AutoCloseable} 时额外实现 {@link AutoCloseable}。后续交换不会扩大或缩小
+ * 代理的接口集合；若新存储缺少已公开能力，对应调用会明确失败。
+ * </p>
+ * <p>
  * Safe Swap 约定：调用方应先构建并验证新存储可用，再执行交换；
- * 交换下来的旧存储若实现了 {@link AutoCloseable}，默认在交换成功后静默关闭
- * （尽力而为，不阻塞交换流程，关闭异常仅记录日志）。
- * 注意：交换瞬间在途调用仍持有旧存储引用，立即关闭可能中断在途调用——
- * 连接池型后端建议使用 {@link #swap(KvStore, KvStore, long)} 的宽限期重载。
+ * HotSwap#hotswap(Object) 仅原子替换并返回旧存储，不负责关闭。使用静态
+ * {@code swap} 重载可保留旧的立即关闭或宽限期关闭语义。
  * </p>
  *
  * @author jay.wu
  */
 @Slf4j
 public final class HotSwapStore {
-
 
     /**
      * 延迟关闭的共享守护线程调度器：不阻塞业务线程，不阻止 JVM 退出
@@ -44,31 +49,32 @@ public final class HotSwapStore {
     /**
      * 包装初始存储，返回支持运行时热交换的 {@link KvStore} 代理
      * <p>
-     * 返回对象同时实现了 {@link Swappable}，业务侧以 {@link KvStore} 类型持有即可。
-     * 初始存储实现 {@link StoreWrapper} 时，代理额外实现 {@link StoreWrapper}，
-     * {@code unwrap()} 经鸭子类型转发到<b>当前</b>委托——能力解析（见
-     * {@link com.team4u.framework.kv.KvStores}）在热交换后仍指向新存储。
-     * 初始存储实现 {@link AutoCloseable} 时，代理额外实现 {@link AutoCloseable}，
-     * {@code close()} 同样经鸭子类型转发到<b>当前</b>委托——与装饰器的级联关闭语义一致；
-     * 换下的旧洋葱由 Safe Swap 的交换重载负责关闭。
-     * 已知边界：交换到未实现对应接口的存储后，{@code unwrap()}/{@code close()} 调用会以
-     * {@link ProxyException} 失败。
+     * 业务侧以 {@link KvStore} 类型持有即可。代理接口集合在创建时固定：
+     * {@link StoreWrapper} 与 {@link AutoCloseable} 仅按初始存储能力公开，
+     * 交换不会动态增加能力，也不会静默移除已公开能力。缺少能力的交换目标会让
+     * 对应调用失败，而不是把代理降级成另一个运行时类型。
      * </p>
      */
     public static KvStore wrap(KvStore initial) {
         Objects.requireNonNull(initial, "initial store");
-        ProxyBuilder<KvStore> builder = ProxyBuilder.forClass(KvStore.class)
-                .delegate(initial);
-        if (initial instanceof StoreWrapper) {
-            builder.withInterfaces(StoreWrapper.class);
+        AtomicReference<KvStore> current = new AtomicReference<>(initial);
+
+        Class<?>[] interfaces;
+        if (initial instanceof StoreWrapper && initial instanceof AutoCloseable) {
+            interfaces = new Class<?>[] {KvStore.class, HotSwap.class,
+                    StoreWrapper.class, AutoCloseable.class};
+        } else if (initial instanceof StoreWrapper) {
+            interfaces = new Class<?>[] {KvStore.class, HotSwap.class, StoreWrapper.class};
+        } else if (initial instanceof AutoCloseable) {
+            interfaces = new Class<?>[] {KvStore.class, HotSwap.class, AutoCloseable.class};
+        } else {
+            interfaces = new Class<?>[] {KvStore.class, HotSwap.class};
         }
-        if (initial instanceof AutoCloseable) {
-            // close() 经鸭子类型转发到当前存储：与装饰器级联关闭语义一致
-            builder.withInterfaces(AutoCloseable.class);
-        }
-        return builder
-                .enableHotswap()
-                .build();
+
+        return (KvStore) Proxy.newProxyInstance(
+                HotSwapStore.class.getClassLoader(),
+                interfaces,
+                new Handler(current));
     }
 
     /**
@@ -92,7 +98,7 @@ public final class HotSwapStore {
      */
     public static KvStore swap(KvStore hotSwapProxy, KvStore newStore, long gracePeriodMillis) {
         Objects.requireNonNull(newStore, "new store");
-        KvStore old = (KvStore) swappable(hotSwapProxy).hotswap(newStore);
+        KvStore old = (KvStore) hotSwap(hotSwapProxy).hotswap(newStore);
         if (old instanceof AutoCloseable) {
             if (gracePeriodMillis > 0) {
                 scheduleClose(old, gracePeriodMillis);
@@ -110,20 +116,20 @@ public final class HotSwapStore {
      */
     public static KvStore swap(KvStore hotSwapProxy, KvStore newStore, boolean closeOldQuietly) {
         Objects.requireNonNull(newStore, "new store");
-        KvStore old = (KvStore) swappable(hotSwapProxy).hotswap(newStore);
+        KvStore old = (KvStore) hotSwap(hotSwapProxy).hotswap(newStore);
         if (closeOldQuietly && old instanceof AutoCloseable) {
             closeQuietly(old);
         }
         return old;
     }
 
-    private static Swappable swappable(KvStore hotSwapProxy) {
-        if (!(hotSwapProxy instanceof Swappable)) {
+    private static HotSwap hotSwap(KvStore hotSwapProxy) {
+        if (!(hotSwapProxy instanceof HotSwap)) {
             throw new IllegalArgumentException(
                     "Not a hot-swap proxy, wrap it first via HotSwapStore.wrap(): "
                             + hotSwapProxy.getClass().getName());
         }
-        return (Swappable) hotSwapProxy;
+        return (HotSwap) hotSwapProxy;
     }
 
     private static void scheduleClose(KvStore store, long delayMillis) {
@@ -159,6 +165,52 @@ public final class HotSwapStore {
             ((AutoCloseable) store).close();
         } catch (Exception e) {
             log.warn("Failed to close old kv store {}", store.getClass().getName(), e);
+        }
+    }
+
+    private static final class Handler implements InvocationHandler {
+
+        private final AtomicReference<KvStore> current;
+
+        private Handler(AtomicReference<KvStore> current) {
+            this.current = current;
+        }
+
+        @Override
+        public Object invoke(Object proxy, Method method, Object[] args) throws Throwable {
+            String methodName = method.getName();
+            if (method.getDeclaringClass() == HotSwap.class && methodName.equals("hotswap")) {
+                Object newDelegate = args == null || args.length == 0 ? null : args[0];
+                if (!(newDelegate instanceof KvStore)) {
+                    throw new IllegalArgumentException(
+                            "hotswap requires a non-null com.team4u.framework.kv.KvStore delegate");
+                }
+                return current.getAndSet((KvStore) newDelegate);
+            }
+            if (method.getDeclaringClass() == Object.class) {
+                return objectMethod(proxy, methodName, args);
+            }
+
+            KvStore delegate = current.get();
+            try {
+                return method.invoke(delegate, args);
+            } catch (InvocationTargetException e) {
+                throw e.getCause();
+            } catch (IllegalArgumentException | IllegalStateException e) {
+                throw new IllegalStateException(
+                        "Current hot-swap delegate no longer supports method " + method
+                                + ": " + delegate.getClass().getName(), e);
+            }
+        }
+
+        private Object objectMethod(Object proxy, String methodName, Object[] args) {
+            if (methodName.equals("equals")) {
+                return proxy == args[0];
+            }
+            if (methodName.equals("hashCode")) {
+                return System.identityHashCode(proxy);
+            }
+            return "HotSwapStore proxy for " + current.get().getClass().getName();
         }
     }
 }
