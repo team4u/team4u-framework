@@ -134,13 +134,16 @@ team4u-kv-test
 
 ## Move Accounting
 
-Git detects all moved old log files under 90% rename similarity. Of the 63 moved production/test paths:
+The old log source inventory contains 40 production paths and 21 test paths (61 total); every old production/test source path is accounted for in the new modules.
 
-- 62 are detected as 100% renames.
+Current split source counts are core 23 production/13 test and governance 19 production/11 test, totaling 42 production and 24 test files. That is exactly the old inventory plus 2 new production files and 3 new test files.
+
+Fresh Git rename detection at the 90% similarity threshold reports 48 renames:
+
+- 47 are detected as 100% renames.
 - `LogProxyTest.java` is detected as a 90% rename because Phase B adjusted its lifecycle cleanup along with the module move.
+- Old files modified below the rename-detection threshold remain accounted for by the exact old/new path inventory; Git's 48 rename reports do not establish that every move was detected.
 - The old `team4u-log` directory has no remaining source or POM path.
-- Current split source counts are core 23 production/13 test and governance 19 production/11 test, which account for all 63 moved files plus the four Phase B quickstart/serializer additions and the quickstart file now stored as a similarity-based move.
-
 No production or test file from the old monolith is unaccounted for.
 
 ## Documentation
