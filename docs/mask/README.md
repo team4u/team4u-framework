@@ -52,7 +52,8 @@ graph TD
 
 - **高性能无锁策略路由**：底层基于 `team4u-policy` 的 `KeyedPolicyRegistry` 读写分离架构，核心路径无反射、无正则开销。
 - **内置 15 种标准脱敏算法**：开箱覆盖姓名（支持中英文智能区分）、手机号、身份证、银行卡、邮箱、地址、密码、居中百分比掩码等。
-- **Jackson 无侵入自动脱敏**：注册 `JacksonMaskModule` 后，自动接管 JavaBean 与 Map 的 JSON 序列化输出，内存对象中的真实值完全不受影响。
+- **Jackson 无侵入自动脱敏**：注册 `JacksonMaskModule` 后，自动接管 JavaBean 与 Map 的 JSON 序列化输出，内存对象中的真实值完全不受影响。当前 `team4u-mask` 生产源码仍直接使用 Jackson API，直接 Jackson 依赖保留到 Task 15 拆分为 `team4u-mask-jackson`；它不传递 `team4u-serializer-jackson`。
+- **JsonUtil 输出脱敏**：通过 `JsonUtil` 输出 Map 的应用仍需显式添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。
 - **配置中心动态治理 (`team4u.mask.rules`)**：联动 `team4u-config`，无需修改代码即可针对特定 Class、第三方 DTO 或全局字段名动态下发脱敏规则。
 - **Unicode CodePoint 安全机制**：所有字符串长度计算与截取严格基于 Unicode CodePoint 算法，完美兼容 Emoji 与生僻字。
 - **超长报文截断保护 (`MaskConfig`)**：支持配置 `maxStringLength`，防止超大报文或 Base64 文本打满磁盘日志。

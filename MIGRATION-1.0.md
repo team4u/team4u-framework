@@ -25,7 +25,7 @@ Developers can run the currently green external-consumer set with:
 mvn -Pconsumer-it -DskipTests verify
 ```
 
-The set currently covers minimal base, explicit Jackson provider, and JDK interface proxy consumers. `consumer-serializer-api` is a known transition guard: the current no-provider error names only `JsonSerializerPolicy` and omits the Jackson artifact or custom-provider instruction, so run it explicitly with `-Dinvoker.test=consumer-serializer-api` until Task 7. `consumer-config-core` is also explicit: its scalar/binder path runs, but its runtime tree still carries proxy and Jackson; it joins the default gate in Task 9.
+The default set covers minimal base, provider-free serializer API, explicit Jackson provider, and JDK interface proxy consumers. `consumer-config-core` remains explicit until Task 9: after Task 7 its runtime tree is free of Jackson/ByteBuddy but still carries `team4u-proxy`.
 
 The release baseline gate is:
 
@@ -33,11 +33,11 @@ The release baseline gate is:
 mvn -Prelease-contracts -DskipTests verify
 ```
 
-It runs the same three currently green consumers, executes their mains, and validates or records each runtime dependency tree. Its staged selection is deliberately the extension point that Task 7 and Task 18 strengthen without speculative infrastructure.
+It runs the same four active consumers, executes their mains, and validates or records each runtime dependency tree. `consumer-config-core` joins when Task 9 removes its remaining proxy edge.
 
 ## Explicit serializer provider choice
 
-Applications using JSON APIs must choose a provider explicitly. Add `com.team4u:team4u-serializer-jackson` to the application, or provide/register a custom `JsonSerializerPolicy`. Depending only on `team4u-serializer-json` is supported, but JSON calls fail fast with an `IllegalStateException`; Task 7 updates that message to state both choices explicitly.
+Applications using JSON APIs must choose a provider explicitly. Add `com.team4u:team4u-serializer-jackson` to the application, or provide/register a custom `JsonSerializerPolicy` through `META-INF/services/com.team4u.framework.serializer.json.JsonSerializerPolicy`. Depending only on `team4u-serializer-json` is supported, but the first non-null/non-empty JSON call fails fast with an `IllegalStateException` naming both choices. The same requirement applies to JSON paths in config-core, retry-core, kv-core/kv-lifecycle, lease-jdbc, router, translator, mask, and log. Until Tasks 15 and 17, mask and log may directly depend on Jackson for their current adapters but never pass `team4u-serializer-jackson`; retry-lease-runtime is the recorded direct-Jackson integration exception until its retry/runtime split.
 
 After importing it, depend on concrete Team4u artifacts without versions.
 

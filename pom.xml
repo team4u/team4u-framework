@@ -501,6 +501,7 @@
                             <streamLogs>true</streamLogs>
                             <pomIncludes>
                                 <pomInclude>consumer-minimal/pom.xml</pomInclude>
+                                <pomInclude>consumer-serializer-api/pom.xml</pomInclude>
                                 <pomInclude>consumer-serializer-jackson/pom.xml</pomInclude>
                                 <pomInclude>consumer-interface-proxy/pom.xml</pomInclude>
                             </pomIncludes>
@@ -536,6 +537,7 @@
                             <streamLogs>true</streamLogs>
                             <pomIncludes>
                                 <pomInclude>consumer-minimal/pom.xml</pomInclude>
+                                <pomInclude>consumer-serializer-api/pom.xml</pomInclude>
                                 <pomInclude>consumer-serializer-jackson/pom.xml</pomInclude>
                                 <pomInclude>consumer-interface-proxy/pom.xml</pomInclude>
                             </pomIncludes>

@@ -137,6 +137,8 @@ team4u-kv
 | `team4u-kv-store-redis` | kv-core、spring-data-redis | Redis 存储时 |
 | `team4u-kv-test` | kv-core、junit | 为新存储写契约测试时 |
 
+`Space` 与 `ExpiringValue` 的 JSON 值编解码由应用显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。
+
 ## 文档导航
 
 - [快速开始](quick-start.md)：从引入依赖到读写第一个键值

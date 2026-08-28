@@ -17,6 +17,8 @@
 
 `maxRetries` 不包含首次执行：`2` 表示最多总共执行 3 次。MANAGED 还必须配置 `foregroundMaxRetries`，它表示首次执行之后前台额外尝试几次；任务进入后台时已失败次数不会归零。
 
+`team4u-retry-core` 的 JSON 配置和 `JsonRetryRecordSerializer` 由应用显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。`team4u-retry-lease-runtime` 在 Task 11 拆分边界前保留直接 Jackson 生产依赖，是当前记录的显式集成例外。
+
 ---
 
 ## 模式选择
