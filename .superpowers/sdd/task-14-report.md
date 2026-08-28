@@ -6,14 +6,15 @@
 - Branch: `refactor/framework-convergence`
 - Input HEAD: `29c9b5c8`
 - Implementation commit subject: `test(translator): lock post-router boundary`
+- Review remediation commit subject: `test(translator): strengthen fallback quickstart`
 
 ## Changes
 
 - Added `team4u-translator/src/test/java/com/team4u/framework/translator/TranslatorQuickstartTest.java`.
-  - Uses `TestConfigContext` to build an isolated `ConfigManager` and `RoutingManager`; it does not mock `RoutingManager`.
+  - Uses `TestConfigContext` to build an isolated `ConfigManager` and `RoutingManager`; the builder disables the global interceptor registry, and the test does not mock `RoutingManager`.
   - Loads an actual expression router JSON policy through test-scoped `team4u-serializer-jackson`.
-  - Covers route selection into `ErrorDef`, translated code/message, template args plus `rawCode`/`rawMessage`, trace propagation, missing-field fallback to raw values, unmatched-route passthrough, and missing-route passthrough.
-  - Destroys the test config context after each test and never mutates global router state.
+  - Covers route selection into `ErrorDef`, translated code/message, template args plus `rawCode`/`rawMessage`, trace propagation, independent message-only and code-only fallback behavior, unmatched-route passthrough, and missing-route passthrough.
+  - Destroys the test config context after each test and does not scan or mutate shared router interceptor state.
 - Added only actual test dependencies:
   - `team4u-config-test` (`test`, excluding `team4u-config-proxy`)
   - `team4u-serializer-jackson` (`test`)
