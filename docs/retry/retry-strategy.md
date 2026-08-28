@@ -140,4 +140,4 @@ MANAGED 会把 Backoff 保存成稳定的 `type + params`，当前记录格式�
 - 异常类会在解析时加载并校验为 Throwable 子类，类不存在或类型不匹配会立即失败。
 - MANAGED 持久化非 `java.*` 异常时，还需要加入 serializer allowlist，见[托管持久化重试](retry-managed.md)。
 
-按名称查找策略时，先查动态配置 `DynamicRetryPolicyRegistry`，再查全局静态注册 `NamedRetryPolicyRegistry.global()`；都没有则抛出 `IllegalArgumentException`。
+按名称查找策略时，先查 `team4u-retry-config` 提供的动态配置 `DynamicRetryPolicyRegistry`，再查全局静态注册 `NamedRetryPolicyRegistry.global()`；都没有则抛出 `IllegalArgumentException`。

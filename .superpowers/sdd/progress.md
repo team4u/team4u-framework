@@ -20,7 +20,7 @@
 | 8. Config Dependency Inversion and Global Initialization Fix | Complete |
 | 9. Split config-proxy and config-spring | Complete |
 | 10. Lease Boundary Before Retry Migration | Complete |
-| 11. Retry Core/Managed/Dynamic Split Without Cycles | Pending |
+| 11. Retry Core/Managed/Dynamic Split Without Cycles | Complete |
 | 12. KV Space Split and Proxy-Free HotSwapStore | Pending |
 | 13. Router Core and Router Proxy Split | Pending |
 | 14. Translator Convergence After Router | Pending |
@@ -46,3 +46,5 @@ Task 8 complete: creator resolution and lazy global initialization landed at `8b
 Task 9 complete: split config proxy/Spring adapters, kept proxy creation explicit, and verified active consumers plus release packaging.
 
 Task 10 complete: added deterministic memory/JDBC lease quickstarts, enforced lease-core and lease-jdbc runtime boundaries, documented explicit JSON provider choice, and verified the full reactor plus release gates. Review remediation corrected the malformed Jackson/Spring Enforcer patterns and the Task 10 RED record; commit `fix(lease): enforce framework dependency bans`.
+
+Task 11 complete: split managed governance and config-driven retry policies out of retry-core, replaced `Retries.managed(...)` with `ManagedRetries.with(...)`, and kept retry-core free of managed/config dependencies. Full reactor, consumer/release gates, and release packaging passed after one unrelated KV timing rerun; commit `refactor(retry): split managed governance without core cycles`.

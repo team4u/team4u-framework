@@ -11,7 +11,7 @@
         <relativePath>../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>team4u-retry-proxy</artifactId>
+    <artifactId>team4u-retry-managed</artifactId>
 
     <dependencies>
         <dependency>
@@ -21,39 +21,8 @@
         </dependency>
         <dependency>
             <groupId>com.team4u</groupId>
-            <artifactId>team4u-retry-managed</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.team4u</groupId>
-            <artifactId>team4u-retry-config</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.team4u</groupId>
-            <artifactId>team4u-proxy</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.team4u</groupId>
-            <artifactId>team4u-bean</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.team4u</groupId>
             <artifactId>team4u-serializer-json</artifactId>
             <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.team4u</groupId>
-            <artifactId>team4u-serializer-jackson</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>net.bytebuddy</groupId>
-            <artifactId>byte-buddy</artifactId>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>

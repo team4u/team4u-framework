@@ -5,7 +5,7 @@
 先明确边界：
 
 - `INLINE`: 支持有返回值方法和 `CompletableFuture` 方法。
-- `MANAGED`: 代理拦截只支持 `void` 方法。需要拿到返回值时，直接使用 `Retries.managed(...)`。
+- `MANAGED`: 代理拦截只支持 `void` 方法。需要拿到返回值时，直接使用 `ManagedRetries.with(...)`。
 
 ## 最小 INLINE 代理
 
@@ -121,7 +121,7 @@ try {
 - 策略判定不可重试：抛出原始异常。
 - 存储 rejected：抛出 `IllegalStateException`。
 
-`InvocationReplay.TASK_NAME` 固定为 `ProxyInvocationReplay`。它不是业务自定义的 task type；业务 handler 场景应使用 `Retries.managed(...)` 和自己的 `StringRecoveryHandler`。
+`InvocationReplay.TASK_NAME` 固定为 `ProxyInvocationReplay`。它不是业务自定义的 task type；业务 handler 场景应使用 `ManagedRetries.with(...)` 和自己的 `StringRecoveryHandler`。
 
 ## @RetryIgnore
 

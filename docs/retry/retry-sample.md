@@ -7,7 +7,6 @@
 用户注册时必须当场知道验证码是否发送成功，所以选 INLINE。这里只重试网络超时，不重试参数错误。
 
 ```java
-import com.team4u.framework.retry.api.Retries;
 import com.team4u.framework.retry.api.RetryPolicy;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 
@@ -47,8 +46,8 @@ public class SmsService {
 前台提交代码：
 
 ```java
-import com.team4u.framework.retry.api.ManagedSubmitResult;
-import com.team4u.framework.retry.api.Retries;
+import com.team4u.framework.retry.managed.ManagedSubmitResult;
+import com.team4u.framework.retry.managed.ManagedRetries;
 import com.team4u.framework.retry.api.RetryPolicy;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 import com.team4u.framework.retry.managed.client.ManagedRetryClient;
@@ -73,7 +72,7 @@ public class MerchantNotifyService {
     }
 
     public void notifyMerchant(String orderId, String payload) {
-        ManagedSubmitResult<String> result = Retries.managed(retryClient)
+        ManagedSubmitResult<String> result = ManagedRetries.with(retryClient)
                 .taskType("merchant-webhook-notify")
                 .idempotencyKey("notify-" + orderId)
                 .payload(payload)

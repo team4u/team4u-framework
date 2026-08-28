@@ -17,7 +17,7 @@
 
 `maxRetries` 不包含首次执行：`2` 表示最多总共执行 3 次。MANAGED 还必须配置 `foregroundMaxRetries`，它表示首次执行之后前台额外尝试几次；任务进入后台时已失败次数不会归零。
 
-`team4u-retry-core` 的 JSON 配置和 `JsonRetryRecordSerializer` 由应用显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。`team4u-retry-lease-runtime` 是长期 Jackson 集成模块：`LeaseRetryRecordSerializer` 直接使用 Jackson tree API 实现版本化持久 schema、字段级校验和 throwable allowlist；通用 serializer SPI 无法表达这些约束。该直接 Jackson 生产依赖是发布契约中的显式例外，不传递 `team4u-serializer-jackson`。
+`team4u-retry-core` 的 JSON 配置由应用显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。`team4u-retry-managed` 的 `JsonRetryRecordSerializer` 使用同一 JSON SPI。`team4u-retry-lease-runtime` 是长期 Jackson 集成模块：`LeaseRetryRecordSerializer` 直接使用 Jackson tree API 实现版本化持久 schema、字段级校验和 throwable allowlist；通用 serializer SPI 无法表达这些约束。该直接 Jackson 生产依赖是发布契约中的显式例外，不传递 `team4u-serializer-jackson`。
 ---
 
 ## 模式选择
@@ -36,7 +36,6 @@
 ### 最小 INLINE 示例
 
 ```java
-import com.team4u.framework.retry.api.Retries;
 import com.team4u.framework.retry.api.RetryPolicy;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 
@@ -78,8 +77,8 @@ MANAGED 比 INLINE 多三件事：要指定后台恢复处理器；要传幂等�
 
 ```java
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
-import com.team4u.framework.retry.api.ManagedSubmitResult;
-import com.team4u.framework.retry.api.Retries;
+import com.team4u.framework.retry.managed.ManagedSubmitResult;
+import com.team4u.framework.retry.managed.ManagedRetries;
 import com.team4u.framework.retry.api.RetryPolicy;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 import com.team4u.framework.retry.managed.recovery.RecoveryContext;
@@ -108,7 +107,7 @@ public class PayNotifyDemo {
                 .start();
 
         try {
-            ManagedSubmitResult<String> result = Retries.managed(runtime.client())
+            ManagedSubmitResult<String> result = ManagedRetries.with(runtime.client())
                     .taskType("pay-notify")
                     .idempotencyKey("order-1001")
                     .payload("order-1001")
@@ -171,7 +170,7 @@ Memory 后端只适合演示和单进程测试。部署到多个进程时，把 
 ## 核心概念
 
 - `Retries.inline()`: 进程内重试入口。
-- `Retries.managed(runtime.client())`: 托管重试入口。
+- `ManagedRetries.with(runtime.client())`: 托管重试入口（来自 `team4u-retry-managed`）。
 - `RetryPolicy`: 最多再试几次、每次等多久、哪些异常才重试。
 - `Backoffs`: 固定、递增、指数、指数加随机抖动。
 - `StringRecoveryHandler`: MANAGED 后台恢复处理器，入参固定为字符串 payload。

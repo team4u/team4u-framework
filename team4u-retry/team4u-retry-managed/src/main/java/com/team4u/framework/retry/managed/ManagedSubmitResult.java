@@ -1,4 +1,4 @@
-package com.team4u.framework.retry.api;
+package com.team4u.framework.retry.managed;
 
 import com.team4u.framework.retry.managed.model.RetryStatus;
 import lombok.Data;

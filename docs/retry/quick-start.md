@@ -39,7 +39,6 @@ Memory 后端用于本机示例和单进程测试。多进程生产环境使用 
 适合“等 200ms、800ms 也可以，但这次调用必须拿到结果”的场景。下面的任务前两次失败，第三次成功：
 
 ```java
-import com.team4u.framework.retry.api.Retries;
 import com.team4u.framework.retry.api.RetryPolicy;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 
@@ -83,12 +82,12 @@ result=ok, calls=3
 - `notifyMerchant`: 前台业务动作，这里固定失败，用来触发后台接管。
 - `NotifyAgainHandler`: 后台恢复动作，成功后打印 payload。
 - `ManagedRetryRuntime`: 创建后台 Worker 和存储。
-- `Retries.managed(...)`: 提交前台任务和恢复信息。
+- `ManagedRetries.with(...)`: 提交前台任务和恢复信息（来自 `team4u-retry-managed`）。
 
 ```java
 import com.team4u.framework.lease.memory.InMemoryLeaseBackend;
-import com.team4u.framework.retry.api.ManagedSubmitResult;
-import com.team4u.framework.retry.api.Retries;
+import com.team4u.framework.retry.managed.ManagedSubmitResult;
+import com.team4u.framework.retry.managed.ManagedRetries;
 import com.team4u.framework.retry.api.RetryPolicy;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 import com.team4u.framework.retry.managed.recovery.RecoveryContext;
@@ -115,7 +114,7 @@ public class ManagedQuickStart {
                 .start();
 
         try {
-            ManagedSubmitResult<String> result = Retries.managed(runtime.client())
+            ManagedSubmitResult<String> result = ManagedRetries.with(runtime.client())
                     .taskType("pay-notify")
                     .idempotencyKey("order-1001")
                     .payload("order-1001")
