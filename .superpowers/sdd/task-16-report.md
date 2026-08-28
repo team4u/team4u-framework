@@ -73,7 +73,7 @@ All Maven invocations used the absolute root POM `-f /root/code/team4u-framework
 5. Root structure:
    - 39 unique concrete reactor modules.
    - 53 unique artifacts in all dependency management.
-   - 39 Team4u-managed concrete leaves when the root `team4u-framework` aggregate is excluded; the raw Team4u dependency-management entry count is 40 with that aggregate included.
+   - 39 Team4u dependency-management entries, all of which are concrete leaves; the root `team4u-framework` aggregate is not self-managed.
 6. Full clean reactor:
    - `mvn clean test` passed: 240 Surefire XML files, 1,524 tests, 0 failures, 0 errors, 0 skipped.
 7. Consumer and release contracts:
