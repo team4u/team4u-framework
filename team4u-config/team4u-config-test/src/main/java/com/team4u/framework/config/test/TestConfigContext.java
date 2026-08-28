@@ -1,9 +1,7 @@
 package com.team4u.framework.config.test;
 
 import com.team4u.framework.config.core.ConfigManager;
-import com.team4u.framework.config.core.ConfigProxyContext;
 import com.team4u.framework.config.core.internal.DefaultConfigManager;
-import com.team4u.framework.config.core.proxy.ConfigProxyFactory;
 import com.team4u.framework.config.core.spi.InMemoryConfigSource;
 import lombok.Getter;
 
@@ -33,7 +31,6 @@ public class TestConfigContext {
                 .addSource(source)
                 .addWatcher(source)
                 .debounceWindow(0)
-                .proxyCreator(TestConfigContext::createConfigProxy)
                 .build();
     }
 
@@ -70,10 +67,6 @@ public class TestConfigContext {
         return configManager.createProxy(prefix, configType);
     }
 
-    private static <T> T createConfigProxy(ConfigProxyContext context, String prefix, Class<T> configType) {
-        return new ConfigProxyFactory(context.converterRegistry())
-                .createLiveProxy(context.manager(), prefix, configType);
-    }
 
     /**
      * 快捷销毁资源
