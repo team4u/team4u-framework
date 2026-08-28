@@ -1,5 +1,7 @@
 package com.team4u.framework.mask;
 
+import java.util.concurrent.atomic.AtomicReference;
+
 /**
  * Resolves externally governed field masking rules.
  * <p>
@@ -26,24 +28,41 @@ public interface MaskRuleResolver {
      * Global resolver holder with a lifecycle for adapter installation.
      */
     final class Global {
-        private static volatile MaskRuleResolver resolver = NO_OP;
+        private static final AtomicReference<MaskRuleResolver> RESOLVER =
+                new AtomicReference<>(NO_OP);
 
         private Global() {
         }
 
         public static MaskRuleResolver get() {
-            return resolver;
+            return RESOLVER.get();
         }
 
         public static void install(MaskRuleResolver newResolver) {
             if (newResolver == null) {
                 throw new IllegalArgumentException("MaskRuleResolver must not be null");
             }
-            resolver = newResolver;
+            RESOLVER.set(newResolver);
         }
 
+        /**
+         * Removes the global resolver only when it is still the expected owner.
+         *
+         * @param expectedResolver resolver supplied by the installing owner
+         * @return true when the expected resolver was installed and removed
+         */
+        public static boolean uninstall(MaskRuleResolver expectedResolver) {
+            if (expectedResolver == null) {
+                return false;
+            }
+            return RESOLVER.compareAndSet(expectedResolver, NO_OP);
+        }
+
+        /**
+         * Unconditionally resets the global resolver. Reserved for tests and explicit administration.
+         */
         public static void reset() {
-            resolver = NO_OP;
+            RESOLVER.set(NO_OP);
         }
     }
 }

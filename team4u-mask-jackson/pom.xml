@@ -52,8 +52,8 @@
                                         <exclude>com.team4u:team4u-serializer-json:*:*:runtime</exclude>
                                         <exclude>com.team4u:team4u-serializer-jackson:*:*:compile</exclude>
                                         <exclude>com.team4u:team4u-serializer-jackson:*:*:runtime</exclude>
-                                        <exclude>org.springframework:*:*:*:compile</exclude>
-                                        <exclude>org.springframework:*:*:*:runtime</exclude>
+                                        <exclude>org.springframework*:*:*:*:compile</exclude>
+                                        <exclude>org.springframework*:*:*:*:runtime</exclude>
                                     </excludes>
                                     <message>mask-jackson may depend only on mask core and direct Jackson API.</message>
                                 </bannedDependencies>

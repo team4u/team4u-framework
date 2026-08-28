@@ -62,8 +62,8 @@
                                         <exclude>com.team4u:team4u-mask-config:*:*:runtime</exclude>
                                         <exclude>com.fasterxml.jackson*:*:*:*:compile</exclude>
                                         <exclude>com.fasterxml.jackson*:*:*:*:runtime</exclude>
-                                        <exclude>org.springframework:*:*:*:compile</exclude>
-                                        <exclude>org.springframework:*:*:*:runtime</exclude>
+                                        <exclude>org.springframework*:*:*:*:compile</exclude>
+                                        <exclude>org.springframework*:*:*:*:runtime</exclude>
                                     </excludes>
                                     <message>mask core must remain a pure Java artifact with no adapter dependencies.</message>
                                 </bannedDependencies>
