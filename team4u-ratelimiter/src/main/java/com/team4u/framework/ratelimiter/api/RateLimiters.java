@@ -16,8 +16,8 @@ import java.util.Objects;
  * 引擎引用 volatile + 双检锁保证并发安全，{@code destroy()} 复位引用供测试隔离。
  * </p>
  * <p>
- * {@code acquire} 在被拒绝时抛出 {@link RateLimitException}（携带裁决结果），
- * 放行时返回裁决结果；{@code tryAcquire} 仅返回是否放行。
+ * {@code acquire} 返回完整裁决结果（拒绝不抛异常，{@code allowed=false} 携带
+ * 拒绝规则与重试等待等信息）；{@code tryAcquire} 仅返回是否放行。
  * </p>
  *
  * @author jay.wu
@@ -47,21 +47,19 @@ public final class RateLimiters {
     }
 
     /**
-     * 限流检查：放行返回裁决结果，拒绝抛出 {@link RateLimitException}
+     * 限流检查：返回裁决结果（与引擎同构，拒绝不抛异常——「否」是判定服务的正常产出，
+     * 携带完整信息；何时抛、抛什么由调用方决定，注解代理的 {@code RateLimitException}
+     * 是穿越方法签名边界的传输手段，编程式路径不沿用）
      */
     public static RateLimitResult acquire(String point, Object context) {
         return acquire(point, context, 1);
     }
 
     /**
-     * 限流检查（指定许可数）：放行返回裁决结果，拒绝抛出 {@link RateLimitException}
+     * 限流检查（指定许可数）：返回裁决结果，拒绝不抛异常
      */
     public static RateLimitResult acquire(String point, Object context, int permits) {
-        RateLimitResult result = engine().acquire(point, context, permits);
-        if (!result.isAllowed()) {
-            throw new RateLimitException(result);
-        }
-        return result;
+        return engine().acquire(point, context, permits);
     }
 
     /**

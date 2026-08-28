@@ -85,7 +85,7 @@ acquire(point, context, permits)
 | `RateLimitAlgorithm` | 算法规约（`KeyedPolicy`）：`key()` 命名、`requiredCapabilities()` 声明所需 kv 能力、`tryAcquire` 纯决策 |
 | `RateLimitResult` | 裁决结果（不可变）：allowed / point / ruleId / remaining / retryAfterMillis / decisionTimeMillis / reason |
 | `RateLimitStores` | 命名存储注册表与全局门面：规则按 `store` 名引用存储，一套规则多存储分工（默认内存、热点走 Redis） |
-| `RateLimiters` | 静态门面：持有全局引擎，`acquire`（拒绝抛 `RateLimitException`）与 `tryAcquire`（仅返回布尔）两种入口 |
+| `RateLimiters` | 静态门面：持有全局引擎，`acquire`（返回完整裁决结果，拒绝不抛异常）与 `tryAcquire`（仅返回布尔）两种入口 |
 | `@RateLimit` | 方法级注解：标注 `value`（`point` 简写别名）/ `permits` / `reject`，经代理拦截裁决，方法参数自动组装为检查上下文 |
 | `RateLimitReason` | 裁决原因：`NO_RULE`（无规则放行）/ `PASS` / `THRESHOLD`（命中阈值）/ `STORE_ERROR`（故障关闭拒绝） |
 
