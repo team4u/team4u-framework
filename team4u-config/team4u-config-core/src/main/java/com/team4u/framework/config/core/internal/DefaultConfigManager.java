@@ -65,8 +65,8 @@ public class DefaultConfigManager implements ConfigManager {
      */
     private final DynamicInstanceProvider<ProxyKey, ProxyKey, Object> proxyInstanceProvider;
     private final Set<ConfigWatcher> activeWatchers = Collections.newSetFromMap(new IdentityHashMap<>());
+    private final Object lifecycleMonitor = new Object();
     private final Object watcherLifecycleMonitor = new Object();
-
     /**
      * @param sourceRegistry     配置源注册表
      * @param watcherRegistry    配置监听器注册表
@@ -90,13 +90,11 @@ public class DefaultConfigManager implements ConfigManager {
 
         // 配置热重载管理器，防抖窗口由外部传入，支持测试环境配置为 0 以实现同步重载
         this.hotReloadManager = new HotReloadManager(
-                snapshotRef,
                 this.sourceRegistry::getPolicies,
                 this.aggregator,
                 this.versionGenerator,
                 debounceWindowMs,
-                this::fireChangeEvents);
-
+                this::commitReload);
         // 启动各配置源的监控任务
         reconcileWatchers();
 
@@ -111,11 +109,8 @@ public class DefaultConfigManager implements ConfigManager {
      * 获取全局标准单例配置管理引擎
      */
     public static DefaultConfigManager global() {
-        DefaultConfigManager current = global;
-        if (current != null) {
-            return current;
-        }
-        synchronized (DefaultConfigManager.class) {
+        // ConfigManager.class serializes global initialization, refresh, and reset.
+        synchronized (ConfigManager.class) {
             if (global == null) {
                 ConfigManager globalManager = Builder.buildGlobal();
                 if (!(globalManager instanceof DefaultConfigManager)) {
@@ -141,15 +136,43 @@ public class DefaultConfigManager implements ConfigManager {
     }
 
     /**
+     * Discards the global manager reference without initializing an absent manager.
+     * Test cleanup must destroy the manager first through ConfigBootstrap.resetForTests().
+     */
+    public static void discardGlobalForTests() {
+        // Callers must reset bootstrap first; this only removes an already-destroyed manager.
+        synchronized (ConfigManager.class) {
+            global = null;
+        }
+    }
+
+    /**
      * 刷新配置
      * <p>
      * 强制重新加载配置源并重新初始化监听器。
      * </p>
      */
     public void refresh() {
-        log.info("Refreshing configuration...");
-        initialLoad();
-        reconcileWatchers();
+        synchronized (lifecycleMonitor) {
+            hotReloadManager.resumeAcceptingReloads();
+            log.info("Refreshing configuration...");
+            initialLoad();
+            reconcileWatchers();
+        }
+    }
+
+    private boolean commitReload(long generation, ConfigSnapshot newSnapshot) {
+        ConfigSnapshot oldSnapshot;
+        synchronized (lifecycleMonitor) {
+            if (!hotReloadManager.isReloadCurrent(generation)) {
+                return false;
+            }
+            oldSnapshot = snapshotRef.getAndSet(newSnapshot);
+        }
+
+        // Listener callbacks run only after manager and reload locks are released.
+        fireChangeEvents(new HotReloadManager.ReloadEvent(oldSnapshot, newSnapshot));
+        return true;
     }
 
     /**
@@ -230,7 +253,12 @@ public class DefaultConfigManager implements ConfigManager {
     }
 
     private Object doCreateProxy(String prefix, Class<?> configType) {
-        return proxyCreator.create(proxyContext, prefix, configType);
+        Object proxy = proxyCreator.create(proxyContext, prefix, configType);
+        if (proxy == null) {
+            throw new IllegalStateException("ConfigProxyCreator returned null: prefix=[" + prefix
+                    + "], configType=[" + configType.getName() + "]");
+        }
+        return proxy;
     }
 
     @Override
@@ -320,10 +348,11 @@ public class DefaultConfigManager implements ConfigManager {
      * 销毁实例，释放线程池与监听器资源
      */
     public void destroy() {
-        destroyActiveWatchers();
-        hotReloadManager.destroy();
+        synchronized (lifecycleMonitor) {
+            destroyActiveWatchers();
+            hotReloadManager.destroy();
+        }
     }
-
     private void destroyActiveWatchers() {
         synchronized (watcherLifecycleMonitor) {
             for (ConfigWatcher watcher : new ArrayList<>(activeWatchers)) {
@@ -337,11 +366,13 @@ public class DefaultConfigManager implements ConfigManager {
      * 仅用于测试场景，重置运行时状态但保留全局单例对象本身。
      */
     public void resetForTests() {
-        destroyActiveWatchers();
-        hotReloadManager.cancelPendingReload();
-        listeners.clear();
-        proxyInstanceProvider.clear();
-        snapshotRef.set(new ConfigSnapshot(nextVersion(), Collections.emptyMap()));
+        synchronized (lifecycleMonitor) {
+            destroyActiveWatchers();
+            hotReloadManager.cancelPendingReload();
+            listeners.clear();
+            proxyInstanceProvider.clear();
+            snapshotRef.set(new ConfigSnapshot(nextVersion(), Collections.emptyMap()));
+        }
     }
 
     private void destroyWatcher(ConfigWatcher watcher) {

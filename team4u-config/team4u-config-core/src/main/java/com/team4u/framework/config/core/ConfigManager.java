@@ -296,9 +296,14 @@ public interface ConfigManager {
             }
 
             List<ConfigProxyCreator> discovered = new ArrayList<>();
-            for (ConfigProxyCreator candidate : ServiceLoader.load(
-                    ConfigProxyCreator.class, contextClassLoader())) {
-                discovered.add(candidate);
+            try {
+                for (ConfigProxyCreator candidate : ServiceLoader.load(
+                        ConfigProxyCreator.class, contextClassLoader())) {
+                    discovered.add(candidate);
+                }
+            } catch (Error e) {
+                throw new IllegalStateException(
+                        "Failed to discover ConfigProxyCreator providers", e);
             }
             if (discovered.isEmpty()) {
                 return null;
@@ -309,7 +314,6 @@ public interface ConfigManager {
             throw new IllegalStateException(
                     "Multiple ConfigProxyCreator implementations were found: " + discovered);
         }
-
         private static ClassLoader contextClassLoader() {
             ClassLoader classLoader = Thread.currentThread().getContextClassLoader();
             return classLoader == null

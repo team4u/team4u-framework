@@ -140,6 +140,7 @@ public class DbConfig {
 
 ```java
 import com.team4u.framework.config.core.ConfigManager;
+import com.team4u.framework.config.core.ConfigProxyContext;
 import com.team4u.framework.config.core.ConfigProxyCreator;
 import com.team4u.framework.config.core.proxy.ConfigProxyFactory;
 
@@ -147,9 +148,13 @@ public class ProxyQuickStart {
     public static void main(String[] args) {
 
         // 过渡期显式提供创建器；Task 9 后可直接引入 team4u-config-proxy
-        ConfigProxyCreator creator = (context, prefix, configType) ->
-                new ConfigProxyFactory(context.converterRegistry())
+        ConfigProxyCreator creator = new ConfigProxyCreator() {
+            @Override
+            public <T> T create(ConfigProxyContext context, String prefix, Class<T> configType) {
+                return new ConfigProxyFactory(context.converterRegistry())
                         .createLiveProxy(context.manager(), prefix, configType);
+            }
+        };
         ConfigManager manager = ConfigManager.builder()
                 .addSource(source)
                 .proxyCreator(creator)

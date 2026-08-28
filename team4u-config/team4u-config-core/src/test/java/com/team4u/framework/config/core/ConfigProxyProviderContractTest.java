@@ -71,6 +71,32 @@ public class ConfigProxyProviderContractTest {
         }
     }
 
+    @Test
+    public void creatorNullResultFailsFastWithTypeAndPrefix() {
+        InMemoryConfigSource source = new InMemoryConfigSource("null-creator", 1);
+        source.put("app.name", "team4u");
+
+        ConfigManager manager = ConfigManager.builder()
+                .addSource(source)
+                .proxyCreator(new NullCreator())
+                .build();
+
+        try {
+            manager.createProxy("app", AppConfig.class);
+            throw new AssertionError("Null creator result must fail fast");
+        } catch (IllegalStateException e) {
+            assertEquals("ConfigProxyCreator returned null: prefix=[app], configType=["
+                            + AppConfig.class.getName() + "]", e.getMessage());
+        }
+    }
+
+    private static class NullCreator implements ConfigProxyCreator {
+        @Override
+        public <T> T create(ConfigProxyContext context, String prefix, Class<T> configType) {
+            return null;
+        }
+    }
+
     private static class RecordingCreator implements ConfigProxyCreator {
         private final AtomicReference<ConfigProxyContext> contextRef = new AtomicReference<>();
         private final AtomicReference<Object> createdBy = new AtomicReference<>(this);

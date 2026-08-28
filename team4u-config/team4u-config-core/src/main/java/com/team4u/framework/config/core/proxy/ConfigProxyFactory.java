@@ -30,7 +30,11 @@ public class ConfigProxyFactory implements ConfigProxyCreator {
 
     @Override
     public <T> T create(ConfigProxyContext context, String prefix, Class<T> configType) {
-        return createLiveProxy(context.manager(), prefix, configType);
+        if (context == null) {
+            throw new IllegalArgumentException("ConfigProxyContext is required");
+        }
+        return new ConfigProxyFactory(context.converterRegistry())
+                .createLiveProxy(context.manager(), prefix, configType);
     }
 
     /**

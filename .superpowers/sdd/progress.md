@@ -17,7 +17,7 @@
 | 5. Base PathPatternMatcher and Criterion Adapter | Complete |
 | 6. Proxy One Artifact and Optional ByteBuddy | Complete |
 | 7. Serializer Provider Contracts and Upstream Cleanup | Complete |
-| 8. Config Dependency Inversion and Global Initialization Fix | Pending |
+| 8. Config Dependency Inversion and Global Initialization Fix | Complete |
 | 9. Split config-proxy and config-spring | Pending |
 | 10. Lease Boundary Before Retry Migration | Pending |
 | 11. Retry Core/Managed/Dynamic Split Without Cycles | Pending |
@@ -40,3 +40,5 @@ Task 5 complete: added pure Java Base matcher, preserved Criterion adapter seman
 Task 6 complete: kept the one-artifact public ProxyBuilder API, made ByteBuddy optional and reflectively loaded, added isolated/consumer proofs, and committed `refactor(proxy): make bytebuddy optional`.
 
 Task 7 complete: enforced serializer provider boundaries, cleaned unused translator/mask test providers, and recorded retry-lease-runtime as the permanent Jackson durable-schema integration exception; review remediation complete.
+
+Task 8 complete: creator resolution and lazy global initialization landed at `8bebace`; review remediation serialized global/reset and reload lifecycle operations, added ServiceLoader failure coverage, verified Java 8 quick start, and retained the intentional proxy-only Task9 RED. Fix commit: `fix(config): serialize global lifecycle and verify providers`.
