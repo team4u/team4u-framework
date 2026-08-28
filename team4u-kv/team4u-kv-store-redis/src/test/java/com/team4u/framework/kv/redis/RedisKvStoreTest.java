@@ -6,6 +6,9 @@ import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.KvStoreException;
 import com.team4u.framework.kv.NativeTtlCapable;
 import com.team4u.framework.kv.PutMode;
+import com.team4u.framework.kv.ScoredWindowCapable;
+import com.team4u.framework.kv.ScoredWindowCapable.Offer;
+import com.team4u.framework.kv.ScoredWindowCapable.Verdict;
 import com.team4u.framework.kv.SpaceKey;
 import com.team4u.framework.kv.test.TestKvContext.SettableClock;
 import org.junit.Before;
@@ -16,6 +19,8 @@ import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.data.redis.core.ValueOperations;
 import org.springframework.data.redis.core.script.RedisScript;
 
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.concurrent.TimeUnit;
 
 import static org.junit.Assert.assertEquals;
@@ -133,7 +138,34 @@ public class RedisKvStoreTest {
         assertTrue(store instanceof CounterCapable);
 
         when(valueOps.increment(KEY, 5)).thenReturn(5L);
-        assertEquals(5, ((CounterCapable) store).incrementAndGet(SpaceKey.of("user", "u1"), 5));
+        assertEquals(5, ((CounterCapable) store).incrementAndGet(SpaceKey.of("user", "u1"), 5, 0));
+        verify(valueOps).increment(KEY, 5);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void incrementWithTtlInvokesScript() {
+        when(redis.execute(any(RedisScript.class), anyList(), eq("5"), eq("1000")))
+                .thenReturn(5L);
+
+        assertEquals(5, ((CounterCapable) store)
+                .incrementAndGet(SpaceKey.of("user", "u1"), 5, 1000));
+
+        // 脚本参数：delta、TTL 毫秒（TTL 与递增原子生效，仅首设不刷新）
+        verify(redis).execute(any(RedisScript.class), anyList(), eq("5"), eq("1000"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void incrementScriptFailureWrappedAsStoreException() {
+        when(redis.execute(any(RedisScript.class), anyList(), anyString(), anyString()))
+                .thenThrow(new QueryTimeoutException("timeout"));
+        try {
+            ((CounterCapable) store).incrementAndGet(SpaceKey.of("user", "u1"), 1, 1000);
+            fail("expected KvStoreException");
+        } catch (KvStoreException e) {
+            assertTrue(e.getCause() instanceof QueryTimeoutException);
+        }
     }
 
     @Test
@@ -142,7 +174,93 @@ public class RedisKvStoreTest {
         when(valueOps.increment(anyString(), any(Long.class)))
                 .thenThrow(new QueryTimeoutException("timeout"));
         try {
-            counter.incrementAndGet(SpaceKey.of("user", "u1"), 1);
+            counter.incrementAndGet(SpaceKey.of("user", "u1"), 1, 0);
+            fail("expected KvStoreException");
+        } catch (KvStoreException e) {
+            assertTrue(e.getCause() instanceof QueryTimeoutException);
+        }
+    }
+
+    // ------------------------------------------------- 计分窗口能力
+
+    @Test
+    public void declaresScoredWindowCapability() {
+        assertTrue(store instanceof ScoredWindowCapable);
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void offerInvokesWindowScriptWithAssembledArgs() {
+        when(redis.execute(any(RedisScript.class), anyList(),
+                eq("90"), eq("100"), eq("2"), eq("0"), eq("m1"), eq("m2")))
+                .thenReturn(Arrays.asList(1L, 2L, "100"));
+
+        Verdict verdict = ((ScoredWindowCapable) store).offer(SpaceKey.of("rl", "w1"),
+                Offer.builder()
+                        .cutoffScore(90)
+                        .memberScore(100)
+                        .members(Arrays.asList("m1", "m2"))
+                        .maxCount(2)
+                        .ttlMillis(0)
+                        .build());
+
+        assertTrue(verdict.isAccepted());
+        assertEquals(2, verdict.getCount());
+        assertEquals(100L, verdict.getOldestScore().longValue());
+
+        // 脚本参数：cutoff、score、maxCount、ttl、members...
+        verify(redis).execute(any(RedisScript.class), anyList(),
+                eq("90"), eq("100"), eq("2"), eq("0"), eq("m1"), eq("m2"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void offerParsesRejectionVerdict() {
+        when(redis.execute(any(RedisScript.class), anyList(),
+                eq("0"), eq("200"), eq("2"), eq("1000"), eq("m3")))
+                .thenReturn(Arrays.asList(0L, 5L, "123"));
+
+        Verdict verdict = ((ScoredWindowCapable) store).offer(SpaceKey.of("rl", "w1"),
+                Offer.builder()
+                        .cutoffScore(0)
+                        .memberScore(200)
+                        .members(Collections.singletonList("m3"))
+                        .maxCount(2)
+                        .ttlMillis(1000)
+                        .build());
+
+        assertFalse(verdict.isAccepted());
+        assertEquals(5, verdict.getCount());
+        assertEquals(123L, verdict.getOldestScore().longValue());
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void offerParsesEmptyOldestAsNull() {
+        when(redis.execute(any(RedisScript.class), anyList(),
+                eq("50"), eq("0"), eq("3"), eq("0")))
+                .thenReturn(Arrays.asList(1L, 0L, ""));
+
+        Verdict verdict = ((ScoredWindowCapable) store).offer(SpaceKey.of("rl", "w2"),
+                Offer.builder()
+                        .cutoffScore(50)
+                        .maxCount(3)
+                        .build());
+
+        assertTrue(verdict.isAccepted());
+        assertEquals(0, verdict.getCount());
+        assertNull(verdict.getOldestScore());
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void offerFailureWrappedAsStoreException() {
+        when(redis.execute(any(RedisScript.class), anyList(),
+                any(Object[].class)))
+                .thenThrow(new QueryTimeoutException("timeout"));
+        try {
+            ((ScoredWindowCapable) store).offer(SpaceKey.of("rl", "w1"),
+                    Offer.builder().cutoffScore(0).maxCount(1).build());
             fail("expected KvStoreException");
         } catch (KvStoreException e) {
             assertTrue(e.getCause() instanceof QueryTimeoutException);

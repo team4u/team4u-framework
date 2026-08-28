@@ -1,11 +1,14 @@
 package com.team4u.framework.kv.memory;
 
 import com.team4u.framework.kv.CasCapable;
+import com.team4u.framework.kv.CounterCapable;
 import com.team4u.framework.kv.KvEvent;
 import com.team4u.framework.kv.KvRecord;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.ScanCapable;
+import com.team4u.framework.kv.ScoredWindowCapable;
+import com.team4u.framework.kv.ScoredWindowCapable.Offer;
 import com.team4u.framework.kv.SpaceKey;
 import com.team4u.framework.kv.WatchCapable;
 import com.team4u.framework.kv.support.SettableClock;
@@ -13,6 +16,8 @@ import org.junit.Before;
 import org.junit.Test;
 
 import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
@@ -234,6 +239,257 @@ public class InMemoryKvStoreTest {
         assertEquals(1, events.size());
     }
 
+    // ------------------------------------------------- 计数 TTL
+
+    @Test
+    public void counterWithoutTtlNeverExpires() {
+        SpaceKey key = SpaceKey.of("seq", "c1");
+
+        assertEquals(1, store.incrementAndGet(key, 1, 0));
+        clock.advance(24L * 3600_000);
+        assertEquals(2, store.incrementAndGet(key, 1, 0));
+    }
+
+    @Test
+    public void counterExpiresAndRestartsFromZero() {
+        SpaceKey key = SpaceKey.of("seq", "c2");
+
+        assertEquals(3, store.incrementAndGet(key, 3, 1000));
+        clock.advance(999);
+        assertEquals(4, store.incrementAndGet(key, 1, 1000));
+        clock.advance(1);
+        assertEquals("expired counter restarts from zero", 2,
+                store.incrementAndGet(key, 2, 1000));
+        assertEquals(3, store.incrementAndGet(key, 1, 1000));
+    }
+
+    @Test
+    public void counterTtlNotRefreshedByLaterIncrements() {
+        SpaceKey key = SpaceKey.of("seq", "c3");
+
+        store.incrementAndGet(key, 1, 1000);
+        clock.advance(500);
+        store.incrementAndGet(key, 1, 1000);
+        clock.advance(500);
+        assertEquals("TTL set at creation must not be refreshed", 1,
+                store.incrementAndGet(key, 1, 1000));
+    }
+
+    @Test
+    public void expiredCounterPrunedByPruneExpired() {
+        SpaceKey expiredKey = SpaceKey.of("seq", "c-expired");
+        SpaceKey aliveKey = SpaceKey.of("seq", "c-alive");
+
+        store.incrementAndGet(expiredKey, 1, 1000);
+        store.incrementAndGet(aliveKey, 1, 0);
+        clock.advance(1000);
+
+        assertEquals(1, store.pruneExpired("seq", 10));
+        // 过期键被清扫后视为键不存在：从 0 重新开始
+        assertEquals(1, store.incrementAndGet(expiredKey, 1, 0));
+        assertEquals(2, store.incrementAndGet(aliveKey, 1, 0));
+    }
+
+    // ------------------------------------------------- 计分窗口能力
+
+    @Test
+    public void offerPrunesMembersAtOrBelowCutoff() {
+        SpaceKey key = SpaceKey.of("rl", "w1");
+
+        ScoredWindowCapable.Verdict v = store.offer(key, Offer.builder()
+                .cutoffScore(100).memberScore(100)
+                .members(Collections.singletonList("a")).maxCount(10).build());
+        assertTrue(v.isAccepted());
+        assertEquals(1, v.getCount());
+        assertEquals(100L, v.getOldestScore().longValue());
+
+        // score == cutoff 被裁剪后仅剩新成员
+        v = store.offer(key, Offer.builder()
+                .cutoffScore(100).memberScore(200)
+                .members(Collections.singletonList("b")).maxCount(10).build());
+        assertTrue(v.isAccepted());
+        assertEquals(1, v.getCount());
+        assertEquals(200L, v.getOldestScore().longValue());
+
+        // score > cutoff 存活
+        v = store.offer(key, Offer.builder()
+                .cutoffScore(201).memberScore(300)
+                .members(Collections.singletonList("c")).maxCount(10).build());
+        assertTrue(v.isAccepted());
+        assertEquals(1, v.getCount());
+    }
+
+    @Test
+    public void offerAddsWhenWithinMaxCount() {
+        SpaceKey key = SpaceKey.of("rl", "w2");
+
+        ScoredWindowCapable.Verdict v = store.offer(key, Offer.builder()
+                .cutoffScore(0).memberScore(100)
+                .members(Arrays.asList("a", "b")).maxCount(2).build());
+        assertTrue(v.isAccepted());
+        assertEquals(2, v.getCount());
+        assertEquals(100L, v.getOldestScore().longValue());
+    }
+
+    @Test
+    public void offerRejectsOverLimitWithoutAdding() {
+        SpaceKey key = SpaceKey.of("rl", "w3");
+
+        assertTrue(store.offer(key, Offer.builder()
+                .cutoffScore(0).memberScore(100)
+                .members(Collections.singletonList("a")).maxCount(2).build()).isAccepted());
+
+        ScoredWindowCapable.Verdict rejected = store.offer(key, Offer.builder()
+                .cutoffScore(0).memberScore(200)
+                .members(Arrays.asList("b", "c")).maxCount(2).build());
+        assertFalse(rejected.isAccepted());
+        assertEquals(1, rejected.getCount());
+        assertEquals(100L, rejected.getOldestScore().longValue());
+
+        // 拒绝不添加任何成员：后续计数不变
+        ScoredWindowCapable.Verdict peek = store.offer(key, Offer.builder()
+                .cutoffScore(0).maxCount(2).build());
+        assertTrue(peek.isAccepted());
+        assertEquals(1, peek.getCount());
+    }
+
+    @Test
+    public void offerPeekNeverRejectsAndDoesNotAdd() {
+        SpaceKey key = SpaceKey.of("rl", "w4");
+
+        ScoredWindowCapable.Verdict empty = store.offer(key, Offer.builder()
+                .cutoffScore(0).maxCount(1).build());
+        assertTrue(empty.isAccepted());
+        assertEquals(0, empty.getCount());
+        assertNull(empty.getOldestScore());
+
+        store.offer(key, Offer.builder().cutoffScore(0).memberScore(100)
+                .members(Collections.singletonList("a")).maxCount(1).build());
+
+        // 已满窗口窥探也永不拒绝，且不添加
+        ScoredWindowCapable.Verdict peek = store.offer(key, Offer.builder()
+                .cutoffScore(0).maxCount(1).build());
+        assertTrue(peek.isAccepted());
+        assertEquals(1, peek.getCount());
+        assertEquals(100L, peek.getOldestScore().longValue());
+    }
+
+    @Test
+    public void offerExpiresWholeKeyAfterTtl() {
+        SpaceKey key = SpaceKey.of("rl", "w5");
+
+        store.offer(key, Offer.builder().cutoffScore(0).memberScore(100)
+                .members(Collections.singletonList("a")).maxCount(1).ttlMillis(1000).build());
+        clock.advance(1000);
+
+        // 整键过期：旧成员全部消失，即使 cutoff 不裁剪也从零重来
+        ScoredWindowCapable.Verdict v = store.offer(key, Offer.builder()
+                .cutoffScore(0).memberScore(50)
+                .members(Collections.singletonList("b")).maxCount(1).ttlMillis(1000).build());
+        assertTrue(v.isAccepted());
+        assertEquals(1, v.getCount());
+        assertEquals(50L, v.getOldestScore().longValue());
+    }
+
+    @Test
+    public void offerRefreshesTtlOnEachSuccess() {
+        SpaceKey key = SpaceKey.of("rl", "w6");
+
+        store.offer(key, Offer.builder().cutoffScore(0).memberScore(100)
+                .members(Collections.singletonList("a")).maxCount(10).ttlMillis(1000).build());
+        clock.advance(600);
+        store.offer(key, Offer.builder().cutoffScore(0).maxCount(10).ttlMillis(1000).build());
+        clock.advance(600);
+
+        // 窥探刷新了 TTL：旧成员仍存活
+        ScoredWindowCapable.Verdict v = store.offer(key, Offer.builder()
+                .cutoffScore(0).memberScore(200)
+                .members(Collections.singletonList("b")).maxCount(10).ttlMillis(1000).build());
+        assertTrue(v.isAccepted());
+        assertEquals(2, v.getCount());
+        assertEquals(100L, v.getOldestScore().longValue());
+    }
+
+    @Test
+    public void offerOldestScoreIsMinimum() {
+        SpaceKey key = SpaceKey.of("rl", "w7");
+
+        store.offer(key, Offer.builder().cutoffScore(0).memberScore(300)
+                .members(Collections.singletonList("a")).maxCount(10).build());
+        store.offer(key, Offer.builder().cutoffScore(0).memberScore(100)
+                .members(Collections.singletonList("b")).maxCount(10).build());
+        store.offer(key, Offer.builder().cutoffScore(0).memberScore(200)
+                .members(Collections.singletonList("c")).maxCount(10).build());
+
+        ScoredWindowCapable.Verdict v = store.offer(key, Offer.builder()
+                .cutoffScore(150).maxCount(10).build());
+        assertEquals(2, v.getCount());
+        assertEquals(200L, v.getOldestScore().longValue());
+    }
+
+    @Test
+    public void offerGrowsBeyondInitialCapacity() {
+        SpaceKey key = SpaceKey.of("rl", "w8");
+
+        // 初始容量 8：验证按需扩容
+        for (int i = 1; i <= 20; i++) {
+            ScoredWindowCapable.Verdict v = store.offer(key, Offer.builder()
+                    .cutoffScore(0).memberScore(100)
+                    .members(Collections.singletonList("m" + i)).maxCount(20).build());
+            assertTrue(v.isAccepted());
+            assertEquals(i, v.getCount());
+        }
+    }
+
+    @Test
+    public void expiredWindowPrunedByPruneExpired() {
+        SpaceKey expiredKey = SpaceKey.of("rl", "w-expired");
+        SpaceKey aliveKey = SpaceKey.of("rl", "w-alive");
+
+        store.offer(expiredKey, Offer.builder().cutoffScore(0).memberScore(100)
+                .members(Collections.singletonList("a")).maxCount(1).ttlMillis(1000).build());
+        store.offer(aliveKey, Offer.builder().cutoffScore(0).memberScore(100)
+                .members(Collections.singletonList("a")).maxCount(1).ttlMillis(0).build());
+        clock.advance(1000);
+
+        // 同批清扫记录 + 计数器 + 窗口（此处仅 1 个过期窗口）
+        assertEquals(1, store.pruneExpired("rl", 10));
+    }
+
+    @Test
+    public void pruneExpiredCountsRecordsCountersAndWindowsTogether() {
+        SpaceKey record = SpaceKey.of("mix", "r1");
+        SpaceKey counterKey = SpaceKey.of("mix", "c1");
+        SpaceKey windowKey = SpaceKey.of("mix", "w1");
+
+        store.put(record, KvRecord.of("v1", 1000, clock.millis()), PutMode.SET);
+        store.incrementAndGet(counterKey, 1, 1000);
+        store.offer(windowKey, Offer.builder().cutoffScore(0).memberScore(1)
+                .members(Collections.singletonList("a")).maxCount(1).ttlMillis(1000).build());
+        clock.advance(1000);
+
+        assertEquals(3, store.pruneExpired("mix", 10));
+        assertEquals(0, store.pruneExpired("mix", 10));
+    }
+
+    @Test
+    public void closeClearsCountersAndWindows() throws Exception {
+        SpaceKey counterKey = SpaceKey.of("seq", "cc");
+        SpaceKey windowKey = SpaceKey.of("rl", "ww");
+
+        store.incrementAndGet(counterKey, 5, 0);
+        store.offer(windowKey, Offer.builder().cutoffScore(0).memberScore(1)
+                .members(Collections.singletonList("a")).maxCount(1).build());
+
+        store.close();
+
+        assertEquals("counter must restart after close", 1,
+                store.incrementAndGet(counterKey, 1, 0));
+        ScoredWindowCapable.Verdict v = store.offer(windowKey, Offer.builder()
+                .cutoffScore(0).maxCount(1).build());
+        assertEquals("window must restart after close", 0, v.getCount());
+    }
+
     // ------------------------------------------------- 能力接口声明
 
     @Test
@@ -241,6 +497,8 @@ public class InMemoryKvStoreTest {
         assertTrue(store instanceof CasCapable);
         assertTrue(store instanceof ScanCapable);
         assertTrue(store instanceof WatchCapable);
+        assertTrue(store instanceof CounterCapable);
+        assertTrue(store instanceof ScoredWindowCapable);
         KvStore asStore = store;
         assertTrue(asStore instanceof AutoCloseable);
     }

@@ -134,7 +134,7 @@ public class SequenceServiceTest {
         assertEquals(1, service.next("fast"));
 
         CounterCapable fastCounter = KvStores.capabilityOf(redisLike, CounterCapable.class);
-        assertEquals(1, fastCounter.incrementAndGet(SpaceKey.of("seq", "fast"), 0));
+        assertEquals(1, fastCounter.incrementAndGet(SpaceKey.of("seq", "fast"), 0, 0));
 
         redisLike.close();
     }

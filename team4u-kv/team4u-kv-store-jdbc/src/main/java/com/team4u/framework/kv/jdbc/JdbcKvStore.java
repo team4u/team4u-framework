@@ -34,7 +34,9 @@ import java.util.Objects;
  *     <li>CAS：条件 UPDATE / DELETE（值精确匹配 + 未过期），
  *     数据库行锁保证原子性，是 {@code team4u-kv-lock} 的可靠底座</li>
  *     <li>计数：独立计数表 {@code kv_counter} 上 {@code SELECT FOR UPDATE} 行锁
- *     串行化「读-改-写」（实现 {@link CounterCapable}），计数与值域互不干扰</li>
+ *     串行化「读-改-写」（实现 {@link CounterCapable}），计数与值域互不干扰；
+ *     计数 TTL（{@code expire_at} 列，0 为永不过期）的过期重置与设置
+ *     同样在行锁内原子完成</li>
  * </ul>
  * 默认表名 {@code kv_store} / {@code kv_counter}，可通过 {@link Config} 自定义；
  * {@code autoCreateTable=true} 时启动自动建表（H2/MySQL 语法兼容）。
@@ -59,13 +61,14 @@ public class JdbcKvStore implements KvStore, CasCapable, ScanCapable, CounterCap
                     + ")";
 
     /**
-     * 计数表 DDL：H2 与 MySQL 均兼容
+     * 计数表 DDL：H2 与 MySQL 均兼容（expire_at 为计数键过期时间，0 为永不过期）
      */
     public static final String DEFAULT_COUNTER_DDL =
             "CREATE TABLE IF NOT EXISTS kv_counter ("
                     + "space VARCHAR(100) NOT NULL, "
                     + "name VARCHAR(255) NOT NULL, "
                     + "counter_value BIGINT NOT NULL DEFAULT 0, "
+                    + "expire_at BIGINT NOT NULL DEFAULT 0, "
                     + "PRIMARY KEY (space, name)"
                     + ")";
 
@@ -263,12 +266,12 @@ public class JdbcKvStore implements KvStore, CasCapable, ScanCapable, CounterCap
     }
 
     @Override
-    public long incrementAndGet(SpaceKey key, long delta) {
+    public long incrementAndGet(SpaceKey key, long delta, long ttlMillis) {
         try (Connection conn = dataSource.getConnection()) {
             boolean originalAutoCommit = conn.getAutoCommit();
             conn.setAutoCommit(false);
             try {
-                long value = doIncrement(conn, key, delta);
+                long value = doIncrement(conn, key, delta, ttlMillis);
                 conn.commit();
                 return value;
             } catch (SQLException e) {
@@ -284,40 +287,75 @@ public class JdbcKvStore implements KvStore, CasCapable, ScanCapable, CounterCap
 
     /**
      * 单事务内 SELECT FOR UPDATE 行锁串行化「读-改-写」，
-     * 保证并发递增不丢失且返回值为本次递增后的精确值
+     * 保证并发递增不丢失且返回值为本次递增后的精确值；
+     * 过期判定与 TTL 设置同样在行锁内完成（与递增原子生效，不刷新既有 TTL）
      */
-    private long doIncrement(Connection conn, SpaceKey key, long delta) throws SQLException {
-        Long current = selectCounterForUpdate(conn, key);
-        if (current == null) {
+    private long doIncrement(Connection conn, SpaceKey key, long delta, long ttlMillis)
+            throws SQLException {
+        CounterRow row = selectCounterForUpdate(conn, key);
+        if (row == null) {
+            long expireAt = KvRecord.expireAtOf(ttlMillis, now());
             try {
                 executeUpdate(conn, "INSERT INTO " + config.getCounterTableName()
-                                + " (space, name, counter_value) VALUES (?, ?, ?)",
-                        key.getSpace(), key.getKey(), delta);
+                                + " (space, name, counter_value, expire_at) VALUES (?, ?, ?, ?)",
+                        key.getSpace(), key.getKey(), delta, expireAt);
                 return delta;
             } catch (SQLException e) {
                 if (!isUniqueViolation(e)) {
                     throw e;
                 }
                 // 并发首插撞唯一索引：转为更新流程重新加锁读取
-                current = selectCounterForUpdate(conn, key);
+                row = selectCounterForUpdate(conn, key);
             }
+        }
+        long now = now();
+        long current = row.value;
+        long expireAt = row.expireAt;
+        if (expireAt > 0 && expireAt <= now) {
+            // 已过期：重置计数后重新累加，等效于键消失后重建
+            current = 0;
+            expireAt = ttlMillis > 0 ? KvRecord.expireAtOf(ttlMillis, now) : 0;
+        } else if (ttlMillis > 0 && expireAt == 0) {
+            // 存量无 TTL 键首次遇到 TTL 请求：补充设置（不刷新既有 TTL）
+            expireAt = KvRecord.expireAtOf(ttlMillis, now);
         }
         long next = current + delta;
         executeUpdate(conn, "UPDATE " + config.getCounterTableName()
-                        + " SET counter_value=? WHERE space=? AND name=?",
-                next, key.getSpace(), key.getKey());
+                        + " SET counter_value=?, expire_at=? WHERE space=? AND name=?",
+                next, expireAt, key.getSpace(), key.getKey());
         return next;
     }
 
-    private Long selectCounterForUpdate(Connection conn, SpaceKey key) throws SQLException {
+    /**
+     * 行锁读取计数行（counter_value + expire_at）；键不存在返回 {@code null}
+     */
+    private CounterRow selectCounterForUpdate(Connection conn, SpaceKey key) throws SQLException {
         try (PreparedStatement ps = conn.prepareStatement(
-                "SELECT counter_value FROM " + config.getCounterTableName()
+                "SELECT counter_value, expire_at FROM " + config.getCounterTableName()
                         + " WHERE space=? AND name=? FOR UPDATE")) {
             ps.setString(1, key.getSpace());
             ps.setString(2, key.getKey());
             try (ResultSet rs = ps.executeQuery()) {
-                return rs.next() ? rs.getLong(1) : null;
+                return rs.next() ? new CounterRow(rs.getLong(1), rs.getLong(2)) : null;
             }
+        }
+    }
+
+    /**
+     * 计数行快照（SELECT FOR UPDATE 读取结果）
+     */
+    private static final class CounterRow {
+
+        private final long value;
+
+        /**
+         * 过期截止时间（epoch 毫秒），0 表示永不过期
+         */
+        private final long expireAt;
+
+        private CounterRow(long value, long expireAt) {
+            this.value = value;
+            this.expireAt = expireAt;
         }
     }
 

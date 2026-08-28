@@ -181,7 +181,7 @@ public class SequenceService implements Sequences {
         CounterCapable counter = counterOf(rule);
         SpaceKey key = SpaceKey.of(space, counterKeyOf(ruleId, groupKey));
         if (rule.getSegment() <= 0) {
-            long position = counter.incrementAndGet(key, 1);
+            long position = counter.incrementAndGet(key, 1, 0);
             if (count != null && !rule.isRecycle() && position > count) {
                 return null;
             }

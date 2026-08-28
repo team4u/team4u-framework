@@ -5,10 +5,11 @@ import com.team4u.framework.kv.memory.InMemoryKvStore;
 
 /**
  * 内存存储的契约测试：所有 KvStore 实现的行为基准
+ * （含计数 TTL 与计分窗口契约）
  *
  * @author jay.wu
  */
-public class InMemoryKvStoreContractTest extends AbstractKvStoreContractTest {
+public class InMemoryKvStoreContractTest extends AbstractScoredWindowCapableContractTest {
 
     private final TestKvContext context = TestKvContext.create();
 
