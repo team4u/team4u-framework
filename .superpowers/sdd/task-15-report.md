@@ -8,6 +8,7 @@
 - Implementation HEAD: `8ee8c551e7b2de76122bbf02d131738b1d56e8ed`
 - Implementation commit subject: `refactor(mask): split adapters and fail fast on unknown policies`
 - Review remediation commit subject: `fix(mask): close dynamic rule and lifecycle gaps`
+- Final review remediation commit subject: `fix(mask): reject null manual rule maps`
 
 ## Changes
 
@@ -38,16 +39,21 @@
   - `MaskSecurityContractTest` (8 tests)
   - `JacksonMaskQuickstartTest` (1 test)
   - `MaskConfigQuickstartTest` (4 tests)
-  - `MaskConfigSecurityLifecycleTest` (5 tests)
+  - `MaskConfigSecurityLifecycleTest` (8 tests)
   - `MaskConfigCompatibilityTest` (1 test)
 - Updated root/BOM, migration, breaking-change, root README/docs index, and mask/log documentation.
 
 ## Review Remediation
 
+Final review finding addressed: manual `setRuleCache` published caller-owned mutable maps before validating them. This allowed partial-state concerns if validation moved later and left the active cache vulnerable to caller mutation after publication.
+
 - Explicit null dynamic rules now fail closed:
   - Initial configuration validates the complete candidate rule map before replacing the active registry or installing the global resolver.
   - A failed hot update is retained by `ConfigDrivenRegistry`, so the last valid rules continue to resolve.
-  - Manual `setRuleCache` rules distinguish an absent field from an explicit null value. Explicit null fails on lookup; an absent field remains no-op and does not fall through to the `*` wildcard after an exact class/field miss.
+  - Manual `setRuleCache` publication now validates the complete input map: a null class-rule map or an explicit null field value is rejected before the volatile cache is replaced. An absent field remains no-op.
+  - Manual rules are copied into unmodifiable outer and inner maps before publication, so caller mutations after `setRuleCache` cannot change the active rule snapshot.
+  - Lookup distinguishes absent keys from explicit null values with defensive `containsKey` checks for both the exact class and the global `*` entry. This protects against malformed state injected directly into the field, while normal publication rejects that state.
+  - An exact class/field miss does not inherit an unrelated wildcard field: fallback is limited to the same `fieldName` when the global `*` class defines that field; otherwise lookup returns null.
   - A null class-rule map is also rejected during configured rule decoding.
 - Global resolver ownership is now explicit:
   - `MaskRuleResolver.Global` stores its resolver in an `AtomicReference`.
@@ -124,22 +130,27 @@ Root reactor integrity:
 
 ## Verification
 
-All worktree Maven commands used `-f /root/code/team4u-framework/.worktrees/framework-convergence/pom.xml`. `/tmp` Enforcer probes used their copied absolute module POMs as stated below.
+All worktree Maven commands used `-f /root/code/team4u-framework/.worktrees/framework-convergence/pom.xml`. The extra focused `-am` diagnostic and snapshot-refresh prerequisite used that same absolute POM. `/tmp` Enforcer probes used their copied absolute module POMs.
 
 Checks run for this final record:
 
-- Focused security/lifecycle/API rerun: `mvn -q -pl :team4u-mask,:team4u-mask-jackson,:team4u-mask-config -Dtest=MaskSecurityContractTest,MaskQuickstartTest,MaskConfigSecurityLifecycleTest,MaskConfigCompatibilityTest test`: exit 0.
-  - `MaskSecurityContractTest`: 8 tests, 0 failures/errors/skipped.
-  - `MaskQuickstartTest`: 7 tests, 0 failures/errors/skipped.
-  - `MaskConfigSecurityLifecycleTest`: 5 tests, 0 failures/errors/skipped.
-  - `MaskConfigCompatibilityTest`: 1 test, 0 failures/errors/skipped.
-- Exhaustive Java 8 bytecode audit ran `javap -verbose` on every `.class` file under each module's absolute `target/classes` path and parsed each `major version:` line:
+- Focused rerun: `mvn -q -pl :team4u-mask-config -Dtest=MaskConfigSecurityLifecycleTest test`: exit 0.
+  - `MaskConfigSecurityLifecycleTest`: 8 tests, 0 failures/errors/skipped.
+- Module dependency-chain gate: `mvn -pl :team4u-mask-config -am test`: exit 0.
+  - 11 selected reactor modules: 428 tests, 0 failures/errors/skipped.
+  - `team4u-mask-config`: 15 tests, 0 failures/errors/skipped (`MaskRuleRepositoryTest` 3, `MaskConfigSecurityLifecycleTest` 8, `MaskConfigQuickstartTest` 4).
+- Mask split gate: `mvn -pl :team4u-mask,:team4u-mask-jackson,:team4u-mask-config -am test`: exit 0.
+  - 12 selected reactor modules: 428 tests, 0 failures/errors/skipped.
+  - Three mask modules total: 54 tests, 0 failures/errors/skipped.
+  - Per split module: `team4u-mask` 32, `team4u-mask-jackson` 7, `team4u-mask-config` 15.
+- Exhaustive Java 8 bytecode audit reran `javap -verbose` on every `.class` file under each module's absolute `target/classes` path and parsed each `major version:` line:
   - `team4u-mask`: 23 class files, 23 major-version lines, 0 non-52.
   - `team4u-mask-jackson`: 6 class files, 6 major-version lines, 0 non-52.
   - `team4u-mask-config`: 3 class files, 3 major-version lines, 0 non-52.
-  - Total: 32 class files, 32 major-version lines, 0 non-52.
+- Total bytecode audit: 32 class files, 32 major-version lines, 0 non-52.
 - `git diff --check`: passed.
 
+The first direct focused invocation hit the mask-config Enforcer boundary because the local repository still held a stale pre-split `team4u-config-core` snapshot that transitively exposed `team4u-serializer-jackson`. Refreshing reactor snapshots with `-am -DskipTests install` made the requested direct invocation pass; no production POM or rule was changed. No full reactor, consumer, release-contract, or release-packaging command was rerun for this final record.
 Inherited remediation evidence retained from the prior agent (not rerun here):
 
 - Full reactor `mvn clean test` completed in the 2026-08-28 14:37:20-14:38:25 UTC window. Its 237 Surefire XML files total 1,512 tests, 0 failures, 0 errors, 0 skipped.

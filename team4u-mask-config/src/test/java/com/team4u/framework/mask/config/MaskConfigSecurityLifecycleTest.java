@@ -7,6 +7,7 @@ import org.junit.Assert;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.HashMap;
 import java.util.Map;
@@ -59,7 +60,7 @@ public class MaskConfigSecurityLifecycleTest {
     }
 
     @Test
-    public void missingFieldRemainsNoOpAndDoesNotUseWildcardFallback() {
+    public void exactFieldMissReturnsNullUnlessWildcardDefinesField() {
         configContext.put("team4u.mask.rules", "{\"*\":{\"email\":\"EMAIL\"}}");
         MaskBootstrap.global().start(configContext.getConfigManager());
 
@@ -69,7 +70,7 @@ public class MaskConfigSecurityLifecycleTest {
     }
 
     @Test
-    public void manualExplicitNullRuleFailsClosedInsteadOfFallingThrough() {
+    public void manualExplicitNullRuleIsRejectedBeforePublication() {
         Map<String, String> classRules = new HashMap<>();
         classRules.put("email", null);
         classRules.put("mobile", "MOBILE");
@@ -78,18 +79,77 @@ public class MaskConfigSecurityLifecycleTest {
         rules.put(Payload.class.getName(), classRules);
         rules.put("*", Collections.singletonMap("email", "NAME"));
 
-        MaskRuleRepository.getInstance().setRuleCache(rules);
-
         try {
-            MaskRuleRepository.getInstance().findRule(Payload.class.getName(), "email");
-            Assert.fail("Explicit null manual mask rule must fail closed");
+            MaskRuleRepository.getInstance().setRuleCache(rules);
+            Assert.fail("Explicit null manual mask rule must fail publication");
         } catch (IllegalArgumentException e) {
             Assert.assertEquals("Mask rule must not be null: "
                             + Payload.class.getName() + ".email",
                     e.getMessage());
         }
-        Assert.assertEquals("MOBILE",
-                MaskRuleRepository.getInstance().findRule(Payload.class.getName(), "mobile"));
+    }
+
+    @Test
+    public void manualNullClassRulesAreRejectedBeforePublication() {
+        Map<String, Map<String, String>> rules = new HashMap<>();
+        rules.put(Payload.class.getName(), null);
+        rules.put("*", Collections.singletonMap("email", "EMAIL"));
+
+        try {
+            MaskRuleRepository.getInstance().setRuleCache(rules);
+            Assert.fail("Null manual class rules must fail publication");
+        } catch (IllegalArgumentException e) {
+            Assert.assertEquals("Mask class rules must not be null: "
+                    + Payload.class.getName(), e.getMessage());
+        }
+    }
+
+    @Test
+    public void manualRulesUseDefensiveDeepSnapshotAfterPublication() {
+        Map<String, String> classRules = new HashMap<>();
+        classRules.put("email", "EMAIL");
+
+        Map<String, Map<String, String>> rules = new HashMap<>();
+        rules.put(Payload.class.getName(), classRules);
+
+        MaskRuleRepository.getInstance().setRuleCache(rules);
+
+        classRules.put("email", null);
+        rules.put(Payload.class.getName(), null);
+
+        Assert.assertEquals("EMAIL",
+                MaskRuleRepository.getInstance().findRule(Payload.class.getName(), "email"));
+        Assert.assertNull(MaskRuleRepository.getInstance().findRule(Payload.class.getName(), "mobile"));
+    }
+
+    @Test
+    public void malformedStateWithNullClassRulesFailsClosedDuringLookup() throws Exception {
+        Map<String, Map<String, String>> rules = new HashMap<>();
+        rules.put(Payload.class.getName(), null);
+        rules.put("*", null);
+        publishMalformedManualRules(rules);
+
+        try {
+            MaskRuleRepository.getInstance().findRule(Payload.class.getName(), "email");
+            Assert.fail("Null exact class rules must fail lookup");
+        } catch (IllegalArgumentException e) {
+            Assert.assertEquals("Mask class rules must not be null: "
+                    + Payload.class.getName(), e.getMessage());
+        }
+
+        try {
+            MaskRuleRepository.getInstance().findRule("Other", "email");
+            Assert.fail("Null wildcard class rules must fail lookup");
+        } catch (IllegalArgumentException e) {
+            Assert.assertEquals("Mask class rules must not be null: *", e.getMessage());
+        }
+    }
+
+    private static void publishMalformedManualRules(Map<String, Map<String, String>> rules)
+            throws Exception {
+        Field field = MaskRuleRepository.class.getDeclaredField("manualRuleCache");
+        field.setAccessible(true);
+        field.set(MaskRuleRepository.getInstance(), rules);
     }
 
     @Test
