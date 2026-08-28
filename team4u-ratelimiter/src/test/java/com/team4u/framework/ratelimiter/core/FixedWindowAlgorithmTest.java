@@ -39,7 +39,7 @@ public class FixedWindowAlgorithmTest {
     }
 
     private RateLimitResult acquire(RateLimitRule rule, String key, int permits) {
-        return algorithm.tryAcquire(rule, store, key, null, kv.clock().millis(), permits);
+        return algorithm.tryAcquire(rule, null, store, key, null, kv.clock().millis(), permits);
     }
 
     @Test

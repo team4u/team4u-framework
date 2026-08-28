@@ -26,7 +26,7 @@
 - **规则与实现分离**：检查点（point）→ 规则组 → 算法的三层结构。业务代码只声明检查点（一个字符串），算法、阈值、维度键全部在规则 JSON 中，配置中心改完即热更新生效（先建新再替换、失败保旧）；
 - **基于 kv 能力协商**：算法不绑定存储，只声明所需 kv 能力接口（如固定窗口要 `CounterCapable`、滑动窗口要 `ScoredWindowCapable`），引擎在规则加载期经 `KvStores.capabilityOf` 校验存储齐备，缺能力当场报配置错误而不是运行期行为错乱。内存、Redis、装饰器组合皆可作为后端；
 - **配置驱动热更新**：规则经配置组件的 `ConfigDrivenRegistry` 加载，`team4u.ratelimiter.{point}` 配置键的值即该检查点的规则 JSON 数组，调整无需重启；
-- **多规则规则链**：一个检查点可配多条规则，按 `priority` 降序依次执行、首拒即停，形成「先严后宽」的规则链（如先按用户维度卡阈值，再按全局维度兜底）。
+- **多规则规则链**：一个检查点可配多条规则，按 `priority` 升序（越小优先级越高）依次执行、首拒即停，形成「先严后宽」的规则链（如先按用户维度卡阈值，再按全局维度兜底）。
 
 ```mermaid
 graph LR
@@ -68,7 +68,7 @@ graph LR
 ```text
 acquire(point, context, permits)
 ├── 规则加载：ConfigDrivenRegistry 按配置键 team4u.ratelimiter.{point} 输出规则列表
-│             （按 priority 降序稳定排序；无规则直接放行，reason=NO_RULE）
+│             （按 priority 升序稳定排序，越小优先级越高；无规则直接放行，reason=NO_RULE）
 ├── 逐条裁决：键 = {规则标识}.{渲染后的键模板}，按 algorithm 查表路由到算法
 │             ├── 算法所需能力在加载期已校验，运行期直接使用
 │             └── 存储故障（KvStoreException）按规则 failOpen 处置：
@@ -81,7 +81,7 @@ acquire(point, context, permits)
 | 概念 | 说明 |
 | :--- | :--- |
 | `RateLimitEngine` | 限流引擎：组装规则加载、算法路由、键渲染、存储协商四个关注点，`acquire` 完成规则链裁决 |
-| `RateLimitRule` | 限流规则（JSON 列表中的一个条目）：id / algorithm / store / key / priority / windowMillis / threshold / failOpen / historyPath |
+| `RateLimitRule` | 限流规则（JSON 列表中的一个条目）：id / algorithm / store / key / priority / windowMillis / threshold / failOpen / config（算法私有配置槽） |
 | `RateLimitAlgorithm` | 算法规约（`KeyedPolicy`）：`key()` 命名、`requiredCapabilities()` 声明所需 kv 能力、`tryAcquire` 纯决策 |
 | `RateLimitResult` | 裁决结果（不可变）：allowed / point / ruleId / remaining / retryAfterMillis / decisionTimeMillis / reason |
 | `RateLimitStores` | 命名存储注册表与全局门面：规则按 `store` 名引用存储，一套规则多存储分工（默认内存、热点走 Redis） |

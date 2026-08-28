@@ -4,6 +4,7 @@ import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.ratelimiter.api.RateLimitReason;
 import com.team4u.framework.ratelimiter.api.RateLimitResult;
 import com.team4u.framework.ratelimiter.config.RateLimitRule;
+import lombok.Data;
 
 import java.util.List;
 
@@ -22,8 +23,9 @@ import java.util.List;
  * windowStart 周期）后计数自然归零。{@code retryAfter} 恒为当前窗口剩余时间。
  * </p>
  * <p>
- * 历史时间戳经 {@code rule.historyPath} 点路径从上下文提取（Map 取值/Bean 公有
- * getter/List 按下标导航，元素 Number/Date 转 epoch 毫秒），路径缺失或为 null
+ * 历史时间戳经 {@link Config#getPath()} 点路径从上下文提取（Map 取值/Bean 公有
+ * getter/List 按下标导航，元素 Number/Date 转 epoch 毫秒），路径默认
+ * {@code history}——调用方将历史置于约定属性下即可零配置；路径缺失或为 null
  * 视为空历史。注意：客户端携带历史天然可伪造，仅适合客户端自我节流，
  * 不能作为服务端防刷手段。
  * </p>
@@ -49,13 +51,18 @@ public class HistoryWindowAlgorithm implements RateLimitAlgorithm {
     }
 
     @Override
-    public RateLimitResult tryAcquire(RateLimitRule rule, KvStore store, String key,
+    public Class<?> configType() {
+        return Config.class;
+    }
+
+    @Override
+    public RateLimitResult tryAcquire(RateLimitRule rule, Object config, KvStore store, String key,
                                       Object context, long nowMillis, int permits) {
         long windowMillis = rule.getWindowMillis();
         long threshold = rule.getThreshold();
         long windowStart = (nowMillis / windowMillis) * windowMillis;
 
-        List<Long> history = HistoryPaths.extractTimestamps(context, rule.getHistoryPath());
+        List<Long> history = HistoryPaths.extractTimestamps(context, ((Config) config).getPath());
         long count = 0;
         for (long ts : history) {
             if (ts >= windowStart) {
@@ -72,5 +79,18 @@ public class HistoryWindowAlgorithm implements RateLimitAlgorithm {
                 .decisionTimeMillis(nowMillis)
                 .reason(allowed ? RateLimitReason.PASS : RateLimitReason.THRESHOLD)
                 .build();
+    }
+
+    /**
+     * 算法私有配置（规则 {@code config} 字段的类型）
+     */
+    @Data
+    public static class Config {
+
+        /**
+         * 历史时间戳列表在上下文中的点路径，默认 {@code history}——
+         * 调用方将历史置于约定属性 {@code history} 下即可零配置
+         */
+        private String path = "history";
     }
 }

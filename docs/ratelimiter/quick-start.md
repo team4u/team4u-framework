@@ -36,13 +36,15 @@ team4u.ratelimiter.order.create=[{"id":"per-user","algorithm":"fixed-window","wi
 | `algorithm` | String | 是 | 算法名：`fixed-window` / `token-bucket` / `sliding-window` / `history-window`，或自定义注册名 |
 | `store` | String | 否 | 命名存储（注册于 `RateLimitStores`）；空 = 引擎默认存储。无状态算法（`history-window`）不解析本字段 |
 | `key` | String | 否 | 计数键模板，支持 `${variable}` 占位符（变量取自检查上下文）；空 = 以检查点为静态键，全检查点共享额度。不允许包含 `:` |
-| `priority` | int | 否 | 优先级，大者先执行；默认 `0`。同优先级保持配置顺序（稳定排序） |
+| `priority` | int | 否 | 优先级，**越小越先执行**（与策略组件 ContextPolicy 约定一致：越小优先级越高）；默认 `0`。同优先级保持配置顺序（稳定排序） |
 | `windowMillis` | long | 是 | 窗口时长（毫秒），必须 > 0。语义随算法：fixed-window 计数窗口、token-bucket 注满一桶时间、sliding-window 滚动窗口长度、history-window 对齐窗口长度 |
 | `threshold` | long | 是 | 阈值，必须 > 0。fixed-window/sliding-window/history-window 为窗口内请求数上限；token-bucket 为桶容量 |
 | `failOpen` | boolean | 否 | 存储故障时是否放行，默认 `true`。`true` = 故障开放（记 warn、该条视为通过继续）；`false` = 故障关闭（立即拒绝，reason=`STORE_ERROR`） |
-| `historyPath` | String | 条件 | 历史时间戳列表在上下文中的点路径（如 `client.history`），`history-window` 必填，其余算法不使用 |
+| `config` | Object | 条件 | 算法私有配置，形态由算法声明（`RateLimitAlgorithm#configType()`），加载期反序列化为类型化实例并校验；算法未声明配置类型时禁止携带（加载期报错）。当前仅 `history-window` 使用：`{"path": "..."}` 指定历史时间戳在上下文中的点路径，缺省取 `history` 属性 |
 
-同一检查点配多条规则即组成规则链：按 `priority` 降序依次执行、首拒即停。
+全算法共享的参数（`windowMillis`/`threshold`/`failOpen` 等）保留在规则模型；单算法专属参数放各自的 `config`——新增算法的私有参数不触碰通用规则模型。
+
+同一检查点配多条规则即组成规则链：按 `priority` 升序依次执行（越小优先级越高）、首拒即停。
 
 ```properties
 # 规则链示例：先按用户维度卡 5 次/分钟，再按全局维度兜底 1000 次/分钟
@@ -202,7 +204,8 @@ team4u.ratelimiter.order.create=[{"id":"per-user","algorithm":"fixed-window","wi
 
 ```properties
 # 检查点 recommend.feed：epoch 对齐的 60 秒固定窗口，阈值 5
-team4u.ratelimiter.recommend.feed=[{"id":"client-history","algorithm":"history-window","windowMillis":60000,"threshold":5,"historyPath":"history"}]
+# 历史置于约定属性 history 下即可零配置（不在此字段也可用 config.path 指定点路径）
+team4u.ratelimiter.recommend.feed=[{"id":"client-history","algorithm":"history-window","windowMillis":60000,"threshold":5}]
 ```
 
 **服务端**检查：
