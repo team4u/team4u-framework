@@ -1,7 +1,7 @@
 package com.team4u.framework.log.core;
 
 /**
- * Safe default log serializer for environments without an explicit JSON provider.
+ * Raw, unmasked plain-text serializer. Core is provider-free and emits no masking policy.
  */
 public final class PlainTextLogSerializer implements LogSerializer {
 

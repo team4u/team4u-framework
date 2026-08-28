@@ -50,7 +50,7 @@
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
 | **[数据脱敏组件](docs/mask/README.md)** | `team4u-mask` / `team4u-mask-jackson` / `team4u-mask-config` | 纯 Java 核心脱敏、Jackson 序列化适配与配置中心动态规则，按需显式引入。 | [概览](docs/mask/README.md) · [快速开始](docs/mask/quick-start.md) |
-| **[结构化日志组件](docs/log/README.md)** | `team4u-log-core` / `team4u-log-governance` | 流式结构化日志核心默认明文输出；治理 artifact 显式集成 Jackson、配置热更新、脱敏、方法代理、染色与 FinOps 限流。 | [概览](docs/log/README.md) · [快速开始](docs/log/quick-start.md) |
+| **[结构化日志组件](docs/log/README.md)** | `team4u-log-core` / `team4u-log-governance` | 流式结构化日志核心默认输出未经脱敏的 RAW/UNMASKED 明文；治理 artifact 显式集成 Jackson、配置热更新、脱敏、方法代理、染色与 FinOps 限流。 | [概览](docs/log/README.md) · [快速开始](docs/log/quick-start.md) |
 
 ---
 
@@ -140,7 +140,7 @@
         <artifactId>team4u-mask-config</artifactId>
     </dependency>
 
-    <!-- 结构化日志核心（默认明文输出） -->
+    <!-- 结构化日志核心（默认输出未经脱敏的 RAW/UNMASKED 明文） -->
     <dependency>
         <groupId>com.team4u</groupId>
         <artifactId>team4u-log-core</artifactId>

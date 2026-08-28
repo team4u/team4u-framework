@@ -67,17 +67,20 @@ com.team4u.it:consumer-log-governance:jar:1.0.0-SNAPSHOT
 - `LogBootstrap.start()` builds a new engine with `JacksonLogSerializer`, installs it globally, transfers/rebinds the current appender, and records the previous engine. Duplicate start is ignored.
 - `reconfigure(Options)` changes options without replacing the started engine. A failed reconfigure rolls back prior options; if rollback also fails, governance enters `FAILED`.
 - `LogBootstrap.stop()` restores the previous engine only while the governance engine is still the global owner. If ownership moved externally, it leaves the newer owner and appender untouched, resets the detached governance engine, cleans repositories, and still enters `STOPPED`.
-- `LogEngine.reset()` does not stop governance. It resets the appender, generic interceptor state, and serializer state while retaining the engine's explicitly injected serializer and interceptor composition.
+- `LogEngine.reset()` does not stop governance. It resets the appender, engine-owned default/SPI interceptor state, and serializer state while retaining explicitly injected interceptors.
 - Engine appender ownership is covered by install/restore tests: a replacement receives the prior appender, serializer-aware appenders rebind, restore transfers the appender back, and stale ownership restoration fails without changing the newer owner.
-- Rate behavior is covered by the default-threshold and reset tests. The first configured-threshold error passes, the second is suppressed, an explicit counter reset plus hot update to a higher limit admits new signatures, and core reset/stop ignore configured zero limits and restore the default of 10.
+- Global and instance compare-and-set operations serialize mutations under the private `GLOBAL_MONITOR`; global transforms skip rebinding when the transform returns the same appender instance.
+- `TestLogHelper` owns a private `HelperCompositeLogAppender` with a volatile stopped marker. Starts wrap atomically; stops remove only that helper's memory appender and collapse only stopped single-child helper composites. It never mutates or collapses a user composite and has no static ownership map.
+- `LogInterceptorManager` tracks engine-owned interceptors in an identity set guarded against concurrent unregister/reset. Duplicate suppression and removal use instance identity, so equal-but-distinct custom interceptors remain distinct.
+- The governance quickstart starts at configured FinOps limit 1, updates the live repository to limit 2 after bootstrap start, clears only the rate counter with `rate.stop()`, and proves two passes followed by suppression of the third same-signature event.
+- Rate behavior also covers the default threshold, reset semantics, and preservation of governance policy across independent engine resets.
 
-These behaviors are locked by `LogQuickstartTest` (7 tests), `LogBootstrapTest` (7 tests), `RateLimitInterceptorTest` (8 tests), `LogGovernanceQuickstartTest` (2 tests), and related integration tests.
-
+These behaviors are locked by `LogQuickstartTest` (7 tests), `LogBootstrapTest` (7 tests), `EngineAppenderAtomicityTest` (3 tests), `EngineRuntimeIsolationTest` (4 tests), `TestLogHelperOwnershipTest` (5 tests), `RateLimitInterceptorTest` (8 tests), `LogGovernanceQuickstartTest` (2 tests), and related integration tests.
 ## Source Boundary
 
-`team4u-log-core` contains 23 production files and 13 test files. It has no governance/Jackson/Spring/ByteBuddy/Config/Mask/Criterion/Proxy/provider source reference or dependency. Its only production dependency tree is `team4u-base`, `team4u-policy`, and `slf4j-api`.
+`team4u-log-core` contains 23 production files and 19 test files. It has no governance/Jackson/Spring/ByteBuddy/Config/Mask/Criterion/Proxy/provider source reference or dependency. Its only production dependency tree is `team4u-base`, `team4u-policy`, and `slf4j-api`.
 
-`team4u-log-governance` contains 19 production files and 11 test files. It directly uses `JsonUtil`, direct Jackson APIs, Config, Criterion, Mask, Proxy, and plain Spring configuration. It has an explicit runtime `team4u-serializer-jackson` edge plus direct Jackson edges. It has no Boot dependency, Boot metadata, factory file, or auto-configuration naming; its Enforcer rule rejects Boot in compile/runtime/test scopes.
+`team4u-log-governance` contains 19 production files, 16 test Java files, and one test-only ServiceLoader resource. It directly uses `JsonUtil`, direct Jackson APIs, Config, Criterion, Mask, Proxy, and plain Spring configuration. It has an explicit runtime `team4u-serializer-jackson` edge plus direct Jackson edges. It has no Boot dependency, Boot metadata, factory file, or auto-configuration naming; its Enforcer rule rejects Boot in compile/runtime/test scopes.
 
 ## Root Manifest
 
@@ -136,8 +139,7 @@ team4u-kv-test
 
 The old log source inventory contains 40 production paths and 21 test paths (61 total); every old production/test source path is accounted for in the new modules.
 
-Current split source counts are core 23 production/13 test and governance 19 production/11 test, totaling 42 production and 24 test files. That is exactly the old inventory plus 2 new production files and 3 new test files.
-
+Current split source counts are core 23 production/19 test and governance 19 production/17 test files, totaling 42 production and 36 test files. That is exactly the old inventory plus 2 new production files and 15 new test files.
 Fresh Git rename detection at the 90% similarity threshold reports 48 renames:
 
 - 47 are detected as 100% renames.
@@ -150,13 +152,13 @@ No production or test file from the old monolith is unaccounted for.
 
 Active log documentation now states:
 
-- Core defaults to plain `toString` output and is provider-free.
+- Core defaults to provider-free RAW/UNMASKED plain `toString` output and explicitly warns that sensitive values are not masked.
 - `LogEngine.builder()` injects serializers and interceptors.
 - Governance is the explicit owner of Jackson, Config, Mask, Proxy, Criterion, and Spring integration.
 - Governance transitively supplies the serializer provider and Jackson runtime.
 - Bootstrap start/reconfigure/stop engine ownership semantics are explicit.
-- `TestLogHelper.lastJson()` uses the active serializer and may be plain in core.
-- Core `toJson(LogEvent)` may be plain text.
+- `TestLogHelper.lastJson()` uses the active serializer and may be RAW/UNMASKED plain text in core.
+- Core `toJson(LogEvent)` may be RAW/UNMASKED plain text.
 - The old monolith is removed with no compatibility artifact.
 - `LogEngine.reset()` no longer stops governance.
 - Explicit artifact migration is documented in `MIGRATION-1.0.md` and `docs/breaking-changes-1.0.md`.
@@ -167,39 +169,41 @@ Root and docs index dependency snippets now show `team4u-log-core` and optional 
 
 Fresh full clean test evidence:
 
-- 243 Surefire report files.
-- 1,527 tests, 0 failures, 0 errors, 0 skipped.
-- `team4u-log-core`: 55 tests, 0 failures/errors/skipped.
-- `team4u-log-governance`: 45 tests, 0 failures/errors/skipped.
+- 252 Surefire report files.
+- 1,562 tests, 0 failures, 0 errors, 0 skipped.
+- `team4u-log-core`: 74 tests, 0 failures/errors/skipped.
+- `team4u-log-governance`: 61 tests, 0 failures/errors/skipped.
 
-Phase B focused counts remain:
+Final focused ownership/remediation evidence:
 
-- `LogBootstrapTest`: 7 tests.
-- `LogQuickstartTest`: 7 tests.
-- `LogGovernanceQuickstartTest`: 2 tests.
-- `LogMaskingTest`: 3 tests.
-- `LogProxyTest`: 3 tests.
-- `RateLimitInterceptorTest`: 8 tests.
-
-## Verification
+- Core focused helper/atomicity/manager/rate/isolation/cleanup/helper tests: exit 0.
+- Governance focused cleanup/ownership/quickstart/Jackson tests: exit 0 (18 focused tests).
+- `TestLogHelperOwnershipTest`: 5 tests, including all six arbitrary stop orders for three nested helpers.
+- `LogInterceptorManagerTest`: 5 tests, including equal-but-distinct interceptor coexistence and identity unregister.
+- `LogGovernanceQuickstartTest`: 2 tests, including live limit-1-to-2 hot update and third-event suppression.
+- `JacksonLogSerializerTest`: 11 tests.
 
 All Maven commands used the absolute root POM `-f /root/code/team4u-framework/.worktrees/framework-convergence/pom.xml`.
 
-1. `mvn -DskipTests clean install`: exit 0.
-2. Focused `consumer-it -Dinvoker.test=consumer-log-governance`: exit 0 after the consumer fixture compile defect was corrected.
-3. Full `mvn clean test`: exit 0, 1,527 tests / 0 failures / 0 errors / 0 skipped.
-4. `mvn -Pconsumer-it -DskipTests verify`: exit 0; all six consumers passed sequentially.
-5. `mvn -Prelease-contracts -DskipTests verify`: exit 0; all six consumers passed sequentially and separately from consumer-it.
-6. `mvn -Prelease -DskipTests package`: exit 0.
-7. `git diff --cached --check`: exit 0 after whitespace cleanup.
+1. Focused log-core ownership/atomicity/manager/rate/isolation/cleanup/helper tests: exit 0.
+2. Focused log-governance cleanup/ownership/quickstart/Jackson tests: exit 0.
+3. Full `team4u-log-core test`: exit 0, 74/74.
+4. Full `team4u-log-governance test`: exit 0, 61/61.
+5. Combined `-pl :team4u-log-core,:team4u-log-governance -am test`: exit 0, 135/135 across the two log modules.
+6. Full reactor `clean test`: exit 0, 252 report files and 1,562 tests / 0 failures / 0 errors / 0 skipped.
+7. Focused `-Pconsumer-it -Dinvoker.test=consumer-log-governance verify`: exit 0.
+8. Full `-Pconsumer-it -DskipTests verify`: exit 0; all six consumers passed sequentially.
+9. `-Prelease-contracts -DskipTests verify`: exit 0; all six consumers passed sequentially.
+10. `-Prelease -DskipTests package`: exit 0.
+11. Source/test-resource partition, Java 8 classfile audit, binary/source/javadoc JAR checks, core forbidden-dependency-bytecode scan, and `git diff --check`: all passed.
 
-No KV heartbeat modification was made. The KV heartbeat test passed in the full reactor; no flake or focused rerun was required.
+No KV heartbeat modification was made. No Task18, KV, or `team4u-id` work is included.
 
 ## Java 8 and Release Artifacts
 
 Every production class in both new artifacts has classfile major version 52:
 
-- `team4u-log-core`: 27 classes, 0 non-52.
+- `team4u-log-core`: 29 classes, 0 non-52.
 - `team4u-log-governance`: 34 classes, 0 non-52.
 
 Both artifacts have binary, source, and javadoc jars:
@@ -213,8 +217,20 @@ team4u-log-governance-1.0.0-SNAPSHOT-sources.jar
 team4u-log-governance-1.0.0-SNAPSHOT-javadoc.jar
 ```
 
+## Review Findings and Remediation
+
+- The initial `TestLogHelper` ownership map was a `WeakHashMap` whose value reached the key wrapper through owner fields, allowing retention of helper metadata and relying on equality-based ownership. It was removed. Ownership is now the private helper composite's volatile stopped marker, with no static map.
+- Helper collapse now recurses only through single-child `HelperCompositeLogAppender` instances marked stopped. A user composite and any live helper wrapper remain untouched; all six three-helper stop orders restore the original root.
+- Global appender transforms previously rebound even when the transform returned the same appender. They now skip mutation and serializer rebinding for identity-same results while retaining private `GLOBAL_MONITOR` serialization for every appender mutation path.
+- Interceptor core ownership used list equality for duplicate checks/removal and was not synchronized against concurrent unregister/reset. It now uses an identity-backed core set, an identity duplicate check, and a private monitor around register/unregister/reset-core; equal-but-distinct interceptors coexist.
+- The FinOps quickstart originally changed the limit before bootstrap and therefore did not prove hot update. It now starts at limit 1, puts limit 2 after start, asserts repository value 2, performs a counter-only `rate.stop()`, and asserts pass/pass/suppressed for the same signature.
+- The cleanup test name incorrectly described full registry reset semantics. It is now `engineResetFailuresStillStopCoreRepositories`; deterministic cleanup SPI resources remain under `src/test/resources` only.
+- Active documentation no longer calls core output "safe plain/安全明文". README, log README/quick-start, and related pages explicitly call it RAW/UNMASKED and warn that sensitive values are not masked.
+- Jackson governance coverage is restored in the split (`JacksonLogSerializerTest`, 11 tests), and all report/source/test/JAR/classfile counts were refreshed from the final verification run.
+
 ## Concerns
 
 - The external consumer uses `LogEngine.processAndOutput` rather than `Loggers.log()` for its deterministic engine/appender assertion because a consumer without an SLF4J backend uses NOP logging and `Loggers` performs backend level filtering. Provider, engine, serializer, helper, and appender behavior remain covered.
-- The first focused consumer run exposed a missing fixture helper/variable and the second exposed NOP level filtering. Both were fixture defects; no core redesign was needed.
+- `TestLogHelper.stop()` collapses a stopped helper chain only when that wrapper is still the global root. If ownership has moved externally, it removes its capture appender but intentionally leaves the newer owner's appender graph otherwise untouched.
+- `updateGlobalAppender` executes the caller's transform while holding the private engine monitor; transforms must not call appender mutation APIs that re-enter that monitor.
 - No Task18 benchmark, `team4u-id`, or KV work is included.

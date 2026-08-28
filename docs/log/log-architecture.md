@@ -52,7 +52,7 @@ graph TD
     I2 --> I3["RateLimitInterceptor<br/>priority: LOW (200)<br/>异常特征限流, 抑制高频错误日志"]
     I3 --> Check{"是否通过 / 未被 suppressed"}
     Check -->|"否"| Drop["终止输出"]
-    Check -->|"是"| Serializer["活动 LogSerializer<br/>core 默认明文 / governance Jackson"]
+    Check -->|"是"| Serializer["活动 LogSerializer<br/>core 默认 RAW/UNMASKED 明文 / governance Jackson"]
     Serializer --> Appender["LogAppender<br/>Slf4jLogAppender / MemoryLogAppender"]
 ```
 

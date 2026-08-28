@@ -9,41 +9,30 @@ import com.team4u.framework.log.core.LogEngine;
 import java.util.List;
 
 /**
- * Structured logging test helper that survives ownership-safe engine swaps.
+ * Structured logging test helper with a private capture wrapper and deterministic cleanup.
  */
 public class TestLogHelper {
 
     private final MemoryLogAppender memoryAppender;
-    private final LogAppender originalAppender;
-    private final CompositeLogAppender attachedComposite;
-    private final boolean ownsComposite;
-    private volatile boolean stopped;
+    private final HelperCompositeLogAppender ownedWrapper;
 
-    private TestLogHelper(
-            MemoryLogAppender memoryAppender,
-            LogAppender originalAppender,
-            CompositeLogAppender attachedComposite,
-            boolean ownsComposite) {
+    private TestLogHelper(MemoryLogAppender memoryAppender, HelperCompositeLogAppender ownedWrapper) {
         this.memoryAppender = memoryAppender;
-        this.originalAppender = originalAppender;
-        this.attachedComposite = attachedComposite;
-        this.ownsComposite = ownsComposite;
+        this.ownedWrapper = ownedWrapper;
     }
 
     public static TestLogHelper start() {
-        LogEngine engine = LogEngine.getInstance();
-        LogAppender currentAppender = engine.getAppender();
         MemoryLogAppender memoryAppender = new MemoryLogAppender();
-
-        if (currentAppender instanceof CompositeLogAppender) {
-            CompositeLogAppender compositeAppender = (CompositeLogAppender) currentAppender;
-            compositeAppender.addAppender(memoryAppender);
-            return new TestLogHelper(memoryAppender, currentAppender, compositeAppender, false);
-        }
-
-        CompositeLogAppender compositeAppender = new CompositeLogAppender(currentAppender, memoryAppender);
-        engine.setAppender(compositeAppender);
-        return new TestLogHelper(memoryAppender, currentAppender, compositeAppender, true);
+        final TestLogHelper[] helper = new TestLogHelper[1];
+        LogEngine.updateGlobalAppender(current -> {
+            if (helper[0] != null) {
+                return current;
+            }
+            HelperCompositeLogAppender wrapper = new HelperCompositeLogAppender(current, memoryAppender);
+            helper[0] = new TestLogHelper(memoryAppender, wrapper);
+            return wrapper;
+        });
+        return helper[0];
     }
 
     public LogEvent lastEvent() {
@@ -64,26 +53,64 @@ public class TestLogHelper {
     }
 
     public void stop() {
-        if (stopped) {
+        if (ownedWrapper.isStopped()) {
             return;
         }
 
-        synchronized (this) {
+        LogEngine.updateGlobalAppender(current -> {
+            if (ownedWrapper.stopAndMarkIfOwned()) {
+                ownedWrapper.removeAppender(memoryAppender);
+                LogAppender restoreTarget = collapseStoppedWrappers(ownedWrapper);
+                if (current == ownedWrapper) {
+                    return restoreTarget;
+                }
+            }
+            return current;
+        });
+    }
+
+    private static LogAppender collapseStoppedWrappers(HelperCompositeLogAppender wrapper) {
+        LogAppender child = singleChild(wrapper);
+        while (child instanceof HelperCompositeLogAppender) {
+            HelperCompositeLogAppender helperChild = (HelperCompositeLogAppender) child;
+            if (!helperChild.isStopped()) {
+                break;
+            }
+            LogAppender nextChild = singleChild(helperChild);
+            if (nextChild == null) {
+                break;
+            }
+            child = nextChild;
+        }
+        return child != null ? child : wrapper;
+    }
+
+    private static LogAppender singleChild(CompositeLogAppender wrapper) {
+        List<LogAppender> children = wrapper.getAppenders();
+        return children.size() == 1 ? children.get(0) : null;
+    }
+
+    private static final class HelperCompositeLogAppender extends CompositeLogAppender {
+        private volatile boolean stopped;
+
+        private HelperCompositeLogAppender(LogAppender... appenders) {
+            super(appenders);
+        }
+
+        private boolean isStopped() {
+            return stopped;
+        }
+
+        /**
+         * Marks this wrapper stopped exactly once; the monitor in updateGlobalAppender
+         * serializes calls, so a failed compare-and-set means another stop completed.
+         */
+        private boolean stopAndMarkIfOwned() {
             if (stopped) {
-                return;
+                return false;
             }
-
-            LogEngine engine = LogEngine.getInstance();
-            attachedComposite.removeAppender(memoryAppender);
-
-            if (ownsComposite
-                    && engine.getAppender() == attachedComposite
-                    && attachedComposite.getAppenders().size() == 1
-                    && attachedComposite.getAppenders().contains(originalAppender)) {
-                engine.setAppender(originalAppender);
-            }
-
             stopped = true;
+            return true;
         }
     }
 }

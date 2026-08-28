@@ -30,7 +30,7 @@ public class CompositeLogAppender implements SerializerAwareLogAppender {
     }
 
     @Override
-    public void bindSerializer(LogSerializer serializer) {
+    public synchronized void bindSerializer(LogSerializer serializer) {
         if (serializer == null) {
             return;
         }
@@ -43,7 +43,7 @@ public class CompositeLogAppender implements SerializerAwareLogAppender {
     /**
      * Adds an appender and binds the serializer currently bound to this composite.
      */
-    public void addAppender(LogAppender appender) {
+    public synchronized void addAppender(LogAppender appender) {
         if (appender == null) {
             return;
         }
@@ -58,7 +58,7 @@ public class CompositeLogAppender implements SerializerAwareLogAppender {
         return Collections.unmodifiableList(appenders);
     }
 
-    public boolean removeAppender(LogAppender appender) {
+    public synchronized boolean removeAppender(LogAppender appender) {
         return appender != null && appenders.remove(appender);
     }
 

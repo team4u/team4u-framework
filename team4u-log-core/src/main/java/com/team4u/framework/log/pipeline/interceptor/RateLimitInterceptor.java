@@ -22,11 +22,18 @@ public class RateLimitInterceptor implements LogInterceptor {
     private volatile IntSupplier errorLimitPerSecond = () -> DEFAULT_ERROR_LIMIT_PER_SECOND;
 
     private RateLimitInterceptor() {
-        stop();
     }
 
+    /**
+     * Returns the legacy shared instance. New engines use {@link #create()} so mutable
+     * rate state is never shared between independently built engines.
+     */
     public static RateLimitInterceptor getInstance() {
         return INSTANCE;
+    }
+
+    public static RateLimitInterceptor create() {
+        return new RateLimitInterceptor();
     }
 
     public void setErrorLimitPerSecond(IntSupplier supplier) {
@@ -39,9 +46,12 @@ public class RateLimitInterceptor implements LogInterceptor {
         this.errorLimitPerSecond = () -> DEFAULT_ERROR_LIMIT_PER_SECOND;
     }
 
+    /**
+     * Clears counters only. An explicitly configured supplier remains active so engine
+     * resets do not remove live governance policy.
+     */
     @Override
     public synchronized void stop() {
-        errorLimitPerSecond = () -> DEFAULT_ERROR_LIMIT_PER_SECOND;
         errorCounter.clear();
     }
 
@@ -51,7 +61,7 @@ public class RateLimitInterceptor implements LogInterceptor {
     }
 
     @Override
-    public boolean handle(LogEvent event) {
+    public synchronized boolean handle(LogEvent event) {
         if (event.getException() == null) {
             return true;
         }
