@@ -14,6 +14,18 @@
 </dependency>
 ```
 
+本文的键值读取和显式绑定不引入 Spring。强类型代理是可选能力；在 `team4u-config-proxy` 发布前，代理实现仍临时保留在 core 中。拆分完成后需要额外引入：
+
+```xml
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-config-proxy</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+</dependency>
+```
+
+`JsonPropertyConverter` 的 JSON 路径仍按模块文档单独选择 JSON 引擎。在 `team4u-config-proxy` 发布前，`ConfigManager.builder().proxyCreator(...)` 是唯一启用代理的方式；未提供创建器时，`createProxy` 会快速失败，不会退回绑定 POJO。`team4u-config-test` 的 `TestConfigContext` 已在内部注入当前过渡实现。
+
 若需使用关系型数据库（MySQL/PostgreSQL/H2 等）作为配置源，额外引入：
 
 ```xml
@@ -44,7 +56,7 @@ server.description=${server.name} is running on port ${server.port}
 
 ## 基础键值读取
 
-`ConfigManager` 提供了直接获取字符串配置的快捷方法：
+`ConfigManager` 提供了直接获取字符串配置的快捷方法。该路径不创建强类型代理，也不依赖 Jackson、ByteBuddy 或 Spring：
 
 ```java
 import com.team4u.framework.config.core.ConfigManager;
@@ -72,10 +84,26 @@ public class ConfigQuickStart {
 ```
 
 ---
+## 固定快照显式绑定
+
+`DefaultConfigBinder` 仍保留给需要一次性固定配置对象的场景。它不创建实时代理，也不会作为 `createProxy` 的降级实现：
+
+```java
+import com.team4u.framework.config.core.ConfigManager;
+import com.team4u.framework.config.core.internal.DefaultConfigBinder;
+
+ConfigManager manager = ConfigManager.builder()
+        .addSource(source)
+        .build();
+AppConfig bound = new DefaultConfigBinder()
+        .bind(manager.currentSnapshot(), "server", AppConfig.class);
+```
+
+---
 
 ## 推荐用法：强类型 JavaBean 动态代理
 
-相较于手动解析字符串，`team4u-config` 强烈推荐使用**强类型 JavaBean 声明式代理**：
+如果只需要固定值，显式绑定已经足够；需要随热更新实时读取时再使用代理。
 
 ### 定义普通的 JavaBean 配置类
 
@@ -112,12 +140,23 @@ public class DbConfig {
 
 ```java
 import com.team4u.framework.config.core.ConfigManager;
+import com.team4u.framework.config.core.ConfigProxyCreator;
+import com.team4u.framework.config.core.proxy.ConfigProxyFactory;
 
 public class ProxyQuickStart {
-
     public static void main(String[] args) {
+
+        // 过渡期显式提供创建器；Task 9 后可直接引入 team4u-config-proxy
+        ConfigProxyCreator creator = (context, prefix, configType) ->
+                new ConfigProxyFactory(context.converterRegistry())
+                        .createLiveProxy(context.manager(), prefix, configType);
+        ConfigManager manager = ConfigManager.builder()
+                .addSource(source)
+                .proxyCreator(creator)
+                .build();
+
         // 创建实时动态代理对象（Live Mode）
-        AppConfig config = ConfigManager.global().createProxy(AppConfig.class);
+        AppConfig config = manager.createProxy(AppConfig.class);
 
         // 直接通过 Getter 访问，享受强类型提示与重构安全
         System.out.println("应用名称: " + config.getName());

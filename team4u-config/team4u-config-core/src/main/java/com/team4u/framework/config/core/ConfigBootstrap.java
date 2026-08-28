@@ -38,6 +38,7 @@ public class ConfigBootstrap {
     public synchronized ConfigBootstrap addSource(ConfigSource source) {
         checkLocked();
         ConfigSourceRegistry.global().register(source);
+        DefaultConfigManager.refreshGlobalIfInitialized();
         return this;
     }
 
@@ -49,6 +50,7 @@ public class ConfigBootstrap {
     public synchronized ConfigBootstrap addWatcher(ConfigWatcher watcher) {
         checkLocked();
         ConfigWatcherRegistry.global().register(watcher);
+        DefaultConfigManager.refreshGlobalIfInitialized();
         return this;
     }
 
@@ -60,6 +62,7 @@ public class ConfigBootstrap {
     public synchronized ConfigBootstrap addConverter(PropertyConverter<?> converter) {
         checkLocked();
         PropertyConverterRegistry.global().register(converter);
+        DefaultConfigManager.refreshGlobalIfInitialized();
         return this;
     }
 
@@ -70,13 +73,17 @@ public class ConfigBootstrap {
      */
     public synchronized void lock() {
         this.locked = true;
+        DefaultConfigManager.refreshGlobalIfInitialized();
     }
 
     /**
      * 仅用于测试场景，清理全局注册表并解除锁定。
      */
     public synchronized void resetForTests() {
-        DefaultConfigManager.global().resetForTests();
+        DefaultConfigManager current = DefaultConfigManager.globalOrNullForTests();
+        if (current != null) {
+            current.resetForTests();
+        }
         ConfigSourceRegistry.global().unregisterAll();
         ConfigWatcherRegistry.global().unregisterAll();
         PropertyConverterRegistry.global().unregisterAll();

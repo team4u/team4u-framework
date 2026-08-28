@@ -40,6 +40,7 @@ public class ConfigConverterTest {
         ConfigSnapshot snapshot = new ConfigSnapshot(1L, entries);
         ConfigManager manager = ConfigManager.builder()
                 .addSource(new StaticConfigSource(snapshot))
+                .proxyCreator(new TestConfigProxyCreator())
                 .build();
 
         ConverterConfig config = manager.createProxy("app", ConverterConfig.class);
@@ -67,6 +68,7 @@ public class ConfigConverterTest {
         ConfigSnapshot snapshot = new ConfigSnapshot(1L, entries);
         ConfigManager manager = ConfigManager.builder()
                 .addSource(new StaticConfigSource(snapshot))
+                .proxyCreator(new TestConfigProxyCreator())
                 .build();
 
         manager.createProxy("app", FailingConverterConfig.class).getPassword();
@@ -81,6 +83,7 @@ public class ConfigConverterTest {
         ConfigSnapshot snapshot = new ConfigSnapshot(1L, entries);
         ConfigManager manager = ConfigManager.builder()
                 .addSource(new StaticConfigSource(snapshot))
+                .proxyCreator(new TestConfigProxyCreator())
                 .build();
 
         manager.createProxy("app", PrimitiveConfig.class).getPort();
