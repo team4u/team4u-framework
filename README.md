@@ -49,7 +49,7 @@
 
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
-| **[数据脱敏组件](docs/mask/README.md)** | `team4u-mask` | 敏感数据脱敏治理组件。内置姓名、手机、身份证、银行卡等标准算法，支持 `@Mask` 注解、配置中心动态规则 (`team4u.mask.rules`) 与 Jackson 无侵入序列化脱敏。 | [概览](docs/mask/README.md) · [快速开始](docs/mask/quick-start.md) |
+| **[数据脱敏组件](docs/mask/README.md)** | `team4u-mask` / `team4u-mask-jackson` / `team4u-mask-config` | 纯 Java 核心脱敏、Jackson 序列化适配与配置中心动态规则，按需显式引入。 | [概览](docs/mask/README.md) · [快速开始](docs/mask/quick-start.md) |
 | **[结构化日志组件](docs/log/README.md)** | `team4u-log` | 结构化动态日志治理框架。提供流式 JSON 日志 (`Loggers`)、方法级切面追踪 (`@AutoLogTrace`)、动态条件染色提权 (`team4u.log.dyeing`) 与 FinOps 成本保护限流。 | [概览](docs/log/README.md) · [快速开始](docs/log/quick-start.md) |
 
 ---
@@ -125,10 +125,19 @@
         <artifactId>team4u-retry-core</artifactId>
     </dependency>
 
-    <!-- 数据脱敏模块 -->
+    <!-- 数据脱敏核心，Jackson / 配置中心适配按需显式引入 -->
     <dependency>
         <groupId>com.team4u</groupId>
         <artifactId>team4u-mask</artifactId>
+    </dependency>
+    <!-- Jackson 脱敏 / 配置中心动态规则按需显式引入 -->
+    <dependency>
+        <groupId>com.team4u</groupId>
+        <artifactId>team4u-mask-jackson</artifactId>
+    </dependency>
+    <dependency>
+        <groupId>com.team4u</groupId>
+        <artifactId>team4u-mask-config</artifactId>
     </dependency>
 
     <!-- 结构化日志模块 -->

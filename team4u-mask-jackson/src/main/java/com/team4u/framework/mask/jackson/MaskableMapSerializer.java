@@ -10,7 +10,7 @@ import com.fasterxml.jackson.databind.ser.ContextualSerializer;
 import com.fasterxml.jackson.databind.ser.std.MapSerializer;
 import com.team4u.framework.mask.FastMasker;
 import com.team4u.framework.mask.MaskUtils;
-import com.team4u.framework.mask.config.MaskRuleRepository;
+import com.team4u.framework.mask.MaskRuleResolver;
 
 import java.io.IOException;
 import java.util.LinkedHashMap;
@@ -82,7 +82,7 @@ public class MaskableMapSerializer extends JsonSerializer<Map<?, ?>> implements 
             Object transformedValue = originalValue;
 
             if (key instanceof String && originalValue instanceof String) {
-                String maskType = MaskRuleRepository.getInstance().findRule(mapClassName, (String) key);
+                String maskType = MaskRuleResolver.Global.get().findRule(mapClassName, (String) key);
                 String maskedValue = maskType != null
                         ? FastMasker.mask((String) originalValue, maskType)
                         : (String) originalValue;

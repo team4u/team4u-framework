@@ -52,6 +52,8 @@
         <module>team4u-router-proxy</module>
         <module>team4u-translator</module>
         <module>team4u-mask</module>
+        <module>team4u-mask-jackson</module>
+        <module>team4u-mask-config</module>
         <module>team4u-log</module>
         <module>team4u-lease/team4u-lease-core</module>
         <module>team4u-lease/team4u-lease-test</module>
@@ -169,6 +171,16 @@
             <dependency>
                 <groupId>com.team4u</groupId>
                 <artifactId>team4u-mask</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-mask-jackson</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-mask-config</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

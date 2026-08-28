@@ -1,6 +1,6 @@
 # 注解式脱敏与 Jackson 集成
 
-通过集成 Jackson 序列化体系，`team4u-mask` 实现了出参序列化时的无侵入自动脱敏。
+通过集成 Jackson 序列化体系，`team4u-mask-jackson` 实现了出参序列化时的无侵入自动脱敏。
 
 ---
 
@@ -115,7 +115,7 @@ graph TD
     CheckStr1 -->|"是"| AssignAnno["设置 MaskStringSerializer maskAnnotation.value"]
     CheckStr1 -->|"否"| Warn1["打印 Warn 日志，跳过脱敏并保留原生序列化"]
     
-    CheckAnno -->|"否"| CheckRepo{"MaskRuleRepository 是否有外部规则"}
+    CheckAnno -->|"否"| CheckRepo{"MaskRuleResolver 是否有外部规则"}
     CheckRepo -->|"是"| CheckStr2{"是否为 String 类型"}
     CheckStr2 -->|"是"| AssignRepo["设置 MaskStringSerializer externalRule"]
     CheckStr2 -->|"否"| Warn2["打印 Warn 日志，跳过脱敏"]

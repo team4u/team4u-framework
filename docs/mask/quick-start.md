@@ -6,6 +6,8 @@
 
 ## 引入依赖
 
+核心脱敏引入 `team4u-mask`（传递 `team4u-base` 与 `team4u-policy`）：
+
 ```xml
 <dependency>
     <groupId>com.team4u</groupId>
@@ -13,6 +15,23 @@
     <version>1.0.0-SNAPSHOT</version>
 </dependency>
 ```
+
+需要 Jackson 自动脱敏或配置中心动态规则时，分别显式添加：
+
+```xml
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-mask-jackson</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+</dependency>
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-mask-config</artifactId>
+    <version>1.0.0-SNAPSHOT</version>
+</dependency>
+```
+
+`team4u-mask-config` 只包含 JSON 解析 API；应用还需提供 `team4u-serializer-jackson` 或自定义 `JsonSerializerPolicy`。
 
 ---
 

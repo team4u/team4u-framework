@@ -100,15 +100,35 @@ public class FastMaskerTest {
 
     @Test
     public void testUnknownType() {
-        // 未知类型返回原值
-        Assert.assertEquals("anyValue", FastMasker.mask("anyValue", "UNKNOWN"));
+        try {
+            FastMasker.mask("anyValue", "UNKNOWN");
+            Assert.fail();
+        } catch (IllegalArgumentException e) {
+            Assert.assertEquals("Unknown mask policy: UNKNOWN", e.getMessage());
+        }
     }
 
     @Test
-    public void testNullTypeReturnsOriginalValue() {
-        Assert.assertEquals("anyValue", FastMasker.mask("anyValue", (String) null));
-        Assert.assertEquals("anyValue", FastMasker.mask("anyValue", (MaskType) null));
-        Assert.assertEquals("anyValue", FastMasker.mask("anyValue", ""));
+    public void testIllegalTypeFailsClosed() {
+        assertIllegalPolicy((String) null);
+        assertIllegalPolicy("");
+        assertIllegalPolicy(" ");
+
+        try {
+            FastMasker.mask("anyValue", (MaskType) null);
+            Assert.fail();
+        } catch (IllegalArgumentException e) {
+            Assert.assertNotNull(e.getMessage());
+        }
+    }
+
+    private void assertIllegalPolicy(String type) {
+        try {
+            FastMasker.mask("anyValue", type);
+            Assert.fail();
+        } catch (IllegalArgumentException e) {
+            Assert.assertNotNull(e.getMessage());
+        }
     }
 
     @Test

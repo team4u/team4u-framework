@@ -6,7 +6,7 @@ import com.team4u.framework.log.config.FinOpsConfigRepository;
 import com.team4u.framework.log.core.LogEngine;
 import com.team4u.framework.log.pipeline.interceptor.TargetedDyeingInterceptor;
 import com.team4u.framework.log.proxy.ProxyRuleRepository;
-import com.team4u.framework.mask.MaskBootstrap;
+import com.team4u.framework.mask.config.MaskBootstrap;
 import lombok.Builder;
 import lombok.Getter;
 import org.slf4j.Logger;

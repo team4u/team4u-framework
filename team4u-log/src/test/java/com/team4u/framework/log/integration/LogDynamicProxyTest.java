@@ -4,6 +4,7 @@ import com.team4u.framework.log.core.LogEvent;
 import com.team4u.framework.log.proxy.AutoLogTrace;
 import com.team4u.framework.log.proxy.LogProxyFactory;
 import com.team4u.framework.log.support.TestLogHelper;
+import com.team4u.framework.mask.MaskRuleResolver;
 import com.team4u.framework.mask.config.MaskRuleRepository;
 import lombok.Data;
 import org.junit.After;
@@ -28,7 +29,9 @@ public class LogDynamicProxyTest {
     }
 
     private void refreshRules(Map<String, Map<String, String>> rules) {
-        MaskRuleRepository.getInstance().setRuleCache(rules);
+        MaskRuleRepository repository = MaskRuleRepository.getInstance();
+        repository.setRuleCache(rules);
+        MaskRuleResolver.Global.install(repository);
     }
 
     @After

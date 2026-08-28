@@ -5,7 +5,7 @@ import com.team4u.framework.policy.api.KeyedPolicy;
 /**
  * 脱敏策略接口
  * <p>
- * 继承自 {@link KeyedPolicy}，支持基于字符串 Key 的动态路由，实现“野马”级别的扩展。
+ * 继承自 {@link KeyedPolicy}，支持基于字符串 Key 的动态路由。
  */
 public interface MaskPolicy extends KeyedPolicy<String> {
 

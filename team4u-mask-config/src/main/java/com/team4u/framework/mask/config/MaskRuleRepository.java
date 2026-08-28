@@ -1,6 +1,7 @@
 package com.team4u.framework.mask.config;
 
 import com.team4u.framework.base.util.TypeReference;
+import com.team4u.framework.mask.MaskRuleResolver;
 import com.team4u.framework.config.core.ConfigManager;
 import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.serializer.json.JsonUtil;
@@ -15,7 +16,7 @@ import java.util.Map;
  * <p>
  * 维护第三方类或 Map 的脱敏规则，支持快速检索。
  */
-public class MaskRuleRepository {
+public class MaskRuleRepository implements MaskRuleResolver {
     private static final Logger log = LoggerFactory.getLogger(MaskRuleRepository.class);
     private static final MaskRuleRepository INSTANCE = new MaskRuleRepository();
 
@@ -45,29 +46,20 @@ public class MaskRuleRepository {
      * 组件自治：自己初始化自己的配置监听
      */
     public synchronized void init(ConfigManager configManager) {
+        ConfigDrivenRegistry<Map<String, Map<String, String>>> newRegistry =
+                new ConfigDrivenRegistry<>(configManager, CONFIG_KEY, this::parseRules);
+        try {
+            newRegistry.get();
+        } catch (RuntimeException e) {
+            newRegistry.destroy();
+            throw e;
+        }
+
         if (this.registry != null) {
             this.registry.destroy();
         }
-
-        this.registry = new ConfigDrivenRegistry<>(configManager, CONFIG_KEY, json -> {
-            try {
-                if (json == null || json.trim().isEmpty()) {
-                    return new HashMap<>();
-                }
-                Map<String, Map<String, String>> rules = JsonUtil.toBean(
-                        json,
-                        new TypeReference<Map<String, Map<String, String>>>() {
-                        },
-                        false);
-                return rules != null ? rules : new HashMap<>();
-            } catch (Exception e) {
-                log.error("MaskRuleRepository|parseConfig|error|msg={}", e.getMessage());
-                throw new IllegalArgumentException("Invalid mask rule config", e);
-            }
-        });
-
-        // 触发首次拉取
-        this.registry.get();
+        this.registry = newRegistry;
+        MaskRuleResolver.Global.install(this);
     }
 
     /**
@@ -81,6 +73,26 @@ public class MaskRuleRepository {
         if (this.registry != null) {
             this.registry.destroy();
             this.registry = null;
+        }
+        if (MaskRuleResolver.Global.get() == this) {
+            MaskRuleResolver.Global.reset();
+        }
+    }
+
+    private Map<String, Map<String, String>> parseRules(String json) {
+        try {
+            if (json == null || json.trim().isEmpty()) {
+                return new HashMap<>();
+            }
+            Map<String, Map<String, String>> rules = JsonUtil.toBean(
+                    json,
+                    new TypeReference<Map<String, Map<String, String>>>() {
+                    },
+                    false);
+            return rules != null ? rules : new HashMap<>();
+        } catch (Exception e) {
+            log.error("MaskRuleRepository|parseConfig|error|msg={}", e.getMessage());
+            throw new IllegalArgumentException("Invalid mask rule config", e);
         }
     }
 

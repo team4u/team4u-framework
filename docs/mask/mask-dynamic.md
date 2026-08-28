@@ -2,7 +2,7 @@
 
 对于第三方依赖库中的类、不可修改源码的外部 DTO 或动态 `Map<String, Object>` 报文，无法在源码中添加 `@Mask` 注解。
 
-`team4u-mask` 提供了基于 `team4u-config` 的**动态规则驱动脱敏机制**，支持在运行期通过配置中心秒级下发和更新脱敏规则，实现全局无侵入的数据隐私治理。
+`team4u-mask-config` 提供基于 `team4u-config` 的**动态规则驱动脱敏机制**，支持在运行期通过配置中心秒级下发和更新脱敏规则，实现全局无侵入的数据隐私治理。它启动时把 `MaskRuleRepository` 安装为 `team4u-mask` 的全局 `MaskRuleResolver`，停止时卸载并恢复 no-op。
 
 ---
 
@@ -12,7 +12,7 @@
 
 ```java
 import com.team4u.framework.config.core.ConfigManager;
-import com.team4u.framework.mask.MaskBootstrap;
+import com.team4u.framework.mask.config.MaskBootstrap;
 
 // 1. 获取配置中心管理器实例
 ConfigManager configManager = ConfigManager.global();
