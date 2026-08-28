@@ -23,7 +23,7 @@
 | 11. Retry Core/Managed/Dynamic Split Without Cycles | Complete |
 | 12. KV Space Split and Proxy-Free HotSwapStore | Complete |
 | 13. Router Core and Router Proxy Split | Complete |
-| 14. Translator Convergence After Router | Pending |
+| 14. Translator Convergence After Router | Complete |
 | 15. Split Mask Core, Jackson Adapter, and Dynamic Config | Pending |
 | 16. Split bean-spring as Plain Spring Configuration | Pending |
 | 17. Log Core/Governance Split with Injected Serializer and Interceptors | Pending |
@@ -52,3 +52,5 @@ Task 11 complete: split managed governance and config-driven retry policies out 
 Task 12 complete: moved typed JSON Spaces to `team4u-kv-space`, moved HotSwapStore to a KV-local `HotSwap` contract with JDK proxies and stable creation-time capability interfaces, and removed proxy/policy/serializer production coupling from kv-core. No KV heartbeat work was included.
 
 Task 13 complete: moved the declarative proxy adapter to `team4u-router-proxy` with unchanged FQCNs, kept router core free of proxy/bean/config-proxy/Jackson compile/runtime edges, and documented the explicit adapter dependency and concrete-class ByteBuddy fallback. Review remediation corrected the Enforcer field-order record to valid scope-aware five-field shorthand (classifier omitted); compile/runtime rejection and test allowance were independently proven, and the working POM rules were unchanged.
+
+Task 14 complete: added a real JSON-policy translator quickstart without router mocks, test-scoped config-test and the Jackson provider, enforced the router-core-only compile/runtime boundary, and documented the explicit provider/adapter split. Commit `test(translator): lock post-router boundary`.

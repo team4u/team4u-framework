@@ -54,7 +54,7 @@ Add `com.team4u:team4u-config-proxy` to let `ConfigManager.createProxy(...)` dis
 
 ## Router declarative proxy split
 
-`@Routed`, `@RouteContext`, `RoutedProxyFactory`, `RoutedBeanLocator`, `BeanResolver`, and `RoutedMethodInterceptor` moved from `team4u-router` to `team4u-router-proxy`; every FQCN is unchanged. Add `com.team4u:team4u-router-proxy` when creating routed interface proxies or resolving routed beans. Keep `team4u-router` for `RoutingManager`, routing policy parsing, trace, and interceptors; `team4u-translator` remains router-core-only. Router core never publishes proxy, bean, config-proxy, ByteBuddy, or Jackson production dependencies.
+`@Routed`, `@RouteContext`, `RoutedProxyFactory`, `RoutedBeanLocator`, `BeanResolver`, and `RoutedMethodInterceptor` moved from `team4u-router` to `team4u-router-proxy`; every FQCN is unchanged. Add `com.team4u:team4u-router-proxy` when creating routed interface proxies or resolving routed beans. Keep `team4u-router` for `RoutingManager`, routing policy parsing, trace, and interceptors; `team4u-translator` remains router-core-only and never passes proxy, bean, config-proxy, ByteBuddy, or a JSON provider. Router core never publishes proxy, bean, config-proxy, ByteBuddy, or Jackson production dependencies.
 ## Retry module split
 
 Managed retry governance moved from `team4u-retry-core` to `team4u-retry-managed`, and config-driven retry policies moved to `team4u-retry-config`.

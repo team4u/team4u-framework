@@ -9,7 +9,7 @@
 - **缺乏上下文变量动态替换**：对外文案需要带上用户的业务动作（如“您在 [提交订单] 时失败，请稍后重试”）。
 - **多业务线无法独立定制**：不同业务线希望在沿用全局兜底错误的同时，优先定制自己专属的提示文案与状态码。
 
-`team4u-translator` 专注于将内部系统返回的原始响应 `RawResponse`，按路由规则与渲染策略翻译成对外暴露的标准化不可变契约 `TranslatedResponse`。JSON 路由配置继承 Router 的显式 provider 要求：应用添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。
+`team4u-translator` 专注于将内部系统返回的原始响应 `RawResponse`，按路由规则与渲染策略翻译成对外暴露的标准化不可变契约 `TranslatedResponse`。它只依赖 router core；声明式 `@Routed` 代理能力在 `team4u-router-proxy` 中，翻译器不引入该适配器。JSON 路由配置继承 Router 的显式 provider 要求：应用添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。
 
 ---
 
