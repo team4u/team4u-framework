@@ -18,7 +18,7 @@
   - 遇到空指针或类型不匹配容易抛出异常，缺乏生产级异常容错与降级保护。
   - 缺乏执行链路追踪，复杂组合规则未命中时难以排查究竟卡在哪一个条件。
 
-`team4u-criterion` 是一个专为业务规则判定设计的轻量级、纳秒级、高扩展 DSL 规则引擎。它专注于“**业务规则如何极简表达、如何高效判定、如何白盒排障**”。
+`team4u-criterion` 是一个专为业务规则判定设计的轻量级、低开销、高扩展 DSL 规则引擎。它专注于“**业务规则如何极简表达、如何高效判定、如何白盒排障**”。
 
 ---
 
@@ -44,9 +44,8 @@ graph LR
 
 Criterion 具备以下核心设计特色：
 
-- **DSL 自然语义**：语法无限接近自然语言与 SQL（如 `age > 18 && status == 'ACTIVE'`，`items is not empty`，`tags contains any ['A', 'B']`）。
-- **JIT 闭包直出与纳秒级执行**：解析后的 AST 会被编译为纯 Java Lambda 闭包（`MatchPredicate`），执行过程无反射、无动态解释，单次匹配仅需纳秒级别。
-- **0 GC 核心路径与智能宽容比较**：内置 `ValueOptimizer`、`FastNumberUtil` 和 `ObjectCompareUtil`，在整数、浮点数原生类型比较与逻辑组合数组遍历中实现全程 0 GC，自动兼容字符串与数值比较。
+- **JIT 闭包直出与低开销执行**：解析后的 AST 会被编译为纯 Java Lambda 闭包（`MatchPredicate`），执行过程无反射、无动态解释；逻辑/属性表达式与数值比较的实测结果见 [JMH 基准](../../benchmarks/README.md)。
+- **低分配核心路径与智能宽容比较**：内置 `ValueOptimizer`、`FastNumberUtil` 和 `ObjectCompareUtil`，整数、浮点数优先使用原生类型比较，逻辑组合编译为数组遍历，自动兼容字符串与数值比较。
 - **白盒排障 (Trace)**：内置 `TraceRecorder` 与 `TraceTreeRenderer`，可生成树状可视化执行日志，精确展示每个子条件的入参、预期与命中状态（`[Y]` / `[N]`）。
 - **按需延迟解析 (Lazy Resolve)**：支持结合 `LazyAttributeResolver` 延迟拉取 RPC 或数据库属性，配合逻辑短路规则，避免不必要的外部网络调用。
 - **默认容错机制**：生产环境下字段缺失或类型异常默认返回 `false` 并记录日志，不阻断主业务链路；亦可按需开启严格模式（`strictMode`）。
@@ -104,7 +103,7 @@ com.team4u.framework.criterion
 │   ├── handler                  # 各语法处理器 (BetweenSyntaxHandler, InSyntaxHandler, HashProbabilitySyntaxHandler 等)
 │   └── token                    # 词法 Token 与 TokenType 定义
 ├── trace                        # 执行链路追踪器与树状渲染 (TraceRecorder, TraceNode, TraceTreeRenderer)
-├── util                         # 0 GC 高性能数值与对象比较工具 (FastNumberUtil, ObjectCompareUtil, CriterionCollectionUtil)
+├── util                         # 低分配高性能数值与对象比较工具 (FastNumberUtil, ObjectCompareUtil, CriterionCollectionUtil)
 ├── Criteria.java                # 规则引擎核心门面与 Builder
 ├── CriterionBootstrap.java       # 全局引导配置与安全锁
 ├── LazyAttributeResolver.java   # 延迟加载属性解析器
@@ -124,8 +123,7 @@ com.team4u.framework.criterion
 ## 文档导航
 
 - [快速开始](quick-start.md)：从引入依赖到执行一次规则判定与可视化 Trace
-- [DSL 语法指南](criterion-syntax.md)：全量运算符、组合逻辑、动态变量与类型转换器详解
-- [编译与 0 GC 优化](criterion-compiler.md)：AST 闭包编译原理、ValueOptimizer 0 GC 优化、MurmurHash64 盐值分流与属性延迟加载
+- [编译与低分配优化](criterion-compiler.md)：AST 闭包编译原理、ValueOptimizer 原生数值优化、MurmurHash64 盐值分流与属性延迟加载
 - [执行链路追踪 Trace](criterion-trace.md)：TraceNode 节点结构、控制台可视化输出与排障实践
 - [扩展机制与 SPI](criterion-extension.md)：自定义操作符、转换器、语法处理器与编译器 SPI
 - [实战案例](criterion-sample.md)：营销圈选、网关灰度、风控拦截与微服务延迟加载实战

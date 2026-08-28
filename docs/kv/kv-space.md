@@ -1,6 +1,6 @@
 # 类型化键空间
 
-裸用核心接口时，每个调用点都要重复两件事：键空间字符串（拼错不报错）和值类型（`get` 后自行反序列化）。`Space` 门面把「键空间 + 值类型 + 默认 TTL」绑定到一个对象上，之后读写只传业务键，值自动做 JSON 序列化/反序列化（复用 serializer 组件的 `JsonUtil`）：
+裸用核心接口时，每个调用点都要重复两件事：键空间字符串（拼错不报错）和值类型（`get` 后自行反序列化）。`Space` 门面把「键空间 + 值类型 + 默认 TTL」绑定到一个对象上，之后读写只传业务键，值自动做 JSON 序列化/反序列化（复用 serializer 组件的 `JsonUtil`）。注册表读路径使用 Copy-On-Write 结构，避免热查找加锁：
 
 ```java
 // 裸用核心接口
@@ -52,7 +52,7 @@ boolean first = idem.putIfAbsent("order-1", "1", 24 * 3600_000L);
 
 ## 策略热更新
 
-`Spaces` 的注册表基于 policy 组件的 `KeyedPolicyRegistry`（Copy-On-Write，读路径无锁、零 GC）。同名重新注册即覆盖：
+`Spaces` 的注册表基于 policy 组件的 `KeyedPolicyRegistry`（Copy-On-Write，读路径无锁、低分配）。同名重新注册即覆盖：
 
 ```java
 Spaces.global().register(new SpacePolicy()

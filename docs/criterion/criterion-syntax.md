@@ -119,7 +119,7 @@ age >= 18 && (userLevel in ['VIP', 'SVIP'] || totalAmount > 5000)
 | :--- | :--- | :--- |
 | `:date` | 转换为日期进行比较，支持标准格式与 `'now'` 关键字 | `createTime:date > '2023-01-01'`<br/>`expireTime:date < 'now'`<br/>`birth:date between ['1990-01-01', '2000-01-01']` |
 | `:version` | 语义化版本号比较（Semantic Versioning） | `appVersion:version >= '2.1.0'`<br/>`clientVer:version between ['1.0.0', '2.0.0')` |
-| `:number` | 转换为数值类型（走 0 GC 极速路径） | `price:number > 100` |
+| `:number` | 转换为数值类型（优先进入原生数值快速路径） | `price:number > 100` |
 | `:size` | 获取集合、数组、Map 或字符串的长度/大小 | `followers:size > 1000`<br/>`items:size >= 5`<br/>`name:size < 10` |
 | `:string` | 调用 `String.valueOf(obj)` 转换为字符串 | `code:string == '1001'` |
 

@@ -9,7 +9,7 @@
 | 类型标识 (`type`) | 对应实现类 | 核心算法与特征 | 适用场景 |
 | :--- | :--- | :--- | :--- |
 | `map` | `MapRouter` | 基于精确字符串匹配，查找复杂度 $O(1)$，初始化检测重复 Condition | 状态码映射、渠道直连、枚举分发 |
-| `expression` | `ExpressionRouter` | 集成 `team4u-criterion` 纳秒级 DSL，支持短路评估与 `multiMatch` 多重匹配 | 人群圈选、风控拦截、多维优惠定价 |
+| `expression` | `ExpressionRouter` | 集成 `team4u-criterion` 低开销 DSL，支持短路评估与 `multiMatch` 多重匹配 | 人群圈选、风控拦截、多维优惠定价 |
 | `weight` | `WeightRouter` | 基于 MurmurHash32 与 `TreeMap.ceilingEntry` 区间查找，查找复杂度 $O(\log N)$ | A/B 测试、灰度发布、流量权重负载 |
 | `composite` | `CompositeRouter` | 瀑布责任链串联多个子路由，支持私有规则优先与基准兜底继承 | 业务线定制覆盖系统全局通用规则 |
 

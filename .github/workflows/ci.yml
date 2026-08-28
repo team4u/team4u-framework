@@ -22,7 +22,15 @@ jobs:
         run: mvn -DskipTests clean install
       - name: Test
         run: mvn test
+      - name: Benchmark package
+        run: mvn -q -f benchmarks/pom.xml clean package
       - name: Consumer contracts
         run: mvn -Pconsumer-it -DskipTests verify
       - name: Release contracts
         run: mvn -Prelease-contracts -DskipTests verify
+      - name: Release artifact contracts
+        run: scripts/check-release-contracts.sh
+      - name: Performance claims
+        run: scripts/check-performance-claims.sh
+      - name: Release package
+        run: mvn -Prelease -DskipTests package

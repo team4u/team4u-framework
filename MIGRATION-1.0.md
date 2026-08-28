@@ -1,8 +1,6 @@
 # Team4u 1.0 Migration Guide
 
-## Maven dependency management
-Team4u 1.0 publishes one dependency-management POM. Import the root POM; there is no separate BOM artifact. The Task 16 reactor and root BOM manage 39 concrete framework leaves.
-Team4u 1.0 publishes one dependency-management POM. Import the root POM; there is no separate BOM artifact. The Task 17 reactor and root BOM manage 40 concrete framework leaves.
+Team4u 1.0 publishes one dependency-management POM. Import the root POM; there is no separate BOM artifact. The final reactor and root BOM manage 40 concrete framework leaves.
 
 ```xml
 <dependencyManagement>
@@ -35,6 +33,8 @@ mvn -Prelease-contracts -DskipTests verify
 ```
 
 It runs the same six active consumers, executes their mains, and validates or records each runtime dependency tree.
+
+Task 18 adds no functional migration and does not change `1.0.0-SNAPSHOT`. It aligns performance wording with the committed JMH evidence and adds the unpublished standalone benchmark project and release-evidence gates. Release evidence remains incomplete until the sequential JDK 8/11/17/21 CI matrix passes on GitHub Actions; this local environment only has JDK 21. No production release or version change should be made from that local-only evidence.
 
 ## Config proxy creation
 

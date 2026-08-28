@@ -111,6 +111,6 @@ Criteria.global().compileExpression("age between [18, 60] && status == 'ACTIVE'"
 ## 下一步
 
 - 查看所有运算符、语法糖与类型转换器：[DSL 语法指南](criterion-syntax.md)
-- 了解 AST 编译、0 GC 优化与延迟属性加载：[编译与 0 GC 优化](criterion-compiler.md)
+- 了解 AST 编译、低分配优化与延迟属性加载：[编译与低分配优化](criterion-compiler.md)
 - 深入掌握白盒排障工具：[执行链路追踪 Trace](criterion-trace.md)
 - 自定义算子与 Spring 整合：[扩展机制与 SPI](criterion-extension.md)

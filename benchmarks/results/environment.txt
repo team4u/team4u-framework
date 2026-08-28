@@ -1,0 +1,18 @@
+openjdk version "21.0.11" 2026-04-21 LTS
+OpenJDK Runtime Environment Corretto-21.0.11.10.1 (build 21.0.11+10-LTS)
+OpenJDK 64-Bit Server VM Corretto-21.0.11.10.1 (build 21.0.11+10-LTS, mixed mode, sharing)
+Linux code2 6.8.12-22-pve #1 SMP PREEMPT_DYNAMIC PMX 6.8.12-22 (2026-04-30T07:01Z) x86_64 x86_64 x86_64 GNU/Linux
+CPU model:  AMD Ryzen 7 7735HS with Radeon Graphics
+visible processors: 16
+cgroup cpu.max: max 100000
+cgroup memory.max: max
+
+commands (JMH commands execute from benchmarks/):
+mvn -q -DskipTests clean install
+mvn -q -f benchmarks/pom.xml clean package
+cd benchmarks
+java -jar target/benchmarks.jar CriterionMatchBenchmark -prof gc -f 1 -wi 3 -i 5 -rf json -rff results/CriterionMatchBenchmark.json
+java -jar target/benchmarks.jar RouterRouteBenchmark -prof gc -f 1 -wi 3 -i 5 -rf json -rff results/RouterRouteBenchmark.json
+java -jar target/benchmarks.jar KvTieredReadBenchmark -prof gc -f 1 -wi 3 -i 5 -rf json -rff results/KvTieredReadBenchmark.json
+java -jar target/benchmarks.jar ProxyDelegateBenchmark -prof gc -f 1 -wi 3 -i 5 -rf json -rff results/ProxyDelegateBenchmark.json
+container caveat: Linux cgroup values may cap CPU/memory independently from host visibility; run on the recorded host/container only.
