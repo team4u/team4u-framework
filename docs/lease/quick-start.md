@@ -178,6 +178,39 @@ Submission submission = orders.submit(Task
 
 重复提交相同幂等键时，`submission.isCreated()` 返回 `false`，`submission.getTask()` 返回已有任务。
 
+Memory 后端不序列化属性。下面的 JDBC 属性会写入 `attributes_json`，应用必须显式提供 JSON 引擎：
+
+```xml
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-serializer-jackson</artifactId>
+</dependency>
+```
+
+也可以不用 Jackson provider，改为通过 `META-INF/services/com.team4u.framework.serializer.json.JsonSerializerPolicy` 注册自定义实现。`team4u-lease-jdbc` 不会传递选择任何 JSON 引擎。
+
+## 可直接测试的租约生命周期
+
+如果只想验证后端协议，也可以不启动 Worker，直接按提交、抢占、心跳、完成的顺序调用后端接口。执行权由 `taskId + workerId + leaseToken` 组成；伪造 token 的心跳会被拒绝，过期执行权不能写回结果：
+
+```java
+SubmitResult submission = backend.submit(SubmitCommand.of(
+        "orders", "email.send", "{\"orderId\":\"O-1001\"}",
+        "O-1001", 0L, 10, Collections.singletonMap("traceId", "T-1001")));
+
+LeaseGrant grant = backend.acquire(AcquireCommand.of(
+        TaskSubscription.of("orders", Collections.singleton("email.send")),
+        "worker-a", 500L));
+
+Assert.assertEquals(RuntimeResult.APPLIED,
+        backend.heartbeat(grant.getHandle(), 700L));
+Assert.assertEquals(RuntimeResult.APPLIED, backend.close(grant.getHandle(),
+        LeaseCompletion.succeeded("{\"sent\":true}",
+                Collections.singletonMap("traceId", "T-1001"))));
+```
+
+Memory 后端可以注入 `Clock` 控制时间，JDBC 后端测试构造器可以注入毫秒时钟，测试不需要 sleep。
+
 ## 准备上生产：改用 JDBC
 
 跨进程部署时不要用 Memory 后端。先引入 JDBC 模块：

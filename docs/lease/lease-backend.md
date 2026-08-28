@@ -60,6 +60,10 @@ JdbcLeaseBackend backend =
 
 默认方言就是 MySQL。`DataSource` 来自 HikariCP、Druid、Spring 或应用服务器；JDBC 后端不内置连接池，也不负责建表。
 
+任务属性会写入 `attributes_json` 并通过 `JsonUtil` 编解码。应用必须显式添加 `team4u-serializer-jackson`，或通过 `META-INF/services/com.team4u.framework.serializer.json.JsonSerializerPolicy` 注册自定义 provider；`team4u-lease-jdbc` 本身不会传递绑定任何 JSON 引擎。
+
+H2 测试路径使用 JDBC 模块测试资源中的 `lease_task_h2.sql` 建表；生产 MySQL 使用上文的生产 DDL。测试可以调用包内构造器注入确定性毫秒时钟。
+
 ### 表结构
 
 单表名为 `lease_task`，核心列如下：

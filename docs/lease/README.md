@@ -124,7 +124,7 @@ public final class FirstTaskDemo {
 
 `InMemoryLeaseBackend` 只保存在当前 JVM，适合演示、学习和单进程测试。生产环境需要可共享的持久化后端，例如 JDBC 后端。
 
-JDBC 租约的 JSON 属性编解码由应用显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。
+JDBC 租约的 JSON 属性编解码由应用显式提供 JSON 引擎：添加 `team4u-serializer-jackson`，或注册自定义 `JsonSerializerPolicy`。Memory 路径不引入 JSON 引擎，JDBC 模块也不会替应用选择 provider。
 
 ---
 
