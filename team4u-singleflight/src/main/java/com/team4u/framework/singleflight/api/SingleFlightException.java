@@ -1,11 +1,10 @@
 package com.team4u.framework.singleflight.api;
 
 /**
- * Base exception of the singleflight component.
+ * 回源合并组件异常基类。
  * <p>
- * Exceptions raised by the loader itself are always rethrown unchanged; only
- * component decisions (conflict, timeout, reconstructed remote failures, and
- * configuration errors) use this hierarchy.
+ * 加载函数自身抛出的业务异常始终原样上抛，不进入本层次；
+ * 只有组件自身的裁决（锁冲突、等待超时、重构的远端失败、配置错误）才使用本异常层次。
  * </p>
  *
  * @author jay.wu

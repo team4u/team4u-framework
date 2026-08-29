@@ -4,7 +4,8 @@ import com.team4u.framework.kv.KvStore;
 import lombok.Getter;
 import lombok.RequiredArgsConstructor;
 /**
- * Binding between a rule's {@code store} name and a KvStore.
+ * 命名存储绑定：规则 {@code store} 字段的名字与具体 {@link KvStore} 实例的对应关系，
+ * 作为 {@code KeyedPolicyRegistry} 的注册单元。
  *
  * @author jay.wu
  */

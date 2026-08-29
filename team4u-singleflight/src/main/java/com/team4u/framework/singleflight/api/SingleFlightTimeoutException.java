@@ -1,9 +1,10 @@
 package com.team4u.framework.singleflight.api;
 
 /**
- * Raised when a WAIT caller cannot receive a finished session in time.
+ * 等待超时异常：WAIT 调用者在 {@code waitTimeoutMillis} 内既没等到终态会话，
+ * 也没等到接管机会（含等待中被中断的场景）。
  * <p>
- * Stack capture is disabled because timeout is expected under contention.
+ * 不采集堆栈：竞争下的超时属于预期结果。
  * </p>
  *
  * @author jay.wu

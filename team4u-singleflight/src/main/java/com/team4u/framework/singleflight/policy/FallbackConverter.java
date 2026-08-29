@@ -9,7 +9,11 @@ import com.team4u.framework.singleflight.api.SingleFlightConfigException;
 import java.lang.reflect.Type;
 
 /**
- * Fallback conversion from native rule JSON to the execution return type.
+ * 降级值转换器：把规则中的原生降级 JSON 反序列化为执行请求的返回类型。
+ * <p>
+ * 显式 JSON {@code null} 表示降级返回 null；返回类型为基本类型时无法承载 null，
+ * 视为配置错误（引擎在执行期组合校验中同样拦截）。
+ * </p>
  *
  * @author jay.wu
  */
@@ -18,6 +22,13 @@ public class FallbackConverter {
     private static final TypeFactory TYPE_FACTORY = TypeFactory.defaultInstance();
     private static final ObjectMapper MAPPER = new ObjectMapper();
 
+    /**
+     * 转换降级 JSON 为目标类型；JSON 与类型不匹配视为配置错误。
+     *
+     * @param fallback   规则配置的降级 JSON（可能为 null 或 JSON null）
+     * @param returnType 执行请求的返回类型
+     * @return 反序列化后的降级值，可为 null
+     */
     public Object convert(JsonNode fallback, Type returnType) {
         JavaType javaType = TYPE_FACTORY.constructType(returnType);
         if (fallback == null || fallback.isNull()) {
