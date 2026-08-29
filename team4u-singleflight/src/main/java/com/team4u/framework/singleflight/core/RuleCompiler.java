@@ -10,6 +10,8 @@ import com.team4u.framework.singleflight.config.ContentionPolicy;
 import com.team4u.framework.singleflight.config.SingleFlightRule;
 import com.team4u.framework.singleflight.policy.KeyResolver;
 import com.team4u.framework.singleflight.policy.SingleFlightCondition;
+import com.team4u.framework.singleflight.policy.SingleFlightKeyDigest;
+import com.team4u.framework.singleflight.policy.SingleFlightKeyDigests;
 import com.team4u.framework.singleflight.store.SingleFlightStores;
 import lombok.extern.slf4j.Slf4j;
 
@@ -112,7 +114,8 @@ class RuleCompiler implements AutoCloseable {
             SingleFlightCondition cacheWhen = compileCondition(rule.getCacheWhen());
             KeyResolver keyResolver = rule.getKey() == null || rule.getKey().trim().isEmpty()
                     ? null : new KeyResolver(rule.getKey());
-            return new CompiledRule(rule, skipWhen, cacheWhen, keyResolver,
+            SingleFlightKeyDigest keyDigest = resolveKeyDigest(rule.getKeyDigest());
+            return new CompiledRule(rule, skipWhen, cacheWhen, keyResolver, keyDigest,
                     rawStore, coordinationStore, cas, lockManager);
         } catch (RuntimeException e) {
             // 编译失败回滚登记，避免留下“占住存储名却无生效规则”的脏登记
@@ -130,7 +133,6 @@ class RuleCompiler implements AutoCloseable {
         positive(rule.getPollIntervalMillis(), "pollIntervalMillis");
         positive(rule.getUncacheableTtlMillis(), "uncacheableTtlMillis");
         positive(rule.getFailureTtlMillis(), "failureTtlMillis");
-        positive(rule.getDigestThreshold(), "digestThreshold");
         if (rule.isCacheEnabled() && rule.getCacheTtlMillis() <= 0) {
             throw new SingleFlightConfigException(
                     "cacheTtlMillis must be > 0 when cacheEnabled is true");
@@ -152,6 +154,22 @@ class RuleCompiler implements AutoCloseable {
             return null;
         }
         return SingleFlightCondition.compile(expression);
+    }
+
+    /**
+     * 按名解析 key 摘要策略（空白返回 null 表示不摘要）；
+     * 未注册的名字视为配置错误，规则加载期即失败（热更新保旧）。
+     */
+    private static SingleFlightKeyDigest resolveKeyDigest(String name) {
+        if (name == null || name.trim().isEmpty()) {
+            return null;
+        }
+        try {
+            return SingleFlightKeyDigests.global().resolve(name.trim());
+        } catch (IllegalArgumentException e) {
+            throw new SingleFlightConfigException(
+                    "Singleflight key digest not registered|keyDigest=" + name, e);
+        }
     }
 
     /**

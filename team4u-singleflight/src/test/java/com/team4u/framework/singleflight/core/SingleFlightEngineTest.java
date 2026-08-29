@@ -60,7 +60,7 @@ public class SingleFlightEngineTest {
     }
 
     private String finalKey(String point, String id) {
-        return SingleFlightKeys.compose(point, id, 128);
+        return SingleFlightKeys.compose(point, id, null);
     }
 
     @Test

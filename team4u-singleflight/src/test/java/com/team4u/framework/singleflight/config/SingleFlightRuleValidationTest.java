@@ -15,6 +15,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 
@@ -151,6 +152,30 @@ public class SingleFlightRuleValidationTest {
         waiter.join(2000);
 
         assertEquals("leader-done", waiterResult.get());
+    }
+
+    @Test
+    public void keyDigestWithUnregisteredNameFailsAtLoad() {
+        assertInvalidRule("{\"id\":\"invalid\",\"key\":\"${id}\",\"cacheTtlMillis\":60000,"
+                + "\"keyDigest\":\"nope\"}",
+                "key digest not registered");
+    }
+
+    @Test
+    public void keyDigestHidesSensitiveBusinessKeyInStore() {
+        rule("secret", "{\"id\":\"secret\",\"key\":\"${id}\",\"cacheTtlMillis\":60000,"
+                + "\"keyDigest\":\"sha256\"}");
+        SingleFlightExecution.SingleFlightLoader<String> loader = () -> "done";
+        assertEqualsValue("done", engine.execute(SingleFlightExecution.of("secret",
+                Collections.singletonMap("id", "13800138000"), String.class, loader)));
+
+        // 存储里的最终 key 不含明文手机号，point 保持明文便于排查
+        boolean found = kv.store().scan(SingleFlightEngine.CACHE_SPACE).stream()
+                .anyMatch(spaceKey -> spaceKey.getKey().startsWith("secret_"));
+        assertTrue(found);
+        kv.store().scan(SingleFlightEngine.CACHE_SPACE).stream()
+                .filter(spaceKey -> spaceKey.getKey().startsWith("secret_"))
+                .forEach(spaceKey -> assertFalse(spaceKey.getKey().contains("13800138000")));
     }
 
     private void assertInvalidRule(String json, String expected) {

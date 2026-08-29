@@ -168,7 +168,7 @@ public class SingleFlightEngine implements AutoCloseable {
     /**
      * 渲染最终协调 key：未配置模板时以 point 为业务 key（同 point 全局共享窗口）；
      * 渲染结果为 null 时按 onInvalidKey 策略处置（PASS_THROUGH 返回 null 由调用方直接回源）；
-     * 最终经 {@link SingleFlightKeys} 完成 point 拼接、编码与摘要。
+     * 最终经 {@link SingleFlightKeys} 完成 point 拼接、编码与按需摘要。
      */
     private String renderKey(CompiledRule rule, SingleFlightExecution<?> execution) {
         String rendered;
@@ -184,8 +184,7 @@ public class SingleFlightEngine implements AutoCloseable {
             throw new SingleFlightConfigException("Singleflight rendered key is invalid"
                     + "|point=" + execution.getPoint() + "|template=" + rule.rule().getKey());
         }
-        return SingleFlightKeys.compose(execution.getPoint(), rendered,
-                rule.rule().getDigestThreshold());
+        return SingleFlightKeys.compose(execution.getPoint(), rendered, rule.keyDigest());
     }
 
     /**
