@@ -205,7 +205,13 @@ team4u-singleflight                # 单模块：存储经 kv 能力协商，无
 └── com.team4u.framework.singleflight
     ├── api                       # SingleFlights 门面、SingleFlightExecution、异常体系
     ├── config                    # SingleFlightRule 与策略枚举
-    ├── core                      # SingleFlightEngine、SessionEnvelope、SingleFlightKeys
+    ├── core                      # 引擎与协作分工（见下）
+    │   ├── SingleFlightEngine    # 编排层：规则加载→校验→skip→key 渲染→委托协调
+    │   ├── RuleCompiler          # 规则编译：JSON→CompiledRule（校验/存储解析/条件预编译）
+    │   ├── SessionCoordinator    # 协调状态机：抢锁、终态 CAS、WAIT 轮询与接管
+    │   ├── SessionEnvelope       # 会话回执：PENDING→终态的不可变状态载体
+    │   ├── ResultCodec           # 结果 JSON 序列化边界
+    │   └── EffectivePolicies      # 生效策略推导（显式配置优先，省略按语义推导）
     ├── policy                    # key 渲染、Criterion 包装、fallback 转换
     ├── store                     # SingleFlightStores / NamedStore 命名存储
     ├── proxy                     # @SingleFlight 注解、拦截器、代理工厂、异常转换
