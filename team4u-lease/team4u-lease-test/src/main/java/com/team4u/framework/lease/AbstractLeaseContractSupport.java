@@ -24,10 +24,13 @@ public abstract class AbstractLeaseContractSupport {
     protected static final String WORKER_A = "worker-a";
     protected static final String WORKER_B = "worker-b";
 
-    protected static final long LEASE_MILLIS = 500L;
-    protected static final long LONG_LEASE_MILLIS = 2_000L;
-    protected static final long SHORT_DELAY_MILLIS = 250L;
-    protected static final long VISIBILITY_MARGIN_MILLIS = 25L;
+    // 时间标尺整体缩小 10 倍：这些常量只表达「短租约 / 长租约 / 短延迟」的相对语义，
+    // 缩放后契约不变，过期等待从 ~525ms 降到 ~60ms 量级。短延迟取 50ms 而非 25ms，
+    // 为提交后立即断言「延迟未到不可见」的否定性检查留出调度抖动余量。
+    protected static final long LEASE_MILLIS = 50L;
+    protected static final long LONG_LEASE_MILLIS = 200L;
+    protected static final long SHORT_DELAY_MILLIS = 50L;
+    protected static final long VISIBILITY_MARGIN_MILLIS = 10L;
 
     protected abstract LeaseBackend createBackend();
 
@@ -117,18 +120,12 @@ public abstract class AbstractLeaseContractSupport {
             if (Boolean.TRUE.equals(condition.get())) {
                 return;
             }
-            Thread.sleep(20L);
+            Thread.sleep(LeaseTestWaits.POLL_INTERVAL_MILLIS);
         }
         Assert.fail("condition was not met within 2000ms");
     }
 
     protected void waitUntilAfter(Instant boundary) throws InterruptedException {
-        final Instant requiredTime = boundary.plusMillis(VISIBILITY_MARGIN_MILLIS);
-        waitUntil(new Supplier<Boolean>() {
-            @Override
-            public Boolean get() {
-                return Instant.now().isAfter(requiredTime);
-            }
-        });
+        LeaseTestWaits.awaitAfter(boundary, VISIBILITY_MARGIN_MILLIS);
     }
 }

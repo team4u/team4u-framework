@@ -75,7 +75,8 @@ public class DefaultInlineRetryClientTest {
                     scheduler);
 
             Assert.assertTrue(resultFuture.cancel(true));
-            Thread.sleep(50L);
+            awaitCondition("in-flight child future should be cancelled", 2000L,
+                    () -> childFuture.cancelCalled.get());
 
             Assert.assertTrue(resultFuture.isCancelled());
             Assert.assertEquals(1, attempts.get());
@@ -107,10 +108,7 @@ public class DefaultInlineRetryClientTest {
                     scheduler);
 
             Assert.assertTrue(resultFuture.cancel(true));
-            Thread.sleep(350L);
-
-            Assert.assertTrue(resultFuture.isCancelled());
-            Assert.assertEquals(1, attempts.get());
+            assertCancellationPreventsRetry(resultFuture, attempts, 200L);
         } finally {
             scheduler.shutdownNow();
         }
@@ -199,9 +197,11 @@ public class DefaultInlineRetryClientTest {
                     },
                     scheduler);
 
-            Thread.sleep(50L);
+            awaitCondition("scheduled retry should be queued", 2000L,
+                    () -> scheduler.lastScheduledFuture != null);
             Assert.assertTrue(resultFuture.cancel(true));
-            Thread.sleep(50L);
+            awaitCondition("queued retry should be cancelled", 2000L,
+                    () -> Boolean.TRUE.equals(scheduler.lastScheduledFuture.cancelCalled.get()));
 
             Assert.assertTrue(resultFuture.isCancelled());
             Assert.assertEquals(1, attempts.get());
@@ -209,6 +209,21 @@ public class DefaultInlineRetryClientTest {
             Assert.assertTrue(scheduler.lastScheduledFuture.cancelCalled.get());
         } finally {
             scheduler.shutdownNow();
+        }
+    }
+
+    /**
+     * 断言取消后重试不会再被调度：取消后紧轮询至退避期限（backoffMillis）
+     * 外加缓冲（原用例为固定 350ms sleep），期间 attempts 不得增长。
+     */
+    private void assertCancellationPreventsRetry(CompletableFuture<?> resultFuture,
+                                                 AtomicInteger attempts,
+                                                 long backoffMillis) throws InterruptedException {
+        long deadline = System.currentTimeMillis() + backoffMillis + 100L;
+        while (System.currentTimeMillis() < deadline) {
+            Assert.assertTrue(resultFuture.isCancelled());
+            Assert.assertEquals(1, attempts.get());
+            Thread.sleep(10L);
         }
     }
 
@@ -241,6 +256,26 @@ public class DefaultInlineRetryClientTest {
         }
 
         Assert.assertEquals(expectedAttempts, attempts.get());
+    }
+
+    /**
+     * 期限 + 紧轮询等待条件成立（替代固定 sleep）：步长 5ms，
+     * 超时则断言失败并报出 timeoutMillis 与提示。
+     */
+    private static void awaitCondition(String message, long timeoutMillis, Condition condition)
+            throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeoutMillis;
+        while (System.currentTimeMillis() < deadline) {
+            if (condition.isSatisfied()) {
+                return;
+            }
+            Thread.sleep(5L);
+        }
+        Assert.fail(message + " within " + timeoutMillis + "ms");
+    }
+
+    private interface Condition {
+        boolean isSatisfied();
     }
 
     private static class TrackingCompletableFuture<T> extends CompletableFuture<T> {

@@ -1,8 +1,12 @@
 package com.team4u.framework.base.lease;
 
+import com.team4u.framework.base.testsupport.Await;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.ArrayList;
+import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -20,7 +24,10 @@ import java.util.concurrent.atomic.AtomicReference;
 public class ScheduledHeartbeatTest {
 
     private static final long LEASE_MILLIS = 300L;
-    private static final long INTERVAL_MILLIS = 60L;
+    /**
+     * 时间标尺：所有用例只关心「多个周期」的倍数语义，不依赖具体毫秒数，取校验上限内较小的 30ms 提速
+     */
+    private static final long INTERVAL_MILLIS = 30L;
 
     @Test
     public void renewPeriodically() throws Exception {
@@ -83,9 +90,9 @@ public class ScheduledHeartbeatTest {
         Assert.assertFalse("丢失后应自动停止", heartbeat.isRunning());
 
         int countAfterLoss = renewCount.get();
-        // 停止后不再有心跳
-        Thread.sleep(200L);
-        Assert.assertEquals("停止后不应继续续约", countAfterLoss, renewCount.get());
+        // 停止后不再有心跳：等计数稳定（窗口 80ms 覆盖超过 2 个周期，若仍续约必增长不会误判稳定）
+        long stableCount = Await.awaitStable(80L, 2_000L, "停止后不应继续续约", renewCount::get);
+        Assert.assertEquals("停止后不应继续续约", countAfterLoss, stableCount);
 
         // 丢失后再 stop 仍应幂等安全
         heartbeat.stop();
@@ -127,25 +134,33 @@ public class ScheduledHeartbeatTest {
     }
 
     @Test
-    public void startIsIdempotent() {
-        AtomicInteger renewCount = new AtomicInteger();
+    public void startIsIdempotent() throws Exception {
+        // 用「首末续约跨度 ≥ (次数-1)×2/3 周期」验证节奏（周期见 INTERVAL_MILLIS 时间标尺注释）：
+        // scheduleAtFixedRate 不会提前触发、延迟只会拉大跨度，若重复调度（两个任务）
+        // 相同时刻内续约次数翻倍、跨度减半，必被断言抓出，倍数语义不变且更稳
+        List<Long> tickNanos = new CopyOnWriteArrayList<>();
         ScheduledHeartbeat heartbeat = ScheduledHeartbeat
                 .builder("token-idem", LEASE_MILLIS, token -> {
-                    renewCount.incrementAndGet();
+                    tickNanos.add(System.nanoTime());
                     return true;
                 })
                 .intervalMillis(INTERVAL_MILLIS)
                 .build();
         Assert.assertSame("重复 start 应返回自身", heartbeat, heartbeat.start());
         heartbeat.start();
-        try {
-            Thread.sleep(250L);
-        } catch (InterruptedException ignored) {
-            Thread.currentThread().interrupt();
-        }
-        // 重复 start 不会重复调度：单一调度任务的续约节奏
-        int count = renewCount.get();
-        Assert.assertTrue("重复 start 后仍只有一个心跳任务在跑", count >= 1 && count <= 8);
+
+        // 等待至少 5 次续约（约 4 个周期，正常 120ms 左右）
+        Await.awaitCondition(2_000L, "心跳应持续触发，实际 " + tickNanos.size(),
+                () -> tickNanos.size() >= 5);
+        heartbeat.stop();
+
+        List<Long> snapshot = new ArrayList<>(tickNanos);
+        long spanMillis = TimeUnit.NANOSECONDS.toMillis(
+                snapshot.get(snapshot.size() - 1) - snapshot.get(0));
+        long minSpanMillis = (snapshot.size() - 1) * INTERVAL_MILLIS * 2L / 3L;
+        Assert.assertTrue("重复 start 后仍只有一个心跳任务在跑：跨度 " + spanMillis + "ms/"
+                + snapshot.size() + " 次，应不小于约 (次数-1)×2/3 周期（" + minSpanMillis + "ms）",
+                spanMillis >= minSpanMillis);
     }
 
     @Test
