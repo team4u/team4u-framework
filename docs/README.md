@@ -27,7 +27,7 @@
 
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
-| **[配置组件](config/README.md)** | `team4u-config` | 强类型安全配置框架。支持快照驱动 (`Snapshot`)、Live/Pinned 代理双模、环境变量/属性文件/数据库 (`team4u-config-db`) 多源聚合、占位符嵌套解析与防抖热更新。 | [概览](config/README.md) · [快速开始](config/quick-start.md) |
+| **[配置组件](config/README.md)** | `team4u-config-core` / `team4u-config-proxy` / `team4u-config-spring` / `team4u-config-db` | 强类型安全配置框架。支持快照驱动 (`Snapshot`)、Live/Pinned 代理双模、环境变量/属性文件/数据库多源聚合、占位符嵌套解析与防抖热更新。core 可独立使用，代理 / Spring / DB 适配按需显式引入。 | [概览](config/README.md) · [快速开始](config/quick-start.md) |
 | **[策略模式组件](policy/README.md)** | `team4u-policy` | 高性能策略管理与责任链引擎。提供 O(1) 复杂度 Copy-On-Write 读写分离精准路由 (`KeyedPolicy`)、有序责任链 (`OrderedPolicyChain`)、中断流水线与 Spring 自动发现 (`@PolicyAutoRegister`)。 | [概览](policy/README.md) · [快速开始](policy/quick-start.md) |
 
 ---
@@ -38,9 +38,9 @@
 
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
-| **[租约任务组件](lease/README.md)** | `team4u-lease` | 排他任务调度框架。通过队列化 Task/Worker/Result API 提供延迟调度、精确类型订阅、心跳续约、故障接管与业务键幂等建档，支持 Memory 与 MySQL 持久化后端。 | [概览](lease/README.md) · [快速开始](lease/quick-start.md) |
-| **[通用重试组件](retry/README.md)** | `team4u-retry` | 统一重试治理框架。支持进程内即时同步/异步重试 (`INLINE`)，以及基于租约持久化的跨进程后台托管补偿重试 (`MANAGED`)，支持 `@Retryable` 注解与动态策略下发。 | [概览](retry/README.md) · [快速开始](retry/quick-start.md) |
-| **[键值存储组件](kv/README.md)** | `team4u-kv` | 最小核心 + 装饰器的键值存储套件。4 操作 `KvStore` 核心与 CAS/扫描/订阅能力协商，分层缓存 (`TieredStore`)、热交换 (`HotSwapStore`)、观测、重试装饰器，CAS 化分布式锁、过期值源（refresh-ahead/singleflight）与 memory/JDBC/Redis 多后端契约测试。 | [概览](kv/README.md) · [快速开始](kv/quick-start.md) |
+| **[租约任务组件](lease/README.md)** | `team4u-lease-core` / `team4u-lease-memory` / `team4u-lease-jdbc` | 排他任务调度框架。通过队列化 Task/Worker/Result API 提供延迟调度、精确类型订阅、心跳续约、故障接管与业务键幂等建档，Memory / JDBC 持久化后端按需显式引入。 | [概览](lease/README.md) · [快速开始](lease/quick-start.md) |
+| **[通用重试组件](retry/README.md)** | `team4u-retry-core` / `team4u-retry-managed` / `team4u-retry-proxy` / `team4u-retry-config` / `team4u-retry-spring` / `team4u-retry-lease-runtime` | 统一重试治理框架。core 提供进程内即时同步/异步重试 (`INLINE`)；managed 提供 `MANAGED` 后台托管编排、记录模型与 `RetryStore` SPI；proxy 提供 `@Retryable` 注解代理；config 提供配置中心动态策略；lease-runtime 提供基于租约的持久化后端；spring 提供 Spring 显式适配。 | [概览](retry/README.md) · [快速开始](retry/quick-start.md) |
+| **[键值存储组件](kv/README.md)** | `team4u-kv-core` / `team4u-kv-space` / `team4u-kv-lock` / `team4u-kv-lifecycle` / `team4u-kv-retryable` / `team4u-kv-store-jdbc` / `team4u-kv-store-redis` | 最小核心 + 装饰器的键值存储套件。core 仅含 4 操作 `KvStore` 核心与能力协商；类型化键空间 (`Space`)、观测/重试装饰器、CAS 化分布式锁、过期值源与 memory 内建实现之上，JDBC / Redis 后端按需显式引入。 | [概览](kv/README.md) · [快速开始](kv/quick-start.md) |
 
 ---
 
@@ -63,8 +63,8 @@
 | :--- | :--- | :--- | :--- |
 | **[对象容器组件](bean/README.md)** | `team4u-bean` / `team4u-bean-spring` | 轻量级 Bean 容器与对象管理门面。核心为纯 Java 本地容器与 Provider 链式查找；Spring 桥接作为独立普通配置显式引入。 | [概览](bean/README.md) · [快速开始](bean/quick-start.md) |
 | **[动态代理组件](proxy/README.md)** | `team4u-proxy` | 统一代理门面与 AOP 拦截器链。自适应 JDK Proxy / ByteBuddy 双引擎，开箱提供方法委托 (鸭子类型)、调用链追踪 (`Tracker`)、运行时热替换 (`HotSwap`) 与空对象防 NPE 代理。 | [概览](proxy/README.md) · [快速开始](proxy/quick-start.md) |
-| **[序列化组件](serializer/README.md)** | `team4u-serializer` | 统一 JSON 序列化门面 (`JsonUtil`)。基于 SPI 自动扫描与优先级加载，原生提供高性能 Jackson 驱动，支持复杂泛型 `TypeReference` 提取与容错解析。 | [概览](serializer/README.md) · [快速开始](serializer/quick-start.md) |
-| **[核心基础组件](base/README.md)** | `team4u-base` | 框架基石与通用工具库。提供分段锁动态实例创建 (`DynamicInstanceProvider`)、高性能预解析文本模板 (`TextTemplate`)、通用缓存 (`LRU/LFU/TimedCache`)、可刷新值 (`RefreshableValue`)、类型转换器与 JDBC 构建工具。 | [概览](base/README.md) · [快速开始](base/quick-start.md) |
+| **[序列化组件](serializer/README.md)** | `team4u-serializer-json` / `team4u-serializer-jackson` | 统一 JSON 序列化门面 (`JsonUtil`)。json 为 provider-free 核心与 SPI，基于自动扫描与优先级加载，支持复杂泛型 `TypeReference` 提取与容错解析；Jackson 驱动经 `team4u-serializer-jackson` 显式引入。 | [概览](serializer/README.md) · [快速开始](serializer/quick-start.md) |
+| **[核心基础组件](base/README.md)** | `team4u-base` / `team4u-base-jdbc` | 框架基石与通用工具库。提供分段锁动态实例创建 (`DynamicInstanceProvider`)、高性能预解析文本模板 (`TextTemplate`)、通用缓存 (`LRU/LFU/TimedCache`) 与类型转换器；JDBC 构建工具位于独立的 `team4u-base-jdbc`。 | [概览](base/README.md) · [快速开始](base/quick-start.md) |
 
 ---
 
