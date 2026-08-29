@@ -53,7 +53,7 @@ com.mycompany.container.CustomJndiBeanFactory
 
 ## Order 优先级排序与多源聚合规则
 
-`BeanManager` 启动时通过 `ServiceLoader.load(BeanFactory.class)` 自动发现所有扩展并按 `getOrder()` 升序排列：
+`BeanManager` 启动时通过 base 组件的 `ServiceLoaderUtil.loadAvailableList(BeanFactory.class)` 容错加载所有扩展并按 `getOrder()` 升序排列（单个实现初始化失败只记录告警并跳过，不影响其余扩展与全局初始化）：
 
 ```java
 private void sortFactories() {

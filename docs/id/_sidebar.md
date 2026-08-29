@@ -1,0 +1,6 @@
+* [序号生成组件](README.md)
+* [快速开始](quick-start.md)
+* [规则配置](id-rule.md)
+* [分组策略](id-group.md)
+* [本地号段](id-segment.md)
+* [常见案例](id-sample.md)

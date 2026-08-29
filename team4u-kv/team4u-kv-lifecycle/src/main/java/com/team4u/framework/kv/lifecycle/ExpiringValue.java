@@ -1,5 +1,6 @@
 package com.team4u.framework.kv.lifecycle;
 
+import com.team4u.framework.base.util.Expiry;
 import com.team4u.framework.kv.KvRecord;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.PutMode;
@@ -52,6 +53,16 @@ import java.util.function.Supplier;
  * 进入刷新窗口的 get() 立即返回旧值，续期由指定 executor 异步执行
  * （必须显式提供 executor，不引入隐式共享线程池）；异步任务失败只记日志与冷却，
  * 绝不传播给调用方。异步模式下首次进入刷新窗口的调用方拿到旧值，新值在下个 get() 可见。
+ * </p>
+ * <p>
+ * <b>与 base 组件 RefreshableValue 的分工</b>：两者都实现了「future 式 singleflight +
+ * 异步提交拒绝回退 + 指数失败冷却」这一套进程内刷新语义，但状态宿主不同——
+ * 本类以 KvStore 为唯一事实源（同键多实例、跨进程经存储协调，每次 get() 重读记录判新鲜），
+ * 而 RefreshableValue 以内存 State 为宿主（进程内直读、不经序列化，含 onChange/后台刷新等进程内能力）。
+ * 因生命周期与失败传播策略深度耦合于各自的状态宿主（本类冷却仅软化刷新窗口、硬路径抛原始异常，
+ * 后者冷却内嵌于读取决策、失败统一包装），两者不共享实例、不复用对方的加载框架，
+ * 仅共用 base 的 {@link Expiry} 饱和时间算术。连注解可见
+ * base-refresh 文档的选型提示。
  * </p>
  *
  * @param <V> 值类型
@@ -323,7 +334,7 @@ public class ExpiringValue<V> {
     private void onLoadFailure(SpaceKey spaceKey, RuntimeException error) {
         long cooldownMillis = cooldownMillis(consecutiveFailures);
         consecutiveFailures++;
-        retryAtMillis = saturatedAdd(clock.millis(), cooldownMillis);
+        retryAtMillis = Expiry.expiryFrom(clock.millis(), cooldownMillis);
         log.debug("ExpiringValue load failed|key={}|failures={}|cooldownMs={}",
                 spaceKey, consecutiveFailures, cooldownMillis, error);
     }
@@ -346,14 +357,6 @@ public class ExpiringValue<V> {
             return cooldownMaxMillis;
         }
         return cooldown;
-    }
-
-    /**
-     * 非负饱和加法，溢出时返回 Long.MAX_VALUE
-     */
-    private static long saturatedAdd(long a, long b) {
-        long sum = a + b;
-        return sum < 0 ? Long.MAX_VALUE : sum;
     }
 
     private V decode(KvRecord record) {

@@ -23,14 +23,22 @@ import org.junit.Before;
 import org.junit.Test;
 import org.springframework.aop.config.AopConfigUtils;
 import org.springframework.aop.framework.autoproxy.InfrastructureAdvisorAutoProxyCreator;
+import org.springframework.beans.BeansException;
+import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.beans.factory.BeanFactory;
+import org.springframework.beans.factory.ListableBeanFactory;
+import org.springframework.beans.factory.NoSuchBeanDefinitionException;
 import org.springframework.beans.factory.config.BeanDefinition;
 import org.springframework.beans.factory.support.RootBeanDefinition;
+import org.springframework.core.ResolvableType;
 import org.springframework.context.annotation.AnnotationConfigApplicationContext;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.stereotype.Service;
 
+import java.lang.annotation.Annotation;
 import java.util.Collections;
+import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.atomic.AtomicInteger;
 
@@ -135,6 +143,97 @@ public class RetrySpringTest {
 
             OrderService orderService = context.getBean(OrderService.class);
             Assert.assertEquals("ok_A100", orderService.doRetry("A100"));
+        }
+    }
+
+    /**
+     * 回归测试：INLINE 模式下不解析目标 Bean 名称（历史 bug：每次被拦截调用
+     * 都遍历全部 Bean 定义找目标 bean，INLINE 模式下结果根本用不到），
+     * MANAGED 模式解析结果按代理实例缓存。
+     */
+    @Test
+    public void testSpringInlineModeSkipsAndManagedModeCachesTargetBeanNameResolution() {
+        AnnotationConfigApplicationContext context = new AnnotationConfigApplicationContext(
+                BeanNameProbeConfig.class);
+        try {
+            CountingListableBeanFactory probeFactory =
+                    new CountingListableBeanFactory(context.getBeanFactory());
+            SpringRetryInterceptor interceptor = new SpringRetryInterceptor(
+                    context.getBeanFactory(), probeFactory,
+                    context.getBean(RetryExecutorManager.class));
+
+            Object inlineProxy = context.getBean("inlineOnlyService");
+            callThroughInterceptor(interceptor, inlineProxy,
+                    InlineOnlyService.class, "call");
+            callThroughInterceptor(interceptor, inlineProxy,
+                    InlineOnlyService.class, "call");
+            // INLINE 模式不应触发任何 Bean 定义遍历
+            Assert.assertEquals(0, probeFactory.definitionNameLookups.get());
+
+            Object managedProxy = context.getBean("managedVoidProbeService");
+            callThroughInterceptor(interceptor, managedProxy,
+                    ManagedVoidProbeService.class, "notifyPay", "probe-1");
+            callThroughInterceptor(interceptor, managedProxy,
+                    ManagedVoidProbeService.class, "notifyPay", "probe-2");
+            callThroughInterceptor(interceptor, managedProxy,
+                    ManagedVoidProbeService.class, "notifyPay", "probe-3");
+            // MANAGED 模式：同一代理重复调用命中缓存，遍历仅发生一次
+            Assert.assertEquals(1, probeFactory.definitionNameLookups.get());
+        } finally {
+            context.close();
+        }
+    }
+
+    /**
+     * 经指定拦截器调用目标代理方法（模拟 Spring AOP 链路中的拦截动作）
+     */
+    private void callThroughInterceptor(
+            SpringRetryInterceptor interceptor, Object target,
+            Class<?> api, String methodName, Object... args) {
+        try {
+            java.lang.reflect.Method method;
+            if (args.length == 0) {
+                method = api.getMethod(methodName);
+            } else {
+                method = api.getMethod(methodName, String.class);
+            }
+            final java.lang.reflect.Method targetMethod = method;
+            final Object targetBean = target;
+            final Object[] targetArgs = args;
+            org.aopalliance.intercept.MethodInvocation invocation =
+                    new org.aopalliance.intercept.MethodInvocation() {
+                        @Override
+                        public java.lang.reflect.Method getMethod() {
+                            return targetMethod;
+                        }
+
+                        @Override
+                        public Object[] getArguments() {
+                            return targetArgs;
+                        }
+
+                        @Override
+                        public Object getThis() {
+                            return targetBean;
+                        }
+
+                        @Override
+                        public java.lang.reflect.AccessibleObject getStaticPart() {
+                            return targetMethod;
+                        }
+
+                        @Override
+                        public Object proceed() throws Throwable {
+                            return targetMethod.invoke(targetBean, targetArgs);
+                        }
+                    };
+            interceptor.invoke(invocation);
+        } catch (RuntimeException ex) {
+            throw ex;
+        } catch (Exception ex) {
+            throw new RuntimeException(ex);
+        } catch (Throwable ex) {
+            throw new RuntimeException(ex);
         }
     }
 
@@ -405,6 +504,198 @@ public class RetrySpringTest {
         }
     }
 
+    public interface InlineOnlyService {
+        void call();
+    }
+
+    public static class InlineOnlyServiceImpl implements InlineOnlyService {
+        @Override
+        @Retryable(policy = "test-policy")
+        public void call() {
+        }
+    }
+
+    /**
+     * 计数型 BeanFactory 代理：记录 getBeanDefinitionNames 的遍历次数，
+     * 用于验证目标 Bean 名称解析的调用频次
+     */
+    public static class CountingListableBeanFactory
+            implements ListableBeanFactory, java.io.Serializable {
+
+        private static final long serialVersionUID = 1L;
+
+        private final ListableBeanFactory delegate;
+        final AtomicInteger definitionNameLookups = new AtomicInteger();
+
+        public CountingListableBeanFactory(ListableBeanFactory delegate) {
+            this.delegate = delegate;
+        }
+
+        @Override
+        public String[] getBeanDefinitionNames() {
+            definitionNameLookups.incrementAndGet();
+            return delegate.getBeanDefinitionNames();
+        }
+
+        @Override
+        public int getBeanDefinitionCount() {
+            return delegate.getBeanDefinitionCount();
+        }
+
+        @Override
+        public boolean containsBeanDefinition(String beanName) {
+            return delegate.containsBeanDefinition(beanName);
+        }
+
+        @Override
+        public String[] getAliases(String beanName) {
+            return delegate.getAliases(beanName);
+        }
+
+        @Override
+        public boolean containsBean(String name) {
+            return delegate.containsBean(name);
+        }
+
+        @Override
+        public Class<?> getType(String name) throws NoSuchBeanDefinitionException {
+            return delegate.getType(name);
+        }
+
+        @Override
+        public Class<?> getType(String name, boolean allowFactoryBeanInit)
+                throws NoSuchBeanDefinitionException {
+            return delegate.getType(name, allowFactoryBeanInit);
+        }
+
+        @Override
+        public boolean isSingleton(String name) throws NoSuchBeanDefinitionException {
+            return delegate.isSingleton(name);
+        }
+
+        @Override
+        public boolean isPrototype(String name) throws NoSuchBeanDefinitionException {
+            return delegate.isPrototype(name);
+        }
+
+        @Override
+        public boolean isTypeMatch(String name, ResolvableType typeToMatch)
+                throws NoSuchBeanDefinitionException {
+            return delegate.isTypeMatch(name, typeToMatch);
+        }
+
+        @Override
+        public boolean isTypeMatch(String name, Class<?> typeToMatch)
+                throws NoSuchBeanDefinitionException {
+            return delegate.isTypeMatch(name, typeToMatch);
+        }
+
+        @Override
+        public Object getBean(String name) throws BeansException {
+            return delegate.getBean(name);
+        }
+
+        @Override
+        public <T> T getBean(String name, Class<T> requiredType) throws BeansException {
+            return delegate.getBean(name, requiredType);
+        }
+
+        @Override
+        public Object getBean(String name, Object... args) throws BeansException {
+            return delegate.getBean(name, args);
+        }
+
+        @Override
+        public <T> ObjectProvider<T> getBeanProvider(Class<T> requiredType) {
+            return delegate.getBeanProvider(requiredType);
+        }
+
+        @Override
+        public <T> ObjectProvider<T> getBeanProvider(
+                Class<T> requiredType, boolean allowEagerInit) {
+            return delegate.getBeanProvider(requiredType, allowEagerInit);
+        }
+
+        @Override
+        public <T> ObjectProvider<T> getBeanProvider(ResolvableType requiredType) {
+            return delegate.getBeanProvider(requiredType);
+        }
+
+        @Override
+        public <T> ObjectProvider<T> getBeanProvider(
+                ResolvableType requiredType, boolean allowEagerInit) {
+            return delegate.getBeanProvider(requiredType, allowEagerInit);
+        }
+
+        @Override
+        public <T> T getBean(Class<T> requiredType) throws BeansException {
+            return delegate.getBean(requiredType);
+        }
+
+        @Override
+        public <T> T getBean(Class<T> requiredType, Object... args) throws BeansException {
+            return delegate.getBean(requiredType, args);
+        }
+
+        @Override
+        public <T> Map<String, T> getBeansOfType(Class<T> type) throws BeansException {
+            return delegate.getBeansOfType(type);
+        }
+
+        @Override
+        public <T> Map<String, T> getBeansOfType(Class<T> type, boolean includeNonSingletons,
+                                                 boolean allowEagerInit) throws BeansException {
+            return delegate.getBeansOfType(type, includeNonSingletons, allowEagerInit);
+        }
+
+        @Override
+        public String[] getBeanNamesForType(Class<?> type) {
+            return delegate.getBeanNamesForType(type);
+        }
+
+        @Override
+        public String[] getBeanNamesForType(Class<?> type, boolean includeNonSingletons,
+                                            boolean allowEagerInit) {
+            return delegate.getBeanNamesForType(type, includeNonSingletons, allowEagerInit);
+        }
+
+        @Override
+        public String[] getBeanNamesForType(ResolvableType type) {
+            return delegate.getBeanNamesForType(type);
+        }
+
+        @Override
+        public String[] getBeanNamesForType(
+                ResolvableType type, boolean includeNonSingletons, boolean allowEagerInit) {
+            return delegate.getBeanNamesForType(type, includeNonSingletons, allowEagerInit);
+        }
+
+        @Override
+        public String[] getBeanNamesForAnnotation(Class<? extends Annotation> annotationType) {
+            return delegate.getBeanNamesForAnnotation(annotationType);
+        }
+
+        @Override
+        public Map<String, Object> getBeansWithAnnotation(
+                Class<? extends Annotation> annotationType) throws BeansException {
+            return delegate.getBeansWithAnnotation(annotationType);
+        }
+
+        @Override
+        public <A extends Annotation> A findAnnotationOnBean(String beanName,
+                                                             Class<A> annotationType) throws NoSuchBeanDefinitionException {
+            return delegate.findAnnotationOnBean(beanName, annotationType);
+        }
+
+        @Override
+        public <A extends Annotation> A findAnnotationOnBean(String beanName,
+                                                             Class<A> annotationType,
+                                                             boolean allowFactoryBeanInit)
+                throws NoSuchBeanDefinitionException {
+            return delegate.findAnnotationOnBean(beanName, annotationType, allowFactoryBeanInit);
+        }
+    }
+
     public static class NamedReplayBean implements ReplayHandler {
         private String lastOrderId;
 
@@ -480,6 +771,41 @@ public class RetrySpringTest {
         @Bean
         public ManagedVoidOnlyService managedVoidOnlyService() {
             return managedService;
+        }
+    }
+
+    /**
+     * Bean 名称解析频次探针配置：提供 INLINE/MANAGED 各一个业务 Bean，
+     * 拦截器由测试内以计数型 BeanFactory 构造后直连调用
+     */
+    @Configuration
+    @EnableRetry
+    public static class BeanNameProbeConfig {
+
+        @Bean
+        public InlineOnlyService inlineOnlyService() {
+            return new InlineOnlyServiceImpl();
+        }
+
+        @Bean
+        public ManagedRetryClient managedRetryClient() {
+            return new ManagedRetryClientStub();
+        }
+
+        @Bean
+        public ManagedVoidProbeService managedVoidProbeService() {
+            return new ManagedVoidProbeServiceImpl();
+        }
+    }
+
+    public interface ManagedVoidProbeService {
+        void notifyPay(String id);
+    }
+
+    public static class ManagedVoidProbeServiceImpl implements ManagedVoidProbeService {
+        @Override
+        @Retryable(policy = "test-policy", mode = RetryMode.MANAGED)
+        public void notifyPay(String id) {
         }
     }
 

@@ -27,7 +27,6 @@
             <groupId>com.team4u</groupId>
             <artifactId>team4u-serializer-jackson</artifactId>
             <version>${project.version}</version>
-            <scope>runtime</scope>
         </dependency>
         <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>

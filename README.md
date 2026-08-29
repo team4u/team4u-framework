@@ -34,13 +34,16 @@
 
 ### 服务治理与分布式协同
 
-提供分布式排他任务调度与统一容灾重试治理能力。
+提供分布式排他任务调度、统一容灾重试治理与键值/序号/限流基础能力。
 
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
 | **[租约任务组件](docs/lease/README.md)** | `team4u-lease-core` / `team4u-lease-memory` / `team4u-lease-jdbc` | 排他任务调度框架。通过队列化 Task/Worker/Result API 提供延迟调度、精确类型订阅、心跳续约、故障接管与业务键幂等建档，Memory / JDBC 持久化后端按需显式引入。 | [概览](docs/lease/README.md) · [快速开始](docs/lease/quick-start.md) |
 | **[通用重试组件](docs/retry/README.md)** | `team4u-retry-core` / `team4u-retry-managed` / `team4u-retry-proxy` / `team4u-retry-config` / `team4u-retry-spring` / `team4u-retry-lease-runtime` | 统一重试治理框架。core 提供进程内即时同步/异步重试 (`INLINE`)；managed 提供 `MANAGED` 后台托管编排、记录模型与 `RetryStore` SPI；proxy 提供 `@Retryable` 注解代理；config 提供配置中心动态策略；lease-runtime 提供基于租约的持久化后端；spring 提供 Spring 显式适配。 | [概览](docs/retry/README.md) · [快速开始](docs/retry/quick-start.md) |
-| **[键值存储组件](docs/kv/README.md)** | `team4u-kv-core` / `team4u-kv-space` / `team4u-kv-lock` / `team4u-kv-lifecycle` / `team4u-kv-retryable` / `team4u-kv-store-jdbc` / `team4u-kv-store-redis` | 最小核心 + 装饰器的键值存储套件。core 仅含 4 操作 `KvStore` 核心与能力协商；类型化键空间 (`Space`)、观测/重试装饰器、CAS 化分布式锁、过期值源与 memory 内建实现之上，JDBC / Redis 后端按需显式引入。 | [概览](docs/kv/README.md) · [快速开始](docs/kv/quick-start.md) |
+| **[键值存储组件](docs/kv/README.md)** | `team4u-kv-core` / `team4u-kv-space` / `team4u-kv-lock` / `team4u-kv-lifecycle` / `team4u-kv-retryable` / `team4u-kv-store-jdbc` / `team4u-kv-store-redis` | 最小核心 + 装饰器的键值存储套件。core 仅含 4 操作 `KvStore` 核心与能力协商（计数/计分窗口）；类型化键空间 (`Space`) 与命名存储注册表 (`NamedKvStoreRegistry`) 位于 `team4u-kv-space`，观测/重试装饰器、CAS 化分布式锁、过期值源与 memory 内建实现之上，JDBC / Redis 后端按需显式引入。 | [概览](docs/kv/README.md) · [快速开始](docs/kv/quick-start.md) |
+| **[序号生成组件](docs/id/README.md)** | `team4u-id` | 配置驱动的序号生成框架。基于 `KvStore` 原子计数能力 (`CounterCapable`)，一条 JSON 规则支持分组重置、额度耗尽、循环使用、本地号段加速与模板化单号，内存/JDBC/Redis 后端行为一致。 | [概览](docs/id/README.md) · [快速开始](docs/id/quick-start.md) |
+| **[限流组件](docs/ratelimiter/README.md)** | `team4u-ratelimiter-core` / `team4u-ratelimiter-proxy` / `team4u-ratelimiter-spring` | 配置驱动的多算法限流框架。基于 `KvStore` 能力协商提供固定窗口、令牌桶、精确滑动窗口与客户端历史窗口四种算法，一条 JSON 规则支持键模板维度计数、多存储分工、failOpen 故障策略与 `@RateLimit` 注解代理，热更新生效；注解代理与 Spring 装配按需显式引入。 | [概览](docs/ratelimiter/README.md) · [快速开始](docs/ratelimiter/quick-start.md) |
+| **[回源合并组件](docs/singleflight/README.md)** | `team4u-singleflight-core` / `team4u-singleflight-proxy` / `team4u-singleflight-spring` | 配置驱动的回源合并与并发互斥框架。基于 `KvStore` CAS 与 kv 锁提供同 key 唯一执行者、WAIT/FAIL_FAST/FALLBACK 竞争策略、结果缓存、失败会话共享、执行者崩溃接管与 token fencing，一条 JSON 规则热更新生效，支持 `@SingleFlight` 注解代理；注解代理与 Spring 装配按需显式引入。 | [概览](docs/singleflight/README.md) · [快速开始](docs/singleflight/quick-start.md) |
 
 ---
 
@@ -62,7 +65,7 @@
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
 | **[对象容器组件](docs/bean/README.md)** | `team4u-bean` / `team4u-bean-spring` | 轻量级 Bean 容器与对象管理门面。核心为纯 Java 本地容器与 Provider 链式查找；Spring 桥接作为独立普通配置显式引入。 | [概览](docs/bean/README.md) · [快速开始](docs/bean/quick-start.md) |
-| **[动态代理组件](docs/proxy/README.md)** | `team4u-proxy` | 统一代理门面与 AOP 拦截器链。自适应 JDK Proxy / ByteBuddy 双引擎，开箱提供方法委托 (鸭子类型)、调用链追踪 (`Tracker`)、运行时热替换 (`HotSwap`) 与空对象防 NPE 代理。 | [概览](docs/proxy/README.md) · [快速开始](docs/proxy/quick-start.md) |
+| **[动态代理组件](docs/proxy/README.md)** | `team4u-proxy` / `team4u-proxy-spring` | 统一代理门面与 AOP 拦截器链。自适应 JDK Proxy / ByteBuddy 双引擎，开箱提供方法委托 (鸭子类型)、调用链追踪 (`Tracker`)、运行时热替换 (`HotSwap`) 与空对象防 NPE 代理；注解驱动代理的 Spring 装配模板（`AnnotationProxyBeanPostProcessor` 抽象）位于独立的 `team4u-proxy-spring`。 | [概览](docs/proxy/README.md) · [快速开始](docs/proxy/quick-start.md) |
 | **[序列化组件](docs/serializer/README.md)** | `team4u-serializer-json` / `team4u-serializer-jackson` | 统一 JSON 序列化门面 (`JsonUtil`)。json 为 provider-free 核心与 SPI，基于自动扫描与优先级加载，支持复杂泛型 `TypeReference` 提取与容错解析；Jackson 驱动经 `team4u-serializer-jackson` 显式引入。 | [概览](docs/serializer/README.md) · [快速开始](docs/serializer/quick-start.md) |
 | **[核心基础组件](docs/base/README.md)** | `team4u-base` / `team4u-base-jdbc` | 框架基石与通用工具库。提供分段锁动态实例创建 (`DynamicInstanceProvider`)、高性能预解析文本模板 (`TextTemplate`)、通用缓存 (`LRU/LFU/TimedCache`) 与类型转换器；JDBC 构建工具位于独立的 `team4u-base-jdbc`。 | [概览](docs/base/README.md) · [快速开始](docs/base/quick-start.md) |
 

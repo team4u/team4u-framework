@@ -1,5 +1,7 @@
 package com.team4u.framework.retry.runtime.lease;
 
+import com.team4u.framework.base.util.DurationUtil;
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.lease.Leases;
 import com.team4u.framework.lease.api.Submission;
 import com.team4u.framework.lease.api.Task;
@@ -78,7 +80,8 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
             throw new IllegalArgumentException("RetryRecordSerializer must not be null");
         }
         this.foregroundRecoveryTimeoutMillis =
-                requireExactPositiveMillis(foregroundRecoveryTimeout);
+                DurationUtil.requirePositiveMillis(
+                        foregroundRecoveryTimeout, "foregroundRecoveryTimeout");
         this.queue = queue;
         this.serializer = serializer;
     }
@@ -287,31 +290,6 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
         }
     }
 
-    private static long requireExactPositiveMillis(Duration duration) {
-        if (duration == null) {
-            throw new IllegalArgumentException(
-                    "foregroundRecoveryTimeout must not be null");
-        }
-        if (duration.isNegative() || duration.isZero()) {
-            throw new IllegalArgumentException(
-                    "foregroundRecoveryTimeout must contain positive milliseconds");
-        }
-        if (duration.getNano() % 1_000_000L != 0L) {
-            throw new IllegalArgumentException(
-                    "foregroundRecoveryTimeout must be exact in milliseconds");
-        }
-        try {
-            long millis = duration.toMillis();
-            if (millis <= 0L) {
-                throw new ArithmeticException("non-positive");
-            }
-            return millis;
-        } catch (ArithmeticException ex) {
-            throw new IllegalArgumentException(
-                    "foregroundRecoveryTimeout must fit in positive milliseconds", ex);
-        }
-    }
-
     private static void requireText(String value, String name) {
         if (isBlank(value)) {
             throw new IllegalArgumentException(name + " must not be blank");
@@ -319,6 +297,6 @@ public class LeaseDurableRetryStore implements RetryStore, RetryDispatcher, Retr
     }
 
     private static boolean isBlank(String value) {
-        return value == null || value.trim().isEmpty();
+        return StringUtil.isBlank(value);
     }
 }

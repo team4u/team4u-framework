@@ -14,6 +14,7 @@ import java.sql.SQLException;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.function.BooleanSupplier;
 
 import static org.junit.Assert.*;
 
@@ -150,26 +151,33 @@ public class DbConfigSourceTest {
 
     /**
      * 变更探测监听测试。
+     * <p>
+     * watch() 会同步建立 MAX(update_time) 基线（返回时首查已完成，且不应触发回调），
+     * 此后由后台周期 tick 检测到最大值严格增大时才触发 changeSignal。
+     * 轮询间隔构造参数为整秒、最小 1 秒，且首个 tick 恒早于软死期（基线加载完成时刻 + 间隔），
+     * 实际生效的是第二个 tick（名义时刻约 2 秒），故条件等待期限取 5 秒留足余量；满足条件立即返回。
+     * </p>
      */
     @Test
     public void testWatcherTriggering() throws SQLException {
-        // 轮询间隔设为 1 秒以加快测试速度
+        // 轮询间隔设为 1 秒（构造参数支持的最小值）
         DbConfigWatcher watcher = new DbConfigWatcher(dataSource, 1);
 
         AtomicBoolean triggered = new AtomicBoolean(false);
         watcher.watch(() -> triggered.set(true));
 
-        // 等待初始轮询完成，建立基线
-        ThreadUtil.sleep(1200);
+        // watch() 同步建立基线，初始化阶段不应触发 changeSignal
         assertFalse("初始化阶段不应触发 changeSignal", triggered.get());
+
+        // 与基线拉开间隔，确保毫秒精度的 update_time 严格大于基线值
+        ThreadUtil.sleep(50);
 
         // 修改数据库中的配置值
         JdbcUtil.execute(dataSource, "UPDATE system_config SET config_value = '9090' WHERE config_key = 'port'");
 
-        // 等待下一轮轮询完成
-        ThreadUtil.sleep(1500);
-
-        assertTrue("数据库发生变更后，应触发 changeSignal 回调", triggered.get());
+        // 条件等待：下一轮轮询检测到变更即返回，无需固定睡眠
+        assertTrue("数据库发生变更后，应触发 changeSignal 回调",
+                awaitTrue(triggered::get, 5000));
 
         watcher.destroy();
     }
@@ -181,14 +189,40 @@ public class DbConfigSourceTest {
 
         watcher.watch(triggerCount::incrementAndGet);
 
-        ThreadUtil.sleep(1200);
+        // watch() 已同步建立基线，随后删除配置表制造查询失败
         JdbcUtil.execute(dataSource, "DROP TABLE system_config");
 
-        ThreadUtil.sleep(1200);
+        // 条件等待：轮询到查询失败、失败计数递增后即返回（有效 tick 名义时刻约 2 秒）
+        assertTrue("轮询查询失败后失败计数应递增",
+                awaitTrue(() -> watcher.getFailureCount() > 0, 5000));
+
         assertEquals("查询失败时不应伪装成变更", 0, triggerCount.get());
         assertTrue("失败计数应递增", watcher.getFailureCount() > 0);
         assertNotNull("最近错误应可观测", watcher.getLastErrorMessage());
 
         watcher.destroy();
+    }
+
+    /**
+     * 截至期限 + 10ms 紧轮询的条件等待：条件满足立即返回，超时返回 false。
+     *
+     * @param condition       等待条件
+     * @param deadlineMillis  等待期限（毫秒）
+     * @return 条件是否在期限内满足
+     */
+    private static boolean awaitTrue(BooleanSupplier condition, long deadlineMillis) {
+        long deadline = System.currentTimeMillis() + deadlineMillis;
+        while (System.currentTimeMillis() < deadline) {
+            if (condition.getAsBoolean()) {
+                return true;
+            }
+            try {
+                Thread.sleep(10);
+            } catch (InterruptedException e) {
+                Thread.currentThread().interrupt();
+                return condition.getAsBoolean();
+            }
+        }
+        return condition.getAsBoolean();
     }
 }

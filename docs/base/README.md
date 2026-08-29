@@ -21,6 +21,8 @@ graph TD
     Base --> RV["RefreshableValue<br/>可刷新值（单值远端影子）"]
     Base --> CU["ConvertUtil / TypeConverterRegistry<br/>强类型转换系统"]
     BaseJdbc["team4u-base-jdbc<br/>JdbcUtil / SqlBuilder / InsertBuilder<br/>轻量 JDBC 流式构造器"]
+    Base --> TM["DurationUtil / Expiry<br/>时长校验与饱和时间戳运算"]
+    Base --> HB["ScheduledHeartbeat<br/>纯 JDK 调度的租约心跳器"]
     Base --> Util["通用工具集<br/>Reflect, String, Date, Digest, Id, ServiceLoader"]
 ```
 
@@ -37,6 +39,8 @@ graph TD
 | **可刷新值** | `RefreshableValue<T>` | 单值远端影子的声明式封装：三个时间戳（软死期/硬死期/冷却）+ 单飞 + 变更回调，并发安全开箱即用 |
 | **类型转换体系** | `ConvertUtil`, `TypeConverterRegistry` | 支持标量、时间、集合、数组、枚举与 JavaBean 的全类型安全转换，支持扩展 SPI |
 | **极简 JDBC 构建器**（`team4u-base-jdbc`） | `JdbcUtil`, `SqlBuilder`, `InsertBuilder`, `UpdateBuilder` | 轻量流式 SQL 拼接与命名参数绑定，支持实体自动下划线映射与自增键返回 |
+| **时长校验与时间戳运算** | `DurationUtil`, `Expiry` | 分层语义：`DurationUtil` 在校验层拒绝非毫秒精度/溢出的 `Duration`（抛异常）；`Expiry` 在运行期对已合法的时间戳做饱和加法（上溢封顶 `NEVER` 不抛异常），两者互补不混用 |
+| **租约心跳器** | `ScheduledHeartbeat` | 纯 JDK 调度器的「持有者令牌 + 固定间隔续约」心跳器：续约失败即弃权并回调 `onLost`，异常容忍重试；统一各租约类模块的心跳线程模型 |
 | **健壮服务加载器** | `ServiceLoaderUtil` | 强化 Java 原生 SPI，捕获单实现类加载异常，防止单点故障蔓延 |
 
 ---
@@ -49,8 +53,9 @@ com.team4u.framework.base
 ├── config                           # 配置解析接口 (ConfigParser, StringConfigParser)
 ├── convert                          # 类型转换体系 (ConvertUtil, TypeConverterRegistry, 各 TypeConverter)
 ├── instance                         # 实例工厂与提供者 (DynamicInstanceProvider, SingletonFactory, InstanceFactory)
+├── lease                            # 租约心跳器 (ScheduledHeartbeat)
 ├── refresh                          # 可刷新值 (RefreshableValue)
-└── util                             # 通用工具类库 (Assert, BeanUtil, ReflectUtil, StringUtil, DateUtil, DigestUtil, IdUtil, TextTemplate, TypeReference, TypeUtil 等)
+└── util                             # 通用工具类库 (Assert, BeanUtil, ReflectUtil, StringUtil, DateUtil, DigestUtil, IdUtil, TextTemplate, TypeReference, TypeUtil, ThreadUtil, DurationUtil, Expiry 等)
 ```
 
 JDBC 工具位于 `team4u-base-jdbc`，但保留 `com.team4u.framework.base.jdbc` 包名：
@@ -71,4 +76,5 @@ com.team4u.framework.base.jdbc
 - [可刷新值 (RefreshableValue)](base-refresh.md)：三个时间戳语义模型、单飞与并发契约、典型场景
 - [类型转换器体系 (ConvertUtil)](base-convert.md)：TypeConverter 注册表、转换优先级与复杂类型转换
 - [极简 JDBC 构建工具 (JdbcUtil)](base-jdbc.md)：SqlBuilder、InsertBuilder、UpdateBuilder 与极简 CRUD
+- [时长与时间戳工具 (DurationUtil / Expiry)](base-lease.md)：校验层拖异常与运行期饱和的分工、ScheduledHeartbeat 租约心跳器
 - [实战案例](base-sample.md)：动态插件加载器、高性能路由 Key 生成与轻量数据访问实战

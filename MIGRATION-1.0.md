@@ -1,6 +1,6 @@
 # Team4u 1.0 Migration Guide
 
-Team4u 1.0 publishes one dependency-management POM. Import the root POM; there is no separate BOM artifact. The final reactor and root BOM manage 40 concrete framework leaves.
+Team4u 1.0 publishes one dependency-management POM. Import the root POM; there is no separate BOM artifact. The final reactor and root BOM manage 48 concrete framework leaves (40 after Task 18, plus the 8 merged from master: id, ratelimiter core/proxy/spring, singleflight core/proxy/spring, and proxy-spring).
 
 ```xml
 <dependencyManagement>
@@ -24,7 +24,7 @@ Developers can run the currently green external-consumer set with:
 mvn -Pconsumer-it -DskipTests verify
 ```
 
-The default set covers minimal base, config-core, provider-free serializer API, explicit Jackson provider, JDK interface proxy, and log-governance consumers. Since Task 9, `consumer-config-core` proves that scalar config and explicit binding have no proxy, ByteBuddy, Jackson, or Spring runtime edge. Since Task 17, `consumer-log-governance` depends only on BOM-managed `team4u-log-governance`, proves the transitive Jackson provider at runtime, and verifies that `LogBootstrap.start/stop` exchanges the engine as the documented owner.
+The default set covers minimal base, config-core, provider-free serializer API, explicit Jackson provider, JDK interface proxy, log-governance, ratelimiter-core, and singleflight-jackson consumers (8 in total). Since Task 9, `consumer-config-core` proves that scalar config and explicit binding have no proxy, ByteBuddy, Jackson, or Spring runtime edge. Since Task 17, `consumer-log-governance` depends only on BOM-managed `team4u-log-governance`, proves the transitive Jackson provider at runtime, and verifies that `LogBootstrap.start/stop` exchanges the engine as the documented owner. After the master merge, `consumer-ratelimiter-core` proves the three-way ratelimiter split (core only, no proxy/Spring edges) and `consumer-singleflight-jackson` proves the three-way singleflight split with the explicit application-owned JSON provider (direct databind edge, no transitive provider).
 
 The release baseline gate is:
 
@@ -32,7 +32,7 @@ The release baseline gate is:
 mvn -Prelease-contracts -DskipTests verify
 ```
 
-It runs the same six active consumers, executes their mains, and validates or records each runtime dependency tree.
+It runs the same eight active consumers, executes their mains, and validates or records each runtime dependency tree (48 leaves, 30 representative direct shapes).
 
 Task 18 adds no functional migration and does not change `1.0.0-SNAPSHOT`. It aligns performance wording with the committed JMH evidence and adds the unpublished standalone benchmark project and release-evidence gates. The sequential JDK 8/11/17/21 matrix has passed locally in Docker (`maven:3.9.11-eclipse-temurin` images, Temurin `1.8.0_472`/`11.0.29`/`17.0.17`/`21.0.9`, Maven `3.9.11`): per JDK, clean install `1,565/1,565` tests, benchmark package (5 methods in 4 classes), 6 external + 6 release-contract consumers, performance claims gate, release package, the `40×3` DOM manifest check, and `678` classfiles at major version `52`; the release-contract script passed 40 real dependency trees / 22 exact shapes on all four JDKs after its JDK 8 helper-directory fix (`javac` on Java 8 does not auto-create the `-d` output directory; the script now `mkdir -p`s it first, and the fixed checked-in script passes unchanged on 8, 11, 17, and 21). A local Docker matrix is not hosted execution: the GitHub Actions workflow is still pending, and no production release or version change should be made from local-only evidence.
 
@@ -138,6 +138,18 @@ The engine is attempted from the thread context loader, the target type's loader
 ## Removed grouping artifacts
 
 The pure grouping artifacts `team4u-config`, `team4u-kv`, `team4u-lease`, `team4u-retry`, and `team4u-serializer` no longer exist. Replace each grouping dependency with the concrete artifact that provides the classes you use, managed by the root BOM.
+
+## Merged master features (post-plan convergence)
+
+The master branch merged into the convergence branch adds the following capabilities, published under the split-artifact conventions above:
+
+- **`team4u-proxy-spring`**: the annotation-proxy Spring wiring template (`AnnotationProxyBeanPostProcessor` abstract base). It depends only on `team4u-proxy` + `spring-context`/`spring-aop`, and never carries ByteBuddy at compile/runtime (Enforcer-enforced); it is the shared template behind `ratelimiter-spring` / `singleflight-spring`.
+- **`team4u-ratelimiter-core` / `-proxy` / `-spring` (three-way split)**: the pre-merge monolith `team4u-ratelimiter` no longer exists. Core is the rule model, four algorithms, and facade (storage via kv capability negotiation, no storage submodule); proxy adds `@RateLimit` annotation interception (JDK/ByteBuddy dual engine, ByteBuddy on demand); spring adds `@EnableRateLimit` auto-proxy on the `team4u-proxy-spring` template. JSON rules go through the `JsonUtil` SPI: the application must provide `team4u-serializer-jackson` or a registered custom `JsonSerializerPolicy` explicitly.
+- **`team4u-singleflight-core` / `-proxy` / `-spring` (three-way split)**: the pre-merge monolith `team4u-singleflight` no longer exists. Core is the rule model, coordination state machine, and facade; proxy adds `@SingleFlight`; spring adds `@EnableSingleFlight`. Two distinct Jackson boundaries: core owns a direct nonoptional `jackson-databind` compile edge for its durable session-envelope/fallback-converter schema (inherited transitively by the adapters), while rule parsing goes through the `JsonUtil` SPI and the application must provide the provider explicitly (`team4u-serializer-jackson` or a registered custom policy); neither core nor its adapters ever pass `team4u-serializer-jackson`.
+- **Named store registry moved to kv-space**: `NamedKvStore` / `NamedKvStoreRegistry` keep their FQCNs (`com.team4u.framework.kv.*`) but live in `team4u-kv-space`, matching the Task 12 kv split; id, ratelimiter, and singleflight consume it as a transitive dependency.
+- **`team4u-id`**: config-driven sequence generation on kv `CounterCapable` (group reset, quota exhaustion, recycle, local segment, formatted numbers). Single module; JDBC/Redis counting backends stay explicit application dependencies.
+
+The consumer set grew from 6 to 8: `consumer-ratelimiter-core` proves the ratelimiter core boundary (no proxy/Spring edges) and `consumer-singleflight-jackson` proves the singleflight split with an application-owned JSON provider. Both profiles run the same 8 consumers.
 
 ## Wildcard matcher transition
 

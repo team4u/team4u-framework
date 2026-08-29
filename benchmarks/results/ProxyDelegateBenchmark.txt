@@ -12,30 +12,30 @@
 
 # Run progress: 0.00% complete, ETA 00:00:08
 # Fork: 1 of 1
-# Warmup Iteration   1: 6.067 ns/op
-# Warmup Iteration   2: 9.495 ns/op
-# Warmup Iteration   3: 9.419 ns/op
-Iteration   1: 9.462 ns/op
+# Warmup Iteration   1: 5.960 ns/op
+# Warmup Iteration   2: 9.500 ns/op
+# Warmup Iteration   3: 9.481 ns/op
+Iteration   1: 9.563 ns/op
                  gc.alloc.rate:      0.007 MB/sec
                  gc.alloc.rate.norm: ≈ 10⁻⁴ B/op
                  gc.count:           ≈ 0 counts
 
-Iteration   2: 9.576 ns/op
+Iteration   2: 9.458 ns/op
                  gc.alloc.rate:      0.007 MB/sec
                  gc.alloc.rate.norm: ≈ 10⁻⁴ B/op
                  gc.count:           ≈ 0 counts
 
-Iteration   3: 9.458 ns/op
+Iteration   3: 9.428 ns/op
                  gc.alloc.rate:      0.007 MB/sec
                  gc.alloc.rate.norm: ≈ 10⁻⁴ B/op
                  gc.count:           ≈ 0 counts
 
-Iteration   4: 9.446 ns/op
+Iteration   4: 9.413 ns/op
                  gc.alloc.rate:      0.007 MB/sec
                  gc.alloc.rate.norm: ≈ 10⁻⁴ B/op
                  gc.count:           ≈ 0 counts
 
-Iteration   5: 9.395 ns/op
+Iteration   5: 9.450 ns/op
                  gc.alloc.rate:      0.007 MB/sec
                  gc.alloc.rate.norm: ≈ 10⁻⁴ B/op
                  gc.count:           ≈ 0 counts
@@ -43,9 +43,9 @@ Iteration   5: 9.395 ns/op
 
 
 Result "com.team4u.bench.ProxyDelegateBenchmark.delegatedNoArgInvocation":
-  9.467 ±(99.9%) 0.256 ns/op [Average]
-  (min, avg, max) = (9.395, 9.467, 9.576), stdev = 0.066
-  CI (99.9%): [9.212, 9.723] (assumes normal distribution)
+  9.462 ±(99.9%) 0.226 ns/op [Average]
+  (min, avg, max) = (9.413, 9.462, 9.563), stdev = 0.059
+  CI (99.9%): [9.236, 9.689] (assumes normal distribution)
 
 Secondary result "com.team4u.bench.ProxyDelegateBenchmark.delegatedNoArgInvocation:gc.alloc.rate":
   0.007 ±(99.9%) 0.001 MB/sec [Average]
@@ -74,7 +74,7 @@ different JVMs are already problematic, the performance difference caused by dif
 modes can be very significant. Please make sure you use the consistent Blackhole mode for comparisons.
 
 Benchmark                                                           Mode  Cnt   Score    Error   Units
-ProxyDelegateBenchmark.delegatedNoArgInvocation                     avgt    5   9.467 ±  0.256   ns/op
+ProxyDelegateBenchmark.delegatedNoArgInvocation                     avgt    5   9.462 ±  0.226   ns/op
 ProxyDelegateBenchmark.delegatedNoArgInvocation:gc.alloc.rate       avgt    5   0.007 ±  0.001  MB/sec
 ProxyDelegateBenchmark.delegatedNoArgInvocation:gc.alloc.rate.norm  avgt    5  ≈ 10⁻⁴             B/op
 ProxyDelegateBenchmark.delegatedNoArgInvocation:gc.count            avgt    5     ≈ 0           counts

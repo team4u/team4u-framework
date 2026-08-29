@@ -18,12 +18,35 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-serializer-jackson</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+            <optional>true</optional>
+        </dependency>
+        <!-- 语义边界测试需验证「规则仓库存在时脱敏仍不进入全局 mapper」，
+             mask-config 仅限测试期：其生产边界禁令不变。 -->
+        <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-mask-config</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-simple</artifactId>
+            <scope>test</scope>
         </dependency>
     </dependencies>
 
@@ -48,14 +71,21 @@
                                         <exclude>com.team4u:team4u-config-core:*:*:runtime</exclude>
                                         <exclude>com.team4u:team4u-config-proxy:*:*:compile</exclude>
                                         <exclude>com.team4u:team4u-config-proxy:*:*:runtime</exclude>
-                                        <exclude>com.team4u:team4u-serializer-json:*:*:compile</exclude>
-                                        <exclude>com.team4u:team4u-serializer-json:*:*:runtime</exclude>
-                                        <exclude>com.team4u:team4u-serializer-jackson:*:*:compile</exclude>
-                                        <exclude>com.team4u:team4u-serializer-jackson:*:*:runtime</exclude>
                                         <exclude>org.springframework*:*:*:*:compile</exclude>
                                         <exclude>org.springframework*:*:*:*:runtime</exclude>
                                     </excludes>
-                                    <message>mask-jackson may depend only on mask core and direct Jackson API.</message>
+                                    <message>mask-jackson may depend only on mask core, direct Jackson API, and the serializer-jackson provider (the single explicit provider edge for sharedMapper).</message>
+                                </bannedDependencies>
+                                <bannedDependencies>
+                                    <!-- 唯一 provider 边（serializer-jackson compile）会传递带出
+                                         serializer-json；这里只禁直接依赖，禁止本模块代码绕过
+                                         provider 直接消费 serializer-json SPI。 -->
+                                    <searchTransitive>false</searchTransitive>
+                                    <excludes>
+                                        <exclude>com.team4u:team4u-serializer-json:*:*:compile</exclude>
+                                        <exclude>com.team4u:team4u-serializer-json:*:*:runtime</exclude>
+                                    </excludes>
+                                    <message>mask-jackson must not depend on serializer-json directly; JSON SPI access flows only through the serializer-jackson provider.</message>
                                 </bannedDependencies>
                             </rules>
                         </configuration>

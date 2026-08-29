@@ -151,9 +151,9 @@ public abstract class AbstractLeaseRuntimeContractTest extends AbstractLeaseCont
     public void testAcquireUsesGlobalPriorityThenCreatedAtOrderAcrossTaskTypes() throws Exception {
         LeaseBackend backend = createBackend();
         String lowPriorityTaskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "low", 0);
-        Thread.sleep(50L);
+        waitUntilDistinctCreatedAt(backend, DEFAULT_QUEUE, lowPriorityTaskId);
         String firstHighPriorityTaskId = submit(backend, DEFAULT_QUEUE, MAIL_TASK_TYPE, "high-1", 9);
-        Thread.sleep(50L);
+        waitUntilDistinctCreatedAt(backend, DEFAULT_QUEUE, firstHighPriorityTaskId);
         String secondHighPriorityTaskId = submit(backend, DEFAULT_QUEUE, PAY_TASK_TYPE, "high-2", 9);
 
         Set<String> taskTypes = new LinkedHashSet<String>(Arrays.asList(
@@ -364,5 +364,24 @@ public abstract class AbstractLeaseRuntimeContractTest extends AbstractLeaseCont
     private LeaseRetry retry(long delayMillis, String payload, String errorMessage,
                              java.util.Map<String, String> attributes) {
         return LeaseRetry.of(delayMillis, payload, errorMessage, attributes);
+    }
+
+    /**
+     * createdAt 时间戳为毫秒精度，同毫秒内提交的任务次序不确定；等两个任务戳不同即返回，
+     * 取代固定 sleep(50)×2。
+     */
+    private void waitUntilDistinctCreatedAt(LeaseBackend backend, String queue,
+                                             String firstTaskId) throws InterruptedException {
+        final Instant firstCreatedAt = snapshot(backend, queue, firstTaskId).getCreatedAt();
+        // 等待墙钟严格晚于前一任务的 createdAt 才返回：保证本方法返回后提交的下一个任务
+        // 其 created_at（毫秒精度）必然落在不同毫秒，排序不会退化为 task_id 字典序。
+        // 若仅等 ">= createdAt"或与提交同毫秒，同优先级下任务顺序将由随机 taskId 决定，
+        // 优先级排序用例会闪断（曾见于 JdbcLeaseRuntimeContractTest）。
+        LeaseTestWaits.awaitTrue(new java.util.function.BooleanSupplier() {
+            @Override
+            public boolean getAsBoolean() {
+                return System.currentTimeMillis() > firstCreatedAt.toEpochMilli();
+            }
+        }, "clock did not advance past createdAt of task " + firstTaskId);
     }
 }

@@ -77,6 +77,14 @@
         <module>team4u-kv/team4u-kv-store-jdbc</module>
         <module>team4u-kv/team4u-kv-store-redis</module>
         <module>team4u-kv/team4u-kv-test</module>
+        <module>team4u-id</module>
+        <module>team4u-ratelimiter/team4u-ratelimiter-core</module>
+        <module>team4u-ratelimiter/team4u-ratelimiter-proxy</module>
+        <module>team4u-ratelimiter/team4u-ratelimiter-spring</module>
+        <module>team4u-singleflight/team4u-singleflight-core</module>
+        <module>team4u-singleflight/team4u-singleflight-proxy</module>
+        <module>team4u-singleflight/team4u-singleflight-spring</module>
+        <module>team4u-proxy-spring</module>
     </modules>
 
     <properties>
@@ -299,6 +307,46 @@
             <dependency>
                 <groupId>com.team4u</groupId>
                 <artifactId>team4u-kv-test</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-id</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-ratelimiter-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-ratelimiter-proxy</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-ratelimiter-spring</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-singleflight-core</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-singleflight-proxy</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-singleflight-spring</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-proxy-spring</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
@@ -582,6 +630,8 @@
                                 <pomInclude>consumer-serializer-jackson/pom.xml</pomInclude>
                                 <pomInclude>consumer-interface-proxy/pom.xml</pomInclude>
                                 <pomInclude>consumer-log-governance/pom.xml</pomInclude>
+                                <pomInclude>consumer-ratelimiter-core/pom.xml</pomInclude>
+                                <pomInclude>consumer-singleflight-jackson/pom.xml</pomInclude>
                             </pomIncludes>
                         </configuration>
                         <executions>
@@ -620,6 +670,8 @@
                                 <pomInclude>consumer-serializer-jackson/pom.xml</pomInclude>
                                 <pomInclude>consumer-interface-proxy/pom.xml</pomInclude>
                                 <pomInclude>consumer-log-governance/pom.xml</pomInclude>
+                                <pomInclude>consumer-ratelimiter-core/pom.xml</pomInclude>
+                                <pomInclude>consumer-singleflight-jackson/pom.xml</pomInclude>
                             </pomIncludes>
                         </configuration>
                         <executions>

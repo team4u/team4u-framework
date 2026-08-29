@@ -70,8 +70,19 @@ public class CustomerVO {
 
 ## 注册 `JacksonMaskModule`
 
+> [!IMPORTANT]
+> **先选对序列化入口**：全局 `JsonUtil` / 共享 `ObjectMapper` 奉行「永远无损」契约，脱敏模块**不注册全局**（否则存库、缓存、重放载荷等存储向序列化会把 `@Mask` 字段静默写成掩码串，反序列化无任何报错信号）。观测向输出（日志、审计、对外展示）请直接使用 [`MaskedJson` 门面](quick-start.md)，它内部已叠加脱敏模块；以下手工注册方式仅用于自建独立 `ObjectMapper` 的场景。
+
+### MaskedJson 门面（推荐）
+```java
+import com.team4u.framework.mask.jackson.MaskedJson;
+
+String masked = MaskedJson.toJsonStr(user); // @Mask 字段输出掩码，无注解字段不受影响
+String plain = com.team4u.framework.serializer.json.JsonUtil.toJsonStr(user); // 永远明文
+```
+
 ### Spring Boot 应用配置
-在 Spring Boot 项目中，只需将 `JacksonMaskModule` 注册为一个 Spring `@Bean` 或注入到 `ObjectMapper` 中：
+在 Spring Boot 项目中，若自建了独立的 `ObjectMapper`（如 Spring MVC 消息转换器），可将 `JacksonMaskModule` 注册为一个 Spring `@Bean` 或注入到该 `ObjectMapper` 中：
 
 ```java
 import com.fasterxml.jackson.databind.ObjectMapper;

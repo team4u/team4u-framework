@@ -84,7 +84,8 @@ public class RoutingManager {
     /**
      * 获取全局共享的 RoutingManager 实例。
      * <p>
-     * 首次调用时将触发全局初始化，并锁定 {@link RouterBootstrap} 中的相关配置。
+     * 首次调用时触发全局初始化；初始化后全局配置前缀将被冻结，
+     * 见 {@link RouterBootstrap#configPrefix(String)}。
      * </p>
      *
      * @return 全局实例
@@ -97,7 +98,6 @@ public class RoutingManager {
 
         synchronized (RoutingManager.class) {
             if (GLOBAL == null) {
-                RouterBootstrap.global().freezeConfig();
                 GLOBAL = builder().build();
             }
             return GLOBAL;
@@ -109,9 +109,6 @@ public class RoutingManager {
      */
     public static void setGlobal(RoutingManager routingManager) {
         GLOBAL = routingManager;
-        if (routingManager != null) {
-            RouterBootstrap.global().freezeConfig();
-        }
     }
 
     /**

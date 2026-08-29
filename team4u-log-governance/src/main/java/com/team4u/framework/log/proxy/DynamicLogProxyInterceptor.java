@@ -38,7 +38,7 @@ public class DynamicLogProxyInterceptor implements MethodInterceptor {
                 .ignoreExceptionNames(rule.getIgnoreExceptions())
                 .build();
 
-        return LogTraceSupport.proceed(new Team4uMethodInvocationAdapter(invocation), options);
+        return LogTraceSupport.proceed(invocation, options);
     }
 
     private boolean isMethodMatched(String methodName, List<String> configuredMethods) {

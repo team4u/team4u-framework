@@ -222,6 +222,59 @@ public class SingleHttpClientManager {
 
 ---
 
+## 姊妹组件：轻量级 JSON 配置仓库 `AbstractJsonConfigRepository<T>`
+
+`ConfigDrivenRegistry` 面向“重建重型运行时组件”的场景；若要管理的只是一份**纯数据快照**（规则表、开关集、名单映射），则应使用同在 `team4u-config-core` 的抽象模板 `AbstractJsonConfigRepository<T>`（`com.team4u.framework.config.core.support` 包）。
+
+它收编了“从 `ConfigManager` 读单个 JSON Key → 反序列化为 T → 原子替换内存引用”的同构骨架（log 的代理规则/FinOps 配置、mask 的规则仓库、log 的染色拦截器均由它驱动），子类最少只需提供一个配置键：
+
+```java
+import com.team4u.framework.base.util.TypeReference;
+import java.util.Collections;
+import java.util.Map;
+
+public class FeatureRuleRepository extends AbstractJsonConfigRepository<Map<String, FeatureRule>> {
+
+    @Override
+    protected String configKey() {
+        return "app.feature.rules"; // 必须实现：该仓库绑定的配置键
+    }
+
+    @Override
+    protected TypeReference<Map<String, FeatureRule>> typeReference() {
+        // 提供后自动走 JsonUtil 反序列化；不提供则需覆写 parseJson
+        return new TypeReference<Map<String, FeatureRule>>() { };
+    }
+
+    @Override
+    protected Map<String, FeatureRule> emptyConfig() {
+        // 可选：配置为空/被删除时的缺省值（默认 null）
+        return Collections.emptyMap();
+    }
+
+    @Override
+    protected void onConfigLoaded(Map<String, FeatureRule> oldValue,
+                                  Map<String, FeatureRule> newValue) {
+        // 可选：变更回调（首次加载/热更新/stop 重置均触发）
+    }
+}
+```
+
+生命周期：`init(configManager)` 挂载监听并完成首次加载，`stop()` 幂等注销；运行期用 `get()` 无锁读 volatile 引用。
+
+**统一降级语义**（与 `ConfigDrivenRegistry` 的安全替换理念一致，作为框架标准写进了 javadoc）：
+
+| 场景 | 行为 |
+| :--- | :--- |
+| 首次 `init()` 加载失败 | 抛 `IllegalStateException`，启动期快速失败 |
+| 运行期热更新失败 | 保留旧配置 + `warn` 日志，业务不中断 |
+| 配置被删除 / 置空 | 回退 `emptyConfig()` 缺省值 |
+
+> [!TIP]
+> **选型口诀**：配置变更是“换零件”（连接池、客户端）用 `ConfigDrivenRegistry`；只是“换参数表”（规则/名单/阈值）用 `AbstractJsonConfigRepository`。
+
+---
+
 ## 框架内部关键实现解析
 
 `ConfigDrivenRegistry.java` 的核心热更新逻辑如下：
