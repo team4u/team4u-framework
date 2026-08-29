@@ -1,5 +1,9 @@
 # 快速开始
 
+本文介绍如何在项目中引入并使用 `team4u-singleflight` 回源合并组件。
+
+---
+
 ## 引入依赖
 
 ```xml
@@ -10,15 +14,20 @@
 </dependency>
 ```
 
-协调存储按需引入 kv 后端：
+协调存储按需引入 kv 后端（与 team4u-singleflight 无强绑定）：
 
-- 内存存储（单测、单实例）：`team4u-kv-core` 传递引入 `InMemoryKvStore`，无需额外依赖；
-- Redis 存储（跨实例回源合并）：引入 `team4u-kv-store-redis`，由业务项目提供 `StringRedisTemplate`；
-- JDBC 存储（跨实例回源合并）：引入 `team4u-kv-store-jdbc`，由业务项目提供 `DataSource`。
+- 内存存储（单测、单实例）：`team4u-kv-core` 自带 `InMemoryKvStore`，无需额外依赖
+- Redis 存储（跨实例回源合并）：引入 `team4u-kv-store-redis`，由业务项目提供 `StringRedisTemplate`
+- JDBC 存储（跨实例回源合并）：引入 `team4u-kv-store-jdbc`，由业务项目提供 `DataSource`
 
-底层存储必须实现 `CasCapable`。传入 `TieredStore` / `ObservedStore` 等装饰存储时，引擎会解析到最内层真实存储，协调与结果缓存路径不会经过装饰层。
+> [!NOTE]
+> 底层存储必须实现 `CasCapable`（内存 / Redis / JDBC 均支持）。传入 `TieredStore` / `ObservedStore` 等装饰存储时，引擎会解析到最内层真实存储——协调与结果缓存路径不经过装饰层，也**不会**因此获得 L1 加速。
+
+---
 
 ## 最小可运行示例
+
+下面这个例子可以在单进程内直接运行（仅依赖 `team4u-singleflight`）：
 
 ```java
 package demo;
@@ -41,9 +50,10 @@ public final class FirstSingleFlightDemo {
         ConfigManager configManager = ConfigManager.builder()
                 .addSource(source).addWatcher(source).build();
 
-        // 2. 初始化全局门面；同 key 并发调用时只有一个 loader 真正执行
+        // 2. 初始化全局门面：默认内存存储（行为与 Redis 后端一致，同一套 kv 契约测试保证）
         SingleFlights.init(configManager, new InMemoryKvStore());
 
+        // 3. 同 key 并发调用时只有一个 loader 真正执行
         SingleFlightExecution.SingleFlightLoader<String> firstLoader =
                 () -> loadFromDatabase("p1");
         String first = SingleFlights.execute(SingleFlightExecution.of(
@@ -59,6 +69,7 @@ public final class FirstSingleFlightDemo {
                 Collections.singletonMap("productId", "p1"),
                 String.class,
                 secondLoader));
+
         System.out.println(first);
         System.out.println(second);
 
@@ -71,46 +82,76 @@ public final class FirstSingleFlightDemo {
 }
 ```
 
-输出：
+你应该看到：
 
 ```text
 product:p1
 product:p1
 ```
 
+第二次调用的 loader 完全没有执行——它读到了第一次执行写入的结果缓存。
+
+---
+
 ## 编程式接入
 
-直接持有引擎时自行管理生命周期（测试可注入 `Clock` 控制存储侧租约与 TTL 时间）：
+直接构造引擎，适合自持生命周期的场景（测试可注入 `Clock` 虚拟推进租约与 TTL）：
 
 ```java
 SingleFlightEngine engine = new SingleFlightEngine(configManager, new InMemoryKvStore());
 
-// 也可以使用静态门面 SingleFlights.init(configManager, store) / execute(execution)
+SingleFlightExecution.SingleFlightLoader<String> loader =
+        () -> loadFromDatabase("p1");
 String result = engine.execute(SingleFlightExecution.of(
         "product.detail",
         Collections.singletonMap("productId", "p1"),
         String.class,
-        (SingleFlightExecution.SingleFlightLoader<String>) () -> loadFromDatabase("p1")));
+        loader));
 
 engine.close();   // 释放配置监听
 ```
 
-复杂泛型不要直接使用 `Class`：
+更多场景使用静态门面 `SingleFlights`（内部持有全局引擎，`init` 显式初始化，未 init 时首次调用以 `ConfigManager.global()` + 内存存储懒加载）：
+
+```java
+// 初始化（也可以注入时钟：init(configManager, store, clock)）
+SingleFlights.init(configManager, kvStore);
+
+SingleFlightExecution.SingleFlightLoader<String> loader = () -> loadFromDatabase("p1");
+String result = SingleFlights.execute(SingleFlightExecution.of(
+        "product.detail",
+        Collections.singletonMap("productId", "p1"),
+        String.class,
+        loader));
+
+SingleFlights.destroy();   // 复位引用，供测试隔离
+```
+
+### 泛型返回不要直接用 Class
+
+`List<User>` 这类泛型返回必须提供精确类型（`Class` 会丢失元素类型），用 `TypeReference` 子类：
 
 ```java
 public static final class UserList extends TypeReference<List<User>> {
 }
 
+SingleFlightExecution.SingleFlightLoader<List<User>> loader =
+        () -> queryUsers(ids);
 List<User> users = engine.execute(SingleFlightExecution.of(
         "user.byIds",
         Collections.singletonMap("ids", ids),
         new UserList(),
-        () -> queryUsers(ids)));
+        loader));
 ```
+
+> [!NOTE]
+> loader 的结果会 JSON 序列化后写入 kv，等待者再按声明的返回类型反序列化。类型不精确时，`List<User>` 会退化成 `List<Map>`，错误在调用方才暴露。
+
+---
 
 ## 注解式接入
 
-注解值就是 point，方法参数按参数名组装为上下文：
+方法上标注 `@SingleFlight`，注解值就是 point，方法参数按参数名自动组装为上下文（供 key 模板与 `skipWhen` 使用）：
 
 ```java
 public interface ProductService {
@@ -123,19 +164,23 @@ public interface ProductService {
 }
 ```
 
-项目编译需保留参数名（框架父 POM 默认开启 `-parameters`）。
+要求类编译时保留参数名（项目已默认开启 `-parameters`），key 模板 `${productId}` 才能取到参数值。
 
 ### 非 Spring 环境：手动代理
 
 ```java
 ProductService proxied = SingleFlightProxyFactory.proxy(new ProductServiceImpl());
 
-// 目标为接口实现时推荐显式指定接口类型
+// 目标为接口实现时推荐指定接口类型（JDK 代理，避免 ByteBuddy 子类代理的开销）
 ProductService proxied2 = SingleFlightProxyFactory.proxy(
         new ProductServiceImpl(), ProductService.class);
 ```
 
+注解可标注在实现方法或接口方法上（解析沿「方法 → 目标类同名方法 → 接口层次」查找）。
+
 ### Spring 环境：自动代理
+
+配置类加 `@EnableSingleFlight`，容器中含 `@SingleFlight` 方法的 Bean 自动包装为代理：
 
 ```java
 @Configuration
@@ -153,25 +198,25 @@ public class SingleFlightConfig {
 
     @PostConstruct   // javax.annotation.PostConstruct
     public void initSingleFlight() {
+        // 引擎由 SingleFlights 静态门面持有；init 后注解代理自动生效
         SingleFlights.init(configManager, new RedisKvStore(redisTemplate));
     }
 }
 ```
 
-注解代理经 `SingleFlights` 全局门面取引擎；不 `init` 时会懒加载默认引擎（全局配置 + 内存存储）。被 AOP 代理过的 Bean 不会被 `@EnableSingleFlight` 再包一层，请把 `@SingleFlight` 方法放在未被其他切面抢先代理的类型中。
+> 注解代理经 `SingleFlights` 全局门面取引擎（不 init 则懒加载默认引擎：全局配置 + 内存存储）；被 AOP 代理过的 Bean 不会被再包一层，请把 `@SingleFlight` 方法放在未被其他切面抢先代理的类型中。
 
 ### exceptionHandler：组件异常转换
 
-handler 只接收 `SingleFlightException`，loader 的原始业务异常不会被它吞掉：
+handler 只接收 `SingleFlightException`（冲突 / 等待超时 / 存储故障等组件异常），loader 的原始业务异常不会被它吞掉：
 
 ```java
 ProductService proxied = SingleFlightProxyFactory.proxy(
         new ProductServiceImpl(),
         ProductService.class,
         (method, returnType, throwable, arguments) -> {
-            if ("detail".equals(method.getName())
-                    && throwable instanceof SingleFlightConflictException) {
-                return emptyProduct();
+            if (throwable instanceof SingleFlightConflictException) {
+                return emptyProduct();   // 竞争时返回兜底商品，而不是抛异常
             }
             throw new IllegalStateException(throwable);
         });
@@ -185,11 +230,13 @@ private Product emptyProduct() {
 }
 ```
 
-`returnType` 是 `java.lang.reflect.Type`。如果需要 `Class`，应先判断 `instanceof Class` 或使用类型工具，不要直接强转泛型类型。handler 返回 null 只允许对象类型；返回值必须能赋给原方法返回类型；抛出的 checked 异常必须是原方法声明过的异常。
+`returnType` 是 `java.lang.reflect.Type`（泛型感知）。如果需要 `Class`，应先判断 `instanceof Class`，不要直接强转。handler 返回 null 只允许对象类型；抛出的 checked 异常必须是原方法声明过的异常。
+
+---
 
 ## 命名存储
 
-一套规则可按 point 选择不同存储。注意：同一 `id` 的 `store` 名不能热切换，否则新规则编译失败、旧规则继续使用：
+一套规则、多存储分工：按名注册存储，规则中以 `store` 字段引用：
 
 ```java
 SingleFlightStores.global().register("main", new JdbcKvStore(dataSource));
@@ -203,6 +250,10 @@ SingleFlights.init(configManager, SingleFlightStores.global().resolve("main"));
 team4u.singleflight.product.detail={"id":"product.detail","key":"${productId}","store":"hot","cacheTtlMillis":600000}
 team4u.singleflight.report.build={"id":"report.build","key":"${reportId}","cacheEnabled":false,"contention":"FAIL_FAST"}
 ```
+
+> 同一 `id` 的 `store` 名不能热切换：新规则编译失败、旧规则继续服务（避免执行到一半的会话被切到另一个存储找不到回执）。
+
+---
 
 ## 常见配置
 
@@ -224,7 +275,7 @@ team4u.singleflight.product.detail={\
 }
 ```
 
-行为：缓存未命中时同 key 只有一个调用者回源；其他调用者等待并读取本次结果。回源失败时，等待者在 `failureTtlMillis` 内收到 `SingleFlightExecutionException`；本地执行者收到原始异常。
+行为：缓存未命中时同 key 只有一个调用者回源；其他调用者等待并读取本次结果。回源失败时，等待者在 `failureTtlMillis` 内收到 `SingleFlightExecutionException`，本地执行者收到原始异常。
 
 ### 并发窗口互斥：FAIL_FAST
 
@@ -239,7 +290,7 @@ team4u.singleflight.report.build={\
 }
 ```
 
-行为：已有执行者持有同一 `reportId` 时，后来者立即收到 `SingleFlightConflictException`，不会等待、不会重复执行。适合任务防重和并发窗口互斥。
+行为：已有执行者持有同一 `reportId` 时，后来者立即收到 `SingleFlightConflictException`（无堆栈、开销极低），不会等待、不会重复执行。适合任务防重和并发窗口互斥。
 
 ### 竞争时降级：FALLBACK 原生 JSON
 
@@ -253,7 +304,7 @@ team4u.singleflight.recommend.feed={\
 }
 ```
 
-Java 返回类型必须是匹配的集合类型，例如 `List<Recommendation>`：
+`fallback` 是原生 JSON（不是转义字符串）。竞争时不会执行 loader，而是把这份 JSON 反序列化成返回类型：
 
 ```java
 public static final class RecommendationList
@@ -269,9 +320,12 @@ List<Recommendation> recommendations = SingleFlights.execute(
                 new RecommendationList(),
                 loader));
 ```
-竞争时不会执行 loader，而是把 fallback 原生 JSON 反序列化成返回类型。显式 `"fallback":null` 可以让对象类型返回 null，基本类型不允许。
+
+显式 `"fallback":null` 可以让对象类型返回 null，基本类型不允许。
 
 ### 不可缓存结果
+
+「空结果不缓存，但等待者能拿到这次结果」：
 
 ```properties
 team4u.singleflight.order.snapshot={\
@@ -284,16 +338,33 @@ team4u.singleflight.order.snapshot={\
 }
 ```
 
-`cacheWhen` 以 loader 返回值为 Criterion actual：
+`cacheWhen` 以 loader 返回值为判定对象（Criterion 语法，属性直接写返回值字段）：
 
-- `status == 'SUCCESS'` 为 true：发布 `SUCCESS_CACHEABLE`，写 `cacheTtlMillis` 的结果缓存；
-- 为 false：发布 `SUCCESS_NOT_CACHEABLE`，不写结果缓存，但等待者仍可在 `uncacheableTtlMillis` 内读取本次结果。
+- `status == 'SUCCESS'` 为 true：写 `cacheTtlMillis` 的结果缓存，后续请求命中缓存；
+- 为 false（如空单、处理中）：**不写结果缓存**，但等待者仍可在 `uncacheableTtlMillis` 内读到本次结果——下一个新请求会重新回源。
 
 需要完全禁用结果缓存、只做同 key 合并时：
 
 ```properties
 team4u.singleflight.order.snapshot={"id":"order.snapshot","key":"${orderId}","cacheEnabled":false}
 ```
+
+### 跳过协调
+
+某些调用不希望参与合并（如管理端强制刷新），用 `skipWhen`（以参数 Map 为判定对象，`$参数名` 引用参数）：
+
+```properties
+team4u.singleflight.product.detail={\
+  "id":"product.detail",\
+  "key":"${productId}",\
+  "cacheTtlMillis":600000,\
+  "skipWhen":"$refresh == true"\
+}
+```
+
+`refresh=true` 的调用直接执行 loader，不抢锁、不读缓存、不写缓存。
+
+---
 
 ## 下一步
 
