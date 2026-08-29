@@ -34,7 +34,6 @@ public class SingleFlightKeysTest {
 
     @Test
     public void composeWithoutDigestKeepsLongKeysVerbatim() {
-        // 自动摘要已移除：超长 key 不再被截断或摘要，原样进入存储
         StringBuilder value = new StringBuilder();
         for (int i = 0; i < 30; i++) {
             value.append("0123456789");

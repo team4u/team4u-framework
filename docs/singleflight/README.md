@@ -116,7 +116,7 @@ execute(point, arguments, returnType, loader)
 | `failureTtlMillis` | long > 0 | 否 | `5000` | 失败回执 TTL。窗口内同 key 的 WAIT 调用者收到重构的 `SingleFlightExecutionException` |
 | `onInvalidKey` | `ERROR` / `PASS_THROUGH` | 否 | `ERROR` | key 渲染失败：`ERROR` 抛配置异常；`PASS_THROUGH` 直接执行 loader，不做协调 |
 | `onStoreFailure` | `PASS_THROUGH` / `FAIL_CLOSED` | 否 | 随 contention | 显式指定优先。省略时 `FAIL_FAST` 默认 `FAIL_CLOSED`，`WAIT` / `FALLBACK` 默认 `PASS_THROUGH` |
-| `keyDigest` | String | 否 | 无 | 命名摘要算法（注册于 `SingleFlightKeyDigests.global()`），如 `sha256`。配置后业务 key 全量摘要再拼接（point 保持明文）；空白不摘要；未注册的名字规则加载失败。见「key 摘要与自定义算法」 |
+| `keyDigest` | String | 否 | 无 | 命名摘要算法，如 `sha256`。配置后业务 key 全量摘要再拼接，用于敏感 key 不明文落库。见 [key 摘要与自定义算法](key-digest.md) |
 
 规则缺失策略是全局配置（不是规则字段），通过独立配置键设置：
 
@@ -137,46 +137,6 @@ team4u.singleflight.on_rule_missing=ERROR
 | 执行者崩溃 | 租约到期后等待者接管，旧执行者晚到的写入被 CAS 拒绝 |
 | errorFallback vs exceptionHandler | 前者引擎层先行兑底；handler 只接住穿透的配置错误与未配兑底场景 |
 | 存储选型 | 内存单进程 / Redis 跨实例；协调路径直达底层，装饰层不参与 |
-
-### key 摘要与自定义算法
-
-摘要只由规则手工指定（`keyDigest` 字段），不再有按 key 长度自动摘要的行为。敏感 key（手机号、证件号）用摘要避免明文落入存储：
-
-```properties
-team4u.singleflight.user.risk={"id":"user.risk","key":"${idNumber}","cacheTtlMillis":60000,"keyDigest":"sha256"}
-```
-
-- 摘要作用于渲染后的业务 key，**全量替换、不保留可读前缀**；point 始终明文，排查时能定位到规则；
-- 内置算法只有 `sha256`。注意它对低熵标识符不具备抗穷举能力——有存储读权限的人可用彩虹表还原手机号；
-- 需要更强算法（如 HMAC）时自行实现并注册，同名后注册者覆盖先注册者：
-
-```java
-public class HmacSha256KeyDigest implements SingleFlightKeyDigest {
-    private final byte[] secret;
-
-    public HmacSha256KeyDigest(String secret) {
-        this.secret = secret.getBytes(StandardCharsets.UTF_8);
-    }
-
-    @Override
-    public String key() {
-        return "hmac-sha256";
-    }
-
-    @Override
-    public String digest(String renderedKey) {
-        // HMAC-SHA256 hex；必须是纯函数：同一输入永远同一输出
-        return hmacSha256Hex(secret, renderedKey);
-    }
-}
-
-// 应用启动时注册，规则里 "keyDigest":"hmac-sha256"
-SingleFlightKeyDigests.global().register(new HmacSha256KeyDigest(secret));
-```
-
-实现约束：`digest` 必须是纯函数（同输入同输出，否则同 key 并发会散落到不同窗口，合并失效）；返回空白视为非法，执行期拒绝。
-
-> 超长 key 不会再被自动摘要：拿整段报文做 key 时存储侧自行承受长度（JDBC 表有列宽限制，超长写入失败按 `onStoreFailure` 策略处置）。
 
 ## 并发策略
 
@@ -285,5 +245,6 @@ team4u-singleflight                # 单模块：存储经 kv 能力协商，无
 - [快速开始](quick-start.md)：依赖引入、最小示例、编程式/注解式接入、命名存储
 - [场景指南](scenarios.md)：防击穿 / 互斥 / 降级 / 不可缓存 / 跳过 / 失败兑底六大场景的规则+代码+行为示例
 - [会话与失败处理](session.md)：会话状态机、崩溃接管、errorFallback 与 exceptionHandler 优先级、存储选型与限制
+- [key 摘要与自定义算法](key-digest.md)：敏感 key 摘要、内置 sha256、自定义算法注册与实现约束
 - [键值存储组件](../kv/README.md)：锁租约、CAS 能力与存储后端支持
 - [限流组件](../ratelimiter/README.md)：时间窗口配额、突发整形与防刷边界应使用限流而不是 singleflight

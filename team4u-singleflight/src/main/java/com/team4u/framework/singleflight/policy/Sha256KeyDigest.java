@@ -5,10 +5,8 @@ import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 
 /**
- * 内置 SHA-256 摘要策略：对业务 key 全量摘要，不保留任何可读前缀。
- * <p>
- * 摘要目的是隐私（业务 key 不明文落存储），因此不像已被移除的长度触发摘要那样
- * 保留可读前缀——短 key（如手机号）留前缀等于没有脱敏。注意 SHA-256 对低熵
+ * 内置 SHA-256 摘要策略：对业务 key 全量摘要，不保留任何可读前缀——
+ * 短 key（如手机号）留前缀等于没有脱敏。注意 SHA-256 对低熵
  * 标识符不具备抗穷举能力，有此要求请自行实现 HMAC 并注册覆盖。
  * </p>
  *
