@@ -12,7 +12,9 @@ public class ThreadUtilSleepVariantTest {
 
     @Test
     public void sleepUninterruptiblyCompletesFullDuration() throws Exception {
-        long sleepMillis = 200L;
+        // 被测时长最小化（200→100ms）：中断仍落在休眠中段（50ms 处），
+        // 「补足完整时长」的不变式与具体时长无关
+        long sleepMillis = 100L;
         long[] elapsedHolder = new long[1];
         Thread thread = new Thread(() -> {
             long start = System.currentTimeMillis();

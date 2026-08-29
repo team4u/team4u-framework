@@ -46,24 +46,23 @@ public class RetryLeaseInfrastructureRecoveryTest {
             TaskSnapshot running = queue.get(taskId).get();
             Assert.assertEquals(TaskStatus.RUNNING, running.getStatus());
 
+            // 被中断的 worker 不回写：在租约有效期内任务必须保持 RUNNING 且不产生失败记录。
+            // 观察窗口以租约到期时刻为界（而非固定 3s）——租约到期后另一 worker 可合法接管，
+            // 那之后的 RUNNING 状态不再能归因于本 worker 的中断语义。
+            Instant expiresAt = running.getLeaseExpiresAt();
             long deadline = System.currentTimeMillis() + 3000L;
             TaskSnapshot snapshot = running;
-            while (System.currentTimeMillis() < deadline) {
+            do {
                 snapshot = queue.get(taskId).get();
-                if (snapshot.getStatus() == TaskStatus.PENDING
-                        || snapshot.getStatus() == TaskStatus.FAILED) {
-                    break;
-                }
-                Thread.sleep(20L);
-            }
-            Assert.assertEquals(TaskStatus.RUNNING, snapshot.getStatus());
-            Assert.assertNull(store.get(taskId).get().getState().getFailedAt());
+                Assert.assertEquals(TaskStatus.RUNNING, snapshot.getStatus());
+                Assert.assertNull(store.get(taskId).get().getState().getFailedAt());
+                Thread.sleep(10L);
+            } while (Instant.now().isBefore(expiresAt) && System.currentTimeMillis() < deadline);
 
             // Wait past lease expiry, then prove the expired lease is acquirable by another worker.
-            Instant expiresAt = snapshot.getLeaseExpiresAt();
             deadline = System.currentTimeMillis() + 3000L;
             while (Instant.now().isBefore(expiresAt) && System.currentTimeMillis() < deadline) {
-                Thread.sleep(20L);
+                Thread.sleep(5L);
             }
             InterruptibleHandler replacement = new InterruptibleHandler();
             RecoveryHandlerRegistry replacementRegistry = new RecoveryHandlerRegistry();

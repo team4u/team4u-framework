@@ -96,8 +96,9 @@ public class DateUtilTest {
     @Test
     public void testTimer() throws InterruptedException {
         DateUtil.TimeInterval timer = DateUtil.timer();
-        Thread.sleep(100);
+        // 时间标尺最小化：不变式「interval ≥ 实际休眠时长」与时长无关，50ms 足以验证
+        Thread.sleep(50);
         long interval = timer.interval();
-        Assert.assertTrue(interval >= 100);
+        Assert.assertTrue(interval >= 50);
     }
 }

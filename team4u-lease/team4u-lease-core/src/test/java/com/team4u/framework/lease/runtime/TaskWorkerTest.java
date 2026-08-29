@@ -57,13 +57,13 @@ public class TaskWorkerTest {
         FakeBackend backend = new FakeBackend();
         CountDownLatch handled = new CountDownLatch(1);
         TaskWorker worker = worker(backend, new CountDownHandler(
-                TaskResult.retryAfter(Duration.ofMillis(250)), handled));
+                TaskResult.retryAfter(Duration.ofMillis(50)), handled));
 
         worker.start();
         Assert.assertTrue(handled.await(1, TimeUnit.SECONDS));
         backend.awaitRelease();
 
-        Assert.assertEquals(250L, backend.lastRetry.getDelayMillis());
+        Assert.assertEquals(50L, backend.lastRetry.getDelayMillis());
         Assert.assertEquals(0, backend.closeCalls);
         worker.shutdownNow();
     }
@@ -107,22 +107,18 @@ public class TaskWorkerTest {
         TaskWorker worker = Leases.queue(backend, "orders").worker()
                 .handle("email.send", handler)
                 .workerId("worker-1")
-                .lease(Duration.ofMillis(1500))
-                .pollInterval(Duration.ofMillis(1000))
+                .lease(Duration.ofMillis(200))
+                .pollInterval(Duration.ofMillis(10))
                 .heartbeatEnabled(true)
-                .heartbeatInterval(Duration.ofMillis(1000))
+                .heartbeatInterval(Duration.ofMillis(80))
                 .threadName("worker-infrastructure")
                 .build();
 
         worker.start();
         Assert.assertTrue(handled.await(1, TimeUnit.SECONDS));
-        Thread.sleep(100L);
-
-        Assert.assertEquals(1, backend.acquireCalls);
-        Assert.assertEquals(0, backend.closeCalls);
-        Assert.assertEquals(0, backend.releaseCalls);
-        Assert.assertEquals(0, backend.heartbeatCalls);
+        // 等确定性的终态而非固定 sleep：优雅关退化等 worker 线程退出后再断言计数。
         Assert.assertTrue(worker.shutdownGracefully(Duration.ofSeconds(1)));
+
         Assert.assertEquals(1, backend.acquireCalls);
         Assert.assertEquals(0, backend.closeCalls);
         Assert.assertEquals(0, backend.releaseCalls);
@@ -280,7 +276,7 @@ public class TaskWorkerTest {
                 return TaskResult.success();
             }
         };
-        TaskWorker worker = queueWorker(backend, handler, true);
+        TaskWorker worker = heartbeatWorker(backend, handler);
 
         worker.start();
         Assert.assertTrue(finish.await(1, TimeUnit.SECONDS));
@@ -397,7 +393,8 @@ public class TaskWorkerTest {
 
         worker.start();
         Assert.assertTrue(heartbeat.await(1, TimeUnit.SECONDS));
-        Thread.sleep(200L);
+        // 否定性窗口：间隔 20ms 下 60ms 已覆盖 3 个周期，足够暴露未停的调度
+        Thread.sleep(60L);
         Assert.assertEquals(1, backend.heartbeatCalls);
 
         finish.countDown();
@@ -567,7 +564,8 @@ public class TaskWorkerTest {
     }
 
     private void assertNoSecondWriteBack(FakeBackend backend) throws InterruptedException {
-        long deadline = System.currentTimeMillis() + 100L;
+        // 否定性窗口：write-back 失败后不应再补写；50ms 内无新增即认定稳定
+        long deadline = System.currentTimeMillis() + 50L;
         int seen = backend.closeCalls;
         while (System.currentTimeMillis() < deadline) {
             Thread.sleep(5L);

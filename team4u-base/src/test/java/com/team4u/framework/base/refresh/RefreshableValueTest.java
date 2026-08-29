@@ -1,5 +1,6 @@
 package com.team4u.framework.base.refresh;
 
+import com.team4u.framework.base.testsupport.Await;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -14,10 +15,9 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BooleanSupplier;
 
 /**
- * RefreshableValue 契约测试（全部基于 {@link MutableClock} 虚拟时钟，后台行为测试允许 50ms 级真实等待）
+ * RefreshableValue 契约测试（全部基于 {@link MutableClock} 虚拟时钟，后台行为测试允许百毫秒级真实等待）
  *
  * @author jay.wu
  */
@@ -37,7 +37,8 @@ public class RefreshableValueTest {
                 .name("single-flight")
                 .loader(ctx -> {
                     loadCount.incrementAndGet();
-                    Thread.sleep(200);
+                    // 拉长加载以拓宽并发窗口：50 线程经 startGate 同步放行后堆积在 get() 上，50ms 足够
+                    Thread.sleep(50);
                     return "v1";
                 })
                 .clock(clock)
@@ -176,7 +177,7 @@ public class RefreshableValueTest {
 
         // 释放 loader，等待后台异步刷新发布新值
         loaderGate.countDown();
-        awaitUntil(5000, "异步刷新完成后新值应可见", () -> "v2".equals(value.peek()));
+        Await.awaitCondition(5000, "异步刷新完成后新值应可见", () -> "v2".equals(value.peek()));
         Assert.assertEquals("v2", value.get());
         value.close();
     }
@@ -315,7 +316,7 @@ public class RefreshableValueTest {
         value.refresh(); // v2
         value.refresh(); // v3
 
-        awaitUntil(5000, "应收到全部 3 个变更事件且所有 listener 均执行完毕",
+        Await.awaitCondition(5000, "应收到全部 3 个变更事件且所有 listener 均执行完毕",
                 () -> events.size() == 3 && slowCalls.get() == 3 && throwingCalls.get() == 3);
         List<String> snapshot;
         synchronized (events) {
@@ -377,10 +378,10 @@ public class RefreshableValueTest {
     }
 
     /**
-     * 契约 7c：background 短周期场景 close 后 loader 调用数不再增长（等待超过 2 个周期断言）
+     * 契约 7c：background 短周期场景 close 后 loader 调用数不再增长（期限 + 稳定窗口断言）
      */
     @Test(timeout = 15000)
-    public void testCloseStopsBackgroundRefresh() throws Exception {
+    public void testCloseStopsBackgroundRefresh() {
         clock.enableRealTimeSync();
         AtomicInteger calls = new AtomicInteger();
         RefreshableValue<String> value = RefreshableValue.<String>builder()
@@ -392,14 +393,14 @@ public class RefreshableValueTest {
                 .clock(clock)
                 .build();
 
-        Thread.sleep(150); // 允许后台刷新几次
-        Assert.assertTrue("后台应已触发刷新, calls=" + calls.get(), calls.get() >= 2);
+        // 等后台刷新发生（条件满足即返回，不固定睡等）
+        Await.awaitCondition(2000, "后台应已触发刷新, calls=" + calls.get(), () -> calls.get() >= 2);
 
         value.close();
-        Thread.sleep(100); // 留出在途任务收尾时间
-        int afterClose = calls.get();
-        Thread.sleep(300); // 等待超过 2 个周期
-        Assert.assertEquals("close 后后台不应继续加载", afterClose, calls.get());
+        // close 仅取消后续调度、不打断在途任务：等待计数稳定——稳定窗口 120ms 覆盖超过 2 个周期（50ms），
+        // 若后台仍在刷新则窗口内必然增长不会误判稳定；在途任务收尾导致的少量增长是允许的最后发布
+        long afterClose = Await.awaitStable(120, 2000, "close 后后台不应继续加载", calls::get);
+        Assert.assertTrue("close 后在途收尾外不应有新的加载，稳定值=" + afterClose, afterClose >= 2);
     }
 
     // ------------------------------------------------------------ 契约 8：后台 tick 自愈
@@ -429,7 +430,7 @@ public class RefreshableValueTest {
                 .build();
 
         Assert.assertEquals("warmup 应已完成首载", "v1", value.peek());
-        awaitUntil(5000, "后台 tick 应在两次异常后自愈并加载新值", () -> "v4".equals(value.peek()));
+        Await.awaitCondition(5000, "后台 tick 应在两次异常后自愈并加载新值", () -> "v4".equals(value.peek()));
         Assert.assertTrue("自愈前应至少经历 2 次失败", value.status().getFailureCount() >= 2);
         Assert.assertEquals("新值发布后 version 应递增一次且保持稳定", 2, value.status().getVersion());
         Assert.assertEquals("自愈后连续失败应清零", 0, value.status().getConsecutiveFailures());
@@ -660,17 +661,5 @@ public class RefreshableValueTest {
             Assert.assertTrue("异常消息应包含 '" + messagePart + "'，实际: " + e.getMessage(),
                     e.getMessage() != null && e.getMessage().contains(messagePart));
         }
-    }
-
-    private static void awaitUntil(long timeoutMillis, String message, BooleanSupplier condition)
-            throws InterruptedException {
-        long deadline = System.currentTimeMillis() + timeoutMillis;
-        while (System.currentTimeMillis() < deadline) {
-            if (condition.getAsBoolean()) {
-                return;
-            }
-            Thread.sleep(20);
-        }
-        Assert.fail(message);
     }
 }

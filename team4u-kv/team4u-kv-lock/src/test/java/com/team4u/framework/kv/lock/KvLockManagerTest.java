@@ -157,7 +157,7 @@ public class KvLockManagerTest {
         try (KvLock ignored = holder.tryAcquire("job", 10_000)) {
             assertNotNull(ignored);
             try {
-                manager.acquire("job", 5000, 300);
+                manager.acquire("job", 5000, 120);
                 fail("should timeout");
             } catch (KvLockTimeoutException expected) {
                 assertTrue(expected.getMessage().contains("job"));
@@ -195,8 +195,8 @@ public class KvLockManagerTest {
     }
 
     /**
-     * 真实时钟验证心跳自动续约：lease 400ms + 心跳 100ms，
-     * 无续约时锁 400ms 后过期，有心跳时持续存活。
+     * 真实时钟验证心跳自动续约：lease 100ms + 心跳 30ms，
+     * 无续约时锁 100ms 后过期，有心跳时持续存活。
      * 无续约对照组直接写存储（不经管理器）：管理器心跳间隔自适应收缩（lease/3），
      * 其心跳线程若在注册锁之后才计算首个间隔，会续约「理应闲置」的锁——线程调度竞态，非确定性
      */
@@ -205,16 +205,16 @@ public class KvLockManagerTest {
         InMemoryKvStore realStore = new InMemoryKvStore();   // 系统时钟
         KvLockManager beating = new KvLockManager(realStore,
                 Clock.systemUTC(),
-                new KvLockManager.Config().setHeartbeatIntervalMillis(100));
+                new KvLockManager.Config().setHeartbeatIntervalMillis(30));
         try {
-            KvLock beat = beating.tryAcquire("heartbeat", 400);
+            KvLock beat = beating.tryAcquire("heartbeat", 100);
             assertNotNull(beat);
             SpaceKey idleKey = SpaceKey.of("kv.lock", "idle");
             realStore.put(idleKey,
-                    KvRecord.of("no-heartbeat-token", 400, System.currentTimeMillis()),
+                    KvRecord.of("no-heartbeat-token", 100, System.currentTimeMillis()),
                     PutMode.SET);
 
-            Thread.sleep(900);   // > 2×lease：无续约的锁必然过期
+            Thread.sleep(250);   // > 2×lease：无续约的锁必然过期
 
             assertTrue("心跳续约使锁持续存活", beat.isHeld());
             assertNull("无心跳的锁已过期", realStore.get(idleKey));
@@ -224,8 +224,8 @@ public class KvLockManagerTest {
     }
 
     /**
-     * 短租约触发自适应心跳：lease 300ms + 配置间隔 10s，
-     * 心跳自动收缩到 lease/3，锁存活超过 lease
+     * 短租约触发自适应心跳：lease 100ms + 配置间隔 10s，
+     * 心跳自动收缩到 lease/3（约 33ms），锁存活超过 lease
      */
     @Test
     public void heartbeatIntervalAdaptsToShortLease() throws Exception {
@@ -234,10 +234,10 @@ public class KvLockManagerTest {
                 Clock.systemUTC(),
                 new KvLockManager.Config().setHeartbeatIntervalMillis(10_000));
         try {
-            KvLock lock = manager.tryAcquire("short", 300);
+            KvLock lock = manager.tryAcquire("short", 100);
             assertNotNull(lock);
 
-            Thread.sleep(700);   // > 2×lease
+            Thread.sleep(250);   // > 2×lease
 
             assertTrue("自适应心跳应保证短租约锁存活", lock.isHeld());
         } finally {

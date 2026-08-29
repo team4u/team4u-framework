@@ -45,9 +45,9 @@ public class RetryTaskWorkerTest {
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
         TaskQueue queue = Leases.queue(backend, "retry-b");
         CountingHandler handler = new CountingHandler("payment", 1);
-        RetryTaskWorker worker = new RetryTaskWorker(queue, registry(handler));
+        RetryTaskWorker worker = fastPollWorker(queue, registry(handler));
         LeaseDurableRetryStore store = new LeaseDurableRetryStore(queue);
-        String taskId = submitVisibleTask(store, "payment", "retry", 2, Backoffs.increment(50L, 0L));
+        String taskId = submitVisibleTask(store, "payment", "retry", 2, Backoffs.increment(5L, 0L));
 
         worker.start();
         Assert.assertTrue(awaitCalls(handler, 1));
@@ -75,10 +75,10 @@ public class RetryTaskWorkerTest {
         InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
         TaskQueue queue = Leases.queue(backend, "retry-c");
         CountingHandler handler = new CountingHandler("payment", 3);
-        RetryTaskWorker worker = new RetryTaskWorker(queue, registry(handler));
+        RetryTaskWorker worker = fastPollWorker(queue, registry(handler));
         LeaseDurableRetryStore store = new LeaseDurableRetryStore(queue);
         String taskId = submitVisibleTask(store, "payment", "exhausted", 2,
-                Backoffs.increment(50L, 0L));
+                Backoffs.increment(5L, 0L));
 
         worker.start();
         Assert.assertTrue(awaitCalls(handler, 1));
@@ -133,7 +133,7 @@ public class RetryTaskWorkerTest {
         long deadline = System.currentTimeMillis() + 3000L;
         TaskSnapshot snapshot;
         do {
-            Thread.sleep(20L);
+            Thread.sleep(5L);
             snapshot = queue.get(taskId).get();
         } while (snapshot.getStatus() == TaskStatus.PENDING
                 && System.currentTimeMillis() < deadline);
@@ -149,7 +149,7 @@ public class RetryTaskWorkerTest {
         RecoveryHandlerRegistry registry = new RecoveryHandlerRegistry();
         CountingHandler initial = new CountingHandler("payment", 0);
         registry.register(initial);
-        RetryTaskWorker worker = new RetryTaskWorker(queue, registry);
+        RetryTaskWorker worker = fastPollWorker(queue, registry);
         worker.register(new CountingHandler("invoice", 0));
         CountingHandler lateRegistryHandler = new CountingHandler("shipment", 0);
         registry.register(lateRegistryHandler);
@@ -207,6 +207,17 @@ public class RetryTaskWorkerTest {
         RecoveryHandlerRegistry registry = new RecoveryHandlerRegistry();
         registry.register(handler);
         return registry;
+    }
+
+    /**
+     * 构造短轮询（10ms）的 worker：用例断言的是拾取与状态迁移语义，
+     * 默认 250ms 轮询只会拉长任务可见延迟与 close() 的退等待时长。
+     */
+    private static RetryTaskWorker fastPollWorker(
+            TaskQueue queue, RecoveryHandlerRegistry registry) {
+        return new RetryTaskWorker(
+                queue, registry, null, null, Duration.ofMillis(10L), true, null, null,
+                LeaseRetryRecordSerializer.INSTANCE);
     }
 
     private static String submitVisibleTask(
