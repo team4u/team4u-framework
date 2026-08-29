@@ -246,6 +246,17 @@ public class KvLockManagerTest {
     }
 
     @Test
+    public void invalidHeartbeatIntervalFailsFast() {
+        try {
+            new KvLockManager(store, clock, new KvLockManager.Config()
+                    .setHeartbeatIntervalMillis(0));
+            fail("heartbeatIntervalMillis must be positive");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("heartbeatIntervalMillis"));
+        }
+    }
+
+    @Test
     public void nonCasStoreFailsFast() {
         try {
             new KvLockManager(new NonCasStore());
@@ -321,6 +332,24 @@ public class KvLockManagerTest {
         return new KvLockManager(new ObservedStore(
                 new TieredStore(raw, 60_000, new TieredStore.Config())), clock,
                 new KvLockManager.Config().setHeartbeatIntervalMillis(3600_000));
+    }
+
+    @Test
+    public void invalidHeartbeatConfigFailsFast() {
+        try {
+            new KvLockManager(store, clock,
+                    new KvLockManager.Config().setHeartbeatIntervalMillis(0));
+            fail("should reject non-positive heartbeat interval");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("heartbeatIntervalMillis"));
+        }
+        try {
+            new KvLockManager(store, clock,
+                    new KvLockManager.Config().setRetryIntervalMillis(-1));
+            fail("should reject negative retry interval");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("retryIntervalMillis"));
+        }
     }
 
     @Test
