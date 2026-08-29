@@ -16,7 +16,7 @@ graph TD
 ```
 
 1. **AST 预优化**：在解析阶段，静态常量、正则表达式等在编译期完成类型推断与预编译（例如 `Pattern.compile`、常量折叠与静态 Set 分拣）。
-2. **直出闭包函数**：AST 节点被转换为纯 Java `MatchPredicate`（函数式接口 `context -> boolean`），运行期直接调用函数式方法，无任何反射与字符串解析开销。
+2. **直出闭包函数**：AST 节点被转换为纯 Java `MatchPredicate`（函数式接口 `context -> boolean`），运行期直接调用函数式方法，不经过反射与字符串解析。
 3. **编译缓存**：内部基于 `DynamicInstanceProvider` 构建默认容量为 1000 的 LRU 编译缓存，同一个表达式文本仅在首次加载时编译一次。
 
 ---

@@ -229,7 +229,7 @@ graph TD
     Check1 -->|"是"| Direct["直接处理或放行 proceed"]
     Check1 -->|"否"| CacheCheck{"检查 valueCache 版本<br/>cache.version == snapshot.version"}
     
-    CacheCheck -->|"命中"| ReturnVal["直接返回缓存值 (零反射/零转换)"]
+    CacheCheck -->|"命中"| ReturnVal["直接返回缓存值 (不再反射与转换)"]
     CacheCheck -->|"未命中"| MetaCheck["从 METADATA_CACHE 读取方法元数据"]
     MetaCheck --> Resolve["执行 getSmart 检索 & 类型转换"]
     Resolve --> PutCache["更新 valueCache(version, value)"]
@@ -237,4 +237,4 @@ graph TD
 ```
 
 1. **元数据静态缓存 (`METADATA_CACHE`)**：全局缓存方法的返回类型、注解元数据与解析器，避免重复反射检索方法与字段。
-2. **版本化结果缓存 (`valueCache`)**：以 `Method` 为键，存储 `(version, value)` 缓存节点。在快照未发生变更时，方法调用直接命中缓存，**无字符串检索与类型转换开销**；当发生配置热重载时，快照版本号递增，缓存即时失效并重新计算。
+2. **版本化结果缓存 (`valueCache`)**：以 `Method` 为键，存储 `(version, value)` 缓存节点。在快照未发生变更时，方法调用直接命中缓存，**不再重复字符串检索与类型转换**；当发生配置热重载时，快照版本号递增，缓存即时失效并重新计算。

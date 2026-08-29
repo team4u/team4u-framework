@@ -36,7 +36,7 @@ graph TD
   - 若实现，则自动调用 `close()` 方法释放底层网络连接、线程池或句柄，杜绝连接泄漏和内存溢出。
 - **延迟初始化与 O(1) 极速读取**：
   - 首次通过 `get(configKey)` 访问时，按需执行延迟构建（`computeIfAbsent`）；
-  - 后续读取直接命中内部 `ConcurrentHashMap`，无反射与反序列化开销。
+  - 后续读取直接命中内部 `ConcurrentHashMap`，不再重复反射与反序列化。
 - **监听器与实例全生命周期销毁 (`destroy()`)**：
   - 调用 `destroy()` 时，首先注销与 `ConfigManager` 的监听句柄，随后遍历所有已缓存的实例执行 `closeQuietly()` 彻底释放资源。
 

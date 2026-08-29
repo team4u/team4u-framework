@@ -24,7 +24,7 @@ import java.util.function.Supplier;
  * 业务只需声明「值怎么取、有效期怎么算」，取值统一走 {@link #get()}：
  * </p>
  * <ul>
- *     <li>未过期：直接返回，零加载开销</li>
+ *     <li>未过期：直接返回，不触发加载</li>
  *     <li>进入提前刷新窗口（refreshAhead）：默认本线程同步续期，其余并发请求等待
  *     （singleflight，不重复加载）；续期失败不影响返回旧值；
  *     配置 {@link Builder#refreshAheadAsync} 后改为异步续期，get() 立即返回旧值</li>

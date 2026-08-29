@@ -141,7 +141,7 @@ public class SmartCompareCriterionCompiler extends AbstractCriterionCompiler<Sma
     }
 
     /**
-     * 编译静态长整体验证分支（性能优化：支持长整数原生比较，0 内存分配）
+     * 编译静态长整体验证分支（性能优化：支持长整数原生比较，不装箱为 BigDecimal）
      */
     private MatchPredicate buildStaticLongPredicate(long constantLong, IntPredicate logic) {
         return safe(context -> {

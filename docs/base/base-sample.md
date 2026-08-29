@@ -17,7 +17,7 @@ import java.util.Map;
 
 public class DynamicTopicResolver {
 
-    // 预解析模板（零运行时正则消耗）
+    // 预解析模板（渲染时不做正则解析）
     private static final TextTemplate TOPIC_TEMPLATE = 
             new TextTemplate("app.topic.${env}.${tenantId}.${bizType}");
 

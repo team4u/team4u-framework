@@ -123,7 +123,7 @@ graph TD
 ```
 
 ### `DynamicMaskSerializerModifier` 的性能优化
-- 规则匹配与注解解析**仅在 Jackson 构建序列化器时执行一次**（首次序列化类时完成解析并被 Jackson 缓存），在后续高频的对象序列化过程中**零反射、零注解扫描**。
+- 规则匹配与注解解析**仅在 Jackson 构建序列化器时执行一次**（首次序列化类时完成解析并被 Jackson 缓存），后续高频对象序列化直接复用解析结果，不再重复反射与注解扫描。
 
 ### `MaskStringSerializer`
 - 委托 `FastMasker.mask(value, maskType)` 执行脱敏；
