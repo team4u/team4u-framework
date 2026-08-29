@@ -76,9 +76,23 @@ public class UserDto {
 }
 ```
 
-### 步骤 2：注册 `JacksonMaskModule`
+### 步骤 2：用 `MaskedJson` 序列化（观测向显式脱敏）
 
-依赖 `team4u-mask` 后，SPI 贡献者（`MaskJacksonModuleContributor`）会在共享 `ObjectMapper` 首次初始化时自动注册 `JacksonMaskModule`——走 `JsonUtil` 的全局序列化对 `@Mask` 注解与脱敏规则自动生效，无需手工注册。自建独立 `ObjectMapper` 的场景才需要手工注册：
+**契约**：全局 `JsonUtil` / 共享 `ObjectMapper` 奉行「永远无损」——存库、缓存、重放载荷等存储向序列化必须拿到原文明文，脱敏模块**不注册全局**（否则 `@Mask` 字段会被静默写成掩码串，反序列化无任何报错信号）。需要脱敏输出（日志、审计、对外展示）时，显式使用 mask 模块的门面：
+
+```java
+import com.team4u.framework.mask.jackson.MaskedJson;
+import com.team4u.framework.serializer.json.JsonUtil;
+
+// 存数据库：永远明文（物理上不可能脱敏）
+String plain = JsonUtil.toJsonStr(user);
+
+// 打日志 / 对外输出：显式声明观测语义，输出脱敏 JSON
+String masked = MaskedJson.toJsonStr(user);
+// {"id":1001,"realName":"周杰伦","mobile":"138*****678","idCardNo":"4401**********34"}
+```
+
+自建独立 `ObjectMapper` 的场景，手工注册脱敏模块：
 
 ```java
 import com.fasterxml.jackson.databind.ObjectMapper;
