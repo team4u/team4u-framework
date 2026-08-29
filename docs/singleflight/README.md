@@ -39,7 +39,7 @@ graph LR
     SF --> F
 
     CONFIG["team4u.singleflight.* 规则<br/>配置组件"] -->|ConfigDrivenRegistry<br/>热更新| F
-    F -->|"${variable}" 渲染| KEYS["SingleFlightKeys<br/>point 隔离 + 百分号编码 + 摘要"]
+    F -->|"${variable}" 渲染| KEYS["SingleFlightKeys<br/>point 隔离 + 百分号编码 + 按需摘要"]
     F --> STORES["SingleFlightStores<br/>命名存储解析"]
     STORES --> INNER["KvStores.innermost<br/>直达底层存储"]
     INNER --> CAS["CasCapable<br/>CAS 能力校验"]
@@ -85,8 +85,9 @@ execute(point, arguments, returnType, loader)
 | `SingleFlightExecution<T>` | 一次执行请求：point、参数名到参数值的 Map、返回类型和 loader。编程式 API 的唯一入参 |
 | `SingleFlightLoader<T>` / `ThrowableLoader<T>` | 加载函数。前者可抛 `Exception`；后者用于代理边界，可抛任意 `Throwable` |
 | `SessionEnvelope` | 执行回执：`token + 状态 + 时间 + 结果/错误`，是跨线程、跨实例传递执行结果的数据契约 |
-| `SingleFlightKeys` | 最终 key 组成：point 与业务 key 分别百分号编码后拼接，超过阈值时保留前缀并追加 SHA-256 |
+| `SingleFlightKeys` | 最终 key 组成：point 与业务 key（可按需摘要）分别百分号编码后用下划线拼接；摘要只由规则的 `keyDigest` 手工指定 |
 | `SingleFlightStores` | 命名 `KvStore` 注册表；规则用 `store` 字段按名引用 |
+| `SingleFlightKeyDigest` / `SingleFlightKeyDigests` | 业务 key 摘要策略与命名注册表：内置 `sha256`，自定义算法编程注册、同名覆盖 |
 | `SingleFlights` | 全局静态门面：显式 `init`，未初始化时用 `ConfigManager.global()` + `InMemoryKvStore` 懒加载 |
 | `@SingleFlight` | 方法注解，只声明 `value()`（point）；代理自动携带方法泛型返回类型和参数名上下文 |
 | `SingleFlightExceptionHandler` | 注解边界的组件异常转换器，只处理 `SingleFlightException`，不处理 loader 自己抛出的业务异常 |
@@ -115,7 +116,7 @@ execute(point, arguments, returnType, loader)
 | `failureTtlMillis` | long > 0 | 否 | `5000` | 失败回执 TTL。窗口内同 key 的 WAIT 调用者收到重构的 `SingleFlightExecutionException` |
 | `onInvalidKey` | `ERROR` / `PASS_THROUGH` | 否 | `ERROR` | key 渲染失败：`ERROR` 抛配置异常；`PASS_THROUGH` 直接执行 loader，不做协调 |
 | `onStoreFailure` | `PASS_THROUGH` / `FAIL_CLOSED` | 否 | 随 contention | 显式指定优先。省略时 `FAIL_FAST` 默认 `FAIL_CLOSED`，`WAIT` / `FALLBACK` 默认 `PASS_THROUGH` |
-| `digestThreshold` | int > 0 | 否 | `128` | 编码后完整 key 长度阈值。超过则保留最多 48 字符可读前缀并追加 `#sha256_摘要`，避免存储 key 无界变长 |
+| `keyDigest` | String | 否 | 无 | 命名摘要算法（注册于 `SingleFlightKeyDigests.global()`），如 `sha256`。配置后业务 key 全量摘要再拼接（point 保持明文）；空白不摘要；未注册的名字规则加载失败。见「key 摘要与自定义算法」 |
 
 规则缺失策略是全局配置（不是规则字段），通过独立配置键设置：
 
@@ -136,6 +137,46 @@ team4u.singleflight.on_rule_missing=ERROR
 | 执行者崩溃 | 租约到期后等待者接管，旧执行者晚到的写入被 CAS 拒绝 |
 | errorFallback vs exceptionHandler | 前者引擎层先行兑底；handler 只接住穿透的配置错误与未配兑底场景 |
 | 存储选型 | 内存单进程 / Redis 跨实例；协调路径直达底层，装饰层不参与 |
+
+### key 摘要与自定义算法
+
+摘要只由规则手工指定（`keyDigest` 字段），不再有按 key 长度自动摘要的行为。敏感 key（手机号、证件号）用摘要避免明文落入存储：
+
+```properties
+team4u.singleflight.user.risk={"id":"user.risk","key":"${idNumber}","cacheTtlMillis":60000,"keyDigest":"sha256"}
+```
+
+- 摘要作用于渲染后的业务 key，**全量替换、不保留可读前缀**；point 始终明文，排查时能定位到规则；
+- 内置算法只有 `sha256`。注意它对低熵标识符不具备抗穷举能力——有存储读权限的人可用彩虹表还原手机号；
+- 需要更强算法（如 HMAC）时自行实现并注册，同名后注册者覆盖先注册者：
+
+```java
+public class HmacSha256KeyDigest implements SingleFlightKeyDigest {
+    private final byte[] secret;
+
+    public HmacSha256KeyDigest(String secret) {
+        this.secret = secret.getBytes(StandardCharsets.UTF_8);
+    }
+
+    @Override
+    public String key() {
+        return "hmac-sha256";
+    }
+
+    @Override
+    public String digest(String renderedKey) {
+        // HMAC-SHA256 hex；必须是纯函数：同一输入永远同一输出
+        return hmacSha256Hex(secret, renderedKey);
+    }
+}
+
+// 应用启动时注册，规则里 "keyDigest":"hmac-sha256"
+SingleFlightKeyDigests.global().register(new HmacSha256KeyDigest(secret));
+```
+
+实现约束：`digest` 必须是纯函数（同输入同输出，否则同 key 并发会散落到不同窗口，合并失效）；返回空白视为非法，执行期拒绝。
+
+> 超长 key 不会再被自动摘要：拿整段报文做 key 时存储侧自行承受长度（JDBC 表有列宽限制，超长写入失败按 `onStoreFailure` 策略处置）。
 
 ## 并发策略
 
@@ -212,7 +253,7 @@ team4u-singleflight                # 单模块：存储经 kv 能力协商，无
     │   ├── SessionEnvelope       # 会话回执：PENDING→终态的不可变状态载体
     │   ├── ResultCodec           # 结果 JSON 序列化边界
     │   └── EffectivePolicies      # 生效策略推导（显式配置优先，省略按语义推导）
-    ├── policy                    # key 渲染、Criterion 包装、fallback 转换
+    ├── policy                    # key 渲染、Criterion 包装、fallback 转换、key 摘要策略与注册表
     ├── store                     # SingleFlightStores / NamedStore 命名存储
     ├── proxy                     # @SingleFlight 注解、拦截器、代理工厂、异常转换
     └── spring                    # @EnableSingleFlight 自动代理（可选依赖）
@@ -224,7 +265,7 @@ team4u-singleflight                # 单模块：存储经 kv 能力协商，无
 | `team4u-kv-lock` | `KvLockManager` / `KvLock` 租约、心跳、token | 必需（传递引入） |
 | `team4u-config-core` | `ConfigDrivenRegistry` 规则加载与热更新 | 必需（传递引入） |
 | `team4u-base` | `TextTemplate`、`TypeReference` | 必需（传递引入） |
-| `team4u-policy` | 命名存储注册使用的 `KeyedPolicyRegistry` | 必需（传递引入） |
+| `team4u-policy` | 命名存储与命名摘要注册表使用的 `KeyedPolicyRegistry` | 必需（传递引入） |
 | `team4u-criterion` | `skipWhen` / `cacheWhen` 表达式 | 必需（传递引入） |
 | `team4u-serializer-json` + `jackson-databind` | 规则、结果、回执 JSON | 必需（传递引入） |
 | `team4u-proxy` | `@SingleFlight` 注解代理 | 使用注解时（传递引入） |

@@ -128,8 +128,9 @@ public class SingleFlightRule {
     private StoreFailurePolicy onStoreFailure;
 
     /**
-     * key 摘要阈值：编码后完整 key 长度超过该值时保留可读前缀并追加 SHA-256 摘要，
-     * 避免存储 key 随业务值无界变长。
+     * key 摘要算法名（注册于 {@code SingleFlightKeyDigests.global()}）。
+     * 空白表示不摘要，业务 key 明文进入存储；未注册的名字在规则加载期失败。
+     * 摘要只由本字段手工指定，不再按 key 长度自动触发。
      */
-    private int digestThreshold = 128;
+    private String keyDigest;
 }

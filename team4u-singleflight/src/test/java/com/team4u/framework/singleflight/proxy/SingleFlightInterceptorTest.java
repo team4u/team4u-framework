@@ -72,7 +72,7 @@ public class SingleFlightInterceptorTest {
                 });
 
         kv.store().put(SpaceKey.of(SingleFlightEngine.LOCK_SPACE,
-                SingleFlightKeys.compose("point", "same", 128)),
+                SingleFlightKeys.compose("point", "same", null)),
                 KvRecord.of("other", 60000, 0), PutMode.SET);
         assertEquals(Arrays.asList("handled"), proxy.users("same"));
 
@@ -89,7 +89,7 @@ public class SingleFlightInterceptorTest {
         Service proxy = SingleFlightProxyFactory.proxy(new ServiceImpl(), Service.class,
                 (m, type, t, args) -> null);
         kv.store().put(SpaceKey.of(SingleFlightEngine.LOCK_SPACE,
-                SingleFlightKeys.compose("point", "same", 128)),
+                SingleFlightKeys.compose("point", "same", null)),
                 KvRecord.of("other", 60000, 0), PutMode.SET);
         assertNull(proxy.load("same"));
     }
@@ -153,7 +153,7 @@ public class SingleFlightInterceptorTest {
 
     private void blockPoint() {
         kv.store().put(SpaceKey.of(SingleFlightEngine.LOCK_SPACE,
-                SingleFlightKeys.compose("point", "same", 128)),
+                SingleFlightKeys.compose("point", "same", null)),
                 KvRecord.of("other", 60000, 0), PutMode.SET);
     }
 

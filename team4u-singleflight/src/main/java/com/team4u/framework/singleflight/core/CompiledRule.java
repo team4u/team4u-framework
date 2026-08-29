@@ -6,6 +6,7 @@ import com.team4u.framework.kv.lock.KvLockManager;
 import com.team4u.framework.singleflight.config.SingleFlightRule;
 import com.team4u.framework.singleflight.policy.KeyResolver;
 import com.team4u.framework.singleflight.policy.SingleFlightCondition;
+import com.team4u.framework.singleflight.policy.SingleFlightKeyDigest;
 
 /**
  * 编译后的规则及其运行期资源（预解析的条件、键模板、存储视图与锁管理器）。
@@ -27,6 +28,7 @@ final class CompiledRule {
     private final SingleFlightCondition skipWhen;
     private final SingleFlightCondition cacheWhen;
     private final KeyResolver keyResolver;
+    private final SingleFlightKeyDigest keyDigest;
     private final KvStore resultStore;
     private final KvStore coordinationStore;
     private final CasCapable cas;
@@ -34,12 +36,14 @@ final class CompiledRule {
 
     CompiledRule(SingleFlightRule rule, SingleFlightCondition skipWhen,
                  SingleFlightCondition cacheWhen, KeyResolver keyResolver,
+                 SingleFlightKeyDigest keyDigest,
                  KvStore resultStore, KvStore coordinationStore,
                  CasCapable cas, KvLockManager lockManager) {
         this.rule = rule;
         this.skipWhen = skipWhen;
         this.cacheWhen = cacheWhen;
         this.keyResolver = keyResolver;
+        this.keyDigest = keyDigest;
         this.resultStore = resultStore;
         this.coordinationStore = coordinationStore;
         this.cas = cas;
@@ -60,6 +64,10 @@ final class CompiledRule {
 
     KeyResolver keyResolver() {
         return keyResolver;
+    }
+
+    SingleFlightKeyDigest keyDigest() {
+        return keyDigest;
     }
 
     KvStore resultStore() {

@@ -1,7 +1,8 @@
 package com.team4u.framework.singleflight.core;
 
 import com.team4u.framework.kv.SpaceKey;
-import com.team4u.framework.singleflight.api.SingleFlightConfigException;
+import com.team4u.framework.singleflight.policy.Sha256KeyDigest;
+import com.team4u.framework.singleflight.policy.SingleFlightKeyDigest;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -14,8 +15,8 @@ public class SingleFlightKeysTest {
 
     @Test
     public void composeKeepsPointIsolationAndSafeSpaceKey() {
-        String first = SingleFlightKeys.compose("point.one", "value", 128);
-        String second = SingleFlightKeys.compose("point.two", "value", 128);
+        String first = SingleFlightKeys.compose("point.one", "value", null);
+        String second = SingleFlightKeys.compose("point.two", "value", null);
 
         assertEquals("point.one_value", first);
         assertEquals("point.two_value", second);
@@ -25,45 +26,68 @@ public class SingleFlightKeysTest {
 
     @Test
     public void composeEncodesIllegalCharacters() {
-        String key = SingleFlightKeys.compose("point", "a:b c/d", 128);
+        String key = SingleFlightKeys.compose("point", "a:b c/d", null);
 
         assertEquals("point_a%3ab%20c%2fd", key);
         SpaceKey.of(SingleFlightEngine.SESSION_SPACE, key);
     }
 
     @Test
-    public void composeDigestsLongKeys() {
+    public void composeWithoutDigestKeepsLongKeysVerbatim() {
+        // 自动摘要已移除：超长 key 不再被截断或摘要，原样进入存储
         StringBuilder value = new StringBuilder();
         for (int i = 0; i < 30; i++) {
             value.append("0123456789");
         }
-        String key = SingleFlightKeys.compose("point", value.toString(), 128);
+        String key = SingleFlightKeys.compose("point", value.toString(), null);
 
-        assertTrue(key.length() < value.length());
+        assertEquals("point_" + value, key);
+    }
+
+    @Test
+    public void composeWithDigestReplacesBusinessKeyEntirely() {
+        String key = SingleFlightKeys.compose("point", "13800138000", new Sha256KeyDigest());
+
+        // point 保持明文便于排查；业务 key 全量摘要，不保留可读前缀
         assertTrue(key.startsWith("point_"));
-        assertTrue(key.contains("#sha256_"));
-        assertFalse(key.contains(":0123456789"));
+        assertFalse(key.contains("13800138000"));
+        assertEquals("point_" + new Sha256KeyDigest().digest("13800138000"), key);
         SpaceKey.of(SingleFlightEngine.CACHE_SPACE, key);
     }
 
     @Test
-    public void composeDigestIsStableAndCollisionResistantForLongValues() {
-        StringBuilder first = new StringBuilder();
-        StringBuilder second = new StringBuilder();
-        for (int i = 0; i < 20; i++) {
-            first.append("AAAAAAAAAA");
-            second.append("AAAAAAAAAB");
-        }
-        assertNotEquals(SingleFlightKeys.compose("p", first.toString(), 128),
-                SingleFlightKeys.compose("p", second.toString(), 128));
+    public void digestIsStableAndCollisionResistant() {
+        Sha256KeyDigest digest = new Sha256KeyDigest();
+        assertEquals(digest.digest("same-value"), digest.digest("same-value"));
+        assertNotEquals(SingleFlightKeys.compose("p", "AAAAAAAAAA", digest),
+                SingleFlightKeys.compose("p", "AAAAAAAAAB", digest));
     }
 
     @Test
-    public void separatorAndDigestMarkerAreEscaped() {
-        assertNotEquals(SingleFlightKeys.compose("a", "b_c", 128),
-                SingleFlightKeys.compose("a_b", "c", 128));
-        assertTrue(SingleFlightKeys.compose("a", "b_c", 128).contains("%5f"));
-        assertTrue(SingleFlightKeys.compose("a", "#sha256_x", 128).contains("%23"));
+    public void customDigestPolicyIsAppliedAndEncoded() {
+        // 自定义策略返回非安全字符也统一过百分号编码兜底
+        SingleFlightKeyDigest colon = new SingleFlightKeyDigest() {
+            @Override
+            public String key() {
+                return "colon";
+            }
+
+            @Override
+            public String digest(String renderedKey) {
+                return "x:" + renderedKey;
+            }
+        };
+        String key = SingleFlightKeys.compose("point", "v", colon);
+
+        assertEquals("point_x%3av", key);
+        SpaceKey.of(SingleFlightEngine.LOCK_SPACE, key);
+    }
+
+    @Test
+    public void separatorIsEscaped() {
+        assertNotEquals(SingleFlightKeys.compose("a", "b_c", null),
+                SingleFlightKeys.compose("a_b", "c", null));
+        assertTrue(SingleFlightKeys.compose("a", "b_c", null).contains("%5f"));
     }
 
     @Test
@@ -75,28 +99,43 @@ public class SingleFlightKeysTest {
         assertComposeFails("point", null);
         assertComposeFails("point", "");
         assertComposeFails("point", " ");
-        assertComposeFails("point", "value", 0);
-        assertComposeFails("point", "value", -1);
+    }
+
+    @Test
+    public void composeRejectsBlankDigestedKey() {
+        SingleFlightKeyDigest blank = new SingleFlightKeyDigest() {
+            @Override
+            public String key() {
+                return "blank";
+            }
+
+            @Override
+            public String digest(String renderedKey) {
+                return " ";
+            }
+        };
+        try {
+            SingleFlightKeys.compose("point", "value", blank);
+            fail("expected IllegalArgumentException");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("digested key is empty"));
+        }
     }
 
     private void assertComposeFails(String point, String value) {
-        assertComposeFails(point, value, 128);
-    }
-
-    private void assertComposeEncodesPoint(String point) {
-        String key = SingleFlightKeys.compose(point, "value", 128);
-
-        assertEquals("a%3ab_value", key);
-        assertFalse(key.contains(":"));
-        SpaceKey.of(SingleFlightEngine.LOCK_SPACE, key);
-    }
-
-    private void assertComposeFails(String point, String value, int threshold) {
         try {
-            SingleFlightKeys.compose(point, value, threshold);
+            SingleFlightKeys.compose(point, value, null);
             fail("expected IllegalArgumentException");
         } catch (IllegalArgumentException expected) {
             assertTrue(expected.getMessage().contains("Singleflight"));
         }
+    }
+
+    private void assertComposeEncodesPoint(String point) {
+        String key = SingleFlightKeys.compose(point, "value", null);
+
+        assertEquals("a%3ab_value", key);
+        assertFalse(key.contains(":"));
+        SpaceKey.of(SingleFlightEngine.LOCK_SPACE, key);
     }
 }
