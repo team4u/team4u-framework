@@ -16,14 +16,23 @@ import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
- * Intercepts {@link SingleFlight} methods and forwards a typed execution to the
- * engine behind {@link SingleFlights}.
+ * 拦截 {@link SingleFlight} 注解方法，组装类型化执行请求并转发给
+ * {@link SingleFlights} 背后的引擎。
+ * <p>
+ * 方法元数据（注解、参数信息）按 Method 缓存，代理调用只做一次组装：
+ * 参数名 → 参数值 Map、泛型返回类型与可抛任意 Throwable 的加载函数。
+ * 组件异常可经 {@link SingleFlightExceptionHandler} 转换为方法兼容的返回值，
+ * 转换结果做类型与 null 安全校验，保证代理透明性。
+ * </p>
  *
  * @author jay.wu
  */
 public class SingleFlightInterceptor implements MethodInterceptor {
 
     private final SingleFlightExceptionHandler exceptionHandler;
+    /**
+     * 方法元数据缓存：注解解析与参数名提取只执行一次
+     */
     private final Map<Method, MethodMeta> metaCache = new ConcurrentHashMap<>();
 
     public SingleFlightInterceptor() {
@@ -38,10 +47,12 @@ public class SingleFlightInterceptor implements MethodInterceptor {
     public Object invoke(MethodInvocation invocation) throws Throwable {
         Method method = invocation.getMethod();
         MethodMeta meta = metaCache.computeIfAbsent(method, this::buildMeta);
+        // 未标注解的方法直通，代理对非协调方法零侵入
         if (!meta.annotated) {
             return invocation.proceed();
         }
         Map<String, Object> arguments = arguments(meta.parameters, invocation.getArguments());
+        // ThrowableLoader 适配代理边界：方法调用可抛任意 Throwable
         SingleFlightExecution.ThrowableLoader<Object> loader = invocation::proceed;
         SingleFlightExecution<Object> execution = SingleFlightExecution.of(
                 meta.point, arguments, meta.parameterNames,
@@ -56,6 +67,10 @@ public class SingleFlightInterceptor implements MethodInterceptor {
         }
     }
 
+    /**
+     * 经处理器转换组件异常：受检异常需与方法签名兼容（不兼容包为 IllegalStateException），
+     * 返回值需满足方法的 null 安全与类型约束。
+     */
     private Object handleComponentException(Method method, Map<String, Object> arguments,
                                             SingleFlightException exception) throws Throwable {
         Object result;
@@ -75,6 +90,9 @@ public class SingleFlightInterceptor implements MethodInterceptor {
         return result;
     }
 
+    /**
+     * 方法签名是否声明了该受检异常（处理器上抛受检异常的兼容性边界）。
+     */
     private boolean declaresCheckedException(Method method, Throwable throwable) {
         for (Class<?> type : method.getExceptionTypes()) {
             if (type.isInstance(throwable)) {
@@ -84,6 +102,10 @@ public class SingleFlightInterceptor implements MethodInterceptor {
         return false;
     }
 
+    /**
+     * 解析方法元数据：无注解直通；有注解时要求参数名可读（-parameters），
+     * 否则 key 模板与 skipWhen 将失去变量来源，直接在代理创建期失败。
+     */
     private MethodMeta buildMeta(Method method) {
         SingleFlight annotation = resolveAnnotation(method);
         if (annotation == null) {
@@ -104,6 +126,9 @@ public class SingleFlightInterceptor implements MethodInterceptor {
         return new MethodMeta(annotation.value(), parameters, names, true);
     }
 
+    /**
+     * 组装参数名 → 参数值映射（保持参数声明顺序）。
+     */
     private Map<String, Object> arguments(Parameter[] parameters, Object[] values) {
         Map<String, Object> arguments = new LinkedHashMap<>();
         if (parameters == null || values == null) {
@@ -115,6 +140,10 @@ public class SingleFlightInterceptor implements MethodInterceptor {
         return arguments;
     }
 
+    /**
+     * 校验处理器返回值：基本类型方法不允许 null，返回值必须可赋值给方法返回类型
+     * （基本类型按包装类比较）。
+     */
     private void validateHandlerResult(Method method, Object result) {
         Class<?> returnType = method.getReturnType();
         if (result == null) {
@@ -132,6 +161,9 @@ public class SingleFlightInterceptor implements MethodInterceptor {
         }
     }
 
+    /**
+     * 基本类型 → 包装类。
+     */
     private Class<?> box(Class<?> type) {
         if (!type.isPrimitive()) {
             return type;
@@ -146,6 +178,10 @@ public class SingleFlightInterceptor implements MethodInterceptor {
         return Integer.class;
     }
 
+    /**
+     * 解析方法上的 {@link SingleFlight} 注解：先查方法自身，再沿接口、父类查找同名同参方法，
+     * 支持在接口或父类上集中声明注解。
+     */
     public static SingleFlight resolveAnnotation(Method method) {
         SingleFlight annotation = method.getAnnotation(SingleFlight.class);
         if (annotation != null) {
@@ -176,6 +212,9 @@ public class SingleFlightInterceptor implements MethodInterceptor {
         }
     }
 
+    /**
+     * 方法元数据：注解 point、参数信息与参数名集合；未注解方法标记直通。
+     */
     private static final class MethodMeta {
 
         private final String point;

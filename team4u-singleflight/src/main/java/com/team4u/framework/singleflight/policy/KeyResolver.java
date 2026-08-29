@@ -6,11 +6,11 @@ import java.util.Map;
 import java.util.Set;
 
 /**
- * Key resolver using {@link TextTemplate} over the execution argument map.
+ * key 解析器：基于 {@link TextTemplate} 在参数名 Map 上渲染规则 key 模板。
  * <p>
- * An unresolved or null variable renders to {@code null}; the engine then applies
- * its configured invalid-key policy. This prevents a literal {@code ${name}}
- * silently becoming a coordination key.
+ * 任一模板变量缺失或值为 null 时整体渲染为 {@code null}，交由引擎按 onInvalidKey
+ * 策略处置——这样避免了字面量 {@code ${name}} 被静默当作协调 key，
+ * 让不同调用因变量缺失而意外共享同一个执行窗口。
  * </p>
  *
  * @author jay.wu
@@ -23,6 +23,9 @@ public class KeyResolver {
         this.template = new TextTemplate(template);
     }
 
+    /**
+     * 渲染业务 key：变量齐全且渲染结果非空白才返回，否则返回 null。
+     */
     public String render(Map<String, Object> arguments) {
         for (String name : variableNames()) {
             if (arguments == null || arguments.get(name) == null) {
@@ -36,6 +39,9 @@ public class KeyResolver {
         return rendered == null || rendered.trim().isEmpty() ? null : rendered;
     }
 
+    /**
+     * 模板引用的全部变量名，供引擎做变量可解析性预检。
+     */
     public Set<String> variableNames() {
         return template.getVariableNames();
     }

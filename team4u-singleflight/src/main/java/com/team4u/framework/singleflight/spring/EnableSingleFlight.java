@@ -12,10 +12,12 @@ import java.lang.annotation.RetentionPolicy;
 import java.lang.annotation.Target;
 
 /**
- * Optional Spring integration: enables the shared {@link SingleFlightInterceptor}
- * infrastructure. Method proxies are created with
- * {@code SingleFlightProxyFactory.proxy(target)} from user code or bean
- * post-processing built on that factory.
+ * 可选的 Spring 集成开关：启用共享的 {@link SingleFlightInterceptor} 基础设施。
+ * <p>
+ * 开启后由 {@link SingleFlightSpringConfiguration} 注册 Bean 后置处理器，自动包装
+ * 含 {@code @SingleFlight} 方法的 bean；也可以不使用本开关，在业务代码中通过
+ * {@code SingleFlightProxyFactory.proxy(target)} 自行创建代理。
+ * </p>
  *
  * @author jay.wu
  */
