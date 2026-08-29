@@ -84,7 +84,7 @@ classDiagram
 ## 核心特性
 
 - **自描述策略身份 (`KeyedPolicy`)**：策略对象通过 `key()` 接口自声明身份标识，实现 Key 与 Handler 的强内聚。
-- **Copy-On-Write 极致读取性能**：`KeyedPolicyRegistry` 与 `OrderedPolicyChain` 在写入时维护不可变只读列表缓存（`unmodifiablePolicies`），读取路径完全无锁，**零对象创建开销**。
+- **Copy-On-Write 低开销读取**：`KeyedPolicyRegistry` 与 `OrderedPolicyChain` 在写入时维护不可变只读列表缓存（`unmodifiablePolicies`），读取路径无锁，直接返回缓存列表，避免逐次拷贝与临时对象分配。
 - **智能优先级与自动升序排序**：`ContextPolicy` 内置 `HIGHEST`、`HIGH`、`NORMAL`、`LOW`、`LOWEST` 优先级常量，`OrderedPolicyChain` 注册时自动完成稳定排序（数值越小越优先）。
 - **重复注册策略控制 (`DuplicatePolicyMode`)**：支持 `APPEND`（多实例并存）与 `REPLACE_BY_CLASS`（同类新实例覆盖旧实例）两种模式。
 - **流程中断流水线 (`PolicyPipeline`)**：支持在顺序遍历策略链时，根据策略执行结果即时决定继续或短路中断（用于风控拦截、参数校验链）。
@@ -97,7 +97,7 @@ classDiagram
 | 概念 | 类路径 / 接口 | 说明 |
 | :--- | :--- | :--- |
 | `KeyedPolicy<K>` | `com.team4u.framework.policy.api.KeyedPolicy` | 自描述键值策略接口，提供 `K key()` 唯一身份标识 |
-| `KeyedPolicyRegistry<K, P>` | `com.team4u.framework.policy.core.KeyedPolicyRegistry` | O(1) 复杂度查表注册表，写时更新只读快照缓存，读操作绝对无锁 |
+| `KeyedPolicyRegistry<K, P>` | `com.team4u.framework.policy.core.KeyedPolicyRegistry` | O(1) 复杂度查表注册表，写时更新只读快照缓存，读操作无锁 |
 | `ContextPolicy<C>` | `com.team4u.framework.policy.api.ContextPolicy` | 上下文自匹配策略基接口，提供 `supports(context)` 与 `priority()` |
 | `OrderedPolicy` | `com.team4u.framework.policy.api.OrderedPolicy` | 继承自 `ContextPolicy<Void>`，为无需上下文匹配的纯排序策略提供简化适配 |
 | `OrderedPolicyChain<C, P>` | `com.team4u.framework.policy.core.OrderedPolicyChain` | 自排序责任链容器，自动维护升序排列，支持 `firstMatch` 与 `allMatches` |

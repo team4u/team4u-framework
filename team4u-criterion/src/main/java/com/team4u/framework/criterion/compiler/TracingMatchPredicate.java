@@ -29,7 +29,7 @@ public class TracingMatchPredicate implements MatchPredicate {
 
         TraceRecorder recorder = context.getRecorder();
 
-        // 2. 如果没有开启追踪，直接走快速路径（零开销）
+        // 2. 如果没有开启追踪，直接走快速路径（不创建 TraceNode，仅透传下游判定）
         if (recorder == null) {
             return delegate.test(context);
         }

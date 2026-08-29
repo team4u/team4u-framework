@@ -61,7 +61,7 @@ public class FastNumberUtil {
     }
 
     /**
-     * 极速数字比较（无 BigDecimal，无 GC 开销）
+     * 快速数字比较：直接基于 long/double 原生比较，不经过 BigDecimal，减少临时对象分配。
      */
     public static int compare(Number n1, Number n2) {
         if (Objects.equals(n1, n2)) {

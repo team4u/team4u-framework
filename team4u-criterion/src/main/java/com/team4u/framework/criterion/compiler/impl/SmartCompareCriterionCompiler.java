@@ -153,7 +153,7 @@ public class SmartCompareCriterionCompiler extends AbstractCriterionCompiler<Sma
             if (actualNum == null) {
                 throw new NumberFormatException("无效的数字格式: " + actualObj);
             }
-            // 如果运行时输入也是整数，走极限极速通道 (0 对象创建)
+            // 如果运行时输入也是整数，直接基于 long 原生比较（不经过 BigDecimal）
             if (!FastNumberUtil.isFloatingPoint(actualNum)) {
                 return logic.test(Long.compare(actualNum.longValue(), constantLong));
             }

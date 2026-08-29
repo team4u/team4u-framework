@@ -5,16 +5,33 @@ ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 FAILED=0
 
 # Case-insensitive blanket performance claims, Chinese plus English variants:
-#   0 GC / zero GC / GC-free
-#   零 GC / 零分配
-#   zero allocation / zero-allocation / allocation-free / alloc-free
+#   0 GC / 0 GCC / zero GC / GC-free / no GC / 无 GC / 零 GC
+#   零对象 / 零对象创建 / 0 对象 / zero object creation / object-creation-free
+#   零分配 / zero allocation / no allocation / allocation-free / alloc-free
+#   零开销 / zero overhead / no overhead / overhead-free
+#   GC-free / allocation-free / object-creation-free / overhead-free
 #   纳秒级 / nanosecond-level (any spacing or separator)
 #   杜绝频繁 GC
-# `0 GC` requires a non-numeric boundary before it so counts like `10 GC` or
-# version strings like `1.0 GC` do not trip the rule.
-pattern='(^|[^.[:digit:]])0[[:space:]]+GC|zero[[:space:]]*GC|GC[-_ ]?free'\
-'|零[[:space:]]*(GC|分配)'\
-'|zero[[:space:]]*-?[[:space:]]*alloc|alloc(ation)?[[:space:]]*-?[[:space:]]*free'\
+# `0 GC` and `0 GCC` require a non-alphanumeric boundary before the digit and a
+# non-alphanumeric boundary after the keyword, so counts like `10 GC`, version
+# strings like `1.0 GC`, identifiers like `x0GCCy`, and profiler metrics like
+# `gc.alloc.rate.norm` do not trip the rule. `TimeUnit.NANOSECONDS` is exempt
+# via the `nanosecond-level` phrasing requirement (no `-level` suffix matches).
+# Chinese exemptions: `低开销`/`无锁`/`无 BigDecimal` do not match because the
+# banned patterns are anchored to the exact claim words (零开销/无 GC/零分配...).
+pattern='(^|[^.[:alnum:]])0[[:space:]]*(GC|GCC)([^[:alnum:]]|$)'\
+'|(zero|no)[[:space:]]*-?[[:space:]]*GC([^[:alnum:]]|$)'\
+'|GC[-_ ]?free'\
+'|(无|零)[[:space:]]*GC([^[:alnum:]]|$)'\
+'|(无|零)[[:space:]]*分配'\
+'|(零|0)[[:space:]]*对象'\
+'|object([-_ ]?creation)?[[:space:]]*-?[[:space:]]*free'\
+'|(zero|no)[[:space:]]*-?[[:space:]]*object[[:space:]]*-?[[:space:]]*creation'\
+'|(zero|no)[[:space:]]*-?[[:space:]]*alloc'\
+'|alloc(ation)?[[:space:]]*-?[[:space:]]*free'\
+'|(零|0)[[:space:]]*开销'\
+'|(zero|no)[[:space:]]*-?[[:space:]]*overhead'\
+'|overhead[[:space:]]*-?[[:space:]]*free'\
 '|纳秒级|nanosecond[[:space:]_-]*level'\
 '|杜绝频繁[[:space:]]*GC'
 

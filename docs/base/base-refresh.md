@@ -90,7 +90,7 @@ RefreshableValue<Dict> dict = RefreshableValue.<Dict>builder()
         .build();
 
 dict.refresh();      // 收到外部变更信号时调用
-Dict d = dict.get(); // 其余时刻零开销直读
+Dict d = dict.get(); // 其余时刻直接返回当前快照，不触发重新加载
 ```
 
 ### 配置影子：固定周期 + 后台刷新 + 失败兜底

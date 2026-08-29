@@ -88,7 +88,7 @@ public interface OrderedPolicy extends ContextPolicy<Void> {
 
 ## `OrderedPolicyChain` 容器与重复注册控制
 
-`OrderedPolicyChain` 采用**手动写时复制 (Manual Copy-On-Write)** 机制。写入时自动按照 `priority()` 执行稳定升序排序，读取时零加锁、零对象创建。
+`OrderedPolicyChain` 采用**手动写时复制 (Manual Copy-On-Write)** 机制。写入时自动按照 `priority()` 执行稳定升序排序，读取时不加锁，直接返回缓存的只读列表，避免每次读取时的拷贝与临时对象分配。
 
 ### 重复策略处理模式 (`DuplicatePolicyMode`)
 在构造 `OrderedPolicyChain` 时，可指定重复策略注册模式：

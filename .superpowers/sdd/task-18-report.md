@@ -157,3 +157,112 @@ benchmark classes keep their committed `3a121b7e` evidence:
 All remediation verification ran on the local Corretto 21.0.11 JDK only. The JDK 8/11/17
 matrix remains required via GitHub Actions before release; nothing in this remediation
 claims otherwise.
+
+## Final Residual Claim Remediation
+
+A second independent review approved the remediation but listed as minor that active
+source and docs still carried softer-but-still-absolute variants: `无 GC 开销`,
+`零对象创建`, `零开销`, and closely related phrasing. The convergence standard treats
+these as required fixes even though they were formally minor findings, because every
+absolute performance claim without direct JMH backing is the same class of defect the
+gate exists to catch.
+
+### Full-Variant Rescan (RED by Evidence)
+
+Before this remediation, the hardened gate from the previous round was GREEN, but a
+wider semantic scan (`rg`, case-insensitive, Chinese plus English) over the root README,
+`MIGRATION-1.0.md`, active docs (excluding `docs/superpowers` history), and all 514
+non-target `*/src/main/java/*.java` sources still found these absolute variants the gate
+pattern did not yet cover:
+
+- `team4u-criterion/.../FastNumberUtil.java:64` — `无 GC 开销`
+- `team4u-criterion/.../TracingMatchPredicate.java:32` — `零开销`
+- `team4u-criterion/.../SmartCompareCriterionCompiler.java:156` — `0 对象创建` (digit-zero
+  variant)
+- `team4u-policy/.../OrderedPolicyChain.java:17` — `零对象创建`
+- `docs/policy/policy-keyed.md` — `零对象创建`, `彻底消除了…GC 开销`, `绝对无锁`
+- `docs/policy/policy-ordered.md` — `零加锁、零对象创建`
+- `docs/policy/README.md` — `零对象创建开销`, `绝对无锁`
+- `docs/router/router-interceptor.md` — `零开销快速路径`
+- `docs/base/base-refresh.md` — `零开销直读`
+- `docs/base/base-template.md` — `零正则开销…GC 开销`
+- `docs/kv/kv-sample.md` — `未过期零开销`
+
+The last four were confirmed false-green gaps of the gate's variant families
+(`零开销` was not matched at all; `0 对象` digit-zero and `无 GC` spaced-Chinese were not
+matched), proven in an isolated sandbox before the gate was extended.
+
+### New Gate RED Proof (Sandbox)
+
+The extended pattern was run against an isolated positive corpus covering every family
+(`0 GC`, `0GCC`, `zero GC`, `no GC`, `GC-free`, `无 GC`/`无GC`/`零 GC`/`零GC`, `零对象`,
+`零对象创建`, `0 对象创建`, `zero object creation`, `zero-object creation`,
+`object-creation-free`, `无分配`, `zero/no allocation`, `allocation-free`, `alloc-free`,
+`零开销`, `zero/no overhead`, `overhead-free`, `纳秒级`, `nanosecond-level`,
+`杜绝频繁 GC`): all 28 positive samples were caught in both docs and Java-source
+layouts. A negative corpus (`JDK 10 GC`, `1.0 GCT`, `gc.alloc.rate.norm`,
+`TimeUnit.NANOSECONDS`, `低开销`, `无锁`, `无 BigDecimal`, `x0GCCy`, `allocation rate`,
+`低分配`, `no reflection overhead` on a non-banned noun, `ByteBuddy-free`,
+`nanoseconds elapsed`, `毫秒级`) produced zero hits, closing the theoretical `0 GCC`
+false-positive noted in review (the `0 GCC` token now requires an alphanumeric
+boundary on both sides). A full worktree copy with the three original source claims
+git-restored (`无 GC 开销`, `零开销`, `零对象创建`) and a fourth synthetic re-add
+(`零开销`) turned the real gate RED with exactly those four source lines; reverting to
+the softened wording returned GREEN.
+
+### Production Change Scope (Comments Only, Again)
+
+Exactly four production comment lines changed; no production code, behavior, API,
+bytecode, version, KV implementation, or identifier changed:
+
+- `FastNumberUtil.java:64` — now states the mechanism: native long/double comparison
+  without BigDecimal, reducing temporary allocations.
+- `TracingMatchPredicate.java:32` — now states: when tracing is off, no `TraceNode` is
+  created and the downstream predicate runs directly.
+- `SmartCompareCriterionCompiler.java:156` — now states: integer inputs compare as raw
+  longs without BigDecimal.
+- `OrderedPolicyChain.java:17` — now states: `getPolicies()` returns the cached read-only
+  list, avoiding per-read copies and temporary allocations.
+
+Active doc files softened the same way (mechanism instead of absolutes):
+`docs/policy/policy-keyed.md`, `docs/policy/policy-ordered.md`, `docs/policy/README.md`,
+`docs/router/router-interceptor.md`, `docs/base/base-refresh.md`,
+`docs/base/base-template.md`, `docs/kv/kv-sample.md`. Historical `docs/superpowers`
+content was not touched. Raw JMH numbers in `benchmarks/` were not changed.
+
+### Gate Extensions in This Round
+
+`scripts/check-performance-claims.sh` now additionally covers, case-insensitively:
+`无 GC` (spaced/compact), `零对象(创建)` including the digit-zero `0 对象` variant,
+`zero/no object creation`, `object-creation-free`, `零开销`/`0 开销`,
+`zero/no overhead`, `overhead-free`, `zero/no GC` as word tokens, and the `0 GCC`
+case with boundary protection. Existing families (`0 GC`, `zero GC`, `GC-free`,
+`零 GC`/`零分配`/`无分配`, `zero/no allocation`, `allocation-free`/`alloc-free`,
+`纳秒级`/`nanosecond-level`, `杜绝频繁 GC`) are retained. `docs/superpowers` remains
+excluded, and the source scan still requires non-empty `*/src/main/java` coverage
+(explicit RED otherwise).
+
+### Verification (This Round)
+
+- `bash -n scripts/check-performance-claims.sh` passed; gate GREEN on the softened tree.
+- The softened tree was re-scanned with the full variant set: remaining `零…` matches are
+  only conservative mechanism wording, historical `docs/superpowers` files, non-performance
+  idioms (`零依赖`, `零侵入`, `零配置`, `零 NPE`, `零等待`, `清零`, amounts like
+  `BigDecimal.ZERO`), or raw evidence caveats — no absolute performance claims remain in
+  active docs or production sources.
+- Full reactor `mvn -f <worktree>/pom.xml clean install` rerun after the comment edits;
+  see the test-count note above (1,565/1,565 expected and confirmed in this rerun).
+- `mvn -Prelease -DskipTests package` rerun to rebuild javadoc jars; all 40 javadoc jars
+  scanned for every banned variant — zero hits.
+- Java 8 bytecode (major 52) re-audited across production classfiles.
+- The release script was not rerun across all 40 consumer trees (no release packaging
+  inputs changed); the quick DOM helper, manifest count 40, and
+  `scripts/check-release-contracts.sh` were rerun as fast guards.
+- JMH benchmarks and consumer gates were not rerun: no runtime behavior changed
+  (comments and docs only), so the committed evidence remains the valid measurement.
+  The ignored `task-18-phase-a.md` local record's stale KV value was refreshed to the
+  official `45.978 ± 1.279 ns/op` for local consistency; that file is intentionally not
+  committed (it is gitignored by `.superpowers/sdd/.gitignore`), and nothing ignored was
+  force-added.
+
+Commit subject: `docs(performance): remove residual absolute claims`.
