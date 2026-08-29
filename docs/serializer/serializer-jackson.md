@@ -50,19 +50,23 @@ public class JacksonSerializerPolicy implements JsonSerializerPolicy {
 
 ## 共享 ObjectMapper 与扩展模块注册
 
-`JacksonSerializerPolicy` 是全局共享 `ObjectMapper` 的唯一权威来源——所有走 `JsonUtil` 的 JSON 序列化都经由共享 mapper 执行，各业务模块不得私建 `ObjectMapper`。扩展模块（如脱敏、日志截断）通过静态 API 或 SPI 注册：
+`JacksonSerializerPolicy` 是全局共享 `ObjectMapper` 的唯一权威来源——所有走 `JsonUtil` 的 JSON 序列化都经由共享 mapper 执行，各业务模块不得私建 `ObjectMapper`。
+
+> [!WARNING]
+> **无损契约**：共享 mapper 永远执行无损序列化——存库、缓存、重放载荷等存储向场景必须拿到原文明文。**会改变输出内容的观测向模块（脱敏、日志截断）严禁注册全局**，必须由调用方在副本/门面上显式叠加（脱敏见 mask 模块的 `MaskedJson` 门面）；全局只接受不改变语义的安全模块（如 `JavaTimeModule`、多态支持等）。扩展模块通过静态 API 或 SPI 注册：
 
 ```java
 // 静态注册：建议在应用启动阶段（首次 JSON 访问前）调用；
 // 若共享 mapper 已初始化，注册同样立即生效
-boolean registered = JacksonSerializerPolicy.registerModule(new MaskModule());
+// 例：注册不改变语义的安全模块（如 Kotlin 支持模块）
+boolean registered = JacksonSerializerPolicy.registerModule(new KotlinModule.Builder().build());
 
 // SPI 注册：实现 JacksonModuleContributor 并提供服务文件，
 // 共享 mapper 首次初始化时自动发现并注册
-public final class MaskModuleContributor implements JacksonModuleContributor {
+public final class KotlinSupportContributor implements JacksonModuleContributor {
     @Override
     public Collection<Module> modules() {
-        return Collections.singletonList(new MaskModule());
+        return Collections.singletonList(new KotlinModule.Builder().build());
     }
 }
 ```
