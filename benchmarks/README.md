@@ -55,8 +55,8 @@ evidence are kept in `benchmarks/results/`.
 The commands already run from `benchmarks/`, so JMH writes `-rff` under
 `benchmarks/results/`. Read `gc.alloc.rate.norm` from the GC profiler output as
 the observed allocation per operation under this specific run.
-The score column from JMH average-time mode is a mean, not a median. A single short run does not prove a
-general zero-allocation or fixed-latency contract: JIT behavior, CPU
+The score column from JMH average-time mode is a mean, not a median. A single short run does not
+prove a general absolute-allocation or fixed-latency contract: JIT behavior, CPU
 frequency, container quota, memory layout, and co-tenancy can all change the
 result. Numbers should be compared only with the recorded environment and
 command.

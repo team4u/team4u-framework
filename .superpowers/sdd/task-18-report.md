@@ -252,12 +252,13 @@ excluded, and the source scan still requires non-empty `*/src/main/java` coverag
   active docs or production sources.
 - Full reactor `mvn -f <worktree>/pom.xml clean install` rerun after the comment edits;
   see the test-count note above (1,565/1,565 expected and confirmed in this rerun).
-- `mvn -Prelease -DskipTests package` rerun to rebuild javadoc jars; all 40 javadoc jars
-  scanned for every banned variant — zero hits.
+- In the 8c round, `mvn -Prelease -DskipTests package` was rerun and rebuilt all 40
+  javadoc jars; all 40 were scanned for every banned variant — zero hits.
 - Java 8 bytecode (major 52) re-audited across production classfiles.
-- The release script was not rerun across all 40 consumer trees (no release packaging
-  inputs changed); the quick DOM helper, manifest count 40, and
-  `scripts/check-release-contracts.sh` were rerun as fast guards.
+- The release script's 40 real dependency trees / 22 exact shapes were rerun fresh by
+  the independent review immediately after 8c (after the comments-only second round no
+  invoker consumers were rerun; the two consumer profiles had passed after 44f). The
+  release script itself is unchanged, so it was not rerun in this round.
 - JMH benchmarks and consumer gates were not rerun: no runtime behavior changed
   (comments and docs only), so the committed evidence remains the valid measurement.
   The ignored `task-18-phase-a.md` local record's stale KV value was refreshed to the
@@ -266,3 +267,65 @@ excluded, and the source scan still requires non-empty `*/src/main/java` coverag
   force-added.
 
 Commit subject: `docs(performance): remove residual absolute claims`.
+
+## Semantic Scanner Round (Final Gate Rework)
+
+Rationale: the prior gate mixed CJK quantifier words with ASCII keywords in
+byte-oriented grep, which is locale sensitive and hard to post-filter in Bash
+(the previous attempt left `check-performance-claims.sh` with a line-86 syntax
+error and was abandoned). The matching now lives in
+`scripts/PerformanceClaimScanner.java` (default package, Java 8 source only):
+explicit UTF-8 decoding, locale-independent `java.util.regex` with
+`Pattern.CASE_INSENSITIVE` on ASCII-only families, deterministic file
+recursion, and a subclause model (each line is split at Chinese and ASCII
+punctuation; quantifier and noun must share one subclause). Subclauses are
+matched as regions of the original line with transparent bounds, so the digit
+guard still sees the character before the split (`1.0GC` stays negative).
+The thin shell wrapper compiles the helper with
+`javac -source 8 -target 8 -Xlint:-options`, runs it over the repository root,
+and retains only the non-claim checks (benchmarks README required strings,
+4 JSON + 4 TXT raw results, environment record). `bash -n` clean.
+
+Families: (零|无) + cost noun (GC with ASCII right boundary but CJK suffix
+allowed, 分配/对象/创建/加锁/任意X开销); 零 + mechanism noun; boundary-guarded
+digit 0 + cost noun; 彻底(消除|避免|杜绝) + cost noun; 绝对 + (无锁|零|性能|cost
+noun); 纳秒级; 杜绝频繁 GC; English zero/no/0 + ≤3 tokens + noun with ASCII
+word boundaries; metric + hyphen/underscore + free; nanosecond-level.
+Approved mechanisms that stay negative: 无锁 alone, 无 BigDecimal, 无反射/无正则
+alone, `zero get calls`, low overhead, `gc.alloc.*`, `TimeUnit.NANOSECONDS`,
+无-compound idioms (无法/无需/无缝/...), 零-idioms (零依赖/零侵入/零等待/清零/...),
+and `零 NPE 空对象` correctness pattern names. `GC-freeware`, `GC freelance`,
+`0 GCC`, `0GCC`, `x0GC`, `10GC`, `1.0GC` verified negative.
+
+TDD order: the scanner and wrapper were completed first and run on the
+unsoftened tree — RED with exactly 20 hits:
+
+- docs (15 lines / 12 files): benchmarks/README.md:59 (`zero-allocation`
+  caveat), docs/base/README.md:19,35, base-sample.md:20, quick-start.md:33
+  (零正则), config-instance.md:39, config-proxy.md:232,240 (无…开销),
+  criterion-compiler.md:19 (无任何…开销), kv-decorators.md:195,
+  kv-lifecycle.md:11,67, kv-tiered.md:33, log-sample.md:131, mask-annotation.md:126
+  (零X开销 family).
+- production comments (5 lines): LogicCriterionCompiler.java:16
+  (无迭代器对象生成), SmartCompareCriterionCompiler.java:144 (`0 内存分配`),
+  TieredStore.java:19, ExpiringValue.java:27, KeyedPolicyRegistry.java:171.
+
+All 20 were then softened to concrete mechanism wording (docs and
+comments only). Sandbox corpus results: 40/40 positives RED, 47/47 negatives
+GREEN, identical under the default UTF-8 locale and `LC_ALL=C`; a re-added
+claim on the real tree replayed RED and returned GREEN after revert.
+
+Verification this round: `mvn clean install` 1,565/1,565 (0 failures, errors,
+skipped); `-Prelease -DskipTests package` rebuilt all 40 javadoc jars and the
+semantic scanner over all 40 unpacked javadocs found 0 banned variants; DOM
+manifest check 40 modules = 40 managed = 40 module artifact IDs, identical and
+duplicate-free; `benchmarks.jar -l` lists exactly 5 methods in 4 classes; the
+40 binary leaf JARs contain 678 production classfiles, all major version 52
+(678/678, non-52 = 0 — the earlier 712 figure is not used); the gate is GREEN
+under the default locale, `LC_ALL=C`, and `LC_ALL=zh_CN.UTF-8`; `bash -n`
+clean. JMH benchmarks, the two invoker consumer profiles, and the release
+script were not rerun this round: no runtime behavior, API, version, POM, raw
+JMH evidence, or KV production code changed (comments and docs only), and the
+release script was freshly run by the independent review immediately after
+8c with 40 real dependency trees / 22 exact shapes PASS. GitHub Actions
+JDK 8/11/17/21 matrix execution remains pending.

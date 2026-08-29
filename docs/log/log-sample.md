@@ -128,5 +128,5 @@ Loggers.of(PaymentService.class)
 ```
 
 #### 效果
-- 普通租户（`tenantId != 'TENANT_VIP_008'`）的 DEBUG 日志直接在客户端短路丢弃，零性能消耗；
+- 普通租户（`tenantId != 'TENANT_VIP_008'`）的 DEBUG 日志直接在客户端短路丢弃，不付出序列化与输出成本；
 - `TENANT_VIP_008` 的请求命中染色规则，日志级别被提权并完整输出到日志平台，`payload` 中自动附加 `"dyeingRuleMatched": "dyeing_vip_tenant"`。

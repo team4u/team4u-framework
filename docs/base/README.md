@@ -16,7 +16,7 @@
 graph TD
     Base["team4u-base 核心模块"] --> DIP["DynamicInstanceProvider<br/>分段锁双缓存实例提供者"]
     Base --> SF["SingletonFactory<br/>全局反射单例工厂"]
-    Base --> TT["TextTemplate<br/>预解析零正则文本模板"]
+    Base --> TT["TextTemplate<br/>预解析无正则文本模板"]
     Base --> Cache["Cache 体系<br/>LRU / LFU / TimedCache"]
     Base --> RV["RefreshableValue<br/>可刷新值（单值远端影子）"]
     Base --> CU["ConvertUtil / TypeConverterRegistry<br/>强类型转换系统"]
@@ -32,7 +32,7 @@ graph TD
 | :--- | :--- | :--- |
 | **动态实例提供者** | `DynamicInstanceProvider<I, C, T>` | 分段锁防并发击穿，支持从输入源 (`I`) 到配置解析 (`C`) 再到实例创建 (`T`) 的统一双缓存流水线 |
 | **通用单例工厂** | `SingletonFactory` | 基于 `DynamicInstanceProvider` 与 LFU 缓存的高性能全局反射单例桶 |
-| **预解析文本模板** | `TextTemplate` | 预解析 `${var}` 占位符为静态段与变量段，运行时纯 `StringBuilder` 拼接，零正则开销 |
+| **预解析文本模板** | `TextTemplate` | 预解析 `${var}` 占位符为静态段与变量段，运行时纯 `StringBuilder` 拼接，渲染时不做正则解析 |
 | **轻量缓存体系** | `LRUCache`, `LFUCache`, `TimedCache`, `CacheUtil` | 纯 Java 原生实现的内存缓存，支持访问淘汰、频率淘汰与 TTL 自动过期及原子 `getOrCreate` |
 | **可刷新值** | `RefreshableValue<T>` | 单值远端影子的声明式封装：三个时间戳（软死期/硬死期/冷却）+ 单飞 + 变更回调，并发安全开箱即用 |
 | **类型转换体系** | `ConvertUtil`, `TypeConverterRegistry` | 支持标量、时间、集合、数组、枚举与 JavaBean 的全类型安全转换，支持扩展 SPI |

@@ -1,71 +1,24 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Absolute performance claim gate. The claim language mixes CJK quantifier
+# words (零/无/0) with ASCII keywords, and byte-oriented grep semantics change
+# with the invoking locale, so the matching itself lives in the Java 8 helper
+# scripts/PerformanceClaimScanner.java: UTF-8 decoding, locale-independent
+# java.util.regex, subclause splitting at Chinese/ASCII punctuation, and the
+# allowlist for approved mechanisms (无锁 alone, 无 BigDecimal, 无反射/无正则
+# alone, zero get calls, low overhead, gc.alloc metrics, TimeUnit.NANOSECONDS).
+# This wrapper only compiles the helper, runs it over the repository root, and
+# retains the raw-evidence checks that do not involve claim wording.
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+WORK="$(mktemp -d)"
+trap 'rm -rf "$WORK"' EXIT
+
+javac -source 8 -target 8 -Xlint:-options -d "$WORK" \
+  "$ROOT/scripts/PerformanceClaimScanner.java"
+java -cp "$WORK" PerformanceClaimScanner "$ROOT"
+
 FAILED=0
-
-# Case-insensitive blanket performance claims, Chinese plus English variants:
-#   0 GC / 0 GCC / zero GC / GC-free / no GC / 无 GC / 零 GC
-#   零对象 / 零对象创建 / 0 对象 / zero object creation / object-creation-free
-#   零分配 / zero allocation / no allocation / allocation-free / alloc-free
-#   零开销 / zero overhead / no overhead / overhead-free
-#   GC-free / allocation-free / object-creation-free / overhead-free
-#   纳秒级 / nanosecond-level (any spacing or separator)
-#   杜绝频繁 GC
-# `0 GC` and `0 GCC` require a non-alphanumeric boundary before the digit and a
-# non-alphanumeric boundary after the keyword, so counts like `10 GC`, version
-# strings like `1.0 GC`, identifiers like `x0GCCy`, and profiler metrics like
-# `gc.alloc.rate.norm` do not trip the rule. `TimeUnit.NANOSECONDS` is exempt
-# via the `nanosecond-level` phrasing requirement (no `-level` suffix matches).
-# Chinese exemptions: `低开销`/`无锁`/`无 BigDecimal` do not match because the
-# banned patterns are anchored to the exact claim words (零开销/无 GC/零分配...).
-pattern='(^|[^.[:alnum:]])0[[:space:]]*(GC|GCC)([^[:alnum:]]|$)'\
-'|(zero|no)[[:space:]]*-?[[:space:]]*GC([^[:alnum:]]|$)'\
-'|GC[-_ ]?free'\
-'|(无|零)[[:space:]]*GC([^[:alnum:]]|$)'\
-'|(无|零)[[:space:]]*分配'\
-'|(零|0)[[:space:]]*对象'\
-'|object([-_ ]?creation)?[[:space:]]*-?[[:space:]]*free'\
-'|(zero|no)[[:space:]]*-?[[:space:]]*object[[:space:]]*-?[[:space:]]*creation'\
-'|(zero|no)[[:space:]]*-?[[:space:]]*alloc'\
-'|alloc(ation)?[[:space:]]*-?[[:space:]]*free'\
-'|(零|0)[[:space:]]*开销'\
-'|(zero|no)[[:space:]]*-?[[:space:]]*overhead'\
-'|overhead[[:space:]]*-?[[:space:]]*free'\
-'|纳秒级|nanosecond[[:space:]_-]*level'\
-'|杜绝频繁[[:space:]]*GC'
-
-fail_scan() {
-  local label="$1"
-  shift
-  local hits
-  hits="$(grep -RIniE "$pattern" "$@" 2>/dev/null || true)"
-  if [[ -n "$hits" ]]; then
-    echo "unsupported blanket performance claim ($label):" >&2
-    echo "$hits" | while IFS= read -r match; do
-      echo "  $match" >&2
-    done
-    FAILED=1
-  fi
-}
-
-# Active documentation and root README. Historical convergence plans/specs
-# under docs/superpowers are excluded on purpose.
-docs_args=(--include='*.md' --include='*.markdown' --exclude-dir=superpowers)
-fail_scan 'docs' "$ROOT/README.md" "$ROOT/MIGRATION-1.0.md" "$ROOT/docs" "${docs_args[@]}"
-
-# Production and benchmark Java sources (Javadoc and code) outside target/.
-java_sources=()
-while IFS= read -r src; do
-  java_sources+=("$src")
-done < <(find "$ROOT" -type d -name target -prune -o \
-  -type f -name '*.java' -path '*/src/main/java/*' -print 2>/dev/null)
-if [[ "${#java_sources[@]}" -gt 0 ]]; then
-  fail_scan 'sources' "${java_sources[@]}"
-else
-  echo "performance claims gate: RED (no */src/main/java sources found to scan)" >&2
-  exit 1
-fi
 
 readme="$ROOT/benchmarks/README.md"
 for requirement in \

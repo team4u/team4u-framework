@@ -30,7 +30,7 @@ TextTemplate template = new TextTemplate("biz.${region}.${tenantId}.router");
 // 2. 提取变量名列表（保持出现顺序）
 Set<String> vars = template.getVariableNames(); // ["region", "tenantId"]
 
-// 3. 传入上下文 Map 极速渲染（零正则开销）
+// 3. 传入上下文 Map 极速渲染（预解析占位符，渲染时不做正则解析）
 Map<String, Object> context = new HashMap<>();
 context.put("region", "shanghai");
 context.put("tenantId", "alipay");

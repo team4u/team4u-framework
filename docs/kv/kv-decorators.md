@@ -192,7 +192,7 @@ HotSwapStore.swap(kv, new ObservedStore(new TieredStore(redisStore, 30_000,
 | :--- | :--- |
 | ObservedStore 最外层 | 记录整棵洋葱的真实耗时；脱敏覆盖所有路径 |
 | TieredStore 中间层 | 缓存命中时跳过下层一切（包括重试与真实存储） |
-| RetryableStore 最内层 | 只保护真实存储访问；缓存命中的读零重试开销 |
+| RetryableStore 最内层 | 只保护真实存储访问；缓存命中的读跳过重试路径 |
 | HotSwapStore 包整棵洋葱 | 换代换的是完整实现，粒度最大 |
 
 ### 能力自动透传

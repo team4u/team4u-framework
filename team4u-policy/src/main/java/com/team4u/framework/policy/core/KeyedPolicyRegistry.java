@@ -168,7 +168,7 @@ public class KeyedPolicyRegistry<K, P extends KeyedPolicy<K>> implements PolicyR
     /**
      * 获取所有已注册的策略列表
      * <p>
-     * 使用缓存的不可变列表，彻底消除读取时的 ArrayList 创建。
+     * 使用缓存的不可变列表，读取时直接返回缓存引用，不再每次拷贝 ArrayList。
      *
      * @return 策略列表
      */

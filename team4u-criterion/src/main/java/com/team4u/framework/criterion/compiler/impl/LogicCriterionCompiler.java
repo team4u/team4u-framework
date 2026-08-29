@@ -13,7 +13,7 @@ public class LogicCriterionCompiler extends AbstractCriterionCompiler<LogicCrite
     @Override
     public MatchPredicate compile(LogicCriterion criterion, CriterionVisitor<MatchPredicate> visitor) {
         // 递归预编译所有子节点 (Compile-time)
-        // 将 list 转换为数组，运行时遍历数组比 list 快一点点，且无迭代器对象生成
+        // 将 list 转换为数组，运行时遍历数组比 list 快一点点，且不生成迭代器对象
         MatchPredicate[] funcs = criterion.getChildren().stream()
                 .map(visitor::visit)
                 .toArray(MatchPredicate[]::new);
