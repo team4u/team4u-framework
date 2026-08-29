@@ -329,3 +329,86 @@ JMH evidence, or KV production code changed (comments and docs only), and the
 release script was freshly run by the independent review immediately after
 8c with 40 real dependency trees / 22 exact shapes PASS. GitHub Actions
 JDK 8/11/17/21 matrix execution remains pending.
+
+## Final Scanner Hardening
+
+The final review's three Important findings were all false-negative gaps in
+the semantic scanner's families or coverage; all three were reproduced as RED
+in the new built-in self-test before any fix was applied.
+
+- Review case 1 (case keywords): `零 gc`, `0 gc`, `无 gc`, `杜绝频繁 gc`, and
+  `GC free` were allowed because the Chinese/digit/frequent-GC families were
+  case sensitive and the `free` separator accepted only hyphen/underscore.
+- Review case 2 (idiom guard region restart): `无锁零GC` and `无锁零分配` were
+  allowed because rejecting the leading `无锁` candidate skipped the whole
+  matcher match, swallowing any claim embedded in the same match.
+- Review case 3 (docs html coverage): `docs/index.html` was never scanned
+  (only `.md`/`.markdown`), so a claim injected into the docs landing page was
+  invisible to the gate.
+
+### Built-in Self-Test (RED Before Fixes)
+
+`PerformanceClaimScanner --self-test` now runs a static corpus with no file
+dependencies: 43 positive cases that must be rejected and 34 negative cases
+that must stay allowed, each tagged with its family. A mismatch prints
+`[family] expected verdict: text` and exits 1. The thin shell wrapper runs
+`--self-test` before every root scan, so the pattern set must pass its own
+tests before it can judge the repository.
+
+With the new cases added and the fixes not yet applied, the self-test was RED
+with exactly 12 mismatches — the review's positives `零gc`, `无gc`, `0gc`,
+`无锁零GC`, `无锁零分配`, `GC free`, `allocation free`, `alloc free`,
+`garbage-free`, `garbage collection free`, `garbage-collection-free`,
+`object creation free` — while all 34 negatives (including the required
+`0 GCC`, `0GCC`, `x0GC`, `10GC`, `1.0GC`, `GC-freeware`, `GC freelance`,
+`compiler GCC`, `no BigDecimal`, `no lock`, `zero get calls`, `zero-copy`,
+`gc.alloc.rate.norm`, `TimeUnit.NANOSECONDS`, `零配置、低开销`, `无锁、低分配`)
+already behaved as expected.
+
+### Fixes
+
+- `CHINESE_COST`, `DIGIT_COST`, `ABSOLUTE`, and `FORBID_FREQUENT_GC` are now
+  `CASE_INSENSITIVE`, so lowercase `gc` claims are caught. The quantifier
+  prefix (零/无/0) keeps `gc.alloc.rate.norm` and metric identifiers safe.
+- The idiom-guard reject path now restarts the matcher region right after the
+  rejected quantifier codepoint (strictly advancing floor, digit head never
+  restarts, transparent bounds preserved), so `无锁零GC` and `无锁零分配` are
+  caught while `无锁、低分配` stays allowed.
+- `EN_FREE` accepts space/hyphen/underscore separators (0..2, trailing word
+  boundary) and adds the `garbage([ _-]+collection)?` noun, catching
+  `garbage-free`, `garbage collection free`, and spaced `GC free` while
+  `GC-freeware` and `GC freelance` stay negative.
+- Docs collection now matches `.md/.markdown/.html/.htm` case-insensitively;
+  the existing `docs/index.html` is scanned (124 documentation files now, was
+  123) and the `superpowers` segment stays excluded. A sandboxed
+  `docs/index.html` containing `无锁零GC`, `无锁零分配`, `allocation free`, and
+  `zero gc` turned the scanner RED with both injected lines.
+- The unnecessary `System.setErr` wrapping was removed (JDK 21 decodes
+  `file.encoding=UTF-8` diagnostics natively; claim lines verified readable in
+  zh_CN.UTF-8, C.UTF-8, and C child locales).
+
+### Verification
+
+- Self-test GREEN: 43 positive and 34 negative cases, as expected — under the
+  default locale, `LC_ALL=C`, `LC_ALL=C.UTF-8`, and `LC_ALL=zh_CN.UTF-8`.
+- Root gate GREEN in all four locales; 124 documentation files and 514 Java
+  sources scanned.
+- Fresh-sandbox coverage: docs+source RED (sandbox with `零gc`, `GC free`,
+  allowed `0GCC`), docs-only-with-no-sources explicit RED, non-directory
+  argument exit 2, wrong-argument-count usage exit 2.
+- `javac -source 8 -target 8 -Xlint:-options` clean (no warnings);
+  `bash -n scripts/check-performance-claims.sh` clean; `git diff --check`
+  clean.
+- Full reactor `mvn -f <worktree>/pom.xml clean install`: PASS, 1,565/1,565
+  tests, 0 failures, 0 errors, 0 skipped, 253 Surefire report files (latest
+  run after the scanner changes; production/test inputs unchanged).
+- Not rerun, unchanged inputs, honest scope: release packaging, JMH
+  benchmarks, the two invoker consumer profiles, and the release script (the
+  prior rounds' 40x3 artifact audit, 678 classfiles / major-52 evidence,
+  40-tree release script run, and 40x3/47/40 sandbox corpus evidence all
+  remain valid; this round changed no production, docs-claim, POM, version,
+  runtime, or raw-evidence input).
+- GitHub Actions JDK 8/11/17/21 matrix execution remains pending (unchanged
+  limitation).
+
+Commit subject: `fix(performance): harden semantic claim scanner`.
