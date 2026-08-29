@@ -34,7 +34,7 @@ mvn -Prelease-contracts -DskipTests verify
 
 It runs the same six active consumers, executes their mains, and validates or records each runtime dependency tree.
 
-Task 18 adds no functional migration and does not change `1.0.0-SNAPSHOT`. It aligns performance wording with the committed JMH evidence and adds the unpublished standalone benchmark project and release-evidence gates. Release evidence remains incomplete until the sequential JDK 8/11/17/21 CI matrix passes on GitHub Actions; this local environment only has JDK 21. No production release or version change should be made from that local-only evidence.
+Task 18 adds no functional migration and does not change `1.0.0-SNAPSHOT`. It aligns performance wording with the committed JMH evidence and adds the unpublished standalone benchmark project and release-evidence gates. The sequential JDK 8/11/17/21 matrix has passed locally in Docker (`maven:3.9.11-eclipse-temurin` images, Temurin `1.8.0_472`/`11.0.29`/`17.0.17`/`21.0.9`, Maven `3.9.11`): per JDK, clean install `1,565/1,565` tests, benchmark package (5 methods in 4 classes), 6 external + 6 release-contract consumers, performance claims gate, release package, the `40×3` DOM manifest check, and `678` classfiles at major version `52`; the release-contract script passed 40 real dependency trees / 22 exact shapes on all four JDKs after its JDK 8 helper-directory fix (`javac` on Java 8 does not auto-create the `-d` output directory; the script now `mkdir -p`s it first, and the fixed checked-in script passes unchanged on 8, 11, 17, and 21). A local Docker matrix is not hosted execution: the GitHub Actions workflow is still pending, and no production release or version change should be made from local-only evidence.
 
 ## Config proxy creation
 

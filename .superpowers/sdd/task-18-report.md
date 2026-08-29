@@ -72,9 +72,17 @@ CI YAML parses as a mapping. The build job has JDK matrix `8, 11, 17, 21`, `fail
 
 Scripts are executable (`755`), `bash -n` passes, and `ReleasePomList.java` compiles with `javac -source 8 -target 8` (JDK 21 emits only four expected obsolete-option/bootstrap warnings). `git diff --check` passes. Local Markdown link-target checking found 0 invalid relative paths.
 
+## Local Docker JDK Matrix
+
+The full CI matrix was executed locally in Docker with `maven:3.9.11-eclipse-temurin-{8,11,17,21}` images: Temurin `1.8.0_472`, `11.0.29`, `17.0.17`, `21.0.9`, Maven `3.9.11`. Per JDK the recorded gates were: clean install `1,565/1,565` tests (`253` Surefire report files), benchmark package with exactly 5 methods in 4 classes, 6 external + 6 release-contract consumers, performance claims gate, release package, the `40×3` DOM manifest check (40 direct module IDs = 40 managed IDs = 40 module artifact IDs, duplicate-free), and `678` production classfiles at major version `52`. On JDK 11, 17, and 21 the checked-in `scripts/check-release-contracts.sh` passed with 40 real dependency trees and 22 exact shapes as-is.
+
+On JDK 8 the unmodified script failed deterministically before any Maven work: `javac -d "$WORK/classes" scripts/ReleasePomList.java` exited 2 with `javac: directory not found` because `javac` on Java 8 does not create the `-d` output directory (JDK 9+ creates it automatically). The one-line fix adds `mkdir -p "$WORK/classes"` before the compile; after the fix the unmodified checked-in script was rerun in the same `maven:3.9.11-eclipse-temurin-8` container and passed `40/40 leaves / 22 shapes` including the effective-POM Aliyun check. A local Docker matrix is not equivalent to hosted GitHub Actions: remote workflow execution is still required before any publication.
+
+One JDK 8 test-stage run observed a preexisting scheduler-sensitive KV heartbeat transient; the full rerun passed `1,565/1,565`. This was recorded as an environmental transient only — no code was changed for it and no follow-up was scheduled. It is unrelated to the JDK 8 helper-directory fix above.
+
 ## Release Limitation
 
-The matrix was not executed on JDK 8, 11, and 17 locally: this machine has JDK 21 only. The required matrix evidence is GitHub Actions execution of the checked-in CI file. Task 18 is complete as implementation, evidence cleanup, and local JDK 21 verification, but release/version-change evidence remains incomplete until that matrix passes.
+Local Docker containers are not hosted runners: the locally executed Docker JDK matrix above does not substitute for the required GitHub Actions matrix evidence. The checked-in CI file still must run its JDK 8/11/17/21 matrix on GitHub Actions before release or any version change, and no production release or version change should be made from local-only evidence. Task 18 is complete as implementation, evidence cleanup, and local matrix verification; hosted workflow execution remains pending.
 
 ## Findings and Corrections
 
