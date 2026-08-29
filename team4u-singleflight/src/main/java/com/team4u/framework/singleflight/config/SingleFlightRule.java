@@ -130,7 +130,6 @@ public class SingleFlightRule {
     /**
      * key 摘要算法名（注册于 {@code SingleFlightKeyDigests.global()}）。
      * 空白表示不摘要，业务 key 明文进入存储；未注册的名字在规则加载期失败。
-     * 摘要只由本字段手工指定，不再按 key 长度自动触发。
      */
     private String keyDigest;
 }

@@ -10,7 +10,7 @@ import java.nio.charset.StandardCharsets;
  * point 与业务 key 分别做百分号编码，再以下划线拼接，保证任意业务值
  * 都能安全进入 {@code SpaceKey}（分隔符不会被 {@code SpaceKey} 自身使用，point 与
  * 业务 key 之间不会产生歧义拼接）。规则声明了 {@code keyDigest} 时，业务 key 先经
- * 命名摘要策略变换再拼接——摘要只由规则手工指定，不再按 key 长度自动触发。
+ * 命名摘要策略变换再拼接。
  * </p>
  *
  * @author jay.wu
