@@ -3,7 +3,9 @@ package com.team4u.framework.singleflight.core;
 import com.team4u.framework.kv.CasCapable;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.KvStores;
+import com.team4u.framework.kv.NamedKvStoreRegistry;
 import com.team4u.framework.kv.lock.KvLockManager;
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.serializer.json.JsonUtil;
 import com.team4u.framework.singleflight.api.SingleFlightConfigException;
 import com.team4u.framework.singleflight.config.ContentionPolicy;
@@ -12,7 +14,6 @@ import com.team4u.framework.singleflight.policy.KeyResolver;
 import com.team4u.framework.singleflight.policy.SingleFlightCondition;
 import com.team4u.framework.singleflight.policy.SingleFlightKeyDigest;
 import com.team4u.framework.singleflight.policy.SingleFlightKeyDigests;
-import com.team4u.framework.singleflight.store.SingleFlightStores;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Clock;
@@ -180,14 +181,15 @@ class RuleCompiler implements AutoCloseable {
     }
 
     /**
-     * 按名解析命名存储（直达最内层真实存储）；未注册视为配置错误。
+     * 按名解析命名存储（直达最内层真实存储，注册于
+     * {@link NamedKvStoreRegistry#global()}）；未注册视为配置错误。
      */
     private KvStore resolveStore(String storeName) {
         if (storeName.isEmpty()) {
             return defaultCoordinationStore;
         }
         try {
-            return unwrapStore(SingleFlightStores.global().resolve(storeName));
+            return unwrapStore(NamedKvStoreRegistry.global().get(storeName));
         } catch (IllegalArgumentException e) {
             throw new SingleFlightConfigException(
                     "Singleflight store not registered|store=" + storeName, e);
@@ -224,7 +226,7 @@ class RuleCompiler implements AutoCloseable {
     }
 
     private static boolean blank(String value) {
-        return value == null || value.trim().isEmpty();
+        return StringUtil.isBlank(value);
     }
 
     /**

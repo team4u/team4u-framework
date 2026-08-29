@@ -18,7 +18,7 @@ import lombok.Data;
 public class SeqRule {
 
     /**
-     * 存储名（{@code SeqStores} 注册名）；缺省使用服务构造时传入的默认存储
+     * 存储名（{@code NamedKvStoreRegistry.global()} 注册名）；缺省使用服务构造时传入的默认存储
      */
     private String store;
 

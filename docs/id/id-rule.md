@@ -23,7 +23,7 @@ public class SeqRule {
 
 | 属性 | 类型 | 必填 | 默认值 | 说明 |
 | :--- | :--- | :--- | :--- | :--- |
-| `store` | String | 否 | 默认存储 | 存储名（`SeqStores` 注册名），见[快速开始](quick-start.md#多存储分工) |
+| `store` | String | 否 | 默认存储 | 存储名（`NamedKvStoreRegistry.global()` 注册名），见[快速开始](quick-start.md#多存储分工) |
 | `group` | JSON | 否 | 不分组 | 分组配置，见[分组策略](id-group.md) |
 | `start` | long | 否 | 1 | 初始值 |
 | `step` | int | 否 | 1 | 步进：相邻两个序号的差值 |

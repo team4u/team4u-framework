@@ -14,8 +14,6 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * 声明式路由方法拦截器 (Proxy Method Interceptor)
@@ -34,8 +32,6 @@ import java.util.regex.Pattern;
  * @author jay.wu
  */
 public class RoutedMethodInterceptor implements MethodInterceptor {
-
-    private static final Pattern PLACEHOLDER_PATTERN = Pattern.compile("\\$\\{([^}]+)}");
 
     /**
      * 方法元数据缓存，确保 O(1) 的超高性能
@@ -115,21 +111,10 @@ public class RoutedMethodInterceptor implements MethodInterceptor {
                     "Multiple @RouteContext parameters found in method: " + method);
         }
 
-        int placeholderCount = countPlaceholders(routerIdPattern);
+        // 占位符个数即模板变量个数，由 TextTemplate 统一解析
+        int placeholderCount = template.getVariableNames().size();
 
         return new RouteMetadata(true, template, contextIndex, placeholderCount, routerIdPattern);
-    }
-
-    private static int countPlaceholders(String pattern) {
-        if (pattern == null || pattern.isEmpty()) {
-            return 0;
-        }
-        int count = 0;
-        Matcher matcher = PLACEHOLDER_PATTERN.matcher(pattern);
-        while (matcher.find()) {
-            count++;
-        }
-        return count;
     }
 
     @Override

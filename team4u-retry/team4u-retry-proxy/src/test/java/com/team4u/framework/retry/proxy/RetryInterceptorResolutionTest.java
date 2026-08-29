@@ -84,9 +84,52 @@ public class RetryInterceptorResolutionTest {
     }
 
     @Test
-    public void testRetryInterceptorDoesNotExposeNoArgsConstructor() {
-        for (Constructor<?> constructor : RetryInterceptor.class.getDeclaredConstructors()) {
+    public void testRetryInterceptorKeepsPublicApiRequiringClients() {
+        // 公开构造仍要求显式传入 InlineRetryClient，避免无参构造导致 NPE；
+        // protected 空构造仅供延迟初始化子类（如 Spring 适配壳）使用
+        for (Constructor<?> constructor : RetryInterceptor.class.getConstructors()) {
             Assert.assertTrue(constructor.getParameterCount() > 0);
+        }
+    }
+
+    @Test
+    public void testUninitializedInterceptorFailsFastOnInvocation() {
+        // 延迟初始化子类未调用 initializeDelegate 前首次拦截应快速失败，
+        // 而不是在空 delegate 上 NPE
+        RetryInterceptor uninitialized = new RetryInterceptor() {
+        };
+        try {
+            uninitialized.invoke(new com.team4u.framework.proxy.core.MethodInvocation() {
+                @Override
+                public Object getProxy() {
+                    return null;
+                }
+
+                @Override
+                public Object getTarget() {
+                    return null;
+                }
+
+                @Override
+                public Method getMethod() {
+                    return Object.class.getMethods()[0];
+                }
+
+                @Override
+                public Object[] getArguments() {
+                    return new Object[0];
+                }
+
+                @Override
+                public Object proceed() {
+                    return null;
+                }
+            });
+            Assert.fail("expected IllegalStateException");
+        } catch (IllegalStateException ex) {
+            Assert.assertTrue(ex.getMessage().contains("RetryDelegate has not been initialized"));
+        } catch (Throwable t) {
+            Assert.fail("expected IllegalStateException, but got " + t);
         }
     }
 

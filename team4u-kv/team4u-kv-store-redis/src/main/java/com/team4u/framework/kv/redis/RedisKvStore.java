@@ -75,6 +75,23 @@ public class RedisKvStore implements KvStore, CasCapable, ScanCapable, NativeTtl
             Long.class);
 
     /**
+     * 值匹配则续期（保序，ARGV1=期望值, ARGV2=新TTL毫秒，0 为改为永不过期）：
+     * 仅当新 TTL 晚于当前剩余 TTL 时才刷新——晚到的续约不缩短租约；
+     * 当前已永不过期（PTTL 为 -1）则保持不变；校验与更新单脚本原子生效
+     */
+    private static final RedisScript<Long> CAS_EXPIRE_SCRIPT = new DefaultRedisScript<>(
+            "if redis.call('GET', KEYS[1]) == ARGV[1] then "
+                    + "local pttl = redis.call('PTTL', KEYS[1]) "
+                    + "if pttl == -1 then return 1 end "
+                    + "if tonumber(ARGV[2]) == 0 then "
+                    + "redis.call('PERSIST', KEYS[1]) return 1 end "
+                    + "if tonumber(ARGV[2]) > pttl then "
+                    + "redis.call('PEXPIRE', KEYS[1], ARGV[2]) end "
+                    + "return 1 "
+                    + "else return 0 end",
+            Long.class);
+
+    /**
      * 带 TTL 的原子递增（ARGV1=递增量, ARGV2=TTL毫秒）：
      * 仅当键当前无 TTL（PTTL 为 -1，含新建键与存量无 TTL 键）时设置 PEXPIRE，
      * 后续递增不刷新 TTL；TTL 与递增在脚本内原子生效
@@ -207,6 +224,26 @@ public class RedisKvStore implements KvStore, CasCapable, ScanCapable, NativeTtl
             return result != null && result == 1;
         } catch (DataAccessException e) {
             throw new KvStoreException("CompareAndRemove failed|key=" + key, e);
+        }
+    }
+
+    /**
+     * 单 Lua 脚本原子完成「值匹配」校验与保序续期；
+     * 绝对过期时间转换为相对 TTL 后与剩余 PTTL 比较（与 {@link #compareAndSet}
+     * 一致以客户端时钟折算）；陈旧请求（新过期时间早于当前时钟、折算 TTL 为负）
+     * 落入「不大于剩余 TTL」分支自然成为无害空操作，不会把键钳成永不过期
+     */
+    @Override
+    public boolean compareAndExpire(SpaceKey key, String expectedValue, long newExpireAtMillis) {
+        long newTtlMillis = newExpireAtMillis == 0
+                ? 0 : newExpireAtMillis - clock.millis();
+        try {
+            Long result = redis.execute(CAS_EXPIRE_SCRIPT,
+                    java.util.Collections.singletonList(physical(key)),
+                    expectedValue, Long.toString(newTtlMillis));
+            return result != null && result == 1;
+        } catch (DataAccessException e) {
+            throw new KvStoreException("CompareAndExpire failed|key=" + key, e);
         }
     }
 

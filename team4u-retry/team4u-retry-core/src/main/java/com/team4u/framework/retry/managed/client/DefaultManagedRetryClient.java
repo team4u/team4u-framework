@@ -1,6 +1,8 @@
 package com.team4u.framework.retry.managed.client;
 
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.retry.api.ManagedSubmitResult;
+import com.team4u.framework.retry.common.concurrent.ForegroundRetryLoop;
 import com.team4u.framework.retry.managed.submit.RetryTaskSpec;
 import com.team4u.framework.retry.managed.model.RetryRequest;
 import com.team4u.framework.retry.managed.model.RetryState;
@@ -11,7 +13,6 @@ import com.team4u.framework.retry.managed.dispatch.RetryDispatchCommand;
 import com.team4u.framework.retry.managed.dispatch.RetryDispatcher;
 import com.team4u.framework.retry.managed.store.RetryStore;
 import com.team4u.framework.retry.managed.store.record.*;
-import com.team4u.framework.retry.common.util.RetryExceptionUtil;
 import lombok.Builder;
 
 import java.time.Instant;
@@ -122,13 +123,13 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
             throw new IllegalStateException(
                     "MANAGED mode requires a retry policy with foregroundMaxRetries explicitly configured");
         }
-        if (isBlank(spec.getIdempotencyKey())) {
+        if (StringUtil.isBlank(spec.getIdempotencyKey())) {
             throw new IllegalStateException("MANAGED mode requires RetryTaskSpec.idempotencyKey");
         }
         if (spec.getExecutor() == null) {
             throw new IllegalStateException("MANAGED mode requires RetryTaskSpec.executor");
         }
-        if (spec.getRecovery() == null || isBlank(spec.getRecovery().getTaskType())) {
+        if (spec.getRecovery() == null || StringUtil.isBlank(spec.getRecovery().getTaskType())) {
             throw new IllegalStateException(
                     "MANAGED mode requires a RecoverySpec with a valid taskType");
         }
@@ -163,6 +164,9 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
 
     /**
      * 在调用者线程（前台）执行具体的任务重试。
+     * <p>
+     * 同步重试循环与 INLINE 客户端共用 {@link ForegroundRetryLoop}：MANAGED 侧通过
+     * 前台次数上限（foregroundMaxRetries + 1）与后台移交回调实现自己的对外语义。
      *
      * @param spec   任务规格
      * @param record 当前重试记录
@@ -174,56 +178,60 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
             RetryTaskSpec<T> spec,
             RetryRecord record,
             RetryPolicy policy) {
-        int maxForegroundExecutions = policy.getForegroundMaxRetries() + 1;
-        int failedAttemptsSoFar = 0;
+        return ForegroundRetryLoop.execute(
+                policy,
+                new ForegroundRetryLoop.CallableTask<T>() {
+                    @Override
+                    public T call() throws Exception {
+                        return spec.getExecutor().call();
+                    }
+                },
+                new ForegroundRetryLoop.Listener<T, ManagedSubmitResult<T>>() {
+                    @Override
+                    public ManagedSubmitResult<T> onSuccess(T result, int failedAttemptsSoFar) {
+                        // Completed 只在 durable SUCCEEDED 写入成功后才成立。
+                        try {
+                            Instant succeededAt = Instant.now();
+                            store.markSucceeded(record.getTaskId(), SuccessRecord.builder()
+                                    .succeededAt(succeededAt)
+                                    .attempts(failedAttemptsSoFar + 1)
+                                    .build());
+                            record.getState().setSucceededAt(succeededAt);
+                        } catch (RuntimeException ex) {
+                            throw new DurableSuccessWriteException(record.getTaskId(), ex);
+                        }
+                        record.getState().setStatus(RetryStatus.SUCCEEDED);
+                        record.getState().setNextRunAt(null);
+                        record.getState().setAttempts(failedAttemptsSoFar + 1);
+                        return new ManagedSubmitResult.Completed<T>(result);
+                    }
 
-        while (true) {
-            T result;
-            try {
-                // 执行业务逻辑
-                result = spec.getExecutor().call();
-            } catch (Throwable ex) {
-                failedAttemptsSoFar++;
-                Throwable cause = normalize(ex);
-                if (cause instanceof Error) {
-                    throw (Error) cause;
-                }
-                FailureRecord failure = createFailureRecord(cause);
-                boolean canRetry = policy.canRetry(failedAttemptsSoFar, cause);
-                // 若策略决定不再重试，则标记为最终失败
-                if (!canRetry) {
-                    markFinalFailure(record, failedAttemptsSoFar, failure);
-                    return new ManagedSubmitResult.Failed<T>(cause);
-                }
-                // 若未达到前台重试上限，则在当前线程休眠退避后继续尝试
-                if (failedAttemptsSoFar < maxForegroundExecutions) {
-                    InterruptedException interrupted = sleepBeforeNextAttempt(policy, failedAttemptsSoFar);
-                    if (interrupted != null) {
+                    @Override
+                    public ManagedSubmitResult<T> onRetryExhausted(
+                            Throwable cause, int failedAttemptsSoFar) {
+                        markFinalFailure(record, failedAttemptsSoFar, createFailureRecord(cause));
+                        return new ManagedSubmitResult.Failed<T>(cause);
+                    }
+
+                    @Override
+                    public ManagedSubmitResult<T> onInterrupted(
+                            InterruptedException interrupted, int failedAttemptsSoFar) {
                         markFinalFailure(record, failedAttemptsSoFar, createFailureRecord(interrupted));
-                        Thread.currentThread().interrupt();
                         return new ManagedSubmitResult.Failed<T>(interrupted);
                     }
-                    continue;
-                }
-                // 达到前台上限，移交给后台处理
-                return dispatchToBackground(record, failedAttemptsSoFar, failure, policy);
-            }
-            // Completed 只在 durable SUCCEEDED 写入成功后才成立。
-            try {
-                Instant succeededAt = Instant.now();
-                store.markSucceeded(record.getTaskId(), SuccessRecord.builder()
-                        .succeededAt(succeededAt)
-                        .attempts(failedAttemptsSoFar + 1)
-                        .build());
-                record.getState().setSucceededAt(succeededAt);
-            } catch (RuntimeException ex) {
-                throw new DurableSuccessWriteException(record.getTaskId(), ex);
-            }
-            record.getState().setStatus(RetryStatus.SUCCEEDED);
-            record.getState().setNextRunAt(null);
-            record.getState().setAttempts(failedAttemptsSoFar + 1);
-            return new ManagedSubmitResult.Completed<T>(result);
-        }
+
+                    @Override
+                    public ManagedSubmitResult<T> onForegroundBudgetExhausted(
+                            Throwable cause, int failedAttemptsSoFar) {
+                        return dispatchToBackground(
+                                record, failedAttemptsSoFar, createFailureRecord(cause), policy);
+                    }
+
+                    @Override
+                    public int maxForegroundExecutions() {
+                        return policy.getForegroundMaxRetries() + 1;
+                    }
+                });
     }
 
     /**
@@ -294,26 +302,6 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
     }
 
     /**
-     * 在下一次重试尝试前进行休眠。
-     *
-     * @param policy   重试策略
-     * @param attempts 当前尝试次数
-     * @return 若休眠被中断返回异常，否则返回 null
-     */
-    private InterruptedException sleepBeforeNextAttempt(RetryPolicy policy, int attempts) {
-        long delayMillis = policy.getDelayMillis(attempts);
-        if (delayMillis <= 0) {
-            return null;
-        }
-        try {
-            Thread.sleep(delayMillis);
-            return null;
-        } catch (InterruptedException interrupted) {
-            return interrupted;
-        }
-    }
-
-    /**
      * 根据异常对象创建失败记录详情。
      */
     private FailureRecord createFailureRecord(Throwable throwable) {
@@ -322,19 +310,5 @@ public class DefaultManagedRetryClient implements ManagedRetryClient {
                 .errorMessage(throwable.getMessage())
                 .failedAt(Instant.now())
                 .build();
-    }
-
-    /**
-     * 标准化异常对象，尝试剥离包装层。
-     */
-    private Throwable normalize(Throwable throwable) {
-        return RetryExceptionUtil.unwrapAndRestoreInterrupt(throwable);
-    }
-
-    /**
-     * 检查字符串是否为空或空白。
-     */
-    private boolean isBlank(String value) {
-        return value == null || value.trim().isEmpty();
     }
 }

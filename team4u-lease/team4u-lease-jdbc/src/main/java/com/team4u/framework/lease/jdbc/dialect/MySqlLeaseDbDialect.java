@@ -1,6 +1,6 @@
 package com.team4u.framework.lease.jdbc.dialect;
 
-import com.team4u.framework.lease.jdbc.SqlExpression;
+import com.team4u.framework.base.jdbc.SqlExpression;
 
 public class MySqlLeaseDbDialect implements LeaseDbDialect {
 

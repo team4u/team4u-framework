@@ -11,10 +11,10 @@ import com.team4u.framework.id.api.Sequences;
 import com.team4u.framework.id.config.SeqRule;
 import com.team4u.framework.id.group.GroupKeyPolicies;
 import com.team4u.framework.id.group.GroupKeyPolicy;
-import com.team4u.framework.id.store.SeqStores;
 import com.team4u.framework.kv.CounterCapable;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.KvStores;
+import com.team4u.framework.kv.NamedKvStoreRegistry;
 import com.team4u.framework.kv.SpaceKey;
 import com.team4u.framework.policy.core.KeyedPolicyRegistry;
 import com.team4u.framework.serializer.json.JsonUtil;
@@ -37,7 +37,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *     <li><b>分组</b>：{@link GroupKeyPolicy} 按策略计算分组标识，参与计数键组成，
  *     分组变化即重新计数</li>
  *     <li><b>计数</b>：{@link CounterCapable}（kv 能力协商解析）提供原子递增，
- *     存储无关——内存、JDBC、Redis 及其装饰器组合均可</li>
+ *     存储无关——内存、JDBC、Redis 及其装饰器组合均可；命名存储复用
+ *     {@link NamedKvStoreRegistry#global()} 统一注册</li>
  *     <li><b>号段</b>：{@code segment > 0} 时经 {@link LocalSegment} 本地批量发号，
  *     实例由 LRU 缓存管理，随分组轮转与规则变更自然淘汰</li>
  * </ul>
@@ -286,7 +287,7 @@ public class SequenceService implements Sequences {
             return defaultStore;
         }
         try {
-            return SeqStores.global().resolve(storeName);
+            return NamedKvStoreRegistry.global().get(storeName);
         } catch (IllegalArgumentException e) {
             throw new SeqConfigException("Seq store not registered|store=" + storeName, e);
         }

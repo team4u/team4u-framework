@@ -1,7 +1,6 @@
 package com.team4u.framework.log.jackson;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.SerializationFeature;
 import com.fasterxml.jackson.databind.module.SimpleModule;
 import com.team4u.framework.log.config.FinOpsConfigRepository;
 import com.team4u.framework.log.config.FinOpsConfigRepository.FinOpsConfig;
@@ -9,12 +8,24 @@ import com.team4u.framework.log.core.LogEvent;
 import com.team4u.framework.log.core.LogSerializer;
 import com.team4u.framework.mask.jackson.JacksonMaskModule;
 import com.team4u.framework.mask.jackson.MaskConfig;
+import com.team4u.framework.serializer.json.jackson.JacksonSerializerPolicy;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
  * 基于 Jackson 的日志序列化器
+ * <p>
+ * <b>Mapper 构建策略</b>：以 {@link JacksonSerializerPolicy#sharedMapper()} 的副本为基底，
+ * 叠加日志特有的截断模块（{@link TruncatingStringSerializer} + {@link ByteArrayLogSerializer}）。
+ * <p>
+ * 截断模块<b>不注册进全局共享 mapper</b>，原因：
+ * {@link TruncatingStringSerializer} 对 {@code String.class} 全量生效（非按注解/类型过滤），
+ * 且无上下文属性时回退到 FinOps 默认 2000 字符。若注册全局，所有 {@code JsonUtil} 消费方
+ * （retry 载荷、router 策略、lease 编解码等）的普通字符串都会被无差别截断，污染全局语义。
+ * 脱敏模块（{@link JacksonMaskModule}）则相反，它按注解/规则精确匹配字段，
+ * 已通过 mask 模块的 {@code JacksonModuleContributor} SPI 注册进共享 mapper，
+ * 副本继承该能力，无需本类重复注册。
  */
 public class JacksonLogSerializer implements LogSerializer {
 
@@ -26,17 +37,15 @@ public class JacksonLogSerializer implements LogSerializer {
     }
 
     private ObjectMapper createObjectMapper() {
-        ObjectMapper mapper = new ObjectMapper();
-        mapper.disable(SerializationFeature.FAIL_ON_EMPTY_BEANS);
+        // 以全局共享 mapper 的副本为基底：继承 SPI 注册的脱敏等模块与基础配置，
+        // 同时隔离本类追加的截断模块，避免污染其他 JsonUtil 消费方
+        ObjectMapper mapper = JacksonSerializerPolicy.sharedMapper().copy();
 
-        // 1. 注册日志特有的防超长截断拦截器
+        // 注册日志特有的防超长截断拦截器
         SimpleModule logModule = new SimpleModule();
         logModule.addSerializer(String.class, new TruncatingStringSerializer());
         logModule.addSerializer(byte[].class, new ByteArrayLogSerializer());
         mapper.registerModule(logModule);
-
-        // 2. 注册通用的脱敏模块
-        mapper.registerModule(new JacksonMaskModule());
 
         return mapper;
     }
@@ -78,7 +87,8 @@ public class JacksonLogSerializer implements LogSerializer {
 
     @Override
     public void reset() {
-        // 重置 ObjectMapper 以清空序列化器缓存
+        // 重置 ObjectMapper：重新从共享 mapper 派生副本，清空序列化器缓存并
+        // 感知共享 mapper 侧的模块集变化（如晚注册的脱敏模块）
         this.objectMapper = createObjectMapper();
     }
 }

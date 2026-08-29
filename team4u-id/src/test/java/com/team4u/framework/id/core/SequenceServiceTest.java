@@ -5,11 +5,11 @@ import com.team4u.framework.id.api.SeqConfigException;
 import com.team4u.framework.id.group.GroupKeyPolicies;
 import com.team4u.framework.id.group.GroupKeyPolicy;
 import com.team4u.framework.id.group.SeqGroupConfig;
-import com.team4u.framework.id.store.SeqStores;
 import com.team4u.framework.kv.CounterCapable;
 import com.team4u.framework.kv.KvRecord;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.KvStores;
+import com.team4u.framework.kv.NamedKvStoreRegistry;
 import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.SpaceKey;
 import com.team4u.framework.kv.memory.InMemoryKvStore;
@@ -126,7 +126,7 @@ public class SequenceServiceTest {
     @Test
     public void namedStoreRoutesToItsOwnCounter() {
         InMemoryKvStore redisLike = new InMemoryKvStore();
-        SeqStores.global().register("redisLike", redisLike);
+        NamedKvStoreRegistry.global().register("redisLike", redisLike);
         rule("default", "{}");
         rule("fast", "{\"store\":\"redisLike\"}");
 

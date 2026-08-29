@@ -20,18 +20,22 @@ import java.util.Map;
  * 1. 耗时记录与异常解包
  * 2. 参数名提取与主动脱敏
  * 3. 慢日志判定与异常状态标记
+ * <p>
+ * 方法调用抽象直接复用 team4u-proxy 的 {@link MethodInvocation}
+ * （其五件套为历史 LogInvocation 的严格超集），Spring AOP 场景经
+ * {@link com.team4u.framework.log.spring.SpringMethodInvocationAdapter} 适配。
  */
 public class LogTraceSupport {
 
     /**
      * 自动解析日志追踪配置并执行拦截
      *
-     * @param invocation  日志调用上下文
+     * @param invocation  方法调用上下文
      * @param targetClass 显式指定的目标类（可为空，为空时自动推断）
      * @return 方法执行结果
      * @throws Throwable 原始业务异常
      */
-    public static Object invoke(LogInvocation invocation, Class<?> targetClass) throws Throwable {
+    public static Object invoke(MethodInvocation invocation, Class<?> targetClass) throws Throwable {
         Method method = invocation.getMethod();
         if (targetClass == null) {
             targetClass = getTargetClass(invocation, method);
@@ -61,12 +65,12 @@ public class LogTraceSupport {
     /**
      * 执行拦截并记录日志
      *
-     * @param invocation 日志调用上下文
+     * @param invocation 方法调用上下文
      * @param options    日志追踪配置选项
      * @return 方法执行结果
      * @throws Throwable 原始业务异常
      */
-    public static Object proceed(LogInvocation invocation, LogTraceOptions options) throws Throwable {
+    public static Object proceed(MethodInvocation invocation, LogTraceOptions options) throws Throwable {
         long startNanos = System.nanoTime();
         Method method = invocation.getMethod();
         Object[] args = invocation.getArguments();
@@ -157,22 +161,11 @@ public class LogTraceSupport {
      * 当传递代理对象时，可以自动分析并穿透代理获取底层的真实业务类，
      * 用于确保日志和脱敏规则精确匹配到定义类上。
      *
-     * @param invocation 拦截器方法调用上下文
+     * @param invocation 方法调用上下文
      * @param method     当前执行的方法
      * @return 实际承担业务逻辑的原始类对象
      */
     public static Class<?> getTargetClass(MethodInvocation invocation, Method method) {
-        return getTargetClass(invocation == null ? null : new Team4uMethodInvocationAdapter(invocation), method);
-    }
-
-    /**
-     * 获取原始目标类
-     *
-     * @param invocation 日志调用上下文
-     * @param method     当前执行的方法
-     * @return 实际承担业务逻辑的原始类对象
-     */
-    public static Class<?> getTargetClass(LogInvocation invocation, Method method) {
         if (invocation != null) {
             Object target = invocation.getTarget();
             if (target != null) {

@@ -238,6 +238,23 @@ public class JdbcKvStore implements KvStore, CasCapable, ScanCapable, CounterCap
                 key.getSpace(), key.getKey(), expectedValue, now()) > 0;
     }
 
+    /**
+     * 单条件 UPDATE 原子完成「存活 + 值匹配」校验与保序过期更新；
+     * CASE WHEN 保序写法参考 team4u-lease 的 JdbcLeaseTaskDao.heartbeat：
+     * 晚到的续约（新过期时间早于存量）不回缩租约；0 为永不过期（视为无穷大）
+     */
+    @Override
+    public boolean compareAndExpire(SpaceKey key, String expectedValue, long newExpireAtMillis) {
+        return executeUpdate(
+                "UPDATE " + config.getTableName()
+                        + " SET expire_at = CASE WHEN ? = 0 THEN 0"
+                        + " WHEN expire_at = 0 THEN expire_at"
+                        + " WHEN ? > expire_at THEN ? ELSE expire_at END"
+                        + " WHERE space=? AND name=? AND kv_value=? AND (expire_at = 0 OR expire_at > ?)",
+                newExpireAtMillis, newExpireAtMillis, newExpireAtMillis,
+                key.getSpace(), key.getKey(), expectedValue, now()) > 0;
+    }
+
     @Override
     public List<SpaceKey> scan(String space) {
         List<SpaceKey> keys = new ArrayList<>();

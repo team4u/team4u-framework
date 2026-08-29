@@ -69,7 +69,7 @@ next(name)
 | `DateGroupKeyPolicy` | 内置策略 `DATE`：按时间格式生成分组标识（yyyyMMdd 按天、yyyyMM 按月），时钟可注入 |
 | `ExtGroupKeyPolicy` | 内置策略 `EXT`：分组标识取调用上下文扩展属性（按商户、渠道等业务维度） |
 | `GroupKeyPolicies` | 分组策略注册表与全局门面，自定义策略注册即生效 |
-| `SeqStores` | 序号存储注册表与全局门面：规则按名引用存储，实现一套规则多存储分工 |
+| `NamedKvStoreRegistry` | kv 组件命名存储注册表（`NamedKvStoreRegistry.global()`）：规则按名引用存储，实现一套规则多存储分工 |
 | `LocalSegment` | 本地号段：一次批量取号本地发号，惰性取段 + CAS 无锁发号 + 取段 singleflight，零常驻线程 |
 | `AbstractSequencesContractTest` | 行为契约测试基类：任意计数后端跑同一套契约，保证跨存储行为一致 |
 
@@ -129,13 +129,12 @@ team4u-id                        # 单模块：存储经 kv 组件能力协商�
     ├── api                      # Sequences 门面与异常体系
     ├── config                   # SeqRule 规则模型
     ├── group                    # 分组策略：GroupKeyPolicy + DATE/EXT + 注册表
-    ├── store                    # 命名存储注册表：SeqStores
     └── core                     # SequenceService 组装、LocalSegment 本地号段
 ```
 
 | 依赖 | 用途 | 按需引入 |
 | :--- | :--- | :--- |
-| `team4u-kv-core` | `CounterCapable` 计数能力、`KvStores` 能力协商 | 必需 |
+| `team4u-kv-core` | `CounterCapable` 计数能力、`KvStores` 能力协商、`NamedKvStoreRegistry` 命名存储 | 必需 |
 | `team4u-config-core` | `ConfigDrivenRegistry` 规则加载与热更新 | 必需 |
 | `team4u-policy` / `team4u-base` | `KeyedPolicyRegistry` 策略注册、`TextTemplate` 模板、LRU 缓存 | 必需 |
 | `team4u-kv-store-jdbc` | JDBC 计数后端 | 数据库计数时 |

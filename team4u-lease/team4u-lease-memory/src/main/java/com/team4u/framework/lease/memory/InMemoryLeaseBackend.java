@@ -13,6 +13,7 @@ import com.team4u.framework.lease.spi.LeaseGrant;
 import com.team4u.framework.lease.spi.LeaseHandle;
 import com.team4u.framework.lease.spi.LeaseRetry;
 import com.team4u.framework.lease.spi.LeaseTimes;
+import com.team4u.framework.lease.spi.LeaseTokens;
 import com.team4u.framework.lease.spi.RescheduleCommand;
 import com.team4u.framework.lease.spi.RetryCommand;
 import com.team4u.framework.lease.spi.RuntimeResult;
@@ -37,21 +38,25 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import java.util.TreeSet;
-import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentMap;
-import java.util.concurrent.locks.Condition;
 import java.util.concurrent.locks.ReentrantLock;
 
 /**
  * Process-local lease backend. A single lock guards all state transitions, so task mutations and
  * their queue indexes are committed atomically.
+ * <p>
+ * 可见性通知说明：本后端不提供「任务可被获取时阻塞唤醒 acquire」的等待机制——
+ * {@code LeaseBackend.acquire} 的契约是立即探测、无可取任务时返回 null，由调用方
+ * （如 TaskWorker）自行按轮询间隔退避。旧实现里持有的 {@code Condition} 只在
+ * submit/release/reschedule 等处 signalAll 而从未 await，属于无效唤醒的死代码，已删除；
+ * 若未来需要消除轮询延迟，应在 SPI 层引入阻塞式 acquire 契约后再统一设计，
+ * 而不是在后端内部局部引入单机型唤醒（对 JDBC 后端无意义）。
  */
 public final class InMemoryLeaseBackend implements LeaseBackend {
 
     private final Clock clock;
     private final ReentrantLock lock = new ReentrantLock();
-    private final Condition available = lock.newCondition();
     private final ConcurrentMap<String, TaskRecord> tasksById = new ConcurrentHashMap<>();
     private final ConcurrentMap<String, TaskRecord> tasksByDedupKey = new ConcurrentHashMap<>();
     private final Map<String, Map<String, CandidateSet>> candidates = new HashMap<>();
@@ -84,7 +89,6 @@ public final class InMemoryLeaseBackend implements LeaseBackend {
                 tasksByDedupKey.put(dedupIndexKey, created);
             }
             index(created);
-            available.signalAll();
             return SubmitResult.of(created.taskId, true, created.snapshot());
         } finally {
             lock.unlock();
@@ -169,7 +173,6 @@ public final class InMemoryLeaseBackend implements LeaseBackend {
             }
             clearLease(task);
             reindex(task);
-            available.signalAll();
             return RuntimeResult.APPLIED;
         } finally {
             lock.unlock();
@@ -215,7 +218,6 @@ public final class InMemoryLeaseBackend implements LeaseBackend {
             record.errorMessage = null;
             clearLease(record);
             reindex(record);
-            available.signalAll();
             return AdminResult.APPLIED;
         } finally {
             lock.unlock();
@@ -244,7 +246,6 @@ public final class InMemoryLeaseBackend implements LeaseBackend {
             record.errorMessage = null;
             clearLease(record);
             reindex(record);
-            available.signalAll();
             return AdminResult.APPLIED;
         } finally {
             lock.unlock();
@@ -275,7 +276,6 @@ public final class InMemoryLeaseBackend implements LeaseBackend {
                 return task.result;
             }
             applyUpdate(task.record, command, true);
-            available.signalAll();
             return AdminResult.APPLIED;
         } finally {
             lock.unlock();
@@ -360,7 +360,7 @@ public final class InMemoryLeaseBackend implements LeaseBackend {
 
         selected.status = TaskStatus.RUNNING;
         selected.workerId = workerId;
-        selected.leaseToken = UUID.randomUUID().toString();
+        selected.leaseToken = LeaseTokens.nextToken();
         selected.leaseExpiresAtMillis = leaseExpiresAt;
         selected.attemptCount++;
         reindex(selected);
@@ -519,7 +519,8 @@ public final class InMemoryLeaseBackend implements LeaseBackend {
     }
 
     private String nextTaskId() {
-        return "task-" + ++idSequence + "-" + UUID.randomUUID().toString().replace("-", "");
+        // 任务 ID 带 seq 前缀便于日志定位与人工排序，尾部随机段保证多实例下的唯一性
+        return "task-" + ++idSequence + "-" + LeaseTokens.nextToken();
     }
 
     private static String patchValue(String next, String current) {

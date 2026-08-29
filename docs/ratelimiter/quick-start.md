@@ -34,7 +34,7 @@ team4u.ratelimiter.order.create=[{"id":"per-user","algorithm":"fixed-window","wi
 | :--- | :--- | :--- | :--- |
 | `id` | String | 是 | 规则标识，同检查点内唯一且不允许包含 `:`（参与计数键组成） |
 | `algorithm` | String | 是 | 算法名：`fixed-window` / `token-bucket` / `sliding-window` / `history-window`，或自定义注册名 |
-| `store` | String | 否 | 命名存储（注册于 `RateLimitStores`）；空 = 引擎默认存储。无状态算法（`history-window`）不解析本字段 |
+| `store` | String | 否 | 命名存储（注册于 `NamedKvStoreRegistry.global()`）；空 = 引擎默认存储。无状态算法（`history-window`）不解析本字段 |
 | `key` | String | 否 | 计数键模板，支持 `${variable}` 占位符（变量取自检查上下文）；空 = 以检查点为静态键，全检查点共享额度。不允许包含 `:` |
 | `priority` | int | 否 | 优先级，**越小越先执行**（与策略组件 ContextPolicy 约定一致：越小优先级越高）；默认 `0`。同优先级保持配置顺序（稳定排序） |
 | `windowMillis` | long | 是 | 窗口时长（毫秒），必须 > 0。语义随算法：fixed-window 计数窗口、token-bucket 注满一桶时间、sliding-window 滚动窗口长度、history-window 对齐窗口长度 |
@@ -182,11 +182,12 @@ public class RateLimitConfig {
 
 ```java
 // 全局注册表
-RateLimitStores.global().register("main", new JdbcKvStore(dataSource));
-RateLimitStores.global().register("hot", new RedisKvStore(stringRedisTemplate));
+// 全局注册表（kv-core 公共设施 NamedKvStoreRegistry）
+NamedKvStoreRegistry.global().register("main", new JdbcKvStore(dataSource));
+NamedKvStoreRegistry.global().register("hot", new RedisKvStore(stringRedisTemplate));
 
 // 引擎默认存储为 main；规则可按名切换到 hot
-RateLimiters.init(configManager, RateLimitStores.global().resolve("main"));
+RateLimiters.init(configManager, NamedKvStoreRegistry.global().get("main"));
 ```
 
 ```properties

@@ -7,7 +7,7 @@ import com.team4u.framework.policy.core.KeyedPolicyRegistry;
  * 引擎在规则加载期解析并固定实例，运行期零查找开销。
  * <p>
  * 全局单例（{@link #global()}），内置 {@code sha256}；自定义算法（如 HMAC）
- * 在应用启动时注册，同名后注册者覆盖先注册者（与 {@code SingleFlightStores} 行为一致）。
+ * 在应用启动时注册，同名后注册者覆盖先注册者（与 {@code NamedKvStoreRegistry} 行为一致）。
  * 未注册的名字在规则加载期即失败。
  * </p>
  *

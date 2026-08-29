@@ -2,29 +2,25 @@ package com.team4u.framework.log.proxy;
 
 import com.team4u.framework.base.util.TypeReference;
 import com.team4u.framework.config.core.ConfigManager;
-import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
-import com.team4u.framework.serializer.json.JsonUtil;
+import com.team4u.framework.config.core.support.AbstractJsonConfigRepository;
 import lombok.Data;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
 
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 
 /**
  * 代理规则仓库
  * <p>
- * 维护第三方类库的动态代理日志规则
+ * 维护第三方类库的动态代理日志规则。
+ * init/stop/解析/热更新骨架收编自 {@link AbstractJsonConfigRepository}，
+ * 统一降级语义：首次加载失败抛异常，热更新失败保留旧规则。
  */
-public class ProxyRuleRepository {
-    private static final Logger log = LoggerFactory.getLogger(ProxyRuleRepository.class);
+public class ProxyRuleRepository extends AbstractJsonConfigRepository<Map<String, ProxyRuleRepository.ProxyRule>> {
+
     private static final ProxyRuleRepository INSTANCE = new ProxyRuleRepository();
 
     // 配置中心的 Key
     private static final String CONFIG_KEY = "team4u.log.proxy";
-
-    private ConfigDrivenRegistry<Map<String, ProxyRule>> registry;
 
     private ProxyRuleRepository() {
     }
@@ -36,50 +32,20 @@ public class ProxyRuleRepository {
         return INSTANCE;
     }
 
-    /**
-     * 初始化配置规则并挂载配置监听。
-     * <p>
-     * 通过指定的配置管理器构建驱动注册表，实现配置规则组件自治。
-     * 同步加载初始配置信息，并在底层建立监听以响应后续的实时重读。
-     *
-     * @param configManager 注入配置管理实例
-     */
-    public synchronized void init(ConfigManager configManager) {
-        if (this.registry != null) {
-            this.registry.destroy();
-        }
-
-        this.registry = new ConfigDrivenRegistry<>(configManager, CONFIG_KEY, json -> {
-            try {
-                if (json == null || json.trim().isEmpty()) {
-                    return new HashMap<>();
-                }
-
-                return JsonUtil.toBean(
-                        json,
-                        new TypeReference<Map<String, ProxyRule>>() {
-                        },
-                        false);
-            } catch (Exception e) {
-                log.error("ProxyRuleRepository|parseConfig|error|msg={}", e.getMessage());
-                return null;
-            }
-        });
-        // 触发首次拉取
-        this.registry.get();
+    @Override
+    protected String configKey() {
+        return CONFIG_KEY;
     }
 
-    /**
-     * 注销并释放当前所持有的缓存状态和配置监听关系。
-     * <p>
-     * 避免因重复调用或者应用重启引发监听泄露。
-     * 执行完毕后，环境处于无规则匹配且无内存占用的干净状态。
-     */
-    public synchronized void stop() {
-        if (this.registry != null) {
-            this.registry.destroy();
-            this.registry = null;
-        }
+    @Override
+    protected TypeReference<Map<String, ProxyRule>> typeReference() {
+        return new TypeReference<Map<String, ProxyRule>>() {
+        };
+    }
+
+    @Override
+    protected Map<String, ProxyRule> emptyConfig() {
+        return new java.util.HashMap<>();
     }
 
     /**
@@ -89,10 +55,7 @@ public class ProxyRuleRepository {
      * @return 代理规则
      */
     public ProxyRule getRule(String className) {
-        if (registry == null) {
-            return null;
-        }
-        Map<String, ProxyRule> rules = registry.get();
+        Map<String, ProxyRule> rules = get();
         return rules == null ? null : rules.get(className);
     }
 

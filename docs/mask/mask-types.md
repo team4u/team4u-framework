@@ -15,11 +15,11 @@
 | `EMAIL` | `EmailMaskPolicy` | `@` 前缀 $\le 1$ 字符转为 `*@domain`；多字符前缀保留首字符并拼接 `****@domain` | `"a@qq.com"`<br/>`"jay.chou@gmail.com"` | `"*@qq.com"`<br/>`"j****@gmail.com"` |
 | `ADDRESS` | `AddressMaskPolicy` | 保留前 9 个字符，后续字符全部替换为 `*` (`mask(val, 9, 0)`) | `"北京市海淀区中关村南大街1号院"` | `"北京市海淀区中关村******"` |
 | `PASSWORD` | `PasswordMaskPolicy` | 固定返回 6 个星号 (`"******"`) | `"MyPassword123"` | `"******"` |
-| `B1A1` | `B1A1MaskPolicy` | 仅保留首 1 字符与尾 1 字符 (`mask(val, 1, 1)`) | `"ABCD"` | `"A**D"` |
-| `B2A2` | `B2A2MaskPolicy` | 仅保留首 2 字符与尾 2 字符 (`mask(val, 2, 2)`) | `"ABCDEF"` | `"AB**EF"` |
-| `PERCENT66` | `Percent66MaskPolicy` | 居中掩码总长度的约 66% 字符 (`ceil(len * 0.66)`) | `"123456789"` | `"1******89"` |
-| `PERCENT66_LIMIT10` | `Percent66Limit10MaskPolicy` | 居中掩码 66% 字符，且输出截断限制最多 10 个字符 | 超长字符串 | 限制最多 10 字符 |
-| `PERCENT1_LIMIT200` | `Percent1Limit200MaskPolicy` | 居中掩码 1% 字符，且输出截断限制最多 200 个字符 | 超长报文 (如大报文) | 限制最多 200 字符 |
+| `B1A1` | `PrefixSuffixMaskPolicy`（1, 1） | 仅保留首 1 字符与尾 1 字符 (`mask(val, 1, 1)`) | `"ABCD"` | `"A**D"` |
+| `B2A2` | `PrefixSuffixMaskPolicy`（2, 2） | 仅保留首 2 字符与尾 2 字符 (`mask(val, 2, 2)`) | `"ABCDEF"` | `"AB**EF"` |
+| `PERCENT66` | `PercentMaskPolicy`（66） | 居中掩码总长度的约 66% 字符 (`ceil(len * 0.66)`) | `"123456789"` | `"1******89"` |
+| `PERCENT66_LIMIT10` | `PercentMaskPolicy`（66, 10） | 居中掩码 66% 字符，且输出截断限制最多 10 个字符 | 超长字符串 | 限制最多 10 字符 |
+| `PERCENT1_LIMIT200` | `PercentMaskPolicy`（1, 200） | 居中掩码 1% 字符，且输出截断限制最多 200 个字符 | 超长报文 (如大报文) | 限制最多 200 字符 |
 | `HIDE` | `HideMaskPolicy` | 全部隐藏，固定返回单个星号 (`"*"`) | `"SecretData"` | `"*"` |
 | `NULL` | `NullMaskPolicy` | 强制返回 `null`（常用于敏感凭据字段） | `"SecretKey"` | `null` |
 | `NONE` | `NoneMaskPolicy` | 不进行脱敏，原样返回明文字符串 | `"PublicData"` | `"PublicData"` |
@@ -53,3 +53,14 @@ return MaskUtils.mask(value, 1, 1);
 - **入参为 `null` 或空字符串 `""`**：直接原样返回，不抛出任何异常；
 - **保留前缀加后缀超过字符串总长度**（如 3 字符字符串执行 `mask(val, 2, 2)`）：`MaskUtils.mask` 安全判断 `prefix + suffix >= length`，直接返回原字符串，防止产生负数星号循环或越界；
 - **未知脱敏 Key**：调用 `FastMasker.mask(val, "UNKNOWN_KEY")` 时，若未找到注册的策略，默认安全返回原始值。
+
+---
+
+## 策略实现的组织方式
+
+15 种内置算法按「算法形状」而非「枚举值」组织实现类：
+
+- 多数算法一符一策略（`NameMaskPolicy`、`MobileMaskPolicy` 等自有规则实现）；
+- 参数化形状收敛为两个通用策略：`PrefixSuffixMaskPolicy`（保留前 N 后 M 字符）与 `PercentMaskPolicy`（百分比居中掩码，可选最大显示长度）——`B1A1`/`B2A2`/`PERCENT66` 系枚举由 `MaskPolicyBinder` 在类加载时按枚举名注册对应参数化实例，避免「一种参数组合一个壳类」的膨胀。
+
+对外映射不变：`MaskType` 枚举名仍是脱敏 key，调用方无感知。

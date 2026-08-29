@@ -1,5 +1,6 @@
 package com.team4u.framework.singleflight.core;
 
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.singleflight.policy.SingleFlightKeyDigest;
 
 import java.nio.charset.StandardCharsets;
@@ -58,7 +59,7 @@ public final class SingleFlightKeys {
     }
 
     private static boolean blank(String value) {
-        return value == null || value.trim().isEmpty();
+        return StringUtil.isBlank(value);
     }
 
     /**

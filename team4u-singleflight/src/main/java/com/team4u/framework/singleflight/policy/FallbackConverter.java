@@ -2,8 +2,7 @@ package com.team4u.framework.singleflight.policy;
 
 import com.fasterxml.jackson.databind.JavaType;
 import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
-import com.fasterxml.jackson.databind.type.TypeFactory;
+import com.team4u.framework.serializer.json.jackson.JacksonSerializerPolicy;
 import com.team4u.framework.singleflight.api.SingleFlightConfigException;
 
 import java.lang.reflect.Type;
@@ -13,14 +12,15 @@ import java.lang.reflect.Type;
  * <p>
  * 显式 JSON {@code null} 表示降级返回 null；返回类型为基本类型时无法承载 null，
  * 视为配置错误（引擎在执行期组合校验中同样拦截）。
+ * 序列化纯属只读的树到值转换（treeAsTokens → readValue），无模块或
+ * writer 级特殊配置，直接复用 {@link JacksonSerializerPolicy#sharedMapper()}
+ * 共享 mapper；若未来需要局部序列化定制，应使用
+ * {@code sharedMapper().writer(...)} 变体而非私建 mapper。
  * </p>
  *
  * @author jay.wu
  */
 public class FallbackConverter {
-
-    private static final TypeFactory TYPE_FACTORY = TypeFactory.defaultInstance();
-    private static final ObjectMapper MAPPER = new ObjectMapper();
 
     /**
      * 转换降级 JSON 为目标类型；JSON 与类型不匹配视为配置错误。
@@ -30,7 +30,7 @@ public class FallbackConverter {
      * @return 反序列化后的降级值，可为 null
      */
     public Object convert(JsonNode fallback, Type returnType) {
-        JavaType javaType = TYPE_FACTORY.constructType(returnType);
+        JavaType javaType = JacksonSerializerPolicy.sharedMapper().constructType(returnType);
         if (fallback == null || fallback.isNull()) {
             if (javaType.isPrimitive()) {
                 throw new SingleFlightConfigException(
@@ -39,7 +39,8 @@ public class FallbackConverter {
             return null;
         }
         try {
-            return MAPPER.readValue(MAPPER.treeAsTokens(fallback), javaType);
+            return JacksonSerializerPolicy.sharedMapper()
+                    .readValue(JacksonSerializerPolicy.sharedMapper().treeAsTokens(fallback), javaType);
         } catch (Exception e) {
             throw new SingleFlightConfigException(
                     "Invalid fallback json|returnType=" + javaType + "|fallback=" + fallback, e);
