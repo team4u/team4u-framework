@@ -2,6 +2,9 @@
 
 `JsonUtil` 是业务与 SDK 直接使用的统一门面静态工具类。在类加载时，它会自动通过 `PolicyScanner` 扫描当前类路径下可用的 `JsonSerializerPolicy` 实现，并选择优先级最高且支持当前运行环境的策略作为底层引擎。
 
+> [!IMPORTANT]
+> **无损契约**：`JsonUtil` 面向存储与传输向序列化（存库、缓存、重放载荷、跨进程），**永远输出原文明文**，输出内容不受任何观测向模块（脱敏、截断）影响。日志、审计等需要脱敏/截断的场景，请使用 mask 模块的 `MaskedJson` 门面或 log 模块的序列化器，不要试图往全局注册改变输出内容的模块（详见 [serializer-jackson.md](serializer-jackson.md) 的共享 mapper 契约）。
+
 ---
 
 ## 核心 API 清单

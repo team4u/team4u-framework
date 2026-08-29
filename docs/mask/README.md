@@ -52,7 +52,7 @@ graph TD
 
 - **高性能无锁策略路由**：底层基于 `team4u-policy` 的 `KeyedPolicyRegistry` 读写分离架构，核心路径无反射、无正则开销。
 - **内置 15 种标准脱敏算法**：开箱覆盖姓名（支持中英文智能区分）、手机号、身份证、银行卡、邮箱、地址、密码、居中百分比掩码等。
-- **Jackson 无侵入自动脱敏**：注册 `JacksonMaskModule` 后，自动接管 JavaBean 与 Map 的 JSON 序列化输出，内存对象中的真实值完全不受影响。
+- **Jackson 无侵入显式脱敏**：观测向序列化经 `MaskedJson` 门面（或向自建 mapper 注册 `JacksonMaskModule`）后，自动接管 JavaBean 与 Map 的 JSON 序列化输出，内存对象中的真实值完全不受影响；全局 `JsonUtil` 奉行无损契约，脱敏永不默认生效。
 - **配置中心动态治理 (`team4u.mask.rules`)**：联动 `team4u-config`，无需修改代码即可针对特定 Class、第三方 DTO 或全局字段名动态下发脱敏规则。
 - **Unicode CodePoint 安全机制**：所有字符串长度计算与截取严格基于 Unicode CodePoint 算法，完美兼容 Emoji 与生僻字。
 - **超长报文截断保护 (`MaskConfig`)**：支持配置 `maxStringLength`，防止超大报文或 Base64 文本打满磁盘日志。
@@ -69,7 +69,8 @@ graph TD
 | `@Mask` | `com.team4u.framework.mask.Mask` | 字段级声明式脱敏注解，指定执行的 `MaskType` |
 | `MaskRuleRepository` | `com.team4u.framework.mask.config.MaskRuleRepository` | 动态规则仓库，支持类精确匹配与 `*` 全局通配匹配，支持配置中心热更 |
 | `MaskBootstrap` | `com.team4u.framework.mask.MaskBootstrap` | 全局引导类，绑定 `ConfigManager` 并启动动态脱敏规则热重载监听 |
-| `JacksonMaskModule` | `com.team4u.framework.mask.jackson.JacksonMaskModule` | Jackson 模块，自动注册动态序列化修饰器 |
+| `JacksonMaskModule` | `com.team4u.framework.mask.jackson.JacksonMaskModule` | Jackson 脱敏模块（仅观测向显式叠加，不注册全局） |
+| `MaskedJson` | `com.team4u.framework.mask.jackson.MaskedJson` | 观测向脱敏门面：`toJsonStr` / `maskedWriter`，内部共享 mapper 副本 + 脱敏模块 |
 | `MaskUtils` | `com.team4u.framework.mask.MaskUtils` | Unicode CodePoint 字符安全计算与掩码工具类 |
 
 ---
