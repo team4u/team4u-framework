@@ -39,7 +39,8 @@
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
 | **[租约任务组件](docs/lease/README.md)** | `team4u-lease-core` / `team4u-lease-memory` / `team4u-lease-jdbc` | 排他任务调度框架。通过队列化 Task/Worker/Result API 提供延迟调度、精确类型订阅、心跳续约、故障接管与业务键幂等建档，Memory / JDBC 持久化后端按需显式引入。 | [概览](docs/lease/README.md) · [快速开始](docs/lease/quick-start.md) |
-| **[通用重试组件](docs/retry/README.md)** | `team4u-retry-core` / `team4u-retry-managed` | 统一重试治理框架。core 提供进程内即时同步/异步重试 (`INLINE`)，managed 提供基于租约持久化的跨进程后台托管补偿重试 (`MANAGED`) 与 `@Retryable` 动态策略下发；按需适配 `team4u-retry-proxy`、`team4u-retry-config`、`team4u-retry-spring`、`team4u-retry-lease-runtime` 显式引入。 | [概览](docs/retry/README.md) · [快速开始](docs/retry/quick-start.md) |
+| **[通用重试组件](docs/retry/README.md)** | `team4u-retry-core` / `team4u-retry-managed` / `team4u-retry-proxy` / `team4u-retry-config` / `team4u-retry-spring` / `team4u-retry-lease-runtime` | 统一重试治理框架。core 提供进程内即时同步/异步重试 (`INLINE`)；managed 提供 `MANAGED` 后台托管编排、记录模型与 `RetryStore` SPI；proxy 提供 `@Retryable` 注解代理；config 提供配置中心动态策略；lease-runtime 提供基于租约的持久化后端；spring 提供 Spring 显式适配。 | [概览](docs/retry/README.md) · [快速开始](docs/retry/quick-start.md) |
+| **[键值存储组件](docs/kv/README.md)** | `team4u-kv-core` / `team4u-kv-space` / `team4u-kv-lock` / `team4u-kv-lifecycle` / `team4u-kv-retryable` / `team4u-kv-store-jdbc` / `team4u-kv-store-redis` | 最小核心 + 装饰器的键值存储套件。core 仅含 4 操作 `KvStore` 核心与能力协商；类型化键空间 (`Space`)、观测/重试装饰器、CAS 化分布式锁、过期值源与 memory 内建实现之上，JDBC / Redis 后端按需显式引入。 | [概览](docs/kv/README.md) · [快速开始](docs/kv/quick-start.md) |
 
 ---
 
