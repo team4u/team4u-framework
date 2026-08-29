@@ -1,16 +1,14 @@
 import java.io.BufferedReader;
 import java.io.File;
-import java.io.FileDescriptor;
 import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStreamReader;
-import java.io.PrintStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.List;
+import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
@@ -56,13 +54,23 @@ import java.util.regex.Pattern;
  * Approved mechanisms that stay negative: 无锁 alone, 无 BigDecimal, 无反射
  * and 无正则 alone (compound 无-idioms such as 无法/无需/无缝/无用 are rejected
  * by prefix), zero get calls, low overhead, gc.alloc metrics, and
- * TimeUnit.NANOSECONDS.
+ * TimeUnit.NANOSECONDS. When a guard rejects a candidate, the search
+ * restarts right after the rejected quantifier instead of after the whole
+ * match, so claims embedded after an allowed compound (`无锁零GC`) are
+ * still found; the restart position strictly advances every iteration.
  *
- * CLI: one argument, the repository root. Scans the root README.md,
- * MIGRATION-1.0.md, benchmarks/README.md, every .md/.markdown under docs/
- * whose path has no superpowers segment, and every main Java source
- * (path segment sequence src/main/java) outside target/, .git/, and
- * .worktrees/ (this helper is never scanned).
+ * The GC keyword families are case-insensitive (lowercase gc claims);
+ * gc.alloc metrics stay safe because every Chinese/digit family requires a
+ * leading quantifier (零/无/0) before the noun.
+ *
+ * CLI: `--self-test` runs the built-in static corpus (positive claims that
+ * must be rejected and negative text that must stay allowed) with no file
+ * dependencies, printing one line per mismatch and exiting non-zero; any
+ * other single argument is the repository root. Scans the root README.md,
+ * MIGRATION-1.0.md, benchmarks/README.md, every .md/.markdown/.html/.htm
+ * (case-insensitive) under docs/ whose path has no superpowers segment, and
+ * every main Java source (path segment sequence src/main/java) outside
+ * target/, .git/, and .worktrees/ (this helper is never scanned).
  * At least one Java source must be found, otherwise the gate is RED. Every
  * hit is printed as path:line:text to stderr and the exit code is 1; exit 0
  * means no unsupported claim was found.
@@ -88,22 +96,25 @@ public final class PerformanceClaimScanner {
             "(?:远程|序列化|加载|正则|重试|反射)";
 
     private static final Pattern CHINESE_COST =
-            Pattern.compile("[零无]" + GAP + "{0,14}" + COST_NOUN);
+            Pattern.compile("[零无]" + GAP + "{0,14}" + COST_NOUN,
+                    Pattern.CASE_INSENSITIVE);
     private static final Pattern CHINESE_MECH =
             Pattern.compile("零" + GAP + "{0,8}" + MECH_NOUN);
     private static final Pattern DIGIT_COST =
-            Pattern.compile("(?<![A-Za-z0-9.])0" + GAP + "{0,6}" + COST_NOUN);
+            Pattern.compile("(?<![A-Za-z0-9.])0" + GAP + "{0,6}" + COST_NOUN,
+                    Pattern.CASE_INSENSITIVE);
     private static final Pattern THOROUGH =
             Pattern.compile("彻底(?:消除|避免|杜绝)" + GAP + "{0,20}" + COST_NOUN);
     private static final Pattern ABSOLUTE =
             Pattern.compile("绝对" + GAP + "{0,10}"
-                    + "(?:无锁|零|性能|锁|分配|对象|创建|加锁|开销|消耗|GC(?![A-Za-z]))");
+                    + "(?:无锁|零|性能|锁|分配|对象|创建|加锁|开销|消耗|GC(?![A-Za-z]))",
+                    Pattern.CASE_INSENSITIVE);
     private static final Pattern NANOS_CN = Pattern.compile("纳秒级");
     private static final Pattern FORBID_FREQUENT_GC =
-            Pattern.compile("杜绝\\s{0,4}频繁\\s{0,4}GC");
+            Pattern.compile("杜绝\\s{0,4}频繁\\s{0,4}GC", Pattern.CASE_INSENSITIVE);
 
     private static final String EN_NOUN =
-            "(?:garbage\\s+collections?|object\\s+creations?|allocations?|objects?|overheads?|GC)";
+            "(?:garbage(?:[\\s_-]{1,2}collections?)?|object\\s+creations?|allocations?|objects?|overheads?|GC)";
     private static final String EN_TOKENS = "(?:[\\s-]+[A-Za-z][A-Za-z-]*){0,3}";
     private static final Pattern EN_QUANT = Pattern.compile(
             "\\b(?:zero|no)\\b" + EN_TOKENS + "[\\s-]+" + EN_NOUN + "\\b",
@@ -111,8 +122,8 @@ public final class PerformanceClaimScanner {
     private static final Pattern EN_DIGIT = Pattern.compile(
             "(?<![A-Za-z0-9.])0" + EN_TOKENS + "[\\s-]+" + EN_NOUN + "\\b");
     private static final Pattern EN_FREE = Pattern.compile(
-            "\\b(?:GC|alloc(?:ation)?|object(?:[\\s_-]{0,2}creations?)?|overhead)"
-                    + "[-_]{0,2}free\\b",
+            "\\b(?:GC|garbage(?:[\\s_-]{1,2}collection)?|alloc(?:ation)?|object(?:[\\s_-]{1,2}creations?)?|overhead)"
+                    + "[\\s_-]{0,2}free\\b",
             Pattern.CASE_INSENSITIVE);
     private static final Pattern EN_NANOS = Pattern.compile(
             "\\bnanoseconds?[\\s_-]{0,2}level\\b", Pattern.CASE_INSENSITIVE);
@@ -129,9 +140,13 @@ public final class PerformanceClaimScanner {
     private static final String ZERO_PREV = "从归清";
 
     public static void main(String[] args) throws IOException {
-        System.setErr(new PrintStream(new FileOutputStream(FileDescriptor.err), true, "UTF-8"));
+        if (args.length == 1 && "--self-test".equals(args[0])) {
+            System.exit(selfTest());
+        }
         if (args.length != 1) {
-            System.err.println("usage: PerformanceClaimScanner <repository-root>");
+            System.err.println("usage: PerformanceClaimScanner <repository-root>"
+                    + System.getProperty("line.separator")
+                    + "       PerformanceClaimScanner --self-test");
             System.exit(2);
         }
         File root = new File(args[0]).getAbsoluteFile();
@@ -168,6 +183,143 @@ public final class PerformanceClaimScanner {
         }
         System.out.println("scanned " + (targets.size() - javaSources.size())
                 + " documentation files and " + javaSources.size() + " java sources");
+    }
+
+    /**
+     * One self-test sample: expected true means the line must be rejected as
+     * an unsupported claim, expected false means it must stay allowed.
+     */
+    private static final class Sample {
+        final String family;
+        final String text;
+        final boolean expected;
+
+        Sample(String family, String text, boolean expected) {
+            this.family = family;
+            this.text = text;
+            this.expected = expected;
+        }
+    }
+
+    /** Built-in corpus: positive claims that must RED, negatives that must stay GREEN. */
+    private static final Sample[] SELF_TEST_SAMPLES = {
+        // --- Chinese quantifier + cost noun, exact and lowercase-keyword forms ---
+        new Sample("cn-quant", "零 GC", true),
+        new Sample("cn-quant", "零gc", true),
+        new Sample("cn-quant", "无 GC", true),
+        new Sample("cn-quant", "无gc", true),
+        new Sample("cn-quant", "0 GC", true),
+        new Sample("cn-quant", "0gc", true),
+        new Sample("cn-quant", "无锁零GC", true),
+        new Sample("cn-quant", "无锁零分配", true),
+        // --- Chinese idioms ---
+        new Sample("cn-idiom", "纳秒级", true),
+        new Sample("cn-idiom", "杜绝频繁 GC", true),
+        new Sample("cn-idiom", "杜绝频繁GC", true),
+        new Sample("cn-idiom", "彻底消除 GC 开销", true),
+        new Sample("cn-idiom", "绝对无锁", true),
+        new Sample("cn-idiom", "零开销", true),
+        new Sample("cn-idiom", "零对象创建", true),
+        new Sample("cn-idiom", "0 对象创建", true),
+        new Sample("cn-idiom", "零分配", true),
+        new Sample("cn-idiom", "无分配", true),
+        new Sample("cn-idiom", "零正则开销", true),
+        // --- English quantifier + noun ---
+        new Sample("en-quant", "zero GC", true),
+        new Sample("en-quant", "no GC", true),
+        new Sample("en-quant", "0 GC", true),
+        new Sample("en-quant", "zero allocation", true),
+        new Sample("en-quant", "no allocations", true),
+        new Sample("en-quant", "zero object creation", true),
+        new Sample("en-quant", "zero-object creation", true),
+        new Sample("en-quant", "zero overhead", true),
+        new Sample("en-quant", "no overheads", true),
+        // --- English metric-free families ---
+        new Sample("en-free", "GC free", true),
+        new Sample("en-free", "GC-free", true),
+        new Sample("en-free", "allocation free", true),
+        new Sample("en-free", "allocation-free", true),
+        new Sample("en-free", "alloc free", true),
+        new Sample("en-free", "alloc-free", true),
+        new Sample("en-free", "garbage-free", true),
+        new Sample("en-free", "garbage collection free", true),
+        new Sample("en-free", "garbage-collection-free", true),
+        new Sample("en-free", "object creation free", true),
+        new Sample("en-free", "object-creation-free", true),
+        new Sample("en-free", "overhead-free", true),
+        // --- English nanosecond family ---
+        new Sample("en-nanos", "nanosecond-level", true),
+        new Sample("en-nanos", "nanoseconds level", true),
+        // --- review case: quantifier not on a banned noun ---
+        new Sample("en-quant", "no reflection overhead", true),
+        // --- negatives: benign metric/identifier/idiom text that must stay allowed ---
+        new Sample("neg-digit-boundary", "0 GCC", false),
+        new Sample("neg-digit-boundary", "0GCC", false),
+        new Sample("neg-digit-boundary", "x0GC", false),
+        new Sample("neg-digit-boundary", "10GC", false),
+        new Sample("neg-digit-boundary", "1.0GC", false),
+        new Sample("neg-digit-boundary", "compiler GCC", false),
+        new Sample("neg-free-suffix", "GC-freeware", false),
+        new Sample("neg-free-suffix", "GC freelance", false),
+        new Sample("neg-noun", "no BigDecimal", false),
+        new Sample("neg-noun", "no lock", false),
+        new Sample("neg-noun", "zero get calls", false),
+        new Sample("neg-noun", "no reflection needed", false),
+        new Sample("neg-term", "zero-copy", false),
+        new Sample("neg-term", "gc.alloc.rate.norm", false),
+        new Sample("neg-term", "TimeUnit.NANOSECONDS", false),
+        new Sample("neg-subclause", "零配置、低开销", false),
+        new Sample("neg-subclause", "无锁、低分配", false),
+        new Sample("neg-subclause", "低开销", false),
+        new Sample("neg-subclause", "低分配", false),
+        new Sample("neg-subclause", "无锁", false),
+        new Sample("neg-subclause", "无 BigDecimal", false),
+        new Sample("neg-subclause", "无反射", false),
+        new Sample("neg-subclause", "无正则", false),
+        new Sample("neg-idiom", "零依赖", false),
+        new Sample("neg-idiom", "零侵入", false),
+        new Sample("neg-idiom", "零配置", false),
+        new Sample("neg-idiom", "零 NPE 空对象", false),
+        new Sample("neg-idiom", "从零开始", false),
+        new Sample("neg-idiom", "无法匹配", false),
+        new Sample("neg-idiom", "无需重试", false),
+        new Sample("neg-metric", "allocation rate", false),
+        new Sample("neg-metric", "JDK 10 GC", false),
+        new Sample("neg-metric", "nanoseconds elapsed", false),
+        new Sample("neg-metric", "millisecond level", false),
+    };
+
+    /**
+     * Built-in corpus runner. Returns the process exit code: 0 when every
+     * sample matches its expectation, 1 otherwise. Mismatches print the
+     * case, the expected verdict, and the sample text.
+     */
+    private static int selfTest() {
+        int positives = 0;
+        int negatives = 0;
+        int mismatches = 0;
+        for (Sample sample : SELF_TEST_SAMPLES) {
+            if (sample.expected) {
+                positives++;
+            } else {
+                negatives++;
+            }
+            boolean actual = lineClaims(sample.text);
+            if (actual != sample.expected) {
+                mismatches++;
+                System.err.println("self-test mismatch [" + sample.family + "] "
+                        + (sample.expected ? "expected claim, allowed" : "expected allowed, claimed")
+                        + ": " + sample.text);
+            }
+        }
+        if (mismatches > 0) {
+            System.err.println("self-test: " + mismatches + " mismatch(es), " + positives
+                    + " positive and " + negatives + " negative cases");
+            return 1;
+        }
+        System.out.println("self-test: " + positives + " positive and " + negatives
+                + " negative cases, all as expected");
+        return 0;
     }
 
     private static int scan(File file, File root) {
@@ -252,28 +404,42 @@ public final class PerformanceClaimScanner {
      * Runs one Chinese family over a subclause region of the original line,
      * applying the 无-compound and 零-idiom guards to each candidate match
      * before declaring a claim. The region keeps transparent bounds so the
-     * digit guard still sees the character before the subclause.
+     * digit guard still sees the character before the subclause. When a
+     * guard rejects a candidate, the search restarts right after the rejected
+     * quantifier codepoint rather than skipping the whole match, so a claim
+     * embedded after an allowed compound head (`无锁零GC`) is still found;
+     * every restart position strictly advances, so there is no infinite
+     * loop, and the digit head never restarts (no transparent-bounds digit
+     * regressions).
      */
     private static boolean findClaimRegion(Pattern family, String line, int start, int end) {
         Matcher m = family.matcher(line).region(start, end);
         m.useTransparentBounds(true);
         m.useAnchoringBounds(false);
+        int floor = start;
         while (m.find()) {
             String match = m.group();
             // 零 NPE 空对象 is a correctness pattern name, not a claim.
             if (match.contains("NPE")) {
+                floor = Math.max(floor, m.start() + 1);
+                m.region(floor, end);
                 continue;
             }
             char head = match.charAt(0);
             if (head == '0' || head != '零' && head != '无') {
                 return true;
             }
-            if (head == '无' && m.start() + 1 < line.length()
-                    && WU_COMPOUND_NEXT.indexOf(line.charAt(m.start() + 1)) >= 0) {
+            int restart = m.start() + 1;
+            if (head == '无' && restart < line.length()
+                    && WU_COMPOUND_NEXT.indexOf(line.charAt(restart)) >= 0) {
+                floor = Math.max(floor, restart);
+                m.region(floor, end);
                 continue;
             }
             if (head == '零' && m.start() > 0
                     && ZERO_PREV.indexOf(line.charAt(m.start() - 1)) >= 0) {
+                floor = Math.max(floor, restart);
+                m.region(floor, end);
                 continue;
             }
             return true;
@@ -295,12 +461,14 @@ public final class PerformanceClaimScanner {
         Arrays.sort(children);
         for (File child : children) {
             String name = child.getName();
+            String lower = name.toLowerCase(Locale.ROOT);
             if (child.isDirectory()) {
                 if (isSkippedDir(name)) {
                     continue;
                 }
                 collectMarkdown(child, out);
-            } else if (name.endsWith(".md") || name.endsWith(".markdown")) {
+            } else if (lower.endsWith(".md") || lower.endsWith(".markdown")
+                    || lower.endsWith(".html") || lower.endsWith(".htm")) {
                 out.add(child);
             }
         }
