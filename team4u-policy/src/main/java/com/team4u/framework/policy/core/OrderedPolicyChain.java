@@ -14,7 +14,7 @@ import java.util.function.Predicate;
  * 有序策略链 (责任链模式)
  * <p>
  * 专用于基于上下文匹配和优先级排序的场景。
- * 采用手动写时复制 (Manual Copy-On-Write) 机制，确保读取操作 getPolicies() 达到极致性能 (零对象创建)。
+ * 采用手动写时复制 (Manual Copy-On-Write) 机制，读取操作 getPolicies() 直接返回缓存的只读列表，避免每次读取时的拷贝与临时对象分配。
  *
  * @param <C> 上下文类型
  * @param <P> 策略类型

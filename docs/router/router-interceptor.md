@@ -34,7 +34,7 @@ graph LR
 
 ## 快速路径优化 (Fast Path)
 
-在高并发场景下，若当前 `RoutingManager` 内部没有注册任何拦截器，框架将自动启用**零开销快速路径**：直接穿透调用 `router.route()`，完全跳过 `DefaultRouteInvocation` 对象的创建与责任链迭代，将调用栈深度压减至最低。
+在高并发场景下，若当前 `RoutingManager` 内部没有注册任何拦截器，框架将自动启用**快速路径**：直接穿透调用 `router.route()`，跳过 `DefaultRouteInvocation` 对象的创建与责任链迭代，将调用栈深度压减至最低。
 
 ---
 

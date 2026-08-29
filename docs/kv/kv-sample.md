@@ -58,7 +58,7 @@ ExpiringValue<Token> token = ExpiringValue.<Token>builder(Token.class)
         .lockManager(new KvLockManager(redisStore))
         .build();
 
-// 业务侧只管取值：未过期零开销，进窗口自动续期，无值自动加载
+// 业务侧只管取值：未过期直接命中，进窗口自动续期，无值自动加载
 String accessToken = token.get().getAccessToken();
 ```
 
