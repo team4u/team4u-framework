@@ -331,6 +331,45 @@ public interface ProductService {
 
 `detail("p1", true)` 命中 skipWhen 直接回源；`detail("p1", false)` 走正常合并。
 
+### 场景六：组件失败统一兑底（errorFallback）
+
+**问题**：不同方法的失败返回值不一样，不想为每个方法写 Java 异常处理器；希望像 `fallback` 一样，按 point 配一份 JSON，组件失败时直接反序列化成返回值。
+
+```properties
+team4u.singleflight.order.submit={\
+  "id":"order.submit",\
+  "key":"${orderId}",\
+  "contention":"FAIL_FAST",\
+  "cacheEnabled":false,\
+  "errorFallback":{"code":"BAD","message":"操作太频繁，请稍后再试"}\
+}
+```
+
+```java
+// 竞争时不抛 SingleFlightConflictException，而是拿到 errorFallback 反序列化后的对象
+OrderResult result = SingleFlights.execute(SingleFlightExecution.of(
+        "order.submit",
+        Collections.singletonMap("orderId", orderId),
+        OrderResult.class,
+        () -> orderRepository.create(order)));
+// result.getCode() == "BAD"——直接作为业务失败返回给上层
+```
+
+覆盖范围（三类组件异常，均不抛出、改为返回兑底值）：
+
+| 异常场景 | 兑底后行为 |
+| :--- | :--- |
+| FAIL_FAST 锁竞争（原抛 `SingleFlightConflictException`） | 返回 `errorFallback` 转换值 |
+| WAIT 等待超时（原抛 `SingleFlightTimeoutException`） | 返回 `errorFallback` 转换值 |
+| 复用其他执行者的失败回执（原抛 `SingleFlightExecutionException`） | 返回 `errorFallback` 转换值 |
+
+**不覆盖**的两类（设计如此，兑底会掩盖问题）：
+
+- 配置错误（`SingleFlightConfigException`）：规则写错了必须暴露，静默兑底会把部署问题藏到线上才爆；
+- loader 业务异常：不是组件异常，永远原样上抛给调用方。
+
+与 `fallback` 的分工：`fallback` 管「正常竞争的降级数据」（如静态推荐列表），`errorFallback` 管「组件失败的兑底值」（如统一的失败包装）。两者可同时配置，互不影响。注解方式同样生效——兑底在引擎层收口，`@EnableSingleFlight` 自动代理无需任何改动。
+
 ### 完整对照表：条件表达式的取值上下文
 
 | 表达式 | 判定对象 | 属性写法 | 示例 |

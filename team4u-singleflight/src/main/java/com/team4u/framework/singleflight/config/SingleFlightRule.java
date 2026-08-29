@@ -65,6 +65,14 @@ public class SingleFlightRule {
     private JsonNode fallback;
 
     /**
+     * 组件失败兑底值（原生 JSON）：FAIL_FAST 竞争、WAIT 超时、复用失败会话
+     * 三类组件异常不抛出，改为按返回类型反序列化此值返回。
+     * 省略表示不兑底（异常照抛）；显式 JSON {@code null} 表示返回 null（仅对象类型）。
+     * 不覆盖配置错误（SingleFlightConfigException）与 loader 业务异常。
+     */
+    private JsonNode errorFallback;
+
+    /**
      * kv 锁租约（毫秒）。持有期间锁管理器后台续约；进程崩溃后续约停止，
      * 租约到期后锁可被等待者接管。
      */

@@ -228,7 +228,7 @@ public class SingleFlightEngine implements AutoCloseable {
         // 会话已是终态（上一执行窗口刚结束）：直接复用结果或失败，保证同 key 单次执行语义
         KvRecord record = rule.coordinationStore.get(sessionKey(key));
         if (record != null && SessionEnvelope.of(record.getValue()).isTerminal()) {
-            return finishSession(SessionEnvelope.of(record.getValue()), execution);
+            return finishSession(SessionEnvelope.of(record.getValue()), execution, rule);
         }
         return coordinate(rule, execution, key, true);
     }
@@ -252,7 +252,7 @@ public class SingleFlightEngine implements AutoCloseable {
             if (record != null) {
                 SessionEnvelope session = SessionEnvelope.of(record.getValue());
                 if (session.isTerminal()) {
-                    return finishSession(session, execution);
+                    return finishSession(session, execution, rule);
                 }
             }
             SessionEnvelope pending = SessionEnvelope.pending(lock.token(), clock.millis());
@@ -338,8 +338,7 @@ public class SingleFlightEngine implements AutoCloseable {
     private <T> T onContention(CompiledRule rule, SingleFlightExecution<T> execution,
                                String key) {
         if (rule.rule.getContention() == ContentionPolicy.FAIL_FAST) {
-            throw new SingleFlightConflictException("Singleflight conflict|point="
-                    + execution.getPoint() + "|key=" + key);
+            return conflictOrErrorFallback(rule, execution, key);
         }
         if (rule.rule.getContention() == ContentionPolicy.FALLBACK) {
             return cast(fallbackConverter.convert(rule.rule.getFallback(),
@@ -367,7 +366,7 @@ public class SingleFlightEngine implements AutoCloseable {
             if (record != null) {
                 SessionEnvelope session = SessionEnvelope.of(record.getValue());
                 if (session.isTerminal()) {
-                    return finishSession(session, execution);
+                    return finishSession(session, execution, rule);
                 }
                 if (rule.coordinationStore.get(lockKey(key)) != null) {
                     sleep(rule.rule.getPollIntervalMillis());
@@ -379,6 +378,29 @@ public class SingleFlightEngine implements AutoCloseable {
                 return coordinateAfterTakeover(rule, execution, key, lock);
             }
             sleep(rule.rule.getPollIntervalMillis());
+        }
+        return timeoutOrErrorFallback(rule, execution, key);
+    }
+
+    /**
+     * 组件异常的兑底出口：配置了 errorFallback 时把异常转为返回值，否则原样抛出。
+     * 仅覆盖竞争 / 超时 / 失败会话重构三类用户侧异常，不覆盖配置错误。
+     */
+    private <T> T conflictOrErrorFallback(CompiledRule rule, SingleFlightExecution<T> execution,
+                                          String key) {
+        if (rule.rule.getErrorFallback() != null) {
+            return cast(fallbackConverter.convert(rule.rule.getErrorFallback(),
+                    execution.getReturnType()));
+        }
+        throw new SingleFlightConflictException("Singleflight conflict|point="
+                + execution.getPoint() + "|key=" + key);
+    }
+
+    private <T> T timeoutOrErrorFallback(CompiledRule rule, SingleFlightExecution<T> execution,
+                                          String key) {
+        if (rule.rule.getErrorFallback() != null) {
+            return cast(fallbackConverter.convert(rule.rule.getErrorFallback(),
+                    execution.getReturnType()));
         }
         throw new SingleFlightTimeoutException("Singleflight wait timeout|point="
                 + execution.getPoint() + "|key=" + key
@@ -397,7 +419,7 @@ public class SingleFlightEngine implements AutoCloseable {
             if (record != null) {
                 SessionEnvelope session = SessionEnvelope.of(record.getValue());
                 if (session.isTerminal()) {
-                    return finishSession(session, execution);
+                    return finishSession(session, execution, rule);
                 }
             }
             SessionEnvelope pending = SessionEnvelope.pending(lock.token(), clock.millis());
@@ -414,8 +436,13 @@ public class SingleFlightEngine implements AutoCloseable {
      * 成功把 result JSON 反序列化为执行请求的返回类型。
      */
     @SuppressWarnings("unchecked")
-    private <T> T finishSession(SessionEnvelope session, SingleFlightExecution<T> execution) {
+    private <T> T finishSession(SessionEnvelope session, SingleFlightExecution<T> execution,
+                                CompiledRule rule) {
         if (SessionEnvelope.STATE_FAILURE.equals(session.state())) {
+            if (rule.rule.getErrorFallback() != null) {
+                return cast(fallbackConverter.convert(rule.rule.getErrorFallback(),
+                        execution.getReturnType()));
+            }
             throw new SingleFlightExecutionException("Singleflight loader failed|point="
                     + execution.getPoint() + "|error=" + session.errorMessage());
         }
@@ -625,6 +652,12 @@ public class SingleFlightEngine implements AutoCloseable {
                 && rule.getFallback().isNull() && isPrimitive(execution.getReturnType())) {
             throw new SingleFlightConfigException(
                     "Primitive return type does not allow explicit null fallback|returnType="
+                            + execution.getReturnType().getTypeName());
+        }
+        if (rule.getErrorFallback() != null && rule.getErrorFallback().isNull()
+                && isPrimitive(execution.getReturnType())) {
+            throw new SingleFlightConfigException(
+                    "Primitive return type does not allow explicit null errorFallback|returnType="
                             + execution.getReturnType().getTypeName());
         }
     }

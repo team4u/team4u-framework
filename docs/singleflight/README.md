@@ -105,6 +105,7 @@ execute(point, arguments, returnType, loader)
 | `cacheWhen` | String | 否 | 无 | Criterion 表达式，匹配 loader 返回值。不配置默认可缓存；为 false 时发布 `SUCCESS_NOT_CACHEABLE` 且不写结果缓存 |
 | `contention` | `WAIT` / `FAIL_FAST` / `FALLBACK` | 否 | `WAIT` | 锁竞争策略，见下文并发策略 |
 | `fallback` | 原生 JSON | `FALLBACK` 时是 | 无 | 竞争时按返回类型反序列化。显式 `null` 表示返回 null；省略该字段与显式 `null` 不同，`FALLBACK` 省略会加载失败 |
+| `errorFallback` | 原生 JSON | 否 | 无 | 组件失败兑底：FAIL_FAST 竞争、WAIT 超时、复用失败回执三类组件异常不抛出，改为按返回类型反序列化此值返回。省略不兑底（异常照抛）；显式 `null` 返回 null（仅对象类型）。不覆盖配置错误与 loader 业务异常 |
 | `lockLeaseMillis` | long > 0 | 否 | `30000` | kv 锁租约。持有期间锁管理器后台续约；进程崩溃后续约停止，租约到期后可被接管 |
 | `waitTimeoutMillis` | long > 0 | 否 | `10000` | WAIT 调用者等待终态或接管机会的最长时间，超时抛 `SingleFlightTimeoutException` |
 | `pollIntervalMillis` | long > 0 | 否 | `100` | WAIT 轮询回执与锁的间隔 |

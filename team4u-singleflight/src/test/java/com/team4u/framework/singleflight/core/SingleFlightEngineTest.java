@@ -197,6 +197,70 @@ public class SingleFlightEngineTest {
     }
 
     @Test
+    public void errorFallbackCoversFailFastConflict() {
+        rule("ef-fast", "{\"id\":\"ef-fast\",\"key\":\"${id}\",\"contention\":\"FAIL_FAST\","
+                + "\"cacheEnabled\":false,\"errorFallback\":\"conflict-safe\"}");
+        kv.store().put(SpaceKey.of(SingleFlightEngine.LOCK_SPACE, finalKey("ef-fast", "same")),
+                KvRecord.of("other", 60000, 0), PutMode.SET);
+
+        assertEquals("conflict-safe", execute("ef-fast", "same", () -> "unreachable"));
+    }
+
+    @Test
+    public void errorFallbackCoversWaitTimeout() {
+        rule("ef-timeout", "{\"id\":\"ef-timeout\",\"key\":\"${id}\",\"cacheEnabled\":false,"
+                + "\"waitTimeoutMillis\":20,\"pollIntervalMillis\":5,"
+                + "\"errorFallback\":\"timeout-safe\"}");
+        kv.store().put(SpaceKey.of(SingleFlightEngine.LOCK_SPACE, finalKey("ef-timeout", "same")),
+                KvRecord.of("other", 60000, 0), PutMode.SET);
+
+        assertEquals("timeout-safe", execute("ef-timeout", "same", () -> "unreachable"));
+    }
+
+    @Test
+    public void errorFallbackCoversFailureSessionReconstruction() throws Exception {
+        rule("ef-failure", "{\"id\":\"ef-failure\",\"key\":\"${id}\",\"cacheEnabled\":false,"
+                + "\"failureTtlMillis\":1000,\"waitTimeoutMillis\":5000,"
+                + "\"pollIntervalMillis\":5,\"errorFallback\":\"failure-safe\"}");
+
+        try {
+            execute("ef-failure", "same", () -> {
+                throw new IllegalArgumentException("boom");
+            });
+            fail("leader should fail with original exception");
+        } catch (IllegalArgumentException expected) {
+            // 本地执行者收到原始异常，不被 errorFallback 覆盖
+        }
+
+        // 等待者复用失败会话，但 errorFallback 兑底为返回值
+        assertEquals("failure-safe", execute("ef-failure", "same", () -> "unreachable"));
+    }
+
+    @Test
+    public void errorFallbackExplicitNullAllowedOnlyForObjectType() {
+        rule("ef-null", "{\"id\":\"ef-null\",\"key\":\"${id}\",\"contention\":\"FAIL_FAST\","
+                + "\"cacheEnabled\":false,\"errorFallback\":null}");
+        kv.store().put(SpaceKey.of(SingleFlightEngine.LOCK_SPACE, finalKey("ef-null", "same")),
+                KvRecord.of("other", 60000, 0), PutMode.SET);
+
+        assertNull(execute("ef-null", "same", () -> "unreachable"));
+    }
+
+    @Test
+    public void errorFallbackDoesNotCoverConfigError() {
+        rule("ef-config", "{\"id\":\"ef-config\",\"key\":\"${missing}\","
+                + "\"cacheEnabled\":false,\"onInvalidKey\":\"ERROR\","
+                + "\"errorFallback\":\"safe\"}");
+
+        try {
+            execute("ef-config", "same", () -> "unreachable");
+            fail("config error must not be swallowed by errorFallback");
+        } catch (SingleFlightConfigException expected) {
+            // 配置错误不兑底：静默会掩盖部署问题
+        }
+    }
+
+    @Test
     public void fallbackUsesNativeJsonAndGenericType() {
         rule("fallback", "{\"id\":\"fallback\",\"key\":\"${id}\",\"contention\":\"FALLBACK\","
                 + "\"cacheEnabled\":false,\"fallback\":[{\"name\":\"a\"}]}");
