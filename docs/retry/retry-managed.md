@@ -209,7 +209,7 @@ Lease 队列对外有五个状态：
 
 ## 持久化格式
 
-`LeaseRetryRecordSerializer` 使用显式 JSON，当前 `version=1`：
+序列化由 `VersionedRetryRecordSerializer`（`team4u-retry-core`，`RetryRecordSerializer` 的默认可靠实现，含 `INSTANCE` 单例）承担，使用显式 JSON，当前 `version=1`。`team4u-retry-lease-runtime` 的 `LeaseRetryRecordSerializer` 是它的薄委托壳（保留 lease 侧既有构造入口）。
 
 - 顶层字段为 `version`、`taskId`、`request`、`state`。
 - `request` 保存 task type、幂等键、字符串 payload、策略和创建时间。
