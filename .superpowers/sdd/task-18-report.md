@@ -16,7 +16,7 @@ The benchmark README has one row for each of the five measured JMH methods. Exac
 | `CriterionMatchBenchmark.compiledPredicate` | `53.720 ± 1.492 ns/op` | `1135.981 ± 31.595 MB/sec` | `64.000 ± 0.001 B/op` |
 | `CriterionMatchBenchmark.numericComparison` | `3.974 ± 0.070 ns/op` | `0.007 ± 0.001 MB/sec` | below profiler resolution |
 | `RouterRouteBenchmark.routeDecision` | `34.293 ± 0.332 ns/op` | `3336.570 ± 32.368 MB/sec` | `120.000 ± 0.001 B/op` |
-| `KvTieredReadBenchmark.l1Read` | `46.153 ± 0.219 ns/op` | `0.008 ± 0.014 MB/sec` | below profiler resolution |
+| `KvTieredReadBenchmark.l1Read` | `45.978 ± 1.279 ns/op` | `0.008 ± 0.014 MB/sec` | below profiler resolution |
 | `ProxyDelegateBenchmark.delegatedNoArgInvocation` | `9.467 ± 0.256 ns/op` | `0.007 ± 0.001 MB/sec` | below profiler resolution |
 
 Raw evidence is in `benchmarks/results/CriterionMatchBenchmark.{json,txt}`, `RouterRouteBenchmark.{json,txt}`, `KvTieredReadBenchmark.{json,txt}`, `ProxyDelegateBenchmark.{json,txt}`, and `environment.txt`. Environment: Corretto 21.0.11, Linux 6.8.12-22-pve, AMD Ryzen 7 7735HS, 16 visible processors. The recorded cgroup CPU/memory maxima were not set (`cpu.max: max 100000`, `memory.max: max`); host visibility can therefore differ from an imposed container quota.
@@ -35,8 +35,8 @@ All Maven reactor commands used the absolute root `-f` path; the benchmark packa
 | `mvn -f <root>/pom.xml -Pconsumer-it -DskipTests verify` | PASS; 6 external consumers |
 | `mvn -f <root>/pom.xml -Prelease-contracts -DskipTests verify` | PASS; 6 contract consumers |
 | `mvn -f <root>/pom.xml -Prelease -DskipTests package` | PASS |
-| `scripts/check-release-contracts.sh` | PASS; 40/40 leaves, 40 real dependency trees, 21 exact shapes |
-| `scripts/check-performance-claims.sh` | PASS; `performance claims gate: GREEN` |
+| `scripts/check-release-contracts.sh` | PASS; 40/40 leaves, 40 real dependency trees, 22 exact shapes |
+| `scripts/check-performance-claims.sh` | PASS; `performance claims gate: GREEN` (docs + production/benchmark sources, post-remediation) |
 | Effective root POM Aliyun check | PASS; 0 `maven.aliyun.com` matches |
 
 The benchmark method list is:
@@ -81,3 +81,79 @@ The matrix was not executed on JDK 8, 11, and 17 locally: this machine has JDK 2
 - `MIGRATION-1.0.md` retained an obsolete 39-leaf Task 16 sentence beside the final 40-leaf sentence. The stale sentence was removed.
 - The Task 18 phase report had a truncated dependency-gate proof passage. It now states the altered-tree negative proof completely.
 - No final gate flake occurred. No KV source was modified and no focused KV rerun was needed.
+
+## Independent Review Remediation
+
+Commit `3a121b7e` (initial Task 18) received an independent review with two Important and four small minor findings; remediation is committed as `fix(performance): close benchmark claim gaps`.
+
+### RED Evidence for the Gate Fix (Recorded False-Green)
+
+Before remediation, the existing `scripts/check-performance-claims.sh` printed
+`performance claims gate: GREEN` while production sources still contained exactly two
+unsupported claims:
+
+```text
+team4u-kv/team4u-kv-space/src/main/java/com/team4u/framework/kv/space/Spaces.java:12: 读路径无锁、零 GC
+team4u-base/src/main/java/com/team4u/framework/base/refresh/RefreshableValue.java:48: 热路径：一次 volatile 读 + 比较，零分配
+```
+
+The gate never scanned `*/src/main/java` Javadoc/source, so it was a false green.
+After the hardened gate was written, the original two lines were temporarily restored
+(git stash) and the gate printed `performance claims gate: RED` with exactly those two
+source locations; restoring the softened wording returned it to GREEN. The hardened
+pattern set was additionally negative-tested in an isolated directory against `0 GC`,
+`zero GC`, `GC-free`, `零分配`, `zero-allocation`, `allocation-free`, `alloc free`,
+`纳秒级`, `nanosecond-level`, `杜绝频繁GC抖动`, and `杜绝频繁 GC 抖动`, each caught
+in both docs and Java sources, while `JDK 10 GC`, `allocation rate`, `gc.alloc.rate.norm`,
+`TimeUnit.NANOSECONDS`, and the excluded `docs/superpowers` history produced no hits.
+
+### Production Change Scope
+
+Exactly two Javadoc comment sentences changed in production sources; no production code,
+behavior, API, bytecode, version, KV implementation, or identifier changed:
+
+- `Spaces.java:12`: `读路径无锁、零 GC` → `读路径无锁、低分配、低开销`
+- `RefreshableValue.java:48`: `热路径：一次 volatile 读 + 比较，零分配` → `热路径：一次 volatile 读 + 比较，分配开销较低`
+
+Claim scan now covers active docs plus every non-target `*/src/main/java/*.java`
+(Javadoc and source), case-insensitively, Chinese and English variants.
+
+### Benchmark Teardown Proof
+
+`KvTieredReadBenchmark` now has a trial-level `@TearDown` that asserts
+`l2.getCalls == 0` before `store.close()`, with the actual nonzero count in the failure
+message. This proves L2 received zero `get` calls across the entire trial: warmup plus
+all measured iterations. `close()` runs from `finally`, so the store is closed even when
+the assertion fails. The full official rerun below passed with this assertion in force.
+
+### New KV Evidence (Official Rerun)
+
+Only `KvTieredReadBenchmark` was rerun (official parameters, `-prof gc`); the other three
+benchmark classes keep their committed `3a121b7e` evidence:
+
+| Method | Mean score, 99.9% CI | `gc.alloc.rate` | `gc.alloc.rate.norm` |
+| :--- | :--- | :--- | :--- |
+| `KvTieredReadBenchmark.l1Read` | `45.978 ± 1.279 ns/op` | `0.008 ± 0.014 MB/sec` | below profiler resolution |
+
+### Gate and Environment Corrections
+
+- `scripts/check-performance-claims.sh`: case-insensitive Chinese+English claim variants
+  (`0 GC` with a non-numeric boundary so `10 GC` does not match, `zero GC`, `GC-free`,
+  `零 GC`/`零分配`, `zero allocation`, `allocation-free`/`alloc-free`, `纳秒级`/
+  `nanosecond-level`, `杜绝频繁 GC`), scanning the root README, `MIGRATION-1.0.md`, active
+  docs (still excluding `docs/superpowers` history), and all non-target `*/src/main/java`
+  Javadoc/source; plus raw-evidence existence checks (non-empty JSON/txt per class and
+  `environment.txt`). Locateable output with `file:line:` matches; robust when no source
+  files exist (explicit RED). Java 8 / Bash compatible.
+- `scripts/check-release-contracts.sh`: representative shape for `team4u-base-jdbc ->
+  team4u-base` added; the module-directory `find` fallback now prunes `target` and
+  `.worktrees`.
+- `benchmarks/results/environment.txt`: the root install/package commands now state the
+  explicit absolute `-f <worktree>/pom.xml` form; the recorded commands did not change,
+  this only removes the ambiguity of the relative form.
+
+### Matrix Limitation (Unchanged)
+
+All remediation verification ran on the local Corretto 21.0.11 JDK only. The JDK 8/11/17
+matrix remains required via GitHub Actions before release; nothing in this remediation
+claims otherwise.

@@ -8,8 +8,8 @@ cgroup cpu.max: max 100000
 cgroup memory.max: max
 
 commands (JMH commands execute from benchmarks/):
-mvn -q -DskipTests clean install
-mvn -q -f benchmarks/pom.xml clean package
+mvn -q -f <worktree>/pom.xml -DskipTests clean install
+mvn -q -f <worktree>/benchmarks/pom.xml clean package
 cd benchmarks
 java -jar target/benchmarks.jar CriterionMatchBenchmark -prof gc -f 1 -wi 3 -i 5 -rf json -rff results/CriterionMatchBenchmark.json
 java -jar target/benchmarks.jar RouterRouteBenchmark -prof gc -f 1 -wi 3 -i 5 -rf json -rff results/RouterRouteBenchmark.json

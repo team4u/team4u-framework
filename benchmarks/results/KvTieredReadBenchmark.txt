@@ -12,30 +12,30 @@
 
 # Run progress: 0.00% complete, ETA 00:00:08
 # Fork: 1 of 1
-# Warmup Iteration   1: 46.013 ns/op
-# Warmup Iteration   2: 46.190 ns/op
-# Warmup Iteration   3: 46.233 ns/op
-Iteration   1: 46.103 ns/op
+# Warmup Iteration   1: 45.008 ns/op
+# Warmup Iteration   2: 44.605 ns/op
+# Warmup Iteration   3: 45.518 ns/op
+Iteration   1: 45.675 ns/op
                  gc.alloc.rate:      0.007 MB/sec
                  gc.alloc.rate.norm: ≈ 10⁻⁴ B/op
                  gc.count:           ≈ 0 counts
 
-Iteration   2: 46.112 ns/op
+Iteration   2: 45.612 ns/op
                  gc.alloc.rate:      0.007 MB/sec
                  gc.alloc.rate.norm: ≈ 10⁻⁴ B/op
                  gc.count:           ≈ 0 counts
 
-Iteration   3: 46.122 ns/op
+Iteration   3: 46.412 ns/op
                  gc.alloc.rate:      0.007 MB/sec
                  gc.alloc.rate.norm: ≈ 10⁻³ B/op
                  gc.count:           ≈ 0 counts
 
-Iteration   4: 46.201 ns/op
+Iteration   4: 46.099 ns/op
                  gc.alloc.rate:      0.007 MB/sec
                  gc.alloc.rate.norm: ≈ 10⁻³ B/op
                  gc.count:           ≈ 0 counts
 
-Iteration   5: 46.228 ns/op
+Iteration   5: 46.089 ns/op
                  gc.alloc.rate:      0.014 MB/sec
                  gc.alloc.rate.norm: 0.001 B/op
                  gc.count:           ≈ 0 counts
@@ -43,9 +43,9 @@ Iteration   5: 46.228 ns/op
 
 
 Result "com.team4u.bench.KvTieredReadBenchmark.l1Read":
-  46.153 ±(99.9%) 0.219 ns/op [Average]
-  (min, avg, max) = (46.103, 46.153, 46.228), stdev = 0.057
-  CI (99.9%): [45.934, 46.373] (assumes normal distribution)
+  45.978 ±(99.9%) 1.279 ns/op [Average]
+  (min, avg, max) = (45.612, 45.978, 46.412), stdev = 0.332
+  CI (99.9%): [44.699, 47.256] (assumes normal distribution)
 
 Secondary result "com.team4u.bench.KvTieredReadBenchmark.l1Read:gc.alloc.rate":
   0.008 ±(99.9%) 0.014 MB/sec [Average]
@@ -74,7 +74,7 @@ different JVMs are already problematic, the performance difference caused by dif
 modes can be very significant. Please make sure you use the consistent Blackhole mode for comparisons.
 
 Benchmark                                        Mode  Cnt   Score   Error   Units
-KvTieredReadBenchmark.l1Read                     avgt    5  46.153 ± 0.219   ns/op
+KvTieredReadBenchmark.l1Read                     avgt    5  45.978 ± 1.279   ns/op
 KvTieredReadBenchmark.l1Read:gc.alloc.rate       avgt    5   0.008 ± 0.014  MB/sec
 KvTieredReadBenchmark.l1Read:gc.alloc.rate.norm  avgt    5  ≈ 10⁻³            B/op
 KvTieredReadBenchmark.l1Read:gc.count            avgt    5     ≈ 0          counts

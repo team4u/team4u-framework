@@ -17,7 +17,11 @@ module list and does not publish an artifact.
 - `KvTieredReadBenchmark`: a `TieredStore` L1 hit for a stable, unexpired key
   and record. Setup's write-through warms L1; it performs no read-time backfill,
   and a counting L2 receives zero `get` calls during setup and the measured
-  operation.
+  operation. A trial-level `@TearDown` re-asserts `l2.getCalls == 0` before
+  closing the store, so every recorded run is proven to have never touched L2
+  across warmup and all measured iterations combined; the assertion message
+  carries the actual nonzero count if it ever fails, and `close()` still runs
+  from a `finally` block so the store is closed either way.
 - `ProxyDelegateBenchmark`: a prebuilt JDK interface proxy delegating one
   no-argument method to its target; ByteBuddy is not involved.
 
@@ -68,5 +72,5 @@ single-threaded fork was used; each caveat above still applies.
 | Criterion logical/property predicate | `53.720 ± 1.492 ns/op` | `1135.981 ± 31.595 MB/sec` | `64.000 ± 0.001 B/op` | `results/CriterionMatchBenchmark.{json,txt}` |
 | Criterion subject numeric comparison | `3.974 ± 0.070 ns/op` | `0.007 ± 0.001 MB/sec` | below profiler resolution | `results/CriterionMatchBenchmark.{json,txt}` |
 | Router route decision | `34.293 ± 0.332 ns/op` | `3336.570 ± 32.368 MB/sec` | `120.000 ± 0.001 B/op` | `results/RouterRouteBenchmark.{json,txt}` |
-| Tiered KV L1 read | `46.153 ± 0.219 ns/op` | `0.008 ± 0.014 MB/sec` | below profiler resolution | `results/KvTieredReadBenchmark.{json,txt}` |
+| Tiered KV L1 read | `45.978 ± 1.279 ns/op` | `0.008 ± 0.014 MB/sec` | below profiler resolution | `results/KvTieredReadBenchmark.{json,txt}` |
 | Proxy delegated invocation | `9.467 ± 0.256 ns/op` | `0.007 ± 0.001 MB/sec` | below profiler resolution | `results/ProxyDelegateBenchmark.{json,txt}` |

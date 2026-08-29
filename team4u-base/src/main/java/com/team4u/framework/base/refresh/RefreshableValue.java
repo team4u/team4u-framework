@@ -45,7 +45,7 @@ import java.util.function.Supplier;
  * <pre>
  * s = state.get(); now = clock.millis()
  * ① s.value == null 且未 close   → 阻塞加载（所有模式一致，get() 永不返回首载前的 null）
- * ② now &lt; s.staleAfter           → 返回 s.value（热路径：一次 volatile 读 + 比较，零分配）
+ * ② now &lt; s.staleAfter           → 返回 s.value（热路径：一次 volatile 读 + 比较，分配开销较低）
  * ③ 已 close                     → 有值返值；未加载抛 IllegalStateException
  * ④ now &gt;= hardAfter(s)          → 阻塞重载，绕过冷却；失败异常抛给调用方
  * ⑤ now &lt; s.retryAt              → 返回 s.value（冷却兜底，不打源端）

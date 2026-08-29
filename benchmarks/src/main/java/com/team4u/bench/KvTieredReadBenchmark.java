@@ -109,7 +109,21 @@ public class KvTieredReadBenchmark {
 
     @TearDown
     public void tearDown() {
-        store.close();
+        // Trial-level teardown: by the time the whole trial (warmup plus all
+        // measured iterations) is over, the counting L2 must still have received
+        // zero get() calls. If this fails, some measured read left L1 and the
+        // recorded "L1-only" evidence is invalid. close() must still run even
+        // when the assertion fails, so it is in finally.
+        try {
+            int l2GetCalls = l2.getCalls.get();
+            if (l2GetCalls != 0) {
+                throw new AssertionError(
+                        "TieredStore L1 read left L1 during the trial: counting L2 "
+                                + "received " + l2GetCalls + " get() calls, expected 0");
+            }
+        } finally {
+            store.close();
+        }
     }
 
     @Benchmark
