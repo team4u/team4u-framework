@@ -155,11 +155,25 @@ team4u.singleflight.on_rule_missing=ERROR
 
 | 策略 | 行为 | 适用 |
 | :--- | :--- | :--- |
-| `WAIT` | 以 `pollIntervalMillis` 轮询回执与锁。终态直接返回；PENDING 且锁消失则接管；超过 `waitTimeoutMillis` 抛 `SingleFlightTimeoutException` | 缓存击穿合并，调用方希望拿到同一次真实结果 |
-| `FAIL_FAST` | 锁竞争立即抛无栈的 `SingleFlightConflictException` | 并发窗口互斥、任务防重；调用方自己决定重试或报错 |
+| `WAIT` | 以 `pollIntervalMillis` 轮询回执与锁。终态直接返回；PENDING 且锁消失则接管；超过 `waitTimeoutMillis` 抛 `SingleFlightTimeoutException`（配重 `errorFallback` 时改为返回兑底值） | 缓存击穿合并，调用方希望拿到同一次真实结果 |
+| `FAIL_FAST` | 锁竞争立即抛无栈的 `SingleFlightConflictException`（配重 `errorFallback` 时改为返回兑底值） | 并发窗口互斥、任务防重；调用方自己决定重试或报错 |
 | `FALLBACK` | 锁竞争时把规则中的原生 JSON 反序列化为返回类型；显式 JSON null 只允许非基本类型返回 | 竞争时返回静态降级数据或 null |
 
 > `cacheEnabled=true` 时缓存命中不会抢锁，因此不会进入竞争策略；只有缓存未命中且锁已被他人持有才触发 `contention`。纯互斥场景应配置 `cacheEnabled=false`。
+
+### errorFallback 与 exceptionHandler 的优先级
+
+`errorFallback` 在引擎层兑底，`exceptionHandler` 在代理层接异常——引擎先执行，因此：
+
+| 场景 | errorFallback | exceptionHandler | 实际结果 |
+| :--- | :--- | :--- | :--- |
+| 竞争 / 超时 / 失败回执 | 已配置 | 已配置 | **errorFallback 生效**，handler 收不到这些异常 |
+| 竞争 / 超时 / 失败回执 | 未配置 | 已配置 | 异常抛到代理层，**handler 生效** |
+| 竞争 / 超时 / 失败回执 | 未配置 | 未配置 | 异常抛给调用方 |
+| 配置错误 | 无论是否配置 | 已配置 | 异常穿透引擎（不兑底），**handler 生效** |
+| loader 业务异常 | 无论是否配置 | 无论是否配置 | 都不生效，原样上抛 |
+
+不配置 `errorFallback` 时行为与未引入该字段前完全一致，无隐藏默认值。注意：若依赖 handler 统一记录组件异常日志（监控埋点），配上 errorFallback 后竞争 / 超时类事件不再经过 handler，需改从引擎日志观察。
 
 ## 存储选型与限制
 
