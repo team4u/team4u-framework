@@ -173,8 +173,7 @@ import com.team4u.framework.router.RouterBootstrap;
 
 RouterBootstrap.global()
         .addInterceptor(new TenantEnrichInterceptor())
-        .addInterceptor(new MetricsInterceptor())
-        .lock(); // 启动完成后锁定，防止运行时被篡改
+        .addInterceptor(new MetricsInterceptor());
 ```
 
 ### 方式 B：通过 `RoutingManager.Builder` 独立构建

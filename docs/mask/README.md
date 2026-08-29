@@ -88,21 +88,20 @@ com.team4u.framework.mask
 │   ├── MaskStringSerializer.java    # 字符串脱敏序列化器
 │   └── MaskableMapSerializer.java   # Map 动态脱敏序列化器
 ├── policy                           # 内置脱敏策略实现 (15 种)
+│   ├── AbstractKeyedMaskPolicy.java  # 参数化策略的 key 载体基类
 │   ├── AddressMaskPolicy.java       # 地址 (保留前9字符)
-│   ├── B1A1MaskPolicy.java          # 仅显示前1后1
-│   ├── B2A2MaskPolicy.java          # 仅显示前2后2
 │   ├── BankCardNoMaskPolicy.java    # 银行卡 (保留前4后2)
 │   ├── EmailMaskPolicy.java         # 电子邮箱 (@前保留首字符)
 │   ├── HideMaskPolicy.java          # 全部隐藏 (固定为*)
 │   ├── IdCardNoMaskPolicy.java      # 身份证 (保留前5后2)
+│   ├── MaskPolicyBinder.java        # 枚举名 -> 参数化策略实例的绑定器
 │   ├── MobileMaskPolicy.java        # 手机号 (保留前3后3)
 │   ├── NameMaskPolicy.java          # 姓名 (中英文智能识别)
 │   ├── NoneMaskPolicy.java          # 不脱敏 (返回明文)
 │   ├── NullMaskPolicy.java          # 固定返回 null
 │   ├── PasswordMaskPolicy.java      # 密码 (固定为******)
-│   ├── Percent1Limit200MaskPolicy.java  # 掩码1%且最多显示200字符
-│   ├── Percent66Limit10MaskPolicy.java  # 掩码66%且最多显示10字符
-│   └── Percent66MaskPolicy.java     # 居中掩码66%
+│   ├── PercentMaskPolicy.java       # 百分比居中掩码 (可选限长)
+│   └── PrefixSuffixMaskPolicy.java  # 保留前N后M字符
 ├── FastMasker.java                  # 极速脱敏核心门面
 ├── Mask.java                        # 字段脱敏注解
 ├── MaskBootstrap.java               # 动态规则启动引导类

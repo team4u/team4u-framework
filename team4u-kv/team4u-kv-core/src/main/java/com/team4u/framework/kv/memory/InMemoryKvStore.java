@@ -172,6 +172,35 @@ public class InMemoryKvStore implements KvStore, CasCapable, ScanCapable, WatchC
         return success[0];
     }
 
+    /**
+     * 单 compute 原子完成「存活 + 值匹配」校验与「保序」过期更新；
+     * 过期判定使用 compute 内时间戳，与 {@link #compareAndSet} 一致
+     */
+    @Override
+    public boolean compareAndExpire(SpaceKey key, String expectedValue, long newExpireAtMillis) {
+        boolean[] renewed = new boolean[1];
+        map.compute(key, (ignored, existing) -> {
+            if (existing == null || existing.isExpired(now())) {
+                renewed[0] = false;
+                return existing == null ? null : existing;
+            }
+            if (!existing.getValue().equals(expectedValue)) {
+                renewed[0] = false;
+                return existing;
+            }
+            renewed[0] = true;
+            // 保序：晚到的续约不缩短租约（0 为永不过期，视为无穷大：
+            // 新值 0 恒为最大必生效；存量 0 则任何有限新值都不回缩）
+            if (newExpireAtMillis == 0
+                    || (existing.getExpireAt() != 0
+                    && newExpireAtMillis > existing.getExpireAt())) {
+                return KvRecord.ofRaw(existing.getValue(), newExpireAtMillis);
+            }
+            return existing;
+        });
+        return renewed[0];
+    }
+
     @Override
     public List<SpaceKey> scan(String space) {
         long now = now();

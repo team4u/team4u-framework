@@ -40,7 +40,7 @@ graph LR
 
     CONFIG["team4u.singleflight.* 规则<br/>配置组件"] -->|ConfigDrivenRegistry<br/>热更新| F
     F -->|"${variable}" 渲染| KEYS["SingleFlightKeys<br/>point 隔离 + 百分号编码 + 按需摘要"]
-    F --> STORES["SingleFlightStores<br/>命名存储解析"]
+    F --> STORES["NamedKvStoreRegistry<br/>命名存储解析"]
     STORES --> INNER["KvStores.innermost<br/>直达底层存储"]
     INNER --> CAS["CasCapable<br/>CAS 能力校验"]
 
@@ -86,7 +86,7 @@ execute(point, arguments, returnType, loader)
 | `SingleFlightLoader<T>` / `ThrowableLoader<T>` | 加载函数。前者可抛 `Exception`；后者用于代理边界，可抛任意 `Throwable` |
 | `SessionEnvelope` | 执行回执：`token + 状态 + 时间 + 结果/错误`，是跨线程、跨实例传递执行结果的数据契约 |
 | `SingleFlightKeys` | 最终 key 组成：point 与业务 key（可按需摘要）分别百分号编码后用下划线拼接；摘要只由规则的 `keyDigest` 手工指定 |
-| `SingleFlightStores` | 命名 `KvStore` 注册表；规则用 `store` 字段按名引用 |
+| `NamedKvStoreRegistry` | 命名 `KvStore` 注册表（kv-core 公共设施）；规则用 `store` 字段按名引用 |
 | `SingleFlightKeyDigest` / `SingleFlightKeyDigests` | 业务 key 摘要策略与命名注册表：内置 `sha256`，自定义算法编程注册、同名覆盖 |
 | `SingleFlights` | 全局静态门面：显式 `init`，未初始化时用 `ConfigManager.global()` + `InMemoryKvStore` 懒加载 |
 | `@SingleFlight` | 方法注解，只声明 `value()`（point）；代理自动携带方法泛型返回类型和参数名上下文 |
@@ -100,7 +100,7 @@ execute(point, arguments, returnType, loader)
 | :--- | :--- | :--- | :--- | :--- |
 | `enabled` | boolean | 否 | `true` | 是否启用 singleflight。false 时直接执行 loader，不读锁、回执与缓存 |
 | `id` | String | 是 | 无 | 必须与 point 完全一致，否则执行期抛 `SingleFlightConfigException`。加载期不能为空 |
-| `store` | String | 否 | `""` | `SingleFlightStores.global()` 中的命名存储；空白用引擎默认存储。解析后直达最内层真实存储 |
+| `store` | String | 否 | `""` | `NamedKvStoreRegistry.global()` 中的命名存储；空白用引擎默认存储。解析后直达最内层真实存储 |
 | `key` | String | 否 | 无 | `${variable}` 模板，变量来自参数名 Map。不配置时业务 key 就是 point，同 point 全局共享窗口。渲染为 null/空白时按 `onInvalidKey` 处理 |
 | `skipWhen` | String | 否 | 无 | Criterion 表达式，匹配参数名 Map。命中则直接执行 loader，完全绕过协调和缓存。用 `$参数名` 引用参数，例如 `$refresh == true` |
 | `cacheWhen` | String | 否 | 无 | Criterion 表达式，匹配 loader 返回值。不配置默认可缓存；为 false 时发布 `SUCCESS_NOT_CACHEABLE` 且不写结果缓存 |
@@ -214,7 +214,7 @@ team4u-singleflight                # 单模块：存储经 kv 能力协商，无
     │   ├── ResultCodec           # 结果 JSON 序列化边界
     │   └── EffectivePolicies      # 生效策略推导（显式配置优先，省略按语义推导）
     ├── policy                    # key 渲染、Criterion 包装、fallback 转换、key 摘要策略与注册表
-    ├── store                     # SingleFlightStores / NamedStore 命名存储
+    ├── (store)                     # 命名存储收敛至 kv-core：NamedKvStoreRegistry / NamedKvStore
     ├── proxy                     # @SingleFlight 注解、拦截器、代理工厂、异常转换
     └── spring                    # @EnableSingleFlight 自动代理（可选依赖）
 ```

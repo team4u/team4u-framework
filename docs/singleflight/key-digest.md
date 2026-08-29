@@ -69,7 +69,7 @@ import com.team4u.framework.singleflight.policy.SingleFlightKeyDigests;
 SingleFlightKeyDigests.global().register(new HmacSha256KeyDigest(secret));
 ```
 
-- 同名后注册者覆盖先注册者——可以覆盖内置的 `sha256`，注册表行为与 `SingleFlightStores` 一致；
+- 同名后注册者覆盖先注册者——可以覆盖内置的 `sha256`，注册表行为与 `NamedKvStoreRegistry` 一致；
 - `register` 返回 `this`，支持链式注册多个算法。
 
 ### 步骤 3：规则按名引用

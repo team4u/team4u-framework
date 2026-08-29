@@ -50,6 +50,11 @@
             <version>${project.version}</version>
         </dependency>
         <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-serializer-jackson</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>com.fasterxml.jackson.core</groupId>
             <artifactId>jackson-databind</artifactId>
         </dependency>
@@ -73,12 +78,6 @@
             <optional>true</optional>
         </dependency>
 
-        <dependency>
-            <groupId>com.team4u</groupId>
-            <artifactId>team4u-serializer-jackson</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
         <dependency>
             <groupId>com.team4u</groupId>
             <artifactId>team4u-config-test</artifactId>

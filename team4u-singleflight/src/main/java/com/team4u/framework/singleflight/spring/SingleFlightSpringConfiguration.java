@@ -1,20 +1,22 @@
 package com.team4u.framework.singleflight.spring;
 
+import com.team4u.framework.proxy.core.MethodInterceptor;
+import com.team4u.framework.proxy.spring.AnnotationProxyBeanPostProcessor;
 import com.team4u.framework.singleflight.proxy.SingleFlight;
 import com.team4u.framework.singleflight.proxy.SingleFlightInterceptor;
-import org.springframework.aop.Advisor;
-import org.springframework.aop.framework.AopInfrastructureBean;
-import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.config.BeanDefinition;
-import org.springframework.beans.factory.config.BeanPostProcessor;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Role;
 
-import java.lang.reflect.Method;
-
 /**
  * Spring 集成配置：注册包装含 {@code @SingleFlight} 方法 bean 的后置处理器。
+ * <p>
+ * 装配逻辑（注解探测、代理构建、边界防御）继承自
+ * {@link AnnotationProxyBeanPostProcessor} 公共模板；与限流等模块不同，
+ * 本模块在代理构建失败时快速失败（覆盖 {@code onProxyFailure}），
+ * 与既有行为保持一致。
+ * </p>
  *
  * @author jay.wu
  */
@@ -31,48 +33,31 @@ public class SingleFlightSpringConfiguration {
     }
 
     /**
-     * Bean 后置处理器：初始化完成后，为含 {@code @SingleFlight} 方法的 bean
-     * 创建回源合并代理（经 {@code SingleFlightProxyFactory}）。
+     * Bean 后置处理器：注解类型 + 拦截器工厂即全部装配逻辑。
+     * <p>
+     * 拦截器在调用期按 (method, targetClass) 逐方法解析注解（经公共解析器），
+     * Bean 级注解实例仅用于构造拦截器。
      */
-    public static class SingleFlightBeanPostProcessor implements BeanPostProcessor {
+    public static class SingleFlightBeanPostProcessor extends AnnotationProxyBeanPostProcessor<SingleFlight> {
 
         @Override
-        public Object postProcessAfterInitialization(Object bean, String beanName) {
-            // 基础设施 bean 与已是 AOP 代理的 bean 不重复包装，
-            // 避免与既有代理链冲突或把切面基础设施包进业务代理
-            if (bean == null || isInfrastructure(bean) || AopUtils.isAopProxy(bean)) {
-                return bean;
-            }
-            if (!hasSingleFlightMethod(bean.getClass())) {
-                return bean;
-            }
-            try {
-                return com.team4u.framework.singleflight.proxy.SingleFlightProxyFactory.proxy(bean);
-            } catch (Exception e) {
-                throw new IllegalStateException("Failed to create singleflight proxy|bean=" + beanName
-                        + "|class=" + bean.getClass().getName(), e);
-            }
+        protected Class<SingleFlight> getAnnotationType() {
+            return SingleFlight.class;
+        }
+
+        @Override
+        protected MethodInterceptor createInterceptor(SingleFlight annotation) {
+            return new SingleFlightInterceptor();
         }
 
         /**
-         * 是否为 Spring AOP 基础设施 bean（后置处理器 / 切面 / 基础设施标记）。
+         * 代理构建失败快速失败：回源合并的协调语义（同 key 单执行）依赖代理生效，
+         * 静默退化为直通会让并发回源意外放大，宁可启动期暴露。
          */
-        private boolean isInfrastructure(Object bean) {
-            return bean instanceof BeanPostProcessor
-                    || bean instanceof Advisor
-                    || bean instanceof AopInfrastructureBean;
-        }
-
-        /**
-         * 类的公有方法（含继承）上是否存在可解析的 {@code @SingleFlight} 注解。
-         */
-        private boolean hasSingleFlightMethod(Class<?> beanClass) {
-            for (Method method : beanClass.getMethods()) {
-                if (SingleFlightInterceptor.resolveAnnotation(method) != null) {
-                    return true;
-                }
-            }
-            return false;
+        @Override
+        protected Object onProxyFailure(Object bean, String beanName, Exception e) {
+            throw new IllegalStateException("Failed to create singleflight proxy|bean=" + beanName
+                    + "|class=" + bean.getClass().getName(), e);
         }
     }
 }

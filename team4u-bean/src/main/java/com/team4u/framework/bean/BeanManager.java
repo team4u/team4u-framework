@@ -1,5 +1,6 @@
 package com.team4u.framework.bean;
 
+import com.team4u.framework.base.util.ServiceLoaderUtil;
 import com.team4u.framework.bean.core.BeanFactory;
 import com.team4u.framework.bean.exception.NoSuchBeanDefinitionException;
 import com.team4u.framework.bean.provider.LocalBeanContainer;
@@ -7,7 +8,6 @@ import com.team4u.framework.bean.provider.LocalBeanContainer;
 import java.util.Comparator;
 import java.util.List;
 import java.util.Map;
-import java.util.ServiceLoader;
 import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.function.Supplier;
 import java.util.stream.Collectors;
@@ -165,10 +165,12 @@ public class BeanManager {
 
     /**
      * 通过 Java 标准 SPI 机制加载第三方扩展的 Bean 提供者
+     * <p>
+     * 容错加载：单个实现初始化失败只记录告警并跳过，不影响其余提供者与全局初始化。
+     * </p>
      */
     private void loadSpiProviders() {
-        ServiceLoader<BeanFactory> loader = ServiceLoader.load(BeanFactory.class);
-        for (BeanFactory factory : loader) {
+        for (BeanFactory factory : ServiceLoaderUtil.loadAvailableList(BeanFactory.class)) {
             addProvider(factory);
         }
     }

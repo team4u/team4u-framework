@@ -27,7 +27,7 @@ public class RateLimitRule {
     private String algorithm;
 
     /**
-     * 命名存储（注册于 RateLimitStores）；空 = 使用引擎默认存储。
+     * 命名存储（注册于 {@code NamedKvStoreRegistry.global()}）；空 = 使用引擎默认存储。
      * 无状态算法（如 history-window）不解析存储
      */
     private String store;

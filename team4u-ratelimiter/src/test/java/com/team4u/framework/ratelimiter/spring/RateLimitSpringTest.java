@@ -43,6 +43,8 @@ public class RateLimitSpringTest {
                 "[{\"id\":\"fw\",\"algorithm\":\"fixed-window\",\"windowMillis\":60000,\"threshold\":1}]");
         config.put("team4u.ratelimiter.spring.finalsvc",
                 "[{\"id\":\"fw\",\"algorithm\":\"fixed-window\",\"windowMillis\":60000,\"threshold\":1}]");
+        config.put("team4u.ratelimiter.spring.lookup",
+                "[{\"id\":\"fw\",\"algorithm\":\"fixed-window\",\"windowMillis\":60000,\"threshold\":1}]");
     }
 
     @After
@@ -88,6 +90,30 @@ public class RateLimitSpringTest {
         }
     }
 
+    /**
+     * 注解仅在实现方法（接口未标注）时同样被代理与拦截：与 singleflight 的
+     * targetClass 解析修复对称的回归用例（JDK 代理下拦截到的是接口方法）
+     */
+    @Test
+    public void annotationOnlyOnImplementationStillIntercepted() {
+        try (AnnotationConfigApplicationContext context =
+                     new AnnotationConfigApplicationContext(TestApp.class)) {
+            TestApp app = context.getBean(TestApp.class);
+            LookupService lookup = context.getBean(LookupService.class);
+
+            assertNotSame("注解在实现方法的 bean 也应被代理包装",
+                    LookupServiceImpl.class, lookup.getClass());
+            assertEquals("l-1", lookup.find("k"));
+            try {
+                lookup.find("k");
+                fail("expected RateLimitException");
+            } catch (RateLimitException e) {
+                assertEquals("spring.lookup", e.getResult().getPoint());
+            }
+            assertEquals("拒绝时目标方法不执行", 1, app.lookupService.count.get());
+        }
+    }
+
     @Test
     public void finalClassSkippedWithWarnInsteadOfFailure() {
         try (AnnotationConfigApplicationContext context =
@@ -112,6 +138,7 @@ public class RateLimitSpringTest {
         final OrderServiceImpl orderService = new OrderServiceImpl();
         final ReportService reportService = new ReportService();
         final FinalService finalService = new FinalService();
+        final LookupServiceImpl lookupService = new LookupServiceImpl();
 
         @Bean
         public OrderService orderService() {
@@ -126,6 +153,11 @@ public class RateLimitSpringTest {
         @Bean
         public FinalService finalService() {
             return finalService;
+        }
+
+        @Bean
+        public LookupService lookupService() {
+            return lookupService;
         }
     }
 
@@ -165,6 +197,25 @@ public class RateLimitSpringTest {
         @RateLimit(point = "spring.finalsvc")
         public String call() {
             return "raw-" + count.incrementAndGet();
+        }
+    }
+
+    /**
+     * 注解仅在实现方法（接口未标注）：JDK 代理场景的回归靶心
+     */
+    public interface LookupService {
+
+        String find(String keyword);
+    }
+
+    public static class LookupServiceImpl implements LookupService {
+
+        final AtomicInteger count = new AtomicInteger();
+
+        @Override
+        @RateLimit(point = "spring.lookup")
+        public String find(String keyword) {
+            return "l-" + count.incrementAndGet();
         }
     }
 }

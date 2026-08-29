@@ -1,21 +1,16 @@
 package com.team4u.framework.ratelimiter.core;
 
-import com.team4u.framework.base.util.ReflectUtil;
-
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
-import java.util.Map;
 import java.util.Date;
 
 /**
  * 历史路径点导航工具（history-window 专用，包内工具）
  * <p>
  * 按 {@code a.b.0.c} 形式的点路径从上下文中提取值：Map 按键取值、List 按数字
- * 下标取值、Bean 读公有 getter（getXxx/isXxx）。任一环节缺失（键不存在、下标越界、
- * 无 getter）返回 null。
+ * 下标取值、Bean 读公有 getter（取值逻辑收敛于 {@link ContextProperties}）。任一环节缺失
+ * （键不存在、下标越界、无 getter）返回 null。
  * </p>
  *
  * @author jay.wu
@@ -69,31 +64,10 @@ final class HistoryPaths {
     }
 
     /**
-     * 单段访问：Map 取键 / List 取下标 / Bean 读公有 getter
+     * 单段访问：Map 取键 / List 取下标 / Bean 读公有 getter（经 {@link ContextProperties}）
      */
     private static Object access(Object target, String segment) {
-        if (target instanceof Map) {
-            return ((Map<?, ?>) target).get(segment);
-        }
-        if (target instanceof List) {
-            int index;
-            try {
-                index = Integer.parseInt(segment);
-            } catch (NumberFormatException e) {
-                return null;
-            }
-            List<?> list = (List<?>) target;
-            return index >= 0 && index < list.size() ? list.get(index) : null;
-        }
-        String capitalized = Character.toUpperCase(segment.charAt(0)) + segment.substring(1);
-        for (String prefix : new String[]{"get", "is"}) {
-            Method getter = ReflectUtil.getMethod(target.getClass(), prefix + capitalized);
-            if (getter != null && Modifier.isPublic(getter.getModifiers())
-                    && getter.getParameterCount() == 0 && getter.getReturnType() != void.class) {
-                return ReflectUtil.invoke(target, getter);
-            }
-        }
-        return null;
+        return ContextProperties.access(target, segment);
     }
 
     /**

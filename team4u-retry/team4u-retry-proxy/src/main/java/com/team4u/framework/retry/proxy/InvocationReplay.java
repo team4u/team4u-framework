@@ -1,6 +1,8 @@
 package com.team4u.framework.retry.proxy;
 
 import com.team4u.framework.base.util.ReflectUtil;
+import com.team4u.framework.base.util.StringUtil;
+import com.team4u.framework.base.util.TypeUtil;
 import com.team4u.framework.serializer.json.JsonUtil;
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.retry.proxy.invocation.InvocationArgSnapshot;
@@ -14,8 +16,6 @@ import lombok.Setter;
 
 import java.lang.reflect.Method;
 import java.lang.reflect.Type;
-import java.util.Collections;
-import java.util.HashMap;
 import java.util.Map;
 
 /**
@@ -26,25 +26,10 @@ import java.util.Map;
 public class InvocationReplay implements StringRecoveryHandler {
 
     public static final String TASK_NAME = "ProxyInvocationReplay";
-    private static final Map<String, Class<?>> PRIMITIVE_TYPES = primitiveTypes();
 
     @Getter
     @Setter
     private RetryContextSerializer serializer = JacksonRetryContextSerializer.INSTANCE;
-
-    private static Map<String, Class<?>> primitiveTypes() {
-        Map<String, Class<?>> primitiveTypes = new HashMap<String, Class<?>>();
-        primitiveTypes.put(boolean.class.getName(), boolean.class);
-        primitiveTypes.put(byte.class.getName(), byte.class);
-        primitiveTypes.put(char.class.getName(), char.class);
-        primitiveTypes.put(short.class.getName(), short.class);
-        primitiveTypes.put(int.class.getName(), int.class);
-        primitiveTypes.put(long.class.getName(), long.class);
-        primitiveTypes.put(float.class.getName(), float.class);
-        primitiveTypes.put(double.class.getName(), double.class);
-        primitiveTypes.put(void.class.getName(), void.class);
-        return Collections.unmodifiableMap(primitiveTypes);
-    }
 
     @Override
     public String taskName() {
@@ -71,10 +56,10 @@ public class InvocationReplay implements StringRecoveryHandler {
         Object target = locateTarget(payload.getTargetTypeName(), payload.getTargetBeanName());
 
         Class<?>[] paramTypes = resolveParamTypes(payload);
-        Method method = RetryMethodResolver.findMostSpecificMethod(
+        // 复用 AnnotatedMethodResolver 的方法定位与桥接还原（与拦截期解析保持一致）
+        Method method = RetryMethodResolver.resolve(
                 ReflectUtil.getMethod(Class.forName(payload.getTargetTypeName()), payload.getMethodName(), paramTypes),
-                target.getClass());
-        method = method == null ? null : RetryMethodResolver.resolve(method, target.getClass()).getEffectiveMethod();
+                target.getClass()).getEffectiveMethod();
 
         if (method == null) {
             throw new NoSuchMethodException(payload.getTargetTypeName() + "." + payload.getMethodName());
@@ -86,7 +71,7 @@ public class InvocationReplay implements StringRecoveryHandler {
     }
 
     private InvocationRecoveryData deserializePayload(String payload) {
-        if (payload == null || payload.trim().isEmpty()) {
+        if (StringUtil.isBlank(payload)) {
             return null;
         }
         return JsonUtil.toBean(payload, InvocationRecoveryData.class);
@@ -102,7 +87,7 @@ public class InvocationReplay implements StringRecoveryHandler {
      * @throws ClassNotFoundException 如果找不到对应的类
      */
     private Object locateTarget(String targetTypeName, String targetBeanName) throws ClassNotFoundException {
-        if (targetBeanName != null && !targetBeanName.trim().isEmpty()) {
+        if (StringUtil.isNotBlank(targetBeanName)) {
             Object namedBean = BeanManager.getInstance().getBean(targetBeanName);
             if (namedBean != null) {
                 return namedBean;
@@ -150,11 +135,8 @@ public class InvocationReplay implements StringRecoveryHandler {
     }
 
     private Class<?> resolveType(String typeName) throws ClassNotFoundException {
-        Class<?> primitiveType = PRIMITIVE_TYPES.get(typeName);
-        if (primitiveType != null) {
-            return primitiveType;
-        }
-        return Class.forName(typeName);
+        // 支持基本类型名（int/boolean 等）与 void，上收自本类原 PRIMITIVE_TYPES 私有表
+        return TypeUtil.forName(typeName);
     }
 
     /**
@@ -190,11 +172,11 @@ public class InvocationReplay implements StringRecoveryHandler {
     }
 
     private void validatePayload(InvocationRecoveryData payload) {
-        if (payload.getTargetTypeName() == null || payload.getTargetTypeName().trim().isEmpty()) {
+        if (StringUtil.isBlank(payload.getTargetTypeName())) {
             throw new IllegalArgumentException(
                     "InvocationRecoveryData.targetTypeName is required. Legacy payloads are no longer supported.");
         }
-        if (payload.getMethodName() == null || payload.getMethodName().trim().isEmpty()) {
+        if (StringUtil.isBlank(payload.getMethodName())) {
             throw new IllegalArgumentException("InvocationRecoveryData.methodName is required");
         }
         if (payload.getArgs() == null) {

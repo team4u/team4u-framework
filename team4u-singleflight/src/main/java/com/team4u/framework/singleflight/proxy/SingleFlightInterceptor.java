@@ -1,8 +1,10 @@
 package com.team4u.framework.singleflight.proxy;
 
 import com.team4u.framework.base.util.ReflectUtil;
+import com.team4u.framework.base.util.TypeUtil;
 import com.team4u.framework.proxy.core.MethodInterceptor;
 import com.team4u.framework.proxy.core.MethodInvocation;
+import com.team4u.framework.proxy.support.AnnotatedMethodResolver;
 import com.team4u.framework.singleflight.api.SingleFlightException;
 import com.team4u.framework.singleflight.api.SingleFlightExecution;
 import com.team4u.framework.singleflight.api.SingleFlights;
@@ -19,15 +21,26 @@ import java.util.concurrent.ConcurrentHashMap;
  * 拦截 {@link SingleFlight} 注解方法，组装类型化执行请求并转发给
  * {@link SingleFlights} 背后的引擎。
  * <p>
- * 方法元数据（注解、参数信息）按 Method 缓存，代理调用只做一次组装：
+ * 注解解析统一委托 {@link AnnotatedMethodResolver} 按 (method, targetClass)
+ * 解析与缓存：此前实现只查方法声明链不查 targetClass，JDK 接口代理下拦截到的
+ * 是接口方法、注解仅标注在实现方法时被误判为未注解而直通——现于
+ * targetClass 继承体系中最具体的方法上优先命中，两种标注位置均正确生效。
+ * 方法元数据（注解、参数信息）按 Method + targetClass 缓存，代理调用只做一次组装：
  * 参数名 → 参数值 Map、泛型返回类型与可抛任意 Throwable 的加载函数。
  * 组件异常可经 {@link SingleFlightExceptionHandler} 转换为方法兼容的返回值，
- * 转换结果做类型与 null 安全校验，保证代理透明性。
+ * 转换结果做类型与 null 安全校验（基本类型按包装类比较，
+ * {@link TypeUtil#wrap(Class)}），保证代理透明性。
  * </p>
  *
  * @author jay.wu
  */
 public class SingleFlightInterceptor implements MethodInterceptor {
+
+    /**
+     * 注解解析器：注解查找与缓存收敛于公共设施（含 targetClass 实现方法查找）
+     */
+    private static final AnnotatedMethodResolver<SingleFlight> RESOLVER =
+            AnnotatedMethodResolver.of(SingleFlight.class);
 
     private final SingleFlightExceptionHandler exceptionHandler;
     /**
@@ -46,7 +59,9 @@ public class SingleFlightInterceptor implements MethodInterceptor {
     @Override
     public Object invoke(MethodInvocation invocation) throws Throwable {
         Method method = invocation.getMethod();
-        MethodMeta meta = metaCache.computeIfAbsent(method, this::buildMeta);
+        Class<?> targetClass = invocation.getTarget() == null
+                ? method.getDeclaringClass() : invocation.getTarget().getClass();
+        MethodMeta meta = metaCache.computeIfAbsent(method, m -> buildMeta(m, targetClass));
         // 未标注解的方法直通，代理对非协调方法零侵入
         if (!meta.annotated) {
             return invocation.proceed();
@@ -106,12 +121,12 @@ public class SingleFlightInterceptor implements MethodInterceptor {
      * 解析方法元数据：无注解直通；有注解时要求参数名可读（-parameters），
      * 否则 key 模板与 skipWhen 将失去变量来源，直接在代理创建期失败。
      */
-    private MethodMeta buildMeta(Method method) {
-        SingleFlight annotation = resolveAnnotation(method);
+    private MethodMeta buildMeta(Method method, Class<?> targetClass) {
+        SingleFlight annotation = resolveAnnotation(method, targetClass);
         if (annotation == null) {
             return MethodMeta.passThrough(method);
         }
-        Parameter[] parameters = ReflectUtil.getParameters(method.getDeclaringClass(), method);
+        Parameter[] parameters = ReflectUtil.getParameters(targetClass, method);
         if (method.getParameterCount() > 0
                 && (parameters == null || !parameters[0].isNamePresent())) {
             throw new IllegalStateException(
@@ -142,7 +157,7 @@ public class SingleFlightInterceptor implements MethodInterceptor {
 
     /**
      * 校验处理器返回值：基本类型方法不允许 null，返回值必须可赋值给方法返回类型
-     * （基本类型按包装类比较）。
+     * （基本类型按包装类比较，经 {@link TypeUtil#wrap(Class)}）。
      */
     private void validateHandlerResult(Method method, Object result) {
         Class<?> returnType = method.getReturnType();
@@ -153,7 +168,7 @@ public class SingleFlightInterceptor implements MethodInterceptor {
             }
             return;
         }
-        if (!box(returnType).isInstance(result)) {
+        if (!TypeUtil.wrap(returnType).isInstance(result)) {
             throw new IllegalStateException(
                     "SingleFlight exception handler returned incompatible type|method=" + method
                             + "|expected=" + returnType.getName()
@@ -162,54 +177,12 @@ public class SingleFlightInterceptor implements MethodInterceptor {
     }
 
     /**
-     * 基本类型 → 包装类。
+     * 解析方法上生效的 {@link SingleFlight} 注解：经 {@link AnnotatedMethodResolver}
+     * 按 (method, targetClass) 解析——targetClass 继承体系中最具体的方法（含桥接还原）、
+     * 方法自身、接口与父类链同名同参方法依次查找，注解可集中声明在接口或父类方法上。
      */
-    private Class<?> box(Class<?> type) {
-        if (!type.isPrimitive()) {
-            return type;
-        }
-        if (type == boolean.class) return Boolean.class;
-        if (type == long.class) return Long.class;
-        if (type == float.class) return Float.class;
-        if (type == double.class) return Double.class;
-        if (type == char.class) return Character.class;
-        if (type == byte.class) return Byte.class;
-        if (type == short.class) return Short.class;
-        return Integer.class;
-    }
-
-    /**
-     * 解析方法上的 {@link SingleFlight} 注解：先查方法自身，再沿接口、父类查找同名同参方法，
-     * 支持在接口或父类上集中声明注解。
-     */
-    public static SingleFlight resolveAnnotation(Method method) {
-        SingleFlight annotation = method.getAnnotation(SingleFlight.class);
-        if (annotation != null) {
-            return annotation;
-        }
-        for (Class<?> intf : method.getDeclaringClass().getInterfaces()) {
-            SingleFlight found = findAnnotation(method, intf);
-            if (found != null) {
-                return found;
-            }
-        }
-        Class<?> superclass = method.getDeclaringClass().getSuperclass();
-        if (superclass != null && superclass != Object.class) {
-            SingleFlight found = findAnnotation(method, superclass);
-            if (found != null) {
-                return found;
-            }
-        }
-        return null;
-    }
-
-    private static SingleFlight findAnnotation(Method method, Class<?> type) {
-        try {
-            return type.getMethod(method.getName(), method.getParameterTypes())
-                    .getAnnotation(SingleFlight.class);
-        } catch (NoSuchMethodException ignored) {
-            return null;
-        }
+    public static SingleFlight resolveAnnotation(Method method, Class<?> targetClass) {
+        return RESOLVER.resolve(method, targetClass);
     }
 
     /**

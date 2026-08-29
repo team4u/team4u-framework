@@ -78,6 +78,8 @@ public class UserDto {
 
 ### 步骤 2：注册 `JacksonMaskModule`
 
+依赖 `team4u-mask` 后，SPI 贡献者（`MaskJacksonModuleContributor`）会在共享 `ObjectMapper` 首次初始化时自动注册 `JacksonMaskModule`——走 `JsonUtil` 的全局序列化对 `@Mask` 注解与脱敏规则自动生效，无需手工注册。自建独立 `ObjectMapper` 的场景才需要手工注册：
+
 ```java
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.team4u.framework.mask.jackson.JacksonMaskModule;

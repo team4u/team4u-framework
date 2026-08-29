@@ -246,10 +246,10 @@ ProductService proxied = SingleFlightProxyFactory.proxy(
 一套规则、多存储分工：按名注册存储，规则中以 `store` 字段引用：
 
 ```java
-SingleFlightStores.global().register("main", new JdbcKvStore(dataSource));
-SingleFlightStores.global().register("hot", new RedisKvStore(stringRedisTemplate));
+NamedKvStoreRegistry.global().register("main", new JdbcKvStore(dataSource));
+NamedKvStoreRegistry.global().register("hot", new RedisKvStore(stringRedisTemplate));
 
-SingleFlights.init(configManager, SingleFlightStores.global().resolve("main"));
+SingleFlights.init(configManager, NamedKvStoreRegistry.global().get("main"));
 ```
 
 ```properties

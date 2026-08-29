@@ -13,6 +13,6 @@ public class LogTraceInterceptor implements MethodInterceptor {
 
     @Override
     public Object invoke(MethodInvocation invocation) throws Throwable {
-        return LogTraceSupport.invoke(new Team4uMethodInvocationAdapter(invocation), null);
+        return LogTraceSupport.invoke(invocation, null);
     }
 }

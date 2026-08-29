@@ -1,5 +1,6 @@
 package com.team4u.framework.retry.api;
 
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.retry.common.concurrent.RetryExecutorManager;
 import com.team4u.framework.retry.inline.DefaultInlineRetryClient;
 import com.team4u.framework.retry.inline.InlineRetryClient;
@@ -51,7 +52,7 @@ public final class Retries {
     }
 
     private static boolean isBlank(String value) {
-        return value == null || value.trim().isEmpty();
+        return StringUtil.isBlank(value);
     }
 
     /**

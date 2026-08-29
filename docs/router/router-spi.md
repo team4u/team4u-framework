@@ -124,33 +124,24 @@ public class YamlRoutePolicyParser implements RoutePolicyParser {
 
 ## 全局引导与配置生命周期 (`RouterBootstrap`)
 
-为了保证多线程与生产环境下的确定性与安全性，`RouterBootstrap` 提供了状态机锁机制：
-
-```mermaid
-stateDiagram-v2
-    [*] --> Mutable : 应用启动初期 (可配置)
-    Mutable --> Locked : lock() 手动锁定
-    Mutable --> Frozen : RoutingManager.global() 初始化后自动冻结配置前缀
-    Locked --> Mutable : unlock() 仅供测试
-```
-
-### 锁定与冻结机制
-
-- **`lock()`（全局锁定）**：
-  锁定后，所有通过 `RouterBootstrap.global().addFactory(...)` 与 `addInterceptor(...)` 注册新组件的操作都会抛出 `RouteConfigException.registryLocked()`。建议在 Spring Context 启动完成的事件监听中调用。
-- **`freezeConfig()`（配置冻结）**：
-  一旦 `RoutingManager.global()` 首次被初始化，全局配置前缀 `configPrefix` 将自动被永久冻结。后续尝试修改 `configPrefix` 会抛出异常，防止运行时由于配置前缀不一致引发路由丢失。
+`RouterBootstrap` 是路由模块的全局引导入口，提供自定义工厂注册、拦截器注册与全局配置前缀设定：
 
 ```java
-// 在 Spring Boot 启动完成监听器中锁定
-@Component
-public class RouterLifecycleListener implements ApplicationListener<ApplicationReadyEvent> {
-    @Override
-    public void onApplicationEvent(ApplicationReadyEvent event) {
-        RouterBootstrap.global().lock();
-    }
-}
+RouterBootstrap.global()
+        .configPrefix("biz.router.")
+        .addFactory(new ShardingRouterFactory())
+        .addInterceptor(new TenantEnrichInterceptor());
 ```
+
+### 配置前缀冻结
+
+一旦 `RoutingManager.global()` 首次被初始化，全局配置前缀 `configPrefix` 将被永久冻结，后续尝试修改会抛出
+`RouteConfigException`，防止运行时由于配置前缀不一致引发路由丢失。
+
+> [!NOTE]
+> 工厂与拦截器的注册不做运行期锁定：注册中心本身基于写时复制，支持热更新，
+> 调用方自行保证启动期装配的时序。若需要隔离的全局注册中心，请使用
+> `RoutingManager.builder().factoryRegistry(...)` 或 `interceptorRegistry(...)` 构建独立实例。
 
 ---
 

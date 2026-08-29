@@ -1,5 +1,7 @@
 package com.team4u.framework.lease.api;
 
+import com.team4u.framework.base.util.DurationUtil;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -39,7 +41,7 @@ public final class Task {
             throw new IllegalArgumentException("delay must not be null");
         }
         return new Task(type, payload, deduplicationKey,
-                Durations.requireExactMillis(delay, "delay"), priority, attributes);
+                DurationUtil.requireExactMillis(delay, "delay"), priority, attributes);
     }
 
     public Task priority(int priority) {

@@ -1,8 +1,6 @@
 package com.team4u.framework.singleflight.policy;
 
-import java.nio.charset.StandardCharsets;
-import java.security.MessageDigest;
-import java.security.NoSuchAlgorithmException;
+import com.team4u.framework.base.util.DigestUtil;
 
 /**
  * 内置 SHA-256 摘要策略：对业务 key 全量摘要，不保留任何可读前缀——
@@ -13,8 +11,6 @@ import java.security.NoSuchAlgorithmException;
  * @author jay.wu
  */
 public class Sha256KeyDigest implements SingleFlightKeyDigest {
-
-    private static final char[] HEX = "0123456789abcdef".toCharArray();
 
     @Override
     public String key() {
@@ -27,18 +23,6 @@ public class Sha256KeyDigest implements SingleFlightKeyDigest {
             throw new IllegalArgumentException(
                     "Singleflight rendered key is empty");
         }
-        try {
-            MessageDigest digest = MessageDigest.getInstance("SHA-256");
-            byte[] bytes = digest.digest(renderedKey.getBytes(StandardCharsets.UTF_8));
-            char[] out = new char[bytes.length * 2];
-            for (int i = 0; i < bytes.length; i++) {
-                int value = bytes[i] & 0xff;
-                out[i * 2] = HEX[value >>> 4];
-                out[i * 2 + 1] = HEX[value & 0xf];
-            }
-            return new String(out);
-        } catch (NoSuchAlgorithmException e) {
-            throw new IllegalStateException("SHA-256 is unavailable", e);
-        }
+        return DigestUtil.sha256Hex(renderedKey);
     }
 }

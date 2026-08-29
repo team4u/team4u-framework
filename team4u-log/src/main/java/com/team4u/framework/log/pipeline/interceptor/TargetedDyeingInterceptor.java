@@ -1,7 +1,6 @@
 package com.team4u.framework.log.pipeline.interceptor;
 
 import com.team4u.framework.config.core.ConfigManager;
-import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.criterion.MatchContext;
 import com.team4u.framework.log.LogContext;
@@ -24,20 +23,29 @@ import java.util.Map;
  * <p>
  * 支持根据规则动态调整日志级别，基于 team4u-criterion 进行高效匹配。
  * 通过 LogContext 全局收集上下文信息。
+ * <p>
+ * 内嵌的配置仓库骨架（init/stop/解析/热更新）已收编为
+ * {@link com.team4u.framework.config.core.support.AbstractJsonConfigRepository}
+ * 的私有内部类 {@link RuleRepository}，本类只保留拦截匹配逻辑。
+ * 统一降级语义：首次加载失败抛异常，热更新失败保留旧规则。
  */
 public class TargetedDyeingInterceptor implements LogInterceptor {
 
     private static final Logger log = LoggerFactory.getLogger(TargetedDyeingInterceptor.class);
 
     private static final TargetedDyeingInterceptor INSTANCE = new TargetedDyeingInterceptor();
-    private static final String CONFIG_KEY = "team4u.log.dyeing";
 
+    /**
+     * 统一管理染色规则的配置仓库（继承模板骨架）
+     */
+    private final RuleRepository ruleRepository = new RuleRepository();
+
+    /**
+     * 当前生效的染色规则快照（volatile 保证热更新后立即可见）
+     */
     private volatile List<DyeingRule> activeRules = Collections.emptyList();
 
     private volatile Criteria criteria = Criteria.global();
-
-    // 自我管理的 Registry
-    private ConfigDrivenRegistry<List<DyeingRule>> registry;
 
     private TargetedDyeingInterceptor() {
         this.stop();
@@ -52,54 +60,23 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
         return INSTANCE;
     }
 
+    /**
+     * 初始化染色规则配置并挂载监听
+     *
+     * @param configManager 配置管理器
+     */
     public synchronized void init(ConfigManager configManager) {
-        if (this.registry != null) {
-            this.registry.destroy();
-        }
-
-        this.registry = new ConfigDrivenRegistry<>(configManager, CONFIG_KEY, json -> {
-            try {
-                if (json == null || json.trim().isEmpty()) {
-                    this.activeRules = Collections.emptyList();
-                    return this.activeRules;
-                }
-
-                List<DyeingRule> parsedRules = JsonUtil.toList(json, DyeingRule.class);
-                List<DyeingRule> validRules = new ArrayList<>();
-                Criteria activeCriteria = this.criteria;
-
-                // 预编译表达式，提升首次匹配性能，并过滤掉语法错误的规则
-                for (DyeingRule rule : parsedRules) {
-                    try {
-                        if (rule.getCondition() != null && !rule.getCondition().trim().isEmpty()) {
-                            activeCriteria.compileExpression(rule.getCondition());
-                            validRules.add(rule);
-                        }
-                    } catch (Exception e) {
-                        // 预热失败，打印错误日志，该规则将不会生效
-                        log.error("TargetedDyeingInterceptor|onConfigChanged|error|ruleId={}|condition={}|msg={}",
-                                rule.getId(), rule.getCondition(), e.getMessage());
-                    }
-                }
-
-                this.activeRules = validRules;
-                return this.activeRules;
-            } catch (Exception e) {
-                log.error("TargetedDyeingInterceptor|parseConfig|error|msg={}", e.getMessage());
-                return this.activeRules;
-            }
-        });
-
-        List<DyeingRule> loadedRules = this.registry.get();
-        this.activeRules = loadedRules != null ? loadedRules : Collections.emptyList();
+        this.ruleRepository.init(configManager);
     }
 
+    /**
+     * 停止拦截器：注销配置监听、清空规则并重置全局日志上下文
+     * <p>
+     * 同时实现 {@link LogInterceptor#stop()} 的重置语义，供拦截器链统一重置。
+     */
+    @Override
     public synchronized void stop() {
-        if (this.registry != null) {
-            this.registry.destroy();
-            this.registry = null;
-        }
-        this.activeRules = Collections.emptyList();
+        this.ruleRepository.stop();
         this.criteria = Criteria.global();
         // 同步重置全局日志上下文
         LogContext.reset();
@@ -156,6 +133,55 @@ public class TargetedDyeingInterceptor implements LogInterceptor {
         }
 
         return true;
+    }
+
+    /**
+     * 染色规则仓库
+     * <p>
+     * 解析后预编译条件表达式并过滤语法错误的规则；
+     * 成功后把有效规则写回拦截器的 activeRules 快照。
+     */
+    private class RuleRepository
+            extends com.team4u.framework.config.core.support.AbstractJsonConfigRepository<List<DyeingRule>> {
+
+        private static final String CONFIG_KEY = "team4u.log.dyeing";
+
+        @Override
+        protected String configKey() {
+            return CONFIG_KEY;
+        }
+
+        @Override
+        protected List<DyeingRule> parseJson(String json) throws Exception {
+            List<DyeingRule> parsedRules = JsonUtil.toList(json, DyeingRule.class);
+            List<DyeingRule> validRules = new ArrayList<>();
+            Criteria activeCriteria = criteria;
+
+            // 预编译表达式，提升首次匹配性能，并过滤掉语法错误的规则
+            for (DyeingRule rule : parsedRules) {
+                try {
+                    if (rule.getCondition() != null && !rule.getCondition().trim().isEmpty()) {
+                        activeCriteria.compileExpression(rule.getCondition());
+                        validRules.add(rule);
+                    }
+                } catch (Exception e) {
+                    // 预热失败，打印错误日志，该规则将不会生效
+                    log.error("TargetedDyeingInterceptor|onConfigChanged|error|ruleId={}|condition={}|msg={}",
+                            rule.getId(), rule.getCondition(), e.getMessage());
+                }
+            }
+            return validRules;
+        }
+
+        @Override
+        protected List<DyeingRule> emptyConfig() {
+            return Collections.emptyList();
+        }
+
+        @Override
+        protected void onConfigLoaded(List<DyeingRule> oldValue, List<DyeingRule> newValue) {
+            TargetedDyeingInterceptor.this.activeRules = newValue;
+        }
     }
 
     /**

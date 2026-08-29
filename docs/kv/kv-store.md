@@ -21,9 +21,9 @@ public interface KvStore {
 }
 ```
 
-为什么是这四个？它们恰好是锁（tryLock=`put(IF_ABSENT)`、心跳=`expire`、unlock=`remove`）、幂等控制（SETNX）和 TTL 缓存的最小完备集，且每个操作都能无损映射到 Redis 原生命令与单条 SQL——没有一个是外部存储做不动的。
+为什么是这四个？它们恰好是锁（tryLock=`put(IF_ABSENT)`、unlock=`remove`）、幂等控制（SETNX）和 TTL 缓存的最小完备集，且每个操作都能无损映射到 Redis 原生命令与单条 SQL——没有一个是外部存储做不动的。（锁的心跳续约用的是能力接口 `CasCapable.compareAndExpire`——它需要连带令牌校验，裸 `expire` 做不到不误续他人的锁。）
 
-`expire` 独立成一级操作（而非折叠进 `put`）是因为锁心跳需要**原子改 TTL 而不读值**：折叠进 put 会迫使调用方读-改-写，引入竞争。
+`expire` 独立成一级操作（而非折叠进 `put`）是因为续期场景需要**原子改 TTL 而不读值**：折叠进 put 会迫使调用方读-改-写，引入竞争。锁心跳因为还要连带令牌校验，用的是 `CasCapable.compareAndExpire`（见下文能力协商）；裸 `expire` 服务于「值不变、仅改有效期」的普通 TTL 调整（如 `Space.expire` 门面）。
 
 ## 实现契约
 
@@ -60,7 +60,7 @@ record.expire(60_000, now); // 续期后的新记录，原记录不变
 
 | 能力接口 | 方法 | 典型实现 | 用途 |
 | :--- | :--- | :--- | :--- |
-| `CasCapable` | `compareAndSet(key, expectedValue, update)`<br/>`compareAndRemove(key, expectedValue)` | memory（compute）、jdbc（条件 UPDATE）、redis（Lua） | 锁的 fencing 安全续期/释放、令牌桶状态提交 |
+| `CasCapable` | `compareAndSet(key, expectedValue, update)`<br/>`compareAndRemove(key, expectedValue)`<br/>`compareAndExpire(key, expectedValue, newExpireAtMillis)` | memory（compute）、jdbc（条件 UPDATE）、redis（Lua） | 锁的 fencing 安全续期/释放、令牌桶状态提交 |
 | `CounterCapable` | `incrementAndGet(key, delta, ttlMillis)` | memory（`AtomicLong`）、jdbc（`SELECT FOR UPDATE` 行锁）、redis（`INCRBY` + 首次 `PEXPIRE`） | 序号生成（team4u-id）、固定窗口限流（team4u-ratelimiter） |
 | `ScoredWindowCapable` | `offer(key, offer)`：原子「裁剪 → 计数 → 条件添加」 | memory（独立窗口结构）、redis（ZSET + 单 Lua 脚本） | 精确滑动窗口限流（team4u-ratelimiter）；**JdbcKvStore 暂未实现** |
 | `ScanCapable` | `scan(space)`<br/>`pruneExpired(space, maxBatch)` | memory、jdbc、redis（SCAN） | 轮询订阅、过期清理 |
@@ -70,13 +70,16 @@ record.expire(60_000, now); // 续期后的新记录，原记录不变
 CAS 匹配语义：按**存活记录值的精确字符串相等**判定。锁场景中值是持有者令牌，因此「值匹配 = 是我的锁」，这是 fencing 正确性的根基。
 
 ```java
-// 例子：所有权安全的续期（KvLockManager 内部即此模式）
+// 例子：所有权安全的续期与释放（KvLockManager 内部即此模式）
 if (store instanceof CasCapable) {
     CasCapable cas = (CasCapable) store;
-    cas.compareAndSet(key, "my-token", KvRecord.of("my-token", 30_000, now)); // 仅自己的锁被续期
+    cas.compareAndExpire(key, "my-token", now + 30_000); // 仅自己的锁被续约：单往返「校验 + 改过期时间」，晚到心跳不缩短租约
     cas.compareAndRemove(key, "my-token");                                    // 仅自己的锁被删除
+    cas.compareAndSet(key, "my-token", KvRecord.of("my-token", 30_000, now));  // 仅自己的锁被改写（如令牌轮换）
 }
 ```
+
+`compareAndExpire` 的保序语义：仅当新过期时间**晚于**当前过期时间时才生效（`0` 表示永不过期、视为无穷大），乱序到达的延迟心跳不会回缩租约；返回 `true` 表示持有者校验通过且记录存活（含因保序保护未变更过期时间的情形）。实现方要求「校验 + 更新」一次存储往返原子完成，不得组合 `get` + `compareAndSet` 两段式实现——两段式在窗口期内会用陈旧快照续约。
 
 装饰器实现 `StoreWrapper` 暴露内层，`KvStores` 提供沿链解析（`innermost` 剥出最内层真实存储、`capabilityOf` 查找链上首个能力实现）——对装饰过的存储做 `instanceof` 探测前先经它解析；另有 `closeQuietly` 静默关闭存储（异常记 warn 不抛出），装饰器的级联关闭统一走此入口。
 

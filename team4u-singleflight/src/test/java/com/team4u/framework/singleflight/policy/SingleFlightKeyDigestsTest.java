@@ -51,7 +51,7 @@ public class SingleFlightKeyDigestsTest {
             }
         };
 
-        // 链式注册 + 同名后注册者覆盖先注册者（与 SingleFlightStores 行为一致）
+        // 链式注册 + 同名后注册者覆盖先注册者（与 NamedKvStoreRegistry 行为一致）
         SingleFlightKeyDigests.global().register(custom).register(overridden);
 
         assertEquals("overridden(v)", SingleFlightKeyDigests.global().resolve("test-custom")

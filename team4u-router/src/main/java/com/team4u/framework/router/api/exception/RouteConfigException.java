@@ -26,10 +26,6 @@ public class RouteConfigException extends RouteException {
      * 错误码：重复的配置
      */
     public static final String DUPLICATE_CONFIG = "DUPLICATE_CONFIG";
-    /**
-     * 错误码：注册表已锁定
-     */
-    public static final String REGISTRY_LOCKED = "REGISTRY_LOCKED";
     private static final long serialVersionUID = 1L;
     private final String policyId;
 
@@ -51,16 +47,6 @@ public class RouteConfigException extends RouteException {
     public RouteConfigException(String errorCode, String message, Throwable cause) {
         super(errorCode, message, cause);
         this.policyId = null;
-    }
-
-    /**
-     * 创建注册表锁定异常
-     *
-     * @return 异常实例
-     */
-    public static RouteConfigException registryLocked() {
-        return new RouteConfigException(REGISTRY_LOCKED,
-                "Router global registry is locked, no more registrations allowed.");
     }
 
     /**

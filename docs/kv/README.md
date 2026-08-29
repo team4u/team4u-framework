@@ -56,7 +56,7 @@ graph LR
 | `SpaceKey` | 键标识：`space:key`。键空间（space）实现多业务数据隔离，space 与 key 均不允许包含 `:` |
 | `KvRecord` | 不可变记录：值 + 过期时间戳（epoch 毫秒，`0` 为永不过期） |
 | `KvStore` | 核心接口：`get` / `put`(SET\|IF_ABSENT) / `remove` / `expire` |
-| `CasCapable` | 原子比较替换/删除（按值精确匹配），锁与所有权安全续期的基础 |
+| `CasCapable` | 原子比较替换/删除/续期（按值精确匹配，含保序的 `compareAndExpire`），锁与所有权安全续期的基础 |
 | `CounterCapable` | 键级原子计数（`incrementAndGet(key, delta, ttlMillis)`，`ttl>0` 过期后从 0 重计），序号生成（`team4u-id`）与固定窗口限流（`team4u-ratelimiter`）的基础 |
 | `ScoredWindowCapable` | 原子「裁剪 → 计数 → 条件添加」的有序计分窗口（Offer/Verdict），精确滑动窗口限流的基础；memory 与 redis 实现，JDBC 暂未实现 |
 | `ScanCapable` | 按键空间扫描存活键、批量物理清理过期残留 |

@@ -38,11 +38,14 @@
             <artifactId>team4u-serializer-json</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- 版本化序列化器（VersionedRetryRecordSerializer）需要 Jackson 树模型，
+             与其他基础模块一致按 provided 引入，宿主按需选择 Jackson 实现；
+             provided 同时覆盖编译与测试 classpath，无需重复声明 test scope -->
         <dependency>
             <groupId>com.team4u</groupId>
             <artifactId>team4u-serializer-jackson</artifactId>
             <version>${project.version}</version>
-            <scope>test</scope>
+            <scope>provided</scope>
         </dependency>
         <dependency>
             <groupId>org.projectlombok</groupId>

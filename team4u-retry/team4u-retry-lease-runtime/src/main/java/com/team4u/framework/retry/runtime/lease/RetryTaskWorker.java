@@ -1,5 +1,6 @@
 package com.team4u.framework.retry.runtime.lease;
 
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.lease.api.TaskHandler;
 import com.team4u.framework.lease.api.TaskQueue;
 import com.team4u.framework.lease.runtime.TaskWorker;
@@ -195,7 +196,7 @@ public class RetryTaskWorker implements AutoCloseable {
                             + handler.getClass().getName());
         }
         String type = handler.taskName();
-        if (type == null || type.trim().isEmpty()) {
+        if (StringUtil.isBlank(type)) {
             throw new IllegalArgumentException("Recovery handler taskName must not be blank");
         }
         if (handlers.containsKey(type)) {

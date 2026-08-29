@@ -55,6 +55,8 @@ graph TD
 | `DelegateInterceptor` | `com.team4u.framework.proxy.interceptor.DelegateInterceptor` | 鸭子类型方法委托拦截器，内置反射缓存与异常剥离 |
 | `HotSwapInterceptor` | `com.team4u.framework.proxy.interceptor.HotSwapInterceptor` | 热交换拦截器，继承自 `DelegateInterceptor` |
 | `EmptyValueInterceptor`| `com.team4u.framework.proxy.interceptor.EmptyValueInterceptor`| 空对象拦截器，配合单例缓存池消除 NPE |
+| `AnnotatedMethodResolver` | `com.team4u.framework.proxy.support.AnnotatedMethodResolver` | 注解方法统一解析器：按「最具体方法优先」对 (method, targetClass) 解析生效注解，含桥接方法还原与解析缓存，保证 JDK 代理与 ByteBuddy 子类代理行为一致 |
+| `AnnotationProxyBeanPostProcessor` | `com.team4u.framework.proxy.spring.AnnotationProxyBeanPostProcessor` | 注解驱动代理装配的 Spring BeanPostProcessor 抽象模板（需可选的 spring 依赖），收敛各模块「扫描注解 Bean → 生成代理 → 替换注入」的同构装配逻辑 |
 
 ---
 
@@ -77,7 +79,10 @@ com.team4u.framework.proxy
 │   ├── EmptyValueInterceptor.java      # 空对象防 NPE 拦截器
 │   ├── HotSwapInterceptor.java         # 运行时热交换拦截器
 │   └── TrackInterceptor.java           # 追踪与性能审计拦截器
+├── spring                               # Spring 装配支撑（可选依赖）
+│   └── AnnotationProxyBeanPostProcessor.java  # 注解驱动代理装配模板
 ├── support                              # 辅助能力契约
+│   ├── AnnotatedMethodResolver.java    # 注解方法统一解析器
 │   ├── Swappable.java                  # 热交换标记接口
 │   └── Tracker.java                    # 追踪器接口
 ├── ProxyBuilder.java                    # 流式代理建造者门面

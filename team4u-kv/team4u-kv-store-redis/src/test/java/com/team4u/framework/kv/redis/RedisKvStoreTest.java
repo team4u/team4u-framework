@@ -315,6 +315,65 @@ public class RedisKvStoreTest {
         assertFalse(success);
     }
 
+    @SuppressWarnings("unchecked")
+    @Test
+    public void compareAndExpireInvokesLuaScriptWithTtl() {
+        // 新过期时间 5000ms，当前时钟 1000：折算 TTL = 4000
+        clock.advance(1000);
+        when(redis.execute(any(RedisScript.class), anyList(), eq("token-a"), eq("4000")))
+                .thenReturn(1L);
+
+        boolean success = ((com.team4u.framework.kv.CasCapable) store).compareAndExpire(
+                SpaceKey.of("lock", "job"), "token-a", 5000);
+
+        assertTrue(success);
+        // 脚本参数：期望值、折算后的相对 TTL
+        verify(redis).execute(any(RedisScript.class), anyList(),
+                eq("token-a"), eq("4000"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void compareAndExpireZeroMapsToPersistTtl() {
+        // newExpireAtMillis = 0 表示改为永不过期，脚本参数 TTL 传 0（脚本内 PERSIST）
+        when(redis.execute(any(RedisScript.class), anyList(), eq("token-a"), eq("0")))
+                .thenReturn(1L);
+
+        assertTrue(((com.team4u.framework.kv.CasCapable) store).compareAndExpire(
+                SpaceKey.of("lock", "job"), "token-a", 0));
+        verify(redis).execute(any(RedisScript.class), anyList(),
+                eq("token-a"), eq("0"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void compareAndExpireStaleDeadlineMapsToNonPositiveTtl() {
+        // 陈旧请求：新过期时间早于当前时钟，折算 TTL 为负——落入脚本「不大于剩余 TTL」
+        // 分支成为无害空操作，绝不会钳成永不过期
+        clock.advance(2000);
+        when(redis.execute(any(RedisScript.class), anyList(), eq("token-a"), eq("-1000")))
+                .thenReturn(1L);
+
+        assertTrue(((com.team4u.framework.kv.CasCapable) store).compareAndExpire(
+                SpaceKey.of("lock", "job"), "token-a", 1000));
+        verify(redis).execute(any(RedisScript.class), anyList(),
+                eq("token-a"), eq("-1000"));
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    public void compareAndExpireFailureWrappedAsStoreException() {
+        when(redis.execute(any(RedisScript.class), anyList(), anyString(), anyString()))
+                .thenThrow(new QueryTimeoutException("timeout"));
+        try {
+            ((com.team4u.framework.kv.CasCapable) store).compareAndExpire(
+                    SpaceKey.of("lock", "job"), "token-a", 5000);
+            fail("expected KvStoreException");
+        } catch (KvStoreException e) {
+            assertTrue(e.getCause() instanceof QueryTimeoutException);
+        }
+    }
+
     @Test
     public void keyPrefixApplied() {
         RedisKvStore prefixed = new RedisKvStore(redis, "app1:", clock);

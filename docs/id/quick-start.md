@@ -100,13 +100,13 @@ Redis 后端基于原生 `INCRBY` 原子递增，计数键与普通值键共享�
 一套规则、多存储时，按名注册存储，规则中以 `store` 字段引用：
 
 ```java
-// 注册命名存储（全局注册表，同名重新注册即热更新）
-SeqStores.global().register("main", new JdbcKvStore(dataSource));
-SeqStores.global().register("fast", new RedisKvStore(stringRedisTemplate));
+// 注册命名存储（kv 组件全局注册表，同名重新注册即热更新）
+NamedKvStoreRegistry.global().register("main", new JdbcKvStore(dataSource));
+NamedKvStoreRegistry.global().register("fast", new RedisKvStore(stringRedisTemplate));
 
 // 服务默认存储为 main
 SequenceService sequences = new SequenceService(configManager,
-        SeqStores.global().resolve("main"));
+        NamedKvStoreRegistry.global().get("main"));
 ```
 
 ```properties

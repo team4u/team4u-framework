@@ -28,7 +28,7 @@ public class SingleFlightRule {
     private boolean enabled = true;
 
     /**
-     * 命名存储（注册于 {@code SingleFlightStores}）；空白表示引擎默认存储。
+     * 命名存储（注册于 {@code NamedKvStoreRegistry.global()}）；空白表示引擎默认存储。
      * 规则生效后不允许热切换存储。
      */
     private String store;

@@ -6,6 +6,7 @@ import com.team4u.framework.kv.KvRecord;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.KvStoreException;
 import com.team4u.framework.kv.KvStores;
+import com.team4u.framework.kv.NamedKvStoreRegistry;
 import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.SpaceKey;
 import com.team4u.framework.kv.memory.InMemoryKvStore;
@@ -13,7 +14,6 @@ import com.team4u.framework.kv.test.TestKvContext;
 import com.team4u.framework.ratelimiter.api.RateLimitConfigException;
 import com.team4u.framework.ratelimiter.api.RateLimitReason;
 import com.team4u.framework.ratelimiter.api.RateLimitResult;
-import com.team4u.framework.ratelimiter.store.RateLimitStores;
 import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
@@ -170,7 +170,7 @@ public class RateLimitEngineTest {
     @Test
     public void namedStoreRoutesCounting() {
         InMemoryKvStore named = new InMemoryKvStore();
-        RateLimitStores.global().register("dedicated", named);
+        NamedKvStoreRegistry.global().register("dedicated", named);
         try {
             rules("named", "[{\"id\":\"fw\",\"algorithm\":\"fixed-window\","
                     + "\"windowMillis\":10000,\"threshold\":1,\"store\":\"dedicated\"}]");

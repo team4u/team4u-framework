@@ -7,17 +7,15 @@ import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.KvStoreException;
 import com.team4u.framework.kv.KvStores;
+import com.team4u.framework.kv.NamedKvStoreRegistry;
 import com.team4u.framework.policy.core.KeyedPolicyRegistry;
 import com.team4u.framework.ratelimiter.api.RateLimitConfigException;
 import com.team4u.framework.ratelimiter.api.RateLimitReason;
 import com.team4u.framework.ratelimiter.api.RateLimitResult;
 import com.team4u.framework.ratelimiter.config.RateLimitRule;
-import com.team4u.framework.ratelimiter.store.RateLimitStores;
 import com.team4u.framework.serializer.json.JsonUtil;
 import lombok.extern.slf4j.Slf4j;
 
-import java.lang.reflect.Method;
-import java.lang.reflect.Modifier;
 import java.time.Clock;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -42,8 +40,8 @@ import java.util.concurrent.ConcurrentHashMap;
  *     预注册四个内置算法，自定义算法注册后即可在规则中按名引用</li>
  *     <li><b>键渲染</b>：{@link TextTemplate} 渲染规则键模板（上下文为 Map 取值、
  *     Bean 反射读公有 getter，变量缺失渲染为空串），模板按内容缓存</li>
- *     <li><b>存储协商</b>：无状态算法不解析存储；其余按 {@link RateLimitStores}
- *     按名解析（空名 = 默认存储），所需能力在规则加载期经
+ *     <li><b>存储协商</b>：无状态算法不解析存储；其余按
+ *     {@link NamedKvStoreRegistry} 按名解析（空名 = 默认存储），所需能力在规则加载期经
  *     {@code KvStores.capabilityOf} 逐一校验</li>
  * </ul>
  * <p>
@@ -324,7 +322,7 @@ public class RateLimitEngine implements AutoCloseable {
     }
 
     /**
-     * 规则存储解析：空名 = 默认存储；否则 RateLimitStores 按名解析
+     * 规则存储解析：空名 = 默认存储；否则 {@link NamedKvStoreRegistry} 按名解析
      *
      * @throws RateLimitConfigException 存储名未注册
      */
@@ -333,7 +331,7 @@ public class RateLimitEngine implements AutoCloseable {
             return defaultStore;
         }
         try {
-            return RateLimitStores.global().resolve(storeName);
+            return NamedKvStoreRegistry.global().get(storeName);
         } catch (IllegalArgumentException e) {
             throw new RateLimitConfigException("Rate limit store not registered|store=" + storeName, e);
         }
@@ -377,24 +375,11 @@ public class RateLimitEngine implements AutoCloseable {
     }
 
     /**
-     * 上下文变量解析：Map 直接取值；Bean 反射读公有 getter（getXxx/isXxx，无 getter 返回 null）
+     * 上下文变量解析：Map 直接取值；Bean 反射读公有 getter（getXxx/isXxx，无 getter 返回 null），
+     * 取值逻辑收敛于 {@link ContextProperties}
      */
     private static Object resolveVariable(Object context, String name) {
-        if (context == null || name == null || name.isEmpty()) {
-            return null;
-        }
-        if (context instanceof Map) {
-            return ((Map<?, ?>) context).get(name);
-        }
-        String capitalized = Character.toUpperCase(name.charAt(0)) + name.substring(1);
-        for (String prefix : new String[]{"get", "is"}) {
-            Method getter = ReflectUtil.getMethod(context.getClass(), prefix + capitalized);
-            if (getter != null && Modifier.isPublic(getter.getModifiers())
-                    && getter.getParameterCount() == 0 && getter.getReturnType() != void.class) {
-                return ReflectUtil.invoke(context, getter);
-            }
-        }
-        return null;
+        return ContextProperties.get(context, name);
     }
 
     /**

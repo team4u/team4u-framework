@@ -1,6 +1,5 @@
 package com.team4u.framework.lease.jdbc;
 
-import com.team4u.framework.base.util.IdUtil;
 import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.lease.api.TaskPage;
 import com.team4u.framework.lease.api.TaskQuery;
@@ -17,6 +16,7 @@ import com.team4u.framework.lease.spi.LeaseGrant;
 import com.team4u.framework.lease.spi.LeaseHandle;
 import com.team4u.framework.lease.spi.LeaseRetry;
 import com.team4u.framework.lease.spi.LeaseTimes;
+import com.team4u.framework.lease.spi.LeaseTokens;
 import com.team4u.framework.lease.spi.RescheduleCommand;
 import com.team4u.framework.lease.spi.RetryCommand;
 import com.team4u.framework.lease.spi.RuntimeResult;
@@ -247,7 +247,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
     }
 
     private LeaseGrant tryAcquire(AcquireCommand command, LeaseTaskEntity candidate) {
-        String leaseToken = IdUtil.simpleUUID();
+        String leaseToken = LeaseTokens.nextToken();
         long now = now();
         long leaseExpiresAt = LeaseTimes.plusMillis(now, command.getLeaseMillis());
         int updated = sql(() -> dao.tryAcquire(command.getSubscription(), candidate.getTaskId(),
@@ -269,7 +269,7 @@ public class JdbcLeaseBackend implements LeaseBackend {
 
     private LeaseTaskEntity newPendingEntity(SubmitCommand command, long now) {
         return LeaseTaskEntity.builder()
-                .taskId(IdUtil.simpleUUID())
+                .taskId(LeaseTokens.nextToken())
                 .queueName(command.getQueue())
                 .taskType(command.getTaskType())
                 .payload(command.getPayload())

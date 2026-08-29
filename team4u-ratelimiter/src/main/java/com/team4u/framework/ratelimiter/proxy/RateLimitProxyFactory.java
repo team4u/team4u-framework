@@ -3,17 +3,18 @@ package com.team4u.framework.ratelimiter.proxy;
 import com.team4u.framework.proxy.ProxyBuilder;
 
 /**
- * 限流代理对象工厂
+ * 限流代理对象工厂（非 Spring 场景的编程式入口）
  * <p>
- * 提供便捷的方法用于创建具备限流能力的代理对象。
- * 目标为接口实现时推荐经 {@link ProxyBuilder#forClass(Class)} 以 JDK 代理创建
- * （见 {@link #proxy(Object, Class)}）；目标为普通类时走 ByteBuddy 子类代理
- * （final 类无法代理，构建期抛出代理异常）。
+ * Spring 场景经 {@code @EnableRateLimit} 的 BeanPostProcessor 自动装配；
+ * 本工厂仅保留直接编程创建代理的便捷方法，构建逻辑全部委托
+ * {@link ProxyBuilder}：目标为接口实现时经 {@link ProxyBuilder#forClass(Class)}
+ * 以 JDK 代理创建（见 {@link #proxy(Object, Class)}），普通类走 ByteBuddy
+ * 子类代理（final 类无法代理，构建期抛出代理异常）。
  * </p>
  *
  * @author jay.wu
  */
-public class RateLimitProxyFactory {
+public final class RateLimitProxyFactory {
 
     private RateLimitProxyFactory() {
     }
