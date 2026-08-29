@@ -124,30 +124,18 @@ execute(point, arguments, returnType, loader)
 team4u.singleflight.on_rule_missing=ERROR
 ```
 
-## 会话状态机
+## 会话状态机与失败处理
 
-执行回执保存在 `singleflight.session` space，值是 JSON。`token` 是这次执行的锁持有者令牌，也是 CAS 的身份边界。
+执行回执的状态流转（PENDING / SUCCESS_CACHEABLE / SUCCESS_NOT_CACHEABLE / FAILURE）、执行者崩溃后的接管流程、errorFallback 与 exceptionHandler 的优先级对照、存储选型与限制，均独立成篇：[会话与失败处理](session.md)。
 
-| 状态 | 写入者 | 载荷 | TTL | 后续读取 |
-| :--- | :--- | :--- | :--- | :--- |
-| `PENDING` | 获得锁的执行者 | `token`、`startedAtMillis` | 动态：`max(waitTimeoutMillis + max(uncacheableTtlMillis, failureTtlMillis), 1000)` | 锁仍存在则等待；锁不存在则尝试接管 |
-| `SUCCESS_CACHEABLE` | loader 成功且 `cacheWhen` 通过 | `token`、`result`、`finishedAtMillis` | `uncacheableTtlMillis` | WAIT 调用者反序列化 `result`；执行者另行写 `singleflight.cache` |
-| `SUCCESS_NOT_CACHEABLE` | loader 成功但 `cacheWhen` 不通过 | `token`、`result`、`finishedAtMillis` | `uncacheableTtlMillis` | WAIT 调用者可读取结果，但不写结果缓存 |
-| `FAILURE` | loader 抛出 `RuntimeException` / `Error` | `token`、`error`、`finishedAtMillis` | `failureTtlMillis` | WAIT 调用者收到 `SingleFlightExecutionException`，message 来自原异常 |
+速查：
 
-终态发布使用 `compareAndSet(sessionKey, pending.toJson(), terminal)`：存储里的回执必须「还是我写的那份 PENDING」才允许写成终态。只要接管者已经写入新 token 的 PENDING，旧执行者的 CAS 必然失败。
-
-**执行者崩溃后的接管流程**：
-
-1. 执行者 A 获得锁，写入 `PENDING(tokenA)`，随后进程崩溃、心跳停止；
-2. WAIT 调用者读到 `PENDING(tokenA)`，再检查锁记录——已随租约到期消失；
-3. 调用者 `tryAcquire` 抢锁，成功后先重读回执：A 若恰好刚发布终态则直接复用结果，否则写入新的 `PENDING(tokenB)`；
-4. A 若此时晚到完成，它用 `tokenA` 的 PENDING 做 CAS 会失败，盖不掉 `tokenB` 的回执；
-5. 接管者执行 loader 并发布自己的终态；接管路径不写结果缓存——避免由未持有原始请求语义的线程替调用方决定长 TTL 缓存。
-
-首次协调同样「抢锁后重读」：从进入协调到真正抢到锁之间，上一个执行者可能已完成并释放锁，此时直接复用已发布结果——这是「同 key 一个周期只执行一次」的最后一道保障。
-
-> 本地执行 loader 的调用者收到原始业务异常；其他线程或实例只能从失败回执读取错误信息，收到的是 `SingleFlightExecutionException`（只含 message）——组件不承诺跨线程重建原异常对象。
+| 关注点 | 结论 |
+| :--- | :--- |
+| 同 key 只执行一次的保障 | 抢锁后重读回执 + 终态 CAS（token 防抢跑） |
+| 执行者崩溃 | 租约到期后等待者接管，旧执行者晚到的写入被 CAS 拒绝 |
+| errorFallback vs exceptionHandler | 前者引擎层先行兑底；handler 只接住穿透的配置错误与未配兑底场景 |
+| 存储选型 | 内存单进程 / Redis 跨实例；协调路径直达底层，装饰层不参与 |
 
 ## 并发策略
 
@@ -161,43 +149,11 @@ team4u.singleflight.on_rule_missing=ERROR
 
 > `cacheEnabled=true` 时缓存命中不会抢锁，因此不会进入竞争策略；只有缓存未命中且锁已被他人持有才触发 `contention`。纯互斥场景应配置 `cacheEnabled=false`。
 
-### errorFallback 与 exceptionHandler 的优先级
+errorFallback 与 exceptionHandler 的优先级对照见[会话与失败处理](session.md#errorfallback-与-exceptionhandler-的优先级)。
 
-`errorFallback` 在引擎层兑底，`exceptionHandler` 在代理层接异常——引擎先执行，因此：
+## 存储选型速查
 
-| 场景 | errorFallback | exceptionHandler | 实际结果 |
-| :--- | :--- | :--- | :--- |
-| 竞争 / 超时 / 失败回执 | 已配置 | 已配置 | **errorFallback 生效**，handler 收不到这些异常 |
-| 竞争 / 超时 / 失败回执 | 未配置 | 已配置 | 异常抛到代理层，**handler 生效** |
-| 竞争 / 超时 / 失败回执 | 未配置 | 未配置 | 异常抛给调用方 |
-| 配置错误 | 无论是否配置 | 已配置 | 异常穿透引擎（不兑底），**handler 生效** |
-| loader 业务异常 | 无论是否配置 | 无论是否配置 | 都不生效，原样上抛 |
-
-不配置 `errorFallback` 时行为与未引入该字段前完全一致，无隐藏默认值。注意：若依赖 handler 统一记录组件异常日志（监控埋点），配上 errorFallback 后竞争 / 超时类事件不再经过 handler，需改从引擎日志观察。
-
-## 存储选型与限制
-
-| 存储 | 互斥范围 | 说明 |
-| :--- | :--- | :--- |
-| `InMemoryKvStore` | 当前 JVM | 单测、单实例。跨进程调用者不会合并到同一个执行窗口 |
-| `RedisKvStore` | 连接同一 Redis 的实例 | 生产常用，支持 `CasCapable`，适合跨实例回源合并 |
-| `JdbcKvStore` | 连接同一数据库的实例 | 共享协调可用；高 QPS 热点 key 需评估数据库压力 |
-| 其他 `KvStore` | 由存储决定 | 最内层存储必须实现 `CasCapable`，否则引擎构造或规则编译失败 |
-
-**协调路径必须直达底层**：
-
-- 引擎对默认存储和命名存储都调用 `KvStores.innermost`，再在最内层存储上校验 `CasCapable`；
-- `TieredStore`、`ObservedStore` 等装饰层不参与锁、回执和结果缓存读写。传入 `TieredStore` **不会**得到 singleflight 结果缓存的 L1 加速；
-- 目的：避免本地 L1 让锁续约、回执轮询或 CAS 读到陈旧 token；
-- 引擎没有单独的「协调存储 / 结果缓存存储」字段。若业务在 singleflight 之外再套分层缓存，需自行处理负缓存和 TTL：`SUCCESS_NOT_CACHEABLE` 与 `FAILURE` 只写回执，不会给外部缓存写墓碑；外部 L1 在自身 TTL 窗口内也可能看不到其他实例的新结果。分层存储自身的边界见[分层存储](../kv/kv-tiered.md)；
-- 同一规则 id 的 `store` 名不能在热更新中从 A 改为 B；新编译失败时旧规则继续服务。
-
-**存储异常策略**：
-
-| `onStoreFailure` | 行为 |
-| :--- | :--- |
-| `PASS_THROUGH` | 记 warn，跳过协调直接执行 loader。存储故障时失去合并能力，但保住业务可用性 |
-| `FAIL_CLOSED` | 抛出包装了原因的 `SingleFlightConfigException`。协调阶段失败时 loader 不执行；若失败发生在 loader 成功后的结果缓存写入，loader 已经执行过 |
+完整选型、装饰层限制与存储异常策略见[会话与失败处理](session.md#存储选型与限制)。速查：内存存储单进程有效；Redis / JDBC 跨实例；协调路径直达底层，`TieredStore` / `ObservedStore` 装饰层不参与锁、回执与缓存读写。
 
 ## 注解与类型约束
 
@@ -279,4 +235,8 @@ team4u-singleflight                # 单模块：存储经 kv 能力协商，无
 
 ## 文档导航
 
-- [快速开始](quick-start.md)：依赖引入、最小示例、编程式/注解式接入、WAIT / FAIL_FAST / FALLBACK / 不可缓存结果配置
+- [快速开始](quick-start.md)：依赖引入、最小示例、编程式/注解式接入、命名存储
+- [场景指南](scenarios.md)：防击穿 / 互斥 / 降级 / 不可缓存 / 跳过 / 失败兑底六大场景的规则+代码+行为示例
+- [会话与失败处理](session.md)：会话状态机、崩溃接管、errorFallback 与 exceptionHandler 优先级、存储选型与限制
+- [键值存储组件](../kv/README.md)：锁租约、CAS 能力与存储后端支持
+- [限流组件](../ratelimiter/README.md)：时间窗口配额、突发整形与防刷边界应使用限流而不是 singleflight
