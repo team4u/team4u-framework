@@ -9,7 +9,7 @@ import java.util.Optional;
 /**
  * 键空间注册表与门面工厂
  * <p>
- * 基于 {@link KeyedPolicyRegistry}（Copy-On-Write，读路径无锁、零 GC）管理
+ * 基于 {@link KeyedPolicyRegistry}（Copy-On-Write，读路径无锁、低分配、低开销）管理
  * {@link SpacePolicy}。策略重新注册即热更新，已构建的 {@link Space} 不受影响，
  * 新构建的 {@link Space} 使用新策略——与配置中心的快照热更语义一致。
  * </p>

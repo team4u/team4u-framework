@@ -117,7 +117,7 @@ LEAKS=0
 
 for leaf in "${LEAVES[@]}"; do
   module_dir="$ROOT/$leaf"
-  [[ -f "$module_dir/pom.xml" ]] || module_dir="$(dirname "$(find "$ROOT" -path "*/$leaf/pom.xml" -print -quit)")"
+  [[ -f "$module_dir/pom.xml" ]] || module_dir="$(dirname "$(find "$ROOT" -name target -prune -o -name .worktrees -prune -o -path "*/$leaf/pom.xml" -print -quit 2>/dev/null)")"
   tree="$WORK/$leaf.tree"
   log="$WORK/$leaf.dependency.log"
   if ! mvn -q -f "$module_dir/pom.xml" dependency:tree -Dscope=runtime \
@@ -170,6 +170,7 @@ check_shape() {
   fi
 }
 
+check_shape team4u-base-jdbc $'team4u-base'
 check_shape team4u-criterion $'team4u-base\nteam4u-policy'
 check_shape team4u-proxy $'team4u-base'
 check_shape team4u-serializer-json $'team4u-base\nteam4u-policy'
