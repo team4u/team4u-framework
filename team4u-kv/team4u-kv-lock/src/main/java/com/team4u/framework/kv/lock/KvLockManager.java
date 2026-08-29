@@ -10,6 +10,10 @@ import com.team4u.framework.kv.SpaceKey;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Clock;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
@@ -51,8 +55,9 @@ public class KvLockManager implements AutoCloseable {
     private final Config config;
     private final String ownerId;
 
-    private final ConcurrentHashMap<String, HeldLock> heldLocks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Set<HeldLock>> heldLocks = new ConcurrentHashMap<>();
     private volatile boolean running = true;
+    private final Object heartbeatSignal = new Object();
     private final Thread heartbeatThread;
 
     public KvLockManager(KvStore store) {
@@ -71,6 +76,7 @@ public class KvLockManager implements AutoCloseable {
         this.casStore = resolved;
         this.clock = clock;
         this.config = Objects.requireNonNull(config, "config");
+        this.config.validate();
         this.ownerId = config.getOwnerId() != null ? config.getOwnerId()
                 : "worker-" + UUID.randomUUID().toString().substring(0, 8);
 
@@ -102,7 +108,10 @@ public class KvLockManager implements AutoCloseable {
             return null;
         }
         HeldLock held = new HeldLock(name, token, leaseMillis);
-        heldLocks.put(name, held);
+        heldLocks.computeIfAbsent(name, ignored -> ConcurrentHashMap.newKeySet()).add(held);
+        synchronized (heartbeatSignal) {
+            heartbeatSignal.notifyAll();
+        }
         return new KvLock(this, held);
     }
 
@@ -144,21 +153,22 @@ public class KvLockManager implements AutoCloseable {
      * 持有方应立即停止临界区工作
      */
     boolean renew(HeldLock held) {
-        KvRecord current = store.get(lockKey(held.name));
-        if (current == null || !current.getValue().equals(held.token)) {
-            heldLocks.remove(held.name, held);
-            return false;
+        synchronized (held) {
+            KvRecord current = store.get(lockKey(held.name));
+            if (current == null || !current.getValue().equals(held.token)) {
+                removeHeld(held);
+                return false;
+            }
+            boolean renewed = casStore.compareAndSet(
+                    lockKey(held.name),
+                    held.token,
+                    current.expire(held.leaseMillis, clock.millis()));
+            if (!renewed) {
+                removeHeld(held);
+                log.warn("Lock renew lost (taken over by others?)|lock={}", held.name);
+            }
+            return renewed;
         }
-        boolean renewed = casStore.compareAndSet(
-                lockKey(held.name),
-                held.token,
-                current.expire(held.leaseMillis, clock.millis()));
-        if (!renewed) {
-            // 锁已丢失（被接管）：移出心跳列表，避免每轮空转告警
-            heldLocks.remove(held.name, held);
-            log.warn("Lock renew lost (taken over by others?)|lock={}", held.name);
-        }
-        return renewed;
     }
 
     /**
@@ -168,7 +178,7 @@ public class KvLockManager implements AutoCloseable {
      * 此时无需任何补偿——新持有者的锁不受影响
      */
     boolean release(HeldLock held) {
-        heldLocks.remove(held.name);
+        removeHeld(held);
         return casStore.compareAndRemove(lockKey(held.name), held.token);
     }
 
@@ -182,17 +192,21 @@ public class KvLockManager implements AutoCloseable {
 
     private void heartbeatLoop() {
         while (running) {
-            if (!sleep(heartbeatIntervalMillis())) {
-                return;
+            long idleMillis = config.getHeartbeatIntervalMillis();
+            synchronized (heartbeatSignal) {
+                try {
+                    heartbeatSignal.wait(heartbeatIntervalMillis());
+                } catch (InterruptedException e) {
+                    Thread.currentThread().interrupt();
+                    return;
+                }
             }
             if (!running) {
                 return;
             }
-            for (HeldLock held : heldLocks.values()) {
-                try {
-                    renew(held);
-                } catch (RuntimeException e) {
-                    log.warn("Lock heartbeat failed|lock={}", held.name, e);
+            for (Set<HeldLock> locks : heldLocks.values()) {
+                for (HeldLock held : locks) {
+                    renewHeartbeat(held);
                 }
             }
         }
@@ -204,8 +218,10 @@ public class KvLockManager implements AutoCloseable {
      */
     private long heartbeatIntervalMillis() {
         long interval = config.getHeartbeatIntervalMillis();
-        for (HeldLock held : heldLocks.values()) {
-            interval = Math.min(interval, Math.max(1, held.leaseMillis / 3));
+        for (Set<HeldLock> locks : heldLocks.values()) {
+            for (HeldLock held : locks) {
+                interval = Math.min(interval, Math.max(1, held.leaseMillis / 3));
+            }
         }
         return interval;
     }
@@ -236,14 +252,33 @@ public class KvLockManager implements AutoCloseable {
     @Override
     public void close() {
         running = false;
-        heartbeatThread.interrupt();
-        for (HeldLock held : heldLocks.values()) {
-            try {
-                release(held);
-            } catch (RuntimeException e) {
-                log.warn("Release on close failed|lock={}", held.name, e);
+        synchronized (heartbeatSignal) {
+            heartbeatSignal.notifyAll();
+        }
+        for (Set<HeldLock> locks : new HashMap<>(heldLocks).values()) {
+            for (HeldLock held : new HashSet<>(locks)) {
+                try {
+                    release(held);
+                } catch (RuntimeException e) {
+                    log.warn("Release on close failed|lock={}", held.name, e);
+                }
             }
         }
+    }
+
+    private void renewHeartbeat(HeldLock held) {
+        try {
+            renew(held);
+        } catch (RuntimeException e) {
+            log.warn("Lock heartbeat failed|lock={}", held.name, e);
+        }
+    }
+
+    private void removeHeld(HeldLock held) {
+        heldLocks.computeIfPresent(held.name, (ignored, locks) -> {
+            locks.remove(held);
+            return locks.isEmpty() ? null : locks;
+        });
     }
 
     /**
@@ -306,5 +341,16 @@ public class KvLockManager implements AutoCloseable {
          * acquire 阻塞获取时的重试间隔（毫秒）
          */
         private long retryIntervalMillis = DEFAULT_RETRY_INTERVAL_MILLIS;
+
+        void validate() {
+            if (heartbeatIntervalMillis <= 0) {
+                throw new IllegalArgumentException(
+                        "heartbeatIntervalMillis must be positive");
+            }
+            if (retryIntervalMillis < 0) {
+                throw new IllegalArgumentException(
+                        "retryIntervalMillis must not be negative");
+            }
+        }
     }
 }
