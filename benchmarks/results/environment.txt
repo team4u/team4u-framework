@@ -16,3 +16,10 @@ java -jar target/benchmarks.jar RouterRouteBenchmark -prof gc -f 1 -wi 3 -i 5 -r
 java -jar target/benchmarks.jar KvTieredReadBenchmark -prof gc -f 1 -wi 3 -i 5 -rf json -rff results/KvTieredReadBenchmark.json
 java -jar target/benchmarks.jar ProxyDelegateBenchmark -prof gc -f 1 -wi 3 -i 5 -rf json -rff results/ProxyDelegateBenchmark.json
 container caveat: Linux cgroup values may cap CPU/memory independently from host visibility; run on the recorded host/container only.
+
+rerun note: the same environment and commands were re-executed on 2026-08-29 for
+the merge candidate (worktree .worktrees/framework-convergence, feature 57b4865a
++ master 100f7bc9 staged, MERGE_HEAD retained). Environment re-verified identical
+(JDK Corretto 21.0.11, Linux 6.8.12-22-pve, Ryzen 7 7735HS, 16 processors, cpu.max
+max 100000); the merge-candidate results in this directory supersede the pre-merge
+Task 18 evidence.

@@ -1,6 +1,6 @@
-# 类型化键空间
+# 类型化键空间与命名存储
 
-裸用核心接口时，每个调用点都要重复两件事：键空间字符串（拼错不报错）和值类型（`get` 后自行反序列化）。`Space` 门面把「键空间 + 值类型 + 默认 TTL」绑定到一个对象上，之后读写只传业务键，值自动做 JSON 序列化/反序列化（复用 serializer 组件的 `JsonUtil`）。注册表读路径使用 Copy-On-Write 结构，避免热查找加锁：
+本文档位于 `team4u-kv-space` 模块（依赖 kv-core、policy、serializer-json）。裸用核心接口时，每个调用点都要重复两件事：键空间字符串（拼错不报错）和值类型（`get` 后自行反序列化）。`Space` 门面把「键空间 + 值类型 + 默认 TTL」绑定到一个对象上，之后读写只传业务键，值自动做 JSON 序列化/反序列化（复用 serializer 组件的 `JsonUtil`）。注册表读路径使用 Copy-On-Write 结构，避免热查找加锁：
 
 ```java
 // 裸用核心接口
@@ -73,3 +73,23 @@ Space<Session> after = Spaces.global().use("user.session", kvStore);
 - 一个 `Space` 绑定一个存储：同一策略可对多个存储分别 `use`（如本地缓存一份、Redis 一份）；
 - `Spaces.global()` 是全局单例，适合单体应用；多个独立模块互不干扰时各自 `new Spaces()` 隔离注册表；
 - `Spaces` 不管理存储生命周期，`AutoCloseable` 责任在存储本身。
+
+## 命名存储注册表（NamedKvStoreRegistry）
+
+同一模块还提供命名 `KvStore` 注册表，供规则驱动的组件（id / ratelimiter / singleflight）按规则里的 `store` 名引用存储，实现「一套规则、多存储分工」（如默认走内存、热点走 Redis）：
+
+```java
+// 注册（同名重新注册即热更新，后注册者覆盖先注册者）
+NamedKvStoreRegistry.global().register("main", new JdbcKvStore(dataSource));
+NamedKvStoreRegistry.global().register("hot", new RedisKvStore(stringRedisTemplate));
+
+// 按名取用（作为引擎/服务的默认存储，或由规则的 store 字段解析）
+KvStore main = NamedKvStoreRegistry.global().get("main");
+```
+
+行为要点：
+
+- FQCN 不变：`com.team4u.framework.kv.NamedKvStore` / `com.team4u.framework.kv.NamedKvStoreRegistry`；1.0 仅将它们从 kv-core 迁移到 `team4u-kv-space`，依赖 `team4u-kv-space` 即可继续使用；
+- 注册表实现 policy 组件的 `KeyedPolicyRegistry`（Copy-On-Write，读路径无锁、低分配），同名重新注册即覆盖；
+- 声明为 Spring Bean 后可经 policy 组件的自动装配机制批量注入容器内的 `NamedKvStore` Bean（见类 Javadoc）；
+- 使用方文档：[序号生成](../id/quick-start.md#多存储分工)、[限流](../ratelimiter/quick-start.md)、[回源合并](../singleflight/quick-start.md)。

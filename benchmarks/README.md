@@ -63,14 +63,29 @@ command.
 
 ## Recorded Results
 
+Recorded 2026-08-29 on the fully staged merge candidate: worktree
+`.worktrees/framework-convergence` (`refactor/framework-convergence` at `57b4865a`)
+with master `100f7bc9` merged in (`MERGE_HEAD` retained, merge commit not yet
+created). These numbers supersede the pre-merge Task 18 evidence for the merge
+candidate; the run environment and commands are identical to the
+pre-merge run (see `results/environment.txt`), so the two are directly
+comparable.
+
 JDK 21.0.11 (Corretto), Linux 6.8.12-22-pve, AMD Ryzen 7 7735HS, 16 visible
 processors, and the cgroup quota recorded in `results/environment.txt`. One
 single-threaded fork was used; each caveat above still applies.
 
 | Benchmark | Mean score, 99.9% CI | `gc.alloc.rate` | `gc.alloc.rate.norm` | Raw evidence |
 | :--- | :--- | :--- | :--- | :--- |
-| Criterion logical/property predicate | `53.720 ± 1.492 ns/op` | `1135.981 ± 31.595 MB/sec` | `64.000 ± 0.001 B/op` | `results/CriterionMatchBenchmark.{json,txt}` |
-| Criterion subject numeric comparison | `3.974 ± 0.070 ns/op` | `0.007 ± 0.001 MB/sec` | below profiler resolution | `results/CriterionMatchBenchmark.{json,txt}` |
-| Router route decision | `34.293 ± 0.332 ns/op` | `3336.570 ± 32.368 MB/sec` | `120.000 ± 0.001 B/op` | `results/RouterRouteBenchmark.{json,txt}` |
-| Tiered KV L1 read | `45.978 ± 1.279 ns/op` | `0.008 ± 0.014 MB/sec` | below profiler resolution | `results/KvTieredReadBenchmark.{json,txt}` |
-| Proxy delegated invocation | `9.467 ± 0.256 ns/op` | `0.007 ± 0.001 MB/sec` | below profiler resolution | `results/ProxyDelegateBenchmark.{json,txt}` |
+| Criterion logical/property predicate | `54.663 ± 1.368 ns/op` | `1116.413 ± 27.804 MB/sec` | `64.000 ± 0.001 B/op` | `results/CriterionMatchBenchmark.{json,txt}` |
+| Criterion subject numeric comparison | `4.033 ± 0.026 ns/op` | `0.007 ± 0.001 MB/sec` | below profiler resolution | `results/CriterionMatchBenchmark.{json,txt}` |
+| Router route decision | `35.526 ± 0.812 ns/op` | `3220.778 ± 73.606 MB/sec` | `120.000 ± 0.001 B/op` | `results/RouterRouteBenchmark.{json,txt}` |
+| Tiered KV L1 read | `45.991 ± 1.682 ns/op` | `0.008 ± 0.014 MB/sec` | below profiler resolution | `results/KvTieredReadBenchmark.{json,txt}` |
+| Proxy delegated invocation | `9.462 ± 0.226 ns/op` | `0.007 ± 0.001 MB/sec` | below profiler resolution | `results/ProxyDelegateBenchmark.{json,txt}` |
+
+Versus the pre-merge run, every mean moved by less than 4% (largest:
+Router `34.293 → 35.526 ns/op`, +3.6%), and both measurable
+`gc.alloc.rate.norm` values are unchanged at `64`/`120 B/op`; no regression
+exceeds the merge gate's 20% threshold. The tiered KV teardown assertion
+(`counting L2 == 0 gets` across warmup plus all measured iterations) passed
+on this rerun.

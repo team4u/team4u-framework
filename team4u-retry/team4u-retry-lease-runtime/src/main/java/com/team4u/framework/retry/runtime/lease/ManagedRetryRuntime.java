@@ -1,5 +1,6 @@
 package com.team4u.framework.retry.runtime.lease;
 
+import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.lease.Leases;
 import com.team4u.framework.lease.api.TaskQueue;
 import com.team4u.framework.lease.spi.LeaseBackend;
@@ -102,7 +103,7 @@ public class ManagedRetryRuntime implements AutoCloseable {
         }
 
         public Builder queueName(String queueName) {
-            if (queueName == null || queueName.trim().isEmpty()) {
+            if (StringUtil.isBlank(queueName)) {
                 throw new IllegalArgumentException("queueName must not be blank");
             }
             this.queueName = queueName;

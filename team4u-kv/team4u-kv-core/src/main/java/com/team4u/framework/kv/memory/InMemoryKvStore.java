@@ -1,44 +1,60 @@
 package com.team4u.framework.kv.memory;
 
 import com.team4u.framework.kv.CasCapable;
+import com.team4u.framework.kv.CounterCapable;
 import com.team4u.framework.kv.KvEvent;
 import com.team4u.framework.kv.KvListener;
 import com.team4u.framework.kv.KvRecord;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.PutMode;
 import com.team4u.framework.kv.ScanCapable;
+import com.team4u.framework.kv.ScoredWindowCapable;
 import com.team4u.framework.kv.SpaceKey;
 import com.team4u.framework.kv.WatchCapable;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Clock;
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.CopyOnWriteArrayList;
+import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 内存键值存储
  * <p>
  * 基于 {@link ConcurrentHashMap} 实现，零外部依赖，行为与其他存储实现保持一致
- * （过期语义、SETNX 语义、CAS 语义），适合单元测试与单实例临时数据。
+ * （过期语义、SETNX 语义、CAS 语义、计数 TTL 语义、计分窗口语义），
+ * 适合单元测试与单实例临时数据。
  * 过期采用读取时惰性判定，{@link #size()} 与 {@link #pruneExpired(String, int)}
- * 提供主动清理入口（写多读少的冷键由清理器调用 pruneExpired 止血）。
+ * 提供主动清理入口（写多读少的冷键由清理器调用 pruneExpired 止血；
+ * pruneExpired 同批清扫已过期的计数器与计分窗口键）。
  * </p>
  * 时间源可注入（{@link Clock}），便于测试中虚拟时间推进。
- * 实现 {@link CasCapable}、{@link ScanCapable}、{@link WatchCapable} 全部能力。
+ * 实现 {@link CasCapable}、{@link ScanCapable}、{@link WatchCapable}、
+ * {@link CounterCapable}、{@link ScoredWindowCapable} 全部能力。
  *
  * @author jay.wu
  */
 @Slf4j
-public class InMemoryKvStore implements KvStore, CasCapable, ScanCapable, WatchCapable, AutoCloseable {
+public class InMemoryKvStore implements KvStore, CasCapable, ScanCapable, WatchCapable,
+        CounterCapable, ScoredWindowCapable, AutoCloseable {
 
 
     private final ConcurrentHashMap<SpaceKey, KvRecord> map = new ConcurrentHashMap<>();
     private final ConcurrentHashMap<String, CopyOnWriteArrayList<KvListener>> listeners =
             new ConcurrentHashMap<>();
+    /**
+     * 计数器与记录值域分开维护，互不干扰（带过期截止时间）
+     */
+    private final ConcurrentHashMap<SpaceKey, Counter> counters = new ConcurrentHashMap<>();
+    /**
+     * 计分窗口与记录值域分开维护，互不干扰（带过期截止时间）
+     */
+    private final ConcurrentHashMap<SpaceKey, Window> windows = new ConcurrentHashMap<>();
     private final Clock clock;
 
     public InMemoryKvStore() {
@@ -156,6 +172,35 @@ public class InMemoryKvStore implements KvStore, CasCapable, ScanCapable, WatchC
         return success[0];
     }
 
+    /**
+     * 单 compute 原子完成「存活 + 值匹配」校验与「保序」过期更新；
+     * 过期判定使用 compute 内时间戳，与 {@link #compareAndSet} 一致
+     */
+    @Override
+    public boolean compareAndExpire(SpaceKey key, String expectedValue, long newExpireAtMillis) {
+        boolean[] renewed = new boolean[1];
+        map.compute(key, (ignored, existing) -> {
+            if (existing == null || existing.isExpired(now())) {
+                renewed[0] = false;
+                return existing == null ? null : existing;
+            }
+            if (!existing.getValue().equals(expectedValue)) {
+                renewed[0] = false;
+                return existing;
+            }
+            renewed[0] = true;
+            // 保序：晚到的续约不缩短租约（0 为永不过期，视为无穷大：
+            // 新值 0 恒为最大必生效；存量 0 则任何有限新值都不回缩）
+            if (newExpireAtMillis == 0
+                    || (existing.getExpireAt() != 0
+                    && newExpireAtMillis > existing.getExpireAt())) {
+                return KvRecord.ofRaw(existing.getValue(), newExpireAtMillis);
+            }
+            return existing;
+        });
+        return renewed[0];
+    }
+
     @Override
     public List<SpaceKey> scan(String space) {
         long now = now();
@@ -168,19 +213,47 @@ public class InMemoryKvStore implements KvStore, CasCapable, ScanCapable, WatchC
         return keys;
     }
 
+    /**
+     * 物理清理指定键空间下已过期的数据：普通记录、计数器与计分窗口键同批清扫
+     *
+     * @param maxBatch 单次最大删除数量（三类合计），防止长时间占用
+     * @return 实际删除数量（记录 + 计数器 + 窗口）
+     */
     @Override
     public int pruneExpired(String space, int maxBatch) {
         long now = now();
         int count = 0;
         for (Map.Entry<SpaceKey, KvRecord> entry : map.entrySet()) {
             if (count >= maxBatch) {
-                break;
+                return count;
             }
             SpaceKey key = entry.getKey();
             if (key.getSpace().equals(space)
                     && entry.getValue().isExpired(now)
                     && map.remove(key, entry.getValue())) {
                 fire(new KvEvent(KvEvent.Type.REMOVE, key, null));
+                count++;
+            }
+        }
+        for (Map.Entry<SpaceKey, Counter> entry : counters.entrySet()) {
+            if (count >= maxBatch) {
+                return count;
+            }
+            SpaceKey key = entry.getKey();
+            if (key.getSpace().equals(space)
+                    && isExpired(entry.getValue().deadlineAt, now)
+                    && counters.remove(key, entry.getValue())) {
+                count++;
+            }
+        }
+        for (Map.Entry<SpaceKey, Window> entry : windows.entrySet()) {
+            if (count >= maxBatch) {
+                return count;
+            }
+            SpaceKey key = entry.getKey();
+            if (key.getSpace().equals(space)
+                    && isExpired(entry.getValue().deadlineAt, now)
+                    && windows.remove(key, entry.getValue())) {
                 count++;
             }
         }
@@ -204,6 +277,105 @@ public class InMemoryKvStore implements KvStore, CasCapable, ScanCapable, WatchC
         }
     }
 
+    // ------------------------------------------------- 计数能力
+
+    @Override
+    public long incrementAndGet(SpaceKey key, long delta, long ttlMillis) {
+        Counter counter = counters.computeIfAbsent(key, k -> new Counter());
+        synchronized (counter) {
+            long now = now();
+            // 惰性过期：到期先重置为 0 再累加，等效于键消失后重建
+            if (isExpired(counter.deadlineAt, now)) {
+                counter.value.set(0);
+                counter.deadlineAt = 0;
+            }
+            long next = counter.value.addAndGet(delta);
+            if (ttlMillis > 0 && counter.deadlineAt == 0) {
+                // 键创建（或重置）时设置 TTL；后续递增不刷新
+                counter.deadlineAt = KvRecord.expireAtOf(ttlMillis, now);
+            }
+            return next;
+        }
+    }
+
+    // ------------------------------------------------- 计分窗口能力
+
+    @Override
+    public Verdict offer(SpaceKey key, Offer offer) {
+        Objects.requireNonNull(offer, "offer");
+        List<String> members = offer.getMembers() == null
+                ? java.util.Collections.emptyList()
+                : offer.getMembers();
+        Window window = windows.computeIfAbsent(key, k -> new Window());
+        synchronized (window) {
+            long now = now();
+            // 惰性过期：到期整键消失，窗口从零重来
+            if (isExpired(window.deadlineAt, now)) {
+                window.size = 0;
+                window.deadlineAt = 0;
+            }
+            // 裁剪：score 严格大于 cutoff 的成员存活（== cutoff 被裁剪），紧凑左移
+            int kept = 0;
+            for (int i = 0; i < window.size; i++) {
+                if (window.scores[i] > offer.getCutoffScore()) {
+                    window.scores[kept++] = window.scores[i];
+                }
+            }
+            window.size = kept;
+
+            int adding = members.size();
+            if (adding > 0 && kept + adding > offer.getMaxCount()) {
+                // 超限：不添加任何成员（拒绝路径不刷新 TTL）
+                return Verdict.builder()
+                        .accepted(false)
+                        .count(kept)
+                        .oldestScore(oldestScoreOf(window))
+                        .build();
+            }
+            ensureCapacity(window, kept + adding);
+            for (int i = 0; i < adding; i++) {
+                window.scores[window.size++] = offer.getMemberScore();
+            }
+            if (offer.getTtlMillis() > 0) {
+                // 每次成功操作（含窥探）刷新整键 TTL
+                window.deadlineAt = KvRecord.expireAtOf(offer.getTtlMillis(), now);
+            }
+            return Verdict.builder()
+                    .accepted(true)
+                    .count(window.size)
+                    .oldestScore(oldestScoreOf(window))
+                    .build();
+        }
+    }
+
+    /**
+     * 窗口现存成员中的最小 score（最老成员）；空窗口返回 null
+     */
+    private static Long oldestScoreOf(Window window) {
+        if (window.size == 0) {
+            return null;
+        }
+        long min = window.scores[0];
+        for (int i = 1; i < window.size; i++) {
+            if (window.scores[i] < min) {
+                min = window.scores[i];
+            }
+        }
+        return min;
+    }
+
+    private static void ensureCapacity(Window window, int required) {
+        if (required <= window.scores.length) {
+            return;
+        }
+        int newLength = Math.max(required, window.scores.length * 2);
+        window.scores = Arrays.copyOf(window.scores, newLength);
+    }
+
+    private static boolean isExpired(long deadlineAt, long now) {
+        return deadlineAt > 0 && now >= deadlineAt;
+    }
+
     @Override
     public AutoCloseable watch(String space, KvListener listener) {
         CopyOnWriteArrayList<KvListener> list =
@@ -216,6 +388,8 @@ public class InMemoryKvStore implements KvStore, CasCapable, ScanCapable, WatchC
     public void close() {
         map.clear();
         listeners.clear();
+        counters.clear();
+        windows.clear();
     }
 
     private void fire(KvEvent event) {
@@ -234,5 +408,36 @@ public class InMemoryKvStore implements KvStore, CasCapable, ScanCapable, WatchC
 
     private long now() {
         return clock.millis();
+    }
+
+    /**
+     * 带过期截止时间的计数器（deadlineAt 为 0 表示永不过期）
+     */
+    private static final class Counter {
+
+        private final AtomicLong value = new AtomicLong();
+
+        /**
+         * 过期截止时间（epoch 毫秒），0 表示永不过期
+         */
+        private long deadlineAt;
+    }
+
+    /**
+     * 带过期截止时间的计分窗口：仅保留成员 score（计数与最老成员计算只依赖 score）
+     */
+    private static final class Window {
+
+        private long[] scores = new long[8];
+
+        /**
+         * 现存成员数量（scores 的有效前缀长度）
+         */
+        private int size;
+
+        /**
+         * 过期截止时间（epoch 毫秒），0 表示永不过期
+         */
+        private long deadlineAt;
     }
 }

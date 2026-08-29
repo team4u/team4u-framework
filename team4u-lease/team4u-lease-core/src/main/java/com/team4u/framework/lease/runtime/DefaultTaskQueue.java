@@ -1,5 +1,6 @@
 package com.team4u.framework.lease.runtime;
 
+import com.team4u.framework.base.util.DurationUtil;
 import com.team4u.framework.lease.api.Submission;
 import com.team4u.framework.lease.api.Task;
 import com.team4u.framework.lease.api.TaskOperationResult;
@@ -53,7 +54,7 @@ public final class DefaultTaskQueue implements TaskQueue {
                 task.getType(),
                 task.getPayload(),
                 task.getDeduplicationKey(),
-                Durations.requireExactMillis(task.getDelay(), "delay"),
+                DurationUtil.requireExactMillis(task.getDelay(), "delay"),
                 task.getPriority(),
                 task.getAttributes()));
         return Submission.of(result.getTaskId(), result.isCreated(), result.getSnapshot());
@@ -162,7 +163,7 @@ public final class DefaultTaskQueue implements TaskQueue {
                 delayMillis);
     }
     private static long requireDelay(Duration delay) {
-        return Durations.requireExactMillis(delay, "delay");
+        return DurationUtil.requireExactMillis(delay, "delay");
     }
 
     private static void requireTaskId(String taskId) {

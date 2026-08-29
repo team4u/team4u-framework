@@ -1,6 +1,7 @@
 package com.team4u.framework.retry.inline;
 
 import com.team4u.framework.retry.api.RetryPolicy;
+import com.team4u.framework.retry.common.concurrent.ForegroundRetryLoop;
 import com.team4u.framework.retry.common.util.RetryExceptionUtil;
 
 import java.util.concurrent.*;
@@ -11,7 +12,7 @@ import java.util.function.Supplier;
  * 进程内重试客户端的默认实现。
  * <p>
  * 该类通过单例模式提供全局访问，实现了同步与异步的重试执行逻辑。
- * 它直接在内存中处理重试循环，并利用 {@link Thread#sleep} 或 {@link ScheduledExecutorService} 处理退避延迟。
+ * 它直接在内存中处理重试循环，同步退避休眠经 base ThreadUtil，异步延迟经 {@link ScheduledExecutorService} 调度。
  */
 public class DefaultInlineRetryClient implements InlineRetryClient {
 
@@ -34,33 +35,59 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
                     "Inline mode does not support foregroundMaxRetries, please use maxRetries instead");
         }
 
-        int failedAttemptsSoFar = 0;
-        while (true) {
-            try {
-                // 执行具体的业务逻辑回调
-                return callable.call();
-            } catch (Throwable ex) {
-                // 统一异常形态，处理中断及 Error 类型的严重错误
-                Throwable cause = normalize(ex);
+        // 前台同步重试循环与 MANAGED 客户端共用 ForegroundRetryLoop：
+        // INLINE 无前台次数限制，重试耗尽时抛出最终异常（异常形态与旧实现一致：
+        // Exception 子类按 execute 的 throws Exception 签名原样抛出）
+        try {
+            return ForegroundRetryLoop.execute(policy, callable::call,
+                    new ForegroundRetryLoop.Listener<T, T>() {
+                        @Override
+                        public T onSuccess(T result, int failedAttemptsSoFar) {
+                            return result;
+                        }
 
-                // Error 类型（如 OutOfMemoryError）属于严重的系统级异常，
-                // 不应进入重试循环，直接向上抛出
-                if (cause instanceof Error) {
-                    throw (Error) cause;
-                }
+                        @Override
+                        public T onRetryExhausted(Throwable cause, int failedAttemptsSoFar) {
+                            throw asTransparentRuntimeException(cause);
+                        }
 
-                failedAttemptsSoFar++;
+                        @Override
+                        public T onInterrupted(InterruptedException interrupted, int failedAttemptsSoFar) {
+                            throw asTransparentRuntimeException(interrupted);
+                        }
 
-                // 这里只在失败后进入 canRetry，因此传入的是“截至当前已失败的次数”。
-                if (!policy.canRetry(failedAttemptsSoFar, cause)) {
-                    throw wrap(cause);
-                }
+                        @Override
+                        public T onForegroundBudgetExhausted(Throwable cause, int failedAttemptsSoFar) {
+                            // 无前台次数限制时不会走到；防御性抛出
+                            throw asTransparentRuntimeException(cause);
+                        }
 
-                // 获取当前重试批次对应的退避延迟时间，并进行休眠等待
-                long delayMillis = policy.getDelayMillis(failedAttemptsSoFar);
-                sleepQuietly(delayMillis);
-            }
+                        @Override
+                        public int maxForegroundExecutions() {
+                            return -1;
+                        }
+                    });
+        } catch (TransparentFailure ex) {
+            // unchecked 回调无法直接抛 checked 异常，经透明包装通道在此还原
+            throw wrap(ex.getCause());
         }
+    }
+
+    /**
+     * Listener 回调（unchecked 签名）无法直接抛出 checked 异常，
+     * 用此私有透明通道包装后由 execute 解包
+     */
+    private static final class TransparentFailure extends RuntimeException {
+        private TransparentFailure(Throwable cause) {
+            super(cause);
+        }
+    }
+
+    /**
+     * 将最终失败原因经透明通道抛出，保留原始异常对象不丢失
+     */
+    private RuntimeException asTransparentRuntimeException(Throwable cause) {
+        throw new TransparentFailure(cause);
     }
 
     @Override
@@ -265,21 +292,17 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
     }
 
     /**
-     * 安静地让当前线程休眠指定的时间。
-     *
-     * @param delay 延迟时间（毫秒）
-     * @throws InterruptedException 如果休眠期间线程被中断
+     * 包装 Throwable 为 Exception 实例。
+     * <p>
+     * execute 方法签名仅声明 Exception：Exception 及其子类（含
+     * InterruptedException）原样抛出，仅对非 Exception 的 Throwable（如自定义
+     * 直接继承 Throwable 的异常）做 RuntimeException 包装。
      */
-    private void sleepQuietly(long delay) throws InterruptedException {
-        if (delay > 0) {
-            try {
-                Thread.sleep(delay);
-            } catch (InterruptedException e) {
-                // 重置线程中断状态并抛出异常，让调用方决定如何处理
-                Thread.currentThread().interrupt();
-                throw e;
-            }
+    private Exception wrap(Throwable cause) {
+        if (cause instanceof Exception) {
+            return (Exception) cause;
         }
+        return new RuntimeException(cause);
     }
 
     /**
@@ -296,15 +319,5 @@ public class DefaultInlineRetryClient implements InlineRetryClient {
             return ex;
         }
         return RetryExceptionUtil.unwrapAndRestoreInterrupt(ex);
-    }
-
-    /**
-     * 包装 Throwable 为 Exception 实例。
-     */
-    private Exception wrap(Throwable cause) {
-        if (cause instanceof Exception) {
-            return (Exception) cause;
-        }
-        return new RuntimeException(cause);
     }
 }

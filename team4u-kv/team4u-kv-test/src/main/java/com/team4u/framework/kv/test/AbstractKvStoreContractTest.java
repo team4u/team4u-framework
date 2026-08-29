@@ -1,6 +1,7 @@
 package com.team4u.framework.kv.test;
 
 import com.team4u.framework.kv.CasCapable;
+import com.team4u.framework.kv.CounterCapable;
 import com.team4u.framework.kv.KvRecord;
 import com.team4u.framework.kv.KvStore;
 import com.team4u.framework.kv.PutMode;
@@ -31,7 +32,7 @@ import static org.junit.Assert.assertTrue;
  * <p>
  * 任何 {@link KvStore} 实现（memory/jdbc/redis...）继承本类并实现
  * {@link #createStore()} 与 {@link #nowMillis()}，即可跑同一套行为契约，
- * 保证「过期语义、SETNX 语义、CAS 语义、扫描、订阅」在多后端间一致
+ * 保证「过期语义、SETNX 语义、CAS 语义、计数语义、扫描、订阅」在多后端间一致
  * ——把「内存实现与生产实现行为一致」从文档承诺变成 CI 强制
  * （对齐 team4u-lease-test 的契约测试惯例）。
  * </p>
@@ -238,6 +239,57 @@ public abstract class AbstractKvStoreContractTest {
         int pruned = scannable.pruneExpired("contract-prune", 10);
         assertEquals(1, pruned);
         assertEquals(1, scannable.scan("contract-prune").size());
+    }
+
+    @Test
+    public void contractCounterIfSupported() {
+        if (!(store instanceof CounterCapable)) {
+            return;
+        }
+        CounterCapable counter = (CounterCapable) store;
+        SpaceKey key = SpaceKey.of("contract", "counter");
+
+        // 键不存在从 0 开始：首次调用返回 delta
+        assertEquals(1, counter.incrementAndGet(key, 1, 0));
+        // 返回值为递增后的精确当前值
+        assertEquals(3, counter.incrementAndGet(key, 2, 0));
+        assertEquals(3, counter.incrementAndGet(key, 0, 0));
+        // 计数器与普通值域互不干扰
+        SpaceKey other = SpaceKey.of("contract", "counter-value");
+        store.put(other, KvRecord.of("v1"), PutMode.SET);
+        assertEquals(4, counter.incrementAndGet(key, 1, 0));
+        assertEquals("v1", store.get(other).getValue());
+    }
+
+    @Test
+    public void concurrentCounterNoLostUpdate() throws Exception {
+        if (!(store instanceof CounterCapable)) {
+            return;
+        }
+        CounterCapable counter = (CounterCapable) store;
+        SpaceKey key = SpaceKey.of("contract", "counter-concurrent");
+        int threads = 8;
+        int incrementsPerThread = 100;
+        ExecutorService pool = Executors.newFixedThreadPool(threads);
+        CountDownLatch start = new CountDownLatch(1);
+        try {
+            for (int i = 0; i < threads; i++) {
+                pool.submit(() -> {
+                    start.await();
+                    for (int j = 0; j < incrementsPerThread; j++) {
+                        counter.incrementAndGet(key, 1, 0);
+                    }
+                    return null;
+                });
+            }
+            start.countDown();
+            pool.shutdown();
+            assertTrue(pool.awaitTermination(30, TimeUnit.SECONDS));
+        } finally {
+            pool.shutdownNow();
+        }
+        assertEquals("counter must not lose updates",
+                threads * incrementsPerThread, counter.incrementAndGet(key, 0, 0));
     }
 
     @Test

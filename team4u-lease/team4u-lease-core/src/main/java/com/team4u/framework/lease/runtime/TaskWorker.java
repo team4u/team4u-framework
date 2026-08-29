@@ -1,5 +1,7 @@
 package com.team4u.framework.lease.runtime;
 
+import com.team4u.framework.base.util.DurationUtil;
+import com.team4u.framework.base.util.ThreadUtil;
 import com.team4u.framework.lease.api.TaskContext;
 import com.team4u.framework.lease.api.TaskHandler;
 import com.team4u.framework.lease.api.TaskResult;
@@ -91,7 +93,7 @@ public final class TaskWorker implements AutoCloseable {
     }
 
     public boolean shutdownGracefully(Duration timeout) {
-        long timeoutMillis = Durations.requireExactMillis(timeout, "timeout");
+        long timeoutMillis = DurationUtil.requireExactMillis(timeout, "timeout");
         Thread threadToJoin;
         synchronized (this) {
             shutdown = true;
@@ -264,16 +266,10 @@ public final class TaskWorker implements AutoCloseable {
         }
         return new HeartbeatTask(grant);
     }
-
     private void sleepQuietly() {
-        if (pollIntervalMillis <= 0L) {
-            return;
-        }
-        try {
-            Thread.sleep(pollIntervalMillis);
-        } catch (InterruptedException ex) {
-            Thread.currentThread().interrupt();
-        }
+        // 中断优先于时长：被中断意味着关闭信号，返回 false 后由外层循环的
+        // running/中断标志检测退出，避免忙转
+        ThreadUtil.sleepQuietly(pollIntervalMillis);
     }
 
     private void logWriteResult(String operation, LeaseGrant grant, RuntimeResult result) {
@@ -372,8 +368,8 @@ public final class TaskWorker implements AutoCloseable {
         }
 
         public Builder pollInterval(Duration pollInterval) {
-            long millis = Durations.requireExactMillis(pollInterval, "pollInterval");
-            this.pollIntervalMillis = millis;
+            this.pollIntervalMillis = DurationUtil.requireNonNegativeMillis(pollInterval,
+                    "pollInterval");
             return this;
         }
 
@@ -428,19 +424,7 @@ public final class TaskWorker implements AutoCloseable {
         }
 
         private static long positiveDuration(Duration duration, String name) {
-            long millis = Durations.requireExactMillis(duration, name);
-            if (millis <= 0L) {
-                throw new IllegalArgumentException(name + " must be positive");
-            }
-            return millis;
-        }
-
-        private static long nonNegativeDuration(Duration duration, String name) {
-            long millis = Durations.requireExactMillis(duration, name);
-            if (millis < 0L) {
-                throw new IllegalArgumentException(name + " must not be negative");
-            }
-            return millis;
+            return DurationUtil.requirePositiveMillis(duration, name);
         }
 
         private static void requireText(String value, String name) {
@@ -450,6 +434,23 @@ public final class TaskWorker implements AutoCloseable {
         }
     }
 
+    /**
+     * 单个租约持有期的心跳任务：持锁期间在独立调度线程上周期性续约
+     * <p>
+     * 与 base 的 ScheduledHeartbeat 相比，本类刻意保留私有实现，原因：
+     * </p>
+     * <ul>
+     *     <li><b>生命周期与 worker 关闭联动</b>：心跳复用 worker 级单线程调度器，
+     *     worker 关闭时调度器一并终止，此后调度被拒即视为「持锁期被关闭切断」，
+     *     立即放弃执行让租约自然过期——而 ScheduledHeartbeat 每实例独占调度器，
+     *     无法感知 worker 关闭时序；</li>
+     *     <li><b>丢失后不回调仅停止</b>：worker 对 LEASE_LOST 的响应是放弃当次
+     *     write-back（租约已被接管，写入会失败），不需要 onLost 回调介入。
+     *     持有者仍会继续跑完 handler 并尝试 close，由条件 UPDATE 的 fencing 拒绝。</li>
+     * </ul>
+     * 线程模型：daemon 单线程 ScheduledExecutorService（命名 {@code <threadName>-heartbeat}），
+     * stop 时取消后续调度，线程随 worker 关闭回收。
+     */
     private final class HeartbeatTask implements Runnable {
         private final LeaseGrant grant;
         private final AtomicBoolean heartbeating = new AtomicBoolean(false);

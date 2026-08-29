@@ -29,6 +29,17 @@ public class KvLock implements AutoCloseable {
     }
 
     /**
+     * 本次持有者的只读令牌。
+     * <p>
+     * 令牌同时也是锁记录的 CAS 匹配值。调用方可以把它复制到自己的 fencing
+     * envelope，但不能通过本方法改变锁状态。
+     * </p>
+     */
+    public String token() {
+        return held.token;
+    }
+
+    /**
      * 主动续约（心跳之外的手动触发）
      *
      * @return {@code false} 表示锁已丢失，应立即停止临界区工作

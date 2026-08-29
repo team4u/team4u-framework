@@ -1,12 +1,9 @@
 package com.team4u.framework.mask.config;
 
 import com.team4u.framework.base.util.TypeReference;
-import com.team4u.framework.mask.MaskRuleResolver;
 import com.team4u.framework.config.core.ConfigManager;
-import com.team4u.framework.config.core.support.ConfigDrivenRegistry;
-import com.team4u.framework.serializer.json.JsonUtil;
-import org.slf4j.Logger;
-import org.slf4j.LoggerFactory;
+import com.team4u.framework.config.core.support.AbstractJsonConfigRepository;
+import com.team4u.framework.mask.MaskRuleResolver;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -16,20 +13,31 @@ import java.util.Map;
  * 脱敏规则仓库
  * <p>
  * 维护第三方类或 Map 的脱敏规则，支持快速检索。
+ * init/stop/解析/热更新骨架收编自 {@link AbstractJsonConfigRepository}，
+ * 统一降级语义：首次加载失败抛异常，热更新失败保留旧配置。
+ * <p>
+ * 安全语义（保持既有契约）：
+ * <ul>
+ *     <li>规则快照不可变（深拷贝 + unmodifiable），注册后外部修改不影响仓库；</li>
+ *     <li>解析与手动注入统一走 {@link #validateRules}——null 类规则 / null 规则值
+ *     快速失败，检索期对已存在键的 null 值同样抛出（fail-closed，不静默放行）；</li>
+ *     <li>实现 {@link MaskRuleResolver}，经
+ *     {@link MaskRuleResolver.Global} 按 init/reset 生命周期安装/注销，
+ *     CAS 卸载避免误删他人安装的解析器。</li>
+ * </ul>
  */
-public class MaskRuleRepository implements MaskRuleResolver {
-    private static final Logger log = LoggerFactory.getLogger(MaskRuleRepository.class);
+public class MaskRuleRepository extends AbstractJsonConfigRepository<Map<String, Map<String, String>>>
+        implements MaskRuleResolver {
+
     private static final MaskRuleRepository INSTANCE = new MaskRuleRepository();
 
-    // 配置中心的 Key 变更为 team4u.mask.rules
+    // 配置中心的 Key
     private static final String CONFIG_KEY = "team4u.mask.rules";
 
     /**
-     * 手动注入规则缓存（主要用于测试场景）
+     * 手动注入规则缓存（主要用于测试场景，优先级低于配置中心）
      */
-    private volatile Map<String, Map<String, String>> manualRuleCache = new HashMap<>();
-
-    private volatile ConfigDrivenRegistry<Map<String, Map<String, String>>> registry;
+    private volatile Map<String, Map<String, String>> manualRuleCache = Collections.emptyMap();
 
     private MaskRuleRepository() {
     }
@@ -43,25 +51,57 @@ public class MaskRuleRepository implements MaskRuleResolver {
         return INSTANCE;
     }
 
-    /**
-     * 组件自治：自己初始化自己的配置监听
-     */
-    public synchronized void init(ConfigManager configManager) {
-        ConfigDrivenRegistry<Map<String, Map<String, String>>> newRegistry =
-                new ConfigDrivenRegistry<>(configManager, CONFIG_KEY, this::parseRules);
-        try {
-            newRegistry.get();
-        } catch (RuntimeException e) {
-            newRegistry.destroy();
-            throw e;
-        }
+    @Override
+    protected String configKey() {
+        return CONFIG_KEY;
+    }
 
-        ConfigDrivenRegistry<Map<String, Map<String, String>>> oldRegistry = this.registry;
-        this.registry = newRegistry;
-        if (oldRegistry != null) {
-            oldRegistry.destroy();
+    @Override
+    protected TypeReference<Map<String, Map<String, String>>> typeReference() {
+        return new TypeReference<Map<String, Map<String, String>>>() {
+        };
+    }
+
+    /**
+     * 解析并校验规则：保持既有的「非法配置 → IllegalArgumentException」快速失败语义。
+     */
+    @Override
+    protected Map<String, Map<String, String>> parseJson(String json) throws Exception {
+        Map<String, Map<String, String>> rules;
+        try {
+            rules = super.parseJson(json);
+        } catch (Exception e) {
+            throw new IllegalArgumentException("Invalid mask rule config", e);
         }
+        validateRules(rules);
+        return immutableSnapshot(rules);
+    }
+
+    @Override
+    protected Map<String, Map<String, String>> emptyConfig() {
+        return new HashMap<>();
+    }
+
+    @Override
+    protected void onConfigLoaded(Map<String, Map<String, String>> oldValue,
+                                  Map<String, Map<String, String>> newValue) {
+        // 配置中心加载成功后清空手动缓存，保证配置中心的优先级
+        this.manualRuleCache = Collections.emptyMap();
+    }
+
+    /**
+     * 初始化仓库并安装全局规则解析器
+     */
+    @Override
+    public synchronized void init(ConfigManager configManager) {
+        super.init(configManager);
         MaskRuleResolver.Global.install(this);
+    }
+
+    @Override
+    public synchronized void stop() {
+        super.stop();
+        this.manualRuleCache = Collections.emptyMap();
     }
 
     /**
@@ -71,52 +111,8 @@ public class MaskRuleRepository implements MaskRuleResolver {
      * 确保下次 init() 时从干净状态重新初始化。
      */
     public synchronized void reset() {
-        this.manualRuleCache = new HashMap<>();
-        ConfigDrivenRegistry<Map<String, Map<String, String>>> currentRegistry = this.registry;
-        this.registry = null;
-        if (currentRegistry != null) {
-            currentRegistry.destroy();
-        }
+        stop();
         MaskRuleResolver.Global.uninstall(this);
-    }
-
-    private Map<String, Map<String, String>> parseRules(String json) {
-        try {
-            if (json == null || json.trim().isEmpty()) {
-                return new HashMap<>();
-            }
-            Map<String, Map<String, String>> rules = JsonUtil.toBean(
-                    json,
-                    new TypeReference<Map<String, Map<String, String>>>() {
-                    },
-                    false);
-            if (rules == null) {
-                return new HashMap<>();
-            }
-            validateRules(rules);
-            return rules;
-        } catch (IllegalArgumentException e) {
-            throw e;
-        } catch (Exception e) {
-            log.error("MaskRuleRepository|parseConfig|error|msg={}", e.getMessage());
-            throw new IllegalArgumentException("Invalid mask rule config", e);
-        }
-    }
-
-    private static void validateRules(Map<String, Map<String, String>> rules) {
-        for (Map.Entry<String, Map<String, String>> classEntry : rules.entrySet()) {
-            Map<String, String> classRules = classEntry.getValue();
-            if (classRules == null) {
-                throw new IllegalArgumentException("Mask class rules must not be null: "
-                        + classEntry.getKey());
-            }
-            for (Map.Entry<String, String> fieldEntry : classRules.entrySet()) {
-                if (fieldEntry.getValue() == null) {
-                    throw new IllegalArgumentException("Mask rule must not be null: "
-                            + classEntry.getKey() + "." + fieldEntry.getKey());
-                }
-            }
-        }
     }
 
     /**
@@ -125,27 +121,9 @@ public class MaskRuleRepository implements MaskRuleResolver {
      * @param rules className -> (fieldName -> maskPolicyKey)
      */
     public void setRuleCache(Map<String, Map<String, String>> rules) {
-        this.manualRuleCache = immutableRuleSnapshot(rules);
+        this.manualRuleCache = immutableSnapshot(rules);
     }
 
-    private static Map<String, Map<String, String>> immutableRuleSnapshot(
-            Map<String, Map<String, String>> rules) {
-        if (rules == null) {
-            return Collections.emptyMap();
-        }
-
-        Map<String, Map<String, String>> snapshot = new HashMap<>();
-        for (Map.Entry<String, Map<String, String>> classEntry : rules.entrySet()) {
-            Map<String, String> classRules = classEntry.getValue();
-            if (classRules != null) {
-                classRules = Collections.unmodifiableMap(new HashMap<>(classRules));
-            }
-            snapshot.put(classEntry.getKey(), classRules);
-        }
-
-        validateRules(snapshot);
-        return Collections.unmodifiableMap(snapshot);
-    }
     /**
      * 检索脱敏规则
      *
@@ -153,6 +131,7 @@ public class MaskRuleRepository implements MaskRuleResolver {
      * @param fieldName 字段名
      * @return 匹配到的规则 Key，若无则返回 null
      */
+    @Override
     public String findRule(String className, String fieldName) {
         Map<String, Map<String, String>> rules = currentRules();
 
@@ -200,12 +179,47 @@ public class MaskRuleRepository implements MaskRuleResolver {
     }
 
     private Map<String, Map<String, String>> currentRules() {
-        if (registry != null) {
-            Map<String, Map<String, String>> rules = registry.get();
-            if (rules != null) {
+        if (isInitialized()) {
+            Map<String, Map<String, String>> rules = get();
+            if (rules != null && !rules.isEmpty()) {
                 return rules;
             }
         }
         return manualRuleCache;
+    }
+
+    private static Map<String, Map<String, String>> immutableSnapshot(
+            Map<String, Map<String, String>> rules) {
+        if (rules == null) {
+            return Collections.emptyMap();
+        }
+
+        Map<String, Map<String, String>> snapshot = new HashMap<>();
+        for (Map.Entry<String, Map<String, String>> classEntry : rules.entrySet()) {
+            Map<String, String> classRules = classEntry.getValue();
+            if (classRules != null) {
+                classRules = Collections.unmodifiableMap(new HashMap<>(classRules));
+            }
+            snapshot.put(classEntry.getKey(), classRules);
+        }
+
+        validateRules(snapshot);
+        return Collections.unmodifiableMap(snapshot);
+    }
+
+    private static void validateRules(Map<String, Map<String, String>> rules) {
+        for (Map.Entry<String, Map<String, String>> classEntry : rules.entrySet()) {
+            Map<String, String> classRules = classEntry.getValue();
+            if (classRules == null) {
+                throw new IllegalArgumentException("Mask class rules must not be null: "
+                        + classEntry.getKey());
+            }
+            for (Map.Entry<String, String> fieldEntry : classRules.entrySet()) {
+                if (fieldEntry.getValue() == null) {
+                    throw new IllegalArgumentException("Mask rule must not be null: "
+                            + classEntry.getKey() + "." + fieldEntry.getKey());
+                }
+            }
+        }
     }
 }

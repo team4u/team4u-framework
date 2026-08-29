@@ -1,6 +1,7 @@
 package com.team4u.framework.mask;
 
 import com.team4u.framework.policy.util.PolicyScanner;
+import com.team4u.framework.mask.policy.MaskPolicyBinder;
 
 /**
  * High-performance fail-closed mask facade.
@@ -12,6 +13,9 @@ public class FastMasker {
 
     static {
         PolicyScanner.scanAndRegister(REGISTRY);
+        // 注册枚举名到参数化策略的绑定（B1A1/B2A2/PERCENT66 等历史壳类已收敛）
+        MaskPolicyBinder.bind();
+        // 支持通过 SPI 加载扩展策略
         PolicyScanner.registerFromServiceLoader(REGISTRY);
     }
 

@@ -10,9 +10,16 @@ import com.team4u.framework.kv.SpaceKey;
 import lombok.extern.slf4j.Slf4j;
 
 import java.time.Clock;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Map;
+import java.util.Set;
 import java.util.Objects;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 
 /**
@@ -24,8 +31,9 @@ import java.util.concurrent.TimeUnit;
  *     <li><b>误删防护</b>：释放经 {@link CasCapable#compareAndRemove} 仅删除
  *     自己令牌持有的锁，锁被他人接管后旧持有者的释放是安全的空操作</li>
  *     <li><b>超时误放防护</b>：默认开启后台心跳续约（间隔 = lease/3），
- *     持有方存活期间租约持续滚动；续约经 {@link CasCapable#compareAndSet}
- *     校验令牌，绝不续期他人的锁</li>
+ *     持有方存活期间租约持续滚动；续约经 {@link CasCapable#compareAndExpire}
+ *     单次存储往返完成「令牌校验 + 保序续期」，绝不续期他人的锁，
+ *     也无「读后写」窗口期</li>
  *     <li><b>宕机自愈</b>：持有方进程崩溃后心跳停止，租约到期自动失效，
  *     其他实例可获取（过期由存储惰性判定，无需后台任务回写）</li>
  * </ul>
@@ -51,9 +59,18 @@ public class KvLockManager implements AutoCloseable {
     private final Config config;
     private final String ownerId;
 
-    private final ConcurrentHashMap<String, HeldLock> heldLocks = new ConcurrentHashMap<>();
+    private final ConcurrentHashMap<String, Set<HeldLock>> heldLocks = new ConcurrentHashMap<>();
     private volatile boolean running = true;
-    private final Thread heartbeatThread;
+    private final ScheduledExecutorService heartbeatExecutor;
+    /**
+     * 心跳排程代际：每次排程递增，任务触发时校验代际是否仍为当前值，
+     * 被取消替换的旧任务即使已启动也不会重复排程（避免双排程链）
+     */
+    private long heartbeatEpoch;
+    /**
+     * 当前登记在册的待执行心跳（尚未启动的任务）
+     */
+    private ScheduledFuture<?> pendingHeartbeat;
 
     public KvLockManager(KvStore store) {
         this(store, Clock.systemUTC(), new Config());
@@ -71,12 +88,85 @@ public class KvLockManager implements AutoCloseable {
         this.casStore = resolved;
         this.clock = clock;
         this.config = Objects.requireNonNull(config, "config");
+        this.config.validate();
         this.ownerId = config.getOwnerId() != null ? config.getOwnerId()
                 : "worker-" + UUID.randomUUID().toString().substring(0, 8);
 
-        this.heartbeatThread = new Thread(this::heartbeatLoop, "kv-lock-heartbeat-" + ownerId);
-        this.heartbeatThread.setDaemon(true);
-        this.heartbeatThread.start();
+        // 守护线程调度心跳（治理方式对齐 team4u-lease TaskWorker）：
+        // 自重排程的 one-shot 任务而非固定周期任务——周期经 heartbeatIntervalMillis()
+        // 动态计算（最短租约的 1/3 与配置值取小），运行期新加更短租约的锁时
+        // 下一轮自动收缩；任务自身吞异常，防止异常终止后续调度
+        this.heartbeatExecutor = Executors.newSingleThreadScheduledExecutor(runnable -> {
+            Thread thread = new Thread(runnable, "kv-lock-heartbeat-" + ownerId);
+            thread.setDaemon(true);
+            return thread;
+        });
+        scheduleNextHeartbeat(heartbeatIntervalMillis());
+    }
+
+    /**
+     * 自重排程的单次心跳（one-shot，非固定周期）：每轮以最新计算的间隔重排，
+     * 运行期新加更短租约的锁时经 shrinkHeartbeatIfShorter 立即收缩等待。
+     * 代际校验防止被取消替换的旧任务重复排程（双排程链）
+     */
+    private void scheduleNextHeartbeat(long intervalMillis) {
+        synchronized (this) {
+            if (!running) {
+                return;
+            }
+            final long epoch = ++heartbeatEpoch;
+            try {
+                pendingHeartbeat = heartbeatExecutor.schedule(() -> runHeartbeatEpoch(epoch),
+                        intervalMillis, TimeUnit.MILLISECONDS);
+            } catch (java.util.concurrent.RejectedExecutionException ignored) {
+                // close 竞态：executor 已关闭，无需再排程
+            }
+        }
+    }
+
+    /**
+     * 心跳任务体：仅当自身代际仍为当前代际时执行（被取消替换的旧任务让位）；
+     * 任务后以最新间隔重排，支持自适应收缩
+     */
+    private void runHeartbeatEpoch(long epoch) {
+        synchronized (this) {
+            if (!running || epoch != heartbeatEpoch) {
+                return;
+            }
+            pendingHeartbeat = null;
+        }
+        try {
+            heartbeatTick();
+        } finally {
+            scheduleNextHeartbeat(heartbeatIntervalMillis());
+        }
+    }
+
+    /**
+     * 新加短租约锁后收缩待执行心跳的等待（对齐旧 wait/notify 实现的
+     * 「加锁即唤醒重算」语义）：待执行间隔长于新计算间隔时取消并立即重排，
+     * 代际递增使被取消的旧任务即使已启动也让位，不会双排程
+     */
+    private void shrinkHeartbeatIfShorter() {
+        synchronized (this) {
+            ScheduledFuture<?> future = pendingHeartbeat;
+            if (future == null) {
+                return;   // 心跳任务执行中，其 finally 会以新间隔重排
+            }
+            long shorter = heartbeatIntervalMillis();
+            if (future.getDelay(TimeUnit.MILLISECONDS) > shorter) {
+                future.cancel(false);
+                scheduleNextHeartbeat(shorter);
+            }
+        }
+    }
+
+    /**
+     * 本次持有者的不可伪造令牌：ownerId + 随机后缀
+     * （同一持有者可多次持锁，令牌互不相同）
+     */
+    private String newToken() {
+        return ownerId + ":" + UUID.randomUUID();
     }
 
     /**
@@ -91,7 +181,7 @@ public class KvLockManager implements AutoCloseable {
             throw new IllegalArgumentException("leaseMillis must be positive: " + leaseMillis);
         }
         checkRunning();
-        String token = ownerId + ":" + UUID.randomUUID();
+        String token = newToken();
 
         boolean acquired = store.put(
                 lockKey(name),
@@ -102,7 +192,8 @@ public class KvLockManager implements AutoCloseable {
             return null;
         }
         HeldLock held = new HeldLock(name, token, leaseMillis);
-        heldLocks.put(name, held);
+        heldLocks.computeIfAbsent(name, ignored -> ConcurrentHashMap.newKeySet()).add(held);
+        shrinkHeartbeatIfShorter();
         return new KvLock(this, held);
     }
 
@@ -138,27 +229,24 @@ public class KvLockManager implements AutoCloseable {
     }
 
     /**
-     * 续约指定持有的锁（校验令牌，绝不续期他人的锁）
+     * 续约指定持有的锁（单次存储往返：「令牌校验 + 保序续期」原子完成，
+     * 校验失败即弃权；无「读后写」窗口期，绝不续期他人的锁）
      *
      * @return {@code true} 续约成功；{@code false} 表示锁已丢失（租约到期被接管），
      * 持有方应立即停止临界区工作
      */
     boolean renew(HeldLock held) {
-        KvRecord current = store.get(lockKey(held.name));
-        if (current == null || !current.getValue().equals(held.token)) {
-            heldLocks.remove(held.name, held);
-            return false;
+        synchronized (held) {
+            boolean renewed = casStore.compareAndExpire(
+                    lockKey(held.name),
+                    held.token,
+                    KvRecord.expireAtOf(held.leaseMillis, clock.millis()));
+            if (!renewed) {
+                removeHeld(held);
+                log.warn("Lock renew lost (taken over by others?)|lock={}", held.name);
+            }
+            return renewed;
         }
-        boolean renewed = casStore.compareAndSet(
-                lockKey(held.name),
-                held.token,
-                current.expire(held.leaseMillis, clock.millis()));
-        if (!renewed) {
-            // 锁已丢失（被接管）：移出心跳列表，避免每轮空转告警
-            heldLocks.remove(held.name, held);
-            log.warn("Lock renew lost (taken over by others?)|lock={}", held.name);
-        }
-        return renewed;
     }
 
     /**
@@ -168,7 +256,7 @@ public class KvLockManager implements AutoCloseable {
      * 此时无需任何补偿——新持有者的锁不受影响
      */
     boolean release(HeldLock held) {
-        heldLocks.remove(held.name);
+        removeHeld(held);
         return casStore.compareAndRemove(lockKey(held.name), held.token);
     }
 
@@ -180,20 +268,17 @@ public class KvLockManager implements AutoCloseable {
         return current != null && current.getValue().equals(held.token);
     }
 
-    private void heartbeatLoop() {
-        while (running) {
-            if (!sleep(heartbeatIntervalMillis())) {
-                return;
-            }
-            if (!running) {
-                return;
-            }
-            for (HeldLock held : heldLocks.values()) {
-                try {
-                    renew(held);
-                } catch (RuntimeException e) {
-                    log.warn("Lock heartbeat failed|lock={}", held.name, e);
-                }
+    /**
+     * 单次心跳周期：遍历全部持有锁逐个续约；异常逐锁吞掉，
+     * 防止单锁故障（存储抖动等）终止后续调度
+     */
+    private void heartbeatTick() {
+        if (!running) {
+            return;
+        }
+        for (Set<HeldLock> locks : heldLocks.values()) {
+            for (HeldLock held : locks) {
+                renewHeartbeat(held);
             }
         }
     }
@@ -204,8 +289,10 @@ public class KvLockManager implements AutoCloseable {
      */
     private long heartbeatIntervalMillis() {
         long interval = config.getHeartbeatIntervalMillis();
-        for (HeldLock held : heldLocks.values()) {
-            interval = Math.min(interval, Math.max(1, held.leaseMillis / 3));
+        for (Set<HeldLock> locks : heldLocks.values()) {
+            for (HeldLock held : locks) {
+                interval = Math.min(interval, Math.max(1, held.leaseMillis / 3));
+            }
         }
         return interval;
     }
@@ -236,14 +323,31 @@ public class KvLockManager implements AutoCloseable {
     @Override
     public void close() {
         running = false;
-        heartbeatThread.interrupt();
-        for (HeldLock held : heldLocks.values()) {
-            try {
-                release(held);
-            } catch (RuntimeException e) {
-                log.warn("Release on close failed|lock={}", held.name, e);
+        heartbeatExecutor.shutdownNow();
+        for (Set<HeldLock> locks : new HashMap<>(heldLocks).values()) {
+            for (HeldLock held : new HashSet<>(locks)) {
+                try {
+                    release(held);
+                } catch (RuntimeException e) {
+                    log.warn("Release on close failed|lock={}", held.name, e);
+                }
             }
         }
+    }
+
+    private void renewHeartbeat(HeldLock held) {
+        try {
+            renew(held);
+        } catch (RuntimeException e) {
+            log.warn("Lock heartbeat failed|lock={}", held.name, e);
+        }
+    }
+
+    private void removeHeld(HeldLock held) {
+        heldLocks.computeIfPresent(held.name, (ignored, locks) -> {
+            locks.remove(held);
+            return locks.isEmpty() ? null : locks;
+        });
     }
 
     /**
@@ -306,5 +410,16 @@ public class KvLockManager implements AutoCloseable {
          * acquire 阻塞获取时的重试间隔（毫秒）
          */
         private long retryIntervalMillis = DEFAULT_RETRY_INTERVAL_MILLIS;
+
+        void validate() {
+            if (heartbeatIntervalMillis <= 0) {
+                throw new IllegalArgumentException(
+                        "heartbeatIntervalMillis must be positive");
+            }
+            if (retryIntervalMillis < 0) {
+                throw new IllegalArgumentException(
+                        "retryIntervalMillis must not be negative");
+            }
+        }
     }
 }

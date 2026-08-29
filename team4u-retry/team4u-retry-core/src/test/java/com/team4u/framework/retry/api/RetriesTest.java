@@ -56,7 +56,10 @@ public class RetriesTest {
 
         try {
             Retries.inline()
-                    .policy(RetryPolicy.builder().build())
+                    // 仅验证默认 maxRetries（默认 2 次）；退避用 1ms 避免真实等待默认的 1000ms
+                    .policy(RetryPolicy.builder()
+                            .backoff(Backoffs.fixed(1L))
+                            .build())
                     .call(() -> {
                         attempts.incrementAndGet();
                         throw new IllegalStateException("boom");

@@ -79,7 +79,7 @@
 
 ## 动态数据脱敏 (`team4u.mask.rules`)
 
-`team4u-log-governance` 与 `team4u-mask-config` / `team4u-mask-jackson` 显式集成。在 Jackson 序列化输出阶段，自动应用配置中心下发的动态脱敏规则：
+`team4u-log-governance` 与 `team4u-mask-config` / `team4u-mask-jackson` 显式集成。日志序列化器在自有的 mapper 副本上显式叠加了 `JacksonMaskModule`（全局 `JsonUtil` 奉行无损契约，脱敏仅存在于日志这条观测向链路），在 Jackson 序列化输出阶段自动应用配置中心下发的动态脱敏规则：
 
 ```json
 {

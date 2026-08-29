@@ -51,7 +51,7 @@ graph TD
 | 概念 | 说明 |
 | :--- | :--- |
 | `RoutingManager` | 路由统一门面，提供 `route`、`routeByConfig`、`routeByPolicy` 与 `trace` 等核心方法，支持泛型转换（`TypeReference` / `Class` / `Type`），线程安全且单例复用 |
-| `RouterBootstrap` | 全局引导配置入口，支持注册自定义工厂、拦截器、配置前缀设定，具备运行时锁定（`lock`）与冻结（`freeze`）安全机制 |
+| `RouterBootstrap` | 全局引导配置入口，支持注册自定义工厂、拦截器与配置前缀设定；全局初始化后配置前缀冻结，防止运行时不一致 |
 | `Router` | 路由器核心接口，定义 `route(request)`、`route(request, Type)` 与 `trace(request)` 方法 |
 | `RoutePolicy` | 路由策略元数据模型，包含 `id`、`type`、`rules`、`fallbackValue` 与 `ext` 扩展属性 |
 | `RouteRule` | 单条规则定义模型，包含 `condition` 匹配条件与 `value` 路由目标值 |
@@ -110,7 +110,7 @@ com.team4u.framework.router
 ├── parser                           # 路由配置解析器 (DefaultRoutePolicyParser)
 ├── proxy                            # team4u-router-proxy 模块：声明式路由与代理支持 (@Routed, @RouteContext, RoutedProxyFactory, RoutedBeanLocator, BeanResolver, RoutedMethodInterceptor)
 ├── spi                              # SPI 扩展接口 (RouterFactory, RoutePolicyParser)
-├── RouterBootstrap.java             # 全局引导与配置锁 (Locked / Frozen 状态机)
+├── RouterBootstrap.java             # 全局引导配置入口（前缀冻结约束）
 └── RoutingManager.java              # 路由管理器统一门面 (Facade)
 ```
 

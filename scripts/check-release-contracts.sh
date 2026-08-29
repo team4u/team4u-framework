@@ -6,6 +6,12 @@ POM="$ROOT/pom.xml"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
+# Independent 48-leaf manifest. Every entry below was confirmed against the
+# actual root <modules> list, the root dependencyManagement com.team4u entries,
+# and the module POM <artifactId> of each reactor leaf after the master merge
+# (id + ratelimiter core/proxy/spring + singleflight core/proxy/spring +
+# proxy-spring joined the released reactor; the old monolith artifacts
+# team4u-ratelimiter / team4u-singleflight are gone).
 EXPECTED="$WORK/expected.txt"
 cat >"$EXPECTED" <<'EOF'
 team4u-base
@@ -18,6 +24,7 @@ team4u-config-proxy
 team4u-config-spring
 team4u-config-test
 team4u-criterion
+team4u-id
 team4u-kv-core
 team4u-kv-lifecycle
 team4u-kv-lock
@@ -37,6 +44,10 @@ team4u-mask-config
 team4u-mask-jackson
 team4u-policy
 team4u-proxy
+team4u-proxy-spring
+team4u-ratelimiter-core
+team4u-ratelimiter-proxy
+team4u-ratelimiter-spring
 team4u-retry-config
 team4u-retry-core
 team4u-retry-lease-runtime
@@ -47,6 +58,9 @@ team4u-router
 team4u-router-proxy
 team4u-serializer-jackson
 team4u-serializer-json
+team4u-singleflight-core
+team4u-singleflight-proxy
+team4u-singleflight-spring
 team4u-translator
 EOF
 
@@ -67,7 +81,7 @@ compare_structure() {
     fail "duplicated $label entries: $(echo "$duplicate" | tr '\n' ' ')"
   fi
   if ! diff -u "$EXPECTED" "$actual" >&2; then
-    fail "$label does not match the independent 40-leaf manifest"
+    fail "$label does not match the independent 48-leaf manifest"
   fi
 }
 
@@ -93,6 +107,12 @@ fi
 if grep -qx 'team4u-log' "$WORK/modules.txt" "$WORK/managed.txt" "$WORK/artifacts.txt"; then
   fail "legacy monolith team4u-log must remain absent"
 fi
+if grep -qx 'team4u-ratelimiter' "$WORK/modules.txt" "$WORK/managed.txt" "$WORK/artifacts.txt"; then
+  fail "pre-merge monolith team4u-ratelimiter must remain absent (split into -core/-proxy/-spring)"
+fi
+if grep -qx 'team4u-singleflight' "$WORK/modules.txt" "$WORK/managed.txt" "$WORK/artifacts.txt"; then
+  fail "pre-merge monolith team4u-singleflight must remain absent (split into -core/-proxy/-spring)"
+fi
 if grep -qx 'benchmarks' "$WORK/modules.txt"; then
   fail "benchmarks must stay outside the published leaf manifest"
 fi
@@ -109,10 +129,19 @@ JACKSON_OWNERS=(
   team4u-mask-jackson
   team4u-retry-lease-runtime
   team4u-serializer-jackson
+  team4u-singleflight-core
 )
-if [[ "${#JACKSON_OWNERS[@]}" -ne 4 ]]; then
-  fail "provider/Jackson ownership must allow exactly four modules"
+if [[ "${#JACKSON_OWNERS[@]}" -ne 5 ]]; then
+  fail "provider/Jackson ownership must allow exactly five modules"
 fi
+# singleflight-core owns a direct nonoptional jackson-databind compile edge
+# (durable-schema exemption). That edge necessarily flows transitively to its
+# adapters; they inherit the databind runtime artifact but never the provider.
+# Heirs may carry com.fasterxml.jackson only, never team4u-serializer-jackson.
+DATABIND_HEIRS=(
+  team4u-singleflight-proxy
+  team4u-singleflight-spring
+)
 LEAK_INCLUDES='com.team4u:*,com.fasterxml.jackson*'
 LEAKS=0
 
@@ -138,20 +167,55 @@ for leaf in "${LEAVES[@]}"; do
   for allowed in "${JACKSON_OWNERS[@]}"; do
     [[ "$leaf" == "$allowed" ]] && owner=yes
   done
-  if [[ -s "$hits" && "$owner" == no ]]; then
-    LEAKS=1
-    echo "Jackson/provider leakage: module=$leaf" >&2
-    sed 's/^/  artifact=/g' "$hits" >&2
+  heir=no
+  for allowed in "${DATABIND_HEIRS[@]}"; do
+    [[ "$leaf" == "$allowed" ]] && heir=yes
+  done
+  if [[ "$owner" == no && -s "$hits" ]]; then
+    if [[ "$heir" == yes ]]; then
+      # Heirs may only carry raw Jackson inherited from singleflight-core's
+      # databind edge; the provider artifact remains forbidden.
+      if grep -q 'com[.]team4u:team4u-serializer-jackson' "$hits"; then
+        LEAKS=1
+        echo "Jackson provider leakage: module=$leaf" >&2
+        sed 's/^/  artifact=/g' "$hits" >&2
+      fi
+    else
+      LEAKS=1
+      echo "Jackson/provider leakage: module=$leaf" >&2
+      sed 's/^/  artifact=/g' "$hits" >&2
+    fi
   fi
 done
 
 # A nonempty owner tree without a provider/Jackson row would let the leakage
-# check pass without exercising ownership semantics. Governance is the split
-# representative whose provider/Jackson line must be present.
-if ! grep -Eq 'com[.]team4u:team4u-serializer-jackson|com[.]fasterxml[.]jackson' \
-  "$WORK/team4u-log-governance.tree"; then
-  fail "team4u-log-governance dependency tree does not contain its expected provider/Jackson row"
+# check pass without exercising ownership semantics. Each owner below has a
+# distinct ownership shape that must be present in its filtered runtime tree:
+#  - serializer-jackson / mask-jackson / log-governance / retry-lease-runtime
+#    carry the provider artifact team4u-serializer-jackson,
+#  - singleflight-core owns only a direct jackson-databind edge (durable-schema
+#    exemption) and must NOT carry team4u-serializer-jackson.
+# Heirs must carry the inherited databind edge but never the provider.
+for owner_leaf in \
+    team4u-serializer-jackson \
+    team4u-mask-jackson \
+    team4u-log-governance \
+    team4u-retry-lease-runtime; do
+  if ! grep -q 'com[.]team4u:team4u-serializer-jackson' "$WORK/$owner_leaf.tree"; then
+    fail "$owner_leaf dependency tree does not contain its expected provider row team4u-serializer-jackson"
+  fi
+done
+if ! grep -q 'com[.]fasterxml[.]jackson[.]core:jackson-databind' "$WORK/team4u-singleflight-core.tree"; then
+  fail "team4u-singleflight-core dependency tree does not contain its expected direct jackson-databind durable-schema edge"
 fi
+if grep -q 'com[.]team4u:team4u-serializer-jackson' "$WORK/team4u-singleflight-core.tree"; then
+  fail "team4u-singleflight-core must not expose the serializer provider at runtime (databind-only durable-schema exemption)"
+fi
+for heir_leaf in "${DATABIND_HEIRS[@]}"; do
+  if grep -q 'com[.]team4u:team4u-serializer-jackson' "$WORK/$heir_leaf.tree"; then
+    fail "$heir_leaf must not expose the serializer provider at runtime"
+  fi
+done
 
 if [[ "$LEAKS" -ne 0 ]]; then
   fail "non-owner modules expose serializer-jackson or com.fasterxml.jackson at compile/runtime scope"
@@ -171,9 +235,16 @@ check_shape() {
   fi
 }
 
+# 30 representative direct Team4u dependency shapes = the 22 pre-merge shapes
+# plus the 8 post-merge leaves (id, ratelimiter core/proxy/spring, singleflight
+# core/proxy/spring, proxy-spring). Every expected set was confirmed from the
+# leaf's actual POM dependencies and its runtime dependency:tree output, not
+# derived from this list; mask-jackson was re-confirmed because the merged
+# master POM now also carries the provider edge.
 check_shape team4u-base-jdbc $'team4u-base'
 check_shape team4u-criterion $'team4u-base\nteam4u-policy'
 check_shape team4u-proxy $'team4u-base'
+check_shape team4u-proxy-spring $'team4u-proxy'
 check_shape team4u-serializer-json $'team4u-base\nteam4u-policy'
 check_shape team4u-serializer-jackson $'team4u-serializer-json'
 check_shape team4u-config-core $'team4u-base\nteam4u-policy\nteam4u-serializer-json'
@@ -189,10 +260,17 @@ check_shape team4u-kv-space $'team4u-kv-core\nteam4u-policy\nteam4u-serializer-j
 check_shape team4u-router $'team4u-base\nteam4u-config-core\nteam4u-criterion\nteam4u-policy\nteam4u-serializer-json'
 check_shape team4u-router-proxy $'team4u-bean\nteam4u-proxy\nteam4u-router'
 check_shape team4u-mask $'team4u-base\nteam4u-policy'
-check_shape team4u-mask-jackson $'team4u-mask'
+check_shape team4u-mask-jackson $'team4u-mask\nteam4u-serializer-jackson'
 check_shape team4u-mask-config $'team4u-config-core\nteam4u-mask\nteam4u-serializer-json'
 check_shape team4u-log-core $'team4u-base\nteam4u-policy'
 check_shape team4u-log-governance $'team4u-config-core\nteam4u-criterion\nteam4u-log-core\nteam4u-mask\nteam4u-mask-config\nteam4u-mask-jackson\nteam4u-proxy\nteam4u-serializer-jackson\nteam4u-serializer-json'
+check_shape team4u-id $'team4u-base\nteam4u-config-core\nteam4u-kv-core\nteam4u-kv-space\nteam4u-policy\nteam4u-serializer-json'
+check_shape team4u-ratelimiter-core $'team4u-base\nteam4u-config-core\nteam4u-kv-core\nteam4u-kv-space\nteam4u-policy\nteam4u-serializer-json'
+check_shape team4u-ratelimiter-proxy $'team4u-proxy\nteam4u-ratelimiter-core'
+check_shape team4u-ratelimiter-spring $'team4u-proxy-spring\nteam4u-ratelimiter-proxy'
+check_shape team4u-singleflight-core $'team4u-base\nteam4u-config-core\nteam4u-criterion\nteam4u-kv-core\nteam4u-kv-lock\nteam4u-kv-space\nteam4u-policy\nteam4u-serializer-json'
+check_shape team4u-singleflight-proxy $'team4u-proxy\nteam4u-singleflight-core'
+check_shape team4u-singleflight-spring $'team4u-proxy-spring\nteam4u-singleflight-proxy'
 EFFECTIVE="$WORK/effective-pom.xml"
 if ! mvn -q -f "$POM" help:effective-pom -Doutput="$EFFECTIVE" >"$WORK/effective.log" 2>&1; then
   cat "$WORK/effective.log" >&2
@@ -202,4 +280,4 @@ if grep -q 'maven.aliyun.com' "$EFFECTIVE"; then
   fail "effective root POM still resolves maven.aliyun.com"
 fi
 
-echo "release contracts: 40/40 leaves, Jackson owners, and effective POM repository verified"
+echo "release contracts: 48/48 leaves, Jackson owners, and effective POM repository verified"

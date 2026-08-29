@@ -11,7 +11,6 @@ import org.junit.Test;
 import org.slf4j.MDC;
 import org.slf4j.event.Level;
 
-import java.lang.reflect.Field;
 import java.util.Collections;
 import java.util.List;
 
@@ -126,15 +125,25 @@ public class TargetedDyeingInterceptorTest {
     }
 
     @Test
-    public void testResetDestroysRegistry() {
+    public void testResetDestroysRegistry() throws Exception {
         TestConfigContext context = TestConfigContext.create();
         try {
+            context.put("team4u.log.dyeing",
+                    "[{\"id\":\"r1\",\"condition\":\"meta_action=='X'\",\"targetLevel\":\"DEBUG\"}]");
             interceptor.init(context.getConfigManager());
-            Assert.assertNotNull(readField(interceptor, "registry"));
+            Thread.sleep(50);
+            Assert.assertTrue(interceptor.hasActiveRules());
 
             interceptor.stop();
 
-            Assert.assertNull(readField(interceptor, "registry"));
+            // 停止后：监听已释放、规则快照同步归零
+            Assert.assertFalse(interceptor.hasActiveRules());
+
+            // 停止后配置变更不再触发回调
+            context.put("team4u.log.dyeing",
+                    "[{\"id\":\"r2\",\"condition\":\"meta_action=='Y'\",\"targetLevel\":\"WARN\"}]");
+            Thread.sleep(50);
+            Assert.assertFalse(interceptor.hasActiveRules());
         } finally {
             context.destroy();
         }
@@ -173,20 +182,4 @@ public class TargetedDyeingInterceptorTest {
         }
     }
 
-    /**
-     * 通过反射读取对象内部字段，替代外部框架依赖
-     *
-     * @param target    目标对象
-     * @param fieldName 字段名称
-     * @return 字段对应的值
-     */
-    private Object readField(Object target, String fieldName) {
-        try {
-            Field field = target.getClass().getDeclaredField(fieldName);
-            field.setAccessible(true);
-            return field.get(target);
-        } catch (Exception e) {
-            throw new RuntimeException(e);
-        }
-    }
 }

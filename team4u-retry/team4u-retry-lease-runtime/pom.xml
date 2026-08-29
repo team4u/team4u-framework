@@ -35,6 +35,11 @@
             <version>${jackson.version}</version>
         </dependency>
         <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-serializer-jackson</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
         </dependency>

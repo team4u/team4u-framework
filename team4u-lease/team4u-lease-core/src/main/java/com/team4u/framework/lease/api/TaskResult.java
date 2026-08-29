@@ -1,5 +1,7 @@
 package com.team4u.framework.lease.api;
 
+import com.team4u.framework.base.util.DurationUtil;
+
 import java.time.Duration;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -71,7 +73,7 @@ public final class TaskResult {
                                           Map<String, String> attributes,
                                           boolean attributesPresent) {
         return new TaskResult(Decision.RETRY,
-                Long.valueOf(Durations.requireExactMillis(delay, "retryDelay")),
+                Long.valueOf(DurationUtil.requireExactMillis(delay, "retryDelay")),
                 payload, errorMessage, attributes, attributesPresent);
     }
 

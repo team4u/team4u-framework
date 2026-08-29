@@ -12,50 +12,50 @@
 
 # Run progress: 0.00% complete, ETA 00:00:08
 # Fork: 1 of 1
-# Warmup Iteration   1: 47.768 ns/op
-# Warmup Iteration   2: 35.111 ns/op
-# Warmup Iteration   3: 34.516 ns/op
-Iteration   1: 34.163 ns/op
-                 gc.alloc.rate:      3349.203 MB/sec
+# Warmup Iteration   1: 51.045 ns/op
+# Warmup Iteration   2: 37.587 ns/op
+# Warmup Iteration   3: 36.270 ns/op
+Iteration   1: 35.411 ns/op
+                 gc.alloc.rate:      3231.174 MB/sec
                  gc.alloc.rate.norm: 120.000 B/op
                  gc.count:           6.000 counts
                  gc.time:            3.000 ms
 
-Iteration   2: 34.391 ns/op
-                 gc.alloc.rate:      3327.066 MB/sec
+Iteration   2: 35.503 ns/op
+                 gc.alloc.rate:      3222.764 MB/sec
                  gc.alloc.rate.norm: 120.000 B/op
                  gc.count:           6.000 counts
                  gc.time:            3.000 ms
 
-Iteration   3: 34.258 ns/op
-                 gc.alloc.rate:      3339.953 MB/sec
+Iteration   3: 35.780 ns/op
+                 gc.alloc.rate:      3197.892 MB/sec
+                 gc.alloc.rate.norm: 120.000 B/op
+                 gc.count:           5.000 counts
+                 gc.time:            3.000 ms
+
+Iteration   4: 35.685 ns/op
+                 gc.alloc.rate:      3206.401 MB/sec
                  gc.alloc.rate.norm: 120.000 B/op
                  gc.count:           6.000 counts
                  gc.time:            3.000 ms
 
-Iteration   4: 34.327 ns/op
-                 gc.alloc.rate:      3333.145 MB/sec
+Iteration   5: 35.253 ns/op
+                 gc.alloc.rate:      3245.660 MB/sec
                  gc.alloc.rate.norm: 120.000 B/op
                  gc.count:           6.000 counts
-                 gc.time:            3.000 ms
-
-Iteration   5: 34.325 ns/op
-                 gc.alloc.rate:      3333.482 MB/sec
-                 gc.alloc.rate.norm: 120.000 B/op
-                 gc.count:           6.000 counts
-                 gc.time:            3.000 ms
+                 gc.time:            4.000 ms
 
 
 
 Result "com.team4u.bench.RouterRouteBenchmark.routeDecision":
-  34.293 ±(99.9%) 0.332 ns/op [Average]
-  (min, avg, max) = (34.163, 34.293, 34.391), stdev = 0.086
-  CI (99.9%): [33.960, 34.625] (assumes normal distribution)
+  35.526 ±(99.9%) 0.812 ns/op [Average]
+  (min, avg, max) = (35.253, 35.526, 35.780), stdev = 0.211
+  CI (99.9%): [34.714, 36.338] (assumes normal distribution)
 
 Secondary result "com.team4u.bench.RouterRouteBenchmark.routeDecision:gc.alloc.rate":
-  3336.570 ±(99.9%) 32.368 MB/sec [Average]
-  (min, avg, max) = (3327.066, 3336.570, 3349.203), stdev = 8.406
-  CI (99.9%): [3304.202, 3368.938] (assumes normal distribution)
+  3220.778 ±(99.9%) 73.606 MB/sec [Average]
+  (min, avg, max) = (3197.892, 3220.778, 3245.660), stdev = 19.115
+  CI (99.9%): [3147.172, 3294.385] (assumes normal distribution)
 
 Secondary result "com.team4u.bench.RouterRouteBenchmark.routeDecision:gc.alloc.rate.norm":
   120.000 ±(99.9%) 0.001 B/op [Average]
@@ -63,14 +63,14 @@ Secondary result "com.team4u.bench.RouterRouteBenchmark.routeDecision:gc.alloc.r
   CI (99.9%): [120.000, 120.000] (assumes normal distribution)
 
 Secondary result "com.team4u.bench.RouterRouteBenchmark.routeDecision:gc.count":
-  30.000 ±(99.9%) 0.001 counts [Sum]
-  (min, avg, max) = (6.000, 6.000, 6.000), stdev = 0.001
-  CI (99.9%): [30.000, 30.000] (assumes normal distribution)
+  29.000 ±(99.9%) 0.001 counts [Sum]
+  (min, avg, max) = (5.000, 5.800, 6.000), stdev = 0.447
+  CI (99.9%): [29.000, 29.000] (assumes normal distribution)
 
 Secondary result "com.team4u.bench.RouterRouteBenchmark.routeDecision:gc.time":
-  15.000 ±(99.9%) 0.001 ms [Sum]
-  (min, avg, max) = (3.000, 3.000, 3.000), stdev = 0.001
-  CI (99.9%): [15.000, 15.000] (assumes normal distribution)
+  16.000 ±(99.9%) 0.001 ms [Sum]
+  (min, avg, max) = (3.000, 3.200, 4.000), stdev = 0.447
+  CI (99.9%): [16.000, 16.000] (assumes normal distribution)
 
 
 # Run complete. Total time: 00:00:08
@@ -88,10 +88,10 @@ different JVMs are already problematic, the performance difference caused by dif
 modes can be very significant. Please make sure you use the consistent Blackhole mode for comparisons.
 
 Benchmark                                              Mode  Cnt     Score    Error   Units
-RouterRouteBenchmark.routeDecision                     avgt    5    34.293 ±  0.332   ns/op
-RouterRouteBenchmark.routeDecision:gc.alloc.rate       avgt    5  3336.570 ± 32.368  MB/sec
+RouterRouteBenchmark.routeDecision                     avgt    5    35.526 ±  0.812   ns/op
+RouterRouteBenchmark.routeDecision:gc.alloc.rate       avgt    5  3220.778 ± 73.606  MB/sec
 RouterRouteBenchmark.routeDecision:gc.alloc.rate.norm  avgt    5   120.000 ±  0.001    B/op
-RouterRouteBenchmark.routeDecision:gc.count            avgt    5    30.000           counts
-RouterRouteBenchmark.routeDecision:gc.time             avgt    5    15.000               ms
+RouterRouteBenchmark.routeDecision:gc.count            avgt    5    29.000           counts
+RouterRouteBenchmark.routeDecision:gc.time             avgt    5    16.000               ms
 
 Benchmark result is saved to results/RouterRouteBenchmark.json
