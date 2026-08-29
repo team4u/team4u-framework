@@ -1,6 +1,8 @@
 # 快速开始
 
-本文介绍如何在项目中引入并使用 `team4u-singleflight` 回源合并组件。
+本文面向第一次接触 `team4u-singleflight` 的开发者：从引入依赖到跑通第一个场景，再到每个配置项「配置怎么写、代码怎么传参、结果是什么」。
+
+阅读前只需要建立一个心智模型：**业务代码只负责声明「在哪合并」（point）和「怎么加载」（loader），其余一切——key 怎么取、结果缓存多久、竞争者怎么收场——都由一条 JSON 规则决定**。配置和代码的衔接点是**参数 Map**：编程式调用时你手工构造它，注解调用时框架自动把方法参数按参数名装进它。规则里的 `${productId}`、`$refresh` 都是从这个 Map 里取值。
 
 ---
 
@@ -27,7 +29,7 @@
 
 ## 最小可运行示例
 
-下面这个例子可以在单进程内直接运行（仅依赖 `team4u-singleflight`）：
+先跑通一个最简单的场景：**缓存击穿合并**——同一个商品只回源一次，后续请求读缓存。
 
 ```java
 package demo;
@@ -39,10 +41,11 @@ import com.team4u.framework.singleflight.api.SingleFlightExecution;
 import com.team4u.framework.singleflight.api.SingleFlights;
 
 import java.util.Collections;
+import java.util.Map;
 
 public final class FirstSingleFlightDemo {
     public static void main(String[] args) {
-        // 1. 配置源：写入一条规则（生产环境接配置中心/数据库，见配置组件文档）
+        // 1. 写一条规则：point 为 product.detail，key 取参数里的 productId，结果缓存 60 秒
         InMemoryConfigSource source = new InMemoryConfigSource("demo", 0);
         source.put("team4u.singleflight.product.detail",
                 "{\"id\":\"product.detail\",\"key\":\"${productId}\","
@@ -50,34 +53,31 @@ public final class FirstSingleFlightDemo {
         ConfigManager configManager = ConfigManager.builder()
                 .addSource(source).addWatcher(source).build();
 
-        // 2. 初始化全局门面：默认内存存储（行为与 Redis 后端一致，同一套 kv 契约测试保证）
+        // 2. 初始化全局门面：这里用内存存储（生产环境换 Redis/JDBC 即可，业务代码不变）
         SingleFlights.init(configManager, new InMemoryKvStore());
 
-        // 3. 同 key 并发调用时只有一个 loader 真正执行
-        SingleFlightExecution.SingleFlightLoader<String> firstLoader =
-                () -> loadFromDatabase("p1");
+        // 3. 第一次调用：loader 真正执行，结果写入缓存
+        //    参数 Map 的 key 必须和规则里的 ${productId} 对得上
+        Map<String, Object> arguments = Collections.singletonMap("productId", "p1");
+        SingleFlightExecution.SingleFlightLoader<String> loadFromDb =
+                () -> queryFromDatabase("p1");
         String first = SingleFlights.execute(SingleFlightExecution.of(
-                "product.detail",
-                Collections.singletonMap("productId", "p1"),
-                String.class,
-                firstLoader));
+                "product.detail", arguments, String.class, loadFromDb));
 
-        SingleFlightExecution.SingleFlightLoader<String> secondLoader =
-                () -> "must not execute";   // cacheTtlMillis 内不会执行
+        // 4. 第二次调用：同 key 命中缓存，loader 完全不执行
+        SingleFlightExecution.SingleFlightLoader<String> neverRuns =
+                () -> "must not execute";
         String second = SingleFlights.execute(SingleFlightExecution.of(
-                "product.detail",
-                Collections.singletonMap("productId", "p1"),
-                String.class,
-                secondLoader));
+                "product.detail", arguments, String.class, neverRuns));
 
-        System.out.println(first);
-        System.out.println(second);
+        System.out.println(first);   // product:p1
+        System.out.println(second);  // product:p1（来自缓存，loader 没跑）
 
         SingleFlights.destroy();
     }
 
-    private static String loadFromDatabase(String productId) {
-        return "product:" + productId;
+    private static String queryFromDatabase(String productId) {
+        return "product:" + productId;   // 想象这里是一次昂贵的数据库查询
     }
 }
 ```
@@ -89,43 +89,59 @@ product:p1
 product:p1
 ```
 
-第二次调用的 loader 完全没有执行——它读到了第一次执行写入的结果缓存。
+注意代码和配置的对应关系：
+
+| 规则里的写法 | 代码里的对应 |
+| :--- | :--- |
+| `"id":"product.detail"` | `execute` 的第一个参数 `"product.detail"`（必须完全一致） |
+| `"key":"${productId}"` | 参数 Map 里的 `"productId"` 键（注解方式则是方法参数名） |
+| `cacheTtlMillis:60000` | 无需代码配合——第二次调用自动命中缓存 |
+| loader | `() -> queryFromDatabase("p1")`——只有抢到执行权的调用者会真正调用它 |
 
 ---
 
-## 编程式接入
+## 两种接入方式
 
-直接构造引擎，适合自持生命周期的场景（测试可注入 `Clock` 虚拟推进租约与 TTL）：
+### 方式一：编程式（推荐先掌握）
+
+直接构造 `SingleFlightExecution` 并执行。参数 Map 是你手工构造的，适合上下文不完全等于方法参数的场景（比如要塞入请求头、灰度标记等额外变量）：
+
+```java
+Map<String, Object> arguments = new HashMap<>();
+arguments.put("productId", productId);   // 供 ${productId} 与 $productId 使用
+arguments.put("refresh", forceRefresh);  // 供 skipWhen: "$refresh == true" 使用
+
+SingleFlightExecution.SingleFlightLoader<Product> loader =
+        () -> productMapper.selectById(productId);
+
+Product result = SingleFlights.execute(SingleFlightExecution.of(
+        "product.detail",          // point，对应配置键 team4u.singleflight.product.detail
+        arguments,                 // 参数上下文：key 模板和条件表达式从这里取值
+        Product.class,             // 返回类型（等待者按它反序列化结果）
+        loader));                  // 加载函数：只有真正执行的那次调用会运行它
+```
+
+直接持有引擎时自行管理生命周期（测试可注入 `Clock` 虚拟推进租约与 TTL）：
 
 ```java
 SingleFlightEngine engine = new SingleFlightEngine(configManager, new InMemoryKvStore());
-
-SingleFlightExecution.SingleFlightLoader<String> loader =
-        () -> loadFromDatabase("p1");
-String result = engine.execute(SingleFlightExecution.of(
-        "product.detail",
-        Collections.singletonMap("productId", "p1"),
-        String.class,
-        loader));
-
+// 用法与 SingleFlights.execute 完全一致
 engine.close();   // 释放配置监听
 ```
 
-更多场景使用静态门面 `SingleFlights`（内部持有全局引擎，`init` 显式初始化，未 init 时首次调用以 `ConfigManager.global()` + 内存存储懒加载）：
+### 方式二：注解式（业务代码零侵入）
 
 ```java
-// 初始化（也可以注入时钟：init(configManager, store, clock)）
-SingleFlights.init(configManager, kvStore);
+public interface ProductService {
 
-SingleFlightExecution.SingleFlightLoader<String> loader = () -> loadFromDatabase("p1");
-String result = SingleFlights.execute(SingleFlightExecution.of(
-        "product.detail",
-        Collections.singletonMap("productId", "p1"),
-        String.class,
-        loader));
-
-SingleFlights.destroy();   // 复位引用，供测试隔离
+    @SingleFlight("product.detail")
+    Product detail(String productId);
+}
 ```
+
+注解方式下**参数 Map 由框架自动组装**：方法参数名 → 参数值。所以方法声明 `detail(String productId)` 就等价于编程式的 `{"productId": productId}`，规则里的 `${productId}` 自然取到值。
+
+要求类编译时保留参数名（项目已默认开启 `-parameters`），否则框架拿不到参数名，代理创建期即失败。
 
 ### 泛型返回不要直接用 Class
 
@@ -137,34 +153,196 @@ public static final class UserList extends TypeReference<List<User>> {
 
 SingleFlightExecution.SingleFlightLoader<List<User>> loader =
         () -> queryUsers(ids);
-List<User> users = engine.execute(SingleFlightExecution.of(
+List<User> users = SingleFlights.execute(SingleFlightExecution.of(
         "user.byIds",
         Collections.singletonMap("ids", ids),
-        new UserList(),
+        new UserList(),          // 而不是 List.class
         loader));
 ```
 
 > [!NOTE]
-> loader 的结果会 JSON 序列化后写入 kv，等待者再按声明的返回类型反序列化。类型不精确时，`List<User>` 会退化成 `List<Map>`，错误在调用方才暴露。
+> loader 的结果会 JSON 序列化后写入 kv，等待者再按声明的返回类型反序列化。类型不精确时，`List<User>` 会退化成 `List<Map>`，错误在调用方才暴露。注解方式不受此影响——代理自动携带 `method.getGenericReturnType()`。
 
 ---
 
-## 注解式接入
+## 逐场景配置指南
 
-方法上标注 `@SingleFlight`，注解值就是 point，方法参数按参数名自动组装为上下文（供 key 模板与 `skipWhen` 使用）：
+以下每个场景都给出「规则 + 调用代码 + 实际行为」，可以直接复制改造。
+
+### 场景一：防击穿合并（WAIT）
+
+**问题**：缓存到期瞬间 2000 个请求同时回源数据库。
+
+```properties
+team4u.singleflight.product.detail={\
+  "id":"product.detail",\
+  "key":"${productId}",\
+  "contention":"WAIT",\
+  "cacheEnabled":true,\
+  "cacheTtlMillis":600000,\
+  "waitTimeoutMillis":5000,\
+  "pollIntervalMillis":50\
+}
+```
+
+```java
+// 调用方代码没有任何特殊之处——2000 个线程并发调用下面这段，
+// 只有 1 个真正执行 loader，其余 1999 个等待后拿到同一个结果
+Product p = SingleFlights.execute(SingleFlightExecution.of(
+        "product.detail",
+        Collections.singletonMap("productId", "p1"),
+        Product.class,
+        () -> productMapper.selectById("p1")));
+```
+
+行为：缓存未命中的瞬间，第一个抢到锁的调用者回源，其余等待（最多 `waitTimeoutMillis`）后拿到本次结果；回源抛异常时，等待者收到 `SingleFlightExecutionException`，执行者本人收到原始异常。
+
+### 场景二：并发窗口互斥（FAIL_FAST）
+
+**问题**：用户双击提交，同一订单的重复请求应该直接拒绝。
+
+```properties
+team4u.singleflight.order.submit={\
+  "id":"order.submit",\
+  "key":"${orderId}",\
+  "contention":"FAIL_FAST",\
+  "cacheEnabled":false,\
+  "lockLeaseMillis":60000\
+}
+```
+
+```java
+try {
+    SingleFlights.execute(SingleFlightExecution.of(
+            "order.submit",
+            Collections.singletonMap("orderId", orderId),
+            OrderResult.class,
+            () -> orderRepository.create(order)));
+} catch (SingleFlightConflictException e) {   // 无堆栈，高并发下开销极低
+    return OrderResult.fail("请勿重复提交");    // 竞争者在这里收场
+}
+```
+
+行为：第一个请求执行期间（`lockLeaseMillis` 窗口内），同 `orderId` 的后续请求立即抛 `SingleFlightConflictException`，loader 不执行。
+
+### 场景三：竞争时降级（FALLBACK 原生 JSON）
+
+**问题**：推荐服务是弱依赖，合并窗口内的多余请求直接拿默认推荐，不值得等待。
+
+```properties
+team4u.singleflight.recommend.feed={\
+  "id":"recommend.feed",\
+  "key":"${userId}",\
+  "contention":"FALLBACK",\
+  "cacheEnabled":false,\
+  "fallback":[{"id":"default","name":"默认推荐"}]\
+}
+```
+
+```java
+public static final class RecommendationList
+        extends TypeReference<List<Recommendation>> {
+}
+
+// 竞争时 loader 不执行，fallback JSON 直接反序列化为 List<Recommendation>
+List<Recommendation> feed = SingleFlights.execute(SingleFlightExecution.of(
+        "recommend.feed",
+        Collections.singletonMap("userId", "u1"),
+        new RecommendationList(),
+        () -> recommendClient.query("u1")));
+```
+
+行为：抢到锁的调用者正常回源；没抢到的**不抛异常**，直接拿到 `[{"id":"default","name":"默认推荐"}]` 反序列化后的对象。显式 `"fallback":null` 可以让对象类型返回 null，基本类型不允许。
+
+### 场景四：不可缓存的结果（cacheWhen）
+
+**问题**：查询结果为「处理中 / 空数据」时不该进缓存（否则 60 秒内用户都看到旧状态），但等待中的并发请求应该能拿到这次结果。
+
+```properties
+team4u.singleflight.order.snapshot={\
+  "id":"order.snapshot",\
+  "key":"${orderId}",\
+  "cacheEnabled":true,\
+  "cacheTtlMillis":60000,\
+  "cacheWhen":"status == 'SUCCESS' && amount > 0",\
+  "uncacheableTtlMillis":1000\
+}
+```
+
+`cacheWhen` 的判定对象是 **loader 的返回值**——表达式里的属性直接写返回值的字段名：
+
+```java
+public class OrderSnapshot {
+    private String status;    // cacheWhen 里的 status 就是取的这个字段
+    private BigDecimal amount;
+    // ...
+}
+
+OrderSnapshot snapshot = SingleFlights.execute(SingleFlightExecution.of(
+        "order.snapshot",
+        Collections.singletonMap("orderId", orderId),
+        OrderSnapshot.class,
+        () -> orderRepository.querySnapshot(orderId)));
+```
+
+| loader 返回 | 行为 |
+| :--- | :--- |
+| `status = "SUCCESS"` 且 `amount > 0` | 写 60 秒结果缓存，后续请求命中缓存 |
+| `status = "PROCESSING"`（表达式为 false） | **不写缓存**；本次等待者仍可拿到结果（1 秒内），下一个新请求重新回源 |
+
+表达式里也可以用 `$参数名` 引用入参，例如 `"cacheWhen":"status == 'SUCCESS' && $userId != 'preview-user'"`。
+
+### 场景五：某些调用跳过合并（skipWhen）
+
+**问题**：管理端「强制刷新」的调用不应该读缓存，必须真回源。
+
+```properties
+team4u.singleflight.product.detail={\
+  "id":"product.detail",\
+  "key":"${productId}",\
+  "cacheTtlMillis":600000,\
+  "skipWhen":"$refresh == true"\
+}
+```
+
+`skipWhen` 的判定对象是**参数 Map**——必须用 `$参数名` 引用（注意和 `cacheWhen` 不同，那里属性直接写返回值字段）：
+
+```java
+// 编程式：把 refresh 塞进参数 Map
+Map<String, Object> arguments = new HashMap<>();
+arguments.put("productId", "p1");
+arguments.put("refresh", true);
+
+Product p = SingleFlights.execute(SingleFlightExecution.of(
+        "product.detail", arguments, Product.class,
+        () -> productMapper.selectById("p1")));
+// refresh=true → 完全绕过：不读缓存、不抢锁、不写缓存，loader 直接执行
+```
+
+注解方式更自然——方法多声明一个参数即可：
 
 ```java
 public interface ProductService {
 
     @SingleFlight("product.detail")
-    Product detail(String productId);
-
-    @SingleFlight("user.byIds")
-    List<User> users(List<String> ids);
+    Product detail(String productId, boolean refresh);   // refresh 自动进入参数 Map
 }
 ```
 
-要求类编译时保留参数名（项目已默认开启 `-parameters`），key 模板 `${productId}` 才能取到参数值。
+`detail("p1", true)` 命中 skipWhen 直接回源；`detail("p1", false)` 走正常合并。
+
+### 完整对照表：条件表达式的取值上下文
+
+| 表达式 | 判定对象 | 属性写法 | 示例 |
+| :--- | :--- | :--- | :--- |
+| `skipWhen` | 参数 Map | `$参数名` | `$refresh == true`、`$userId is null` |
+| `cacheWhen` | loader 返回值 | 直接写返回值字段；`$参数名` 引用入参 | `status == 'SUCCESS'`、`amount > 0` |
+
+语法即 [Criterion DSL](../criterion/criterion-syntax.md)：支持 `&&` / `||`、`between`、`in`、`is null` / `is empty`、正则等。
+
+---
+
+## 注解接入的工程细节
 
 ### 非 Spring 环境：手动代理
 
@@ -179,8 +357,6 @@ ProductService proxied2 = SingleFlightProxyFactory.proxy(
 注解可标注在实现方法或接口方法上（解析沿「方法 → 目标类同名方法 → 接口层次」查找）。
 
 ### Spring 环境：自动代理
-
-配置类加 `@EnableSingleFlight`，容器中含 `@SingleFlight` 方法的 Bean 自动包装为代理：
 
 ```java
 @Configuration
@@ -198,7 +374,6 @@ public class SingleFlightConfig {
 
     @PostConstruct   // javax.annotation.PostConstruct
     public void initSingleFlight() {
-        // 引擎由 SingleFlights 静态门面持有；init 后注解代理自动生效
         SingleFlights.init(configManager, new RedisKvStore(redisTemplate));
     }
 }
@@ -222,15 +397,7 @@ ProductService proxied = SingleFlightProxyFactory.proxy(
         });
 ```
 
-辅助方法按业务返回值实现：
-
-```java
-private Product emptyProduct() {
-    return new Product("empty", "empty");
-}
-```
-
-`returnType` 是 `java.lang.reflect.Type`（泛型感知）。如果需要 `Class`，应先判断 `instanceof Class`，不要直接强转。handler 返回 null 只允许对象类型；抛出的 checked 异常必须是原方法声明过的异常。
+`returnType` 是 `java.lang.reflect.Type`（泛型感知）。handler 返回 null 只允许对象类型；抛出的 checked 异常必须是原方法声明过的异常。
 
 ---
 
@@ -255,118 +422,8 @@ team4u.singleflight.report.build={"id":"report.build","key":"${reportId}","cache
 
 ---
 
-## 常见配置
-
-### 防击穿合并：WAIT
-
-```properties
-team4u.singleflight.product.detail={\
-  "id":"product.detail",\
-  "key":"${productId}",\
-  "contention":"WAIT",\
-  "cacheEnabled":true,\
-  "cacheTtlMillis":600000,\
-  "lockLeaseMillis":30000,\
-  "waitTimeoutMillis":5000,\
-  "pollIntervalMillis":50,\
-  "uncacheableTtlMillis":1000,\
-  "failureTtlMillis":1000,\
-  "onStoreFailure":"PASS_THROUGH"\
-}
-```
-
-行为：缓存未命中时同 key 只有一个调用者回源；其他调用者等待并读取本次结果。回源失败时，等待者在 `failureTtlMillis` 内收到 `SingleFlightExecutionException`，本地执行者收到原始异常。
-
-### 并发窗口互斥：FAIL_FAST
-
-```properties
-team4u.singleflight.report.build={\
-  "id":"report.build",\
-  "key":"${reportId}",\
-  "contention":"FAIL_FAST",\
-  "cacheEnabled":false,\
-  "lockLeaseMillis":60000,\
-  "onStoreFailure":"FAIL_CLOSED"\
-}
-```
-
-行为：已有执行者持有同一 `reportId` 时，后来者立即收到 `SingleFlightConflictException`（无堆栈、开销极低），不会等待、不会重复执行。适合任务防重和并发窗口互斥。
-
-### 竞争时降级：FALLBACK 原生 JSON
-
-```properties
-team4u.singleflight.recommend.feed={\
-  "id":"recommend.feed",\
-  "key":"${userId}",\
-  "contention":"FALLBACK",\
-  "cacheEnabled":false,\
-  "fallback":[{"id":"default","name":"默认推荐"}]\
-}
-```
-
-`fallback` 是原生 JSON（不是转义字符串）。竞争时不会执行 loader，而是把这份 JSON 反序列化成返回类型：
-
-```java
-public static final class RecommendationList
-        extends TypeReference<List<Recommendation>> {
-}
-
-SingleFlightExecution.SingleFlightLoader<List<Recommendation>> loader =
-        () -> queryRecommendations("u1");
-List<Recommendation> recommendations = SingleFlights.execute(
-        SingleFlightExecution.of(
-                "recommend.feed",
-                Collections.singletonMap("userId", "u1"),
-                new RecommendationList(),
-                loader));
-```
-
-显式 `"fallback":null` 可以让对象类型返回 null，基本类型不允许。
-
-### 不可缓存结果
-
-「空结果不缓存，但等待者能拿到这次结果」：
-
-```properties
-team4u.singleflight.order.snapshot={\
-  "id":"order.snapshot",\
-  "key":"${orderId}",\
-  "cacheEnabled":true,\
-  "cacheTtlMillis":60000,\
-  "cacheWhen":"status == 'SUCCESS'",\
-  "uncacheableTtlMillis":1000\
-}
-```
-
-`cacheWhen` 以 loader 返回值为判定对象（Criterion 语法，属性直接写返回值字段）：
-
-- `status == 'SUCCESS'` 为 true：写 `cacheTtlMillis` 的结果缓存，后续请求命中缓存；
-- 为 false（如空单、处理中）：**不写结果缓存**，但等待者仍可在 `uncacheableTtlMillis` 内读到本次结果——下一个新请求会重新回源。
-
-需要完全禁用结果缓存、只做同 key 合并时：
-
-```properties
-team4u.singleflight.order.snapshot={"id":"order.snapshot","key":"${orderId}","cacheEnabled":false}
-```
-
-### 跳过协调
-
-某些调用不希望参与合并（如管理端强制刷新），用 `skipWhen`（以参数 Map 为判定对象，`$参数名` 引用参数）：
-
-```properties
-team4u.singleflight.product.detail={\
-  "id":"product.detail",\
-  "key":"${productId}",\
-  "cacheTtlMillis":600000,\
-  "skipWhen":"$refresh == true"\
-}
-```
-
-`refresh=true` 的调用直接执行 loader，不抢锁、不读缓存、不写缓存。
-
----
-
 ## 下一步
 
 - 组件设计、完整规则字段表、会话状态机与存储边界：[Singleflight 组件](README.md)
 - kv 锁、CAS 能力和分层存储限制：[键值存储组件](../kv/README.md)
+- `skipWhen` / `cacheWhen` 的完整表达式语法：[Criterion DSL 语法指南](../criterion/criterion-syntax.md)
