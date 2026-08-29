@@ -33,8 +33,7 @@
 ---
 
 ### 服务治理与分布式协同
-
-提供分布式排他任务调度、统一容灾重试治理与键值/序号/限流基础能力。
+提供分布式排他任务调度、统一容灾重试治理与键值/序号/限流/回源合并基础能力。
 
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
@@ -43,6 +42,7 @@
 | **[键值存储组件](kv/README.md)** | `team4u-kv` | 最小核心键值抽象与能力协商框架。四操作核心接口 + CAS/扫描/订阅/计数/计分窗口能力接口 + 装饰器洋葱（分层、观测、重试、热交换），内置内存/JDBC/Redis 后端与跨后端契约测试。 | [概览](kv/README.md) · [快速开始](kv/quick-start.md) |
 | **[序号生成组件](id/README.md)** | `team4u-id` | 配置驱动的序号生成框架。基于 `KvStore` 原子计数能力 (`CounterCapable`)，一条 JSON 规则支持分组重置、额度耗尽、循环使用、本地号段加速与模板化单号，内存/JDBC/Redis 后端行为一致。 | [概览](id/README.md) · [快速开始](id/quick-start.md) |
 | **[限流组件](ratelimiter/README.md)** | `team4u-ratelimiter` | 配置驱动的多算法限流框架。基于 `KvStore` 能力协商提供固定窗口、令牌桶、精确滑动窗口与客户端历史窗口四种算法，一条 JSON 规则支持键模板维度计数、多存储分工、failOpen 故障策略与 `@RateLimit` 注解代理，热更新生效。 | [概览](ratelimiter/README.md) · [快速开始](ratelimiter/quick-start.md) |
+| **[Singleflight 组件](singleflight/README.md)** | `team4u-singleflight` | 配置驱动的回源合并与并发互斥框架。基于 `KvStore` CAS 与 kv 锁提供同 key 唯一执行者、WAIT/FAIL_FAST/FALLBACK 竞争策略、结果缓存、失败会话共享、执行者崩溃接管与 token fencing，一条 JSON 规则热更新生效，支持 `@SingleFlight` 注解代理。 | [概览](singleflight/README.md) · [快速开始](singleflight/quick-start.md) |
 
 ---
 
