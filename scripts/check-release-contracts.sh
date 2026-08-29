@@ -50,6 +50,7 @@ team4u-serializer-json
 team4u-translator
 EOF
 
+mkdir -p "$WORK/classes"
 javac -d "$WORK/classes" "$ROOT/scripts/ReleasePomList.java"
 
 fail() {
