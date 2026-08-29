@@ -1,6 +1,6 @@
 # Master Merge Report — framework convergence
 
-> Status: this report accompanies the merge commit with parents `57b4865a` (feature, first parent) and `100f7bc9` (master, second parent / MERGE_HEAD). All conflicts resolved and staged; the merge is concluded by the commit that carries this report in its tree. Remaining gate: hosted GitHub Actions JDK 8/11/17/21 matrix (see Pending gates).
+> Status: the merge commit `6a2ef9cc` (`merge: integrate master features with converged boundaries`, parents `57b4865a` + `100f7bc9`) is concluded. The final merge commit has been re-verified with the full local Docker JDK matrix (see Local Docker matrix on the merge commit). Remaining gate: hosted GitHub Actions JDK 8/11/17/21 matrix (see Pending gates).
 
 ## Merge geometry
 
@@ -109,12 +109,30 @@ no `AssertionError` in the recorded text output).
 
 Earlier rounds additionally stand: performance claims gate GREEN (142 docs + 594 Java sources scanned; 6 post-merge claims softened to mechanism wording), static POM boundary audit, docs sync with 0 broken links.
 
+## Local Docker matrix on the merge commit (2026-08-29)
+
+After the merge commit `6a2ef9cc` was created, the full ten-step gate sequence was re-executed locally in Docker against that exact commit, one container per JDK, strictly serial (no overlap: JDK 8 16:36–16:42, JDK 11 16:42–16:48, JDK 17 16:48–16:54, JDK 21 16:54–17:00) so the shared invoker staging directories are never contended. Images: `maven:3.9.11-eclipse-temurin` 8/11/17/21 — Maven 3.9.11 (`3e54c93a704957b63ee3494413a2b544fd3d825b` throughout) on Temurin `1.8.0_472`, `11.0.29`, `17.0.17`, `21.0.9` (JDK 8 vendor line reads `Temurin`; 11/17/21 read `Eclipse Adoptium` — same distribution family). Logs: `/tmp/team4u-merge-jdk-{8,11,17,21}-matrix.log`, each ending `ALL-STEPS-OK` with 22 `BUILD SUCCESS` markers and 0 `BUILD FAILURE`.
+
+Isolation: each container used a fresh, throwaway local repository `/tmp/team4u-merge-m2` (created 16:40 by the first run, reused only across these four serial runs, never the host `~/.m2`), so all dependencies and the 48 reactor snapshots were resolved and installed from this merge state only. No JMH measurement was executed in the matrix (step 4 builds the benchmark jar and asserts `-l` = exactly 5); the formal JMH evidence above — run on the host Corretto 21.0.11 environment — is untouched by this round.
+
+Per-JDK results (identical on all four):
+
+- `mvn -DskipTests clean install` then `mvn test`: 49/49 modules, **1,914 tests / 0 failures / 0 errors / 0 skipped** per JDK (47 modules carrying tests; 1,914 = 1,907 previous + 7 `FallbackConverterTest`). No KV transient this round — the only `transient` strings in the logs are expected negative-path log frames from passing tests (e.g. `ScheduledHeartbeat` renew-error keep-trying tests); zero test reruns, zero failures anywhere.
+- Benchmark standalone `clean package`: BUILD SUCCESS; `BENCH_METHODS=5 BENCH_CLASSES=4`; shaded jar lists the same 4 benchmark classes.
+- `consumer-it` profile invoker: **Passed: 8, Failed: 0, Errors: 0, Skipped: 0** (read from the invoker `Build Summary` block — 8, not 6).
+- `release-contracts` profile invoker (separate invocation): **Passed: 8, Failed: 0, Errors: 0, Skipped: 0**.
+- Checked-in release script `scripts/check-release-contracts.sh`: exit 0, `release contracts: 48/48 leaves, Jackson owners, and effective POM repository verified` — **48 real runtime `dependency:tree` outputFile trees, 30 exact direct shapes, Jackson owners 5 / databind heirs 2**, provider leakage 0.
+- Performance claims gate: self-test 43 positive + 34 negative cases all as expected, 142 docs + 594 Java sources scanned, **gate GREEN**.
+- `mvn -Prelease -DskipTests package`: **MAIN_JARS=48, SRC_JARS=48, JD_JARS=48 (48×3 = 144)**; production bytecode **792 class files, NON52=0** (792/792 major 52); own benchmark classes major 52 (`BENCH_NON52=0`).
+
+A local Docker matrix is not hosted execution: the GitHub Actions workflow remains the only pending gate, and no release or version flip may be made from local-only evidence.
+
 ## Counts
 
 | Metric | Value |
 | :--- | :--- |
 | Final reactor leaves | 48 (40 + 8 merged) |
-| Full clean install | BUILD SUCCESS, 1,907 tests / 0 fail / 0 error / 0 skip |
+| Full clean install | BUILD SUCCESS, 1,907 tests / 0 fail / 0 error / 0 skip (JDK 21 host); merge-commit Docker matrix 1,914 per JDK 8/11/17/21 |
 | Release-contract direct shapes | 30 (22 pre-merge + 8 post-merge leaves), all GREEN when executed |
 | Release-contract outputFile trees | 48/48 real, nonempty, owner-row checked |
 | Jackson owners / databind heirs | 5 / 2 (provider leakage 0; aliyun refs 0) |
@@ -123,10 +141,11 @@ Earlier rounds additionally stand: performance claims gate GREEN (142 docs + 594
 | Production class files / major 52 | 792 / 792 |
 | Benchmark JAR `-l` | exactly 5 benchmarks; own classes 31/31 major 52 |
 | JMH rerun (merge candidate) | 5/5 methods measured; all means within 4% of pre-merge; norms unchanged (64/120 B/op); KV L2-zero teardown passed |
+| Merge-commit Docker matrix | 4/4 JDKs (Temurin 8/11/17/21, Maven 3.9.11) ALL-STEPS-OK: 1,914 tests, 5-method bench jar, 8+8 consumers, 48 trees / 30 shapes / owners 5 + heirs 2, claims GREEN, 48×3 jars, 792/792 major 52, no KV transient |
 
 ## Pending gates
 
 1. ~~JMH benchmark rerun~~ — **complete** (2026-08-29, see JMH evidence above: 5/5 methods, no regression beyond 20% — largest movement +3.6%, allocation norms unchanged).
 2. ~~Final review of the merge~~ — **complete**: 3 independent review areas (singleflight fallback converter semantics, serializer provider boundaries, docs/index consistency) returned no Critical and no Important findings; the single fallback finding (I-1, `FallbackConverter` bean conversion must ride the application-owned shared JSON provider — unknown-field tolerance, JavaTimeModule, custom modules — instead of a bare private ObjectMapper) is fixed with 7 dedicated tests in `team4u-singleflight-core` (`FallbackConverterTest`), all GREEN in the 1,907-test full run.
-3. Hosted GitHub Actions JDK 8/11/17/21 matrix — the only remaining gate, required before any release or version flip (local Docker matrix evidence from Task 18 stands, but hosted execution has not been run and must not be assumed to pass).
-4. ~~The merge commit itself~~ — **complete**: non-ff merge commit with parents `57b4865a` (feature, first) and `100f7bc9` (master, second), subject `merge: integrate master features with converged boundaries`.
+3. Hosted GitHub Actions JDK 8/11/17/21 matrix — the only remaining gate, required before any release or version flip. The merge commit `6a2ef9cc` has now passed the full ten-step gate sequence locally in Docker on Temurin 8/11/17/21 (Maven 3.9.11, fresh `/tmp/team4u-merge-m2`, serial containers; see Local Docker matrix on the merge commit), but a local Docker matrix is not hosted execution — hosted Actions have not been run and must not be assumed to pass.
+4. ~~The merge commit itself~~ — **complete**: non-ff merge commit `6a2ef9cc217c226253b562dfc2ece40d61c8b364` with parents `57b4865a` (feature, first) and `100f7bc9` (master, second), subject `merge: integrate master features with converged boundaries`.
