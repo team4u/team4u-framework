@@ -3,6 +3,7 @@
 * **业务路由与规则控制**
   * [路由组件](router/README.md)
   * [Criterion 表达式组件](criterion/README.md)
+  * [状态机组件](fsm/README.md)
   * [契约翻译组件](translator/README.md)
 
 * **配置中心与动态治理**

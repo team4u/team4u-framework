@@ -27,6 +27,7 @@ team4u-framework 是一组专注解决后端常见架构模式的基础组件库
 | :--- | :--- | :--- | :--- |
 | **业务路由** | `team4u-router` | 多维条件分流、权重分流与复合决策，替代深层嵌套的 `if-else`。 | [文档](docs/router/README.md) |
 | **规则表达式** | `team4u-criterion` | 纯 Java 实现的类 SQL 语法 DSL 引擎，低分配且支持执行链路白盒追踪。 | [文档](docs/criterion/README.md) |
+| **状态机** | `team4u-fsm` | 强类型有限状态机：不可变迁移定义、守卫与动作、确定性分层匹配与 Mermaid 状态图。 | [文档](docs/fsm/README.md) |
 | **回源合并** | `team4u-singleflight` | 抑制高并发下相同 Key 的瞬时击穿与惊群效应，支持结果共享与超时接管。 | [文档](docs/singleflight/README.md) |
 | **多算法限流** | `team4u-ratelimiter` | 提供固定窗口、滑动窗口、令牌桶等算法，基于 KV 能力自动协商。 | [文档](docs/ratelimiter/README.md) |
 | **排他任务租约** | `team4u-lease` | 基于租约心跳的任务抢占与故障接管机制，保障单点排他执行。 | [文档](docs/lease/README.md) |

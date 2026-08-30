@@ -47,6 +47,7 @@
         <module>modules/config/spring</module>
         <module>modules/config/test</module>
         <module>modules/criterion/core</module>
+        <module>modules/fsm/core</module>
         <module>modules/id/core</module>
         <module>modules/kv/core</module>
         <module>modules/kv/lifecycle</module>
@@ -127,6 +128,11 @@
             <dependency>
                 <groupId>com.team4u</groupId>
                 <artifactId>team4u-criterion</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-fsm</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
