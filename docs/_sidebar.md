@@ -1,6 +1,7 @@
 * [首页](README.md)
 
 * **业务路由与规则控制**
+  * [轻量化流程组件](flow/README.md)
   * [路由组件](router/README.md)
   * [Criterion 表达式组件](criterion/README.md)
   * [状态机组件](fsm/README.md)

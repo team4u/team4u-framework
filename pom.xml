@@ -47,6 +47,10 @@
         <module>modules/config/spring</module>
         <module>modules/config/test</module>
         <module>modules/criterion/core</module>
+        <module>modules/flow/core</module>
+        <module>modules/flow/durable</module>
+        <module>modules/flow/graph</module>
+        <module>modules/flow/test</module>
         <module>modules/fsm/core</module>
         <module>modules/id/core</module>
         <module>modules/kv/core</module>
@@ -128,6 +132,26 @@
             <dependency>
                 <groupId>com.team4u</groupId>
                 <artifactId>team4u-criterion</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-flow</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-flow-test</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-flow-graph</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-flow-durable</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>
@@ -638,6 +662,7 @@
                                 <pomInclude>log-governance/pom.xml</pomInclude>
                                 <pomInclude>ratelimiter-core/pom.xml</pomInclude>
                                 <pomInclude>singleflight-jackson/pom.xml</pomInclude>
+                                <pomInclude>flow-core/pom.xml</pomInclude>
                             </pomIncludes>
                         </configuration>
                         <executions>
@@ -678,6 +703,7 @@
                                 <pomInclude>log-governance/pom.xml</pomInclude>
                                 <pomInclude>ratelimiter-core/pom.xml</pomInclude>
                                 <pomInclude>singleflight-jackson/pom.xml</pomInclude>
+                                <pomInclude>flow-core/pom.xml</pomInclude>
                             </pomIncludes>
                         </configuration>
                         <executions>
