@@ -67,7 +67,7 @@ import java.util.regex.Pattern;
  * must be rejected and negative text that must stay allowed) with no file
  * dependencies, printing one line per mismatch and exiting non-zero; any
  * other single argument is the repository root. Scans the root README.md,
- * MIGRATION-1.0.md, benchmarks/README.md, every .md/.markdown/.html/.htm
+ * benchmarks/README.md, every .md/.markdown/.html/.htm
  * (case-insensitive) under docs/ whose path has no superpowers segment, and
  * every main Java source (path segment sequence src/main/java) outside
  * target/, .git/, and .worktrees/ (this helper is never scanned).
@@ -157,7 +157,6 @@ public final class PerformanceClaimScanner {
 
         List<File> targets = new ArrayList<File>();
         addIfFile(new File(root, "README.md"), targets);
-        addIfFile(new File(root, "MIGRATION-1.0.md"), targets);
         addIfFile(new File(root, "benchmarks" + File.separator + "README.md"), targets);
         File docs = new File(root, "docs");
         if (docs.isDirectory()) {

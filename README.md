@@ -86,8 +86,6 @@ team4u-framework 是一组专注解决后端常见架构模式的基础组件库
 ## 导航与参考
 
 - [官方文档中心 (docs/README.md)](docs/README.md)：包含各组件的设计细节、API 手册与实战示例。
-- [1.0 迁移指南 (MIGRATION-1.0.md)](MIGRATION-1.0.md)：版本升级说明与模块拆分对照。
-- [1.0 不兼容变更清单 (breaking-changes-1.0.md)](docs/breaking-changes-1.0.md)：Breaking Changes 与应对方案。
 - [JMH 基准测试记录 (benchmarks/README.md)](benchmarks/README.md)：核心热路径的单次耗时与内存分配实测数据。
 
 ---

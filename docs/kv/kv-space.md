@@ -89,7 +89,7 @@ KvStore main = NamedKvStoreRegistry.global().get("main");
 
 行为要点：
 
-- FQCN 不变：`com.team4u.framework.kv.NamedKvStore` / `com.team4u.framework.kv.NamedKvStoreRegistry`；1.0 仅将它们从 kv-core 迁移到 `team4u-kv-space`，依赖 `team4u-kv-space` 即可继续使用；
+- 注册表与命名存储位于 `team4u-kv-space` 模块，类名分别为 `com.team4u.framework.kv.NamedKvStore` 与 `com.team4u.framework.kv.NamedKvStoreRegistry`；
 - 注册表实现 policy 组件的 `KeyedPolicyRegistry`（Copy-On-Write，读路径无锁、低分配），同名重新注册即覆盖；
 - 声明为 Spring Bean 后可经 policy 组件的自动装配机制批量注入容器内的 `NamedKvStore` Bean（见类 Javadoc）；
 - 使用方文档：[序号生成](../id/quick-start.md#多存储分工)、[限流](../ratelimiter/quick-start.md)、[回源合并](../singleflight/quick-start.md)。

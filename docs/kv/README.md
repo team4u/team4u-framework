@@ -141,7 +141,7 @@ team4u-kv
 | `team4u-kv-store-redis` | kv-core、spring-data-redis | Redis 存储时 |
 | `team4u-kv-test` | kv-core、junit | 为新存储写契约测试时 |
 
-`Space` 与命名存储注册表位于 `team4u-kv-space`：`NamedKvStore` / `NamedKvStoreRegistry` 的 FQCN 不变（`com.team4u.framework.kv.NamedKvStore` / `com.team4u.framework.kv.NamedKvStoreRegistry`），1.0 仅将它们从 kv-core 迁移到 `team4u-kv-space`——依赖 `team4u-kv-space` 即可继续使用，id / ratelimiter / singleflight 等组件已作为传递依赖引入。JSON 值编解码由应用显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。`team4u-kv` 的 `KvStore`、装饰器与热交换路径不需要 JSON、policy、proxy、Jackson 或 ByteBuddy。
+`Space` 与命名存储注册表位于 `team4u-kv-space`：`NamedKvStore` / `NamedKvStoreRegistry` 类名分别为 `com.team4u.framework.kv.NamedKvStore` 与 `com.team4u.framework.kv.NamedKvStoreRegistry`，依赖 `team4u-kv-space` 即可使用，id / ratelimiter / singleflight 等组件已作为传递依赖引入。JSON 值编解码由应用显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。`team4u-kv` 的 `KvStore`、装饰器与热交换路径不需要 JSON、policy、proxy、Jackson 或 ByteBuddy。
 
 ## 文档导航
 
