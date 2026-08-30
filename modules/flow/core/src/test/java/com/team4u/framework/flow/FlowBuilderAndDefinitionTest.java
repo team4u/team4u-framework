@@ -108,4 +108,81 @@ public class FlowBuilderAndDefinitionTest {
         Integer res = flow.call(0);
         Assert.assertEquals(Integer.valueOf(3), res);
     }
+
+    @Test
+    public void subflowAndStepDuplicateId_rejected() {
+        Flow<String, String> subflow = Flows.<String>begin("sub1")
+                .step("child-step", in -> in + "-child")
+                .build();
+
+        try {
+            Flows.<String>begin("collide-sub-step")
+                    .step("sub1", in -> in + "-s")
+                    .then(subflow)
+                    .build();
+            Assert.fail("Expected IllegalArgumentException for duplicate node ID between step and subflow");
+        } catch (IllegalArgumentException e) {
+            Assert.assertTrue(e.getMessage().contains("sub1"));
+        }
+
+        try {
+            Flows.<String>begin("collide-step-sub")
+                    .then(subflow)
+                    .step("sub1", in -> in + "-s")
+                    .build();
+            Assert.fail("Expected IllegalArgumentException for duplicate node ID between subflow and step");
+        } catch (IllegalArgumentException e) {
+            Assert.assertTrue(e.getMessage().contains("sub1"));
+        }
+    }
+
+    @Test
+    public void subflowAndRecoverDuplicateId_rejected() {
+        Flow<String, String> subflow = Flows.<String>begin("rec-id")
+                .step("child-step", in -> in + "-child")
+                .build();
+
+        try {
+            Flows.<String>begin("collide-sub-recover")
+                    .then(subflow)
+                    .recover("rec-id", (in, failure) -> FlowResult.succeeded(in))
+                    .build();
+            Assert.fail("Expected IllegalArgumentException for duplicate node ID between subflow and recover");
+        } catch (IllegalArgumentException e) {
+            Assert.assertTrue(e.getMessage().contains("rec-id"));
+        }
+    }
+
+    @Test
+    public void subflowAndEnsureDuplicateId_rejected() {
+        Flow<String, String> subflow = Flows.<String>begin("ens-id")
+                .step("child-step", in -> in + "-child")
+                .build();
+
+        try {
+            Flows.<String>begin("collide-sub-ensure")
+                    .then(subflow)
+                    .ensure("ens-id", (in, ctx) -> {})
+                    .build();
+            Assert.fail("Expected IllegalArgumentException for duplicate node ID between subflow and ensure");
+        } catch (IllegalArgumentException e) {
+            Assert.assertTrue(e.getMessage().contains("ens-id"));
+        }
+    }
+
+    @Test
+    public void repeatedSubflowMounts_allowed() {
+        Flow<String, String> subflow = Flows.<String>begin("reused-sub")
+                .step("child-step", in -> in + "-x")
+                .build();
+
+        Flow<String, String> flow = Flows.<String>begin("main-reuse")
+                .step("s1", in -> in + "-1")
+                .then(subflow)
+                .step("s2", in -> in + "-2")
+                .then(subflow)
+                .build();
+
+        Assert.assertEquals("val-1-x-2-x", flow.call("val"));
+    }
 }

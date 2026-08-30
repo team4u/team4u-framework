@@ -17,7 +17,58 @@ public class FlowCoreConsumer {
         testDirectInstanceStep();
         testSharedContextAndTypeTransformation();
         testProjectionConsumer();
+        testNestedSubflowAndChooseConsumer();
         System.out.println("FlowCoreConsumer executed successfully!");
+    }
+
+    private static void testNestedSubflowAndChooseConsumer() {
+        final List<String> execIds = new ArrayList<>();
+        final List<String> invocIds = new ArrayList<>();
+
+        Flow<String, String> child = Flows.<String>begin("sub-consumer")
+                .step("sub-s1", (ctx, in) -> {
+                    execIds.add(ctx.executionId());
+                    invocIds.add(ctx.invocationId());
+                    return in + "-sub";
+                })
+                .build();
+
+        Flow<String, String> branch = Flows.<String>begin("branch-consumer")
+                .step("b-s1", (ctx, in) -> {
+                    execIds.add(ctx.executionId());
+                    invocIds.add(ctx.invocationId());
+                    return in + "-branch";
+                })
+                .build();
+
+        Flow<String, String> main = Flows.<String>begin("main-consumer")
+                .step("p1", (ctx, in) -> {
+                    execIds.add(ctx.executionId());
+                    invocIds.add(ctx.invocationId());
+                    return in + "-p1";
+                })
+                .then(child)
+                .choose("ch", in -> "A")
+                .when("A", branch)
+                .end()
+                .build();
+
+        FlowExecution<String> exec = main.run("hello");
+        if (!"hello-p1-sub-branch".equals(exec.result().value())) {
+            throw new AssertionError("Unexpected result: " + exec.result().value());
+        }
+        if (execIds.size() != 3) {
+            throw new AssertionError("Expected 3 execution IDs, got: " + execIds.size());
+        }
+        String rootExecId = exec.executionId();
+        for (String id : execIds) {
+            if (!rootExecId.equals(id)) {
+                throw new AssertionError("Execution ID mismatch: " + id + " vs " + rootExecId);
+            }
+        }
+        if (invocIds.size() != 3 || invocIds.get(0).equals(invocIds.get(1)) || invocIds.get(1).equals(invocIds.get(2))) {
+            throw new AssertionError("Invocation IDs should be unique: " + invocIds);
+        }
     }
 
     private static void testLambdaAndContextualSteps() {

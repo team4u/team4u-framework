@@ -1,7 +1,5 @@
 package com.team4u.framework.flow;
 
-import com.team4u.framework.base.util.Assert;
-
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -44,12 +42,16 @@ public final class FlowBuilder<I, C> {
     }
 
     private static String validateFlowId(String flowId) {
-        Assert.notBlank(flowId, "flowId must not be null or blank");
+        if (flowId == null || flowId.trim().isEmpty()) {
+            throw new IllegalArgumentException("flowId must not be null or blank");
+        }
         return flowId;
     }
 
     private static String validateNodeId(String nodeId) {
-        Assert.notBlank(nodeId, "nodeId must not be null or blank");
+        if (nodeId == null || nodeId.trim().isEmpty()) {
+            throw new IllegalArgumentException("nodeId must not be null or blank");
+        }
         return nodeId;
     }
 
@@ -327,18 +329,34 @@ public final class FlowBuilder<I, C> {
             throw new IllegalStateException("Flow sequence must contain at least one node in flow [" + flowId + "]");
         }
 
-        // Validate unique node IDs in current scope
-        Set<String> nodeIds = new HashSet<>();
+        // Validate unique node IDs in current scope:
+        // 1. Direct ordinary nodes (step, tap, guard, choose, recover, ensure) must be unique among themselves.
+        // 2. Direct ordinary node IDs must not collide with mounted subflow IDs.
+        // 3. Repeated mounts of the same flow / subflow IDs are preserved and permitted.
+        Set<String> ordinaryNodeIds = new HashSet<>();
+        Set<String> subflowIds = new HashSet<>();
+
         for (NodeSpec spec : nodeSpecs) {
-            if (!nodeIds.add(spec.id())) {
-                throw new IllegalArgumentException("Duplicate node ID [" + spec.id() + "] in flow [" + flowId + "]");
+            if (spec instanceof SubflowSpec) {
+                if (ordinaryNodeIds.contains(spec.id())) {
+                    throw new IllegalArgumentException("Duplicate node ID [" + spec.id() + "] in flow [" + flowId + "]");
+                }
+                subflowIds.add(spec.id());
+            } else {
+                if (!ordinaryNodeIds.add(spec.id()) || subflowIds.contains(spec.id())) {
+                    throw new IllegalArgumentException("Duplicate node ID [" + spec.id() + "] in flow [" + flowId + "]");
+                }
             }
         }
-        if (recoverSpec != null && !nodeIds.add(recoverSpec.id())) {
-            throw new IllegalArgumentException("Duplicate node ID [" + recoverSpec.id() + "] for recover in flow [" + flowId + "]");
+        if (recoverSpec != null) {
+            if (!ordinaryNodeIds.add(recoverSpec.id()) || subflowIds.contains(recoverSpec.id())) {
+                throw new IllegalArgumentException("Duplicate node ID [" + recoverSpec.id() + "] for recover in flow [" + flowId + "]");
+            }
         }
-        if (ensureSpec != null && !nodeIds.add(ensureSpec.id())) {
-            throw new IllegalArgumentException("Duplicate node ID [" + ensureSpec.id() + "] for ensure in flow [" + flowId + "]");
+        if (ensureSpec != null) {
+            if (!ordinaryNodeIds.add(ensureSpec.id()) || subflowIds.contains(ensureSpec.id())) {
+                throw new IllegalArgumentException("Duplicate node ID [" + ensureSpec.id() + "] for ensure in flow [" + flowId + "]");
+            }
         }
 
         List<FlowNode> builtNodes = new ArrayList<>(nodeSpecs.size());

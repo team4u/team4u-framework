@@ -50,17 +50,19 @@ final class GuardNode implements FlowNode {
     @Override
     public FlowResult<Object> execute(ExecutionContext context, Object input) {
         long startNanos = System.nanoTime();
-        context.notifyNodeStarted(id, path, NodeKind.GUARD);
+        String effectivePath = context.qualifyPath(path);
+
+        context.notifyNodeStarted(id, effectivePath, NodeKind.GUARD);
 
         try {
             boolean passed = condition.test(input);
             long duration = System.nanoTime() - startNanos;
             if (passed) {
                 if (context.isTraceEnabled()) {
-                    context.traceCollector().recordLeaf(id, path, null, NodeKind.GUARD,
+                    context.traceCollector().recordLeaf(id, effectivePath, null, NodeKind.GUARD,
                             FlowResult.Kind.SUCCEEDED, duration, null, null, null);
                 }
-                context.notifyNodeCompleted(id, path, NodeKind.GUARD, FlowResult.Kind.SUCCEEDED, duration, null, null);
+                context.notifyNodeCompleted(id, effectivePath, NodeKind.GUARD, FlowResult.Kind.SUCCEEDED, duration, null, null);
                 return FlowResult.succeeded(input);
             } else {
                 StopReason reason = reasonFactory.apply(input);
@@ -68,23 +70,26 @@ final class GuardNode implements FlowNode {
                     throw new IllegalStateException("Guard reasonFactory returned null StopReason for node [" + id + "]");
                 }
                 if (context.isTraceEnabled()) {
-                    context.traceCollector().recordLeaf(id, path, null, NodeKind.GUARD,
+                    context.traceCollector().recordLeaf(id, effectivePath, null, NodeKind.GUARD,
                             FlowResult.Kind.STOPPED, duration, null, reason, null);
                 }
-                context.notifyNodeCompleted(id, path, NodeKind.GUARD, FlowResult.Kind.STOPPED, duration, reason, null);
+                context.notifyNodeCompleted(id, effectivePath, NodeKind.GUARD, FlowResult.Kind.STOPPED, duration, reason, null);
                 return FlowResult.stopped(reason);
             }
         } catch (Throwable t) {
             if (t instanceof Error) {
                 throw (Error) t;
             }
+            if (t instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             long duration = System.nanoTime() - startNanos;
-            FailureContext failure = new FailureContext(id, path, t);
+            FailureContext failure = new FailureContext(id, effectivePath, t);
             if (context.isTraceEnabled()) {
-                context.traceCollector().recordLeaf(id, path, null, NodeKind.GUARD,
+                context.traceCollector().recordLeaf(id, effectivePath, null, NodeKind.GUARD,
                         FlowResult.Kind.FAILED, duration, null, null, failure);
             }
-            context.notifyNodeCompleted(id, path, NodeKind.GUARD, FlowResult.Kind.FAILED, duration, null, failure);
+            context.notifyNodeCompleted(id, effectivePath, NodeKind.GUARD, FlowResult.Kind.FAILED, duration, null, failure);
             return FlowResult.failed(failure);
         }
     }

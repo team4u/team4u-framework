@@ -6,7 +6,7 @@ import com.team4u.framework.flow.StopReason;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.io.Serializable;
+import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -17,9 +17,7 @@ import java.util.Map;
  */
 public class DurableFlowQuickstartTest {
 
-    public static class OrderContext implements Serializable {
-        private static final long serialVersionUID = 1L;
-
+    public static class OrderContext {
         private final String orderId;
         private final long amount;
         private boolean stockReserved;
@@ -41,9 +39,7 @@ public class DurableFlowQuickstartTest {
         public void setReceiptId(String receiptId) { this.receiptId = receiptId; }
     }
 
-    public static class Receipt implements Serializable {
-        private static final long serialVersionUID = 1L;
-
+    public static class Receipt {
         private final String orderId;
         private final String receiptId;
         private final long amount;
@@ -72,11 +68,47 @@ public class DurableFlowQuickstartTest {
         }
     }
 
+    private static class OrderStateMapper implements StateMapper {
+        @Override
+        public StoredValue encode(Object value) throws Exception {
+            if (value instanceof OrderContext) {
+                OrderContext order = (OrderContext) value;
+                String encoded = order.getOrderId() + "|" + order.getAmount() + "|" + order.getPaymentChannel() + "|" +
+                        order.isStockReserved() + "|" + (order.getReceiptId() != null ? order.getReceiptId() : "");
+                return new StoredValue("OrderContext", encoded.getBytes(StandardCharsets.UTF_8));
+            } else if (value instanceof Receipt) {
+                Receipt receipt = (Receipt) value;
+                String encoded = receipt.getOrderId() + "|" + receipt.getReceiptId() + "|" + receipt.getAmount();
+                return new StoredValue("Receipt", encoded.getBytes(StandardCharsets.UTF_8));
+            }
+            return DefaultStateMapper.INSTANCE.encode(value);
+        }
+
+        @Override
+        public Object decode(StoredValue storedValue) throws Exception {
+            if ("OrderContext".equals(storedValue.typeId())) {
+                String[] parts = storedValue.asString().split("\\|", -1);
+                OrderContext order = new OrderContext(parts[0], Long.parseLong(parts[1]), parts[2]);
+                order.setStockReserved(Boolean.parseBoolean(parts[3]));
+                if (!parts[4].isEmpty()) {
+                    order.setReceiptId(parts[4]);
+                }
+                return order;
+            } else if ("Receipt".equals(storedValue.typeId())) {
+                String[] parts = storedValue.asString().split("\\|", -1);
+                return new Receipt(parts[0], parts[1], Long.parseLong(parts[2]));
+            }
+            return DefaultStateMapper.INSTANCE.decode(storedValue);
+        }
+    }
+
     @Test
     public void durableCheckoutScenario() {
         ExternalInventoryService inventory = new ExternalInventoryService();
         InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableRuntime runtime = DurableRuntime.builder(store).build();
+        DurableRuntime runtime = DurableRuntime.builder(store)
+                .stateMapper(new OrderStateMapper())
+                .build();
 
         Flow<OrderContext, OrderContext> cardPaySubflow = Flows.<OrderContext>begin("card-pay")
                 .tap("call-card-gateway", ctx -> ctx.setReceiptId("RCP-CARD-" + ctx.getOrderId()))

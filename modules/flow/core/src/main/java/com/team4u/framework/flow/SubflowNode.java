@@ -43,34 +43,49 @@ final class SubflowNode implements FlowNode {
     }
 
     @Override
-    public FlowResult<Object> execute(ExecutionContext context, Object input) {
+    public FlowResult<Object> execute(ExecutionContext context, Object input) throws Exception {
         long startNanos = System.nanoTime();
-        context.notifyNodeStarted(id, path, NodeKind.SUBFLOW);
+        String effectivePath = context.qualifyPath(path);
+        String effectiveAddress = context.qualifyAddress(address);
+
+        context.notifyNodeStarted(id, effectivePath, NodeKind.SUBFLOW);
 
         if (context.isTraceEnabled()) {
-            context.traceCollector().enterScope(id, path, null, NodeKind.SUBFLOW, null);
+            context.traceCollector().enterScope(id, effectivePath, null, NodeKind.SUBFLOW, null);
         }
 
-        RunOptions options = RunOptions.builder()
-                .executionId(context.executionId())
-                .trace(context.isTraceEnabled())
-                .observer(null) // Observer already managed by parent context
-                .build();
-
-        FlowExecution<Object> execution = subflow.run(input, options);
-        FlowResult<Object> result = execution.result();
+        ExecutionContext childContext = context.childContext(path, address);
+        FlowResult<Object> result;
+        try {
+            if (subflow instanceof DefaultFlow) {
+                result = ((DefaultFlow<Object, Object>) subflow).rootNode().execute(childContext, input);
+            } else {
+                FlowExecution<Object> execution = subflow.run(input, RunOptions.builder()
+                        .executionId(context.executionId())
+                        .trace(context.isTraceEnabled())
+                        .observer(context.observer())
+                        .build());
+                result = execution.result();
+            }
+        } catch (Throwable t) {
+            if (t instanceof Error) {
+                throw (Error) t;
+            }
+            if (t instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
+            FailureContext failure = new FailureContext(id, effectivePath, t);
+            result = FlowResult.failed(failure);
+        }
 
         if (context.isTraceEnabled()) {
-            if (execution.trace() != null) {
-                context.traceCollector().recordEntries(execution.trace().entries());
-            }
             context.traceCollector().exitScope(result.kind(),
                     result.isStopped() ? result.stopReason() : null,
                     result.isFailed() ? result.failure() : null);
         }
 
         long duration = System.nanoTime() - startNanos;
-        context.notifyNodeCompleted(id, path, NodeKind.SUBFLOW, result.kind(), duration,
+        context.notifyNodeCompleted(id, effectivePath, NodeKind.SUBFLOW, result.kind(), duration,
                 result.isStopped() ? result.stopReason() : null,
                 result.isFailed() ? result.failure() : null);
 

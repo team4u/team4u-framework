@@ -44,10 +44,13 @@ final class RecoverNode {
 
     public FlowResult<Object> execute(ExecutionContext context, Object scopeInput, FailureContext failure) {
         long startNanos = System.nanoTime();
-        context.notifyNodeStarted(id, path, NodeKind.RECOVER);
+        String effectivePath = context.qualifyPath(path);
+        String effectiveAddress = context.qualifyAddress(address);
+
+        context.notifyNodeStarted(id, effectivePath, NodeKind.RECOVER);
 
         StepContext stepContext = contextualRecovery != null ? context.createStepContext(id, path, address) : null;
-        String invocationId = stepContext != null ? stepContext.invocationId() : null;
+        String invocationId = stepContext != null ? stepContext.invocationId() : context.executionId() + "#" + effectiveAddress;
 
         try {
             FlowResult<Object> result;
@@ -61,12 +64,12 @@ final class RecoverNode {
             }
             long duration = System.nanoTime() - startNanos;
             if (context.isTraceEnabled()) {
-                context.traceCollector().recordLeaf(id, path, invocationId, NodeKind.RECOVER,
+                context.traceCollector().recordLeaf(id, effectivePath, invocationId, NodeKind.RECOVER,
                         result.kind(), duration, null,
                         result.isStopped() ? result.stopReason() : null,
                         result.isFailed() ? result.failure() : null);
             }
-            context.notifyNodeCompleted(id, path, NodeKind.RECOVER, result.kind(), duration,
+            context.notifyNodeCompleted(id, effectivePath, NodeKind.RECOVER, result.kind(), duration,
                     result.isStopped() ? result.stopReason() : null,
                     result.isFailed() ? result.failure() : null);
             return result;
@@ -74,16 +77,27 @@ final class RecoverNode {
             if (t instanceof Error) {
                 throw (Error) t;
             }
-            // Add original exception to suppressed
-            t.addSuppressed(failure.cause());
-            long duration = System.nanoTime() - startNanos;
-            FailureContext newFailure = new FailureContext(id, path, t);
-            if (context.isTraceEnabled()) {
-                context.traceCollector().recordLeaf(id, path, invocationId, NodeKind.RECOVER,
-                        FlowResult.Kind.FAILED, duration, null, null, newFailure);
+            if (t instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
             }
-            context.notifyNodeCompleted(id, path, NodeKind.RECOVER, FlowResult.Kind.FAILED, duration, null, newFailure);
-            return FlowResult.failed(newFailure);
+            long duration = System.nanoTime() - startNanos;
+            FailureContext resultingFailure;
+            if (failure != null && t == failure.cause()) {
+                // Prevent self-suppression: handler rethrew the original failure.
+                // Retain the original node / cause.
+                resultingFailure = failure;
+            } else {
+                if (failure != null && failure.cause() != null) {
+                    t.addSuppressed(failure.cause());
+                }
+                resultingFailure = new FailureContext(id, effectivePath, t);
+            }
+            if (context.isTraceEnabled()) {
+                context.traceCollector().recordLeaf(id, effectivePath, invocationId, NodeKind.RECOVER,
+                        FlowResult.Kind.FAILED, duration, null, null, resultingFailure);
+            }
+            context.notifyNodeCompleted(id, effectivePath, NodeKind.RECOVER, FlowResult.Kind.FAILED, duration, null, resultingFailure);
+            return FlowResult.failed(resultingFailure);
         }
     }
 

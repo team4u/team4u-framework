@@ -54,6 +54,9 @@ final class DefaultFlow<I, O> implements Flow<I, O> {
             if (t instanceof Error) {
                 throw (Error) t;
             }
+            if (t instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             rawResult = FlowResult.failed(rootNode.id(), rootNode.path(), t);
         }
 

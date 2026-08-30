@@ -27,6 +27,9 @@ final class TextFlowGraphRenderer implements FlowGraphRenderer {
     }
 
     private void renderNodes(StringBuilder sb, List<NodeDescription> nodes, String prefix) {
+        if (nodes == null || nodes.isEmpty()) {
+            return;
+        }
         for (int i = 0; i < nodes.size(); i++) {
             boolean isLast = (i == nodes.size() - 1);
             NodeDescription node = nodes.get(i);
@@ -35,26 +38,38 @@ final class TextFlowGraphRenderer implements FlowGraphRenderer {
 
             sb.append(prefix).append(branchConnector).append(node.kind()).append(": ").append(node.id()).append("\n");
 
-            if (node.branches() != null && !node.branches().isEmpty()) {
+            boolean hasBranches = node.branches() != null && !node.branches().isEmpty();
+            boolean hasOtherwiseBranch = node.otherwiseBranch() != null;
+            boolean hasOtherwiseStop = node.hasOtherwiseStop();
+
+            if (hasBranches || hasOtherwiseBranch || hasOtherwiseStop) {
+                int bTotal = (node.branches() != null ? node.branches().size() : 0) + (hasOtherwiseBranch || hasOtherwiseStop ? 1 : 0);
                 int bIndex = 0;
-                int bTotal = node.branches().size() + (node.otherwiseBranch() != null || node.hasOtherwiseStop() ? 1 : 0);
-                for (Map.Entry<String, FlowDescription> entry : node.branches().entrySet()) {
-                    boolean bLast = (++bIndex == bTotal);
-                    String bConn = bLast ? "└── " : "├── ";
-                    String bChildPrefix = childPrefix + (bLast ? "    " : "│   ");
-                    sb.append(childPrefix).append(bConn).append("[").append(entry.getKey()).append("]\n");
-                    renderNodes(sb, entry.getValue().nodes(), bChildPrefix);
+                if (hasBranches) {
+                    for (Map.Entry<String, FlowDescription> entry : node.branches().entrySet()) {
+                        boolean bLast = (++bIndex == bTotal);
+                        String bConn = bLast ? "└── " : "├── ";
+                        String bChildPrefix = childPrefix + (bLast ? "    " : "│   ");
+                        sb.append(childPrefix).append(bConn).append("[").append(entry.getKey()).append("]\n");
+                        if (entry.getValue() != null) {
+                            renderNodes(sb, entry.getValue().nodes(), bChildPrefix);
+                        }
+                    }
                 }
-                if (node.otherwiseBranch() != null) {
+                if (hasOtherwiseBranch) {
                     sb.append(childPrefix).append("└── [otherwise]\n");
                     renderNodes(sb, node.otherwiseBranch().nodes(), childPrefix + "    ");
-                } else if (node.hasOtherwiseStop()) {
+                } else if (hasOtherwiseStop) {
                     sb.append(childPrefix).append("└── [otherwise -> STOPPED]\n");
                 }
             }
 
             if (node.subflow() != null) {
                 renderNodes(sb, node.subflow().nodes(), childPrefix);
+            }
+
+            if (node.children() != null && !node.children().isEmpty()) {
+                renderNodes(sb, node.children(), childPrefix);
             }
         }
     }

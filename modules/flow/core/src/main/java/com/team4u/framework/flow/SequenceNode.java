@@ -71,7 +71,7 @@ final class SequenceNode implements FlowNode {
         for (FlowNode node : nodes) {
             if (Thread.currentThread().isInterrupted()) {
                 InterruptedException ie = new InterruptedException("Thread was interrupted during flow execution");
-                FailureContext fail = new FailureContext(node.id(), node.path(), ie);
+                FailureContext fail = new FailureContext(node.id(), context.qualifyPath(node.path()), ie);
                 result = FlowResult.failed(fail);
                 break;
             }

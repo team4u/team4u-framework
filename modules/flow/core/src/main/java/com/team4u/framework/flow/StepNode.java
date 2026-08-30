@@ -55,12 +55,17 @@ final class StepNode implements FlowNode {
     @Override
     public FlowResult<Object> execute(ExecutionContext context, Object input) {
         long startNanos = System.nanoTime();
-        context.notifyNodeStarted(id, path, NodeKind.STEP);
+        String effectivePath = context.qualifyPath(path);
+        String effectiveAddress = context.qualifyAddress(address);
+
+        context.notifyNodeStarted(id, effectivePath, NodeKind.STEP);
 
         StepContext stepContext = (contextualStep != null || !interceptors.isEmpty())
                 ? context.createStepContext(id, path, address)
                 : null;
-        String invocationId = stepContext != null ? stepContext.invocationId() : null;
+        String invocationId = stepContext != null
+                ? stepContext.invocationId()
+                : context.executionId() + "#" + effectiveAddress;
 
         try {
             Object output = new InterceptorChain(0, stepContext, input, context).proceed(input);
@@ -69,22 +74,25 @@ final class StepNode implements FlowNode {
             }
             long duration = System.nanoTime() - startNanos;
             if (context.isTraceEnabled()) {
-                context.traceCollector().recordLeaf(id, path, invocationId, NodeKind.STEP,
+                context.traceCollector().recordLeaf(id, effectivePath, invocationId, NodeKind.STEP,
                         FlowResult.Kind.SUCCEEDED, duration, null, null, null);
             }
-            context.notifyNodeCompleted(id, path, NodeKind.STEP, FlowResult.Kind.SUCCEEDED, duration, null, null);
+            context.notifyNodeCompleted(id, effectivePath, NodeKind.STEP, FlowResult.Kind.SUCCEEDED, duration, null, null);
             return FlowResult.succeeded(output);
         } catch (Throwable t) {
             if (t instanceof Error) {
                 throw (Error) t;
             }
+            if (t instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             long duration = System.nanoTime() - startNanos;
-            FailureContext failure = new FailureContext(id, path, t);
+            FailureContext failure = new FailureContext(id, effectivePath, t);
             if (context.isTraceEnabled()) {
-                context.traceCollector().recordLeaf(id, path, invocationId, NodeKind.STEP,
+                context.traceCollector().recordLeaf(id, effectivePath, invocationId, NodeKind.STEP,
                         FlowResult.Kind.FAILED, duration, null, null, failure);
             }
-            context.notifyNodeCompleted(id, path, NodeKind.STEP, FlowResult.Kind.FAILED, duration, null, failure);
+            context.notifyNodeCompleted(id, effectivePath, NodeKind.STEP, FlowResult.Kind.FAILED, duration, null, failure);
             return FlowResult.failed(failure);
         }
     }

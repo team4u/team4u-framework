@@ -28,23 +28,96 @@ public final class DurableSnapshot {
     private final Map<String, StoredValue> slots;
     private final StopReason stopReason;
     private final DurableFailure failure;
+    private final FrameState retryFrameState;
+
+    public DurableSnapshot(String flowId, int flowVersion, String executionId,
+                           String formatId, int formatVersion, long revision,
+                           DurableLifecycle lifecycle, FrameState frameState,
+                           Map<String, StoredValue> slots, StopReason stopReason,
+                           DurableFailure failure, FrameState retryFrameState) {
+        if (flowId == null || flowId.trim().isEmpty()) {
+            throw new IllegalArgumentException("flowId must not be null or blank");
+        }
+        if (flowVersion <= 0) {
+            throw new IllegalArgumentException("flowVersion must be a positive integer, got: " + flowVersion);
+        }
+        if (executionId == null || executionId.trim().isEmpty()) {
+            throw new IllegalArgumentException("executionId must not be null or blank");
+        }
+        if (formatId == null || formatId.trim().isEmpty()) {
+            throw new IllegalArgumentException("formatId must not be null or blank");
+        }
+        if (formatVersion <= 0) {
+            throw new IllegalArgumentException("formatVersion must be a positive integer, got: " + formatVersion);
+        }
+        if (revision < 0) {
+            throw new IllegalArgumentException("revision must be non-negative, got: " + revision);
+        }
+        this.flowId = flowId;
+        this.flowVersion = flowVersion;
+        this.executionId = executionId;
+        this.formatId = formatId;
+        this.formatVersion = formatVersion;
+        this.revision = revision;
+        this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle must not be null");
+        this.frameState = Objects.requireNonNull(frameState, "frameState must not be null");
+        Objects.requireNonNull(slots, "slots must not be null");
+        this.slots = Collections.unmodifiableMap(new LinkedHashMap<>(slots));
+        this.stopReason = stopReason;
+        this.failure = failure;
+        this.retryFrameState = retryFrameState;
+
+        validateInvariants();
+    }
 
     public DurableSnapshot(String flowId, int flowVersion, String executionId,
                            String formatId, int formatVersion, long revision,
                            DurableLifecycle lifecycle, FrameState frameState,
                            Map<String, StoredValue> slots, StopReason stopReason,
                            DurableFailure failure) {
-        this.flowId = Objects.requireNonNull(flowId, "flowId must not be null");
-        this.flowVersion = flowVersion;
-        this.executionId = Objects.requireNonNull(executionId, "executionId must not be null");
-        this.formatId = formatId != null ? formatId : DEFAULT_FORMAT_ID;
-        this.formatVersion = formatVersion > 0 ? formatVersion : DEFAULT_FORMAT_VERSION;
-        this.revision = revision;
-        this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle must not be null");
-        this.frameState = frameState != null ? frameState : FrameState.initial();
-        this.slots = slots != null ? Collections.unmodifiableMap(new LinkedHashMap<>(slots)) : Collections.emptyMap();
-        this.stopReason = stopReason;
-        this.failure = failure;
+        this(flowId, flowVersion, executionId, formatId, formatVersion, revision,
+                lifecycle, frameState, slots, stopReason, failure, null);
+    }
+
+    private void validateInvariants() {
+        switch (lifecycle) {
+            case ACTIVE:
+                if (stopReason != null) {
+                    throw new IllegalArgumentException("ACTIVE snapshot must not contain stopReason");
+                }
+                if (failure != null) {
+                    throw new IllegalArgumentException("ACTIVE snapshot must not contain failure");
+                }
+                break;
+            case COMPLETED:
+                if (stopReason != null) {
+                    throw new IllegalArgumentException("COMPLETED snapshot must not contain stopReason");
+                }
+                if (failure != null) {
+                    throw new IllegalArgumentException("COMPLETED snapshot must not contain failure");
+                }
+                break;
+            case STOPPED:
+                if (stopReason == null) {
+                    throw new IllegalArgumentException("STOPPED snapshot must contain stopReason");
+                }
+                if (failure != null) {
+                    throw new IllegalArgumentException("STOPPED snapshot must not contain failure");
+                }
+                break;
+            case FAILED:
+                if (failure == null) {
+                    throw new IllegalArgumentException("FAILED snapshot must contain failure");
+                }
+                if (stopReason != null) {
+                    throw new IllegalArgumentException("FAILED snapshot must not contain stopReason");
+                }
+                break;
+            case CANCELLED:
+                break;
+            default:
+                throw new IllegalArgumentException("Unknown lifecycle: " + lifecycle);
+        }
     }
 
     public static DurableSnapshot initial(String flowId, int flowVersion, String executionId, StoredValue inputSlot) {
@@ -54,7 +127,7 @@ public final class DurableSnapshot {
             slots.put("active", inputSlot);
         }
         return new DurableSnapshot(flowId, flowVersion, executionId, DEFAULT_FORMAT_ID, DEFAULT_FORMAT_VERSION,
-                1L, DurableLifecycle.ACTIVE, FrameState.initial(), slots, null, null);
+                1L, DurableLifecycle.ACTIVE, FrameState.initial(), slots, null, null, null);
     }
 
     public String flowId() { return flowId; }
@@ -68,6 +141,7 @@ public final class DurableSnapshot {
     public Map<String, StoredValue> slots() { return slots; }
     public StopReason stopReason() { return stopReason; }
     public DurableFailure failure() { return failure; }
+    public FrameState retryFrameState() { return retryFrameState; }
 
     public StoredValue getSlot(String slotName) {
         return slots.get(slotName);
@@ -75,24 +149,33 @@ public final class DurableSnapshot {
 
     public DurableSnapshot withRevision(long newRevision) {
         return new DurableSnapshot(flowId, flowVersion, executionId, formatId, formatVersion, newRevision,
-                lifecycle, frameState, slots, stopReason, failure);
+                lifecycle, frameState, slots, stopReason, failure, retryFrameState);
     }
 
     public DurableSnapshot withLifecycle(DurableLifecycle newLifecycle) {
         return new DurableSnapshot(flowId, flowVersion, executionId, formatId, formatVersion, revision + 1,
-                newLifecycle, frameState, slots, stopReason, failure);
+                newLifecycle, frameState, slots, stopReason, failure, retryFrameState);
     }
 
     public DurableSnapshot withFrameState(FrameState newFrameState) {
         return new DurableSnapshot(flowId, flowVersion, executionId, formatId, formatVersion, revision,
-                lifecycle, newFrameState, slots, stopReason, failure);
+                lifecycle, newFrameState, slots, stopReason, failure, retryFrameState);
+    }
+
+    public DurableSnapshot withRetryFrameState(FrameState newRetryFrameState) {
+        return new DurableSnapshot(flowId, flowVersion, executionId, formatId, formatVersion, revision,
+                lifecycle, frameState, slots, stopReason, failure, newRetryFrameState);
     }
 
     public DurableSnapshot withSlot(String slotName, StoredValue value) {
+        if (slotName == null || slotName.trim().isEmpty()) {
+            throw new IllegalArgumentException("slotName must not be null or blank");
+        }
+        Objects.requireNonNull(value, "value must not be null");
         Map<String, StoredValue> newSlots = new LinkedHashMap<>(slots);
         newSlots.put(slotName, value);
         return new DurableSnapshot(flowId, flowVersion, executionId, formatId, formatVersion, revision,
-                lifecycle, frameState, newSlots, stopReason, failure);
+                lifecycle, frameState, newSlots, stopReason, failure, retryFrameState);
     }
 
     public DurableSnapshot withCheckpoint(int nextCursor, String slotName, StoredValue value) {
@@ -102,17 +185,20 @@ public final class DurableSnapshot {
         }
         FrameState newFrame = frameState.withCursor(nextCursor);
         return new DurableSnapshot(flowId, flowVersion, executionId, formatId, formatVersion, revision + 1,
-                lifecycle, newFrame, newSlots, stopReason, failure);
+                lifecycle, newFrame, newSlots, stopReason, failure, retryFrameState);
     }
 
     public DurableSnapshot withStopped(StopReason reason) {
+        Objects.requireNonNull(reason, "stopReason must not be null");
         return new DurableSnapshot(flowId, flowVersion, executionId, formatId, formatVersion, revision + 1,
-                DurableLifecycle.STOPPED, frameState, slots, reason, null);
+                DurableLifecycle.STOPPED, frameState, slots, reason, null, null);
     }
 
     public DurableSnapshot withFailed(DurableFailure newFailure) {
+        Objects.requireNonNull(newFailure, "failure must not be null");
+        FrameState targetRetry = (retryFrameState != null) ? retryFrameState : frameState;
         return new DurableSnapshot(flowId, flowVersion, executionId, formatId, formatVersion, revision + 1,
-                DurableLifecycle.FAILED, frameState, slots, null, newFailure);
+                DurableLifecycle.FAILED, frameState, slots, null, newFailure, targetRetry);
     }
 
     public DurableSnapshot withCompleted(StoredValue outputValue) {
@@ -121,16 +207,17 @@ public final class DurableSnapshot {
             newSlots.put("output", outputValue);
         }
         return new DurableSnapshot(flowId, flowVersion, executionId, formatId, formatVersion, revision + 1,
-                DurableLifecycle.COMPLETED, frameState, newSlots, null, null);
+                DurableLifecycle.COMPLETED, frameState, newSlots, null, null, null);
     }
 
     public DurableSnapshot withCancelled() {
         return new DurableSnapshot(flowId, flowVersion, executionId, formatId, formatVersion, revision + 1,
-                DurableLifecycle.CANCELLED, frameState, slots, stopReason, failure);
+                DurableLifecycle.CANCELLED, frameState, slots, stopReason, failure, retryFrameState);
     }
 
     public DurableSnapshot withRetryActive() {
+        FrameState targetFrameState = (retryFrameState != null) ? retryFrameState : frameState;
         return new DurableSnapshot(flowId, flowVersion, executionId, formatId, formatVersion, revision + 1,
-                DurableLifecycle.ACTIVE, frameState, slots, null, null);
+                DurableLifecycle.ACTIVE, targetFrameState, slots, null, null, null);
     }
 }

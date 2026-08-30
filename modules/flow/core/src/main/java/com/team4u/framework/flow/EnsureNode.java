@@ -44,10 +44,13 @@ final class EnsureNode {
 
     public FlowResult<Object> execute(ExecutionContext context, Object scopeInput, FlowResult<Object> currentResult) {
         long startNanos = System.nanoTime();
-        context.notifyNodeStarted(id, path, NodeKind.ENSURE);
+        String effectivePath = context.qualifyPath(path);
+        String effectiveAddress = context.qualifyAddress(address);
+
+        context.notifyNodeStarted(id, effectivePath, NodeKind.ENSURE);
 
         StepContext stepContext = contextualCompletionAction != null ? context.createStepContext(id, path, address) : null;
-        String invocationId = stepContext != null ? stepContext.invocationId() : null;
+        String invocationId = stepContext != null ? stepContext.invocationId() : context.executionId() + "#" + effectiveAddress;
 
         CompletionContext<Object> completionContext = new CompletionContext<>(currentResult);
         try {
@@ -58,33 +61,40 @@ final class EnsureNode {
             }
             long duration = System.nanoTime() - startNanos;
             if (context.isTraceEnabled()) {
-                context.traceCollector().recordLeaf(id, path, invocationId, NodeKind.ENSURE,
+                context.traceCollector().recordLeaf(id, effectivePath, invocationId, NodeKind.ENSURE,
                         FlowResult.Kind.SUCCEEDED, duration, null, null, null);
             }
-            context.notifyNodeCompleted(id, path, NodeKind.ENSURE, FlowResult.Kind.SUCCEEDED, duration, null, null);
+            context.notifyNodeCompleted(id, effectivePath, NodeKind.ENSURE, FlowResult.Kind.SUCCEEDED, duration, null, null);
             return currentResult;
         } catch (Throwable t) {
             if (t instanceof Error) {
                 throw (Error) t;
             }
+            if (t instanceof InterruptedException) {
+                Thread.currentThread().interrupt();
+            }
             long duration = System.nanoTime() - startNanos;
             if (currentResult.isFailed()) {
                 Throwable origCause = currentResult.failure().cause();
-                origCause.addSuppressed(t);
-                FailureContext ensureFail = new FailureContext(id, path, t);
+                if (t != origCause && origCause != null) {
+                    origCause.addSuppressed(t);
+                }
+                FailureContext ensureFail = (t == origCause)
+                        ? currentResult.failure()
+                        : new FailureContext(id, effectivePath, t);
                 if (context.isTraceEnabled()) {
-                    context.traceCollector().recordLeaf(id, path, invocationId, NodeKind.ENSURE,
+                    context.traceCollector().recordLeaf(id, effectivePath, invocationId, NodeKind.ENSURE,
                             FlowResult.Kind.FAILED, duration, null, null, ensureFail);
                 }
-                context.notifyNodeCompleted(id, path, NodeKind.ENSURE, FlowResult.Kind.FAILED, duration, null, ensureFail);
+                context.notifyNodeCompleted(id, effectivePath, NodeKind.ENSURE, FlowResult.Kind.FAILED, duration, null, ensureFail);
                 return currentResult;
             } else {
-                FailureContext ensureFail = new FailureContext(id, path, t);
+                FailureContext ensureFail = new FailureContext(id, effectivePath, t);
                 if (context.isTraceEnabled()) {
-                    context.traceCollector().recordLeaf(id, path, invocationId, NodeKind.ENSURE,
+                    context.traceCollector().recordLeaf(id, effectivePath, invocationId, NodeKind.ENSURE,
                             FlowResult.Kind.FAILED, duration, null, null, ensureFail);
                 }
-                context.notifyNodeCompleted(id, path, NodeKind.ENSURE, FlowResult.Kind.FAILED, duration, null, ensureFail);
+                context.notifyNodeCompleted(id, effectivePath, NodeKind.ENSURE, FlowResult.Kind.FAILED, duration, null, ensureFail);
                 return FlowResult.failed(ensureFail);
             }
         }

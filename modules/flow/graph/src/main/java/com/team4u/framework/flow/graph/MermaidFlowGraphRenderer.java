@@ -5,13 +5,16 @@ import com.team4u.framework.flow.NodeDescription;
 import com.team4u.framework.flow.NodeKind;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Set;
 import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Mermaid 格式流程图渲染器。
+ * Mermaid format flow graph renderer.
  *
  * @author jay.wu
  */
@@ -28,15 +31,73 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
 
         AtomicInteger idSeq = new AtomicInteger();
         String startId = "start_" + idSeq.incrementAndGet();
-        sb.append("    ").append(startId).append("([\"Start: ").append(escape(description.flowId())).append("\"])\n");
+        sb.append("    ").append(startId).append("([\"Start: ")
+                .append(escapeLabel(description.flowId())).append("\"])\n");
 
-        String currentPrev = startId;
-        List<NodeDescription> nodes = description.nodes();
+        ScopeExits rootExits = renderScope(sb, description.nodes(),
+                Collections.singletonList(startId), null, idSeq, "    ");
 
+        String endId = "end_" + idSeq.incrementAndGet();
+        sb.append("    ").append(endId).append("([\"End: ")
+                .append(escapeLabel(description.flowId())).append("\"])\n");
+        for (String exitId : rootExits.successExits) {
+            sb.append("    ").append(exitId).append(" --> ").append(endId).append("\n");
+        }
+
+        if (!rootExits.stoppedExits.isEmpty()) {
+            String stoppedId = "terminal_stopped_" + idSeq.incrementAndGet();
+            sb.append("    ").append(stoppedId).append("([\"STOPPED\"])\n");
+            sb.append("    style ").append(stoppedId).append(" fill:#f9f,stroke:#333\n");
+            for (String exitId : rootExits.stoppedExits) {
+                sb.append("    ").append(exitId).append(" -->|stopped| ")
+                        .append(stoppedId).append("\n");
+            }
+        }
+
+        if (!rootExits.failureExits.isEmpty()) {
+            String failedId = "terminal_failed_" + idSeq.incrementAndGet();
+            sb.append("    ").append(failedId).append("([\"FAILED\"])\n");
+            sb.append("    style ").append(failedId).append(" fill:#fee2e2,stroke:#991b1b\n");
+            for (String exitId : rootExits.failureExits) {
+                sb.append("    ").append(exitId).append(" -.->|failed| ")
+                        .append(failedId).append("\n");
+            }
+        }
+
+        return sb.toString();
+    }
+
+    private static final class ScopeExits {
+        private final List<String> successExits;
+        private final List<String> failureExits;
+        private final List<String> stoppedExits;
+
+        private ScopeExits(List<String> successExits,
+                           List<String> failureExits,
+                           List<String> stoppedExits) {
+            this.successExits = immutableDistinct(successExits);
+            this.failureExits = immutableDistinct(failureExits);
+            this.stoppedExits = immutableDistinct(stoppedExits);
+        }
+
+        private static ScopeExits empty(List<String> entryNodes) {
+            return new ScopeExits(entryNodes, Collections.emptyList(), Collections.emptyList());
+        }
+    }
+
+    private ScopeExits renderScope(StringBuilder sb,
+                                   List<NodeDescription> nodes,
+                                   List<String> entryNodes,
+                                   String incomingEdgeLabel,
+                                   AtomicInteger idSeq,
+                                   String indent) {
+        if (nodes == null || nodes.isEmpty()) {
+            return ScopeExits.empty(entryNodes);
+        }
+
+        List<NodeDescription> bodyNodes = new ArrayList<>();
         NodeDescription recoverNode = null;
         NodeDescription ensureNode = null;
-        List<NodeDescription> bodyNodes = new ArrayList<>();
-
         for (NodeDescription node : nodes) {
             if (node.kind() == NodeKind.RECOVER) {
                 recoverNode = node;
@@ -47,146 +108,359 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
             }
         }
 
-        List<String> exitNodes = new ArrayList<>();
-        currentPrev = renderNodeList(sb, bodyNodes, currentPrev, idSeq, exitNodes);
+        List<String> successExits = distinct(entryNodes);
+        List<String> failureExits = new ArrayList<>();
+        List<String> stoppedExits = new ArrayList<>();
 
-        if (recoverNode != null) {
-            String recId = "node_" + idSeq.incrementAndGet() + "_" + sanitize(recoverNode.id());
-            sb.append("    ").append(recId).append("[\"Recover: ").append(escape(recoverNode.id())).append("\"]\n");
-            sb.append("    ").append(currentPrev).append(" -.->|on failure| ").append(recId).append("\n");
-            currentPrev = recId;
+        for (int i = 0; i < bodyNodes.size(); i++) {
+            String edgeLabel = i == 0 ? incomingEdgeLabel : null;
+            ScopeExits nodeExits = renderNode(sb, bodyNodes.get(i), successExits,
+                    edgeLabel, idSeq, indent);
+            successExits = nodeExits.successExits;
+            failureExits.addAll(nodeExits.failureExits);
+            stoppedExits.addAll(nodeExits.stoppedExits);
+        }
+
+        failureExits = distinct(failureExits);
+        stoppedExits = distinct(stoppedExits);
+
+        if (recoverNode != null && !failureExits.isEmpty()) {
+            ScopeExits recovered = renderRecover(sb, recoverNode, failureExits, idSeq, indent);
+            List<String> mergedSuccess = new ArrayList<>(successExits);
+            mergedSuccess.addAll(recovered.successExits);
+            successExits = distinct(mergedSuccess);
+
+            List<String> mergedStopped = new ArrayList<>(stoppedExits);
+            mergedStopped.addAll(recovered.stoppedExits);
+            stoppedExits = distinct(mergedStopped);
+            failureExits = recovered.failureExits;
         }
 
         if (ensureNode != null) {
-            String ensId = "node_" + idSeq.incrementAndGet() + "_" + sanitize(ensureNode.id());
-            sb.append("    ").append(ensId).append("[\"Ensure: ").append(escape(ensureNode.id())).append("\"]\n");
-            sb.append("    ").append(currentPrev).append(" --> ").append(ensId).append("\n");
-            currentPrev = ensId;
+            return renderEnsure(sb, ensureNode, successExits, stoppedExits,
+                    failureExits, idSeq, indent);
         }
 
-        String endId = "end_" + idSeq.incrementAndGet();
-        sb.append("    ").append(endId).append("([\"End: ").append(escape(description.flowId())).append("\"])\n");
-        sb.append("    ").append(currentPrev).append(" --> ").append(endId).append("\n");
-
-        return sb.toString();
+        return new ScopeExits(successExits, failureExits, stoppedExits);
     }
 
-    private String renderNodeList(StringBuilder sb, List<NodeDescription> nodes, String prev,
-                                  AtomicInteger idSeq, List<String> exitNodes) {
-        String current = prev;
-        for (NodeDescription node : nodes) {
-            current = renderNode(sb, node, current, idSeq);
+    private ScopeExits renderRecover(StringBuilder sb,
+                                     NodeDescription recoverNode,
+                                     List<String> failureInputs,
+                                     AtomicInteger idSeq,
+                                     String indent) {
+        String recoverId = makeNodeId(recoverNode, idSeq);
+        sb.append(indent).append(recoverId).append("[\"Recover: ")
+                .append(escapeLabel(recoverNode.id())).append("\"]\n");
+        for (String failureInput : failureInputs) {
+            sb.append(indent).append(failureInput).append(" -.->|on failure| ")
+                    .append(recoverId).append("\n");
         }
-        return current;
+
+        String successId = makeGatewayId("recover_success", idSeq);
+        String stoppedId = makeGatewayId("recover_stopped", idSeq);
+        String failedId = makeGatewayId("recover_failed", idSeq);
+        appendGateway(sb, successId, indent);
+        appendGateway(sb, stoppedId, indent);
+        appendGateway(sb, failedId, indent);
+        sb.append(indent).append(recoverId).append(" -->|recovered| ")
+                .append(successId).append("\n");
+        sb.append(indent).append(recoverId).append(" -->|stopped| ")
+                .append(stoppedId).append("\n");
+        sb.append(indent).append(recoverId).append(" -.->|failed| ")
+                .append(failedId).append("\n");
+
+        return new ScopeExits(Collections.singletonList(successId),
+                Collections.singletonList(failedId), Collections.singletonList(stoppedId));
     }
 
-    private String renderNode(StringBuilder sb, NodeDescription node, String prev, AtomicInteger idSeq) {
-        String nId = "node_" + idSeq.incrementAndGet() + "_" + sanitize(node.id());
+    private ScopeExits renderEnsure(StringBuilder sb,
+                                    NodeDescription ensureNode,
+                                    List<String> successInputs,
+                                    List<String> stoppedInputs,
+                                    List<String> failureInputs,
+                                    AtomicInteger idSeq,
+                                    String indent) {
+        List<String> successExits = new ArrayList<>();
+        List<String> stoppedExits = new ArrayList<>();
+        List<String> failureExits = new ArrayList<>();
+
+        if (!successInputs.isEmpty()) {
+            String ensureId = appendEnsureNode(sb, ensureNode, null, idSeq, indent);
+            connectOutcomeInputs(sb, successInputs, ensureId, false, "success", indent);
+
+            String completedId = makeGatewayId("ensure_success", idSeq);
+            String failedId = makeGatewayId("ensure_failed", idSeq);
+            appendGateway(sb, completedId, indent);
+            appendGateway(sb, failedId, indent);
+            sb.append(indent).append(ensureId).append(" -->|completed| ")
+                    .append(completedId).append("\n");
+            sb.append(indent).append(ensureId).append(" -.->|failed| ")
+                    .append(failedId).append("\n");
+            successExits.add(completedId);
+            failureExits.add(failedId);
+        }
+
+        if (!stoppedInputs.isEmpty()) {
+            String ensureId = appendEnsureNode(sb, ensureNode, "stopped", idSeq, indent);
+            connectOutcomeInputs(sb, stoppedInputs, ensureId, false, "stopped", indent);
+
+            String preservedId = makeGatewayId("ensure_stopped", idSeq);
+            String failedId = makeGatewayId("ensure_failed", idSeq);
+            appendGateway(sb, preservedId, indent);
+            appendGateway(sb, failedId, indent);
+            sb.append(indent).append(ensureId).append(" -->|stop preserved| ")
+                    .append(preservedId).append("\n");
+            sb.append(indent).append(ensureId).append(" -.->|failed| ")
+                    .append(failedId).append("\n");
+            stoppedExits.add(preservedId);
+            failureExits.add(failedId);
+        }
+
+        if (!failureInputs.isEmpty()) {
+            String ensureId = appendEnsureNode(sb, ensureNode, "failed", idSeq, indent);
+            connectOutcomeInputs(sb, failureInputs, ensureId, true, "failed", indent);
+
+            String preservedId = makeGatewayId("ensure_failure", idSeq);
+            appendGateway(sb, preservedId, indent);
+            sb.append(indent).append(ensureId).append(" -.->|failure preserved| ")
+                    .append(preservedId).append("\n");
+            failureExits.add(preservedId);
+        }
+
+        return new ScopeExits(successExits, failureExits, stoppedExits);
+    }
+
+    private ScopeExits renderNode(StringBuilder sb,
+                                  NodeDescription node,
+                                  List<String> entryNodes,
+                                  String incomingEdgeLabel,
+                                  AtomicInteger idSeq,
+                                  String indent) {
+        String nodeId = makeNodeId(node, idSeq);
 
         switch (node.kind()) {
             case STEP:
-                sb.append("    ").append(nId).append("[\"Step: ").append(escape(node.id())).append("\"]\n");
-                sb.append("    ").append(prev).append(" --> ").append(nId).append("\n");
-                return nId;
+                appendProcessNode(sb, nodeId, "Step: " + node.id(), indent);
+                connectEntries(sb, entryNodes, incomingEdgeLabel, nodeId, indent);
+                return new ScopeExits(Collections.singletonList(nodeId),
+                        Collections.singletonList(nodeId), Collections.emptyList());
 
             case TAP:
-                sb.append("    ").append(nId).append("[\"Tap: ").append(escape(node.id())).append("\"]\n");
-                sb.append("    ").append(prev).append(" --> ").append(nId).append("\n");
-                return nId;
+                appendProcessNode(sb, nodeId, "Tap: " + node.id(), indent);
+                connectEntries(sb, entryNodes, incomingEdgeLabel, nodeId, indent);
+                return new ScopeExits(Collections.singletonList(nodeId),
+                        Collections.singletonList(nodeId), Collections.emptyList());
 
             case GUARD:
-                sb.append("    ").append(nId).append("{\"Guard: ").append(escape(node.id())).append("\"}\n");
-                sb.append("    ").append(prev).append(" --> ").append(nId).append("\n");
+                sb.append(indent).append(nodeId).append("{\"Guard: ")
+                        .append(escapeLabel(node.id())).append("\"}\n");
+                connectEntries(sb, entryNodes, incomingEdgeLabel, nodeId, indent);
+
                 String stopId = "stop_" + idSeq.incrementAndGet();
-                sb.append("    ").append(stopId).append("([\"STOPPED\"]).style fill:#f9f,stroke:#333\n");
-                sb.append("    ").append(nId).append(" -->|stopped| ").append(stopId).append("\n");
-                String passNext = "guard_pass_" + idSeq.incrementAndGet();
-                sb.append("    ").append(nId).append(" -->|passed| ").append(passNext).append("(( ))\n");
-                return passNext;
+                sb.append(indent).append(stopId).append("([\"STOPPED\"])\n");
+                sb.append(indent).append("style ").append(stopId)
+                        .append(" fill:#f9f,stroke:#333\n");
+                sb.append(indent).append(nodeId).append(" -->|stopped| ")
+                        .append(stopId).append("\n");
+
+                String passId = makeGatewayId("guard_pass", idSeq);
+                appendGateway(sb, passId, indent);
+                sb.append(indent).append(nodeId).append(" -->|passed| ")
+                        .append(passId).append("\n");
+                return new ScopeExits(Collections.singletonList(passId),
+                        Collections.singletonList(nodeId), Collections.singletonList(stopId));
 
             case CHOOSE:
-                sb.append("    ").append(nId).append("{\"Choose: ").append(escape(node.id())).append("\"}\n");
-                sb.append("    ").append(prev).append(" --> ").append(nId).append("\n");
-
-                String joinId = "join_" + idSeq.incrementAndGet() + "(( ))";
-                String joinTarget = "join_" + idSeq.get();
-                sb.append("    ").append(joinId).append("\n");
-
-                for (Map.Entry<String, FlowDescription> entry : node.branches().entrySet()) {
-                    String branchKey = entry.getKey();
-                    FlowDescription branchFlow = entry.getValue();
-                    String branchEntry = renderSubflowDirect(sb, branchFlow, idSeq, joinTarget);
-                    sb.append("    ").append(nId).append(" -->|\"").append(escape(branchKey)).append("\"| ").append(branchEntry).append("\n");
-                }
-
-                if (node.otherwiseBranch() != null) {
-                    String otherwiseEntry = renderSubflowDirect(sb, node.otherwiseBranch(), idSeq, joinTarget);
-                    sb.append("    ").append(nId).append(" -->|otherwise| ").append(otherwiseEntry).append("\n");
-                } else if (node.hasOtherwiseStop()) {
-                    String stopOtherId = "stop_" + idSeq.incrementAndGet();
-                    sb.append("    ").append(stopOtherId).append("([\"STOPPED\"]).style fill:#f9f,stroke:#333\n");
-                    sb.append("    ").append(nId).append(" -->|otherwise| ").append(stopOtherId).append("\n");
-                }
-
-                return joinTarget;
+                return renderChoose(sb, node, nodeId, entryNodes,
+                        incomingEdgeLabel, idSeq, indent);
 
             case SUBFLOW:
-                sb.append("    subgraph sub_").append(nId).append(" [\"Subflow: ").append(escape(node.id())).append("\"]\n");
-                if (node.subflow() != null) {
-                    renderSubflowBody(sb, node.subflow(), nId, idSeq);
-                }
-                sb.append("    end\n");
-                sb.append("    ").append(prev).append(" --> sub_").append(nId).append("\n");
-                return "sub_" + nId;
+                String subgraphId = "sub_" + nodeId;
+                sb.append(indent).append("subgraph ").append(subgraphId)
+                        .append(" [\"Subflow: ").append(escapeLabel(node.id())).append("\"]\n");
+                FlowDescription subflow = node.subflow();
+                List<NodeDescription> subNodes = subflow != null
+                        ? subflow.nodes() : Collections.emptyList();
+                ScopeExits subExits = renderScope(sb, subNodes, entryNodes,
+                        incomingEdgeLabel, idSeq, indent + "    ");
+                sb.append(indent).append("end\n");
+                return subExits;
+
+            case SEQUENCE:
+                return renderScope(sb, node.children(), entryNodes,
+                        incomingEdgeLabel, idSeq, indent);
 
             default:
-                sb.append("    ").append(nId).append("[\"").append(escape(node.id())).append("\"]\n");
-                sb.append("    ").append(prev).append(" --> ").append(nId).append("\n");
-                return nId;
+                appendProcessNode(sb, nodeId, node.id(), indent);
+                connectEntries(sb, entryNodes, incomingEdgeLabel, nodeId, indent);
+                return new ScopeExits(Collections.singletonList(nodeId),
+                        Collections.singletonList(nodeId), Collections.emptyList());
         }
     }
 
-    private String renderSubflowDirect(StringBuilder sb, FlowDescription flow, AtomicInteger idSeq, String joinTarget) {
-        List<NodeDescription> nodes = flow.nodes();
-        if (nodes.isEmpty()) {
-            return joinTarget;
-        }
-        String firstId = null;
-        String prev = null;
-        for (int i = 0; i < nodes.size(); i++) {
-            NodeDescription nd = nodes.get(i);
-            String currId = "node_" + idSeq.incrementAndGet() + "_" + sanitize(nd.id());
-            sb.append("    ").append(currId).append("[\"").append(escape(nd.id())).append("\"]\n");
-            if (i == 0) {
-                firstId = currId;
-            } else {
-                sb.append("    ").append(prev).append(" --> ").append(currId).append("\n");
+    private ScopeExits renderChoose(StringBuilder sb,
+                                    NodeDescription node,
+                                    String chooseId,
+                                    List<String> entryNodes,
+                                    String incomingEdgeLabel,
+                                    AtomicInteger idSeq,
+                                    String indent) {
+        sb.append(indent).append(chooseId).append("{\"Choose: ")
+                .append(escapeLabel(node.id())).append("\"}\n");
+        connectEntries(sb, entryNodes, incomingEdgeLabel, chooseId, indent);
+
+        String joinId = makeGatewayId("join", idSeq);
+        appendGateway(sb, joinId, indent);
+        boolean hasSuccess = false;
+        List<String> failureExits = new ArrayList<>();
+        failureExits.add(chooseId);
+        List<String> stoppedExits = new ArrayList<>();
+
+        if (node.branches() != null) {
+            for (Map.Entry<String, FlowDescription> branch : node.branches().entrySet()) {
+                ScopeExits branchExits = renderScope(sb,
+                        branch.getValue() != null ? branch.getValue().nodes() : Collections.emptyList(),
+                        Collections.singletonList(chooseId),
+                        "\"" + escapeEdgeLabel(branch.getKey()) + "\"", idSeq, indent);
+                for (String successId : branchExits.successExits) {
+                    sb.append(indent).append(successId).append(" --> ")
+                            .append(joinId).append("\n");
+                    hasSuccess = true;
+                }
+                failureExits.addAll(branchExits.failureExits);
+                stoppedExits.addAll(branchExits.stoppedExits);
             }
-            prev = currId;
         }
-        sb.append("    ").append(prev).append(" --> ").append(joinTarget).append("\n");
-        return firstId;
-    }
 
-    private void renderSubflowBody(StringBuilder sb, FlowDescription flow, String subPrefix, AtomicInteger idSeq) {
-        String prev = null;
-        for (NodeDescription nd : flow.nodes()) {
-            String currId = "sub_" + idSeq.incrementAndGet() + "_" + sanitize(nd.id());
-            sb.append("        ").append(currId).append("[\"").append(escape(nd.id())).append("\"]\n");
-            if (prev != null) {
-                sb.append("        ").append(prev).append(" --> ").append(currId).append("\n");
+        if (node.otherwiseBranch() != null) {
+            ScopeExits otherwiseExits = renderScope(sb, node.otherwiseBranch().nodes(),
+                    Collections.singletonList(chooseId), "otherwise", idSeq, indent);
+            for (String successId : otherwiseExits.successExits) {
+                sb.append(indent).append(successId).append(" --> ")
+                        .append(joinId).append("\n");
+                hasSuccess = true;
             }
-            prev = currId;
+            failureExits.addAll(otherwiseExits.failureExits);
+            stoppedExits.addAll(otherwiseExits.stoppedExits);
+        } else if (node.hasOtherwiseStop()) {
+            String stopId = "stop_" + idSeq.incrementAndGet();
+            sb.append(indent).append(stopId).append("([\"STOPPED\"])\n");
+            sb.append(indent).append("style ").append(stopId)
+                    .append(" fill:#f9f,stroke:#333\n");
+            sb.append(indent).append(chooseId).append(" -->|otherwise| ")
+                    .append(stopId).append("\n");
+            stoppedExits.add(stopId);
+        }
+
+        return new ScopeExits(hasSuccess ? Collections.singletonList(joinId) : Collections.emptyList(),
+                failureExits, stoppedExits);
+    }
+
+    private static String appendEnsureNode(StringBuilder sb,
+                                           NodeDescription ensureNode,
+                                           String outcome,
+                                           AtomicInteger idSeq,
+                                           String indent) {
+        String ensureId = makeNodeId(ensureNode, idSeq);
+        String suffix = outcome == null ? "" : " [" + outcome + "]";
+        appendProcessNode(sb, ensureId, "Ensure: " + ensureNode.id() + suffix, indent);
+        return ensureId;
+    }
+
+    private static void appendProcessNode(StringBuilder sb,
+                                          String nodeId,
+                                          String label,
+                                          String indent) {
+        sb.append(indent).append(nodeId).append("[\"")
+                .append(escapeLabel(label)).append("\"]\n");
+    }
+
+    private static void appendGateway(StringBuilder sb, String gatewayId, String indent) {
+        sb.append(indent).append(gatewayId).append("(( ))\n");
+    }
+
+    private static void connectOutcomeInputs(StringBuilder sb,
+                                             List<String> inputs,
+                                             String targetId,
+                                             boolean failureEdge,
+                                             String edgeLabel,
+                                             String indent) {
+        for (String input : distinct(inputs)) {
+            sb.append(indent).append(input)
+                    .append(failureEdge ? " -.->|" : " -->|")
+                    .append(edgeLabel).append("| ").append(targetId).append("\n");
         }
     }
 
-    private static String sanitize(String str) {
-        if (str == null) return "node";
-        return str.replaceAll("[^a-zA-Z0-9_]", "_");
+    private static void connectEntries(StringBuilder sb,
+                                       List<String> entryNodes,
+                                       String edgeLabel,
+                                       String targetId,
+                                       String indent) {
+        for (String entry : distinct(entryNodes)) {
+            sb.append(indent).append(entry).append(" -->");
+            if (edgeLabel != null && !edgeLabel.isEmpty()) {
+                sb.append("|").append(edgeLabel).append("|");
+            }
+            sb.append(" ").append(targetId).append("\n");
+        }
     }
 
-    private static String escape(String str) {
-        if (str == null) return "";
-        return str.replace("\"", "#quot;").replace("\n", " ").replace("\r", "");
+    private static String makeNodeId(NodeDescription node, AtomicInteger idSeq) {
+        int sequence = idSeq.incrementAndGet();
+        String address = node.address();
+        String source = address != null && !address.isEmpty() && !"/".equals(address)
+                ? address : node.id();
+        return "node_" + sequence + "_" + sanitize(source);
+    }
+
+    private static String makeGatewayId(String prefix, AtomicInteger idSeq) {
+        return prefix + "_" + idSeq.incrementAndGet();
+    }
+
+    private static List<String> immutableDistinct(List<String> values) {
+        return Collections.unmodifiableList(distinct(values));
+    }
+
+    private static List<String> distinct(List<String> values) {
+        if (values == null || values.isEmpty()) {
+            return Collections.emptyList();
+        }
+        Set<String> unique = new LinkedHashSet<>(values);
+        return new ArrayList<>(unique);
+    }
+
+    private static String sanitize(String value) {
+        if (value == null || value.isEmpty()) {
+            return "node";
+        }
+        String sanitized = value.replaceAll("[^a-zA-Z0-9_]", "_")
+                .replaceAll("_+", "_")
+                .replaceAll("^_|_$", "");
+        return sanitized.isEmpty() ? "node" : sanitized;
+    }
+
+    private static String escapeLabel(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\\", "#92;")
+                .replace("\"", "#quot;")
+                .replace("\r\n", "<br/>")
+                .replace("\n", "<br/>")
+                .replace("\r", "");
+    }
+
+    private static String escapeEdgeLabel(String value) {
+        if (value == null) {
+            return "";
+        }
+        return value.replace("\\", "#92;")
+                .replace("\"", "#quot;")
+                .replace("|", "#124;")
+                .replace("\r\n", "<br/>")
+                .replace("\n", "<br/>")
+                .replace("\r", "");
     }
 }

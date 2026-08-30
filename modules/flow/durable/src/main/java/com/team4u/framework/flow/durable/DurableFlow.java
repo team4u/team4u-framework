@@ -1,6 +1,5 @@
 package com.team4u.framework.flow.durable;
 
-import com.team4u.framework.base.util.Assert;
 import com.team4u.framework.flow.Flow;
 
 import java.util.NoSuchElementException;
@@ -24,15 +23,17 @@ public class DurableFlow<I, O> {
     private final DurablePlanNode plan;
 
     DurableFlow(String flowId, int flowVersion, Flow<I, O> flowDefinition, DurableStore store, StateMapper stateMapper) {
-        Assert.notBlank(flowId, "flowId must not be null or blank");
-        Assert.notNull(flowDefinition, "flowDefinition must not be null");
-        Assert.notNull(store, "DurableStore must not be null");
-        Assert.notNull(stateMapper, "StateMapper must not be null");
+        if (flowId == null || flowId.trim().isEmpty()) {
+            throw new IllegalArgumentException("flowId must not be null or blank");
+        }
         this.flowId = flowId;
+        if (flowVersion <= 0) {
+            throw new IllegalArgumentException("flowVersion must be a positive integer, got: " + flowVersion);
+        }
         this.flowVersion = flowVersion;
-        this.flowDefinition = flowDefinition;
-        this.store = store;
-        this.stateMapper = stateMapper;
+        this.flowDefinition = Objects.requireNonNull(flowDefinition, "flowDefinition must not be null");
+        this.store = Objects.requireNonNull(store, "DurableStore must not be null");
+        this.stateMapper = Objects.requireNonNull(stateMapper, "StateMapper must not be null");
         this.runner = new DurableRunner(store, stateMapper);
         this.plan = flowDefinition.project(DurablePlanCompiler.INSTANCE);
     }
@@ -52,12 +53,14 @@ public class DurableFlow<I, O> {
     /**
      * 开启新流程执行：落初始快照后开始执行。
      *
-     * @param executionId 执行唯一标识，非 null
+     * @param executionId 执行唯一标识，非 blank
      * @param input       流程入参，非 null
      * @return 执行结果
      */
     public DurableResult<O> start(String executionId, I input) {
-        Objects.requireNonNull(executionId, "executionId must not be null");
+        if (executionId == null || executionId.trim().isEmpty()) {
+            throw new IllegalArgumentException("executionId must not be null or blank");
+        }
         Objects.requireNonNull(input, "input must not be null");
 
         DurableSnapshot existing = store.load(flowId, executionId);
@@ -84,21 +87,20 @@ public class DurableFlow<I, O> {
     /**
      * 恢复执行处于 ACTIVE 状态的流程（例如进程崩溃重启后）。
      *
-     * @param executionId 执行唯一标识，非 null
+     * @param executionId 执行唯一标识，非 blank
      * @return 执行结果
      */
     public DurableResult<O> recover(String executionId) {
-        Objects.requireNonNull(executionId, "executionId must not be null");
+        if (executionId == null || executionId.trim().isEmpty()) {
+            throw new IllegalArgumentException("executionId must not be null or blank");
+        }
         DurableSnapshot snapshot = store.load(flowId, executionId);
         if (snapshot == null) {
             throw new NoSuchElementException("Execution [" + executionId + "] not found in flow [" + flowId + "]");
         }
-        if (snapshot.flowVersion() != this.flowVersion) {
-            throw new IllegalStateException("Snapshot version [" + snapshot.flowVersion() +
-                    "] does not match registered flow version [" + this.flowVersion + "]");
-        }
+        validateSnapshot(snapshot, executionId);
         if (snapshot.lifecycle() != DurableLifecycle.ACTIVE) {
-            return load(executionId);
+            return toResult(snapshot);
         }
         return runner.run(plan, snapshot);
     }
@@ -106,15 +108,18 @@ public class DurableFlow<I, O> {
     /**
      * 重试处于 FAILED 状态的执行：CAS 转回 ACTIVE 并从最后成功快照重放失败节点。
      *
-     * @param executionId 执行唯一标识，非 null
+     * @param executionId 执行唯一标识，非 blank
      * @return 执行结果
      */
     public DurableResult<O> retry(String executionId) {
-        Objects.requireNonNull(executionId, "executionId must not be null");
+        if (executionId == null || executionId.trim().isEmpty()) {
+            throw new IllegalArgumentException("executionId must not be null or blank");
+        }
         DurableSnapshot snapshot = store.load(flowId, executionId);
         if (snapshot == null) {
             throw new NoSuchElementException("Execution [" + executionId + "] not found in flow [" + flowId + "]");
         }
+        validateSnapshot(snapshot, executionId);
         if (snapshot.lifecycle() != DurableLifecycle.FAILED) {
             throw new IllegalStateException("Cannot retry execution [" + executionId +
                     "] with lifecycle [" + snapshot.lifecycle() + "] (expected FAILED)");
@@ -132,15 +137,18 @@ public class DurableFlow<I, O> {
     /**
      * 取消流程执行（支持 ACTIVE 或 FAILED 状态）。
      *
-     * @param executionId 执行唯一标识，非 null
-     * @return true 表示成功取消，false 表示已处于完成/停止状态或并发冲突
+     * @param executionId 执行唯一标识，非 blank
+     * @return true 表示成功取消，false 表示已处于完成/停止状态或未找到
      */
     public boolean cancel(String executionId) {
-        Objects.requireNonNull(executionId, "executionId must not be null");
+        if (executionId == null || executionId.trim().isEmpty()) {
+            throw new IllegalArgumentException("executionId must not be null or blank");
+        }
         DurableSnapshot snapshot = store.load(flowId, executionId);
         if (snapshot == null) {
             return false;
         }
+        validateSnapshot(snapshot, executionId);
         if (snapshot.lifecycle() == DurableLifecycle.COMPLETED ||
                 snapshot.lifecycle() == DurableLifecycle.STOPPED ||
                 snapshot.lifecycle() == DurableLifecycle.CANCELLED) {
@@ -152,17 +160,131 @@ public class DurableFlow<I, O> {
     }
 
     /**
-     * 查询当前快照执行结果。
+     * 查询当前快照执行结果（纯读与解码，不执行 ACTIVE 业务节点）。
      *
-     * @param executionId 执行唯一标识，非 null
+     * @param executionId 执行唯一标识，非 blank
      * @return 执行结果
      */
     public DurableResult<O> load(String executionId) {
-        Objects.requireNonNull(executionId, "executionId must not be null");
+        if (executionId == null || executionId.trim().isEmpty()) {
+            throw new IllegalArgumentException("executionId must not be null or blank");
+        }
         DurableSnapshot snapshot = store.load(flowId, executionId);
         if (snapshot == null) {
             throw new NoSuchElementException("Execution [" + executionId + "] not found in flow [" + flowId + "]");
         }
-        return runner.run(plan, snapshot);
+        validateSnapshot(snapshot, executionId);
+        return toResult(snapshot);
+    }
+
+    private void validateSnapshot(DurableSnapshot snapshot, String expectedExecutionId) {
+        Objects.requireNonNull(snapshot, "snapshot must not be null");
+
+        if (!Objects.equals(snapshot.flowId(), this.flowId)) {
+            throw new IllegalStateException("Snapshot flowId [" + snapshot.flowId() +
+                    "] does not match registered flowId [" + this.flowId + "]");
+        }
+
+        if (snapshot.flowVersion() != this.flowVersion) {
+            throw new IllegalStateException("Snapshot version [" + snapshot.flowVersion() +
+                    "] does not match registered flow version [" + this.flowVersion + "]");
+        }
+
+        if (!Objects.equals(snapshot.executionId(), expectedExecutionId)) {
+            throw new IllegalStateException("Snapshot executionId [" + snapshot.executionId() +
+                    "] does not match requested executionId [" + expectedExecutionId + "]");
+        }
+
+        if (!DurableSnapshot.DEFAULT_FORMAT_ID.equals(snapshot.formatId())) {
+            throw new IllegalStateException("Unsupported snapshot formatId [" + snapshot.formatId() +
+                    "], expected [" + DurableSnapshot.DEFAULT_FORMAT_ID + "]");
+        }
+
+        if (snapshot.formatVersion() != DurableSnapshot.DEFAULT_FORMAT_VERSION) {
+            throw new IllegalStateException("Unsupported snapshot formatVersion [" + snapshot.formatVersion() +
+                    "], expected [" + DurableSnapshot.DEFAULT_FORMAT_VERSION + "]");
+        }
+
+        if (snapshot.revision() < 0) {
+            throw new IllegalStateException("Snapshot revision must be non-negative, got: " + snapshot.revision());
+        }
+
+        if (snapshot.lifecycle() == null) {
+            throw new IllegalStateException("Snapshot lifecycle must not be null");
+        }
+
+        if (snapshot.frameState() == null) {
+            throw new IllegalStateException("Snapshot frameState must not be null");
+        }
+
+        if (snapshot.slots() == null) {
+            throw new IllegalStateException("Snapshot slots must not be null");
+        }
+
+        switch (snapshot.lifecycle()) {
+            case ACTIVE:
+                if (snapshot.stopReason() != null) {
+                    throw new IllegalStateException("ACTIVE snapshot must not contain stopReason");
+                }
+                if (snapshot.failure() != null) {
+                    throw new IllegalStateException("ACTIVE snapshot must not contain failure");
+                }
+                break;
+            case COMPLETED:
+                if (snapshot.stopReason() != null) {
+                    throw new IllegalStateException("COMPLETED snapshot must not contain stopReason");
+                }
+                if (snapshot.failure() != null) {
+                    throw new IllegalStateException("COMPLETED snapshot must not contain failure");
+                }
+                break;
+            case STOPPED:
+                if (snapshot.stopReason() == null) {
+                    throw new IllegalStateException("STOPPED snapshot must contain stopReason");
+                }
+                if (snapshot.failure() != null) {
+                    throw new IllegalStateException("STOPPED snapshot must not contain failure");
+                }
+                break;
+            case FAILED:
+                if (snapshot.failure() == null) {
+                    throw new IllegalStateException("FAILED snapshot must contain failure");
+                }
+                if (snapshot.stopReason() != null) {
+                    throw new IllegalStateException("FAILED snapshot must not contain stopReason");
+                }
+                break;
+            case CANCELLED:
+                break;
+            default:
+                throw new IllegalStateException("Unknown lifecycle: " + snapshot.lifecycle());
+        }
+    }
+
+    @SuppressWarnings("unchecked")
+    private DurableResult<O> toResult(DurableSnapshot snapshot) {
+        switch (snapshot.lifecycle()) {
+            case COMPLETED:
+                try {
+                    StoredValue outSlot = snapshot.getSlot("output");
+                    if (outSlot == null) {
+                        outSlot = snapshot.getSlot("active");
+                    }
+                    O val = outSlot != null ? (O) stateMapper.decode(outSlot) : null;
+                    return DurableResult.completed(snapshot.flowId(), snapshot.flowVersion(), snapshot.executionId(), snapshot.revision(), val);
+                } catch (Exception e) {
+                    DurableFailure f = new DurableFailure("codec", "codec", e.getClass().getName(), e.getMessage());
+                    return DurableResult.failed(snapshot.flowId(), snapshot.flowVersion(), snapshot.executionId(), snapshot.revision(), f);
+                }
+            case STOPPED:
+                return DurableResult.stopped(snapshot.flowId(), snapshot.flowVersion(), snapshot.executionId(), snapshot.revision(), snapshot.stopReason());
+            case FAILED:
+                return DurableResult.failed(snapshot.flowId(), snapshot.flowVersion(), snapshot.executionId(), snapshot.revision(), snapshot.failure());
+            case CANCELLED:
+                return DurableResult.cancelled(snapshot.flowId(), snapshot.flowVersion(), snapshot.executionId(), snapshot.revision());
+            case ACTIVE:
+            default:
+                return DurableResult.active(snapshot.flowId(), snapshot.flowVersion(), snapshot.executionId(), snapshot.revision());
+        }
     }
 }

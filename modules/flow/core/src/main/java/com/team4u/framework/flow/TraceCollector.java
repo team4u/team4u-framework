@@ -72,18 +72,6 @@ final class TraceCollector {
         }
     }
 
-    void recordEntries(List<FlowTrace.Entry> entries) {
-        if (entries == null || entries.isEmpty()) {
-            return;
-        }
-        Scope current = scopeStack.peek();
-        if (current != null && current.nodeId != null) {
-            current.children.addAll(entries);
-        } else {
-            rootEntries.addAll(entries);
-        }
-    }
-
     FlowTrace buildTrace() {
         return new FlowTrace(rootEntries);
     }

@@ -1,7 +1,5 @@
 package com.team4u.framework.flow;
 
-import com.team4u.framework.base.util.Assert;
-
 /**
  * 默认的节点执行上下文实现。
  *
@@ -16,8 +14,12 @@ final class DefaultStepContext implements StepContext {
     private final String invocationId;
 
     DefaultStepContext(String flowId, String executionId, String nodeId, String nodePath, String invocationId) {
-        Assert.notBlank(flowId, "flowId must not be null or blank");
-        Assert.notBlank(nodeId, "nodeId must not be null or blank");
+        if (flowId == null || flowId.trim().isEmpty()) {
+            throw new IllegalArgumentException("flowId must not be null or blank");
+        }
+        if (nodeId == null || nodeId.trim().isEmpty()) {
+            throw new IllegalArgumentException("nodeId must not be null or blank");
+        }
         this.flowId = flowId;
         this.executionId = executionId;
         this.nodeId = nodeId;

@@ -15,8 +15,11 @@ public final class StoredValue {
     private final byte[] data;
 
     public StoredValue(String typeId, byte[] data) {
-        this.typeId = Objects.requireNonNull(typeId, "typeId must not be null");
-        this.data = data != null ? data : new byte[0];
+        if (typeId == null || typeId.trim().isEmpty()) {
+            throw new IllegalArgumentException("typeId must not be null or blank");
+        }
+        this.typeId = typeId;
+        this.data = data != null ? data.clone() : new byte[0];
     }
 
     public static StoredValue of(String typeId, byte[] data) {
@@ -32,7 +35,7 @@ public final class StoredValue {
     }
 
     public byte[] data() {
-        return data;
+        return data.clone();
     }
 
     public String asString() {
