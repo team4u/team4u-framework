@@ -1,6 +1,6 @@
-# Team4u 1.0 Migration Guide
+# Team4u 1.0 迁移与升级指南
 
-Team4u 1.0 publishes one dependency-management POM. Import the root POM; there is no separate BOM artifact. The final reactor and root BOM manage 48 concrete framework leaves (40 after Task 18, plus the 8 merged from master: id, ratelimiter core/proxy/spring, singleflight core/proxy/spring, and proxy-spring).
+Team4u 1.0 统一发布单个依赖管理 POM。请直接在项目中引入根 POM，不再提供独立的 BOM 构件。工程最终的 Reactor 与根 BOM 统一管理 48 个具体的发布叶子模块。
 
 ```xml
 <dependencyManagement>
@@ -16,74 +16,94 @@ Team4u 1.0 publishes one dependency-management POM. Import the root POM; there i
 </dependencyManagement>
 ```
 
-## CI and consumer contract profiles
+---
 
-Developers can run the currently green external-consumer set with:
+## 1. CI 与消费者契约验证配置
+
+开发者可通过以下命令运行当前全绿的外部消费者测试套件：
 
 ```bash
 mvn -Pconsumer-it -DskipTests verify
 ```
 
-The default set covers minimal base, config-core, provider-free serializer API, explicit Jackson provider, JDK interface proxy, log-governance, ratelimiter-core, and singleflight-jackson consumers (8 in total). Since Task 9, `consumer-config-core` proves that scalar config and explicit binding have no proxy, ByteBuddy, Jackson, or Spring runtime edge. Since Task 17, `consumer-log-governance` depends only on BOM-managed `team4u-log-governance`, proves the transitive Jackson provider at runtime, and verifies that `LogBootstrap.start/stop` exchanges the engine as the documented owner. After the master merge, `consumer-ratelimiter-core` proves the three-way ratelimiter split (core only, no proxy/Spring edges) and `consumer-singleflight-jackson` proves the three-way singleflight split with the explicit application-owned JSON provider (direct databind edge, no transitive provider).
+默认套件覆盖 8 个标准消费者用例：`minimal`（最小 base 依赖）、`config-core`（纯核心配置）、`serializer-api`（无 Provider 序列化门面）、`serializer-jackson`（显式引入 Jackson）、`interface-proxy`（JDK 接口代理）、`log-governance`（日志治理）、`ratelimiter-core`（纯核心限流）以及 `singleflight-jackson`（单飞合并与应用端 Jackson）。
+- `config-core` 验证了标量配置与显式绑定无需引入 Proxy、ByteBuddy、Jackson 或 Spring 运行时；
+- `log-governance` 仅依赖 BOM 管理的 `team4u-log-governance`，验证了运行时的传递 Jackson Provider，并确认 `LogBootstrap.start/stop` 可正常接管日志引擎；
+- `ratelimiter-core` 验证了限流的三向拆分（纯核心无 Proxy/Spring 边缘）；
+- `singleflight-jackson` 验证了单飞合并与应用端显式提供的 JSON Provider 配合（仅含 databind 边缘，不隐式传递 Provider）。
 
-The release baseline gate is:
+发布基线门禁命令为：
 
 ```bash
 mvn -Prelease-contracts -DskipTests verify
 ```
 
-It runs the same eight active consumers, executes their mains, and validates or records each runtime dependency tree (48 leaves, 30 representative direct shapes).
+该命令将运行相同的 8 个活跃消费者测试用例，执行其 Main 方法，并校验与记录各模块的运行时依赖树（48 个叶子模块、30 个代表性依赖形状）。
 
-Task 18 adds no functional migration and does not change `1.0.0-SNAPSHOT`. It aligns performance wording with the committed JMH evidence and adds the unpublished standalone benchmark project and release-evidence gates. The sequential JDK 8/11/17/21 matrix has passed locally in Docker on the final merge commit `6a2ef9cc` (`maven:3.9.11-eclipse-temurin` images, Temurin `1.8.0_472`/`11.0.29`/`17.0.17`/`21.0.9`, Maven `3.9.11`, one serial container per JDK, fresh isolated `/tmp/team4u-merge-m2` local repository): per JDK, clean install plus tests `1,914/1,914` (0 failures/errors/skipped), benchmark package (5 methods in 4 classes, no JMH measurement), 8 external + 8 release-contract consumers, performance claims gate, release package, the `48×3` jar manifest check (48 binary + 48 sources + 48 javadoc), and `792` classfiles at major version `52` (0 non-52); the release-contract script passed 48 real dependency trees / 30 exact shapes with Jackson owners 5 / databind heirs 2 on all four JDKs. (The earlier Task 18 round had passed the same sequence at `1,565/1,565` tests, 6+6 consumers, `40×3`, `678` classfiles, 40 trees / 22 shapes before the master merge; its JDK 8 helper-directory fix — `javac` on Java 8 does not auto-create the `-d` output directory, so the script now `mkdir -p`s it first — is included unchanged.) A local Docker matrix is not hosted execution: the GitHub Actions workflow is still pending, and no production release or version change should be made from local-only evidence.
+---
 
-## Config proxy creation
+## 2. 配置代理创建机制变更
 
-`ConfigManager.Builder.configBinder(...)` is removed; it never controlled live proxy construction. Use `DefaultConfigBinder.bind(...)` directly for a one-time bound POJO. `createProxy(...)` now resolves only `ConfigManager.Builder.proxyCreator(...)`, followed by a single ServiceLoader implementation. With neither source it fails fast and recommends `com.team4u:team4u-config-proxy` or a custom `ConfigProxyCreator`; a bound POJO is never returned as a substitute proxy.
-Add `com.team4u:team4u-config-proxy` to let `ConfigManager.createProxy(...)` discover `ServiceLoaderConfigProxyCreator` automatically; explicit `ConfigProxyCreator` injection remains supported. The first call to `ConfigManager.global()` now initializes the global manager, and `ConfigBootstrap` refreshes an already-initialized global after source, watcher, converter, or lock operations. Late registrations are therefore visible without a caller-side refresh.
+1. 移除了 `ConfigManager.Builder.configBinder(...)`（该方法原本并不控制动态代理构建）。对于一次性绑定的静态 POJO，请直接使用 `DefaultConfigBinder.bind(...)`。
+2. `createProxy(...)` 现在仅通过 `ConfigManager.Builder.proxyCreator(...)` 或单一 `ServiceLoader` 实现进行解析。若两者均未提供，将快速失败并明确提示引入 `com.team4u:team4u-config-proxy` 或自定义 `ConfigProxyCreator`，绝不会静默降级返回静态绑定 POJO 作为代理替身。
+3. 引入 `com.team4u:team4u-config-proxy` 可让 `ConfigManager.createProxy(...)` 自动发现 `ServiceLoaderConfigProxyCreator`；显式注入 `ConfigProxyCreator` 的方式依然支持。首次调用 `ConfigManager.global()` 时将完成全局管理器初始化，且 `ConfigBootstrap` 会在数据源、监听器、转换器或锁定操作后自动刷新已初始化的全局实例，后续注册无需调用方手动触发刷新。
 
-## Lease runtime boundary
+---
 
-`team4u-lease` stays independent of Config, Retry, KV, Jackson, and Spring. Tests and logging implementations are no longer published transitively: JUnit and `slf4j-simple` are test-scoped in `lease-core`; `lease-jdbc` additionally keeps H2 test-scoped. `team4u-lease-test` intentionally keeps JUnit `provided` because it is a published test-contract artifact.
+## 3. 租约运行时边界
 
-`team4u-lease-jdbc` publishes only its intended production edges: `lease-core`, `base`, `base-jdbc`, `serializer-json`, and `slf4j-api`. It never carries the Jackson provider. Applications using JSON attributes must add `team4u-serializer-jackson` or provide another registered `JsonSerializerPolicy` themselves.
+1. `team4u-lease` 保持对 Config、Retry、KV、Jackson 及 Spring 的独立解耦。测试与日志实现不再对外传递：JUnit 与 `slf4j-simple` 在 `lease` 核心中设为 `test` 范围；`team4u-lease-jdbc` 中 H2 同样设为 `test` 范围；`team4u-lease-test` 作为公开测试契约包，保留 JUnit 为 `provided`。
+2. `team4u-lease-jdbc` 仅发布其必要的生产依赖：`team4u-lease`、`team4u-base`、`team4u-base-jdbc`、`team4u-serializer-json` 与 `slf4j-api`，绝不自带 Jackson Provider。使用 JSON 属性的应用需自行引入 `team4u-serializer-jackson` 或注册自定义的 `JsonSerializerPolicy`。
 
-## KV space and hot swap split
+---
 
-`Space`, `Spaces`, and `SpacePolicy` moved from `team4u-kv` to `team4u-kv-space`. The new artifact depends on kv-core, policy, and serializer-json; applications using typed JSON spaces must add it and explicitly choose `team4u-serializer-jackson` or another registered `JsonSerializerPolicy`. `team4u-kv` now carries only `team4u-base` and `slf4j-api` production dependencies.
+## 4. KV Space 与 HotSwap 拆分
 
-`HotSwapStore.wrap(KvStore)` still returns `KvStore`, but its proxy no longer implements `com.team4u.framework.proxy.support.Swappable`. For direct atomic replacement, cast to `com.team4u.framework.kv.HotSwap`, call `hotswap(newDelegate)`, and manage the returned old store yourself. The proxy always implements `KvStore` and `HotSwap`; it additionally implements `StoreWrapper` and `AutoCloseable` only when the initial delegate does. That interface set is fixed at wrap time and cannot change after later swaps.
+1. `Space`、`Spaces` 与 `SpacePolicy` 已从核心移至 `team4u-kv-space` 模块。新构件依赖 `team4u-kv`、`team4u-policy` 与 `team4u-serializer-json`；使用类型化 JSON 空间的应用需显式引入该模块并提供 `team4u-serializer-jackson` 或自定义 `JsonSerializerPolicy`。`team4u-kv` 核心仅保留 `team4u-base` 与 `slf4j-api` 生产依赖。
+2. `HotSwapStore.wrap(KvStore)` 返回的代理不再实现 `com.team4u.framework.proxy.support.Swappable`。如需进行原子热替换，请将实例强转为 `com.team4u.framework.kv.HotSwap`，调用 `hotswap(newDelegate)` 并自行管理返回的旧存储。代理固定实现 `KvStore` 与 `HotSwap`；仅在初始委托对象支持时才额外实现 `StoreWrapper` 与 `AutoCloseable`（接口集合在包装时确定，后续热替换不会改变接口契约）。
 
-## Router declarative proxy split
+---
 
-`@Routed`, `@RouteContext`, `RoutedProxyFactory`, `RoutedBeanLocator`, `BeanResolver`, and `RoutedMethodInterceptor` moved from `team4u-router` to `team4u-router-proxy`; every FQCN is unchanged. Add `com.team4u:team4u-router-proxy` when creating routed interface proxies or resolving routed beans. Keep `team4u-router` for `RoutingManager`, routing policy parsing, trace, and interceptors; `team4u-translator` remains router-core-only and never passes proxy, bean, config-proxy, ByteBuddy, or a JSON provider. Router core never publishes proxy, bean, config-proxy, ByteBuddy, or Jackson production dependencies.
-## Retry module split
+## 5. 路由声明式代理拆分
 
-Managed retry governance moved from `team4u-retry` to `team4u-retry-managed`, and config-driven retry policies moved to `team4u-retry-config`.
+`@Routed`、`@RouteContext`、`RoutedProxyFactory`、`RoutedBeanLocator`、`BeanResolver` 与 `RoutedMethodInterceptor` 已由 `team4u-router` 移至 `team4u-router-proxy`；所有类的完整类名（FQCN）保持不变。
+- 需要创建路由接口代理或解析路由 Bean 时，请显式引入 `com.team4u:team4u-router-proxy`。
+- `team4u-router` 仅负责 `RoutingManager`、路由策略解析、Trace 与拦截器；`team4u-translator` 仅依赖路由核心，不引入代理、Bean 容器、ByteBuddy 或 JSON Provider。
 
-| Version | Removed or moved API | Migration |
-| --- | --- | --- |
-| 1.0 | Removed `Retries.managed(ManagedRetryClient)` | Use `ManagedRetries.with(client)` from `team4u-retry-managed`; `Retries` supports INLINE only. |
-| 1.0 | Moved `com.team4u.framework.retry.api.ManagedSubmitResult` | Use `com.team4u.framework.retry.managed.ManagedSubmitResult`. |
-| 1.0 | Moved `com.team4u.framework.retry.config.DynamicRetryPolicyRegistry` | Use `com.team4u.framework.retry.dynamic.DynamicRetryPolicyRegistry` from `team4u-retry-config`. |
+---
 
-## Log core and governance split
+## 6. 重试模块治理拆分
 
-The logging capability is split into `team4u-log` (core provider-free logging) and `team4u-log-governance` (governance, bootstrap, dynamic masking, and Jackson support). All production and test FQCNs are unchanged.
+后台托管重试治理能力由 `team4u-retry` 移至 `team4u-retry-managed`，配置驱动重试策略移至 `team4u-retry-config`。
 
-| Version | Removed or moved API | Migration |
-| --- | --- | --- |
-| 1.0 | Logging split into core and governance | Use `team4u-log` for provider-free logging and `team4u-log-governance` for bootstrap and governance. |
-| 1.0 | `LogBootstrap` moved artifact | Add `team4u-log-governance`; its FQCN `com.team4u.framework.log.LogBootstrap` is unchanged. |
-| 1.0 | Jackson, Config, Mask, Proxy, Criterion, and Spring integrations moved artifact | Add `team4u-log-governance`; `team4u-log` has no corresponding dependency or source edge. |
-| 1.0 | `LogEngine.reset()` no longer stops governance | Call `LogBootstrap.stop()` first; core reset resets appender, interceptors, and serializer state without changing bootstrap ownership. |
-| 1.0 | `LogEngine.toJson(LogEvent)` may be plain text | Core defaults to `toString`; install a custom serializer or use governance Jackson when JSON is required. |
-| 1.0 | Governance carries the Jackson provider | Depend only on `team4u-log-governance`; it supplies `team4u-serializer-jackson` and Jackson transitively at runtime. |
+| 版本 | 变更/移除的 API | 迁移方案 |
+| :--- | :--- | :--- |
+| 1.0 | 移除 `Retries.managed(ManagedRetryClient)` | 使用 `team4u-retry-managed` 中的 `ManagedRetries.with(client)`；`Retries` 仅保留 `INLINE` 进程内重试。 |
+| 1.0 | 迁移 `com.team4u.framework.retry.api.ManagedSubmitResult` | 改为使用 `com.team4u.framework.retry.managed.ManagedSubmitResult`。 |
+| 1.0 | 迁移 `com.team4u.framework.retry.config.DynamicRetryPolicyRegistry` | 改为使用 `team4u-retry-config` 中的 `com.team4u.framework.retry.dynamic.DynamicRetryPolicyRegistry`。 |
 
-## Bean Spring adapter split
+---
 
-`com.team4u.framework.bean.provider.SpringBeanContainer` keeps its FQCN but moved from `team4u-bean` to `team4u-bean-spring`. Pure Java local-container users keep only `team4u-bean`; it has no Spring compile, test, runtime, or source edge.
+## 7. 结构化日志核心与治理拆分
 
-Spring users add `com.team4u:team4u-bean-spring`, remove manual `@Bean SpringBeanContainer` declarations, and import the plain configuration explicitly:
+日志能力拆分为 `team4u-log`（无 Provider 的轻量流式日志核心）与 `team4u-log-governance`（包含引导、Jackson、动态脱敏、染色与 Spring 治理）。所有类名与包路径保持不变。
+
+| 版本 | 变更/移除的 API | 迁移方案 |
+| :--- | :--- | :--- |
+| 1.0 | 日志拆分为核心与治理模块 | 纯日志输出使用 `team4u-log`；全局引导、治理与 Jackson 集成使用 `team4u-log-governance`。 |
+| 1.0 | `LogBootstrap` 迁移构件 | 引入 `team4u-log-governance`；类名 `com.team4u.framework.log.LogBootstrap` 保持不变。 |
+| 1.0 | Jackson、Config、Mask、Proxy、Criterion 与 Spring 集成迁移构件 | 引入 `team4u-log-governance`；`team4u-log` 核心不含上述依赖。 |
+| 1.0 | `LogEngine.reset()` 不再停止治理生命周期 | 请先显式调用 `LogBootstrap.stop()`；核心 reset 仅重置 Appender、拦截器与序列化器状态。 |
+| 1.0 | `LogEngine.toJson(LogEvent)` 默认文本化 | 核心默认使用 `toString` 格式化；需要标准 JSON 时请注册自定义序列化器或引入日志治理模块。 |
+| 1.0 | 日志治理自带 Jackson Provider | 依赖 `team4u-log-governance` 即可，它会在运行时传递提供 `team4u-serializer-jackson`。 |
+
+---
+
+## 8. Bean 容器 Spring 适配拆分
+
+`com.team4u.framework.bean.provider.SpringBeanContainer` 保持完整类名，但已移至 `team4u-bean-spring`。纯 Java 本地容器使用者仅需依赖 `team4u-bean`，完全无 Spring 编译与运行时依赖。
+
+Spring 用户请引入 `com.team4u:team4u-bean-spring`，移除手动声明的 `@Bean SpringBeanContainer`，并显式 `@Import` 配置类：
 
 ```java
 @Configuration
@@ -92,36 +112,45 @@ public class ApplicationConfiguration {
 }
 ```
 
-`team4u-retry-spring` now depends on `team4u-bean-spring`; its `RetrySpringConfiguration` imports `Team4uBeanConfiguration`, so `@EnableRetry` still supplies exactly one adapter without application-side manual wiring.
+`team4u-retry-spring` 现已依赖 `team4u-bean-spring`，其 `RetrySpringConfiguration` 会自动导入 `Team4uBeanConfiguration`，因此使用 `@EnableRetry` 时依然能自动注入单一适配器。
 
-| Version | Removed or moved API | Migration |
-| --- | --- | --- |
-| 1.0 | Moved `SpringBeanContainer` from `team4u-bean` | FQCN is unchanged; add `team4u-bean-spring` and replace manual `@Bean` wiring with `@Import(Team4uBeanConfiguration.class)`. |
-| 1.0 | Removed `RetrySpringConfiguration.springBeanContainer()` | Use `@EnableRetry`; the imported shared configuration registers one `SpringBeanContainer`. |
+| 版本 | 变更/移除的 API | 迁移方案 |
+| :--- | :--- | :--- |
+| 1.0 | `SpringBeanContainer` 迁移模块 | 类名保持不变；引入 `team4u-bean-spring` 并使用 `@Import(Team4uBeanConfiguration.class)`。 |
+| 1.0 | 移除 `RetrySpringConfiguration.springBeanContainer()` | 使用 `@EnableRetry` 即可，导入的公共配置会自动注册 `SpringBeanContainer`。 |
 
-## Mask adapter and dynamic config split
+---
 
-`team4u-mask` is now the core artifact and still depends only on `team4u-base` and `team4u-policy`. Add `com.team4u:team4u-mask-jackson` for the unchanged `com.team4u.framework.mask.jackson` classes and Jackson serialization. Add `com.team4u:team4u-mask-config` for config-driven rules; it depends on config-core and serializer-json, and the application must supply `team4u-serializer-jackson` or another registered `JsonSerializerPolicy`.
+## 9. 数据脱敏适配与动态配置拆分
 
-`MaskRuleRepository` keeps `com.team4u.framework.mask.config.MaskRuleRepository` and now implements the core `MaskRuleResolver` SPI. `MaskBootstrap` moved without a compatibility class from `com.team4u.framework.mask.MaskBootstrap` to `com.team4u.framework.mask.config.MaskBootstrap`; update the import and add `team4u-mask-config`. Jackson serialization reads dynamic rules through the core global resolver, so it does not depend on mask-config.
+1. `team4u-mask` 为纯 Java 核心脱敏构件，仅依赖 `team4u-base` 与 `team4u-policy`。
+2. Jackson 序列化脱敏请引入 `com.team4u:team4u-mask-jackson`（包名 `com.team4u.framework.mask.jackson` 保持不变）。
+3. 配置驱动动态规则请引入 `com.team4u:team4u-mask-config`；该模块依赖配置核心与 JSON 序列化门面，应用需提供 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。
+4. `MaskRuleRepository` 保留类名 `com.team4u.framework.mask.config.MaskRuleRepository` 并实现了核心 `MaskRuleResolver` SPI。`MaskBootstrap` 迁移至 `com.team4u.framework.mask.config.MaskBootstrap`。
+5. 未知脱敏策略键、null、空串及空白字符现在将严格抛出 `IllegalArgumentException`；仅显式配置 `NONE` 会保留明文原始值。
 
-Unknown mask policy keys, null, empty, and whitespace keys now throw `IllegalArgumentException`. Only explicit `NONE` preserves the original value; update accidental fallback usages to register a real `MaskPolicy`.
+---
 
-## Explicit serializer provider choice
+## 10. 显式选择 JSON 序列化 Provider
 
-Applications using JSON APIs must choose a provider explicitly. Add `com.team4u:team4u-serializer-jackson` to the application, or provide/register a custom `JsonSerializerPolicy` through `META-INF/services/com.team4u.framework.serializer.json.JsonSerializerPolicy`. Depending only on `team4u-serializer-json` is supported, but the first non-null/non-empty JSON call fails fast with an `IllegalStateException` naming both choices. The same requirement applies to JSON paths in config-core, retry-core, kv-space/kv-lifecycle, lease-jdbc, router, translator, and mask-config. `team4u-mask-jackson` owns direct Jackson API for its serializer adapter; it never passes `team4u-serializer-jackson`. `team4u-retry-lease-runtime` permanently carries nonoptional Jackson for its durable-record integration and therefore supplies Jackson to consumers directly; this is distinct from an application-owned `JsonUtil` provider, and the artifact never passes `team4u-serializer-jackson`. Log governance is the logging exception: depending on `team4u-log-governance` alone transitively supplies `team4u-serializer-jackson` for its bootstrap and `JsonUtil` runtime.
+使用 JSON 序列化 API 的应用必须显式选择 Provider：
+- 在应用依赖中引入 `com.team4u:team4u-serializer-jackson`；
+- 或通过 SPI（`META-INF/services/com.team4u.framework.serializer.json.JsonSerializerPolicy`）注册自定义的 `JsonSerializerPolicy`。
 
-After importing it, depend on concrete Team4u artifacts without versions.
+仅依赖 `team4u-serializer-json` 时编译正常，但首次进行非空 JSON 调用时将快速失败并抛出明确的 `IllegalStateException` 指引。该要求同样适用于 `team4u-config`、`team4u-retry`、`team4u-kv-space`、`team4u-lease-jdbc`、`team4u-router`、`team4u-translator` 与 `team4u-mask-config` 中的 JSON 解析链路。
 
-## Base JDBC and Spring bean lookup
+---
 
-Applications using `JdbcUtil`, `InsertBuilder`, `UpdateBuilder`, `SqlBuilder`, or `SqlExpression` must add `com.team4u:team4u-base-jdbc`; package and class names are unchanged and `team4u-base` no longer carries JDBC or Spring.
+## 11. Base JDBC 与 Spring Bean 查找
 
-`com.team4u.framework.base.util.SpringUtil` is deleted. Replace it with `BeanManager.getInstance().getBean(...)` after registering a `BeanFactory`/bean provider compatible with `com.team4u.framework.bean.BeanManager`.
+1. 使用 `JdbcUtil`、`InsertBuilder`、`UpdateBuilder`、`SqlBuilder` 或 `SqlExpression` 的应用必须显式引入 `com.team4u:team4u-base-jdbc`；包名与类名保持不变，`team4u-base` 核心不再携带 JDBC 与 Spring。
+2. 彻底删除了 `com.team4u.framework.base.util.SpringUtil`。请统一替换为 `BeanManager.getInstance().getBean(...)` 并配合 `team4u-bean-spring`。
 
-## Optional ByteBuddy for class proxies
+---
 
-`team4u-proxy` supports JDK interface proxies without ByteBuddy. Add ByteBuddy directly only when proxying a concrete class:
+## 12. 类代理的按需引入 ByteBuddy
+
+`team4u-proxy` 默认支持纯 JDK 动态接口代理（无需 ByteBuddy）。当需要对具体类（Class）生成代理时，请按需显式添加 ByteBuddy 依赖：
 
 ```xml
 <dependency>
@@ -131,30 +160,30 @@ Applications using `JdbcUtil`, `InsertBuilder`, `UpdateBuilder`, `SqlBuilder`, o
 </dependency>
 ```
 
-The same rule applies to `LogProxyFactory.createProxy`, `LogProxyFactory.createDynamicProxy`, and `RetryProxyFactory.createProxy`. `team4u-config-proxy` is the exception: it always builds concrete class proxies, so it carries ByteBuddy as an explicit runtime dependency. Adding `team4u-config-proxy` alone is sufficient; do not add a second ByteBuddy dependency for config proxies.
+该规则同样适用于 `LogProxyFactory` 与 `RetryProxyFactory`。`team4u-config-proxy` 是特例：由于其专门构建配置类代理，已将 ByteBuddy 作为显式运行时依赖打包，使用配置代理时无需重复引入。
 
-The engine is attempted from the thread context loader, the target type's loader, and then `ProxyBuilder`'s defining loader. Child-first/plugin loaders that can define both the engine and ByteBuddy are supported. A JVM visibility boundary remains if `ProxyBuilder` is parent-defined, the engine is ordinary parent-delegated, and only a normal child loader carries ByteBuddy: a parent-defined engine class cannot resolve types visible only to that child. Place ByteBuddy in the parent visible to the engine, or use a loader that defines both.
+---
 
-## Bare artifact naming convention for core entry points
+## 13. 核心主入口统一裸 Artifact 命名规范
 
-In Team4u 1.0, each capability family's main entry point uses the bare artifactId (`team4u-config`, `team4u-kv`, `team4u-lease`, `team4u-log`, `team4u-ratelimiter`, `team4u-retry`, `team4u-singleflight`), while runtime variants and adapters carry explicit suffixes (`team4u-config-proxy`, `team4u-kv-space`, `team4u-log-governance`, `team4u-ratelimiter-spring`, `team4u-retry-managed`, etc.).
+在 Team4u 1.0 中，各业务能力族（family）的主入口核心模块统一采用**裸 ArtifactId**（`team4u-config`, `team4u-kv`, `team4u-lease`, `team4u-log`, `team4u-ratelimiter`, `team4u-retry`, `team4u-singleflight`），运行时扩展与适配器携带明确后缀（`team4u-config-proxy`, `team4u-kv-space`, `team4u-log-governance`, `team4u-ratelimiter-spring`, `team4u-retry-managed` 等）。
 
-Bare coordinates no longer serve as grouping or aggregator POMs; the repository is organized into a clean 2D layout `modules/<family>/<variant>`, and the root `team4u-framework` POM is the single parent, aggregator, and BOM for the entire project.
+裸坐标不再承担聚合器角色；全工程采用标准的二维目录结构 `modules/<family>/<variant>`，根 `team4u-framework` POM 作为整个项目唯一的 Parent、Aggregator 和 BOM。
 
-## Merged master features (post-plan convergence)
+---
 
-The master branch merged into the convergence branch adds the following capabilities, published under the split-artifact conventions above:
+## 14. 归并功能与新模块
 
-- **`team4u-proxy-spring`**: the annotation-proxy Spring wiring template (`AnnotationProxyBeanPostProcessor` abstract base). It depends only on `team4u-proxy` + `spring-context`/`spring-aop`, and never carries ByteBuddy at compile/runtime (Enforcer-enforced); it is the shared template behind `ratelimiter-spring` / `singleflight-spring`.
-- **`team4u-ratelimiter` / `-proxy` / `-spring` (three-way split)**: the pre-merge monolith `team4u-ratelimiter` no longer exists. Core is the rule model, four algorithms, and facade (storage via kv capability negotiation, no storage submodule); proxy adds `@RateLimit` annotation interception (JDK/ByteBuddy dual engine, ByteBuddy on demand); spring adds `@EnableRateLimit` auto-proxy on the `team4u-proxy-spring` template. JSON rules go through the `JsonUtil` SPI: the application must provide `team4u-serializer-jackson` or a registered custom `JsonSerializerPolicy` explicitly.
-- **`team4u-singleflight` / `-proxy` / `-spring` (three-way split)**: the pre-merge monolith `team4u-singleflight` no longer exists. Core is the rule model, coordination state machine, and facade; proxy adds `@SingleFlight`; spring adds `@EnableSingleFlight`. Two distinct Jackson boundaries: core owns a direct nonoptional `jackson-databind` compile edge for its durable session-envelope/fallback-converter schema (inherited transitively by the adapters), while rule parsing goes through the `JsonUtil` SPI and the application must provide the provider explicitly (`team4u-serializer-jackson` or a registered custom policy); neither core nor its adapters ever pass `team4u-serializer-jackson`.
-- **Named store registry moved to kv-space**: `NamedKvStore` / `NamedKvStoreRegistry` keep their FQCNs (`com.team4u.framework.kv.*`) but live in `team4u-kv-space`, matching the Task 12 kv split; id, ratelimiter, and singleflight consume it as a transitive dependency.
-- **`team4u-id`**: config-driven sequence generation on kv `CounterCapable` (group reset, quota exhaustion, recycle, local segment, formatted numbers). Single module; JDBC/Redis counting backends stay explicit application dependencies.
+- **`team4u-proxy-spring`**：注解代理 Spring 装配模板（`AnnotationProxyBeanPostProcessor` 抽象基类），仅依赖 `team4u-proxy` 与 `spring-context`/`spring-aop`，绝不携带 ByteBuddy，为 `ratelimiter-spring` / `singleflight-spring` 提供通用底座。
+- **`team4u-ratelimiter` / `-proxy` / `-spring`（三向拆分）**：旧版单体 `team4u-ratelimiter` 已移除。核心提供规则模型、4 种限流算法与门面；proxy 模块提供 `@RateLimit` 注解拦截；spring 模块提供 `@EnableRateLimit` 自动装配。
+- **`team4u-singleflight` / `-proxy` / `-spring`（三向拆分）**：旧版单体 `team4u-singleflight` 已移除。核心提供规则模型、状态协调机与并发合并门面；proxy 模块提供 `@SingleFlight`；spring 模块提供 `@EnableSingleFlight`。核心携带轻量 `jackson-databind` 编译依赖以保障持久化会话信封协议，规则解析依然走 `JsonUtil` 门面。
+- **命名存储注册表移至 `team4u-kv-space`**：`NamedKvStore` / `NamedKvStoreRegistry` 保持原类名，归属到 `team4u-kv-space` 中。
+- **`team4u-id`**：基于 KV 原子计数器能力（`CounterCapable`）的配置驱动序号生成模块，支持分组重置、循环使用、本地号段加速与模板单号。
 
-The consumer set grew from 6 to 8: `consumer-ratelimiter-core` proves the ratelimiter core boundary (no proxy/Spring edges) and `consumer-singleflight-jackson` proves the singleflight split with an application-owned JSON provider. Both profiles run the same 8 consumers.
+---
 
-## Wildcard matcher transition
+## 15. 通配符匹配器平滑过渡
 
-Criterion's `like` syntax now delegates to `com.team4u.framework.base.pattern.PathPatternMatcher` with Team4u Ant-style semantics; the module no longer has a Spring production dependency. Observable behavior is unchanged across the locked 53-case matrix: `*` stays within one `/`-delimited segment, `?` matches one non-separator character, only an exact `**` segment crosses directories, `***` remains segment-local, and a backslash is an ordinary literal. Null behavior is adapter-owned: null pattern/null actual is true, null pattern only is false, and non-null pattern/null actual remains false to public Criterion callers.
+Criterion 的 `like` 通配语法已切换至内部实现的 `com.team4u.framework.base.pattern.PathPatternMatcher`（Ant-Style 语义），彻底移除对 Spring 的生产依赖。53 组基准用例测试结果与原有行为完全一致。
 
-Criterion's Spring-only `Team4uCriterionAutoConfiguration` was removed. Register `Criteria.global()`, `StandardCriterionParser.global()`, `CompilerRegistry.global()`, or `ValueConverterRegistry.global()` directly in application configuration if those singletons are needed as beans.
+同时移除了 Criterion 的 Spring 自动配置类 `Team4uCriterionAutoConfiguration`，如需将 `Criteria.global()` 等单例注入 Spring 容器，请在应用配置类中自行声明注册。
