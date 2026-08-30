@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns:xsi="http://maven.apache.org/POM/4.0.0"
+         xmlns="http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.team4u</groupId>
+        <artifactId>team4u-framework</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+        <relativePath>../../../pom.xml</relativePath>
+    </parent>
+
+    <artifactId>team4u-kv-test</artifactId>
+    <description>KV 存储契约测试套件：保证多后端实现行为一致（对齐 team4u-lease-test 惯例）</description>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-kv</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <!-- 契约测试基类位于 main 源码（供下游模块继承），junit 以 provided 传递，
+             对齐 team4u-lease-test 惯例，不泄漏给消费者 -->
+        <dependency>
+            <groupId>junit</groupId>
+            <artifactId>junit</artifactId>
+            <scope>provided</scope>
+        </dependency>
+    </dependencies>
+</project>

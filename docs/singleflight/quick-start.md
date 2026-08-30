@@ -1,6 +1,6 @@
 # 快速开始
 
-本文面向第一次接触 singleflight 组件（`team4u-singleflight-core`）的开发者：从引入依赖到跑通第一个场景，再到每个配置项「配置怎么写、代码怎么传参、结果是什么」。
+本文面向第一次接触 singleflight 组件（`team4u-singleflight`）的开发者：从引入依赖到跑通第一个场景，再到每个配置项「配置怎么写、代码怎么传参、结果是什么」。
 
 阅读前只需要建立一个心智模型：**业务代码只负责声明「在哪合并」（point）和「怎么加载」（loader），其余一切——key 怎么取、结果缓存多久、竞争者怎么收场——都由一条 JSON 规则决定**。配置和代码的衔接点是**参数 Map**：编程式调用时你手工构造它，注解调用时框架自动把方法参数按参数名装进它。规则里的 `${productId}`、`$refresh` 都是从这个 Map 里取值。
 
@@ -14,7 +14,7 @@
 <!-- 编程式接入（本文主体）：核心引擎与门面 -->
 <dependency>
     <groupId>com.team4u</groupId>
-    <artifactId>team4u-singleflight-core</artifactId>
+    <artifactId>team4u-singleflight</artifactId>
     <version>最新正式版本</version>
 </dependency>
 
@@ -41,11 +41,11 @@
 ```
 
 > [!NOTE]
-> 两个 Jackson 边界：`team4u-singleflight-core` 直连 `jackson-databind`（会话信封的 durable schema 与降级转换的类型自省，会随 core 传递到你的运行时）；但规则解析与降级值 bean 转换都走 `JsonUtil` SPI，core **不会**传递 `team4u-serializer-jackson`——上例最后一项是应用显式的 provider 选择，也可换成经 `META-INF/services` 注册的自定义 `JsonSerializerPolicy`（见[序列化组件](../serializer/README.md)）。
+> 两个 Jackson 边界：`team4u-singleflight` 直连 `jackson-databind`（会话信封的 durable schema 与降级转换的类型自省，会随 core 传递到你的运行时）；但规则解析与降级值 bean 转换都走 `JsonUtil` SPI，core **不会**传递 `team4u-serializer-jackson`——上例最后一项是应用显式的 provider 选择，也可换成经 `META-INF/services` 注册的自定义 `JsonSerializerPolicy`（见[序列化组件](../serializer/README.md)）。
 
 协调存储按需引入 kv 后端（与 singleflight 无强绑定）：
 
-- 内存存储（单测、单实例）：`team4u-kv-core` 自带 `InMemoryKvStore`，无需额外依赖
+- 内存存储（单测、单实例）：`team4u-kv` 自带 `InMemoryKvStore`，无需额外依赖
 - Redis 存储（跨实例回源合并）：引入 `team4u-kv-store-redis`，由业务项目提供 `StringRedisTemplate`
 - JDBC 存储（跨实例回源合并）：引入 `team4u-kv-store-jdbc`，由业务项目提供 `DataSource`
 

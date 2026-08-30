@@ -134,9 +134,9 @@ team4u-id                        # 单模块：存储经 kv 组件能力协商�
 
 | 依赖 | 所属 artifact | 用途 | 按需引入 |
 | :--- | :--- | :--- | :--- |
-| `team4u-kv-core` | `team4u-id`（传递） | `CounterCapable` 计数能力、`KvStores` 能力协商 | 必需 |
+| `team4u-kv` | `team4u-id`（传递） | `CounterCapable` 计数能力、`KvStores` 能力协商 | 必需 |
 | `team4u-kv-space` | `team4u-id`（传递） | `NamedKvStoreRegistry` / `NamedKvStore` 命名存储（多存储分工时使用） | 必需 |
-| `team4u-config-core` | `team4u-id`（传递） | `ConfigDrivenRegistry` 规则加载与热更新 | 必需 |
+| `team4u-config` | `team4u-id`（传递） | `ConfigDrivenRegistry` 规则加载与热更新 | 必需 |
 | `team4u-policy` / `team4u-base` | `team4u-id`（传递） | `KeyedPolicyRegistry` 策略注册、`TextTemplate` 模板、LRU 缓存 | 必需 |
 | `team4u-serializer-json` | `team4u-id`（传递） | 规则 JSON 解析门面（应用需显式提供 JSON 引擎，见下） | 必需 |
 | JSON 引擎（provider） | 应用显式提供 | 规则解析使用 `JsonUtil`：添加 `team4u-serializer-jackson` 或经 ServiceLoader 注册自定义 `JsonSerializerPolicy`（见[序列化组件](../serializer/README.md)） | 必需（无传递 provider） |

@@ -6,26 +6,22 @@ POM="$ROOT/pom.xml"
 WORK="$(mktemp -d)"
 trap 'rm -rf "$WORK"' EXIT
 
-# Independent 48-leaf manifest. Every entry below was confirmed against the
-# actual root <modules> list, the root dependencyManagement com.team4u entries,
-# and the module POM <artifactId> of each reactor leaf after the master merge
-# (id + ratelimiter core/proxy/spring + singleflight core/proxy/spring +
-# proxy-spring joined the released reactor; the old monolith artifacts
-# team4u-ratelimiter / team4u-singleflight are gone).
+# Independent 48-leaf manifest. Every entry below reflects the 2D
+# modules/<family>/<variant> layout with bare artifactIds for core modules.
 EXPECTED="$WORK/expected.txt"
-cat >"$EXPECTED" <<'EOF'
+cat >"$EXPECTED" <<'EOF_EXPECTED'
 team4u-base
 team4u-base-jdbc
 team4u-bean
 team4u-bean-spring
-team4u-config-core
+team4u-config
 team4u-config-db
 team4u-config-proxy
 team4u-config-spring
 team4u-config-test
 team4u-criterion
 team4u-id
-team4u-kv-core
+team4u-kv
 team4u-kv-lifecycle
 team4u-kv-lock
 team4u-kv-retryable
@@ -33,11 +29,11 @@ team4u-kv-space
 team4u-kv-store-jdbc
 team4u-kv-store-redis
 team4u-kv-test
-team4u-lease-core
+team4u-lease
 team4u-lease-jdbc
 team4u-lease-memory
 team4u-lease-test
-team4u-log-core
+team4u-log
 team4u-log-governance
 team4u-mask
 team4u-mask-config
@@ -45,11 +41,11 @@ team4u-mask-jackson
 team4u-policy
 team4u-proxy
 team4u-proxy-spring
-team4u-ratelimiter-core
+team4u-ratelimiter
 team4u-ratelimiter-proxy
 team4u-ratelimiter-spring
+team4u-retry
 team4u-retry-config
-team4u-retry-core
 team4u-retry-lease-runtime
 team4u-retry-managed
 team4u-retry-proxy
@@ -58,11 +54,63 @@ team4u-router
 team4u-router-proxy
 team4u-serializer-jackson
 team4u-serializer-json
-team4u-singleflight-core
+team4u-singleflight
 team4u-singleflight-proxy
 team4u-singleflight-spring
 team4u-translator
-EOF
+EOF_EXPECTED
+
+EXPECTED_MODULES="$WORK/expected-modules.txt"
+cat >"$EXPECTED_MODULES" <<'EOF_MODULES'
+modules/base/core
+modules/base/jdbc
+modules/bean/core
+modules/bean/spring
+modules/config/core
+modules/config/db
+modules/config/proxy
+modules/config/spring
+modules/config/test
+modules/criterion/core
+modules/id/core
+modules/kv/core
+modules/kv/lifecycle
+modules/kv/lock
+modules/kv/retryable
+modules/kv/space
+modules/kv/store-jdbc
+modules/kv/store-redis
+modules/kv/test
+modules/lease/core
+modules/lease/jdbc
+modules/lease/memory
+modules/lease/test
+modules/log/core
+modules/log/governance
+modules/mask/config
+modules/mask/core
+modules/mask/jackson
+modules/policy/core
+modules/proxy/core
+modules/proxy/spring
+modules/ratelimiter/core
+modules/ratelimiter/proxy
+modules/ratelimiter/spring
+modules/retry/config
+modules/retry/core
+modules/retry/lease-runtime
+modules/retry/managed
+modules/retry/proxy
+modules/retry/spring
+modules/router/core
+modules/router/proxy
+modules/serializer/jackson
+modules/serializer/json
+modules/singleflight/core
+modules/singleflight/proxy
+modules/singleflight/spring
+modules/translator/core
+EOF_MODULES
 
 mkdir -p "$WORK/classes"
 javac -d "$WORK/classes" "$ROOT/scripts/ReleasePomList.java"
@@ -73,24 +121,26 @@ fail() {
 }
 
 compare_structure() {
-  local label="$1"
-  local actual="$2"
+  local expected_file="$1"
+  local label="$2"
+  local actual="$3"
   local duplicate
   duplicate="$(sort "$actual" | uniq -d)"
   if [[ -n "$duplicate" ]]; then
-    fail "duplicated $label entries: $(echo "$duplicate" | tr '\n' ' ')"
+    fail "duplicated $label entries: $(echo "$duplicate" | tr '
+' ' ')"
   fi
-  if ! diff -u "$EXPECTED" "$actual" >&2; then
+  if ! diff -u "$expected_file" "$actual" >&2; then
     fail "$label does not match the independent 48-leaf manifest"
   fi
 }
 
 java -cp "$WORK/classes" org.team4u.release.ReleasePomList modules "$POM" >"$WORK/module-paths.txt"
-sed 's|.*/||' "$WORK/module-paths.txt" | LC_ALL=C sort >"$WORK/modules.txt"
-compare_structure "root direct modules" "$WORK/modules.txt"
+LC_ALL=C sort "$WORK/module-paths.txt" >"$WORK/modules.txt"
+compare_structure "$EXPECTED_MODULES" "root direct modules" "$WORK/modules.txt"
 
 java -cp "$WORK/classes" org.team4u.release.ReleasePomList managed "$POM" >"$WORK/managed.txt"
-compare_structure "root dependencyManagement com.team4u leaves" "$WORK/managed.txt"
+compare_structure "$EXPECTED" "root dependencyManagement com.team4u leaves" "$WORK/managed.txt"
 
 : >"$WORK/artifacts.txt"
 while IFS= read -r modulePath; do
@@ -99,21 +149,15 @@ while IFS= read -r modulePath; do
   java -cp "$WORK/classes" org.team4u.release.ReleasePomList artifacts "$module_pom" >>"$WORK/artifacts.txt"
 done <"$WORK/module-paths.txt"
 LC_ALL=C sort -o "$WORK/artifacts.txt" "$WORK/artifacts.txt"
-compare_structure "module POM artifact IDs" "$WORK/artifacts.txt"
+compare_structure "$EXPECTED" "module POM artifact IDs" "$WORK/artifacts.txt"
 
-if grep -qx 'team4u-framework' "$WORK/modules.txt" "$WORK/managed.txt"; then
+if grep -qx 'team4u-framework' "$WORK/managed.txt"; then
   fail "the root BOM team4u-framework must not list itself as a released leaf"
 fi
-if grep -qx 'team4u-log' "$WORK/modules.txt" "$WORK/managed.txt" "$WORK/artifacts.txt"; then
-  fail "legacy monolith team4u-log must remain absent"
+if grep -Ex 'team4u-(config|kv|lease|log|ratelimiter|retry|singleflight)-core' "$WORK/managed.txt" "$WORK/artifacts.txt"; then
+  fail "old -core suffix must remain absent from artifact IDs"
 fi
-if grep -qx 'team4u-ratelimiter' "$WORK/modules.txt" "$WORK/managed.txt" "$WORK/artifacts.txt"; then
-  fail "pre-merge monolith team4u-ratelimiter must remain absent (split into -core/-proxy/-spring)"
-fi
-if grep -qx 'team4u-singleflight' "$WORK/modules.txt" "$WORK/managed.txt" "$WORK/artifacts.txt"; then
-  fail "pre-merge monolith team4u-singleflight must remain absent (split into -core/-proxy/-spring)"
-fi
-if grep -qx 'benchmarks' "$WORK/modules.txt"; then
+if grep -qx 'benchmarks' "$WORK/module-paths.txt"; then
   fail "benchmarks must stay outside the published leaf manifest"
 fi
 
@@ -129,12 +173,12 @@ JACKSON_OWNERS=(
   team4u-mask-jackson
   team4u-retry-lease-runtime
   team4u-serializer-jackson
-  team4u-singleflight-core
+  team4u-singleflight
 )
 if [[ "${#JACKSON_OWNERS[@]}" -ne 5 ]]; then
   fail "provider/Jackson ownership must allow exactly five modules"
 fi
-# singleflight-core owns a direct nonoptional jackson-databind compile edge
+# singleflight owns a direct nonoptional jackson-databind compile edge
 # (durable-schema exemption). That edge necessarily flows transitively to its
 # adapters; they inherit the databind runtime artifact but never the provider.
 # Heirs may carry com.fasterxml.jackson only, never team4u-serializer-jackson.
@@ -145,9 +189,17 @@ DATABIND_HEIRS=(
 LEAK_INCLUDES='com.team4u:*,com.fasterxml.jackson*'
 LEAKS=0
 
+declare -A MODULE_POMS
+while IFS= read -r modulePath; do
+  module_pom="$ROOT/$modulePath/pom.xml"
+  art="$(java -cp "$WORK/classes" org.team4u.release.ReleasePomList artifacts "$module_pom")"
+  MODULE_POMS["$art"]="$module_pom"
+done <"$WORK/module-paths.txt"
+
 for leaf in "${LEAVES[@]}"; do
-  module_dir="$ROOT/$leaf"
-  [[ -f "$module_dir/pom.xml" ]] || module_dir="$(dirname "$(find "$ROOT" -name target -prune -o -name .worktrees -prune -o -path "*/$leaf/pom.xml" -print -quit 2>/dev/null)")"
+  module_pom="${MODULE_POMS["$leaf"]:-}"
+  [[ -n "$module_pom" && -f "$module_pom" ]] || fail "missing module POM for $leaf"
+  module_dir="$(dirname "$module_pom")"
   tree="$WORK/$leaf.tree"
   log="$WORK/$leaf.dependency.log"
   if ! mvn -q -f "$module_dir/pom.xml" dependency:tree -Dscope=runtime \
@@ -173,7 +225,7 @@ for leaf in "${LEAVES[@]}"; do
   done
   if [[ "$owner" == no && -s "$hits" ]]; then
     if [[ "$heir" == yes ]]; then
-      # Heirs may only carry raw Jackson inherited from singleflight-core's
+      # Heirs may only carry raw Jackson inherited from singleflight's
       # databind edge; the provider artifact remains forbidden.
       if grep -q 'com[.]team4u:team4u-serializer-jackson' "$hits"; then
         LEAKS=1
@@ -193,7 +245,7 @@ done
 # distinct ownership shape that must be present in its filtered runtime tree:
 #  - serializer-jackson / mask-jackson / log-governance / retry-lease-runtime
 #    carry the provider artifact team4u-serializer-jackson,
-#  - singleflight-core owns only a direct jackson-databind edge (durable-schema
+#  - singleflight owns only a direct jackson-databind edge (durable-schema
 #    exemption) and must NOT carry team4u-serializer-jackson.
 # Heirs must carry the inherited databind edge but never the provider.
 for owner_leaf in \
@@ -205,11 +257,11 @@ for owner_leaf in \
     fail "$owner_leaf dependency tree does not contain its expected provider row team4u-serializer-jackson"
   fi
 done
-if ! grep -q 'com[.]fasterxml[.]jackson[.]core:jackson-databind' "$WORK/team4u-singleflight-core.tree"; then
-  fail "team4u-singleflight-core dependency tree does not contain its expected direct jackson-databind durable-schema edge"
+if ! grep -q 'com[.]fasterxml[.]jackson[.]core:jackson-databind' "$WORK/team4u-singleflight.tree"; then
+  fail "team4u-singleflight dependency tree does not contain its expected direct jackson-databind durable-schema edge"
 fi
-if grep -q 'com[.]team4u:team4u-serializer-jackson' "$WORK/team4u-singleflight-core.tree"; then
-  fail "team4u-singleflight-core must not expose the serializer provider at runtime (databind-only durable-schema exemption)"
+if grep -q 'com[.]team4u:team4u-serializer-jackson' "$WORK/team4u-singleflight.tree"; then
+  fail "team4u-singleflight must not expose the serializer provider at runtime (databind-only durable-schema exemption)"
 fi
 for heir_leaf in "${DATABIND_HEIRS[@]}"; do
   if grep -q 'com[.]team4u:team4u-serializer-jackson' "$WORK/$heir_leaf.tree"; then
@@ -235,41 +287,36 @@ check_shape() {
   fi
 }
 
-# 30 representative direct Team4u dependency shapes = the 22 pre-merge shapes
-# plus the 8 post-merge leaves (id, ratelimiter core/proxy/spring, singleflight
-# core/proxy/spring, proxy-spring). Every expected set was confirmed from the
-# leaf's actual POM dependencies and its runtime dependency:tree output, not
-# derived from this list; mask-jackson was re-confirmed because the merged
-# master POM now also carries the provider edge.
+# 30 representative direct Team4u dependency shapes.
 check_shape team4u-base-jdbc $'team4u-base'
 check_shape team4u-criterion $'team4u-base\nteam4u-policy'
 check_shape team4u-proxy $'team4u-base'
 check_shape team4u-proxy-spring $'team4u-proxy'
 check_shape team4u-serializer-json $'team4u-base\nteam4u-policy'
 check_shape team4u-serializer-jackson $'team4u-serializer-json'
-check_shape team4u-config-core $'team4u-base\nteam4u-policy\nteam4u-serializer-json'
-check_shape team4u-config-proxy $'team4u-config-core\nteam4u-proxy'
-check_shape team4u-config-spring $'team4u-config-core\nteam4u-policy'
+check_shape team4u-config $'team4u-base\nteam4u-policy\nteam4u-serializer-json'
+check_shape team4u-config-proxy $'team4u-config\nteam4u-proxy'
+check_shape team4u-config-spring $'team4u-config\nteam4u-policy'
 check_shape team4u-bean-spring $'team4u-bean'
-check_shape team4u-lease-core $'team4u-base'
-check_shape team4u-retry-core $'team4u-base\nteam4u-criterion\nteam4u-policy\nteam4u-serializer-json'
-check_shape team4u-retry-managed $'team4u-retry-core\nteam4u-serializer-json'
-check_shape team4u-retry-config $'team4u-config-core\nteam4u-retry-core'
-check_shape team4u-kv-core $'team4u-base'
-check_shape team4u-kv-space $'team4u-kv-core\nteam4u-policy\nteam4u-serializer-json'
-check_shape team4u-router $'team4u-base\nteam4u-config-core\nteam4u-criterion\nteam4u-policy\nteam4u-serializer-json'
+check_shape team4u-lease $'team4u-base'
+check_shape team4u-retry $'team4u-base\nteam4u-criterion\nteam4u-policy\nteam4u-serializer-json'
+check_shape team4u-retry-managed $'team4u-retry\nteam4u-serializer-json'
+check_shape team4u-retry-config $'team4u-config\nteam4u-retry'
+check_shape team4u-kv $'team4u-base'
+check_shape team4u-kv-space $'team4u-kv\nteam4u-policy\nteam4u-serializer-json'
+check_shape team4u-router $'team4u-base\nteam4u-config\nteam4u-criterion\nteam4u-policy\nteam4u-serializer-json'
 check_shape team4u-router-proxy $'team4u-bean\nteam4u-proxy\nteam4u-router'
 check_shape team4u-mask $'team4u-base\nteam4u-policy'
 check_shape team4u-mask-jackson $'team4u-mask\nteam4u-serializer-jackson'
-check_shape team4u-mask-config $'team4u-config-core\nteam4u-mask\nteam4u-serializer-json'
-check_shape team4u-log-core $'team4u-base\nteam4u-policy'
-check_shape team4u-log-governance $'team4u-config-core\nteam4u-criterion\nteam4u-log-core\nteam4u-mask\nteam4u-mask-config\nteam4u-mask-jackson\nteam4u-proxy\nteam4u-serializer-jackson\nteam4u-serializer-json'
-check_shape team4u-id $'team4u-base\nteam4u-config-core\nteam4u-kv-core\nteam4u-kv-space\nteam4u-policy\nteam4u-serializer-json'
-check_shape team4u-ratelimiter-core $'team4u-base\nteam4u-config-core\nteam4u-kv-core\nteam4u-kv-space\nteam4u-policy\nteam4u-serializer-json'
-check_shape team4u-ratelimiter-proxy $'team4u-proxy\nteam4u-ratelimiter-core'
+check_shape team4u-mask-config $'team4u-config\nteam4u-mask\nteam4u-serializer-json'
+check_shape team4u-log $'team4u-base\nteam4u-policy'
+check_shape team4u-log-governance $'team4u-config\nteam4u-criterion\nteam4u-log\nteam4u-mask\nteam4u-mask-config\nteam4u-mask-jackson\nteam4u-proxy\nteam4u-serializer-jackson\nteam4u-serializer-json'
+check_shape team4u-id $'team4u-base\nteam4u-config\nteam4u-kv\nteam4u-kv-space\nteam4u-policy\nteam4u-serializer-json'
+check_shape team4u-ratelimiter $'team4u-base\nteam4u-config\nteam4u-kv\nteam4u-kv-space\nteam4u-policy\nteam4u-serializer-json'
+check_shape team4u-ratelimiter-proxy $'team4u-proxy\nteam4u-ratelimiter'
 check_shape team4u-ratelimiter-spring $'team4u-proxy-spring\nteam4u-ratelimiter-proxy'
-check_shape team4u-singleflight-core $'team4u-base\nteam4u-config-core\nteam4u-criterion\nteam4u-kv-core\nteam4u-kv-lock\nteam4u-kv-space\nteam4u-policy\nteam4u-serializer-json'
-check_shape team4u-singleflight-proxy $'team4u-proxy\nteam4u-singleflight-core'
+check_shape team4u-singleflight $'team4u-base\nteam4u-config\nteam4u-criterion\nteam4u-kv\nteam4u-kv-lock\nteam4u-kv-space\nteam4u-policy\nteam4u-serializer-json'
+check_shape team4u-singleflight-proxy $'team4u-proxy\nteam4u-singleflight'
 check_shape team4u-singleflight-spring $'team4u-proxy-spring\nteam4u-singleflight-proxy'
 EFFECTIVE="$WORK/effective-pom.xml"
 if ! mvn -q -f "$POM" help:effective-pom -Doutput="$EFFECTIVE" >"$WORK/effective.log" 2>&1; then

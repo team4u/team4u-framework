@@ -38,7 +38,7 @@
         </dependency>
         <dependency>
             <groupId>com.team4u</groupId>
-            <artifactId>team4u-kv-core</artifactId>
+            <artifactId>team4u-kv</artifactId>
         </dependency>
         <dependency>
             <groupId>com.team4u</groupId>

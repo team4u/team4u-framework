@@ -9,7 +9,7 @@
 ```xml
 <dependency>
     <groupId>com.team4u</groupId>
-    <artifactId>team4u-config-core</artifactId>
+    <artifactId>team4u-config</artifactId>
     <version>1.0.0-SNAPSHOT</version>
 </dependency>
 ```

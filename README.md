@@ -27,7 +27,7 @@
 
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
-| **[配置组件](docs/config/README.md)** | `team4u-config-core` / `team4u-config-proxy` / `team4u-config-spring` / `team4u-config-db` | 强类型安全配置框架。支持快照驱动 (`Snapshot`)、Live/Pinned 代理双模、环境变量/属性文件/数据库多源聚合、占位符嵌套解析与防抖热更新。core 可独立使用，代理 / Spring / DB 适配按需显式引入。 | [概览](docs/config/README.md) · [快速开始](docs/config/quick-start.md) |
+| **[配置组件](docs/config/README.md)** | `team4u-config` / `team4u-config-proxy` / `team4u-config-spring` / `team4u-config-db` | 强类型安全配置框架。支持快照驱动 (`Snapshot`)、Live/Pinned 代理双模、环境变量/属性文件/数据库多源聚合、占位符嵌套解析与防抖热更新。core 可独立使用，代理 / Spring / DB 适配按需显式引入。 | [概览](docs/config/README.md) · [快速开始](docs/config/quick-start.md) |
 | **[策略模式组件](docs/policy/README.md)** | `team4u-policy` | 高性能策略管理与责任链引擎。提供 O(1) 复杂度 Copy-On-Write 读写分离精准路由 (`KeyedPolicy`)、有序责任链 (`OrderedPolicyChain`)、中断流水线与 Spring 自动发现 (`@PolicyAutoRegister`)。 | [概览](docs/policy/README.md) · [快速开始](docs/policy/quick-start.md) |
 
 ---
@@ -38,12 +38,12 @@
 
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
-| **[租约任务组件](docs/lease/README.md)** | `team4u-lease-core` / `team4u-lease-memory` / `team4u-lease-jdbc` | 排他任务调度框架。通过队列化 Task/Worker/Result API 提供延迟调度、精确类型订阅、心跳续约、故障接管与业务键幂等建档，Memory / JDBC 持久化后端按需显式引入。 | [概览](docs/lease/README.md) · [快速开始](docs/lease/quick-start.md) |
-| **[通用重试组件](docs/retry/README.md)** | `team4u-retry-core` / `team4u-retry-managed` / `team4u-retry-proxy` / `team4u-retry-config` / `team4u-retry-spring` / `team4u-retry-lease-runtime` | 统一重试治理框架。core 提供进程内即时同步/异步重试 (`INLINE`)；managed 提供 `MANAGED` 后台托管编排、记录模型与 `RetryStore` SPI；proxy 提供 `@Retryable` 注解代理；config 提供配置中心动态策略；lease-runtime 提供基于租约的持久化后端；spring 提供 Spring 显式适配。 | [概览](docs/retry/README.md) · [快速开始](docs/retry/quick-start.md) |
-| **[键值存储组件](docs/kv/README.md)** | `team4u-kv-core` / `team4u-kv-space` / `team4u-kv-lock` / `team4u-kv-lifecycle` / `team4u-kv-retryable` / `team4u-kv-store-jdbc` / `team4u-kv-store-redis` | 最小核心 + 装饰器的键值存储套件。core 仅含 4 操作 `KvStore` 核心与能力协商（计数/计分窗口）；类型化键空间 (`Space`) 与命名存储注册表 (`NamedKvStoreRegistry`) 位于 `team4u-kv-space`，观测/重试装饰器、CAS 化分布式锁、过期值源与 memory 内建实现之上，JDBC / Redis 后端按需显式引入。 | [概览](docs/kv/README.md) · [快速开始](docs/kv/quick-start.md) |
+| **[租约任务组件](docs/lease/README.md)** | `team4u-lease` / `team4u-lease-memory` / `team4u-lease-jdbc` | 排他任务调度框架。通过队列化 Task/Worker/Result API 提供延迟调度、精确类型订阅、心跳续约、故障接管与业务键幂等建档，Memory / JDBC 持久化后端按需显式引入。 | [概览](docs/lease/README.md) · [快速开始](docs/lease/quick-start.md) |
+| **[通用重试组件](docs/retry/README.md)** | `team4u-retry` / `team4u-retry-managed` / `team4u-retry-proxy` / `team4u-retry-config` / `team4u-retry-spring` / `team4u-retry-lease-runtime` | 统一重试治理框架。core 提供进程内即时同步/异步重试 (`INLINE`)；managed 提供 `MANAGED` 后台托管编排、记录模型与 `RetryStore` SPI；proxy 提供 `@Retryable` 注解代理；config 提供配置中心动态策略；lease-runtime 提供基于租约的持久化后端；spring 提供 Spring 显式适配。 | [概览](docs/retry/README.md) · [快速开始](docs/retry/quick-start.md) |
+| **[键值存储组件](docs/kv/README.md)** | `team4u-kv` / `team4u-kv-space` / `team4u-kv-lock` / `team4u-kv-lifecycle` / `team4u-kv-retryable` / `team4u-kv-store-jdbc` / `team4u-kv-store-redis` | 最小核心 + 装饰器的键值存储套件。core 仅含 4 操作 `KvStore` 核心与能力协商（计数/计分窗口）；类型化键空间 (`Space`) 与命名存储注册表 (`NamedKvStoreRegistry`) 位于 `team4u-kv-space`，观测/重试装饰器、CAS 化分布式锁、过期值源与 memory 内建实现之上，JDBC / Redis 后端按需显式引入。 | [概览](docs/kv/README.md) · [快速开始](docs/kv/quick-start.md) |
 | **[序号生成组件](docs/id/README.md)** | `team4u-id` | 配置驱动的序号生成框架。基于 `KvStore` 原子计数能力 (`CounterCapable`)，一条 JSON 规则支持分组重置、额度耗尽、循环使用、本地号段加速与模板化单号，内存/JDBC/Redis 后端行为一致。 | [概览](docs/id/README.md) · [快速开始](docs/id/quick-start.md) |
-| **[限流组件](docs/ratelimiter/README.md)** | `team4u-ratelimiter-core` / `team4u-ratelimiter-proxy` / `team4u-ratelimiter-spring` | 配置驱动的多算法限流框架。基于 `KvStore` 能力协商提供固定窗口、令牌桶、精确滑动窗口与客户端历史窗口四种算法，一条 JSON 规则支持键模板维度计数、多存储分工、failOpen 故障策略与 `@RateLimit` 注解代理，热更新生效；注解代理与 Spring 装配按需显式引入。 | [概览](docs/ratelimiter/README.md) · [快速开始](docs/ratelimiter/quick-start.md) |
-| **[回源合并组件](docs/singleflight/README.md)** | `team4u-singleflight-core` / `team4u-singleflight-proxy` / `team4u-singleflight-spring` | 配置驱动的回源合并与并发互斥框架。基于 `KvStore` CAS 与 kv 锁提供同 key 唯一执行者、WAIT/FAIL_FAST/FALLBACK 竞争策略、结果缓存、失败会话共享、执行者崩溃接管与 token fencing，一条 JSON 规则热更新生效，支持 `@SingleFlight` 注解代理；注解代理与 Spring 装配按需显式引入。 | [概览](docs/singleflight/README.md) · [快速开始](docs/singleflight/quick-start.md) |
+| **[限流组件](docs/ratelimiter/README.md)** | `team4u-ratelimiter` / `team4u-ratelimiter-proxy` / `team4u-ratelimiter-spring` | 配置驱动的多算法限流框架。基于 `KvStore` 能力协商提供固定窗口、令牌桶、精确滑动窗口与客户端历史窗口四种算法，一条 JSON 规则支持键模板维度计数、多存储分工、failOpen 故障策略与 `@RateLimit` 注解代理，热更新生效；注解代理与 Spring 装配按需显式引入。 | [概览](docs/ratelimiter/README.md) · [快速开始](docs/ratelimiter/quick-start.md) |
+| **[回源合并组件](docs/singleflight/README.md)** | `team4u-singleflight` / `team4u-singleflight-proxy` / `team4u-singleflight-spring` | 配置驱动的回源合并与并发互斥框架。基于 `KvStore` CAS 与 kv 锁提供同 key 唯一执行者、WAIT/FAIL_FAST/FALLBACK 竞争策略、结果缓存、失败会话共享、执行者崩溃接管与 token fencing，一条 JSON 规则热更新生效，支持 `@SingleFlight` 注解代理；注解代理与 Spring 装配按需显式引入。 | [概览](docs/singleflight/README.md) · [快速开始](docs/singleflight/quick-start.md) |
 
 ---
 
@@ -54,7 +54,7 @@
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
 | **[数据脱敏组件](docs/mask/README.md)** | `team4u-mask` / `team4u-mask-jackson` / `team4u-mask-config` | 纯 Java 核心脱敏、Jackson 序列化适配与配置中心动态规则，按需显式引入。 | [概览](docs/mask/README.md) · [快速开始](docs/mask/quick-start.md) |
-| **[结构化日志组件](docs/log/README.md)** | `team4u-log-core` / `team4u-log-governance` | 流式结构化日志核心默认输出未经脱敏的 RAW/UNMASKED 明文；治理 artifact 显式集成 Jackson、配置热更新、脱敏、方法代理、染色与 FinOps 限流。 | [概览](docs/log/README.md) · [快速开始](docs/log/quick-start.md) |
+| **[结构化日志组件](docs/log/README.md)** | `team4u-log` / `team4u-log-governance` | 流式结构化日志核心默认输出未经脱敏的 RAW/UNMASKED 明文；治理 artifact 显式集成 Jackson、配置热更新、脱敏、方法代理、染色与 FinOps 限流。 | [概览](docs/log/README.md) · [快速开始](docs/log/quick-start.md) |
 
 ---
 
@@ -114,7 +114,7 @@
     <!-- 配置中心核心模块 -->
     <dependency>
         <groupId>com.team4u</groupId>
-        <artifactId>team4u-config-core</artifactId>
+        <artifactId>team4u-config</artifactId>
     </dependency>
 
     <!-- 策略模式模块 -->
@@ -126,7 +126,7 @@
     <!-- 统一重试模块 -->
     <dependency>
         <groupId>com.team4u</groupId>
-        <artifactId>team4u-retry-core</artifactId>
+        <artifactId>team4u-retry</artifactId>
     </dependency>
 
     <!-- 数据脱敏核心，Jackson / 配置中心适配按需显式引入 -->
@@ -147,7 +147,7 @@
     <!-- 结构化日志核心（默认输出未经脱敏的 RAW/UNMASKED 明文） -->
     <dependency>
         <groupId>com.team4u</groupId>
-        <artifactId>team4u-log-core</artifactId>
+        <artifactId>team4u-log</artifactId>
     </dependency>
     <!-- Jackson / 配置 / 脱敏 / 代理 / Spring 治理按需显式引入 -->
     <dependency>

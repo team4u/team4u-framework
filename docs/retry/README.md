@@ -17,7 +17,7 @@
 
 `maxRetries` 不包含首次执行：`2` 表示最多总共执行 3 次。MANAGED 还必须配置 `foregroundMaxRetries`，它表示首次执行之后前台额外尝试几次；任务进入后台时已失败次数不会归零。
 
-`team4u-retry-core` 的 JSON 配置由应用显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。`team4u-retry-managed` 的 `JsonRetryRecordSerializer` 使用同一 JSON SPI。`team4u-retry-lease-runtime` 是长期 Jackson 集成模块：`LeaseRetryRecordSerializer` 直接使用 Jackson tree API 实现版本化持久 schema、字段级校验和 throwable allowlist；通用 serializer SPI 无法表达这些约束。该直接 Jackson 生产依赖是发布契约中的显式例外，不传递 `team4u-serializer-jackson`。
+`team4u-retry` 的 JSON 配置由应用显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。`team4u-retry-managed` 的 `JsonRetryRecordSerializer` 使用同一 JSON SPI。`team4u-retry-lease-runtime` 是长期 Jackson 集成模块：`LeaseRetryRecordSerializer` 直接使用 Jackson tree API 实现版本化持久 schema、字段级校验和 throwable allowlist；通用 serializer SPI 无法表达这些约束。该直接 Jackson 生产依赖是发布契约中的显式例外，不传递 `team4u-serializer-jackson`。
 ---
 
 ## 模式选择

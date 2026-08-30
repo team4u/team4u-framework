@@ -5,7 +5,7 @@
 ```xml
 <dependency>
     <groupId>com.team4u</groupId>
-    <artifactId>team4u-kv-core</artifactId>
+    <artifactId>team4u-kv</artifactId>
     <version>1.0.0-SNAPSHOT</version>
 </dependency>
 ```

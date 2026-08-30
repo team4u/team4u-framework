@@ -7,12 +7,12 @@
 
 ## 引入依赖
 
-只用 INLINE，引入 `team4u-retry-core`：
+只用 INLINE，引入 `team4u-retry`：
 
 ```xml
 <dependency>
     <groupId>com.team4u</groupId>
-    <artifactId>team4u-retry-core</artifactId>
+    <artifactId>team4u-retry</artifactId>
     <version>1.0.0-SNAPSHOT</version>
 </dependency>
 ```

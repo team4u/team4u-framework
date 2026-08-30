@@ -1,6 +1,6 @@
 # 方法切面追踪 (@AutoLogTrace)
 
-对于服务层接口、RPC 调用或通用 SDK 方法，手动编写日志较为繁琐。`@AutoLogTrace` 提供了全自动的方法切面追踪能力，自动记录入参、出参、执行耗时，并支持慢调用告警与业务异常降级。该能力属于 `team4u-log-governance`；`team4u-log-core` 只提供事件与基础日志 API。
+对于服务层接口、RPC 调用或通用 SDK 方法，手动编写日志较为繁琐。`@AutoLogTrace` 提供了全自动的方法切面追踪能力，自动记录入参、出参、执行耗时，并支持慢调用告警与业务异常降级。该能力属于 `team4u-log-governance`；`team4u-log` 只提供事件与基础日志 API。
 
 ---
 

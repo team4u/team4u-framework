@@ -1,6 +1,6 @@
 # 限流组件 (team4u-ratelimiter)
 
-> 1.0 拆分说明：`team4u-ratelimiter` 不再是单一 artifact。核心引擎位于 `team4u-ratelimiter-core`（本文档主体）；`@RateLimit` 注解代理位于 `team4u-ratelimiter-proxy`；Spring 自动装配位于 `team4u-ratelimiter-spring`。旧的单 artifact 依赖已删除，无兼容桥接。
+> 1.0 拆分说明：`team4u-ratelimiter` 不再是单一 artifact。核心引擎位于 `team4u-ratelimiter`（本文档主体）；`@RateLimit` 注解代理位于 `team4u-ratelimiter-proxy`；Spring 自动装配位于 `team4u-ratelimiter-spring`。旧的单 artifact 依赖已删除，无兼容桥接。
 
 # 背景
 
@@ -104,7 +104,7 @@ acquire(point, context, permits)
 
 ## 快速上手
 
-下面这个例子可以在单进程内直接运行（仅依赖 `team4u-ratelimiter-core`，另需按需提供 JSON 引擎，如 `team4u-serializer-jackson`）：
+下面这个例子可以在单进程内直接运行（仅依赖 `team4u-ratelimiter`，另需按需提供 JSON 引擎，如 `team4u-serializer-jackson`）：
 
 ```java
 package demo;
@@ -150,7 +150,7 @@ true
 ## 模块结构
 
 ```text
-team4u-ratelimiter-core             # 核心引擎：规则模型、四算法、门面（存储经 kv 组件能力协商，无存储子模块）
+team4u-ratelimiter             # 核心引擎：规则模型、四算法、门面（存储经 kv 组件能力协商，无存储子模块）
 └── com.team4u.framework.ratelimiter
     ├── api                      # RateLimiters 门面、RateLimitResult、异常体系
     ├── config                   # RateLimitRule 规则模型
@@ -173,8 +173,8 @@ team4u-ratelimiter-spring          # Spring 自动装配（显式引入）
 | :--- | :--- | :--- | :--- |
 | `team4u-base` | core（传递） | `TextTemplate` 键模板、`ReflectUtil` | — |
 | `team4u-policy` | core（传递） | `KeyedPolicyRegistry` 算法注册 | — |
-| `team4u-config-core` | core（传递） | `ConfigDrivenRegistry` 规则加载与热更新 | — |
-| `team4u-kv-core` | core（传递） | `KvStore` 与 `CounterCapable`/`CasCapable`/`ScoredWindowCapable` 能力协商、内存实现 | — |
+| `team4u-config` | core（传递） | `ConfigDrivenRegistry` 规则加载与热更新 | — |
+| `team4u-kv` | core（传递） | `KvStore` 与 `CounterCapable`/`CasCapable`/`ScoredWindowCapable` 能力协商、内存实现 | — |
 | `team4u-kv-space` | core（传递） | `NamedKvStoreRegistry` 命名存储与 `KvStores` 能力协商 | — |
 | `team4u-serializer-json` | core（传递） | 规则 JSON 与令牌桶状态序列化（应用需显式提供 JSON 引擎，见下） | — |
 | `team4u-proxy` | proxy（传递） | `@RateLimit` 注解代理（JDK / ByteBuddy 双引擎） | 使用注解时引入 `team4u-ratelimiter-proxy` |
@@ -185,7 +185,7 @@ team4u-ratelimiter-spring          # Spring 自动装配（显式引入）
 | `team4u-kv-store-jdbc` | 应用显式引入 | JDBC 限流后端（固定窗口、令牌桶） | 数据库存储时 |
 
 > [!IMPORTANT]
-> `team4u-ratelimiter-core` 不携带 Jackson 运行时（既无 `jackson-*` 也无 `team4u-serializer-jackson`）。首次解析规则 JSON 时必须存在 JSON 引擎：要么在应用中显式依赖 `team4u-serializer-jackson`，要么按[序列化组件](../serializer/README.md)文档经 `META-INF/services` 注册自定义 `JsonSerializerPolicy`。`team4u-ratelimiter-proxy`/`-spring` 仅为代理与装配适配，不会替你引入 JSON 引擎。
+> `team4u-ratelimiter` 不携带 Jackson 运行时（既无 `jackson-*` 也无 `team4u-serializer-jackson`）。首次解析规则 JSON 时必须存在 JSON 引擎：要么在应用中显式依赖 `team4u-serializer-jackson`，要么按[序列化组件](../serializer/README.md)文档经 `META-INF/services` 注册自定义 `JsonSerializerPolicy`。`team4u-ratelimiter-proxy`/`-spring` 仅为代理与装配适配，不会替你引入 JSON 引擎。
 
 ## 文档导航
 
