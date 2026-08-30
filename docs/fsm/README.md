@@ -38,19 +38,9 @@ StateMachineMermaid            渲染 stateDiagram-v2 状态图
 
 **3. 零运行时依赖。** 模块通过 Maven Enforcer 强制约束：compile/runtime 作用域不允许任何依赖，只有 JDK 与测试作用域的 JUnit。
 
-## 与旧体系（team-kit Flow）的差异
+## 设计边界
 
-本组件是对 team-kit 状态机能力的重新设计，不兼容旧 API，也刻意不搬运旧实现：
-
-| 维度 | team-kit 旧实现 | team4u-fsm |
-| :--- | :--- | :--- |
-| 类型系统 | 状态/事件为 `Object`，动作为字符串引用 | `S`/`E`/`C` 强泛型，编译期检查 |
-| 定义形态 | 寄生在通用流程引擎上 | 独立纯 Java 定义，构建后不可变 |
-| 动作定位 | 按 Bean 名称反射查找 | 构建 DSL 直接传入函数引用 |
-| 规则来源 | 动态 JSON/配置解析 | 启动期代码声明 |
-| 匹配语义 | 首条匹配 | 按具体度分层，见[语义手册](fsm-semantics.md) |
-| 校验 | 运行期暴露问题 | DSL 声明期或 `build()` 期拒绝非法定义 |
-| 状态图 | `FsmMermaidPrinter` 全局单例，渲染 `flowchart` 流程图 | 内置 `StateMachineMermaid`，渲染 `stateDiagram-v2` 状态图 |
+核心只负责单次迁移判定与动作执行，所有状态持有、事务、持久化和外部集成都由调用方决定。规则通过强类型 DSL 在启动期定义，构建完成后冻结；需要动态规则时，可在核心之外实现配置解析器，将配置转换为同一套构建 API。
 
 ## 刻意不放进核心的能力
 
