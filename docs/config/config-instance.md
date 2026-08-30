@@ -5,8 +5,7 @@
 `team4u-config` 提供了 `ConfigDrivenRegistry<T>` 组件，统一治理重型运行时对象的创建、热替换与资源优雅销毁。
 
 > [!NOTE]
-> **何时使用 `ConfigDrivenRegistry` vs 动态代理 (`createProxy`)？**
-> - **纯配置数据读取**：若只需读取配置属性（如超时时间、开关状态），使用 `@ConfigPrefix` + `configManager.createProxy(...)` 即可获得强类型安全的不可变快照代理。
+> **何时使用 `ConfigDrivenRegistry` vs 动态代理 (`createProxy`)？**> - **纯配置数据读取**：若只需读取配置属性（如超时时间、开关状态），使用 `@ConfigPrefix` + `configManager.createProxy(...)` 即可获得强类型安全的不可变快照代理。
 > - **重型运行时组件管理**：若配置变更需要**重新构造持有着连接池、线程池或底层句柄的运行时组件**，并在替换后安全调用 `close()` 释放旧资源，则应使用 `ConfigDrivenRegistry<T>`。
 
 ---
@@ -27,17 +26,17 @@ graph TD
     Swap --> CloseOld["若旧实例实现了 AutoCloseable<br/>自动调用 oldInstance.close 优雅关闭"]
 ```
 
-- **安全热替换 (Safe Swap)**：
+- **安全热替换** (Safe Swap)：
   - 收到配置变更通知后，**先尝试使用新配置构建新实例**；
   - 只有在新实例构建成功后，才执行缓存引用的原子替换；
   - 若新配置存在格式错误、网络不可达等导致构建失败，系统会捕获异常并告警，**继续保留旧实例对外服务**，保证系统高可用与业务连续性。
-- **资源优雅关闭 (Graceful Shutdown)**：
+- **资源优雅关闭** (Graceful Shutdown)：
   - 当旧实例被替换淘汰，或配置被物理删除/标记失效（Tombstone）时，框架自动检测其实例是否实现了 `java.lang.AutoCloseable` 接口；
   - 若实现，则自动调用 `close()` 方法释放底层网络连接、线程池或句柄，杜绝连接泄漏和内存溢出。
 - **延迟初始化与 O(1) 极速读取**：
   - 首次通过 `get(configKey)` 访问时，按需执行延迟构建（`computeIfAbsent`）；
   - 后续读取直接命中内部 `ConcurrentHashMap`，不再重复反射与反序列化。
-- **监听器与实例全生命周期销毁 (`destroy()`)**：
+- **监听器与实例全生命周期销毁** (`destroy()`)：
   - 调用 `destroy()` 时，首先注销与 `ConfigManager` 的监听句柄，随后遍历所有已缓存的实例执行 `closeQuietly()` 彻底释放资源。
 
 ---
@@ -73,7 +72,7 @@ server.description=${server.name} is running on port ${server.port}
 
 > [!TIP]
 > **展开式 Properties 属性树的推荐方案**：
-> 如果配置是以扁平散落的属性树形式组织，推荐使用框架的 **[类型安全动态代理 (`ConfigManager.createProxy`)](config-proxy.md)**：
+> 如果配置是以扁平散落的属性树形式组织，推荐使用框架的 [**类型安全动态代理 (`ConfigManager.createProxy`)**](config-proxy.md)：
 > - 定义标注了 `@ConfigPrefix("server")` 的 Java Bean 配置类；
 > - 调用 `configManager.createProxy(ServerConfig.class)`，框架将自动完成多属性的松散绑定（Relaxed Binding）、占位符递归解析（`${...}`）与类型转换；
 > - 运行时业务组件直接依赖该动态代理对象即可享受属性级别的实时热更新。
@@ -217,8 +216,8 @@ public class SingleHttpClientManager {
 
 | 模式 | 规则写法 | 监听机制 | 读取 API | 适用场景 |
 | :--- | :--- | :--- | :--- | :--- |
-| **通配符多实例模式** | `"clients.*"` / `"router.*"` | `clients.*`（`*` 通配符前缀匹配） | `get("sms")` 或 `get("clients.sms")`（自动补全前缀） | 多通道连接池、动态路由表、重试策略集等多实例池 |
-| **精确键单实例模式** | `"clients.default"` / `"app.datasource"` | `clients.default`（精确匹配，防误触） | `get()`（无参直取） | 全局单一连接池、数据源、消息消费组等单组件生命周期管理 |
+| **通配符多实例模式** | "clients.*" / "router.*" | `clients.*`（`*` 通配符前缀匹配） | `get("sms")` 或 `get("clients.sms")`（自动补全前缀） | 多通道连接池、动态路由表、重试策略集等多实例池 |
+| **精确键单实例模式** | "clients.default" / "app.datasource" | `clients.default`（精确匹配，防误触） | `get()`（无参直取） | 全局单一连接池、数据源、消息消费组等单组件生命周期管理 |
 
 ---
 

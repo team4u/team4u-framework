@@ -8,7 +8,7 @@
 - **复杂嵌套泛型类型擦除**：对于 `List<Map<String, User>>` 或多层嵌套结构，手动处理 `JavaType`、`TypeToken` 或反射类型容易出现冗余样板代码和类型转换异常。
 - **配置容错与空值处理标准不一**：各序列化库对 `null` 值过滤、Java 8 日期时间（`LocalDateTime`）支持以及未知字段容错的处理行为各不相同。
 
-`team4u-serializer` 提供了**接口策略驱动（Strategy Pattern）**与**统一静态门面 (`JsonUtil`)**，实现了底层序列化引擎的无感替换与复杂泛型的高性能反序列化。
+`team4u-serializer` 提供了**接口策略驱动（Strategy Pattern）**与**统一静态门面** (`JsonUtil`)，实现了底层序列化引擎的无感替换与复杂泛型的高性能反序列化。
 
 ---
 
@@ -41,8 +41,8 @@ graph TD
 
 | 模块 ArtifactId | 说明 | 核心依赖 |
 | :--- | :--- | :--- |
-| **`team4u-serializer-json`** | 统一门面与 SPI 策略接口定义（`JsonUtil`, `JsonSerializerPolicy`） | `team4u-base`, `team4u-policy` |
-| **`team4u-serializer-jackson`** | 基于 Jackson 实现的官方序列化驱动；由应用或显式集成模块添加 | `team4u-serializer-json`, `jackson-databind`, `jackson-datatype-jsr310` |
+| `team4u-serializer-json` | 统一门面与 SPI 策略接口定义（`JsonUtil`, `JsonSerializerPolicy`） | `team4u-base`, `team4u-policy` |
+| `team4u-serializer-jackson` | 基于 Jackson 实现的官方序列化驱动；由应用或显式集成模块添加 | `team4u-serializer-json`, `jackson-databind`, `jackson-datatype-jsr310` |
 
 `team4u-serializer-json` 只提供 API，不传递任何 JSON 引擎。使用 `JsonUtil` 的应用必须显式添加 `team4u-serializer-jackson`，或通过 ServiceLoader 注册自定义 `JsonSerializerPolicy`。上游库只能在测试中使用官方 Jackson provider；生产 provider 归应用和显式集成模块所有。
 

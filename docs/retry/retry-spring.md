@@ -125,7 +125,7 @@ public void notifyMerchantAsync(String orderId, String payload) {
 
 ## 生命周期注意点
 
-- `ManagedRetryRuntime` Bean 使用 `initMethod = "start"` 启动后台 Worker，`destroyMethod = "shutdown"` 停止。
+- `ManagedRetryRuntime` Bean 使用 `initMethod = "start" 启动后台 Worker，`destroyMethod = "shutdown" 停止。
 - 需要等待当前任务结束的优雅停机，可注入 runtime 后调用 `runtime.worker().shutdownGracefully(timeout)`。
 - Worker 启动时会快照 registry 当前 handler；之后再往 registry 加 Bean 不影响已启动 Worker。
 - 不要依赖 `@EnableRetry` 对全局恢复 registry 的自动扫描副作用。`ManagedRetryRuntime` 使用传入的本地 registry。

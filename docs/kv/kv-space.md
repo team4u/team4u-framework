@@ -48,7 +48,7 @@ boolean first = idem.putIfAbsent("order-1", "1", 24 * 3600_000L);
 
 未注册的键空间在 `use` 时快速失败，避免拼写错误静默产生新空间。
 
-**落库形态**：值以 JSON 字符串存储。`Space<Session>` 存 `{"token":"token-abc"}`；注意 `Space<String>` 存的是带引号的 JSON 字符串（`"1"`），取回时自动还原为 `1`——序列化细节由门面处理，业务无感知，但直接查库时会看到 JSON 形态。
+**落库形态**：值以 JSON 字符串存储。`Space<Session>` 存 `{"token":"token-abc"}`；注意 `Space<String>` 存的是带引号的 JSON 字符串（"1"），取回时自动还原为 `1`——序列化细节由门面处理，业务无感知，但直接查库时会看到 JSON 形态。
 
 ## 策略热更新
 

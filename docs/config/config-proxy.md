@@ -25,7 +25,7 @@ public class MysqlConfig {
 ```
 
 > [!NOTE]
-> 如果在 `createProxy("app", MysqlConfig.class)` 中显式传入了前缀 `"app"`，则最终生效前缀为 `"app.datasource.mysql"`。
+> 如果在 `createProxy("app", MysqlConfig.class)` 中显式传入了前缀 "app"，则最终生效前缀为 "app.datasource.mysql"。
 
 ---
 
@@ -131,7 +131,7 @@ public class ThreadPoolConfig {
 
 ## 智能松散绑定 (Relaxed Binding)
 
-为了兼容各种命名风格（如环境变量的大写下划线、YAML 的中划线、Properties 的点号、Java 的驼峰），框架在 `ConfigSnapshot` 构造阶段自动构建了**归一化索引 (`looseIndex`)**。
+为了兼容各种命名风格（如环境变量的大写下划线、YAML 的中划线、Properties 的点号、Java 的驼峰），框架在 `ConfigSnapshot` 构造阶段自动构建了**归一化索引** (`looseIndex`)。
 
 归一化算法（`ConfigSnapshot.normalize`）：
 ```text
@@ -182,13 +182,13 @@ public class NodeConfig {
 
 ## 代理双模式：Live vs Pinned
 
-通过 `ConfigManager.createProxy()` 创建的代理默认工作在 **Live Mode（实时模式）**。通过接口 `SnapshotAware.pin()` 可以将其锚定为 **Pinned Mode（快照模式）**。
+通过 `ConfigManager.createProxy()` 创建的代理默认工作在 **Live Mode（实时模式）**。通过接口 `SnapshotAware.pin()` 可以将其锚定为**Pinned Mode（快照模式）**。
 
 | 特性维度 | Live Mode (实时代理，默认) | Pinned Mode (快照锚定代理) |
 | :--- | :--- | :--- |
 | **底层快照源** | 每次调用均从 `ConfigManager` 获取最新的不可变快照 | 锁定调用 `pin()` 那一时刻的固定快照引用 |
 | **热更新响应** | 配置更新后立即生效，全局业务无感刷新 | 后续全局快照演进不影响该实例，值绝对保持不变 |
-| **一致性语义** | 最终一致（同一长流程内多次调用可能读取不同版本） | **强一致**（全流程版本锁定，彻底杜绝“撕裂读取”） |
+| **一致性语义**| 最终一致（同一长流程内多次调用可能读取不同版本） |**强一致**（全流程版本锁定，彻底杜绝“撕裂读取”） |
 | **适用场景** | Web API 响应、实时业务开关、网关流控、健康检查 | 长事务处理、批量数据计算、连接池/驱动初始化 |
 
 ### 最佳实践：长流程快照锚定
@@ -236,5 +236,5 @@ graph TD
     PutCache --> ReturnVal
 ```
 
-1. **元数据静态缓存 (`METADATA_CACHE`)**：全局缓存方法的返回类型、注解元数据与解析器，避免重复反射检索方法与字段。
-2. **版本化结果缓存 (`valueCache`)**：以 `Method` 为键，存储 `(version, value)` 缓存节点。在快照未发生变更时，方法调用直接命中缓存，**不再重复字符串检索与类型转换**；当发生配置热重载时，快照版本号递增，缓存即时失效并重新计算。
+1. **元数据静态缓存** (`METADATA_CACHE`)：全局缓存方法的返回类型、注解元数据与解析器，避免重复反射检索方法与字段。
+2. **版本化结果缓存**(`valueCache`)：以 `Method` 为键，存储 `(version, value)` 缓存节点。在快照未发生变更时，方法调用直接命中缓存，**不再重复字符串检索与类型转换**；当发生配置热重载时，快照版本号递增，缓存即时失效并重新计算。

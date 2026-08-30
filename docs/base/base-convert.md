@@ -10,12 +10,12 @@
 
 | 转换器类名 | 优先级 Order | 支持的目标类型与特征 |
 | :--- | :--- | :--- |
-| **`ScalarTypeConverter`** | `10` | 基本类型及其包装类（`int`, `long`, `boolean`, `double`, `float`, `short`, `byte`, `char`）、`String`、`BigDecimal`、`BigInteger`、`Number` |
-| **`EnumTypeConverter`** | `20` | 枚举类型转换（支持按枚举名称大小写不敏感匹配） |
-| **`TemporalTypeConverter`** | `30` | 时间类型转换（`Date`, `LocalDate`, `LocalDateTime`, `Instant`），支持时间戳与常见日期格式化字符串 |
-| **`CollectionTypeConverter`** | `40` | `List`, `Set`, `Queue`, `Collection` 转换（支持将逗号分隔的字符串自动切分为集合元素） |
-| **`ArrayTypeConverter`** | `50` | 各类基本类型及对象数组转换 |
-| **`BeanTypeConverter`** | `60` | 将 `Map` 自动通过 `BeanUtil.toBean` 转换为目标 JavaBean 对象 |
+| `ScalarTypeConverter` | `10` | 基本类型及其包装类（`int`, `long`, `boolean`, `double`, `float`, `short`, `byte`, `char`）、`String`、`BigDecimal`、`BigInteger`、`Number` |
+| `EnumTypeConverter` | `20` | 枚举类型转换（支持按枚举名称大小写不敏感匹配） |
+| `TemporalTypeConverter` | `30` | 时间类型转换（`Date`, `LocalDate`, `LocalDateTime`, `Instant`），支持时间戳与常见日期格式化字符串 |
+| `CollectionTypeConverter` | `40` | `List`, `Set`, `Queue`, `Collection` 转换（支持将逗号分隔的字符串自动切分为集合元素） |
+| `ArrayTypeConverter` | `50` | 各类基本类型及对象数组转换 |
+| `BeanTypeConverter` | `60` | 将 `Map` 自动通过 `BeanUtil.toBean` 转换为目标 JavaBean 对象 |
 
 ---
 
@@ -48,7 +48,7 @@
 | `BigDecimal toBigDecimal(Object value, [BigDecimal defaultValue])` | 转为高精度 BigDecimal 类型 |
 | `BigInteger toBigInteger(Object value, [BigInteger defaultValue])` | 转为大整数 BigInteger 类型 |
 | `Character toChar(Object value, [Character defaultValue])` | 转为 Character 字符 |
-| `Boolean toBool(Object value, [Boolean defaultValue])` | 转为 Boolean（支持 `"true"`, `"1"`, `"yes"`, `"ok"`, `"on"`, `"y"` 识别为 `true`；`"false"`, `"0"`, `"no"`, `"off"`, `"n"` 识别为 `false`） |
+| `Boolean toBool(Object value, [Boolean defaultValue])` | 转为 Boolean（支持 "true", "1", "yes", "ok", "on", "y" 识别为 `true`；"false", "0", "no", "off", "n" 识别为 `false`） |
 
 ### 集合与数组转换方法
 ```java

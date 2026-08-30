@@ -11,7 +11,7 @@
 
 传统的实现方式通常面临以下困境：
 
-- **硬编码 `if/else`**：业务规则与核心代码深度耦合，频繁变更导致上线周期长、维护成本极高。
+- **硬编码** `if/else`：业务规则与核心代码深度耦合，频繁变更导致上线周期长、维护成本极高。
 - **引入通用脚本引擎（如 Groovy/SpEL/Aviator）**：
   - 语法复杂度高，函数嵌套冗长，非技术或运营人员上手门槛大。
   - 性能开销显著，反射调用与频繁对象创建容易导致 GC 抖动。
@@ -46,8 +46,8 @@ Criterion 具备以下核心设计特色：
 
 - **JIT 闭包直出与低开销执行**：解析后的 AST 会被编译为纯 Java Lambda 闭包（`MatchPredicate`），执行过程无反射、无动态解释；逻辑/属性表达式与数值比较的实测结果见 [JMH 基准](../../benchmarks/README.md)。
 - **低分配核心路径与智能宽容比较**：内置 `ValueOptimizer`、`FastNumberUtil` 和 `ObjectCompareUtil`，整数、浮点数优先使用原生类型比较，逻辑组合编译为数组遍历，自动兼容字符串与数值比较。
-- **白盒排障 (Trace)**：内置 `TraceRecorder` 与 `TraceTreeRenderer`，可生成树状可视化执行日志，精确展示每个子条件的入参、预期与命中状态（`[Y]` / `[N]`）。
-- **按需延迟解析 (Lazy Resolve)**：支持结合 `LazyAttributeResolver` 延迟拉取 RPC 或数据库属性，配合逻辑短路规则，避免不必要的外部网络调用。
+- **白盒排障** (Trace)：内置 `TraceRecorder` 与 `TraceTreeRenderer`，可生成树状可视化执行日志，精确展示每个子条件的入参、预期与命中状态（`[Y]` / `[N]`）。
+- **按需延迟解析** (Lazy Resolve)：支持结合 `LazyAttributeResolver` 延迟拉取 RPC 或数据库属性，配合逻辑短路规则，避免不必要的外部网络调用。
 - **默认容错机制**：生产环境下字段缺失或类型异常默认返回 `false` 并记录日志，不阻断主业务链路；亦可按需开启严格模式（`strictMode`）。
 
 ---
@@ -114,9 +114,9 @@ com.team4u.framework.criterion
 
 ## 与其他组件联动
 
-- **[路由组件](../router/README.md)**：`team4u-router` 内置的 `ExpressionRouter` 直接基于 Criterion 运行。
-- **[配置组件](../config/README.md)**：DSL 规则文本可下发至统一配置中心，配合变更监听实现运行时热生效。
-- **[日志治理组件](../log/README.md)**：`team4u-log-governance` 的动态染色规则基于 Criterion DSL 进行条件过滤；`team4u-log` 不依赖 Criterion。
+- [**路由组件**](../router/README.md)：`team4u-router` 内置的 `ExpressionRouter` 直接基于 Criterion 运行。
+- [**配置组件**](../config/README.md)：DSL 规则文本可下发至统一配置中心，配合变更监听实现运行时热生效。
+- [**日志治理组件**](../log/README.md)：`team4u-log-governance` 的动态染色规则基于 Criterion DSL 进行条件过滤；`team4u-log` 不依赖 Criterion。
 
 ---
 

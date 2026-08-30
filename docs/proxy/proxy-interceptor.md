@@ -74,7 +74,7 @@ public Object proceed() throws Throwable {
 
 ### 链尾收尾逻辑 (`invokeJoinPoint`)
 当没有委托对象或所有拦截器均已推进完毕时：
-- `toString()`：返回 `"Proxy[" + simpleName + "]@" + Integer.toHexString(identityHashCode)`；
+- `toString()`：返回 "Proxy[" + simpleName + "]@" + Integer.toHexString(identityHashCode)`；
 - `hashCode()`：返回 `System.identityHashCode(proxy)`；
 - `equals(other)`：返回 `proxy == arguments[0]`；
 - `void` 返回类型：返回 `null`；

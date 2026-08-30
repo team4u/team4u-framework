@@ -55,15 +55,15 @@ public @interface RouteContext {
 
 | 场景 | 上下文类型 | 模板示例 | 行为与约束 |
 | :--- | :--- | :--- | :--- |
-| **常量模式** | 任意 | `routerId = "payment-router"` | 直接定位配置 `router.payment-router`，不进行变量替换 |
-| **POJO 多占位符** | POJO 对象 / Map | `routerId = "biz.${region}.${tenantId}.router"` | 框架通过 `BeanUtil.getProperty(context, prop)` 分别提取 `region` 与 `tenantId` 属性并拼接 |
-| **简单类型单占位符** | 基本类型 / String / Long 等 | `routerId = "router.user_${userId}"` | 简单类型直接将其值整体替换该占位符 |
-| **异常分支校验** | 基本类型 / String / Long 等 | `routerId = "biz.${tenant}.${env}"` | **严格校验**：当上下文为简单类型时，若模板中包含多于 1 个占位符，框架将抛出 `RouteConfigException.validationError` |
+| **常量模式** | 任意 | `routerId = "payment-router" | 直接定位配置 `router.payment-router`，不进行变量替换 |
+| **POJO 多占位符** | POJO 对象 / Map | `routerId = "biz.${region}.${tenantId}.router" | 框架通过 `BeanUtil.getProperty(context, prop)` 分别提取 `region` 与 `tenantId` 属性并拼接 |
+| **简单类型单占位符** | 基本类型 / String / Long 等 | `routerId = "router.user_${userId}" | 简单类型直接将其值整体替换该占位符 |
+| **异常分支校验**| 基本类型 / String / Long 等 | `routerId = "biz.${tenant}.${env}" |**严格校验**：当上下文为简单类型时，若模板中包含多于 1 个占位符，框架将抛出 `RouteConfigException.validationError` |
 
 ### 上下文参数提取规则
 1. **显式标注**：方法中被 `@RouteContext` 标注的参数作为上下文。
 2. **多注解校验**：单个方法内**严禁标注多个** `@RouteContext` 参数，否则在解析方法元数据时抛出 `RouteConfigException.validationError`。
-3. **默认兜底**：若方法内未标注任何 `@RouteContext`，框架默认将**第一个入参 (`args[0]`)** 作为路由上下文。
+3. **默认兜底**：若方法内未标注任何 `@RouteContext`，框架默认将**第一个入参** (`args[0]`) 作为路由上下文。
 
 ---
 

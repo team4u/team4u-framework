@@ -64,5 +64,5 @@ private void sortFactories() {
 ### 检索与聚合语义：
 - **单 Bean 查找 (`getBean(name)` / `getBean(type)`)**：
   按 `getOrder()` 从小到大依次遍历各个工厂，一旦某个工厂返回非 `null` 实例，立即短路返回。
-- **多 Bean 聚合 (`getBeansOfType(type)`)**：
+- **多 Bean 聚合** (`getBeansOfType(type)`)：
   将所有工厂检索到的 Bean 汇聚为一个 `Map<String, T>`。如果出现同名冲突，**高优先级容器中的 Bean 优先保留**（通过 `(v1, v2) -> v1` 策略解决冲突）。

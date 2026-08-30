@@ -13,9 +13,7 @@
 
 ## 固定窗口（fixed-window）
 
-**语义**：窗口内第 N 次请求 `n = incrementAndGet(key, permits, windowMillis)`，`n <= threshold` 放行。一次原子递增完成全部工作，是四个算法中最轻的。
-
-**所用 kv 原语与契约要点**（`CounterCapable.incrementAndGet(key, delta, ttlMillis)`）：
+**语义**：窗口内第 N 次请求 `n = incrementAndGet(key, permits, windowMillis)`，`n <= threshold` 放行。一次原子递增完成全部工作，是四个算法中最轻的。**所用 kv 原语与契约要点**（`CounterCapable.incrementAndGet(key, delta, ttlMillis)`）：
 
 - 键不存在时从 0 开始计数，首次调用返回 `delta`（不要求预先建键）；
 - 递增与 TTL 设置在同一原子操作内完成，并发调用不丢失更新、不出现「重置与累积分离」的中间态；
@@ -31,9 +29,7 @@
 
 ## 令牌桶（token-bucket）
 
-**语义**：`threshold` = 桶容量（最大突发量），`windowMillis` = 注满一桶所需时间，补充速率为 `capacity / windowMillis` 个令牌每毫秒。例：`threshold=100, windowMillis=10000` 表示平均 10 个/秒、瞬时最多 100 个。
-
-**所用 kv 原语与契约要点**：桶状态以 JSON 存于 kv 值域（`{"tokens":剩余令牌,"lastMillis":最近补水时刻}`），读写复用 `KvStore` 四操作：
+**语义**：`threshold` = 桶容量（最大突发量），`windowMillis` = 注满一桶所需时间，补充速率为 `capacity / windowMillis` 个令牌每毫秒。例：`threshold=100, windowMillis=10000` 表示平均 10 个/秒、瞬时最多 100 个。**所用 kv 原语与契约要点**：桶状态以 JSON 存于 kv 值域（`{"tokens":剩余令牌,"lastMillis":最近补水时刻}`），读写复用 `KvStore` 四操作：
 
 - 新桶满桶起算：不存在时以 `capacity - permits` 初始令牌建桶，`put(IF_ABSENT)` 防并发重复建桶，抢建失败重读重试；
 - 补水按 `min(capacity, tokens + elapsed * rate)` 计算，`elapsed` 取自 `lastMillis`（时钟回拨时补水量按 0 处理，不出现负增长）；
@@ -45,9 +41,7 @@
 
 ## 滑动窗口（sliding-window）
 
-**语义**：任意连续 `windowMillis` 区间内请求数 ≤ 阈值，精确滚动（非固定对齐）。窗口边缘的突发在下一时刻即可重新获得额度——上一个请求滑出窗口的瞬间，额度立即恢复。
-
-**所用 kv 原语与契约要点**（`ScoredWindowCapable.offer(key, Offer)`，一次原子「裁剪 → 计数 → 条件添加」）：
+**语义**：任意连续 `windowMillis` 区间内请求数 ≤ 阈值，精确滚动（非固定对齐）。窗口边缘的突发在下一时刻即可重新获得额度——上一个请求滑出窗口的瞬间，额度立即恢复。**所用 kv 原语与契约要点**（`ScoredWindowCapable.offer(key, Offer)`，一次原子「裁剪 → 计数 → 条件添加」）：
 
 - 每个请求以到达时刻为成员 score 入窗，裁剪 `score <= now - windowMillis` 的过期成员（契约：score **等于** cutoff 的成员视为过期被裁剪，严格大于才存活）；
 - 「裁剪后计数 + members 数量」超过 `maxCount`（即 `threshold`）时**不添加任何成员**并返回 `accepted = false`——全部或全无，无中间态；
@@ -55,9 +49,7 @@
 - 键 TTL = 窗口时长，每次成功操作（含窥探）刷新，清理零流量残留键——TTL 是键卫生手段，与按 score 裁剪是两套独立机制；
 - 成员 id 为 `nowMillis-hexRandom-i` 随机串，同一请求的多个许可各自唯一。
 
-**内存上界定理**：窗口成员数恒不超过 `maxCount`（超限即整体拒绝、不添加），因此**存储内存 = 键数 × threshold**，与流量速率无关。估算示例：10 万用户 × 阈值 5 × 每成员约 40 字节 ≈ 20 MB，可控。阈值下调无需迁移数据——窗口随成员自然滑出逐步排干。
-
-**窥探**：`permits = 0` 提交空 members，裁决改为 `count < threshold`（判断下一个单许可能否通过）。
+**内存上界定理**：窗口成员数恒不超过 `maxCount`（超限即整体拒绝、不添加），因此**存储内存 = 键数 × threshold**，与流量速率无关。估算示例：10 万用户 × 阈值 5 × 每成员约 40 字节 ≈ 20 MB，可控。阈值下调无需迁移数据——窗口随成员自然滑出逐步排干。**窥探**：`permits = 0` 提交空 members，裁决改为 `count < threshold`（判断下一个单许可能否通过）。
 
 ## 历史窗口（history-window）
 
@@ -66,7 +58,7 @@
 - **epoch 对齐**：`windowStart = (now / windowMillis) * windowMillis`，窗口边界落在 `windowMillis` 的整数倍时刻；`now` 进入下一个 `windowStart` 周期后计数自然归零，无需任何清理动作；
 - **未来时间戳计入当前窗口**：历史中 `ts >= windowStart` 的条目全部计入——客户端时钟超前的记录不放大额度，统一计入当前窗口消耗，杜绝「把请求记到未来窗口里腾额度」的口径漏洞；
 - 裁决：`count + permits <= threshold` 放行；
-- `config.path` 点路径导航：`a.b.0.c` 形式，Map 按键取值、List 按数字下标取值、Bean 读公有 getter；**默认 `history`**——调用方将历史置于约定属性下即可零配置（`config` 整体可省）；路径缺失或终点非 List 视为空历史（空历史 = 无约束放行）；列表元素仅支持 `Number` 与 `Date`（转 epoch 毫秒），其余元素跳过；
+- `config.path` 点路径导航：`a.b.0.c` 形式，Map 按键取值、List 按数字下标取值、Bean 读公有 getter；**默认** `history`——调用方将历史置于约定属性下即可零配置（`config` 整体可省）；路径缺失或终点非 List 视为空历史（空历史 = 无约束放行）；列表元素仅支持 `Number` 与 `Date`（转 epoch 毫秒），其余元素跳过；
 - `decisionTimeMillis` 供客户端回填记录，保证双方时钟基准一致（协作协议详见[快速开始 · 推荐场景案例](quick-start.md#推荐场景完整案例app-客户端推荐频控)）。
 
 **信任边界**：历史由调用方携带、天然可伪造。本算法是**合作式限流**（客户端自我节流），不能作为服务端防刷手段；对抗性场景使用服务端状态的 `fixed-window` / `sliding-window`。

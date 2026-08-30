@@ -119,7 +119,7 @@ Verdict = { accepted, count, oldestScore }
 - **TTL**：`ttlMillis > 0` 时每次成功操作（含窥探）刷新整个键的过期时间，键过期后整键消失、窗口从零重来——TTL 是键卫生手段（清理零流量残留键），与按 score 裁剪是两套独立机制；
 - **oldestScore**：裁剪后现存成员中的最小 score，窗口为空时为 `null`。
 
-双实现：`InMemoryKvStore`（独立窗口结构 + 锁内单线程操作）与 `RedisKvStore`（`ZREMRANGEBYSCORE` 裁剪 → `ZCARD` 计数 → 条件 `ZADD` 准入 → `PEXPIRE` 刷新，单 Lua 脚本原子完成）。**`JdbcKvStore` 暂未实现**该接口——做不到整体原子性的实现不应实现它（SQL 上无 ZSET 等价物，多语句原子需重量级锁），需要滑动窗口的场景请使用内存或 Redis 后端。
+双实现：`InMemoryKvStore`（独立窗口结构 + 锁内单线程操作）与 `RedisKvStore`（`ZREMRANGEBYSCORE` 裁剪 → `ZCARD` 计数 → 条件 `ZADD` 准入 → `PEXPIRE` 刷新，单 Lua 脚本原子完成）。`JdbcKvStore` **暂未实现**该接口——做不到整体原子性的实现不应实现它（SQL 上无 ZSET 等价物，多语句原子需重量级锁），需要滑动窗口的场景请使用内存或 Redis 后端。
 
 ## 内存实现：InMemoryKvStore
 

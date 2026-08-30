@@ -67,8 +67,8 @@ AutoCloseable handle = manager.registerChangeListener("datasource.*", (key, oldV
 ```
 
 ### 模式匹配规则 (`isMatch`)
-- **通配符模式（以 `*` 结尾）**：执行前缀匹配。例如 `"server.*"` 会匹配 `server.port`、`server.name`、`server.db.url`。
-- **精确模式**：执行严格的字符串相等匹配。例如 `"app.max-connections"` 仅在该配置变动时触发。
+- **通配符模式（以 `*` 结尾）**：执行前缀匹配。例如 "server.*" 会匹配 `server.port`、`server.name`、`server.db.url`。
+- **精确模式**：执行严格的字符串相等匹配。例如 "app.max-connections" 仅在该配置变动时触发。
 
 ### 异常隔离保障
 若某个业务监听器的 `onChange` 回调抛出未捕获异常，`DefaultConfigManager` 会记录错误日志并继续通知后续的其他监听器，绝不会阻断整体事件分发流程。

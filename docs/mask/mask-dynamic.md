@@ -36,7 +36,7 @@ MaskBootstrap.global().start(configManager);
 
 ```json
 {
-  "*": {
+  `"*"`: {
     "mobile": "MOBILE",
     "phoneNumber": "MOBILE",
     "idCardNo": "ID_CARD_NO",
@@ -89,8 +89,8 @@ public String findRule(String className, String fieldName) {
         return classRule;
     }
 
-    // 2. 兜底匹配：全局通配符规则（配置了 "*" 的字段）
-    Map<String, String> globalRules = rules.get("*");
+    // 2. 兜底匹配：全局通配符规则（配置了 `"*"` 的字段）
+    Map<String, String> globalRules = rules.get(`"*"`);
     if (globalRules != null && globalRules.containsKey(fieldName)) {
         String globalRule = globalRules.get(fieldName);
         if (globalRule == null) {
@@ -125,7 +125,7 @@ public class MaskRuleUnitTest {
         
         Map<String, String> globalFieldRules = new HashMap<>();
         globalFieldRules.put("mobile", "MOBILE");
-        mockRules.put("*", globalFieldRules);
+        mockRules.put(`"*"`, globalFieldRules);
 
         // 手动注入规则缓存
         MaskRuleRepository.getInstance().setRuleCache(mockRules);

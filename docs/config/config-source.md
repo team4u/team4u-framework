@@ -124,12 +124,12 @@ CREATE TABLE `system_config` (
 
 | 属性方法 | 默认常量 | 说明 |
 | :--- | :--- | :--- |
-| `setTableName(...)` | `DEFAULT_TABLE_NAME = "system_config"` | 配置表名称 |
-| `setConfigTypeColumn(...)` | `DEFAULT_CONFIG_TYPE_COLUMN = "config_type"` | 配置类型列名（作为 Key 的前缀） |
-| `setConfigKeyColumn(...)` | `DEFAULT_CONFIG_KEY_COLUMN = "config_key"` | 配置键列名 |
-| `setConfigValueColumn(...)` | `DEFAULT_CONFIG_VALUE_COLUMN = "config_value"` | 配置值列名 |
-| `setEnabledColumn(...)` | `DEFAULT_ENABLED_COLUMN = "enabled"` | 启用状态列名（值为 0 时映射为 Tombstone 失效标记） |
-| `setUpdateTimeColumn(...)` | `DEFAULT_UPDATE_TIME_COLUMN = "update_time"` | 更新时间列名（用于 `DbConfigWatcher` 轮询探测变更） |
+| `setTableName(...)` | `DEFAULT_TABLE_NAME = "system_config" | 配置表名称 |
+| `setConfigTypeColumn(...)` | `DEFAULT_CONFIG_TYPE_COLUMN = "config_type" | 配置类型列名（作为 Key 的前缀） |
+| `setConfigKeyColumn(...)` | `DEFAULT_CONFIG_KEY_COLUMN = "config_key" | 配置键列名 |
+| `setConfigValueColumn(...)` | `DEFAULT_CONFIG_VALUE_COLUMN = "config_value" | 配置值列名 |
+| `setEnabledColumn(...)` | `DEFAULT_ENABLED_COLUMN = "enabled" | 启用状态列名（值为 0 时映射为 Tombstone 失效标记） |
+| `setUpdateTimeColumn(...)` | `DEFAULT_UPDATE_TIME_COLUMN = "update_time" | 更新时间列名（用于 `DbConfigWatcher` 轮询探测变更） |
 
 ### 配置源与监听器装配示例
 

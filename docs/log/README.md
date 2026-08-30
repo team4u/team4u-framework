@@ -9,7 +9,7 @@
 - **非结构化字符串拼接**：`log.info("user: " + userId + ", action: " + act)` 导致日志解析依赖昂贵的正则，难以被 ELK / SLS 等分析引擎高效检索与聚合。
 - **敏感信息明文泄漏**：代码中打印包含手机号、身份证、银行卡等信息的对象时，极易违反数据合规与隐私安全政策。
 - **排障依赖全局开启 DEBUG**：线上排查特定用户或商户的偶发问题时，若要抓取详细日志，不得不全局调低日志级别，产生海量垃圾日志甚至导致磁盘爆盘。
-- **日志风暴与成本失控 (FinOps)**：未受控的超大报文、`byte[]` 序列化膨胀、死循环日志或下游报错引发的异常堆栈风暴，极易拖垮日志采集链路并带来高昂的存储成本。
+- **日志风暴与成本失控** (FinOps)：未受控的超大报文、`byte[]` 序列化膨胀、死循环日志或下游报错引发的异常堆栈风暴，极易拖垮日志采集链路并带来高昂的存储成本。
 
 核心与治理的分工如下：`team4u-log` 默认输出未经脱敏的 RAW/UNMASKED 明文 `toString`，不携带 Jackson、Spring、ByteBuddy、Config、Mask、Criterion 或 Proxy；`team4u-log-governance` 传递 `team4u-serializer-jackson` 与 Jackson，负责治理配置、脱敏、代理和 Spring 集成。
 
@@ -33,12 +33,12 @@ graph LR
 
 ## 核心特性
 
-- **统一结构化事件 (`LogEvent`)**：业务字段统一沉淀至 `payload`；core 默认输出未经脱敏的 RAW/UNMASKED 明文 `toString`，governance 安装 Jackson 序列化后输出标准 JSON。
-- **流式构建器 (`Loggers`)**：支持 `action()`、`duration()`、`put()`、`derive()` 模板派生与 `LogSpan` 耗时区间统计。
-- **声明式方法追踪 (`@AutoLogTrace`)**：自动记录方法入参、返回值与执行耗时，支持慢调用阈值告警与特定业务异常降级。
-- **动态条件染色 (`team4u.log.dyeing`)**：基于 `team4u-criterion` DSL，针对特定用户、特定 Action 临时将日志提权为 DEBUG/TRACE，无需全局调级。
-- **FinOps 成本保护 (`team4u.log.finops`)**：内置单字段最大长度限制 (`maxStringLength`)、整条日志上限截断 (`maxLogLength`)、`byte[]` 字节防爆以及异常风暴限流 (`errorLimitPerSecond`) 机制。
-- **测试支持 (`TestLogHelper`)**：提供单测专用的复合内存日志断言工具，自动恢复原始环境，单测零副作用。
+- **统一结构化事件** (`LogEvent`)：业务字段统一沉淀至 `payload`；core 默认输出未经脱敏的 RAW/UNMASKED 明文 `toString`，governance 安装 Jackson 序列化后输出标准 JSON。
+- **流式构建器** (`Loggers`)：支持 `action()`、`duration()`、`put()`、`derive()` 模板派生与 `LogSpan` 耗时区间统计。
+- **声明式方法追踪** (`@AutoLogTrace`)：自动记录方法入参、返回值与执行耗时，支持慢调用阈值告警与特定业务异常降级。
+- **动态条件染色** (`team4u.log.dyeing`)：基于 `team4u-criterion` DSL，针对特定用户、特定 Action 临时将日志提权为 DEBUG/TRACE，无需全局调级。
+- **FinOps 成本保护** (`team4u.log.finops`)：内置单字段最大长度限制 (`maxStringLength`)、整条日志上限截断 (`maxLogLength`)、`byte[]` 字节防爆以及异常风暴限流 (`errorLimitPerSecond`) 机制。
+- **测试支持** (`TestLogHelper`)：提供单测专用的复合内存日志断言工具，自动恢复原始环境，单测零副作用。
 
 ---
 

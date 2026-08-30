@@ -1,6 +1,6 @@
 # 路由拦截器
 
-为了支持全局上下文注入、监控打点、熔断降级、权限校验与链路染色等横切关注点，`team4u-router` 提供了基于 **责任链模式 (Chain of Responsibility)** 的通用拦截器体系。
+为了支持全局上下文注入、监控打点、熔断降级、权限校验与链路染色等横切关注点，`team4u-router` 提供了基于 **责任链模式** (Chain of Responsibility) 的通用拦截器体系。
 
 ---
 
@@ -17,11 +17,11 @@ graph LR
 
 ### 核心接口
 
-- **`RouteInterceptor`**：拦截器核心接口，继承自 `OrderedPolicy`。
+- `RouteInterceptor`：拦截器核心接口，继承自 `OrderedPolicy`。
   - `<T> RouteResult<T> intercept(RouteInvocation<T> invocation)`：执行拦截逻辑，调用 `invocation.proceed()` 驱动链条流转。
   - `int priority()`：拦截器执行顺序（数值越小越优先执行，默认 `NORMAL = 0`）。
-- **`TraceableRouteInterceptor`**：诊断观察型拦截器扩展接口，提供 `beforeTrace` / `afterTrace` 回调，仅用于向 `RouteTrace` 补充观察事件（`RouteTraceEvent`），不修改入参和结果。
-- **`RouteInvocation<T>`**：路由执行调用上下文，提供以下方法：
+- `TraceableRouteInterceptor`：诊断观察型拦截器扩展接口，提供 `beforeTrace` / `afterTrace` 回调，仅用于向 `RouteTrace` 补充观察事件（`RouteTraceEvent`），不修改入参和结果。
+- `RouteInvocation<T>`：路由执行调用上下文，提供以下方法：
   - `Router getRouter()`：获取底层路由器实例。
   - `String getRouterId()`：获取当前执行的路由策略 ID。
   - `Object getRequest()`：获取当前请求对象。

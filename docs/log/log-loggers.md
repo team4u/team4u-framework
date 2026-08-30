@@ -10,9 +10,9 @@
 | :--- | :--- | :--- |
 | `Loggers.of(Class<?> clazz)` | 静态工厂，为指定类创建构建器 | `loggerName = clazz.getName()` |
 | `action(String action)` | 设置业务动作标识 | 默认 `null` |
-| `status(String status)` | 设置业务状态（如 `"start"`, `"success"`, `"failed"`） | 默认 `null` |
-| `success()` | 标记状态为 `"success"` | 若未指定 `level`，自动设置为 `INFO` |
-| `failed(Throwable e)` | 标记状态为 `"failed"` 并绑定异常 | 若未指定 `level`，自动设置为 `ERROR` |
+| `status(String status)` | 设置业务状态（如 "start", "success", "failed"） | 默认 `null` |
+| `success()` | 标记状态为 "success" | 若未指定 `level`，自动设置为 `INFO` |
+| `failed(Throwable e)` | 标记状态为 "failed" 并绑定异常 | 若未指定 `level`，自动设置为 `ERROR` |
 | `level(Level level)` | 显式指定日志级别 | `org.slf4j.event.Level` |
 | `atTrace() / atDebug() / atInfo() / atWarn() / atError()` | 快捷设置对应日志级别 | 链式便捷方法 |
 | `duration(long ms)` | 设置执行耗时（毫秒） | 默认 `-1` |

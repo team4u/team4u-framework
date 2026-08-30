@@ -36,14 +36,14 @@ graph LR
 
 ## 核心特性
 
-- **不可变快照 (Immutable Snapshot)**：每次重载生成全局不可变快照，并通过 `AtomicReference` 执行原子替换，彻底杜绝多线程读取竞争与脏读。
-- **双模代理 (Live vs Pinned)**：Live 模式始终读取最新快照，实现业务无感热更新；Pinned 模式锁定请求入口时刻的版本，保障长事务与批处理强一致性。
+- **不可变快照** (Immutable Snapshot)：每次重载生成全局不可变快照，并通过 `AtomicReference` 执行原子替换，彻底杜绝多线程读取竞争与脏读。
+- **双模代理** (Live vs Pinned)：Live 模式始终读取最新快照，实现业务无感热更新；Pinned 模式锁定请求入口时刻的版本，保障长事务与批处理强一致性。
 - **Java Bean 声明式代理**：支持普通 POJO，结合 `@ConfigPrefix`、`@ConfigKey`、`@ConfigRequired`、`@ConfigConverter`，自动将字段初始值作为缺失兜底默认值。
-- **智能松散绑定 (Relaxed Binding)**：自动归一化键名，透明兼容驼峰（camelCase）、中划线（kebab-case）、下划线（snake_case）与点分隔符。
+- **智能松散绑定** (Relaxed Binding)：自动归一化键名，透明兼容驼峰（camelCase）、中划线（kebab-case）、下划线（snake_case）与点分隔符。
 - **占位符深度嵌套与防死锁**：支持 `${db.${env}.host:localhost}` 嵌套语法与默认值，内置递归深度限制（最大 20 层）与循环依赖检测。
-- **防抖热重载 (Debounce Window)**：内置防抖时间窗口（默认 500ms），将高频瞬时修改合并为单次原子重载；单元测试可设为 0 实现同步重载。
-- **配置驱动组件生命周期 (`ConfigDrivenRegistry`)**：配置变更自动安全热替换运行时对象（Safe Swap），旧实例自动执行 `AutoCloseable` 优雅释放。
-- **全局引导与锁定 (`ConfigBootstrap`)**：支持集中化注册并在应用就绪后执行 `lock()`，防止运行期配置源被非法篡改。
+- **防抖热重载** (Debounce Window)：内置防抖时间窗口（默认 500ms），将高频瞬时修改合并为单次原子重载；单元测试可设为 0 实现同步重载。
+- **配置驱动组件生命周期** (`ConfigDrivenRegistry`)：配置变更自动安全热替换运行时对象（Safe Swap），旧实例自动执行 `AutoCloseable` 优雅释放。
+- **全局引导与锁定** (`ConfigBootstrap`)：支持集中化注册并在应用就绪后执行 `lock()`，防止运行期配置源被非法篡改。
 
 ---
 
@@ -67,11 +67,11 @@ graph LR
 
 | 模块 | 说明 | 核心依赖 |
 | :--- | :--- | :--- |
-| **`team4u-config`** | 核心配置引擎：快照聚合、显式绑定、代理创建 SPI、占位符解析与防抖热重载 | `team4u-base`, `team4u-policy`, `team4u-serializer-json` |
-| **`team4u-config-proxy`** | 类型安全代理适配器：保留原有 FQCN，并通过唯一 ServiceLoader 实现自动装配 | `team4u-config`, `team4u-proxy`, ByteBuddy(runtime) |
-| **`team4u-config-spring`** | 显式 `@Import` 的 Spring 注册表配置 | `team4u-config`, `team4u-policy`, Spring |
-| **`team4u-config-db`** | 数据库配置扩展：基于 JDBC 的关系型数据库配置全量加载与低开销时间戳轮询监听器 | `team4u-config`, JDBC / DataSource |
-| **`team4u-config-test`** | 单元测试支持：提供 `TestConfigContext` 内存隔离配置环境，默认 0 延迟同步热重载并自动发现代理实现 | `team4u-config`, `team4u-config-proxy` |
+| `team4u-config` | 核心配置引擎：快照聚合、显式绑定、代理创建 SPI、占位符解析与防抖热重载 | `team4u-base`, `team4u-policy`, `team4u-serializer-json` |
+| `team4u-config-proxy` | 类型安全代理适配器：保留原有 FQCN，并通过唯一 ServiceLoader 实现自动装配 | `team4u-config`, `team4u-proxy`, ByteBuddy(runtime) |
+| `team4u-config-spring` | 显式 `@Import` 的 Spring 注册表配置 | `team4u-config`, `team4u-policy`, Spring |
+| `team4u-config-db` | 数据库配置扩展：基于 JDBC 的关系型数据库配置全量加载与低开销时间戳轮询监听器 | `team4u-config`, JDBC / DataSource |
+| `team4u-config-test` | 单元测试支持：提供 `TestConfigContext` 内存隔离配置环境，默认 0 延迟同步热重载并自动发现代理实现 | `team4u-config`, `team4u-config-proxy` |
 
 `createProxy` 需要显式 `ConfigProxyCreator`，或类路径上唯一的 `team4u-config-proxy` ServiceLoader 实现。
 使用 `JsonPropertyConverter` 的应用必须显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。

@@ -47,7 +47,7 @@ graph TD
 ## 核心特性
 
 - **职责清晰隔离 (ISP / SRP)**：只读查询接口 `BeanFactory` 与写入注册接口 `BeanRegistry` 严格分离。
-- **并发安全与懒加载 (`loadBean`)**：基于原子检查与本地注册机制，确保在并发访问下耗时的初始化逻辑安全执行。
+- **并发安全与懒加载** (`loadBean`)：基于原子检查与本地注册机制，确保在并发访问下耗时的初始化逻辑安全执行。
 - **SPI 扩展机制**：支持通过 Java 标准 SPI（`ServiceLoader`）自动发现并注册第三方自定义容器源。
 - **显式 Spring 桥接**：Spring 环境添加 `team4u-bean-spring`，用 `@Import(Team4uBeanConfiguration.class)` 注册 `SpringBeanContainer`；SDK 代码仍只依赖 `team4u-bean` 的 `BeanManager`。
 

@@ -12,7 +12,7 @@
 
 这些需求如果由各业务自己实现，通常会写成三种样子：
 
-- **本地 `synchronized` / `ConcurrentHashMap`**：只在单个 JVM 内有效。服务部署了 8 个实例，每个实例还是各回源一次；
+- **本地锁** (`synchronized` / `ConcurrentHashMap`)：只在单个 JVM 内有效。服务部署了 8 个实例，每个实例还是各回源一次；
 - **裸写 Redis SET/DEL**：没有租约概念——进程崩了锁就死锁了；没有接管——持锁者超时后请求只能干等；也没有身份校验——旧执行者晚到一步，会把过期结果盖在新执行者头上；
 - **各处复制粘贴**：等待、超时、降级、异常路径的代码重复且容易写错，规则改一下就要发版。
 
@@ -102,7 +102,7 @@ execute(point, arguments, returnType, loader)
 | :--- | :--- | :--- | :--- | :--- |
 | `enabled` | boolean | 否 | `true` | 是否启用 singleflight。false 时直接执行 loader，不读锁、回执与缓存 |
 | `id` | String | 是 | 无 | 必须与 point 完全一致，否则执行期抛 `SingleFlightConfigException`。加载期不能为空 |
-| `store` | String | 否 | `""` | `NamedKvStoreRegistry.global()` 中的命名存储；空白用引擎默认存储。解析后直达最内层真实存储 |
+| `store` | String | 否 | "" | `NamedKvStoreRegistry.global()` 中的命名存储；空白用引擎默认存储。解析后直达最内层真实存储 |
 | `key` | String | 否 | 无 | `${variable}` 模板，变量来自参数名 Map。不配置时业务 key 就是 point，同 point 全局共享窗口。渲染为 null/空白时按 `onInvalidKey` 处理 |
 | `skipWhen` | String | 否 | 无 | Criterion 表达式，匹配参数名 Map。命中则直接执行 loader，完全绕过协调和缓存。用 `$参数名` 引用参数，例如 `$refresh == true` |
 | `cacheWhen` | String | 否 | 无 | Criterion 表达式，匹配 loader 返回值。不配置默认可缓存；为 false 时发布 `SUCCESS_NOT_CACHEABLE` 且不写结果缓存 |
@@ -240,7 +240,7 @@ team4u-singleflight-spring         # Spring 自动装配（显式引入）
 | `team4u-policy` | core（传递） | 命名存储与命名摘要注册表使用的 `KeyedPolicyRegistry` | — |
 | `team4u-criterion` | core（传递） | `skipWhen` / `cacheWhen` 表达式 | — |
 | `team4u-serializer-json` | core（传递） | 规则与结果的 `JsonUtil` 门面（应用需显式提供 JSON 引擎，见下） | — |
-| `jackson-databind` | core（传递，直连） | **durable schema** 直连边界：会话信封（SessionEnvelope）按 Jackson 树模型读写、降级转换（FallbackConverter）经 `TypeFactory` 做类型自省——均为不携带序列化配置的稳定持久化 schema；降级值的 bean 转换本身走 `JsonUtil` provider 语义（见下行），不经 provider SPI，也**不**等于传递提供 `team4u-serializer-jackson` | — |
+| `jackson-databind` | core（传递，直连） | **durable schema**直连边界：会话信封（SessionEnvelope）按 Jackson 树模型读写、降级转换（FallbackConverter）经 `TypeFactory` 做类型自省——均为不携带序列化配置的稳定持久化 schema；降级值的 bean 转换本身走 `JsonUtil` provider 语义（见下行），不经 provider SPI，也**不**等于传递提供 `team4u-serializer-jackson` | — |
 | `team4u-proxy` | proxy（传递） | `@SingleFlight` 注解代理 | 使用注解时引入 `team4u-singleflight-proxy` |
 | `team4u-proxy-spring` | spring（传递） | 注解代理的 Spring 装配公共模板 | Spring 环境引入 `team4u-singleflight-spring` |
 | `spring-context` | spring（传递） | `@EnableSingleFlight` 自动代理 | 同上 |
@@ -253,10 +253,10 @@ team4u-singleflight-spring         # Spring 自动装配（显式引入）
 
 ## 与其他组件联动
 
-- **[键值存储组件](../kv/README.md)**：锁租约、CAS 能力、命名存储与存储后端全部由 kv 组件提供
-- **[限流组件](../ratelimiter/README.md)**：时间窗口配额、突发整形与防刷应使用限流而不是 singleflight
-- **[Criterion 表达式组件](../criterion/README.md)**：`skipWhen` / `cacheWhen` 的表达式语法即 Criterion DSL
-- **[配置组件](../config/README.md)**：规则经 `ConfigDrivenRegistry` 加载，配置中心变更即热更新
+- [**键值存储组件**](../kv/README.md)：锁租约、CAS 能力、命名存储与存储后端全部由 kv 组件提供
+- [**限流组件**](../ratelimiter/README.md)：时间窗口配额、突发整形与防刷应使用限流而不是 singleflight
+- [**Criterion 表达式组件**](../criterion/README.md)：`skipWhen` / `cacheWhen` 的表达式语法即 Criterion DSL
+- [**配置组件**](../config/README.md)：规则经 `ConfigDrivenRegistry` 加载，配置中心变更即热更新
 
 ## 文档导航
 

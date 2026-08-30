@@ -134,7 +134,7 @@ public class JacksonMaskQuickStart {
         // 序列化为 JSON 时自动应用脱敏规则
         String json = mapper.writeValueAsString(user);
         System.out.println(json);
-        // 输出: {"id":1001,"realName":"**伦","mobile":"138*****678","idCardNo":"44011***********34"}
+        // 输出: {"id":1001,"realName":`"**伦"`,"mobile":"138*****678","idCardNo":"44011***********34"}
 
         // 内存中 Java 对象字段的真实值完全不受影响
         System.out.println("内存真实手机号: " + user.getMobile()); // 13812345678

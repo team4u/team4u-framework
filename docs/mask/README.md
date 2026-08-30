@@ -11,7 +11,7 @@ Task 15 将脱敏能力拆为三个 artifact：`team4u-mask` 是核心脱敏模�
 - **规则调整需重新发版**：合规政策调整（例如掩码规则微调）必须修改代码并重新编译上线。
 - **Unicode 与 Emoji 乱码截断**：常规 `String.substring` 在处理 4 字节 Emoji 或生僻字（Surrogate Pair 代理对）时，容易截断半个字符导致乱码或乱码异常。
 
-`team4u-mask` 是一个轻量级、高性能的核心脱敏模块。它提供了 **编程式极速脱敏 (`FastMasker`)** 与 **注解式声明脱敏 (`@Mask`)**；配置中心动态规则由 `team4u-mask-config` 提供。
+`team4u-mask` 是一个轻量级、高性能的核心脱敏模块。它提供了 **编程式极速脱敏**(`FastMasker`) 与 **注解式声明脱敏** (`@Mask`)；配置中心动态规则由 `team4u-mask-config` 提供。
 
 ---
 
@@ -54,9 +54,9 @@ graph TD
 - **内置 15 种标准脱敏算法**：开箱覆盖姓名（支持中英文智能区分）、手机号、身份证、银行卡、邮箱、地址、密码、居中百分比掩码等。
 - **未知策略 fail-closed**：未注册、null、空串或空白策略标识抛出 `IllegalArgumentException`；只有显式 `NONE` 返回原文。
 - **Jackson 无侵入显式脱敏**：观测向序列化经 `MaskedJson` 门面（或向自建 mapper 注册 `JacksonMaskModule`）后，自动接管 JavaBean 与 Map 的 JSON 序列化输出，内存对象中的真实值完全不受影响；全局 `JsonUtil` 奉行无损契约，脱敏永不默认生效（`team4u-mask-jackson` 使用核心 `MaskRuleResolver`，不依赖 mask-config）。
-- **配置中心动态治理 (`team4u.mask.rules`)**：添加 `team4u-mask-config` 并启动 `MaskBootstrap`；规则解析只依赖 `team4u-serializer-json` SPI（应用需显式提供 `team4u-serializer-jackson` 或自定义 `JsonSerializerPolicy`），无需修改代码即可针对特定 Class、第三方 DTO 或全局字段名动态下发脱敏规则。另注：`team4u-mask-jackson` 与 mask-config 无依赖关系，它显式 compile 依赖 provider `team4u-serializer-jackson`，不直接消费 serializer-json SPI。
+- **配置中心动态治理** (`team4u.mask.rules`)：添加 `team4u-mask-config` 并启动 `MaskBootstrap`；规则解析只依赖 `team4u-serializer-json` SPI（应用需显式提供 `team4u-serializer-jackson` 或自定义 `JsonSerializerPolicy`），无需修改代码即可针对特定 Class、第三方 DTO 或全局字段名动态下发脱敏规则。另注：`team4u-mask-jackson` 与 mask-config 无依赖关系，它显式 compile 依赖 provider `team4u-serializer-jackson`，不直接消费 serializer-json SPI。
 - **Unicode CodePoint 安全机制**：所有字符串长度计算与截取严格基于 Unicode CodePoint 算法，兼容 Emoji 与生僻字。
-- **超长报文截断保护 (`MaskConfig`)**：支持配置 `maxStringLength`，防止超大报文或 Base64 文本打满磁盘日志。
+- **超长报文截断保护** (`MaskConfig`)：支持配置 `maxStringLength`，防止超大报文或 Base64 文本打满磁盘日志。
 
 ---
 

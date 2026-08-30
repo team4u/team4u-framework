@@ -17,9 +17,9 @@
 
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
-| **[路由组件](router/README.md)** | `team4u-router` / `team4u-router-proxy` | 插件化业务路由框架。router 支持 Map、Expression、Weight 与 Composite 路由、Trace 与拦截器；`team4u-router-proxy` 提供 `@Routed` 声明式接口代理与 Bean 定位。 | [概览](router/README.md) · [快速开始](router/quick-start.md) · [声明式路由](router/router-declarative.md) |
-| **[Criterion 表达式组件](criterion/README.md)** | `team4u-criterion` | 低开销业务规则 DSL 表达式引擎。支持类 SQL 自然语法、JIT 闭包直出、低分配数值宽容比较、白盒 Trace 执行树与外部属性延迟加载 (`LazyAttributeResolver`)。 | [概览](criterion/README.md) · [快速开始](criterion/quick-start.md) · [基准](../benchmarks/README.md) |
-| **[契约翻译组件](translator/README.md)** | `team4u-translator` | 统一契约与响应翻译框架。将上游/底层原始响应 (`RawResponse`) 经由路由规则映射并渲染为统一对外契约 (`TranslatedResponse`)，内置模板变量插值与多级降级策略。 | [概览](translator/README.md) · [快速开始](translator/quick-start.md) |
+| [**路由组件**](router/README.md) | `team4u-router` / `team4u-router-proxy` | 插件化业务路由框架。router 支持 Map、Expression、Weight 与 Composite 路由、Trace 与拦截器；`team4u-router-proxy` 提供 `@Routed` 声明式接口代理与 Bean 定位。 | [概览](router/README.md) · [快速开始](router/quick-start.md) · [声明式路由](router/router-declarative.md) |
+| [**Criterion 表达式组件**](criterion/README.md) | `team4u-criterion` | 低开销业务规则 DSL 表达式引擎。支持类 SQL 自然语法、JIT 闭包直出、低分配数值宽容比较、白盒 Trace 执行树与外部属性延迟加载 (`LazyAttributeResolver`)。 | [概览](criterion/README.md) · [快速开始](criterion/quick-start.md) · [基准](../benchmarks/README.md) |
+| [**契约翻译组件**](translator/README.md) | `team4u-translator` | 统一契约与响应翻译框架。将上游/底层原始响应 (`RawResponse`) 经由路由规则映射并渲染为统一对外契约 (`TranslatedResponse`)，内置模板变量插值与多级降级策略。 | [概览](translator/README.md) · [快速开始](translator/quick-start.md) |
 
 ---
 
@@ -29,8 +29,8 @@
 
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
-| **[配置组件](config/README.md)** | `team4u-config` / `team4u-config-proxy` / `team4u-config-spring` / `team4u-config-db` | 强类型安全配置框架。支持快照驱动 (`Snapshot`)、Live/Pinned 代理双模、环境变量/属性文件/数据库多源聚合、占位符嵌套解析与防抖热更新。core 可独立使用，代理 / Spring / DB 适配按需显式引入。 | [概览](config/README.md) · [快速开始](config/quick-start.md) |
-| **[策略模式组件](policy/README.md)** | `team4u-policy` | 高性能策略管理与责任链引擎。提供 O(1) 复杂度 Copy-On-Write 读写分离精准路由 (`KeyedPolicy`)、有序责任链 (`OrderedPolicyChain`)、中断流水线与 Spring 自动发现 (`@PolicyAutoRegister`)。 | [概览](policy/README.md) · [快速开始](policy/quick-start.md) |
+| [**配置组件**](config/README.md) | `team4u-config` / `team4u-config-proxy` / `team4u-config-spring` / `team4u-config-db` | 强类型安全配置框架。支持快照驱动 (`Snapshot`)、Live/Pinned 代理双模、环境变量/属性文件/数据库多源聚合、占位符嵌套解析与防抖热更新。core 可独立使用，代理 / Spring / DB 适配按需显式引入。 | [概览](config/README.md) · [快速开始](config/quick-start.md) |
+| [**策略模式组件**](policy/README.md) | `team4u-policy` | 高性能策略管理与责任链引擎。提供 O(1) 复杂度 Copy-On-Write 读写分离精准路由 (`KeyedPolicy`)、有序责任链 (`OrderedPolicyChain`)、中断流水线与 Spring 自动发现 (`@PolicyAutoRegister`)。 | [概览](policy/README.md) · [快速开始](policy/quick-start.md) |
 
 ---
 
@@ -39,12 +39,12 @@
 
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
-| **[租约任务组件](lease/README.md)** | `team4u-lease` / `team4u-lease-memory` / `team4u-lease-jdbc` | 排他任务调度框架。通过队列化 Task/Worker/Result API 提供延迟调度、精确类型订阅、心跳续约、故障接管与业务键幂等建档，Memory / JDBC 持久化后端按需显式引入。 | [概览](lease/README.md) · [快速开始](lease/quick-start.md) |
-| **[通用重试组件](retry/README.md)** | `team4u-retry` / `team4u-retry-managed` / `team4u-retry-proxy` / `team4u-retry-config` / `team4u-retry-spring` / `team4u-retry-lease-runtime` | 统一重试治理框架。core 提供进程内即时同步/异步重试 (`INLINE`)；managed 提供 `MANAGED` 后台托管编排、记录模型与 `RetryStore` SPI；proxy 提供 `@Retryable` 注解代理；config 提供配置中心动态策略；lease-runtime 提供基于租约的持久化后端；spring 提供 Spring 显式适配。 | [概览](retry/README.md) · [快速开始](retry/quick-start.md) |
-| **[键值存储组件](kv/README.md)** | `team4u-kv` / `team4u-kv-space` / `team4u-kv-lock` / `team4u-kv-lifecycle` / `team4u-kv-retryable` / `team4u-kv-store-jdbc` / `team4u-kv-store-redis` | 最小核心 + 装饰器的键值存储套件。core 仅含 4 操作 `KvStore` 核心与能力协商（计数/计分窗口）；类型化键空间 (`Space`) 与命名存储注册表 (`NamedKvStoreRegistry`) 位于 `team4u-kv-space`，观测/重试装饰器、CAS 化分布式锁、过期值源与 memory 内建实现之上，JDBC / Redis 后端按需显式引入。 | [概览](kv/README.md) · [快速开始](kv/quick-start.md) |
-| **[序号生成组件](id/README.md)** | `team4u-id` | 配置驱动的序号生成框架。基于 `KvStore` 原子计数能力 (`CounterCapable`)，一条 JSON 规则支持分组重置、额度耗尽、循环使用、本地号段加速与模板化单号，内存/JDBC/Redis 后端行为一致。 | [概览](id/README.md) · [快速开始](id/quick-start.md) |
-| **[限流组件](ratelimiter/README.md)** | `team4u-ratelimiter` / `team4u-ratelimiter-proxy` / `team4u-ratelimiter-spring` | 配置驱动的多算法限流框架。基于 `KvStore` 能力协商提供固定窗口、令牌桶、精确滑动窗口与客户端历史窗口四种算法，一条 JSON 规则支持键模板维度计数、多存储分工、failOpen 故障策略与 `@RateLimit` 注解代理，热更新生效；注解代理与 Spring 装配按需显式引入。 | [概览](ratelimiter/README.md) · [快速开始](ratelimiter/quick-start.md) |
-| **[Singleflight 组件](singleflight/README.md)** | `team4u-singleflight` / `team4u-singleflight-proxy` / `team4u-singleflight-spring` | 配置驱动的回源合并与并发互斥框架。基于 `KvStore` CAS 与 kv 锁提供同 key 唯一执行者、WAIT/FAIL_FAST/FALLBACK 竞争策略、结果缓存、失败会话共享、执行者崩溃接管与 token fencing，一条 JSON 规则热更新生效，支持 `@SingleFlight` 注解代理；注解代理与 Spring 装配按需显式引入。 | [概览](singleflight/README.md) · [快速开始](singleflight/quick-start.md) |
+| [**租约任务组件**](lease/README.md) | `team4u-lease` / `team4u-lease-memory` / `team4u-lease-jdbc` | 排他任务调度框架。通过队列化 Task/Worker/Result API 提供延迟调度、精确类型订阅、心跳续约、故障接管与业务键幂等建档，Memory / JDBC 持久化后端按需显式引入。 | [概览](lease/README.md) · [快速开始](lease/quick-start.md) |
+| [**通用重试组件**](retry/README.md) | `team4u-retry` / `team4u-retry-managed` / `team4u-retry-proxy` / `team4u-retry-config` / `team4u-retry-spring` / `team4u-retry-lease-runtime` | 统一重试治理框架。core 提供进程内即时同步/异步重试 (`INLINE`)；managed 提供 `MANAGED` 后台托管编排、记录模型与 `RetryStore` SPI；proxy 提供 `@Retryable` 注解代理；config 提供配置中心动态策略；lease-runtime 提供基于租约的持久化后端；spring 提供 Spring 显式适配。 | [概览](retry/README.md) · [快速开始](retry/quick-start.md) |
+| [**键值存储组件**](kv/README.md) | `team4u-kv` / `team4u-kv-space` / `team4u-kv-lock` / `team4u-kv-lifecycle` / `team4u-kv-retryable` / `team4u-kv-store-jdbc` / `team4u-kv-store-redis` | 最小核心 + 装饰器的键值存储套件。core 仅含 4 操作 `KvStore` 核心与能力协商（计数/计分窗口）；类型化键空间 (`Space`) 与命名存储注册表 (`NamedKvStoreRegistry`) 位于 `team4u-kv-space`，观测/重试装饰器、CAS 化分布式锁、过期值源与 memory 内建实现之上，JDBC / Redis 后端按需显式引入。 | [概览](kv/README.md) · [快速开始](kv/quick-start.md) |
+| [**序号生成组件**](id/README.md) | `team4u-id` | 配置驱动的序号生成框架。基于 `KvStore` 原子计数能力 (`CounterCapable`)，一条 JSON 规则支持分组重置、额度耗尽、循环使用、本地号段加速与模板化单号，内存/JDBC/Redis 后端行为一致。 | [概览](id/README.md) · [快速开始](id/quick-start.md) |
+| [**限流组件**](ratelimiter/README.md) | `team4u-ratelimiter` / `team4u-ratelimiter-proxy` / `team4u-ratelimiter-spring` | 配置驱动的多算法限流框架。基于 `KvStore` 能力协商提供固定窗口、令牌桶、精确滑动窗口与客户端历史窗口四种算法，一条 JSON 规则支持键模板维度计数、多存储分工、failOpen 故障策略与 `@RateLimit` 注解代理，热更新生效；注解代理与 Spring 装配按需显式引入。 | [概览](ratelimiter/README.md) · [快速开始](ratelimiter/quick-start.md) |
+| [**Singleflight 组件**](singleflight/README.md) | `team4u-singleflight` / `team4u-singleflight-proxy` / `team4u-singleflight-spring` | 配置驱动的回源合并与并发互斥框架。基于 `KvStore` CAS 与 kv 锁提供同 key 唯一执行者、WAIT/FAIL_FAST/FALLBACK 竞争策略、结果缓存、失败会话共享、执行者崩溃接管与 token fencing，一条 JSON 规则热更新生效，支持 `@SingleFlight` 注解代理；注解代理与 Spring 装配按需显式引入。 | [概览](singleflight/README.md) · [快速开始](singleflight/quick-start.md) |
 
 ---
 
@@ -54,8 +54,8 @@
 
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
-| **[数据脱敏组件](mask/README.md)** | `team4u-mask` / `team4u-mask-jackson` / `team4u-mask-config` | 纯 Java 核心脱敏、Jackson 序列化适配与配置中心动态规则，按需显式引入。 | [概览](mask/README.md) · [快速开始](mask/quick-start.md) |
-| **[结构化日志组件](log/README.md)** | `team4u-log` / `team4u-log-governance` | 流式结构化日志核心默认明文输出；治理 artifact 显式集成 Jackson、配置热更新、脱敏、方法代理、染色与 FinOps 限流。 | [概览](log/README.md) · [快速开始](log/quick-start.md) |
+| [**数据脱敏组件**](mask/README.md) | `team4u-mask` / `team4u-mask-jackson` / `team4u-mask-config` | 纯 Java 核心脱敏、Jackson 序列化适配与配置中心动态规则，按需显式引入。 | [概览](mask/README.md) · [快速开始](mask/quick-start.md) |
+| [**结构化日志组件**](log/README.md) | `team4u-log` / `team4u-log-governance` | 流式结构化日志核心默认明文输出；治理 artifact 显式集成 Jackson、配置热更新、脱敏、方法代理、染色与 FinOps 限流。 | [概览](log/README.md) · [快速开始](log/quick-start.md) |
 
 ---
 
@@ -65,10 +65,10 @@
 
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
-| **[对象容器组件](bean/README.md)** | `team4u-bean` / `team4u-bean-spring` | 轻量级 Bean 容器与对象管理门面。核心为纯 Java 本地容器与 Provider 链式查找；Spring 桥接作为独立普通配置显式引入。 | [概览](bean/README.md) · [快速开始](bean/quick-start.md) |
-| **[动态代理组件](proxy/README.md)** | `team4u-proxy` / `team4u-proxy-spring` | 统一代理门面与 AOP 拦截器链。自适应 JDK Proxy / ByteBuddy 双引擎，开箱提供方法委托 (鸭子类型)、调用链追踪 (`Tracker`)、运行时热替换 (`HotSwap`) 与空对象防 NPE 代理；注解驱动代理的 Spring 装配模板（`AnnotationProxyBeanPostProcessor` 抽象）位于独立的 `team4u-proxy-spring`。 | [概览](proxy/README.md) · [快速开始](proxy/quick-start.md) |
-| **[序列化组件](serializer/README.md)** | `team4u-serializer-json` / `team4u-serializer-jackson` | 统一 JSON 序列化门面 (`JsonUtil`)。json 为 provider-free 核心与 SPI，基于自动扫描与优先级加载，支持复杂泛型 `TypeReference` 提取与容错解析；Jackson 驱动经 `team4u-serializer-jackson` 显式引入。 | [概览](serializer/README.md) · [快速开始](serializer/quick-start.md) |
-| **[核心基础组件](base/README.md)** | `team4u-base` / `team4u-base-jdbc` | 框架基石与通用工具库。提供分段锁动态实例创建 (`DynamicInstanceProvider`)、高性能预解析文本模板 (`TextTemplate`)、通用缓存 (`LRU/LFU/TimedCache`) 与类型转换器；JDBC 构建工具位于独立的 `team4u-base-jdbc`。 | [概览](base/README.md) · [快速开始](base/quick-start.md) |
+| [**对象容器组件**](bean/README.md) | `team4u-bean` / `team4u-bean-spring` | 轻量级 Bean 容器与对象管理门面。核心为纯 Java 本地容器与 Provider 链式查找；Spring 桥接作为独立普通配置显式引入。 | [概览](bean/README.md) · [快速开始](bean/quick-start.md) |
+| [**动态代理组件**](proxy/README.md) | `team4u-proxy` / `team4u-proxy-spring` | 统一代理门面与 AOP 拦截器链。自适应 JDK Proxy / ByteBuddy 双引擎，开箱提供方法委托 (鸭子类型)、调用链追踪 (`Tracker`)、运行时热替换 (`HotSwap`) 与空对象防 NPE 代理；注解驱动代理的 Spring 装配模板（`AnnotationProxyBeanPostProcessor` 抽象）位于独立的 `team4u-proxy-spring`。 | [概览](proxy/README.md) · [快速开始](proxy/quick-start.md) |
+| [**序列化组件**](serializer/README.md) | `team4u-serializer-json` / `team4u-serializer-jackson` | 统一 JSON 序列化门面 (`JsonUtil`)。json 为 provider-free 核心与 SPI，基于自动扫描与优先级加载，支持复杂泛型 `TypeReference` 提取与容错解析；Jackson 驱动经 `team4u-serializer-jackson` 显式引入。 | [概览](serializer/README.md) · [快速开始](serializer/quick-start.md) |
+| [**核心基础组件**](base/README.md) | `team4u-base` / `team4u-base-jdbc` | 框架基石与通用工具库。提供分段锁动态实例创建 (`DynamicInstanceProvider`)、高性能预解析文本模板 (`TextTemplate`)、通用缓存 (`LRU/LFU/TimedCache`) 与类型转换器；JDBC 构建工具位于独立的 `team4u-base-jdbc`。 | [概览](base/README.md) · [快速开始](base/quick-start.md) |
 
 ---
 

@@ -120,8 +120,8 @@ product:p1
 
 | 规则里的写法 | 代码里的对应 |
 | :--- | :--- |
-| `"id":"product.detail"` | `execute` 的第一个参数 `"product.detail"`（必须完全一致） |
-| `"key":"${productId}"` | 参数 Map 里的 `"productId"` 键（注解方式则是方法参数名） |
+| "id":"product.detail" | `execute` 的第一个参数 "product.detail"（必须完全一致） |
+| "key":"${productId}" | 参数 Map 里的 "productId" 键（注解方式则是方法参数名） |
 | `cacheTtlMillis:60000` | 无需代码配合——第二次调用自动命中缓存 |
 | loader | `() -> queryFromDatabase("p1")`——只有抢到执行权的调用者会真正调用它 |
 

@@ -68,9 +68,9 @@ public class GlobalExceptionHandler {
 
 ### 业务场景
 聚合支付网关对接了微信支付、支付宝、云闪付等多家渠道。各渠道对“账户余额不足”返回的原始状态码各异：
-- 微信支付：`domain = "WECHAT", code = "NOTENOUGH"`
-- 支付宝：`domain = "ALIPAY", code = "ACQ.BUYER_BALANCE_NOT_ENOUGH"`
-- 银联：`domain = "UNIONPAY", code = "51"`
+- 微信支付：`domain = "WECHAT", code = "NOTENOUGH"
+- 支付宝：`domain = "ALIPAY", code = "ACQ.BUYER_BALANCE_NOT_ENOUGH"
+- 银联：`domain = "UNIONPAY", code = "51"
 
 系统需将各渠道错误统一归一化为标准的 `PAY_BALANCE_INSUFFICIENT`，并向用户提示友好的文案。
 

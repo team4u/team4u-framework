@@ -33,9 +33,9 @@ public interface Cache<K, V> {
 
 | 缓存实现 | 淘汰机制 | 线程安全设计 | 适用场景 |
 | :--- | :--- | :--- | :--- |
-| **`LRUCache<K, V>`** | 最近最少使用淘汰 (Least Recently Used) | `synchronized` 保护 | 固定容量下的通用高频热点读写缓存 |
-| **`LFUCache<K, V>`** | 最少访问频次淘汰 (Least Frequently Used) | `ReentrantLock` 保护 | 针对访问频次具备长期倾斜性的场景（如单例池、规则匹配） |
-| **`TimedCache<K, V>`** | TTL 存活时长过期淘汰 | 惰性检查 + `ConcurrentHashMap` | 临时 Token、动态验证码、限流计数器、限时缓存 |
+| `LRUCache<K, V>` | 最近最少使用淘汰 (Least Recently Used) | `synchronized` 保护 | 固定容量下的通用高频热点读写缓存 |
+| `LFUCache<K, V>` | 最少访问频次淘汰 (Least Frequently Used) | `ReentrantLock` 保护 | 针对访问频次具备长期倾斜性的场景（如单例池、规则匹配） |
+| `TimedCache<K, V>` | TTL 存活时长过期淘汰 | 惰性检查 + `ConcurrentHashMap` | 临时 Token、动态验证码、限流计数器、限时缓存 |
 
 ---
 

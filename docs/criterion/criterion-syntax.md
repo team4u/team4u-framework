@@ -12,7 +12,7 @@
   - 数字与布尔：`18`, `3.14`, `true`, `false`, `null`
   - 带引号字符串：`'admin'`, `'VIP'`（支持转义字符 `\'`）
   - 无引号普通标识符：`ACTIVE`, `VIP`（引擎会自动解析识别）
-- **关键字 `it`**：代表整个入参对象本身（例如入参为一个 Integer 或 String 时，使用 `it > 18` 或 `it =~ '^vip_.*'`）。
+- **关键字** `it`：代表整个入参对象本身（例如入参为一个 Integer 或 String 时，使用 `it > 18` 或 `it =~ '^vip_.*'`）。
 
 ---
 
@@ -28,7 +28,7 @@
 | `<=` | 小于等于 | `count <= 5` |
 
 > [!NOTE]
-> **智能宽容比较**：引擎底层自动屏蔽基本数值类型的差异。无论实际传入的是 `Integer`, `Long`, `Double` 还是字符串 `"100"`，`100 == 100.0` 均能精准匹配，避免反序列化类型不一致导致的异常。
+> **智能宽容比较**：引擎底层自动屏蔽基本数值类型的差异。无论实际传入的是 `Integer`, `Long`, `Double` 还是字符串 "100"，`100 == 100.0` 均能精准匹配，避免反序列化类型不一致导致的异常。
 
 ---
 
@@ -62,7 +62,7 @@ age >= 18 && (userLevel in ['VIP', 'SVIP'] || totalAmount > 5000)
 - 动态集合引用：`userRole in $allowedRoles`
 
 ### Contains / ContainsAny / ContainsAll (容器包含)
-- **`contains`**：判断集合是否包含指定元素，或字符串是否包含子串
+- `contains`：判断集合是否包含指定元素，或字符串是否包含子串
   - `roles contains 'ADMIN'` (roles 为 List/Set)
   - `description contains 'error'` (字符串包含)
 - **`containsAny` / `contains_any` / `contains any`**：交集检查，实际集合中是否包含预期集合中的任一元素
@@ -91,7 +91,7 @@ age >= 18 && (userLevel in ['VIP', 'SVIP'] || totalAmount > 5000)
 - **正则匹配 (`=~` 或 `regex`)**：
   - `email =~ '^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)+$'`
   - `phone regex '^1[3-9]\\d{9}$'`
-- **通配符匹配 (`like`)**：基于 Team4u Ant 风格路径语义：`*` 匹配单个 `/` 分段内多个字符，`?` 匹配单个非 `/` 字符，只有完整的 `**` 分段可跨越目录；`***` 等更长星号串仍是分段内通配符，`\` 为普通字符
+- **通配符匹配** (`like`)：基于 Team4u Ant 风格路径语义：`*` 匹配单个 `/` 分段内多个字符，`?` 匹配单个非 `/` 字符，只有完整的 `` 分段可跨越目录；`*` 等更长星号串仍是分段内通配符，`\` 为普通字符
   - `name like 'John*'`
   - `code like 'ERR_???'`
   - `path like '/api/v1/**'`
@@ -107,7 +107,7 @@ age >= 18 && (userLevel in ['VIP', 'SVIP'] || totalAmount > 5000)
 ### 一致性 Hash 分流 (`hash` / `hash_probability`)
 基于 **MurmurHash64** 算法，保证同一入参值（如 `userId`）结果稳定幂等：
 - `userId hash 0.2` (固定圈选 20% 用户)
-- **盐值正交性 (`salt`)**：通过在上下文设置 `context.setAttribute("salt", "EXP_A")`，可保证不同实验之间的哈希分流彼此正交、流量均匀分散。
+- **盐值正交性** (`salt`)：通过在上下文设置 `context.setAttribute("salt", "EXP_A")`，可保证不同实验之间的哈希分流彼此正交、流量均匀分散。
 
 ---
 

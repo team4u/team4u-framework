@@ -82,7 +82,7 @@ String jsonOutput = mapper.writer()
 
 ## Unicode CodePoint 安全计算原理
 
-在 Java 中，一个 `char` 仅能表示 16 位 Unicode 字符（基本多语言平面 BMP）。对于包含 4 字节的表情符号或生僻字，Java 内部使用**代理对 (Surrogate Pair)** 表示，即占用 2 个 `char`。
+在 Java 中，一个 `char` 仅能表示 16 位 Unicode 字符（基本多语言平面 BMP）。对于包含 4 字节的表情符号或生僻字，Java 内部使用**代理对** (Surrogate Pair) 表示，即占用 2 个 `char`。
 
 若使用普通的 `String.length()` 或 `String.substring()` 进行截取或掩码，极易将代理对拆开，导致**乱码或前端解析崩溃**。
 

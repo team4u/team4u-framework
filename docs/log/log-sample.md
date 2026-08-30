@@ -59,7 +59,7 @@ public class TradeOrderService {
 ## 慢方法监控与慢调用自动提权
 
 ### 业务场景
-大型报表导出与复杂统计查询接口，正常情况下耗时在 100ms 以内。要求：若某次执行耗时超过 500ms，自动将日志级别提升为 `WARN` 并记录状态为 `"slow_success"`，供告警平台采集。
+大型报表导出与复杂统计查询接口，正常情况下耗时在 100ms 以内。要求：若某次执行耗时超过 500ms，自动将日志级别提升为 `WARN` 并记录状态为 "slow_success"，供告警平台采集。
 
 ### 代码实现
 ```java
@@ -129,4 +129,4 @@ Loggers.of(PaymentService.class)
 
 #### 效果
 - 普通租户（`tenantId != 'TENANT_VIP_008'`）的 DEBUG 日志直接在客户端短路丢弃，不付出序列化与输出成本；
-- `TENANT_VIP_008` 的请求命中染色规则，日志级别被提权并完整输出到日志平台，`payload` 中自动附加 `"dyeingRuleMatched": "dyeing_vip_tenant"`。
+- `TENANT_VIP_008` 的请求命中染色规则，日志级别被提权并完整输出到日志平台，`payload` 中自动附加 "dyeingRuleMatched": "dyeing_vip_tenant"。

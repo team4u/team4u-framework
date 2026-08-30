@@ -26,8 +26,8 @@ graph TD
 ```
 
 ### 双缓存空间隔离语义
-- **`InputKey` 空间**：通过 `get(I input)` 访问时，以 `new InputKey(input)` 缓存最终创建的实例 `T`；
-- **`ConfigKey` 空间**：通过 `getByConfig(C config)` 访问时，以 `new ConfigKey(config)` 缓存最终创建的实例 `T`；
+- `InputKey` **空间**：通过 `get(I input)` 访问时，以 `new InputKey(input)` 缓存最终创建的实例 `T`；
+- `ConfigKey` **空间**：通过 `getByConfig(C config)` 访问时，以 `new ConfigKey(config)` 缓存最终创建的实例 `T`；
 - 两个包装键使用不同的类型标签，彻底避免了具有相同 `hashCode` 的输入源与配置对象之间的键空间污染。
 
 ### 分段锁并发控制 (Striped Lock)

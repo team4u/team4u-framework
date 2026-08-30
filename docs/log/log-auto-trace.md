@@ -54,10 +54,10 @@ public @interface AutoLogTrace {
 
 | 执行情况 | 最终 `status` | 最终 `level` | `payload` 附加字段 | 异常堆栈 |
 | :--- | :--- | :--- | :--- | :--- |
-| 正常执行且耗时 $\le$ slowThreshold | `"success"` | `INFO` | `"resp": result` | 无 |
-| 正常执行但耗时 $>$ slowThreshold | `"slow_success"` | `WARN` | `"resp": result`, `"slowThreshold": N` | 无 |
-| 抛出 `ignoreExceptions` 中的异常 | `"business_error"` | `WARN` | `"errMsg": ex.getMessage()` | 无 |
-| 抛出未声明的非预期异常 | `"failed"` | `ERROR` | 入参字段 | 记录完整 `exception` |
+| 正常执行且耗时 $\le$ slowThreshold | "success" | `INFO` | "resp": result` | 无 |
+| 正常执行但耗时 $>$ slowThreshold | "slow_success" | `WARN` | "resp": result`, "slowThreshold": N` | 无 |
+| 抛出 `ignoreExceptions` 中的异常 | "business_error" | `WARN` | "errMsg": ex.getMessage()` | 无 |
+| 抛出未声明的非预期异常 | "failed" | `ERROR` | 入参字段 | 记录完整 `exception` |
 
 ---
 

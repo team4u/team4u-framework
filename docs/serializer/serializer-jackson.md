@@ -37,14 +37,14 @@ public class JacksonSerializerPolicy implements JsonSerializerPolicy {
 
 1. **JSR310 时间格式支持**：
    原生支持 `java.time.LocalDateTime`、`java.time.LocalDate`、`java.time.Instant` 等类型的标准格式化转换。
-2. **未知属性容错 (`FAIL_ON_UNKNOWN_PROPERTIES = false`)**：
+2. **未知属性容错** (`FAIL_ON_UNKNOWN_PROPERTIES = false`)：
    当服务间契约发生向前演进时，下发的新增字段不会导致旧版本消费方的反序列化失败。
-3. **空值精简 (`Include.NON_NULL`)**：
+3. **空值精简** (`Include.NON_NULL`)：
    序列化生成的 JSON 报文中不包含值为 `null` 的键，大幅减少网络传输 IO 与日志存储成本。
-4. **环境自检支持 (`supports`)**：
+4. **环境自检支持** (`supports`)：
    在 `supports(Void context)` 方法中自动检测类路径下是否存在 `com.fasterxml.jackson.databind.ObjectMapper`。
-5. **高优先级生效 (`priority()`)**：
-   返回 `ContextPolicy.HIGH`，并在策略链中以 `key = "jackson"` 标识。
+5. **高优先级生效** (`priority()`)：
+   返回 `ContextPolicy.HIGH`，并在策略链中以 `key = "jackson" 标识。
 
 ---
 

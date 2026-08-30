@@ -50,7 +50,7 @@ System.out.println("安全 PoolSize: " + maxPoolSize); // 输出: 0
 | 返回值类型 | 解析策略 / 安全返回值 |
 | :--- | :--- |
 | `void` | `null` |
-| `String` | 空字符串 `""` |
+| `String` | 空字符串 "" |
 | `Optional<T>` | `Optional.empty()` |
 | `List<T>` | `Collections.emptyList()` |
 | `Set<T>` | `Collections.emptySet()` |
@@ -76,6 +76,6 @@ private static final ConcurrentMap<Class<?>, Object> EMPTY_INSTANCE_CACHE = new 
 
 ### 基础 Object 方法拦截
 为了防止在日志打印或集合比对时发生递归循环或异常，空对象拦截器对基础方法进行了特殊处理：
-- `toString()`：返回 `"EmptyProxy[" + targetType.getSimpleName() + "]"`；
+- `toString()`：返回 "EmptyProxy[" + targetType.getSimpleName() + "]"；
 - `hashCode()`：返回 `System.identityHashCode(proxy)`；
 - `equals(other)`：仅当 `proxy == arguments[0]` 时返回 `true`。

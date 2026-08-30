@@ -11,7 +11,7 @@
 
 传统的分流实现方式通常存在明显痛点：
 
-- **代码硬编码 `if-else / switch`**：规则变更必须修改代码重新上线，灵活性差、维护成本高。
+- **代码硬编码** `if-else / switch`：规则变更必须修改代码重新上线，灵活性差、维护成本高。
 - **规则与执行强耦合**：缺乏统一的规则下发与配置热更新机制，无法在不停机的情况下动态切换流量。
 - **缺乏白盒诊断能力**：当复杂规则未命中预期分支时，排查过程犹如黑盒，难以还原计算轨迹。
 - **侵入性过高**：业务调用方必须显式编写路由查询逻辑，破坏了代码整洁度与业务内聚性。
@@ -82,14 +82,14 @@ graph TD
 
 | 特性 | 说明 | 适用场景 |
 | :--- | :--- | :--- |
-| **精准映射 (MapRouter)** | 基于字符串 Key 进行 $O(1)$ 查找，初始化重复 Key 严格校验 | 简单枚举分发、支付渠道直连 |
-| **规则引擎 (ExpressionRouter)** | 集成 `team4u-criterion` 低开销 DSL，支持多条件短路与 `multiMatch` 多重匹配 | 复杂人群圈选、多维定价、风控拦截 |
-| **权重分流 (WeightRouter)** | 基于 MurmurHash32 与 `TreeMap.ceilingEntry` 快速定位区间，支持确定性粘性路由 | 流量灰度、A/B 测试、多通道比例负载 |
-| **组合级联 (CompositeRouter)** | 瀑布流串联多个子路由，支持私有规则优先、短路截断与公共规则兜底收口 | 业务线定制规则覆盖系统全局基准 |
+| **精准映射** (MapRouter) | 基于字符串 Key 进行 $O(1)$ 查找，初始化重复 Key 严格校验 | 简单枚举分发、支付渠道直连 |
+| **规则引擎** (ExpressionRouter) | 集成 `team4u-criterion` 低开销 DSL，支持多条件短路与 `multiMatch` 多重匹配 | 复杂人群圈选、多维定价、风控拦截 |
+| **权重分流** (WeightRouter) | 基于 MurmurHash32 与 `TreeMap.ceilingEntry` 快速定位区间，支持确定性粘性路由 | 流量灰度、A/B 测试、多通道比例负载 |
+| **组合级联** (CompositeRouter) | 瀑布流串联多个子路由，支持私有规则优先、短路截断与公共规则兜底收口 | 业务线定制规则覆盖系统全局基准 |
 | **声明式代理 (@Routed)** | 动态代理接口方法，支持 `${property}` 动态模板拼接与 `@RouteContext` 参数绑定 | 业务门面解耦、多租户多策略透明执行 |
 | **类型安全与泛型转换** | 支持 `TypeReference<T>`、`Class<T>`、`Type` 自动类型反序列化与强制转换 | 复杂对象、泛型集合路由结果安全消费 |
-| **责任链拦截器 (RouteInterceptor)** | 统一横切拦截，支持请求改写、耗时监控、熔断短路与无拦截器快速路径优化 | 全局租约注入、统一指标上报、异常防御 |
-| **白盒诊断 (RouteTrace)** | 捕获规则评估轨迹、表达式计算细节、Weight Hash 区间与路由耗时 | 线上排障、规则未命中原因定位 |
+| **责任链拦截器** (RouteInterceptor) | 统一横切拦截，支持请求改写、耗时监控、熔断短路与无拦截器快速路径优化 | 全局租约注入、统一指标上报、异常防御 |
+| **白盒诊断** (RouteTrace) | 捕获规则评估轨迹、表达式计算细节、Weight Hash 区间与路由耗时 | 线上排障、规则未命中原因定位 |
 
 ---
 
@@ -118,10 +118,10 @@ com.team4u.framework.router
 
 # 与其他组件联动
 
-- **[Criterion 表达式组件](../criterion/README.md)**：`ExpressionRouter` 原生集成 Criterion，提供低开销 DSL 条件判定与表达式执行诊断；路由热路径实测见 [JMH 基准](../../benchmarks/README.md)。
-- **[配置组件](../config/README.md)**：`RoutingManager` 内部基于 `ConfigDrivenRegistry` 自动监听 `router.*` 配置变更，实现规则热重载。
-- **[对象容器组件](../bean/README.md)**：声明式路由在解析出目标路由值后，通过 `BeanManager` 或自定义 `BeanResolver` 动态定位目标 Bean。
-- **[契约翻译组件](../translator/README.md)**：`team4u-translator` 基于 `RoutingManager` 实现错误码路由与定制化翻译。
+- [**Criterion 表达式组件**](../criterion/README.md)：`ExpressionRouter` 原生集成 Criterion，提供低开销 DSL 条件判定与表达式执行诊断；路由热路径实测见 [JMH 基准](../../benchmarks/README.md)。
+- [**配置组件**](../config/README.md)：`RoutingManager` 内部基于 `ConfigDrivenRegistry` 自动监听 `router.*` 配置变更，实现规则热重载。
+- [**对象容器组件**](../bean/README.md)：声明式路由在解析出目标路由值后，通过 `BeanManager` 或自定义 `BeanResolver` 动态定位目标 Bean。
+- [**契约翻译组件**](../translator/README.md)：`team4u-translator` 基于 `RoutingManager` 实现错误码路由与定制化翻译。
 
 ---
 

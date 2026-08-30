@@ -87,7 +87,7 @@ List<Recommendation> feed = SingleFlights.execute(SingleFlightExecution.of(
         () -> recommendClient.query("u1")));
 ```
 
-行为：抢到锁的调用者正常回源；没抢到的**不抛异常**，直接拿到 `[{"id":"default","name":"默认推荐"}]` 反序列化后的对象。显式 `"fallback":null` 可以让对象类型返回 null，基本类型不允许。
+行为：抢到锁的调用者正常回源；没抢到的**不抛异常**，直接拿到 `[{"id":"default","name":"默认推荐"}]` 反序列化后的对象。显式 "fallback":null` 可以让对象类型返回 null，基本类型不允许。
 
 ## 场景四：不可缓存的结果（cacheWhen）
 
@@ -122,10 +122,10 @@ OrderSnapshot snapshot = SingleFlights.execute(SingleFlightExecution.of(
 
 | loader 返回 | 行为 |
 | :--- | :--- |
-| `status = "SUCCESS"` 且 `amount > 0` | 写 60 秒结果缓存，后续请求命中缓存 |
-| `status = "PROCESSING"`（表达式为 false） | **不写缓存**；本次等待者仍可拿到结果（1 秒内），下一个新请求重新回源 |
+| `status = "SUCCESS" 且 `amount > 0` | 写 60 秒结果缓存，后续请求命中缓存 |
+| `status = "PROCESSING"（表达式为 false） | **不写缓存**；本次等待者仍可拿到结果（1 秒内），下一个新请求重新回源 |
 
-表达式里也可以用 `$参数名` 引用入参，例如 `"cacheWhen":"status == 'SUCCESS' && $userId != 'preview-user'"`。
+表达式里也可以用 `$参数名` 引用入参，例如 "cacheWhen":"status == 'SUCCESS' && $userId != 'preview-user'"。
 
 ## 场景五：某些调用跳过合并（skipWhen）
 

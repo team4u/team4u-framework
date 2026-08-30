@@ -15,7 +15,7 @@ MatchContext matchCtx = MatchContext.of(source).setAttributes(safeArgs);
 ```
 
 因此，在编写路由规则表达式时，可以直接使用以下属性：
-- **`RawResponse` 字段**：`domain`、`code`、`message`、`cause`
+- `RawResponse` **字段**：`domain`、`code`、`message`、`cause`
 - **动态参数 `args` 字段**：以 `$` 开头或普通属性形式使用（如 `$tenantId`、`$channel`）
 
 ---
