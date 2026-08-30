@@ -1,5 +1,7 @@
 package com.team4u.framework.flow;
 
+import com.team4u.framework.base.util.Assert;
+
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -42,16 +44,12 @@ public final class FlowBuilder<I, C> {
     }
 
     private static String validateFlowId(String flowId) {
-        if (flowId == null || flowId.trim().isEmpty()) {
-            throw new IllegalArgumentException("flowId must not be null or blank");
-        }
+        Assert.notBlank(flowId, "flowId must not be null or blank");
         return flowId;
     }
 
     private static String validateNodeId(String nodeId) {
-        if (nodeId == null || nodeId.trim().isEmpty()) {
-            throw new IllegalArgumentException("nodeId must not be null or blank");
-        }
+        Assert.notBlank(nodeId, "nodeId must not be null or blank");
         return nodeId;
     }
 

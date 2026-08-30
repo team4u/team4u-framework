@@ -1,12 +1,13 @@
 package com.team4u.framework.flow.durable;
 
+import com.team4u.framework.base.util.Assert;
+
 import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
 import java.io.Serializable;
 import java.nio.charset.StandardCharsets;
-import java.util.Objects;
 
 /**
  * 默认的基础状态编解码器实现。
@@ -53,7 +54,7 @@ public class DefaultStateMapper implements StateMapper {
 
     @Override
     public Object decode(StoredValue storedValue) throws Exception {
-        Objects.requireNonNull(storedValue, "storedValue must not be null");
+        Assert.notNull(storedValue, "storedValue must not be null");
         String type = storedValue.typeId();
         byte[] data = storedValue.data();
 

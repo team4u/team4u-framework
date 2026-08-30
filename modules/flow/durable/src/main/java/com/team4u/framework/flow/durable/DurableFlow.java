@@ -1,34 +1,38 @@
 package com.team4u.framework.flow.durable;
 
+import com.team4u.framework.base.util.Assert;
 import com.team4u.framework.flow.Flow;
 
 import java.util.NoSuchElementException;
 import java.util.Objects;
 
 /**
- * 具有特定版本的持久化流程实例（不可变，线程安全）。
+ * 持久化流程实例，绑定特定版本并提供对外操作命令。
  *
- * @param <I> 输入类型
- * @param <O> 输出类型
+ * @param <I> 流程入参类型
+ * @param <O> 流程产物类型
  * @author jay.wu
  */
-public final class DurableFlow<I, O> {
+public class DurableFlow<I, O> {
 
     private final String flowId;
     private final int flowVersion;
     private final Flow<I, O> flowDefinition;
-    private final DurablePlanNode plan;
     private final DurableStore store;
     private final StateMapper stateMapper;
     private final DurableRunner runner;
+    private final DurablePlanNode plan;
 
-    DurableFlow(String flowId, int flowVersion, Flow<I, O> flowDefinition,
-                DurableStore store, StateMapper stateMapper) {
-        this.flowId = Objects.requireNonNull(flowId, "flowId must not be null");
+    DurableFlow(String flowId, int flowVersion, Flow<I, O> flowDefinition, DurableStore store, StateMapper stateMapper) {
+        Assert.notBlank(flowId, "flowId must not be null or blank");
+        Assert.notNull(flowDefinition, "flowDefinition must not be null");
+        Assert.notNull(store, "DurableStore must not be null");
+        Assert.notNull(stateMapper, "StateMapper must not be null");
+        this.flowId = flowId;
         this.flowVersion = flowVersion;
-        this.flowDefinition = Objects.requireNonNull(flowDefinition, "flowDefinition must not be null");
-        this.store = Objects.requireNonNull(store, "DurableStore must not be null");
-        this.stateMapper = Objects.requireNonNull(stateMapper, "StateMapper must not be null");
+        this.flowDefinition = flowDefinition;
+        this.store = store;
+        this.stateMapper = stateMapper;
         this.runner = new DurableRunner(store, stateMapper);
         this.plan = flowDefinition.project(DurablePlanCompiler.INSTANCE);
     }

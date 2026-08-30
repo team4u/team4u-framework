@@ -1,7 +1,7 @@
 package com.team4u.framework.flow;
 
-import java.util.Objects;
-import java.util.UUID;
+import com.team4u.framework.base.util.Assert;
+import com.team4u.framework.base.util.IdUtil;
 
 /**
  * 流程单次执行上下文。
@@ -17,7 +17,8 @@ final class ExecutionContext {
     private final TraceCollector traceCollector;
 
     ExecutionContext(String flowId, String executionId, boolean traceEnabled, FlowObserver observer) {
-        this.flowId = Objects.requireNonNull(flowId, "flowId must not be null");
+        Assert.notNull(flowId, "flowId must not be null");
+        this.flowId = flowId;
         this.executionId = executionId;
         this.traceEnabled = traceEnabled;
         this.observer = observer;
@@ -34,7 +35,7 @@ final class ExecutionContext {
 
     String getOrCreateExecutionId() {
         if (executionId == null || executionId.isEmpty()) {
-            executionId = UUID.randomUUID().toString();
+            executionId = IdUtil.simpleUUID();
         }
         return executionId;
     }

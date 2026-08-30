@@ -47,13 +47,14 @@
                             <rules>
                                 <bannedDependencies>
                                     <excludes>
-                                        <exclude>*:*:*:*:compile</exclude>
-                                        <exclude>*:*:*:*:runtime</exclude>
+                                        <exclude>org.springframework:*:*:*:compile</exclude>
+                                        <exclude>org.springframework:*:*:*:runtime</exclude>
+                                        <exclude>com.fasterxml.jackson:*:*:*:compile</exclude>
+                                        <exclude>com.fasterxml.jackson:*:*:*:runtime</exclude>
+                                        <exclude>net.bytebuddy:*:*:*:compile</exclude>
+                                        <exclude>net.bytebuddy:*:*:*:runtime</exclude>
                                     </excludes>
-                                    <includes>
-                                        <include>com.team4u:team4u-flow</include>
-                                    </includes>
-                                    <message>Flow durable module only allows team4u-flow compile dependency.</message>
+                                    <message>Flow durable module must stay free of Spring, Jackson, and ByteBuddy production dependencies.</message>
                                 </bannedDependencies>
                             </rules>
                         </configuration>

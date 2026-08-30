@@ -12,9 +12,15 @@
     </parent>
 
     <artifactId>team4u-flow</artifactId>
-    <description>轻量化业务流程核心：类型安全、不可变定义、三态结果、可观察与可投影</description>
+    <description>轻量化强类型流程编排组件：不可变流程定义、三态结果模型、本地极速执行器与 Projection SPI</description>
 
     <dependencies>
+        <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-base</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
         <dependency>
             <groupId>junit</groupId>
             <artifactId>junit</artifactId>
@@ -36,10 +42,14 @@
                             <rules>
                                 <bannedDependencies>
                                     <excludes>
-                                        <exclude>*:*:*:*:compile</exclude>
-                                        <exclude>*:*:*:*:runtime</exclude>
+                                        <exclude>org.springframework:*:*:*:compile</exclude>
+                                        <exclude>org.springframework:*:*:*:runtime</exclude>
+                                        <exclude>com.fasterxml.jackson:*:*:*:compile</exclude>
+                                        <exclude>com.fasterxml.jackson:*:*:*:runtime</exclude>
+                                        <exclude>net.bytebuddy:*:*:*:compile</exclude>
+                                        <exclude>net.bytebuddy:*:*:*:runtime</exclude>
                                     </excludes>
-                                    <message>Flow core must stay zero-runtime-dependency: only the JDK and test-scope JUnit are allowed.</message>
+                                    <message>team4u-flow must stay free of Spring, Jackson, and ByteBuddy production dependencies.</message>
                                 </bannedDependencies>
                             </rules>
                         </configuration>
