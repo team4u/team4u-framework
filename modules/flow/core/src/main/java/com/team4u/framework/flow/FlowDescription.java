@@ -1,35 +1,29 @@
 package com.team4u.framework.flow;
 
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
 import java.util.Objects;
 
 /**
- * 流程结构只读描述模型。面向 Graph、Test 和诊断，不暴露 Step、Action 等 callback 实例。
- *
- * @author jay.wu
+ * 流程结构只读描述模型。
  */
 public final class FlowDescription {
-
     private final String flowId;
-    private final List<NodeDescription> nodes;
+    private final NodeDescription root;
 
-    public FlowDescription(String flowId, List<NodeDescription> nodes) {
-        this.flowId = Objects.requireNonNull(flowId, "flowId must not be null");
-        this.nodes = nodes != null ? Collections.unmodifiableList(new ArrayList<>(nodes)) : Collections.emptyList();
+    public FlowDescription(String flowId, NodeDescription root) {
+        this.flowId = flowId;
+        this.root = Objects.requireNonNull(root, "root must not be null");
     }
 
     public String flowId() {
         return flowId;
     }
 
-    public List<NodeDescription> nodes() {
-        return nodes;
+    public NodeDescription root() {
+        return root;
     }
 
     @Override
     public String toString() {
-        return "FlowDescription{flowId='" + flowId + "', nodes=" + nodes + '}';
+        return "FlowDescription[flowId=" + flowId + ", root=" + root + "]";
     }
 }

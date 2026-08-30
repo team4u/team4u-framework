@@ -3,132 +3,132 @@ package com.team4u.framework.flow;
 import java.util.Objects;
 
 /**
- * 流程三态执行结果：SUCCEEDED、STOPPED 或 FAILED。
- *
- * @param <O> 成功产物类型
- * @author jay.wu
+ * Local 执行的严格三态结果：Completed、Suspended 或 Cancelled 三选一。
+ * 采用 Java 8 闭集设计，不可在模块外部实现或继承。
  */
-public final class FlowResult<O> {
+public abstract class FlowResult<O> {
 
-    public enum Kind {
-        SUCCEEDED,
-        STOPPED,
-        FAILED
+    FlowResult() { }
+
+    public static <O> FlowResult<O> completed(Outcome<O> outcome) {
+        return new Completed<O>(outcome);
     }
 
-    private final Kind kind;
-    private final O value;
-    private final StopReason stopReason;
-    private final FailureContext failure;
-
-    private FlowResult(Kind kind, O value, StopReason stopReason, FailureContext failure) {
-        this.kind = Objects.requireNonNull(kind, "kind must not be null");
-        this.value = value;
-        this.stopReason = stopReason;
-        this.failure = failure;
+    public static <O> FlowResult<O> suspended(Suspension<O> suspension) {
+        return new Suspended<O>(suspension);
     }
 
-    public static <O> FlowResult<O> succeeded(O value) {
-        if (value == null) {
-            throw new IllegalArgumentException("Flow succeeded value must not be null");
+    public static <O> FlowResult<O> cancelled(String executionId) {
+        return new Cancelled<O>(executionId);
+    }
+
+    /** 要求结果为 Completed/Accepted，否则抛异常。 */
+    public O requireAccepted() {
+        if (this instanceof Completed) {
+            Outcome<O> outcome = ((Completed<O>) this).outcome();
+            if (outcome instanceof Outcome.Accepted) {
+                return ((Outcome.Accepted<O>) outcome).value();
+            }
         }
-        return new FlowResult<>(Kind.SUCCEEDED, value, null, null);
+        throw new IllegalStateException("Flow did not complete with Accepted");
     }
 
-    public static <O> FlowResult<O> stopped(StopReason reason) {
-        if (reason == null) {
-            throw new IllegalArgumentException("StopReason must not be null");
+    /** 正常结束，携带最终 Outcome。 */
+    public static final class Completed<O> extends FlowResult<O> {
+        private final Outcome<O> outcome;
+
+        Completed(Outcome<O> outcome) {
+            this.outcome = Objects.requireNonNull(outcome, "outcome must not be null");
         }
-        return new FlowResult<>(Kind.STOPPED, null, reason, null);
-    }
 
-    public static <O> FlowResult<O> failed(String nodeId, Throwable cause) {
-        return failed(nodeId, nodeId, cause);
-    }
-
-    public static <O> FlowResult<O> failed(String nodeId, String nodePath, Throwable cause) {
-        return new FlowResult<>(Kind.FAILED, null, null, new FailureContext(nodeId, nodePath, cause));
-    }
-
-    public static <O> FlowResult<O> failed(FailureContext failure) {
-        if (failure == null) {
-            throw new IllegalArgumentException("FailureContext must not be null");
+        public Outcome<O> outcome() {
+            return outcome;
         }
-        return new FlowResult<>(Kind.FAILED, null, null, failure);
-    }
 
-    public Kind kind() {
-        return kind;
-    }
-
-    public boolean isSucceeded() {
-        return kind == Kind.SUCCEEDED;
-    }
-
-    public boolean isStopped() {
-        return kind == Kind.STOPPED;
-    }
-
-    public boolean isFailed() {
-        return kind == Kind.FAILED;
-    }
-
-    public O value() {
-        if (kind != Kind.SUCCEEDED) {
-            throw new IllegalStateException("FlowResult is not SUCCEEDED (actual kind: " + kind + ")");
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Completed<?> completed = (Completed<?>) o;
+            return outcome.equals(completed.outcome);
         }
-        return value;
-    }
 
-    public StopReason stopReason() {
-        if (kind != Kind.STOPPED) {
-            throw new IllegalStateException("FlowResult is not STOPPED (actual kind: " + kind + ")");
+        @Override
+        public int hashCode() {
+            return Objects.hash(outcome);
         }
-        return stopReason;
-    }
 
-    public FailureContext failure() {
-        if (kind != Kind.FAILED) {
-            throw new IllegalStateException("FlowResult is not FAILED (actual kind: " + kind + ")");
+        @Override
+        public String toString() {
+            return "Completed[" + outcome + "]";
         }
-        return failure;
     }
 
-    public Throwable cause() {
-        return failure().cause();
+    /** 执行挂起，携带单次可用的 Suspension 续接句柄。 */
+    public static final class Suspended<O> extends FlowResult<O> {
+        private final Suspension<O> suspension;
+
+        Suspended(Suspension<O> suspension) {
+            this.suspension = Objects.requireNonNull(suspension, "suspension must not be null");
+        }
+
+        public Suspension<O> suspension() {
+            return suspension;
+        }
+
+        /** 当前挂起是否在等待指定 ResumePoint（按 name 匹配）。 */
+        public boolean awaiting(ResumePoint<?> point) {
+            return Objects.requireNonNull(point, "point must not be null").name()
+                    .equals(suspension.resumePoint());
+        }
+
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Suspended<?> suspended = (Suspended<?>) o;
+            return suspension.equals(suspended.suspension);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(suspension);
+        }
+
+        @Override
+        public String toString() {
+            return "Suspended[" + suspension + "]";
+        }
     }
 
-    public Throwable error() {
-        return cause();
-    }
+    /** 执行被取消，仅保留 executionId。 */
+    public static final class Cancelled<O> extends FlowResult<O> {
+        private final String executionId;
 
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof FlowResult)) return false;
-        FlowResult<?> that = (FlowResult<?>) o;
-        return kind == that.kind &&
-                Objects.equals(value, that.value) &&
-                Objects.equals(stopReason, that.stopReason) &&
-                Objects.equals(failure, that.failure);
-    }
+        Cancelled(String executionId) {
+            this.executionId = Objects.requireNonNull(executionId, "executionId must not be null");
+        }
 
-    @Override
-    public int hashCode() {
-        return Objects.hash(kind, value, stopReason, failure);
-    }
+        public String executionId() {
+            return executionId;
+        }
 
-    @Override
-    public String toString() {
-        switch (kind) {
-            case SUCCEEDED:
-                return "SUCCEEDED(" + value + ")";
-            case STOPPED:
-                return "STOPPED(" + stopReason + ")";
-            case FAILED:
-                return "FAILED(" + failure.nodeId() + ": " + failure.cause().getMessage() + ")";
-            default:
-                return "FlowResult{" + kind + "}";
+        @Override
+        public boolean equals(Object o) {
+            if (this == o) return true;
+            if (o == null || getClass() != o.getClass()) return false;
+            Cancelled<?> cancelled = (Cancelled<?>) o;
+            return executionId.equals(cancelled.executionId);
+        }
+
+        @Override
+        public int hashCode() {
+            return Objects.hash(executionId);
+        }
+
+        @Override
+        public String toString() {
+            return "Cancelled[" + executionId + "]";
         }
     }
 }
