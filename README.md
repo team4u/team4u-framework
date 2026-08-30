@@ -3,44 +3,45 @@
 [![JDK 8+](https://img.shields.io/badge/JDK-8+-green.svg)](https://openjdk.java.net/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-> 🚀 **轻量级、模块化、高可扩展的 Java 基础架构组件套件**
+> 简单、克制、趁手。面向 Java 研发者的轻量级基础架构套件。
 
-`team4u-framework` 是一套遵循“**轻量无强制依赖、配置即规则、策略易扩展、接口统一、性能极致**”设计理念的 Java 基础组件套件。
-通过规范化的二维架构设计（`modules/<family>/<variant>`），帮助开发者化繁为简，降低业务复杂度，规范微服务与单体系统的架构模式，显著提升研发效能与系统稳定性。
+`team4u-framework` 是一组专注解决后端常见架构模式的基础组件库。它像一把折叠整齐的瑞士军刀：没有庞大笨重的全家桶依赖，每一个小工具都经过细致打磨，小巧、独立、各司其职，在需要时随时取用。
 
-📖 **[👉 点击进入官方完整文档中心 (docs/README.md)](docs/README.md)**
-
----
-
-## ✨ 核心特性
-
-- 🪶 **轻量无强制依赖**：纯 Java 核心零框架绑定，既可在 CLI / 纯 Java 环境极速运行，又能与 Spring / Spring Boot 生态无缝整合。
-- 📐 **清晰的二维模块化**：统一采用 `modules/<family>/<variant>` 结构，主入口使用裸 ArtifactId（如 `team4u-config`, `team4u-kv`, `team4u-retry` 等），按需引入，杜绝依赖污染。
-- ⚙️ **配置即规则（Config-as-Rule）**：将变动频繁的业务路由、动态脱敏、分布式限流、容灾重试等规则外部化为 JSON 配置，支持运行时防抖热重载与动态生效。
-- ⚡ **极致性能与低分配**：关键路径采用无锁设计、Copy-On-Write 机制与 JIT 闭包预编译，单核千万级吞吐与极低 GC 压力（[查看 JMH 基准实测报告](benchmarks/README.md)）。
-- 🔍 **白盒诊断与可观测**：核心决策链路（动态路由、规则表达式、重试接管、方法耗时）内置 Trace 诊断树，让复杂逻辑透明直观。
+📖 **[👉 进入官方完整文档中心 (docs/README.md)](docs/README.md)**
 
 ---
 
-## 📦 核心组件全览
+## 设计思考
 
-| 能力领域 | 核心模块 | 说明与场景 | 官方文档 |
+- **克制与无侵入**：核心模块基于纯 Java 编写，不强绑 Spring、ByteBuddy 或特定的 JSON 解析器。在纯 CLI、轻量应用或复杂的微服务体系中均可平滑运行。
+- **正交的二维结构**：代码划分为 `modules/<业务族>/<运行时变体>`。核心库只保留纯粹的算法与状态机，Spring 或特定中间件适配作为独立依赖显式引入，不给工程引入多余的传递依赖。
+- **配置即规则**：将变动频繁的业务分支（多维路由、限流阈值、脱敏规则、重试策略）抽离为纯粹的配置模型，支持运行时防抖热重载，减少重复编码。
+- **关注微开销与确定性**：关键执行路径采用无锁读写分离、预编译闭包与原生数值运算，尽量降低高频调用下的临时对象分配与 GC 负担，追求确定、透明的运行表现（[查看 JMH 压测实测数据](benchmarks/README.md)）。
+- **白盒可观测**：重要的决策过程（表达式判定、路由分流、故障接管）内置树状 Trace 结构，便于开发调试与排查。
+
+---
+
+## 常用工具概览
+
+| 组件 | 对应模块 | 解决的典型问题 | 文档 |
 | :--- | :--- | :--- | :--- |
-| **业务路由与规则** | `team4u-router` / `team4u-criterion` / `team4u-translator` | 插件化多维业务路由、DSL 表达式引擎与统一契约响应翻译 | [查看文档](docs/router/README.md) |
-| **配置中心与策略** | `team4u-config` / `team4u-policy` | 类型安全配置框架（快照/代理双模、防抖热重载）与 O(1) 策略注册引擎 | [查看文档](docs/config/README.md) |
-| **服务治理与协同** | `team4u-lease` / `team4u-retry` / `team4u-kv` / `team4u-ratelimiter` / `team4u-singleflight` / `team4u-id` | 分布式租约调度、统一容灾重试治理、键值存储、多算法限流、回源合并与序号生成 | [查看文档](docs/retry/README.md) |
-| **数据安全与日志** | `team4u-mask` / `team4u-log` | 敏感数据动态脱敏（纯 Java/Jackson）与低开销结构化日志治理 | [查看文档](docs/log/README.md) |
-| **架构支撑底座** | `team4u-proxy` / `team4u-bean` / `team4u-serializer` / `team4u-base` | 自适应动态代理（JDK/ByteBuddy）、轻量容器门面、统一 JSON 序列化与基础工具库 | [查看文档](docs/base/README.md) |
+| **业务路由** | `team4u-router` | 多维条件分流、权重分流与复合决策，替代深层嵌套的 `if-else`。 | [文档](docs/router/README.md) |
+| **规则表达式** | `team4u-criterion` | 纯 Java 实现的类 SQL 语法 DSL 引擎，低分配且支持执行链路白盒追踪。 | [文档](docs/criterion/README.md) |
+| **回源合并** | `team4u-singleflight` | 抑制高并发下相同 Key 的瞬时击穿与惊群效应，支持结果共享与超时接管。 | [文档](docs/singleflight/README.md) |
+| **多算法限流** | `team4u-ratelimiter` | 提供固定窗口、滑动窗口、令牌桶等算法，基于 KV 能力自动协商。 | [文档](docs/ratelimiter/README.md) |
+| **排他任务租约** | `team4u-lease` | 基于租约心跳的任务抢占与故障接管机制，保障单点排他执行。 | [文档](docs/lease/README.md) |
+| **容灾重试** | `team4u-retry` | 统一进程内即时重试与后台托管调度，解耦重试策略与业务执行。 | [文档](docs/retry/README.md) |
+| **动态脱敏** | `team4u-mask` | 纯 Java 字段掩码与 Jackson 自动脱敏，支持规则热更新。 | [文档](docs/mask/README.md) |
+| **配置治理** | `team4u-config` | 强类型快照读取与接口代理，支持多数据源聚合与防抖更新。 | [文档](docs/config/README.md) |
+| **基础支撑** | `team4u-proxy` / `team4u-kv` / `team4u-base` | 动态代理、多级 KV 缓存抽象与通用基础工具集。 | [文档](docs/base/README.md) |
 
-> 💡 **详细的组件分类索引、特性深度解析与完整包结构，请直接查阅 [👉 官方完整文档中心 (docs/README.md)](docs/README.md)。**
+> 💡 **各组件更详细的背景、架构设计与高级用法，请参阅 [官方完整文档中心 (docs/README.md)](docs/README.md)。**
 
 ---
 
-## 🚀 快速接入
+## 快速接入
 
-### 1. 引入 Dependency Management (BOM)
-
-在项目的 `pom.xml` 中引入 `team4u-framework` 统一版本管理：
+在工程的 `pom.xml` 中导入统一依赖管理（BOM）：
 
 ```xml
 <dependencyManagement>
@@ -56,55 +57,41 @@
 </dependencyManagement>
 ```
 
-### 2. 按需添加所需模块（无需声明版本号）
+按需引入具体的独立模块（主入口使用裸 ArtifactId，无需声明版本号）：
 
 ```xml
 <dependencies>
-    <!-- 业务路由与声明式代理 -->
+    <!-- 引入业务路由 -->
     <dependency>
         <groupId>com.team4u</groupId>
         <artifactId>team4u-router</artifactId>
     </dependency>
+
+    <!-- 引入轻量限流 -->
     <dependency>
         <groupId>com.team4u</groupId>
-        <artifactId>team4u-router-proxy</artifactId>
+        <artifactId>team4u-ratelimiter</artifactId>
     </dependency>
 
-    <!-- 类型安全配置中心核心 -->
+    <!-- 引入回源防击穿 -->
     <dependency>
         <groupId>com.team4u</groupId>
-        <artifactId>team4u-config</artifactId>
-    </dependency>
-
-    <!-- 统一重试治理模块 -->
-    <dependency>
-        <groupId>com.team4u</groupId>
-        <artifactId>team4u-retry</artifactId>
-    </dependency>
-
-    <!-- 结构化日志核心与治理 -->
-    <dependency>
-        <groupId>com.team4u</groupId>
-        <artifactId>team4u-log</artifactId>
-    </dependency>
-    <dependency>
-        <groupId>com.team4u</groupId>
-        <artifactId>team4u-log-governance</artifactId>
+        <artifactId>team4u-singleflight</artifactId>
     </dependency>
 </dependencies>
 ```
 
 ---
 
-## 📚 文档与资源导航
+## 导航与参考
 
-- 📖 **[官方文档中心 (Docsify 首页)](docs/README.md)**：各组件概览、设计原理、配置说明与最佳实践。
-- 🔄 **[1.0 迁移与升级指南 (MIGRATION-1.0.md)](MIGRATION-1.0.md)**：模块拆分、坐标变更与升级兼容说明。
+- 📖 **[官方文档中心 (docs/README.md)](docs/README.md)**：包含各组件的设计细节、API 手册与实战示例。
+- 🔄 **[1.0 迁移指南 (MIGRATION-1.0.md)](MIGRATION-1.0.md)**：版本升级说明与模块拆分对照。
 - ⚠️ **[1.0 不兼容变更清单 (breaking-changes-1.0.md)](docs/breaking-changes-1.0.md)**：Breaking Changes 与应对方案。
-- 📊 **[JMH 性能基准测试报告 (benchmarks/README.md)](benchmarks/README.md)**：热路径耗时与内存分配实测数据。
+- 📊 **[JMH 基准测试记录 (benchmarks/README.md)](benchmarks/README.md)**：核心热路径的单次耗时与内存分配实测数据。
 
 ---
 
-## 📄 开源协议
+## 开源协议
 
-本项目采用 [MIT License](LICENSE) 开源协议。
+本项目采用 [MIT License](LICENSE) 协议。
