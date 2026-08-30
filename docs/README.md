@@ -1,9 +1,11 @@
-# Team4u Framework 架构与组件文档索引
+# Team4u Framework 官方文档
 
 [![JDK 8+](https://img.shields.io/badge/JDK-8+-green.svg)](https://openjdk.java.net/)
 [![License](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 
-`team4u-framework` 是一个轻量级、模块化、高可扩展的 Java 基础架构组件套件。组件遵循“**轻量无强制依赖、配置即规则、策略易扩展、接口统一、性能极致**”的设计理念，帮助开发者降低业务复杂度、规范架构模式并提高系统稳定性与研发效能。
+> 轻量级、模块化、高可扩展的 Java 基础架构组件套件
+
+`team4u-framework` 是一套轻量级、模块化、高可扩展的 Java 基础架构组件库。组件遵循“**轻量无强制依赖、配置即规则、策略易扩展、接口统一、性能极致**”的设计理念，帮助开发者降低业务复杂度、规范架构模式并提高系统稳定性与研发效能。
 
 ---
 
