@@ -4,6 +4,9 @@
     <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
     <meta name="viewport" content="width=device-width,initial-scale=1">
     <meta charset="UTF-8">
+    <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+    <meta http-equiv="Pragma" content="no-cache">
+    <meta http-equiv="Expires" content="0">
     <title>Team4u Framework 文档中心</title>
     <link rel="stylesheet" href="//cdn.jsdelivr.net/npm/docsify/themes/vue.css">
     <script type="module">
@@ -18,12 +21,15 @@
 <script>
     window.$docsify = {
         name: 'Team4u Framework',
-        repo: '',
+        repo: 'https://github.com/team4u/team4u-framework',
         loadSidebar: true,
         auto2top: true,
         relativePath: true,
         autoHeader: true,
         subMaxLevel: 3,
+        requestHeaders: {
+            'cache-control': 'max-age=0'
+        },
         mermaidConfig: {
             querySelector: ".mermaid"
         },
