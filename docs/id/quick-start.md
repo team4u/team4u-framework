@@ -12,7 +12,7 @@
 
 计数存储按需引入 kv 后端（与 team4u-id 无强绑定）：
 
-- 内存计数（单测、单实例）：`team4u-kv-core` 自带 `InMemoryKvStore`，无需额外依赖
+- 内存计数（单测、单实例）：`team4u-kv` 自带 `InMemoryKvStore`，无需额外依赖
 - JDBC 计数：引入 `team4u-kv-store-jdbc`，由业务项目提供 `DataSource`
 - Redis 计数：引入 `team4u-kv-store-redis`，由业务项目提供 `StringRedisTemplate`
 

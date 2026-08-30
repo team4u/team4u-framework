@@ -12,7 +12,7 @@
 </dependency>
 ```
 
-`team4u-lease-memory` 会传递引入 `team4u-lease-core`。Memory 后端把任务存在当前 JVM 里，进程退出后任务丢失，适合学习、开发和测试。
+`team4u-lease-memory` 会传递引入 `team4u-lease`。Memory 后端把任务存在当前 JVM 里，进程退出后任务丢失，适合学习、开发和测试。
 
 ## 2. 创建队列
 

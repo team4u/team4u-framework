@@ -1,6 +1,6 @@
 # 架构原理与模型设计
 
-`team4u-log-core` 的底层模型、流水线编排与单元测试支持设计。core 默认 serializer 是 `PlainTextLogSerializer`；`LogEngine.builder()` 可显式注入 serializer 与拦截器。`team4u-log-governance` 的 `LogBootstrap` 安装 `JacksonLogSerializer` 与治理拦截器。
+`team4u-log` 的底层模型、流水线编排与单元测试支持设计。core 默认 serializer 是 `PlainTextLogSerializer`；`LogEngine.builder()` 可显式注入 serializer 与拦截器。`team4u-log-governance` 的 `LogBootstrap` 安装 `JacksonLogSerializer` 与治理拦截器。
 
 ---
 

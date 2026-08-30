@@ -17,7 +17,7 @@
 ```
 
 > [!NOTE]
-> `team4u-router` 内部已传递引入 `team4u-criterion`、`team4u-config-core`、`team4u-base` 与 `team4u-serializer-json`。声明式代理、`@Routed` 与 Bean 定位需要额外引入 `team4u-router-proxy`；JSON 配置解析还需应用显式提供 `team4u-serializer-jackson` 或自定义 `JsonSerializerPolicy`。
+> `team4u-router` 内部已传递引入 `team4u-criterion`、`team4u-config`、`team4u-base` 与 `team4u-serializer-json`。声明式代理、`@Routed` 与 Bean 定位需要额外引入 `team4u-router-proxy`；JSON 配置解析还需应用显式提供 `team4u-serializer-jackson` 或自定义 `JsonSerializerPolicy`。
 
 ---
 

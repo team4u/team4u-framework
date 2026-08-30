@@ -1,4 +1,4 @@
-# 结构化日志组件 (team4u-log-core / team4u-log-governance)
+# 结构化日志组件 (team4u-log / team4u-log-governance)
 
 # 背景
 
@@ -11,7 +11,7 @@
 - **排障依赖全局开启 DEBUG**：线上排查特定用户或商户的偶发问题时，若要抓取详细日志，不得不全局调低日志级别，产生海量垃圾日志甚至导致磁盘爆盘。
 - **日志风暴与成本失控 (FinOps)**：未受控的超大报文、`byte[]` 序列化膨胀、死循环日志或下游报错引发的异常堆栈风暴，极易拖垮日志采集链路并带来高昂的存储成本。
 
-核心与治理的分工如下：`team4u-log-core` 默认输出未经脱敏的 RAW/UNMASKED 明文 `toString`，不携带 Jackson、Spring、ByteBuddy、Config、Mask、Criterion 或 Proxy；`team4u-log-governance` 传递 `team4u-serializer-jackson` 与 Jackson，负责治理配置、脱敏、代理和 Spring 集成。
+核心与治理的分工如下：`team4u-log` 默认输出未经脱敏的 RAW/UNMASKED 明文 `toString`，不携带 Jackson、Spring、ByteBuddy、Config、Mask、Criterion 或 Proxy；`team4u-log-governance` 传递 `team4u-serializer-jackson` 与 Jackson，负责治理配置、脱敏、代理和 Spring 集成。
 
 ---
 
@@ -70,7 +70,7 @@ graph LR
 ```xml
 <dependency>
     <groupId>com.team4u</groupId>
-    <artifactId>team4u-log-core</artifactId>
+    <artifactId>team4u-log</artifactId>
 </dependency>
 ```
 
@@ -83,7 +83,7 @@ graph LR
 </dependency>
 ```
 
-`team4u-log-governance` 传递 `team4u-log-core`、`team4u-serializer-jackson` 与 Jackson；不要额外为该消费者重复声明 provider 或 Jackson 依赖。
+`team4u-log-governance` 传递 `team4u-log`、`team4u-serializer-jackson` 与 Jackson；不要额外为该消费者重复声明 provider 或 Jackson 依赖。
 
 ## 文档导航
 

@@ -78,7 +78,7 @@ graph LR
 
 ## 快速上手
 
-下面这个例子可以在单进程内直接运行（仅依赖 `team4u-kv-core`）：
+下面这个例子可以在单进程内直接运行（仅依赖 `team4u-kv`）：
 
 ```java
 package demo;
@@ -120,7 +120,7 @@ false
 
 ```text
 team4u-kv
-├── team4u-kv-core            # 核心抽象、能力接口、内存实现、装饰器、热交换
+├── team4u-kv            # 核心抽象、能力接口、内存实现、装饰器、热交换
 ├── team4u-kv-space           # Space / Spaces / SpacePolicy 类型化 JSON 门面；NamedKvStore / NamedKvStoreRegistry 命名存储注册表
 ├── team4u-kv-lock            # CAS 化分布式锁
 ├── team4u-kv-lifecycle       # 过期值源、轮询订阅、清理器
@@ -132,7 +132,7 @@ team4u-kv
 
 | 模块 | 依赖 | 按需引入 |
 | :--- | :--- | :--- |
-| `team4u-kv-core` | base、slf4j-api | 必需 |
+| `team4u-kv` | base、slf4j-api | 必需 |
 | `team4u-kv-space` | kv-core、policy、serializer-json | 使用类型化 JSON 键空间或命名存储注册表时 |
 | `team4u-kv-lock` | kv-core | 使用锁时 |
 | `team4u-kv-lifecycle` | kv-core、kv-lock、serializer-json | 使用值续期/订阅/清理时 |
@@ -141,7 +141,7 @@ team4u-kv
 | `team4u-kv-store-redis` | kv-core、spring-data-redis | Redis 存储时 |
 | `team4u-kv-test` | kv-core、junit | 为新存储写契约测试时 |
 
-`Space` 与命名存储注册表位于 `team4u-kv-space`：`NamedKvStore` / `NamedKvStoreRegistry` 的 FQCN 不变（`com.team4u.framework.kv.NamedKvStore` / `com.team4u.framework.kv.NamedKvStoreRegistry`），1.0 仅将它们从 kv-core 迁移到 `team4u-kv-space`——依赖 `team4u-kv-space` 即可继续使用，id / ratelimiter / singleflight 等组件已作为传递依赖引入。JSON 值编解码由应用显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。`team4u-kv-core` 的 `KvStore`、装饰器与热交换路径不需要 JSON、policy、proxy、Jackson 或 ByteBuddy。
+`Space` 与命名存储注册表位于 `team4u-kv-space`：`NamedKvStore` / `NamedKvStoreRegistry` 的 FQCN 不变（`com.team4u.framework.kv.NamedKvStore` / `com.team4u.framework.kv.NamedKvStoreRegistry`），1.0 仅将它们从 kv-core 迁移到 `team4u-kv-space`——依赖 `team4u-kv-space` 即可继续使用，id / ratelimiter / singleflight 等组件已作为传递依赖引入。JSON 值编解码由应用显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。`team4u-kv` 的 `KvStore`、装饰器与热交换路径不需要 JSON、policy、proxy、Jackson 或 ByteBuddy。
 
 ## 文档导航
 

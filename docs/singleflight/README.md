@@ -1,6 +1,6 @@
 # Singleflight 组件 (team4u-singleflight)
 
-> 1.0 拆分说明：`team4u-singleflight` 不再是单一 artifact。核心引擎位于 `team4u-singleflight-core`（本文档主体）；`@SingleFlight` 注解代理位于 `team4u-singleflight-proxy`；Spring 自动装配位于 `team4u-singleflight-spring`。旧的单 artifact 依赖已删除，无兼容桥接。
+> 1.0 拆分说明：`team4u-singleflight` 不再是单一 artifact。核心引擎位于 `team4u-singleflight`（本文档主体）；`@SingleFlight` 注解代理位于 `team4u-singleflight-proxy`；Spring 自动装配位于 `team4u-singleflight-spring`。旧的单 artifact 依赖已删除，无兼容桥接。
 
 # 背景
 
@@ -204,7 +204,7 @@ public interface ProductService {
 ## 组件位置与包结构
 
 ```text
-team4u-singleflight-core            # 核心引擎：规则、协调状态机、门面（存储经 kv 能力协商，无存储子模块）
+team4u-singleflight            # 核心引擎：规则、协调状态机、门面（存储经 kv 能力协商，无存储子模块）
 └── com.team4u.framework.singleflight
     ├── api                       # SingleFlights 门面、SingleFlightExecution、异常体系
     ├── config                    # SingleFlightRule 与策略枚举
@@ -232,10 +232,10 @@ team4u-singleflight-spring         # Spring 自动装配（显式引入）
 
 | 依赖 | 所属 artifact | 用途 | 按需引入 |
 | :--- | :--- | :--- | :--- |
-| `team4u-kv-core` | core（传递） | `KvStore`、`CasCapable`、`KvStores` 装饰链解析、内存实现 | — |
+| `team4u-kv` | core（传递） | `KvStore`、`CasCapable`、`KvStores` 装饰链解析、内存实现 | — |
 | `team4u-kv-lock` | core（传递） | `KvLockManager` / `KvLock` 租约、心跳、token | — |
 | `team4u-kv-space` | core（传递） | `NamedKvStoreRegistry` 命名存储与 `KvStores` 能力协商 | — |
-| `team4u-config-core` | core（传递） | `ConfigDrivenRegistry` 规则加载与热更新 | — |
+| `team4u-config` | core（传递） | `ConfigDrivenRegistry` 规则加载与热更新 | — |
 | `team4u-base` | core（传递） | `TextTemplate`、`TypeReference` | — |
 | `team4u-policy` | core（传递） | 命名存储与命名摘要注册表使用的 `KeyedPolicyRegistry` | — |
 | `team4u-criterion` | core（传递） | `skipWhen` / `cacheWhen` 表达式 | — |
@@ -249,7 +249,7 @@ team4u-singleflight-spring         # Spring 自动装配（显式引入）
 | `team4u-kv-store-jdbc` | 应用显式引入 | JDBC 跨实例协调 | 数据库存储 |
 
 > [!IMPORTANT]
-> 两个 Jackson 边界不要混淆：`team4u-singleflight-core` 直连 `jackson-databind` 是它自己的 durable-schema 豁免（会话信封按 Jackson 树模型读写 schema，版本升级时 schema 稳定；降级转换仅用其 `TypeFactory` 做类型自省）；但规则解析与降级值 bean 转换都走 `JsonUtil` SPI，共享应用显式 provider 的序列化语义（忽略未知属性、JavaTimeModule、脱敏/截断等自定义模块对降级值同样生效）——与 master 的共享 mapper 行为一致。`core` **不会**传递提供 `team4u-serializer-jackson`——应用必须自己显式引入 provider 或注册自定义策略，否则首次加载规则即报 `No JsonSerializerPolicy is available`。
+> 两个 Jackson 边界不要混淆：`team4u-singleflight` 直连 `jackson-databind` 是它自己的 durable-schema 豁免（会话信封按 Jackson 树模型读写 schema，版本升级时 schema 稳定；降级转换仅用其 `TypeFactory` 做类型自省）；但规则解析与降级值 bean 转换都走 `JsonUtil` SPI，共享应用显式 provider 的序列化语义（忽略未知属性、JavaTimeModule、脱敏/截断等自定义模块对降级值同样生效）——与 master 的共享 mapper 行为一致。`core` **不会**传递提供 `team4u-serializer-jackson`——应用必须自己显式引入 provider 或注册自定义策略，否则首次加载规则即报 `No JsonSerializerPolicy is available`。
 
 ## 与其他组件联动
 

@@ -1,6 +1,6 @@
 # 快速开始
 
-本文介绍如何在 `team4u-log-core` 与 `team4u-log-governance` 之间选择，并完成第一条结构化日志输出。
+本文介绍如何在 `team4u-log` 与 `team4u-log-governance` 之间选择，并完成第一条结构化日志输出。
 
 ---
 
@@ -11,7 +11,7 @@
 ```xml
 <dependency>
     <groupId>com.team4u</groupId>
-    <artifactId>team4u-log-core</artifactId>
+    <artifactId>team4u-log</artifactId>
 </dependency>
 ```
 
@@ -26,7 +26,7 @@
 </dependency>
 ```
 
-`team4u-log-governance` 传递 `team4u-log-core`、`team4u-serializer-jackson` 与 Jackson；不要为它重复声明 provider 或 Jackson 依赖。
+`team4u-log-governance` 传递 `team4u-log`、`team4u-serializer-jackson` 与 Jackson；不要为它重复声明 provider 或 Jackson 依赖。
 
 > [!NOTE]
 > 若需使用 `@AutoLogTrace` 自动获取方法入参的真实参数名，建议在 `pom.xml` 的 `maven-compiler-plugin` 中开启 `-parameters` 编译参数。
@@ -76,7 +76,7 @@ public class OrderService {
 }
 ```
 
-在 `team4u-log-core` 中，`LogEngine.toJson(event)` 是未经脱敏的 RAW/UNMASKED 明文 `toString` 输出。启动 `team4u-log-governance` 后，活动 serializer 变为 Jackson，同一条事件输出 JSON：
+在 `team4u-log` 中，`LogEngine.toJson(event)` 是未经脱敏的 RAW/UNMASKED 明文 `toString` 输出。启动 `team4u-log-governance` 后，活动 serializer 变为 Jackson，同一条事件输出 JSON：
 
 ```json
 {

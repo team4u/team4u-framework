@@ -2,7 +2,7 @@
 
 在企业级基础架构中，经常面临“**配置变更 -> 运行时组件实例热重建与安全替换**”的诉求（例如：动态多租户数据源、动态 HTTP 客户端连接池、动态消息队列消费者、动态限流/路由规则）。
 
-`team4u-config-core` 提供了 `ConfigDrivenRegistry<T>` 组件，统一治理重型运行时对象的创建、热替换与资源优雅销毁。
+`team4u-config` 提供了 `ConfigDrivenRegistry<T>` 组件，统一治理重型运行时对象的创建、热替换与资源优雅销毁。
 
 > [!NOTE]
 > **何时使用 `ConfigDrivenRegistry` vs 动态代理 (`createProxy`)？**
@@ -224,7 +224,7 @@ public class SingleHttpClientManager {
 
 ## 姊妹组件：轻量级 JSON 配置仓库 `AbstractJsonConfigRepository<T>`
 
-`ConfigDrivenRegistry` 面向“重建重型运行时组件”的场景；若要管理的只是一份**纯数据快照**（规则表、开关集、名单映射），则应使用同在 `team4u-config-core` 的抽象模板 `AbstractJsonConfigRepository<T>`（`com.team4u.framework.config.core.support` 包）。
+`ConfigDrivenRegistry` 面向“重建重型运行时组件”的场景；若要管理的只是一份**纯数据快照**（规则表、开关集、名单映射），则应使用同在 `team4u-config` 的抽象模板 `AbstractJsonConfigRepository<T>`（`com.team4u.framework.config.core.support` 包）。
 
 它收编了“从 `ConfigManager` 读单个 JSON Key → 反序列化为 T → 原子替换内存引用”的同构骨架（log 的代理规则/FinOps 配置、mask 的规则仓库、log 的染色拦截器均由它驱动），子类最少只需提供一个配置键：
 

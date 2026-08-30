@@ -67,11 +67,11 @@ graph LR
 
 | 模块 | 说明 | 核心依赖 |
 | :--- | :--- | :--- |
-| **`team4u-config-core`** | 核心配置引擎：快照聚合、显式绑定、代理创建 SPI、占位符解析与防抖热重载 | `team4u-base`, `team4u-policy`, `team4u-serializer-json` |
-| **`team4u-config-proxy`** | 类型安全代理适配器：保留原有 FQCN，并通过唯一 ServiceLoader 实现自动装配 | `team4u-config-core`, `team4u-proxy`, ByteBuddy(runtime) |
-| **`team4u-config-spring`** | 显式 `@Import` 的 Spring 注册表配置 | `team4u-config-core`, `team4u-policy`, Spring |
-| **`team4u-config-db`** | 数据库配置扩展：基于 JDBC 的关系型数据库配置全量加载与低开销时间戳轮询监听器 | `team4u-config-core`, JDBC / DataSource |
-| **`team4u-config-test`** | 单元测试支持：提供 `TestConfigContext` 内存隔离配置环境，默认 0 延迟同步热重载并自动发现代理实现 | `team4u-config-core`, `team4u-config-proxy` |
+| **`team4u-config`** | 核心配置引擎：快照聚合、显式绑定、代理创建 SPI、占位符解析与防抖热重载 | `team4u-base`, `team4u-policy`, `team4u-serializer-json` |
+| **`team4u-config-proxy`** | 类型安全代理适配器：保留原有 FQCN，并通过唯一 ServiceLoader 实现自动装配 | `team4u-config`, `team4u-proxy`, ByteBuddy(runtime) |
+| **`team4u-config-spring`** | 显式 `@Import` 的 Spring 注册表配置 | `team4u-config`, `team4u-policy`, Spring |
+| **`team4u-config-db`** | 数据库配置扩展：基于 JDBC 的关系型数据库配置全量加载与低开销时间戳轮询监听器 | `team4u-config`, JDBC / DataSource |
+| **`team4u-config-test`** | 单元测试支持：提供 `TestConfigContext` 内存隔离配置环境，默认 0 延迟同步热重载并自动发现代理实现 | `team4u-config`, `team4u-config-proxy` |
 
 `createProxy` 需要显式 `ConfigProxyCreator`，或类路径上唯一的 `team4u-config-proxy` ServiceLoader 实现。
 使用 `JsonPropertyConverter` 的应用必须显式提供 JSON 引擎：添加 `team4u-serializer-jackson` 或注册自定义 `JsonSerializerPolicy`。
@@ -82,7 +82,7 @@ graph LR
 
 ```text
 com.team4u.framework.config
-├── core                             # 配置核心模块 (team4u-config-core)
+├── core                             # 配置核心模块 (team4u-config)
 │   ├── annotation                   # 声明式注解 (@ConfigPrefix, @ConfigKey, @ConfigRequired, @ConfigConverter)
 │   ├── convert                      # 属性类型转换器 (PropertyConverter, JsonPropertyConverter, PropertyConverterRegistry)
 │   ├── domain                       # 领域模型与异常 (ConfigSnapshot, ConfigEntry, ConfigMissingException, ConfigConversionException)

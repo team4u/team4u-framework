@@ -43,13 +43,13 @@ Add `com.team4u:team4u-config-proxy` to let `ConfigManager.createProxy(...)` dis
 
 ## Lease runtime boundary
 
-`team4u-lease-core` stays independent of Config, Retry, KV, Jackson, and Spring. Tests and logging implementations are no longer published transitively: JUnit and `slf4j-simple` are test-scoped in `lease-core`; `lease-jdbc` additionally keeps H2 test-scoped. `team4u-lease-test` intentionally keeps JUnit `provided` because it is a published test-contract artifact.
+`team4u-lease` stays independent of Config, Retry, KV, Jackson, and Spring. Tests and logging implementations are no longer published transitively: JUnit and `slf4j-simple` are test-scoped in `lease-core`; `lease-jdbc` additionally keeps H2 test-scoped. `team4u-lease-test` intentionally keeps JUnit `provided` because it is a published test-contract artifact.
 
 `team4u-lease-jdbc` publishes only its intended production edges: `lease-core`, `base`, `base-jdbc`, `serializer-json`, and `slf4j-api`. It never carries the Jackson provider. Applications using JSON attributes must add `team4u-serializer-jackson` or provide another registered `JsonSerializerPolicy` themselves.
 
 ## KV space and hot swap split
 
-`Space`, `Spaces`, and `SpacePolicy` moved from `team4u-kv-core` to `team4u-kv-space`. The new artifact depends on kv-core, policy, and serializer-json; applications using typed JSON spaces must add it and explicitly choose `team4u-serializer-jackson` or another registered `JsonSerializerPolicy`. `team4u-kv-core` now carries only `team4u-base` and `slf4j-api` production dependencies.
+`Space`, `Spaces`, and `SpacePolicy` moved from `team4u-kv` to `team4u-kv-space`. The new artifact depends on kv-core, policy, and serializer-json; applications using typed JSON spaces must add it and explicitly choose `team4u-serializer-jackson` or another registered `JsonSerializerPolicy`. `team4u-kv` now carries only `team4u-base` and `slf4j-api` production dependencies.
 
 `HotSwapStore.wrap(KvStore)` still returns `KvStore`, but its proxy no longer implements `com.team4u.framework.proxy.support.Swappable`. For direct atomic replacement, cast to `com.team4u.framework.kv.HotSwap`, call `hotswap(newDelegate)`, and manage the returned old store yourself. The proxy always implements `KvStore` and `HotSwap`; it additionally implements `StoreWrapper` and `AutoCloseable` only when the initial delegate does. That interface set is fixed at wrap time and cannot change after later swaps.
 
@@ -58,7 +58,7 @@ Add `com.team4u:team4u-config-proxy` to let `ConfigManager.createProxy(...)` dis
 `@Routed`, `@RouteContext`, `RoutedProxyFactory`, `RoutedBeanLocator`, `BeanResolver`, and `RoutedMethodInterceptor` moved from `team4u-router` to `team4u-router-proxy`; every FQCN is unchanged. Add `com.team4u:team4u-router-proxy` when creating routed interface proxies or resolving routed beans. Keep `team4u-router` for `RoutingManager`, routing policy parsing, trace, and interceptors; `team4u-translator` remains router-core-only and never passes proxy, bean, config-proxy, ByteBuddy, or a JSON provider. Router core never publishes proxy, bean, config-proxy, ByteBuddy, or Jackson production dependencies.
 ## Retry module split
 
-Managed retry governance moved from `team4u-retry-core` to `team4u-retry-managed`, and config-driven retry policies moved to `team4u-retry-config`.
+Managed retry governance moved from `team4u-retry` to `team4u-retry-managed`, and config-driven retry policies moved to `team4u-retry-config`.
 
 | Version | Removed or moved API | Migration |
 | --- | --- | --- |
@@ -68,13 +68,13 @@ Managed retry governance moved from `team4u-retry-core` to `team4u-retry-managed
 
 ## Log core and governance split
 
-The old `com.team4u:team4u-log` artifact is removed with no compatibility/bridge artifact. All production and test FQCNs are unchanged; packages simply moved from `team4u-log` to `team4u-log-core` or `team4u-log-governance` according to ownership.
+The logging capability is split into `team4u-log` (core provider-free logging) and `team4u-log-governance` (governance, bootstrap, dynamic masking, and Jackson support). All production and test FQCNs are unchanged.
 
 | Version | Removed or moved API | Migration |
 | --- | --- | --- |
-| 1.0 | Removed `team4u-log` with no replacement artifact | Use `team4u-log-core` for provider-free logging and `team4u-log-governance` for bootstrap and governance. |
+| 1.0 | Logging split into core and governance | Use `team4u-log` for provider-free logging and `team4u-log-governance` for bootstrap and governance. |
 | 1.0 | `LogBootstrap` moved artifact | Add `team4u-log-governance`; its FQCN `com.team4u.framework.log.LogBootstrap` is unchanged. |
-| 1.0 | Jackson, Config, Mask, Proxy, Criterion, and Spring integrations moved artifact | Add `team4u-log-governance`; `team4u-log-core` has no corresponding dependency or source edge. |
+| 1.0 | Jackson, Config, Mask, Proxy, Criterion, and Spring integrations moved artifact | Add `team4u-log-governance`; `team4u-log` has no corresponding dependency or source edge. |
 | 1.0 | `LogEngine.reset()` no longer stops governance | Call `LogBootstrap.stop()` first; core reset resets appender, interceptors, and serializer state without changing bootstrap ownership. |
 | 1.0 | `LogEngine.toJson(LogEvent)` may be plain text | Core defaults to `toString`; install a custom serializer or use governance Jackson when JSON is required. |
 | 1.0 | Governance carries the Jackson provider | Depend only on `team4u-log-governance`; it supplies `team4u-serializer-jackson` and Jackson transitively at runtime. |
@@ -135,17 +135,19 @@ The same rule applies to `LogProxyFactory.createProxy`, `LogProxyFactory.createD
 
 The engine is attempted from the thread context loader, the target type's loader, and then `ProxyBuilder`'s defining loader. Child-first/plugin loaders that can define both the engine and ByteBuddy are supported. A JVM visibility boundary remains if `ProxyBuilder` is parent-defined, the engine is ordinary parent-delegated, and only a normal child loader carries ByteBuddy: a parent-defined engine class cannot resolve types visible only to that child. Place ByteBuddy in the parent visible to the engine, or use a loader that defines both.
 
-## Removed grouping artifacts
+## Bare artifact naming convention for core entry points
 
-The pure grouping artifacts `team4u-config`, `team4u-kv`, `team4u-lease`, `team4u-retry`, and `team4u-serializer` no longer exist. Replace each grouping dependency with the concrete artifact that provides the classes you use, managed by the root BOM.
+In Team4u 1.0, each capability family's main entry point uses the bare artifactId (`team4u-config`, `team4u-kv`, `team4u-lease`, `team4u-log`, `team4u-ratelimiter`, `team4u-retry`, `team4u-singleflight`), while runtime variants and adapters carry explicit suffixes (`team4u-config-proxy`, `team4u-kv-space`, `team4u-log-governance`, `team4u-ratelimiter-spring`, `team4u-retry-managed`, etc.).
+
+Bare coordinates no longer serve as grouping or aggregator POMs; the repository is organized into a clean 2D layout `modules/<family>/<variant>`, and the root `team4u-framework` POM is the single parent, aggregator, and BOM for the entire project.
 
 ## Merged master features (post-plan convergence)
 
 The master branch merged into the convergence branch adds the following capabilities, published under the split-artifact conventions above:
 
 - **`team4u-proxy-spring`**: the annotation-proxy Spring wiring template (`AnnotationProxyBeanPostProcessor` abstract base). It depends only on `team4u-proxy` + `spring-context`/`spring-aop`, and never carries ByteBuddy at compile/runtime (Enforcer-enforced); it is the shared template behind `ratelimiter-spring` / `singleflight-spring`.
-- **`team4u-ratelimiter-core` / `-proxy` / `-spring` (three-way split)**: the pre-merge monolith `team4u-ratelimiter` no longer exists. Core is the rule model, four algorithms, and facade (storage via kv capability negotiation, no storage submodule); proxy adds `@RateLimit` annotation interception (JDK/ByteBuddy dual engine, ByteBuddy on demand); spring adds `@EnableRateLimit` auto-proxy on the `team4u-proxy-spring` template. JSON rules go through the `JsonUtil` SPI: the application must provide `team4u-serializer-jackson` or a registered custom `JsonSerializerPolicy` explicitly.
-- **`team4u-singleflight-core` / `-proxy` / `-spring` (three-way split)**: the pre-merge monolith `team4u-singleflight` no longer exists. Core is the rule model, coordination state machine, and facade; proxy adds `@SingleFlight`; spring adds `@EnableSingleFlight`. Two distinct Jackson boundaries: core owns a direct nonoptional `jackson-databind` compile edge for its durable session-envelope/fallback-converter schema (inherited transitively by the adapters), while rule parsing goes through the `JsonUtil` SPI and the application must provide the provider explicitly (`team4u-serializer-jackson` or a registered custom policy); neither core nor its adapters ever pass `team4u-serializer-jackson`.
+- **`team4u-ratelimiter` / `-proxy` / `-spring` (three-way split)**: the pre-merge monolith `team4u-ratelimiter` no longer exists. Core is the rule model, four algorithms, and facade (storage via kv capability negotiation, no storage submodule); proxy adds `@RateLimit` annotation interception (JDK/ByteBuddy dual engine, ByteBuddy on demand); spring adds `@EnableRateLimit` auto-proxy on the `team4u-proxy-spring` template. JSON rules go through the `JsonUtil` SPI: the application must provide `team4u-serializer-jackson` or a registered custom `JsonSerializerPolicy` explicitly.
+- **`team4u-singleflight` / `-proxy` / `-spring` (three-way split)**: the pre-merge monolith `team4u-singleflight` no longer exists. Core is the rule model, coordination state machine, and facade; proxy adds `@SingleFlight`; spring adds `@EnableSingleFlight`. Two distinct Jackson boundaries: core owns a direct nonoptional `jackson-databind` compile edge for its durable session-envelope/fallback-converter schema (inherited transitively by the adapters), while rule parsing goes through the `JsonUtil` SPI and the application must provide the provider explicitly (`team4u-serializer-jackson` or a registered custom policy); neither core nor its adapters ever pass `team4u-serializer-jackson`.
 - **Named store registry moved to kv-space**: `NamedKvStore` / `NamedKvStoreRegistry` keep their FQCNs (`com.team4u.framework.kv.*`) but live in `team4u-kv-space`, matching the Task 12 kv split; id, ratelimiter, and singleflight consume it as a transitive dependency.
 - **`team4u-id`**: config-driven sequence generation on kv `CounterCapable` (group reset, quota exhaustion, recycle, local segment, formatted numbers). Single module; JDBC/Redis counting backends stay explicit application dependencies.
 

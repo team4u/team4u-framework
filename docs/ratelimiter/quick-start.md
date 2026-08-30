@@ -8,7 +8,7 @@
 <!-- 编程式接入（本文主体）：核心引擎与门面 -->
 <dependency>
     <groupId>com.team4u</groupId>
-    <artifactId>team4u-ratelimiter-core</artifactId>
+    <artifactId>team4u-ratelimiter</artifactId>
     <version>1.0.0-SNAPSHOT</version>
 </dependency>
 
@@ -28,11 +28,11 @@
 ```
 
 > [!IMPORTANT]
-> 规则 JSON 经 `JsonUtil` 解析，而 `team4u-ratelimiter-core` 不携带任何 JSON 运行时：首次解析规则前应用必须显式提供 JSON 引擎——添加 `team4u-serializer-jackson`，或经 `META-INF/services` 注册自定义 `JsonSerializerPolicy`（见[序列化组件](../serializer/README.md)）。proxy / spring 适配不会替你引入。
+> 规则 JSON 经 `JsonUtil` 解析，而 `team4u-ratelimiter` 不携带任何 JSON 运行时：首次解析规则前应用必须显式提供 JSON 引擎——添加 `team4u-serializer-jackson`，或经 `META-INF/services` 注册自定义 `JsonSerializerPolicy`（见[序列化组件](../serializer/README.md)）。proxy / spring 适配不会替你引入。
 
 限流存储按需引入 kv 后端（与限流组件无强绑定）：
 
-- 内存存储（单测、单实例）：`team4u-kv-core` 自带 `InMemoryKvStore`，无需额外依赖
+- 内存存储（单测、单实例）：`team4u-kv` 自带 `InMemoryKvStore`，无需额外依赖
 - Redis 存储（跨实例限流、滑动窗口）：引入 `team4u-kv-store-redis`，由业务项目提供 `StringRedisTemplate`
 - JDBC 存储（固定窗口、令牌桶）：引入 `team4u-kv-store-jdbc`，由业务项目提供 `DataSource`
   （注意：`JdbcKvStore` 未实现 `ScoredWindowCapable`，`sliding-window` 规则不能绑定 JDBC 存储，加载期即报错）
