@@ -16,6 +16,7 @@ import com.team4u.framework.flow.Operation;
 import com.team4u.framework.flow.OperationContext;
 import com.team4u.framework.flow.OperationResolver;
 import com.team4u.framework.flow.Outcome;
+import com.team4u.framework.flow.ParallelResults;
 import com.team4u.framework.flow.PersistentPolicy;
 import com.team4u.framework.flow.Policy;
 import com.team4u.framework.flow.PolicyContext;
@@ -203,6 +204,15 @@ public class ExternalFlowBoundaryTest {
                 assertNotNull(descriptor);
                 assertNotNull(branches);
                 assertNotNull(join);
+                List<Branch<?, ?>> tokens = new ArrayList<Branch<?, ?>>();
+                List<Outcome<?>> outcomes = new ArrayList<Outcome<?>>();
+                for (ExecutableParallelBranch<String> branch : branches) {
+                    tokens.add(branch.token());
+                    outcomes.add(Outcome.accepted(branch.branchPlan()));
+                }
+                Outcome<?> joined = join.join(ParallelResults.of(tokens, outcomes));
+                assertTrue(joined instanceof Outcome.Accepted<?>);
+                assertEquals("joined", ((Outcome.Accepted<?>) joined).value());
                 visitedNodes.add("Parallel:" + descriptor.path() + ":branches=" + branches.size());
                 return "Parallel(" + branches.size() + ")";
             }
