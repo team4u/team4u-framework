@@ -301,22 +301,60 @@ Flow<OrderRequest, Receipt> protectedFlow = Flow.step(chargeOperation)
 
 ---
 
-## 限流算法与配置驱动热生效
+## 限流算法与配置驱动热生效实战
 
-限流引擎支持通过配置中心（`team4u-config`）动态下发限流算法（令牌桶、漏桶、滑动窗口、固定窗口）与阈值配置，无需重启服务即可即时热生效：
+限流引擎支持通过配置中心（[`team4u-config`](../config/README.md)）动态下发限流算法与阈值配置。当配置中心的规则发生变更时，引擎在后台自动监听并热重载规则，**无需重启服务即可秒级生效**。
+
+### 1. 配置键（Key）命名约定
+
+一个限流检查点（`point`）对应配置中心的一个配置键：
+$$\text{Key} = \text{team4u.ratelimiter.} + \text{point}$$
+
+例如限流点为 `"order.charge"` 时，配置键为：**`team4u.ratelimiter.order.charge`**。
+
+---
+
+### 2. 配置值（Value）JSON 规则数组定义
+
+配置中心的值为该检查点对应的 **JSON 规则数组**（支持配置多条规则分层拦截）：
 
 ```json
-// 配置键：team4u.ratelimiter.order.charge
 [
   {
-    "id": "tb-user-limit",
+    "id": "per-user-limit",
     "algorithm": "token-bucket",
     "capacity": 10,
     "refillRate": 2.0,
-    "key": "${userId}"
+    "key": "${userId}",
+    "priority": 0
+  },
+  {
+    "id": "global-cluster-limit",
+    "algorithm": "sliding-window",
+    "windowMillis": 1000,
+    "threshold": 500,
+    "priority": 1
   }
 ]
 ```
+
+#### JSON 核心字段说明
+
+| 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| **`id`** | `String` | 是 | 规则唯一标识（同检查点内不能重复，作为缓存 Key 与诊断 ruleId）。 |
+| **`algorithm`** | `String` | 是 | 限流算法名：`token-bucket`（令牌桶）、`sliding-window`（滑动窗口）、`leaky-bucket`（漏桶）、`fixed-window`（固定窗口）。 |
+| **`key`** | `String` | 否 | 路由键模板，支持 `${variable}` 占位符（从请求上下文中提取）；为空表示全局共享配额。 |
+| **`capacity`** | `int` | 按算法 | 令牌桶/漏桶容量上限。 |
+| **`refillRate`** | `double` | 按算法 | 令牌桶每秒补充令牌速率。 |
+| **`windowMillis`**| `long` | 按算法 | 窗口时长（毫秒），如滑动窗口长度。 |
+| **`threshold`** | `int` | 按算法 | 窗口内允许通过的最大请求数阈值。 |
+| **`priority`** | `int` | 否 | 规则优先级（**数字越小越先执行**，默认 0）。 |
+
+> [!TIP]
+> 详细的限流算法模型、参数配置与分布式存储后端（Redis / JDBC）选型，请参考 [RateLimiter 快速开始与配置规范 (docs/ratelimiter/quick-start.md)](../ratelimiter/quick-start.md) 及 [RateLimiter 算法详解 (docs/ratelimiter/ratelimiter-algorithms.md)](../ratelimiter/ratelimiter-algorithms.md)。
+
+---
 
 ### 支持的限流算法速查
 
@@ -327,8 +365,6 @@ Flow<OrderRequest, Receipt> protectedFlow = Flow.step(chargeOperation)
 | **滑动窗口 (Sliding Window)** | `sliding-window` | 精确统计窗口内请求数，无临界跳变 | 严格周期配额、防高频刷单 |
 | **固定窗口 (Fixed Window)** | `fixed-window` | 实现极简、内存开销极低 | 粗粒度防刷、基础防护 |
 
-详细限流算法模型与多维度路由键配置，请参考 [RateLimiter 核心文档](../ratelimiter/README.md)。
-
 ---
 
 ## 关联章节与进一步阅读
@@ -336,4 +372,7 @@ Flow<OrderRequest, Receipt> protectedFlow = Flow.step(chargeOperation)
 - [流程治理概览与洋葱模型](flow-governance.md)
 - [重试与退避治理策略 (team4u-flow-retry)](policy-retry.md)
 - [表达式规则门控策略 (team4u-flow-criterion)](policy-criterion.md)
+- [RateLimiter 快速开始与配置规范 (docs/ratelimiter/quick-start.md)](../ratelimiter/quick-start.md)
+- [配置中心组件核心文档 (docs/config/README.md)](../config/README.md)
 - [自定义 Policy 扩展开发](policy-custom.md)
+

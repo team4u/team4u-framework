@@ -13,10 +13,16 @@
     <groupId>com.team4u</groupId>
     <artifactId>team4u-flow-retry</artifactId>
 </dependency>
+
+<!-- 若需对接配置中心动态规则热重载，按需引入动态配置支持包 -->
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-retry-config</artifactId>
+</dependency>
 ```
 
 > [!NOTE]
-> `team4u-flow-retry` 遵循纯净架构原则，仅依赖 `team4u-flow` 与 `team4u-retry`，通过 Maven Enforcer 严格禁止 Spring 与 Jackson 等生产级外部框架硬编码依赖。
+> `team4u-flow-retry` 核心包遵循纯净架构原则，仅依赖 `team4u-flow` 与 `team4u-retry`；动态配置支持通过 `team4u-retry-config` 无缝桥接 [`team4u-config`](../config/README.md)。
 
 ---
 
@@ -126,14 +132,104 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
 
 ---
 
-## 动态配置规则与热重载
+## 动态配置规则与热重载实战
 
-支持从内存注册表（`NamedRetryPolicyRegistry`）或配置中心（`DynamicRetryPolicyRegistry`）按名称动态加载重试参数，修改配置即刻热生效：
+在生产环境中，硬编码重试参数会导致遇到下游故障变更时必须重新打包发布代码。`team4u-flow-retry` 支持通过**策略名称（`policyName`）**从配置中心或内存注册表动态拉取重试规则，并在后台自动监听配置变更，实现**免重启秒级热生效**。
+
+### 1. 流程中声明绑定策略名称
 
 ```java
-// 动态拉取配置中心键为 "order-charge-retry" 的重试规则
+import com.team4u.framework.flow.Flow;
+import com.team4u.framework.flow.retry.FlowRetries;
+
+// 使用 FlowRetries.named 绑定策略名 "order-charge-retry"
 Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
         .persistentPolicy(FlowRetries.named("order-charge-retry"), OrderRequest::getUserId);
+```
+
+---
+
+### 2. 配置中心下发规则配置
+
+框架基于 [`team4u-config`](../config/README.md) 配置中心组件动态解析规则。
+
+#### 配置键（Key）命名约定
+配置中心中的配置键遵循统一前缀规则：
+$$\text{Key} = \text{retry.policy.} + \text{policyName}$$
+
+例如针对 `order-charge-retry`，配置键为：**`retry.policy.order-charge-retry`**。
+
+#### 配置值（Value）JSON 格式定义
+
+```json
+{
+  "maxRetries": 4,
+  "backoff": {
+    "type": "exponentialJitter",
+    "params": {
+      "initialDelay": 100,
+      "multiplier": 2.0,
+      "maxDelay": 2000
+    }
+  },
+  "retryOnExceptions": [
+    "java.net.SocketTimeoutException",
+    "java.io.IOException"
+  ],
+  "abortOnExceptions": [
+    "java.lang.IllegalArgumentException"
+  ]
+}
+```
+
+#### JSON 核心配置字段说明
+
+| JSON 字段 | 类型 | 必填 | 说明 |
+| :--- | :--- | :--- | :--- |
+| **`maxRetries`** | `int` | 是 | **最大重试次数（不含首次执行）**。若设为 4，表示最多尝试 5 次。 |
+| **`backoff.type`** | `String` | 是 | 退避算法类型标识：<br/>• `fixed`：固定延迟<br/>• `exponential`：纯指数退避<br/>• `exponentialJitter`：带随机抖动的指数退避（推荐）<br/>• `increment`：等差递增 |
+| **`backoff.params`** | `Object` | 是 | 对应退避算法的数学参数（如 `initialDelay` 初始延迟、`multiplier` 倍数、`maxDelay` 上限毫秒数）。 |
+| **`retryOnExceptions`**| `Array<String>` | 否 | 仅对指定异常类及其子类触发重试（类名需在类路径中存在）。 |
+| **`abortOnExceptions`**| `Array<String>` | 否 | 遇到指定异常立即终止重试并快速失败。 |
+
+> [!TIP]
+> 详细的动态重试规则 JSON 格式定义与扩展说明，请参考 [重试策略配置规范 (docs/retry/retry-strategy.md#动态配置高级)](../retry/retry-strategy.md#动态配置高级)。
+
+---
+
+### 3. 本地代码内存注册静态兜底（可选）
+
+如果应用在某些环境（如本地测试）未连接配置中心，可以通过 `NamedRetryPolicyRegistry` 注册静态默认策略：
+
+```java
+import com.team4u.framework.retry.api.NamedRetryPolicyRegistry;
+import com.team4u.framework.retry.api.RetryPolicy;
+import com.team4u.framework.retry.common.backoff.Backoffs;
+
+// 注册名为 "order-charge-retry" 的本地静态兜底策略
+NamedRetryPolicyRegistry.global().register("order-charge-retry", () -> 
+        RetryPolicy.builder()
+                .maxRetries(3)
+                .backoff(Backoffs.exponentialJitter(100, 2.0, 1000))
+                .build()
+);
+```
+
+---
+
+### 4. 运行期多级查找与降级优先级
+
+当流程节点执行失败准备重试时，`FlowRetryPolicy` 按以下优先级解析生效参数：
+
+```mermaid
+graph TD
+    START["触发重试评估 (resolveRetryPolicy)"] --> S1{"1. 检查配置中心 DynamicRetryPolicyRegistry<br/>(retry.policy.order-charge-retry)"}
+    
+    S1 -->|"命中动态配置"| USE_DYN["使用配置中心的最新动态规则 (热生效)"]
+    S1 -->|"未配置或未引入 config"| S2{"2. 检查本地内存注册表<br/>NamedRetryPolicyRegistry.global()"}
+    
+    S2 -->|"命中本地注册"| USE_NAMED["使用本地注册的 RetryPolicy 实例"]
+    S2 -->|"未注册"| S3["3. 使用框架默认兜底参数<br/>(maxAttempts=3, backoff=fixed(1000ms))"]
 ```
 
 ---
@@ -169,5 +265,7 @@ $$\text{invocationId} = \text{flowId} : \text{flowVersion} : \text{executionId} 
 - [流程治理概览与洋葱模型](flow-governance.md)
 - [限流治理策略 (team4u-flow-ratelimiter)](policy-ratelimiter.md)
 - [表达式规则门控策略 (team4u-flow-criterion)](policy-criterion.md)
+- [重试策略核心规范与配置详解 (docs/retry/retry-strategy.md)](../retry/retry-strategy.md)
+- [配置中心组件核心文档 (docs/config/README.md)](../config/README.md)
 - [Durable 两段式恢复协议与 PersistentPolicy](flow-durable-resume.md)
 - [自定义 Policy 扩展开发](policy-custom.md)
