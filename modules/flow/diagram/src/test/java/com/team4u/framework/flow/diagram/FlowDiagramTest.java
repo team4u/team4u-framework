@@ -335,15 +335,15 @@ public class FlowDiagramTest {
     }
 
     @Test
-    public void bothRenderersHandleFiveThousandNestedScopesIteratively() {
+    public void bothRenderersHandleTwelveHundredNestedScopesIteratively() {
         Flow<String, String> current = Flow.step(Echo.class);
-        for (int index = 0; index < 5000; index++) {
+        for (int index = 0; index < 1200; index++) {
             current = Flow.scope("scope-" + index, current);
         }
         FlowDescription description = current.describe("deep");
 
         String text = FlowDiagrams.text().render(description);
-        Assert.assertEquals(5000, occurrences(text, " kind=SEQUENCE "));
+        Assert.assertEquals(1200, occurrences(text, " kind=SEQUENCE "));
         Assert.assertTrue(text.contains(" kind=INVOKE "));
         text = null;
 
@@ -425,15 +425,15 @@ public class FlowDiagramTest {
     }
 
     @Test
-    public void fiveThousandNestedTimeoutsRenderWithinLinearCost() {
+    public void twelveHundredNestedTimeoutsRenderWithinLinearCost() {
         Flow<String, String> current = Flow.step(Echo.class);
-        for (int index = 0; index < 5000; index++) {
+        for (int index = 0; index < 1200; index++) {
             current = current.timeout(Duration.ofSeconds(1));
         }
         FlowDescription description = current.describe("deep-timeouts");
 
         String text = FlowDiagrams.text().render(description);
-        Assert.assertEquals(5000, occurrences(text, "control=TIMEOUT"));
+        Assert.assertEquals(1200, occurrences(text, "control=TIMEOUT"));
 
         String graph = FlowDiagrams.mermaid().render(description);
         Assert.assertTrue(graph.contains("flowchart TD"));

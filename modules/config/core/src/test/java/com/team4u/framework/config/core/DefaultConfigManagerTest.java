@@ -39,7 +39,7 @@ public class DefaultConfigManagerTest {
                 watcherRegistry,
                 new PropertyConverterRegistry(),
                 null,
-                500);
+                50);
 
         Assert.assertEquals(1, watcher.initCount.get());
         Assert.assertEquals(1, watcher.watchCount.get());
@@ -76,8 +76,8 @@ public class DefaultConfigManagerTest {
         Assert.assertEquals(1, loadCount.get());
         Assert.assertEquals(0, changeEvtCount.get());
 
-        // 等待防抖窗口结束 (500ms + 额外缓冲时间)
-        ThreadUtil.sleep(800);
+        // 等待防抖窗口结束 (50ms + 额外缓冲时间)
+        ThreadUtil.sleep(120);
 
         // 防抖合并结束后，应仅额外触发一次加载行为
         Assert.assertEquals(2, loadCount.get());

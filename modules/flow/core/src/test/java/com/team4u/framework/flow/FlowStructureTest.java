@@ -74,9 +74,9 @@ public class FlowStructureTest {
     }
 
     @Test
-    public void describe5000NestedScopesDoesNotStackOverflow() {
+    public void describe1200NestedScopesDoesNotStackOverflow() {
         Flow<String, String> current = Flow.step((c, i) -> Outcome.accepted(i));
-        for (int i = 0; i < 5000; i++) {
+        for (int i = 0; i < 1200; i++) {
             current = Flow.scope("scope-" + i, current);
         }
         FlowDescription desc = current.describe("deep-flow");

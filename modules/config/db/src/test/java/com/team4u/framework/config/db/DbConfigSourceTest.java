@@ -11,6 +11,7 @@ import org.junit.Test;
 
 import javax.sql.DataSource;
 import java.sql.SQLException;
+import java.time.Duration;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -160,8 +161,8 @@ public class DbConfigSourceTest {
      */
     @Test
     public void testWatcherTriggering() throws SQLException {
-        // 轮询间隔设为 1 秒（构造参数支持的最小值）
-        DbConfigWatcher watcher = new DbConfigWatcher(dataSource, 1);
+        // 轮询间隔设为 50 毫秒（提速测试）
+        DbConfigWatcher watcher = new DbConfigWatcher(dataSource, Duration.ofMillis(50));
 
         AtomicBoolean triggered = new AtomicBoolean(false);
         watcher.watch(() -> triggered.set(true));
@@ -170,21 +171,21 @@ public class DbConfigSourceTest {
         assertFalse("初始化阶段不应触发 changeSignal", triggered.get());
 
         // 与基线拉开间隔，确保毫秒精度的 update_time 严格大于基线值
-        ThreadUtil.sleep(50);
+        ThreadUtil.sleep(20);
 
         // 修改数据库中的配置值
         JdbcUtil.execute(dataSource, "UPDATE system_config SET config_value = '9090' WHERE config_key = 'port'");
 
         // 条件等待：下一轮轮询检测到变更即返回，无需固定睡眠
         assertTrue("数据库发生变更后，应触发 changeSignal 回调",
-                awaitTrue(triggered::get, 5000));
+                awaitTrue(triggered::get, 3000));
 
         watcher.destroy();
     }
 
     @Test
     public void testWatcherFailureKeepsBaselineAndRecordsError() throws SQLException {
-        DbConfigWatcher watcher = new DbConfigWatcher(dataSource, 1);
+        DbConfigWatcher watcher = new DbConfigWatcher(dataSource, Duration.ofMillis(50));
         AtomicInteger triggerCount = new AtomicInteger();
 
         watcher.watch(triggerCount::incrementAndGet);
@@ -192,9 +193,9 @@ public class DbConfigSourceTest {
         // watch() 已同步建立基线，随后删除配置表制造查询失败
         JdbcUtil.execute(dataSource, "DROP TABLE system_config");
 
-        // 条件等待：轮询到查询失败、失败计数递增后即返回（有效 tick 名义时刻约 2 秒）
+        // 条件等待：轮询到查询失败、失败计数递增后即返回
         assertTrue("轮询查询失败后失败计数应递增",
-                awaitTrue(() -> watcher.getFailureCount() > 0, 5000));
+                awaitTrue(() -> watcher.getFailureCount() > 0, 3000));
 
         assertEquals("查询失败时不应伪装成变更", 0, triggerCount.get());
         assertTrue("失败计数应递增", watcher.getFailureCount() > 0);

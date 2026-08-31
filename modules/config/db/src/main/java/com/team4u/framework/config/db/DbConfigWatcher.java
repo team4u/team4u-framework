@@ -50,9 +50,9 @@ public class DbConfigWatcher implements ConfigWatcher {
     private final DbConfigOptions options;
 
     /**
-     * 轮询间隔（秒）
+     * 轮询间隔
      */
-    private final int intervalSeconds;
+    private final Duration interval;
 
     /**
      * MAX(update_time) 刷新缓存（watch 时创建，destroy 时关闭）
@@ -80,7 +80,17 @@ public class DbConfigWatcher implements ConfigWatcher {
      * @param intervalSeconds 轮询间隔（秒）
      */
     public DbConfigWatcher(DataSource dataSource, int intervalSeconds) {
-        this(dataSource, intervalSeconds, new DbConfigOptions());
+        this(dataSource, Duration.ofSeconds(intervalSeconds), new DbConfigOptions());
+    }
+
+    /**
+     * 构建 DB 配置监听器
+     *
+     * @param dataSource 数据库数据源
+     * @param interval   轮询间隔
+     */
+    public DbConfigWatcher(DataSource dataSource, Duration interval) {
+        this(dataSource, interval, new DbConfigOptions());
     }
 
     /**
@@ -91,9 +101,20 @@ public class DbConfigWatcher implements ConfigWatcher {
      * @param options         数据库配置选项
      */
     public DbConfigWatcher(DataSource dataSource, int intervalSeconds, DbConfigOptions options) {
+        this(dataSource, Duration.ofSeconds(intervalSeconds), options);
+    }
+
+    /**
+     * 构建 DB 配置监听器
+     *
+     * @param dataSource 数据库数据源
+     * @param interval   轮询间隔
+     * @param options    数据库配置选项
+     */
+    public DbConfigWatcher(DataSource dataSource, Duration interval, DbConfigOptions options) {
         this.dataSource = dataSource;
-        this.intervalSeconds = intervalSeconds;
-        this.options = options;
+        this.interval = interval != null ? interval : Duration.ofSeconds(DEFAULT_INTERVAL_SECONDS);
+        this.options = options != null ? options : new DbConfigOptions();
     }
 
     @Override
@@ -119,7 +140,7 @@ public class DbConfigWatcher implements ConfigWatcher {
         maxUpdateTime = RefreshableValue.<Long>builder()
                 .name("db-config-watcher")
                 .loader(ctx -> queryMaxTimestamp())
-                .refreshEvery(Duration.ofSeconds(intervalSeconds))
+                .refreshEvery(interval)
                 .background()
                 .cooldown(COOLDOWN_INITIAL, COOLDOWN_MAX)
                 .scheduler(scheduler)
@@ -136,14 +157,15 @@ public class DbConfigWatcher implements ConfigWatcher {
         refreshBaseline();
 
         // 基线建立失败时的后台补建（RefreshableValue 的后台 tick 仅在已有值时刷新）
+        long delayMillis = Math.max(10, interval.toMillis());
         scheduler.scheduleWithFixedDelay(
                 this::refreshBaseline,
-                intervalSeconds,
-                intervalSeconds,
-                TimeUnit.SECONDS
+                delayMillis,
+                delayMillis,
+                TimeUnit.MILLISECONDS
         );
 
-        log.info("[DbConfigWatcher] Started, interval={}s", intervalSeconds);
+        log.info("[DbConfigWatcher] Started, interval={}", interval);
     }
 
     /**
