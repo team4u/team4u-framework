@@ -1,98 +1,85 @@
 package com.team4u.framework.flow.durable;
 
-import com.team4u.framework.flow.StopReason;
+import com.team4u.framework.flow.Outcome;
 
+import java.time.Instant;
 import java.util.Objects;
+import java.util.Optional;
 
-/**
- * Durable 持久化执行结果模型。
- *
- * @param <O> 成功产物类型
- * @author jay.wu
- */
-public final class DurableResult<O> {
+/** Closed Java 8 result family for durable commands. */
+public abstract class DurableResult<O> {
+    private final DurableSnapshot snapshot;
 
-    private final String flowId;
-    private final int flowVersion;
-    private final String executionId;
-    private final DurableLifecycle lifecycle;
-    private final long revision;
-    private final O value;
-    private final StopReason stopReason;
-    private final DurableFailure failure;
-
-    private DurableResult(String flowId, int flowVersion, String executionId,
-                          DurableLifecycle lifecycle, long revision,
-                          O value, StopReason stopReason, DurableFailure failure) {
-        this.flowId = Objects.requireNonNull(flowId, "flowId must not be null");
-        this.flowVersion = flowVersion;
-        this.executionId = Objects.requireNonNull(executionId, "executionId must not be null");
-        this.lifecycle = Objects.requireNonNull(lifecycle, "lifecycle must not be null");
-        this.revision = revision;
-        this.value = value;
-        this.stopReason = stopReason;
-        this.failure = failure;
-    }
-
-    public static <O> DurableResult<O> completed(String flowId, int flowVersion, String executionId, long revision, O value) {
-        return new DurableResult<>(flowId, flowVersion, executionId, DurableLifecycle.COMPLETED, revision, value, null, null);
-    }
-
-    public static <O> DurableResult<O> stopped(String flowId, int flowVersion, String executionId, long revision, StopReason reason) {
-        return new DurableResult<>(flowId, flowVersion, executionId, DurableLifecycle.STOPPED, revision, null, reason, null);
-    }
-
-    public static <O> DurableResult<O> failed(String flowId, int flowVersion, String executionId, long revision, DurableFailure failure) {
-        return new DurableResult<>(flowId, flowVersion, executionId, DurableLifecycle.FAILED, revision, null, null, failure);
-    }
-
-    public static <O> DurableResult<O> cancelled(String flowId, int flowVersion, String executionId, long revision) {
-        return new DurableResult<>(flowId, flowVersion, executionId, DurableLifecycle.CANCELLED, revision, null, null, null);
-    }
-
-    public static <O> DurableResult<O> active(String flowId, int flowVersion, String executionId, long revision) {
-        return new DurableResult<>(flowId, flowVersion, executionId, DurableLifecycle.ACTIVE, revision, null, null, null);
-    }
-
-    public String flowId() { return flowId; }
-    public int flowVersion() { return flowVersion; }
-    public String executionId() { return executionId; }
-    public DurableLifecycle lifecycle() { return lifecycle; }
-    public long revision() { return revision; }
-
-    public boolean isCompleted() { return lifecycle == DurableLifecycle.COMPLETED; }
-    public boolean isStopped() { return lifecycle == DurableLifecycle.STOPPED; }
-    public boolean isFailed() { return lifecycle == DurableLifecycle.FAILED; }
-    public boolean isCancelled() { return lifecycle == DurableLifecycle.CANCELLED; }
-    public boolean isActive() { return lifecycle == DurableLifecycle.ACTIVE; }
-
-    public O value() {
-        if (!isCompleted()) {
-            throw new IllegalStateException("Result is not COMPLETED (actual: " + lifecycle + ")");
+    DurableResult(DurableSnapshot snapshot, DurableLifecycle expected) {
+        this.snapshot = Objects.requireNonNull(snapshot, "snapshot must not be null");
+        if (snapshot.lifecycle() != expected) {
+            throw new IllegalArgumentException("result requires " + expected
+                    + " snapshot, but was " + snapshot.lifecycle());
         }
+    }
+
+    public final DurableSnapshot snapshot() {
+        return snapshot;
+    }
+
+    public O requireAccepted() {
+        if (this instanceof Completed) {
+            Outcome<O> outcome = ((Completed<O>) this).outcome();
+            if (outcome instanceof Outcome.Accepted) {
+                return ((Outcome.Accepted<O>) outcome).value();
+            }
+        }
+        throw new IllegalStateException(
+                "Durable execution did not complete with Accepted");
+    }
+
+    public static final class Completed<O> extends DurableResult<O> {
+        private final Outcome<O> outcome;
+
+        public Completed(Outcome<O> outcome, DurableSnapshot snapshot) {
+            super(snapshot, DurableLifecycle.COMPLETED);
+            this.outcome = Objects.requireNonNull(outcome, "outcome must not be null");
+        }
+
+        public Outcome<O> outcome() { return outcome; }
+    }
+
+    public static final class Suspended<O> extends DurableResult<O> {
+        private final String resumePoint;
+
+        public Suspended(String resumePoint, DurableSnapshot snapshot) {
+            super(snapshot, DurableLifecycle.SUSPENDED);
+            this.resumePoint = text(resumePoint);
+            if (!resumePoint.equals(snapshot.awaitingPoint())) {
+                throw new IllegalArgumentException(
+                        "resumePoint must match snapshot awaitingPoint");
+            }
+        }
+
+        public String resumePoint() { return resumePoint; }
+    }
+
+    public static final class Active<O> extends DurableResult<O> {
+        private final Optional<Instant> wakeAt;
+
+        public Active(Optional<Instant> wakeAt, DurableSnapshot snapshot) {
+            super(snapshot, DurableLifecycle.ACTIVE);
+            this.wakeAt = Objects.requireNonNull(wakeAt, "wakeAt must not be null");
+        }
+
+        public Optional<Instant> wakeAt() { return wakeAt; }
+    }
+
+    public static final class Cancelled<O> extends DurableResult<O> {
+        public Cancelled(DurableSnapshot snapshot) {
+            super(snapshot, DurableLifecycle.CANCELLED);
+        }
+    }
+
+    private static String text(String value) {
+        Objects.requireNonNull(value, "resumePoint must not be null");
+        if (value.trim().isEmpty()) throw new IllegalArgumentException(
+                "resumePoint must not be blank");
         return value;
-    }
-
-    public StopReason stopReason() {
-        if (!isStopped()) {
-            throw new IllegalStateException("Result is not STOPPED (actual: " + lifecycle + ")");
-        }
-        return stopReason;
-    }
-
-    public DurableFailure failure() {
-        if (!isFailed()) {
-            throw new IllegalStateException("Result is not FAILED (actual: " + lifecycle + ")");
-        }
-        return failure;
-    }
-
-    @Override
-    public String toString() {
-        return "DurableResult{" + flowId + "(v" + flowVersion + ") " + executionId + "=" + lifecycle +
-                (isCompleted() ? ", value=" + value : "") +
-                (isStopped() ? ", stop=" + stopReason : "") +
-                (isFailed() ? ", failure=" + failure : "") +
-                ", rev=" + revision + '}';
     }
 }

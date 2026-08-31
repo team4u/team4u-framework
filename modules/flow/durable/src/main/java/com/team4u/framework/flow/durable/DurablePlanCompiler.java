@@ -1,78 +1,206 @@
 package com.team4u.framework.flow.durable;
 
-import com.team4u.framework.flow.*;
+import com.team4u.framework.flow.ControlKind;
+import com.team4u.framework.flow.ExecutableBinding;
+import com.team4u.framework.flow.ExecutableFlowVisitor;
+import com.team4u.framework.flow.ExecutableParallelBranch;
+import com.team4u.framework.flow.ExecutableRouteCase;
+import com.team4u.framework.flow.FallbackTrigger;
+import com.team4u.framework.flow.Flow;
+import com.team4u.framework.flow.JoinStrategy;
+import com.team4u.framework.flow.NodeDescriptor;
+import com.team4u.framework.flow.OperationResolver;
+import com.team4u.framework.flow.Outcome;
+import com.team4u.framework.flow.ResumePoint;
 
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.LinkedHashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.Set;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
-/**
- * 将不可变 {@link Flow} 编译为 Durable 执行计划的 Projection 实现。
- *
- * @author jay.wu
- */
-final class DurablePlanCompiler implements Flow.Projection<DurablePlanNode> {
+/** Builds a durable-owned executable plan exclusively through the public projection SPI. */
+final class DurablePlanCompiler implements ExecutableFlowVisitor<DurablePlanNode> {
+    static final class Definition {
+        private final DurablePlanNode root;
+        private final Map<String, DurablePlanNode> byPath;
+        private final Set<String> slotRoles;
+        private final Map<String, ResumePoint<?>> resumePoints;
+        private final boolean requiresExecutor;
 
-    static final DurablePlanCompiler INSTANCE = new DurablePlanCompiler();
-
-    @Override
-    public DurablePlanNode projectSequence(Flow.SequenceInfo info, List<DurablePlanNode> children) {
-        return new DurablePlanNode.SequencePlanNode(info, children);
-    }
-
-    @Override
-    public <T, R1> DurablePlanNode projectStep(Flow.StepInfo info, Step<T, R1> step, Step.Contextual<T, R1> contextualStep, List<StepInterceptor> interceptors) {
-        return new DurablePlanNode.StepPlanNode(info, step, contextualStep, interceptors);
-    }
-
-    @Override
-    public <T> DurablePlanNode projectTap(Flow.TapInfo info, Action<T> action, Action.Contextual<T> contextualAction, List<StepInterceptor> interceptors) {
-        return new DurablePlanNode.TapPlanNode(info, action, contextualAction, interceptors);
-    }
-
-    @Override
-    public <T> DurablePlanNode projectGuard(Flow.GuardInfo info, Condition<T> condition, Function<T, StopReason> reasonFactory) {
-        return new DurablePlanNode.GuardPlanNode(info, condition, reasonFactory);
-    }
-
-    @Override
-    public <T, K, R1> DurablePlanNode projectChoose(Flow.ChooseInfo<K> info, Function<T, K> selector, Map<K, DurablePlanNode> branches, DurablePlanNode otherwiseBranch, Function<T, StopReason> otherwiseStopReason) {
-        return new DurablePlanNode.ChoosePlanNode(info, selector, branches, otherwiseBranch, otherwiseStopReason);
-    }
-
-    @Override
-    public <T, R1> DurablePlanNode projectSubflow(Flow.SubflowInfo info, Flow<T, R1> subflow, DurablePlanNode subflowProjection) {
-        return new DurablePlanNode.SubflowPlanNode(info, subflowProjection);
-    }
-
-    @Override
-    public <T, R1> DurablePlanNode projectRecover(Flow.RecoverInfo info, DurablePlanNode body, Recovery<T, R1> recovery, Recovery.Contextual<T, R1> contextualRecovery) {
-        DurablePlanNode.RecoverPlanNode rec = new DurablePlanNode.RecoverPlanNode(info, recovery, contextualRecovery);
-        if (body instanceof DurablePlanNode.SequencePlanNode) {
-            ((DurablePlanNode.SequencePlanNode) body).setRecoverNode(rec);
-            return body;
+        Definition(DurablePlanNode root, Map<String, DurablePlanNode> byPath,
+                   Set<String> slotRoles, Map<String, ResumePoint<?>> resumePoints,
+                   boolean requiresExecutor) {
+            this.root = Objects.requireNonNull(root, "root must not be null");
+            this.byPath = Collections.unmodifiableMap(
+                    new LinkedHashMap<String, DurablePlanNode>(byPath));
+            this.slotRoles = Collections.unmodifiableSet(
+                    new LinkedHashSet<String>(slotRoles));
+            this.resumePoints = Collections.unmodifiableMap(
+                    new LinkedHashMap<String, ResumePoint<?>>(resumePoints));
+            this.requiresExecutor = requiresExecutor;
         }
-        List<DurablePlanNode> list = new ArrayList<>();
-        list.add(body);
-        DurablePlanNode.SequencePlanNode seq = new DurablePlanNode.SequencePlanNode(
-                new Flow.SequenceInfo(info.id(), info.path(), info.address()), list);
-        seq.setRecoverNode(rec);
-        return seq;
+
+        DurablePlanNode root() { return root; }
+        Map<String, DurablePlanNode> byPath() { return byPath; }
+        Set<String> slotRoles() { return slotRoles; }
+        Map<String, ResumePoint<?>> resumePoints() { return resumePoints; }
+        boolean requiresExecutor() { return requiresExecutor; }
+    }
+
+    private final LinkedHashMap<String, DurablePlanNode> byPath =
+            new LinkedHashMap<String, DurablePlanNode>();
+    private final LinkedHashSet<String> slotRoles = new LinkedHashSet<String>();
+    private final LinkedHashMap<String, ResumePoint<?>> resumePoints =
+            new LinkedHashMap<String, ResumePoint<?>>();
+    private boolean requiresExecutor;
+
+    private DurablePlanCompiler() {
+        slotRoles.add("input");
+    }
+
+    static Definition compile(Flow<?, ?> flow, OperationResolver resolver) {
+        Objects.requireNonNull(flow, "flow must not be null");
+        Objects.requireNonNull(resolver, "resolver must not be null");
+        DurablePlanCompiler compiler = new DurablePlanCompiler();
+        DurablePlanNode root = flow.project(resolver, compiler);
+        if (compiler.byPath.get(root.descriptor().path()) != root) {
+            throw invalid("Projected root is not registered at its path");
+        }
+        return new Definition(root, compiler.byPath, compiler.slotRoles,
+                compiler.resumePoints, compiler.requiresExecutor);
     }
 
     @Override
-    public <T, R1> DurablePlanNode projectEnsure(Flow.EnsureInfo info, DurablePlanNode body, CompletionAction<T, R1> completionAction, CompletionAction.Contextual<T, R1> contextualCompletionAction) {
-        DurablePlanNode.EnsurePlanNode ens = new DurablePlanNode.EnsurePlanNode(info, completionAction, contextualCompletionAction);
-        if (body instanceof DurablePlanNode.SequencePlanNode) {
-            ((DurablePlanNode.SequencePlanNode) body).setEnsureNode(ens);
-            return body;
+    public DurablePlanNode visitInvoke(NodeDescriptor descriptor,
+                                       ExecutableBinding binding,
+                                       Function<Object, Object> project,
+                                       BiFunction<Object, Object, Object> merge) {
+        DurablePlanNode.Invoke node = new DurablePlanNode.Invoke(
+                descriptor, binding, project, merge);
+        register(node);
+        slotRoles.add(nodeRole(descriptor.path()));
+        return node;
+    }
+
+    @Override
+    public DurablePlanNode visitSequence(NodeDescriptor descriptor,
+                                         List<DurablePlanNode> children,
+                                         Optional<String> scopeName) {
+        return register(new DurablePlanNode.Sequence(
+                descriptor, children, scopeName));
+    }
+
+    @Override
+    public DurablePlanNode visitRoute(NodeDescriptor descriptor,
+                                      ExecutableBinding selectorBinding,
+                                      List<ExecutableRouteCase<DurablePlanNode>> cases,
+                                      Optional<DurablePlanNode> otherwise) {
+        final String selectorPath = descriptor.path() + "/selector";
+        NodeDescriptor selectorDescriptor = new NodeDescriptor(selectorPath,
+                Optional.<String>empty(), NodeDescriptor.Kind.INVOKE,
+                Optional.of(selectorBinding.contractClass()),
+                Optional.of(selectorBinding.implementationClass()),
+                selectorBinding.qualifier());
+        DurablePlanNode.Invoke selector = new DurablePlanNode.Invoke(
+                selectorDescriptor, selectorBinding,
+                new Function<Object, Object>() {
+                    @Override public Object apply(Object value) { return value; }
+                },
+                new BiFunction<Object, Object, Object>() {
+                    @Override public Object apply(Object ignored, Object value) { return value; }
+                });
+        register(selector);
+        slotRoles.add(nodeRole(selectorPath));
+        ArrayList<DurablePlanNode.Route.RouteCase> projected =
+                new ArrayList<DurablePlanNode.Route.RouteCase>(cases.size());
+        for (ExecutableRouteCase<DurablePlanNode> candidate : cases) {
+            projected.add(new DurablePlanNode.Route.RouteCase(
+                    candidate.key(), candidate.branch()));
         }
-        List<DurablePlanNode> list = new ArrayList<>();
-        list.add(body);
-        DurablePlanNode.SequencePlanNode seq = new DurablePlanNode.SequencePlanNode(
-                new Flow.SequenceInfo(info.id(), info.path(), info.address()), list);
-        seq.setEnsureNode(ens);
-        return seq;
+        return register(new DurablePlanNode.Route(descriptor, selector, projected,
+                otherwise.orElse(null)));
+    }
+
+    @Override
+    public DurablePlanNode visitFallback(NodeDescriptor descriptor,
+                                         FallbackTrigger trigger,
+                                         List<DurablePlanNode> branches) {
+        return register(new DurablePlanNode.Fallback(
+                descriptor, trigger, branches));
+    }
+
+    @Override
+    public DurablePlanNode visitParallel(NodeDescriptor descriptor,
+                                         List<ExecutableParallelBranch<DurablePlanNode>> branches,
+                                         JoinStrategy<?> join) {
+        ArrayList<DurablePlanNode.Parallel.ParallelBranch> projected =
+                new ArrayList<DurablePlanNode.Parallel.ParallelBranch>(branches.size());
+        for (ExecutableParallelBranch<DurablePlanNode> branch : branches) {
+            projected.add(new DurablePlanNode.Parallel.ParallelBranch(
+                    branch.token(), branch.branchPlan()));
+        }
+        slotRoles.add(nodeRole(descriptor.path()));
+        return register(new DurablePlanNode.Parallel(descriptor, projected, join));
+    }
+
+    @Override
+    public DurablePlanNode visitAwait(NodeDescriptor descriptor,
+                                      ResumePoint<?> resumePoint) {
+        ResumePoint<?> previous = resumePoints.put(resumePoint.name(), resumePoint);
+        if (previous != null) {
+            throw invalid("Duplicate ResumePoint: " + resumePoint.name());
+        }
+        slotRoles.add(resumeRole(resumePoint.name()));
+        return register(new DurablePlanNode.Await(descriptor, resumePoint));
+    }
+
+    @Override
+    public DurablePlanNode visitControl(NodeDescriptor descriptor, ControlKind kind,
+                                        DurablePlanNode body,
+                                        Optional<ExecutableBinding> binding,
+                                        Function<Object, Object> keyProjection,
+                                        Object configuration) {
+        if (kind == ControlKind.POLICY || kind == ControlKind.PERSISTENT_POLICY) {
+            slotRoles.add(keyRole(descriptor.path()));
+        }
+        if (kind == ControlKind.PERSISTENT_POLICY) {
+            slotRoles.add(policyRole(descriptor.path()));
+        }
+        if (kind == ControlKind.TIMEOUT) requiresExecutor = true;
+        return register(new DurablePlanNode.Control(descriptor, kind, body,
+                binding, keyProjection, configuration));
+    }
+
+    @Override
+    public DurablePlanNode visitComplete(NodeDescriptor descriptor,
+                                         Outcome<?> outcome, boolean identity) {
+        if (!identity && outcome instanceof Outcome.Accepted) {
+            slotRoles.add(nodeRole(descriptor.path()));
+        }
+        return register(new DurablePlanNode.Complete(descriptor, outcome, identity));
+    }
+
+    private <T extends DurablePlanNode> T register(T node) {
+        String path = node.descriptor().path();
+        if (byPath.put(path, node) != null) {
+            throw invalid("Duplicate projected node path: " + path);
+        }
+        return node;
+    }
+
+    static String nodeRole(String path) { return "node:" + path; }
+    static String keyRole(String path) { return "key:" + path; }
+    static String policyRole(String path) { return "policy:" + path; }
+    static String resumeRole(String name) { return "resume:" + name; }
+
+    private static DurableException invalid(String message) {
+        return new DurableException(DurableException.Error.INVALID_DEFINITION, message);
     }
 }

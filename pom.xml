@@ -48,6 +48,7 @@
         <module>modules/config/test</module>
         <module>modules/criterion/core</module>
         <module>modules/flow/core</module>
+        <module>modules/flow/bean</module>
         <module>modules/flow/durable</module>
         <module>modules/flow/graph</module>
         <module>modules/flow/test</module>
@@ -137,6 +138,11 @@
             <dependency>
                 <groupId>com.team4u</groupId>
                 <artifactId>team4u-flow</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-flow-bean</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

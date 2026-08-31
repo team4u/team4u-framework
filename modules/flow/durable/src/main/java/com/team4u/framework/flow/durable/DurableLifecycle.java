@@ -1,14 +1,9 @@
 package com.team4u.framework.flow.durable;
 
-/**
- * 持久化流程生命周期状态。
- *
- * @author jay.wu
- */
+/** Durable execution lifecycle, separate from business outcomes. */
 public enum DurableLifecycle {
     ACTIVE,
+    SUSPENDED,
     COMPLETED,
-    STOPPED,
-    FAILED,
     CANCELLED
 }

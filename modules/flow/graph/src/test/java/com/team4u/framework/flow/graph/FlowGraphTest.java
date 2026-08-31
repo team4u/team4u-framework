@@ -1,797 +1,621 @@
 package com.team4u.framework.flow.graph;
 
+import com.team4u.framework.flow.Branch;
+import com.team4u.framework.flow.Completion;
+import com.team4u.framework.flow.Failure;
 import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.FlowDescription;
-import com.team4u.framework.flow.FlowResult;
-import com.team4u.framework.flow.Flows;
-import com.team4u.framework.flow.StopReason;
+import com.team4u.framework.flow.Gate;
+import com.team4u.framework.flow.Operation;
+import com.team4u.framework.flow.OperationContext;
+import com.team4u.framework.flow.Outcome;
+import com.team4u.framework.flow.PersistentPolicy;
+import com.team4u.framework.flow.Policy;
+import com.team4u.framework.flow.PolicyContext;
+import com.team4u.framework.flow.Reason;
+import com.team4u.framework.flow.ResumePoint;
+import com.team4u.framework.flow.Retry;
 import org.junit.Assert;
 import org.junit.Test;
 
-import java.util.ArrayDeque;
-import java.util.Deque;
+import java.io.IOException;
+import java.math.BigInteger;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.nio.file.Paths;
+import java.time.Duration;
+import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.HashSet;
+import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
-/**
- * 流程图渲染测试。
- *
- * @author jay.wu
- */
+/** Tests for rendering the frozen Core static description model. */
 public class FlowGraphTest {
 
-    @Test
-    public void mermaid_rendersCompleteStructure() {
-        Flow<String, String> subflow = Flows.<String>begin("sub-payment")
-                .step("pay-step", in -> in)
-                .build();
-
-        Flow<String, String> flow = Flows.<String>begin("checkout-flow")
-                .guard("check-order", in -> true, in -> StopReason.of("INVALID"))
-                .tap("reserve-stock", in -> {})
-                .step("create-order", in -> in)
-                .choose("pay-channel", in -> in)
-                    .when("CARD", Flows.step("card-step", in -> in))
-                    .when("WALLET", Flows.step("wallet-step", in -> in))
-                    .otherwiseStop(in -> StopReason.of("NO_CHANNEL"))
-                .end()
-                .then(subflow)
-                .recover("on-failure", (in, f) -> FlowResult.succeeded("rec"))
-                .ensure("cleanup", (in, c) -> {})
-                .build();
-
-        FlowDescription desc = flow.describe();
-        String mermaid = FlowGraphs.mermaid().render(desc);
-
-        Assert.assertNotNull(mermaid);
-        Assert.assertTrue(mermaid.startsWith("flowchart TD"));
-        Assert.assertTrue(mermaid.contains("Start: checkout-flow"));
-        Assert.assertTrue(mermaid.contains("Guard: check-order"));
-        Assert.assertTrue(mermaid.contains("Tap: reserve-stock"));
-        Assert.assertTrue(mermaid.contains("Step: create-order"));
-        Assert.assertTrue(mermaid.contains("Choose: pay-channel"));
-        Assert.assertTrue(mermaid.contains("Subflow: sub-payment"));
-        Assert.assertTrue(mermaid.contains("Recover: on-failure"));
-        Assert.assertTrue(mermaid.contains("Ensure: cleanup"));
-        Assert.assertTrue(mermaid.contains("End: checkout-flow"));
-
-        // Verify valid styling syntax and no invalid .style
-        Assert.assertFalse(mermaid.contains(".style"));
-        Assert.assertTrue(mermaid.contains("style stop_"));
-
-        // Verify failure route to recover and recover route to ensure
-        Assert.assertTrue(mermaid.contains("-.->|on failure| node_"));
-        Assert.assertTrue(mermaid.contains("[\"Recover: on-failure\"]"));
-        Assert.assertTrue(mermaid.contains("[\"Ensure: cleanup\"]"));
-        Assert.assertTrue(mermaid.contains("End: checkout-flow"));
+    public static final class Echo implements Operation<String, String> {
+        @Override
+        public Outcome<String> execute(OperationContext context, String input) {
+            return Outcome.accepted(input);
+        }
     }
 
-    @Test
-    public void mermaid_recoverOnlyOnFailure_normalBypasses_noEnsure() {
-        Flow<String, String> flow = Flows.<String>begin("rec-no-ens")
-                .step("step-a", in -> in)
-                .step("step-b", in -> in)
-                .recover("fallback", (in, f) -> FlowResult.succeeded("recovered"))
-                .build();
-
-        FlowDescription desc = flow.describe();
-        String mermaid = FlowGraphs.mermaid().render(desc);
-
-        // Find node IDs
-        Pattern stepBPattern = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Step: step-b\"\\]");
-        Matcher stepBMatcher = stepBPattern.matcher(mermaid);
-        Assert.assertTrue(stepBMatcher.find());
-        String stepBId = stepBMatcher.group(1);
-
-        Pattern recPattern = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Recover: fallback\"\\]");
-        Matcher recMatcher = recPattern.matcher(mermaid);
-        Assert.assertTrue(recMatcher.find());
-        String recId = recMatcher.group(1);
-
-        Pattern endPattern = Pattern.compile("(end_\\d+)\\(");
-        Matcher endMatcher = endPattern.matcher(mermaid);
-        Assert.assertTrue(endMatcher.find());
-        String endId = endMatcher.group(1);
-
-        // Normal success bypasses recover and reaches End.
-        Assert.assertTrue(mermaid.contains(stepBId + " --> " + endId));
-
-        // Every body failure can enter recover; recovered success reaches End through
-        // an outcome-specific gateway.
-        Assert.assertTrue(mermaid.contains(stepBId + " -.->|on failure| " + recId));
-        Assert.assertTrue(pathExists(mermaid, recId, endId));
-
-        // Normal flow must not enter recover.
-        Assert.assertFalse(mermaid.contains(stepBId + " --> " + recId));
+    public static final class Select implements Operation<String, String> {
+        @Override
+        public Outcome<String> execute(OperationContext context, String input) {
+            return Outcome.accepted(input);
+        }
     }
 
-    @Test
-    public void mermaid_ensureOnEveryTerminalOutcome() {
-        Flow<String, String> flow = Flows.<String>begin("ens-all-paths")
-                .guard("guard-check", in -> true, in -> StopReason.of("REJECTED"))
-                .step("do-work", in -> in)
-                .recover("on-err", (in, f) -> FlowResult.succeeded("ok"))
-                .ensure("always-cleanup", (in, c) -> {})
-                .build();
-
-        FlowDescription desc = flow.describe();
-        String mermaid = FlowGraphs.mermaid().render(desc);
-
-        Pattern workPattern = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Step: do-work\"\\]");
-        Matcher workMatcher = workPattern.matcher(mermaid);
-        Assert.assertTrue(workMatcher.find());
-        String workId = workMatcher.group(1);
-
-        Pattern recPattern = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Recover: on-err\"\\]");
-        Matcher recMatcher = recPattern.matcher(mermaid);
-        Assert.assertTrue(recMatcher.find());
-        String recId = recMatcher.group(1);
-
-        String successEnsureId = findProcessNodeId(mermaid, "Ensure: always-cleanup");
-        String stoppedEnsureId = findProcessNodeId(mermaid, "Ensure: always-cleanup [stopped]");
-
-        Pattern stopPattern = Pattern.compile("(stop_\\d+)\\(\\[\"STOPPED\"\\]\\)");
-        Matcher stopMatcher = stopPattern.matcher(mermaid);
-        Assert.assertTrue(stopMatcher.find());
-        String stopId = stopMatcher.group(1);
-
-        Pattern endPattern = Pattern.compile("(end_\\d+)\\(");
-        Matcher endMatcher = endPattern.matcher(mermaid);
-        Assert.assertTrue(endMatcher.find());
-        String endId = endMatcher.group(1);
-
-        // Success and stopped outcomes use distinct ensure lanes. This keeps a
-        // stopped path from becoming reachable to the success End.
-        Assert.assertTrue(mermaid.contains(workId + " -->|success| " + successEnsureId));
-        Assert.assertTrue(mermaid.contains(workId + " -.->|on failure| " + recId));
-        Assert.assertTrue(pathExists(mermaid, recId, successEnsureId));
-        Assert.assertTrue(mermaid.contains(stopId + " -->|stopped| " + stoppedEnsureId));
-        Assert.assertTrue(pathExists(mermaid, successEnsureId, endId));
-        Assert.assertFalse(pathExists(mermaid, stopId, endId));
+    /** 返回 Object 路由键的 selector，用于测试任意类型 route key 的稳定渲染。 */
+    public static final class ObjectSelect implements Operation<String, Object> {
+        @Override
+        public Outcome<Object> execute(OperationContext context, String input) {
+            return Outcome.accepted((Object) input);
+        }
     }
 
-    @Test
-    public void mermaid_guardStoppedWithoutEnsure_isTerminal() {
-        Flow<String, String> flow = Flows.<String>begin("guard-standalone")
-                .guard("g-check", in -> true, in -> StopReason.of("HALT"))
-                .step("after-guard", in -> in)
-                .build();
+    /** 非 final 用户类型，重写 toString 并计数，断言渲染器从不调用它。 */
+    public static final class CountingKey {
+        final String secret;
+        int toStringCalls;
 
-        FlowDescription desc = flow.describe();
-        String mermaid = FlowGraphs.mermaid().render(desc);
+        CountingKey(String secret) {
+            this.secret = secret;
+        }
 
-        Pattern stopPattern = Pattern.compile("(stop_\\d+)\\(\\[\"STOPPED\"\\]\\)");
-        Matcher stopMatcher = stopPattern.matcher(mermaid);
-        Assert.assertTrue(stopMatcher.find());
-        String stopId = stopMatcher.group(1);
-
-        // Valid style directive emitted
-        Assert.assertTrue(mermaid.contains("style " + stopId + " fill:#f9f,stroke:#333"));
-        Assert.assertFalse(mermaid.contains(stopId + "([\"STOPPED\"]).style"));
-
-        // Stopped node is terminal without ensure, does not connect to end
-        Assert.assertFalse(mermaid.contains(stopId + " --> end_"));
+        @Override
+        public String toString() {
+            toStringCalls++;
+            return "COUNTING-" + secret;
+        }
     }
 
-    @Test
-    public void mermaid_chooseWithBranchesOtherwiseAndOtherwiseStop() {
-        // Choose with regular branches and otherwise flow
-        Flow<String, String> flowWithOtherwise = Flows.<String>begin("choose-otherwise")
-                .choose("route", in -> in)
-                    .when("X", Flows.step("step-x", in -> in))
-                    .otherwise(Flows.step("step-default", in -> in))
-                .end()
-                .build();
-
-        String mermaid1 = FlowGraphs.mermaid().render(flowWithOtherwise.describe());
-        Assert.assertTrue(mermaid1.contains("-->|\"X\"|"));
-        Assert.assertTrue(mermaid1.contains("-->|otherwise|"));
-        Assert.assertTrue(mermaid1.contains("[\"Step: step-x\"]"));
-        Assert.assertTrue(mermaid1.contains("[\"Step: step-default\"]"));
-
-        // Choose with otherwiseStop and ensure
-        Flow<String, String> flowWithOtherwiseStop = Flows.<String>begin("choose-stop-ens")
-                .choose("route", in -> in)
-                    .when("A", Flows.step("step-a", in -> in))
-                    .otherwiseStop(in -> StopReason.of("UNKNOWN"))
-                .end()
-                .ensure("clean", (in, c) -> {})
-                .build();
-
-        String mermaid2 = FlowGraphs.mermaid().render(flowWithOtherwiseStop.describe());
-        Assert.assertTrue(mermaid2.contains("-->|otherwise| stop_"));
-        Assert.assertTrue(mermaid2.contains("style stop_"));
-
-        Pattern stopPat = Pattern.compile("(stop_\\d+)\\(\\[\"STOPPED\"\\]\\)");
-        Matcher stopMat = stopPat.matcher(mermaid2);
-        Assert.assertTrue(stopMat.find());
-        String stopId = stopMat.group(1);
-
-        String stoppedEnsureId = findProcessNodeId(mermaid2, "Ensure: clean [stopped]");
-        Assert.assertTrue(mermaid2.contains(stopId + " -->|stopped| " + stoppedEnsureId));
+    public static final class TestPolicy implements Policy<String> {
+        @Override
+        public Gate before(PolicyContext context, String key) {
+            return Gate.proceed();
+        }
     }
 
-    @Test
-    public void mermaid_selectorLabelsWithSpecialCharacters() {
-        Flow<String, String> flow = Flows.<String>begin("special-choose")
-                .choose("selector", in -> in)
-                    .when("CARD|WALLET", Flows.step("step-multi", in -> in))
-                    .when("TYPE\"A\"", Flows.step("step-quote", in -> in))
-                    .when("LINE1\nLINE2", Flows.step("step-nl", in -> in))
-                .end()
-                .build();
+    public static final class TestPersistentPolicy implements PersistentPolicy<String, String> {
+        @Override
+        public String initialState(String key) {
+            return key;
+        }
 
-        String mermaid = FlowGraphs.mermaid().render(flow.describe());
+        @Override
+        public Before<String> before(PolicyContext context, String key, String state) {
+            return null;
+        }
 
-        // Vertical bar escaped in edge label
-        Assert.assertTrue(mermaid.contains("CARD#124;WALLET"));
-        // Quote escaped in edge label
-        Assert.assertTrue(mermaid.contains("TYPE#quot;A#quot;"));
-        // Newline converted in edge label
-        Assert.assertTrue(mermaid.contains("LINE1<br/>LINE2"));
-    }
-
-    @Test
-    public void mermaid_escapesSpecialCharactersInLabelsAndIds() {
-        Flow<String, String> flow = Flows.<String>begin("test\"flow<special>\\path\nline2")
-                .step("step\"with[quotes]&brackets\\and\nnewlines", in -> in)
-                .build();
-
-        FlowDescription desc = flow.describe();
-        String mermaid = FlowGraphs.mermaid().render(desc);
-
-        Assert.assertFalse(mermaid.contains("\"step\"with"));
-        Assert.assertTrue(mermaid.contains("#quot;"));
-        Assert.assertTrue(mermaid.contains("#92;"));
-        Assert.assertTrue(mermaid.contains("<br/>"));
-        // Verify no raw multi-line breaks in node text that would corrupt syntax
-        for (String line : mermaid.split("\n")) {
-            if (line.contains("[\"") || line.contains("([\"") || line.contains("{\"")) {
-                Assert.assertTrue("Line must be properly terminated: " + line,
-                        line.endsWith("\"]") || line.endsWith("\"]\n") ||
-                        line.endsWith("\"])") || line.endsWith("\"])\n") ||
-                        line.endsWith("\"}") || line.endsWith("\"}\n"));
-            }
+        @Override
+        public After<String> after(PolicyContext context, String key, String state,
+                                    Completion completion) {
+            return null;
         }
     }
 
     @Test
-    public void mermaid_repeatedNodeIdsInDifferentScopes_noCollisions() {
-        Flow<String, String> subflow1 = Flows.<String>begin("sub1")
-                .step("calc", in -> in)
-                .build();
+    public void rendersAllEightDescriptionKinds() {
+        Branch<String, String> left = Branch.of("left", Flow.accepted("left-value"));
+        Branch<String, String> right = Branch.of("right", Flow.skipped(reason("RIGHT_SKIP")));
+        Flow<String, String> parallel = Flow.parallel(left, right)
+                .join(results -> Outcome.accepted("joined"));
+        Flow<String, String> route = Flow.route(Select.class, "selector-q")
+                .caseOf("A", Flow.accepted("a"))
+                .otherwise(Flow.rejected(reason("OTHER")));
+        Flow<String, ?> flow = Flow.scope("root-scope",
+                Flow.<String, String>step(Echo.class, "operation-q")
+                        .then(route)
+                        .then(Flow.firstApplicable(
+                                Flow.skipped(reason("SKIP")), Flow.accepted("usable")))
+                        .then(parallel)
+                        .retry(Retry.maxAttempts(2))
+                        .timeout(Duration.ofSeconds(3))
+                        .recoverWith(Flow.accepted("recovered")))
+                .await(ResumePoint.<String>named("approval"))
+                .named("all-kinds");
 
-        Flow<String, String> subflow2 = Flows.<String>begin("sub2")
-                .step("calc", in -> in)
-                .build();
+        String text = FlowGraphs.text().render(flow.describe("all-eight"));
+        for (String kind : new String[] {"INVOKE", "SEQUENCE", "ROUTE", "FALLBACK",
+                "PARALLEL", "AWAIT", "CONTROL", "COMPLETE"}) {
+            Assert.assertTrue("Missing " + kind + "\n" + text, text.contains("kind=" + kind));
+        }
+        Assert.assertTrue(text.contains("scope=\"root-scope\""));
+        Assert.assertTrue(text.contains("binding=OPERATION contract=" + Select.class.getName()));
+        Assert.assertTrue(text.contains("qualifier=\"selector-q\""));
+        Assert.assertTrue(text.contains("resume=\"approval\""));
+    }
 
-        Flow<String, String> flow = Flows.<String>begin("scope-test")
-                .step("calc", in -> in)
-                .choose("choice", in -> in)
-                    .when("A", Flows.step("calc", in -> in))
-                    .when("B", Flows.step("calc", in -> in))
-                .end()
-                .then(subflow1)
-                .then(subflow2)
-                .build();
+    @Test
+    public void mermaidHasFourIsolatedCompletionChannelsAndLifecycleTerminals() {
+        String graph = FlowGraphs.mermaid().render(Flow.<String, String>step(Echo.class)
+                .describe("channels"));
 
-        FlowDescription desc = flow.describe();
-        String mermaid = FlowGraphs.mermaid().render(desc);
+        for (String channel : new String[] {"accepted", "rejected", "skipped", "failed"}) {
+            Assert.assertTrue(graph.contains("terminal_" + channel + "([\"COMPLETED &#124; "
+                    + channel.toUpperCase() + "\"])"));
+        }
+        Assert.assertTrue(graph.contains("terminal_suspended([\"SUSPENDED\"])"));
+        Assert.assertTrue(graph.contains("terminal_cancelled([\"CANCELLED\"])"));
+        Assert.assertTrue(graph.contains("|ACCEPTED| terminal_accepted"));
+        Assert.assertTrue(graph.contains("|REJECTED| terminal_rejected"));
+        Assert.assertTrue(graph.contains("|SKIPPED| terminal_skipped"));
+        Assert.assertTrue(graph.contains("|FAILED| terminal_failed"));
+        Assert.assertFalse(graph.contains("|REJECTED| terminal_accepted"));
+        Assert.assertFalse(graph.contains("|SKIPPED| terminal_accepted"));
+        Assert.assertFalse(graph.contains("|FAILED| terminal_accepted"));
+        Assert.assertTrue(graph.contains("flow_start -.->|CANCELLED| terminal_cancelled"));
+    }
 
-        // Collect all declared node IDs in flowchart
-        Pattern declPattern = Pattern.compile("^\\s*([a-zA-Z0-9_]+)\\[\"Step: calc\"\\]", Pattern.MULTILINE);
-        Matcher matcher = declPattern.matcher(mermaid);
-        Set<String> declaredIds = new HashSet<>();
+    @Test
+    public void sequenceAdvancesOnlyAccepted() {
+        String graph = FlowGraphs.mermaid().render(Flow.<String, String>step(Echo.class)
+                .then(Echo.class).describe("sequence"));
+
+        Assert.assertEquals(1, occurrences(graph, "-->|ACCEPTED| n"));
+        Assert.assertFalse(graph.contains("-->|REJECTED| n"));
+        Assert.assertFalse(graph.contains("-.->|SKIPPED| n"));
+        Assert.assertFalse(graph.contains("-.->|FAILED| n"));
+    }
+
+    @Test
+    public void fallbackRoutesOnlyItsConfiguredTrigger() {
+        String firstApplicable = FlowGraphs.mermaid().render(Flow.firstApplicable(
+                Flow.<String, String>skipped(reason("FIRST")), Flow.accepted("second"))
+                .describe("first-applicable"));
+        Assert.assertTrue(firstApplicable.contains("firstApplicable"));
+        Assert.assertTrue(firstApplicable.contains("SKIPPED &#124; next applicable"));
+        Assert.assertFalse(firstApplicable.contains("FAILED &#124; next applicable"));
+
+        String recover = FlowGraphs.mermaid().render(Flow.<String, String>failed(
+                Failure.of("BROKEN", "broken")).recoverWith(Flow.accepted("fixed"))
+                .describe("recover"));
+        Assert.assertTrue(recover.contains("recoverWith"));
+        Assert.assertTrue(recover.contains("FAILED &#124; recover"));
+        Assert.assertFalse(recover.contains("SKIPPED &#124; recover"));
+        Assert.assertFalse(recover.contains("REJECTED &#124; recover"));
+    }
+
+    @Test
+    public void routeRendersCasesOtherwiseAndNoMatchSkipped() {
+        Flow<String, String> withOtherwise = Flow.route(Select.class)
+                .caseOf("A|B", Flow.accepted("case"))
+                .otherwise(Flow.rejected(reason("DEFAULT")));
+        String otherwise = FlowGraphs.mermaid().render(withOtherwise.describe("otherwise"));
+        Assert.assertTrue(otherwise.contains("case=A&#124;B"));
+        Assert.assertTrue(otherwise.contains("ACCEPTED &#124; otherwise"));
+        Assert.assertFalse(otherwise.contains("NO MATCH &#124; SKIPPED"));
+
+        Flow<String, String> withoutOtherwise = Flow.route(Select.class)
+                .caseOf("A", Flow.accepted("case"))
+                .withoutOtherwise();
+        String noMatch = FlowGraphs.mermaid().render(withoutOtherwise.describe("no-match"));
+        Assert.assertTrue(noMatch.contains("no-match=SKIPPED"));
+        Assert.assertTrue(noMatch.contains("NO MATCH &#124; SKIPPED"));
+        Assert.assertTrue(noMatch.contains("ACCEPTED &#124; no match"));
+        Assert.assertTrue(noMatch.contains("|SKIPPED| terminal_skipped"));
+    }
+
+    @Test
+    public void parallelShowsBranchTokensWaitAllAndExplicitJoin() {
+        Flow<String, String> flow = Flow.parallel(
+                Branch.of("left|token", Flow.<String, String>accepted("left")),
+                Branch.of("right", Flow.<String, String>failed(Failure.of("R", "right"))))
+                .join(results -> Outcome.accepted("joined"));
+        String graph = FlowGraphs.mermaid().render(flow.describe("parallel"));
+
+        Assert.assertTrue(graph.contains("branch=left&#124;token"));
+        Assert.assertTrue(graph.contains("BRANCH COMPLETE &#124; token=left&#124;token"));
+        Assert.assertTrue(graph.contains("BRANCH COMPLETE &#124; token=right"));
+        Assert.assertEquals(2, occurrences(graph, "|wait-all|"));
+        Assert.assertTrue(graph.contains("WAIT ALL &#124; branches=2"));
+        Assert.assertTrue(graph.contains("JOIN &#124; static outcome contract"));
+        Assert.assertTrue(graph.contains("|all branches complete|"));
+    }
+
+    @Test
+    public void awaitShowsSuspendedResumedAndCancellationLifecycle() {
+        String graph = FlowGraphs.mermaid().render(Flow.<String>identity()
+                .await(ResumePoint.<String>named("manual-review"))
+                .describe("await"));
+
+        Assert.assertTrue(graph.contains("SUSPENDED &#124; resume=manual-review"));
+        Assert.assertTrue(graph.contains("RESUMED &#124; resume=manual-review"));
+        Assert.assertTrue(graph.contains("|resume signal|"));
+        Assert.assertTrue(graph.contains("|SUSPENDED| terminal_suspended"));
+        Assert.assertTrue(graph.contains("|CANCELLED| terminal_cancelled"));
+    }
+
+    @Test
+    public void rendersAllControlKindsAndConfigurationTypesWithoutValues() {
+        FlowDescription retry = Flow.<String, String>step(Echo.class).retry(
+                Retry.maxAttempts(7).withBackoff(Duration.ofSeconds(11))).describe("retry");
+        FlowDescription timeout = Flow.<String>identity().timeout(
+                Duration.ofSeconds(29)).describe("timeout");
+        FlowDescription policy = Flow.<String>identity().policy(
+                TestPolicy.class, "policy-q", value -> value).describe("policy");
+        FlowDescription persistent = Flow.<String>identity().persistentPolicy(
+                TestPersistentPolicy.class, "persistent-q", value -> value).describe("persistent");
+
+        String text = FlowGraphs.text().render(retry)
+                + FlowGraphs.text().render(timeout)
+                + FlowGraphs.text().render(policy)
+                + FlowGraphs.text().render(persistent);
+        Assert.assertTrue(text.contains("control=RETRY config=maxAttempts=7,backoff=11s0ns"));
+        Assert.assertTrue(text.contains("control=TIMEOUT config=timeout=29s0ns"));
+        Assert.assertTrue(text.contains("control=POLICY config=<none>"));
+        Assert.assertTrue(text.contains("control=PERSISTENT_POLICY config=<none>"));
+        Assert.assertTrue(text.contains("contract=" + TestPolicy.class.getName()
+                + " qualifier=\"policy-q\""));
+        Assert.assertFalse(text.contains("PT11S"));
+        Assert.assertFalse(text.contains("PT29S"));
+
+        String retryGraph = FlowGraphs.mermaid().render(retry);
+        Assert.assertTrue(retryGraph.contains("FAILED &#124; retry while configured"));
+        Assert.assertTrue(retryGraph.contains(
+                "control=RETRY &#124; config=maxAttempts=7,backoff=11s0ns"));
+        String timeoutGraph = FlowGraphs.mermaid().render(timeout);
+        Assert.assertTrue(timeoutGraph.contains("config=timeout=29s0ns"));
+    }
+
+    @Test
+    public void completeNodesExposeIdentityAndEachFixedOutcomeWithoutValues() {
+        FlowDescription[] descriptions = new FlowDescription[] {
+                Flow.<String>identity().describe("identity"),
+                Flow.<String, String>accepted("SECRET_OUTPUT").describe("accepted"),
+                Flow.<String, String>rejected(reason("SECRET_REJECT")).describe("rejected"),
+                Flow.<String, String>skipped(reason("SECRET_SKIP")).describe("skipped"),
+                Flow.<String, String>failed(Failure.of("SECRET_FAIL", "secret"))
+                        .describe("failed")
+        };
+        StringBuilder text = new StringBuilder();
+        for (FlowDescription description : descriptions) {
+            text.append(FlowGraphs.text().render(description));
+        }
+        for (String completion : new String[] {"IDENTITY", "ACCEPTED", "REJECTED", "SKIPPED", "FAILED"}) {
+            Assert.assertTrue(text.toString().contains("complete=" + completion));
+        }
+        Assert.assertFalse(text.toString().contains("SECRET_"));
+    }
+
+    @Test
+    public void safelyEscapesMetadataRouteKeysAndMermaidSyntax() {
+        String hostile = "quote\" slash\\ newline\npipe| []{}()<>`&";
+        Flow<String, String> flow = Flow.route(Select.class, hostile)
+                .caseOf(hostile, Flow.<String, String>accepted("hidden"))
+                .withoutOtherwise()
+                .named(hostile);
+        String graph = FlowGraphs.mermaid().render(flow.describe(hostile));
+        String text = FlowGraphs.text().render(flow.describe(hostile));
+
+        Assert.assertTrue(graph.contains("&quot;"));
+        Assert.assertTrue(graph.contains("&#92;"));
+        Assert.assertTrue(graph.contains("<br/>"));
+        Assert.assertTrue(graph.contains("&#124;"));
+        Assert.assertTrue(graph.contains("&#91;"));
+        Assert.assertTrue(graph.contains("&#123;"));
+        Assert.assertTrue(graph.contains("&#40;"));
+        Assert.assertTrue(graph.contains("&lt;&gt;&#96;&amp;"));
+        Assert.assertFalse(graph.contains("newline\npipe"));
+        Assert.assertTrue(text.contains("quote\\\" slash\\\\ newline\\npipe\\|"));
+        Assert.assertFalse(text.contains("hidden"));
+    }
+
+    @Test
+    public void repeatedLabelsHaveCollisionFreeIdsAndRenderingIsDeterministic() {
+        Flow<String, String> repeated = Flow.<String, String>step(Echo.class).named("same")
+                .then(Flow.<String, String>step(Echo.class).named("same"))
+                .then(Flow.<String, String>step(Echo.class).named("same"));
+        FlowDescription description = repeated.describe("deterministic");
+        String first = FlowGraphs.mermaid().render(description);
+        String second = FlowGraphs.mermaid().render(description);
+        Assert.assertEquals(first, second);
+        Assert.assertFalse(first.contains("Lambda"));
+        Assert.assertFalse(first.matches("(?s).*@[0-9a-fA-F]{4,}.*"));
+
+        Matcher declarations = Pattern.compile("^\\s*(n\\d+)(?:\\[|\\{|\\()", Pattern.MULTILINE)
+                .matcher(first);
+        Set<String> ids = new HashSet<String>();
         int count = 0;
-        while (matcher.find()) {
-            String id = matcher.group(1);
-            boolean added = declaredIds.add(id);
-            Assert.assertTrue("Node ID must be unique: " + id, added);
+        while (declarations.find()) {
             count++;
+            Assert.assertTrue("Duplicate Mermaid id " + declarations.group(1),
+                    ids.add(declarations.group(1)));
         }
-        // There should be 5 distinct "calc" step nodes (main, branch A, branch B, subflow1, subflow2)
-        Assert.assertEquals(5, count);
-        Assert.assertEquals(5, declaredIds.size());
+        Assert.assertTrue(count >= 4);
+        Assert.assertEquals(3, occurrences(first, "label=same"));
     }
 
     @Test
-    public void mermaid_nestedSubflows() {
-        Flow<String, String> innerSub = Flows.<String>begin("inner-sub")
-                .step("inner-step", in -> in)
-                .build();
+    public void textIsCompactAndOmitsRouteBusinessConstantsAndImplementations() {
+        Flow<String, String> flow = Flow.route(Select.class, "route-q")
+                .caseOf("SECRET_CASE_VALUE", Flow.<String, String>accepted("SECRET_OUTPUT"))
+                .withoutOtherwise();
+        String text = FlowGraphs.text().render(flow.describe("compact"));
 
-        Flow<String, String> outerSub = Flows.<String>begin("outer-sub")
-                .step("outer-step-1", in -> in)
-                .then(innerSub)
-                .step("outer-step-2", in -> in)
-                .build();
-
-        Flow<String, String> mainFlow = Flows.<String>begin("main-flow")
-                .step("main-start", in -> in)
-                .then(outerSub)
-                .step("main-end", in -> in)
-                .build();
-
-        String mermaid = FlowGraphs.mermaid().render(mainFlow.describe());
-
-        Assert.assertTrue(mermaid.contains("Subflow: outer-sub"));
-        Assert.assertTrue(mermaid.contains("Subflow: inner-sub"));
-        Assert.assertTrue(mermaid.contains("Step: inner-step"));
-        Assert.assertTrue(mermaid.contains("Step: outer-step-1"));
-        Assert.assertTrue(mermaid.contains("Step: outer-step-2"));
-        Assert.assertTrue(mermaid.contains("Step: main-start"));
-        Assert.assertTrue(mermaid.contains("Step: main-end"));
-    }
-
-    @Test
-    public void mermaid_nestedSubflowEnsureAndParentEnsure() {
-        Flow<String, String> subflow = Flows.<String>begin("sub-with-ensure")
-                .guard("sub-guard", in -> true, in -> StopReason.of("SUB_STOP"))
-                .step("sub-work", in -> in)
-                .ensure("sub-cleanup", (in, c) -> {})
-                .build();
-
-        Flow<String, String> mainFlow = Flows.<String>begin("main-with-ensure")
-                .step("main-start", in -> in)
-                .then(subflow)
-                .step("main-after", in -> in)
-                .ensure("main-cleanup", (in, c) -> {})
-                .build();
-
-        String mermaid = FlowGraphs.mermaid().render(mainFlow.describe());
-
-        Pattern subGuardPat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\{\"Guard: sub-guard\"\\}");
-        Matcher subGuardMat = subGuardPat.matcher(mermaid);
-        Assert.assertTrue(subGuardMat.find());
-        String subGuardId = subGuardMat.group(1);
-
-        Pattern subStopPat = Pattern.compile("(stop_\\d+)\\(\\[\"STOPPED\"\\]\\)");
-        Matcher subStopMat = subStopPat.matcher(mermaid);
-        Assert.assertTrue(subStopMat.find());
-        String subStopId = subStopMat.group(1);
-
-        String subSuccessEnsureId = findProcessNodeId(mermaid, "Ensure: sub-cleanup");
-        String subStoppedEnsureId = findProcessNodeId(mermaid, "Ensure: sub-cleanup [stopped]");
-        String mainStoppedEnsureId = findProcessNodeId(mermaid, "Ensure: main-cleanup [stopped]");
-
-        Pattern mainAfterPat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Step: main-after\"\\]");
-        Matcher mainAfterMat = mainAfterPat.matcher(mermaid);
-        Assert.assertTrue(mainAfterMat.find());
-        String mainAfterId = mainAfterMat.group(1);
-
-        Assert.assertTrue(mermaid.contains(subGuardId + " -->|stopped| " + subStopId));
-        Assert.assertTrue(mermaid.contains(subStopId + " -->|stopped| " + subStoppedEnsureId));
-
-        // Stopped and success outcomes leave the subflow through distinct lanes.
-        Assert.assertTrue(pathExists(mermaid, subStoppedEnsureId, mainStoppedEnsureId));
-        Assert.assertTrue(pathExists(mermaid, subSuccessEnsureId, mainAfterId));
-        Assert.assertFalse(pathExists(mermaid, subStopId, mainAfterId));
-        Assert.assertFalse(pathExists(mermaid, subStopId, findEndId(mermaid)));
-    }
-
-    @Test
-    public void mermaid_nestedRecoverWithoutEnsure_convergesToContinuation() {
-        Flow<String, String> subflow = Flows.<String>begin("sub-rec-only")
-                .step("sub-step", in -> in)
-                .recover("sub-fallback", (in, f) -> FlowResult.succeeded("rec-ok"))
-                .build();
-
-        Flow<String, String> mainFlow = Flows.<String>begin("main-seq")
-                .step("before-sub", in -> in)
-                .then(subflow)
-                .step("after-sub", in -> in)
-                .build();
-
-        String mermaid = FlowGraphs.mermaid().render(mainFlow.describe());
-
-        Pattern beforePat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Step: before-sub\"\\]");
-        Matcher beforeMat = beforePat.matcher(mermaid);
-        Assert.assertTrue(beforeMat.find());
-        String beforeId = beforeMat.group(1);
-
-        Pattern subStepPat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Step: sub-step\"\\]");
-        Matcher subStepMat = subStepPat.matcher(mermaid);
-        Assert.assertTrue(subStepMat.find());
-        String subStepId = subStepMat.group(1);
-
-        Pattern subRecPat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Recover: sub-fallback\"\\]");
-        Matcher subRecMat = subRecPat.matcher(mermaid);
-        Assert.assertTrue(subRecMat.find());
-        String subRecId = subRecMat.group(1);
-
-        Pattern afterPat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Step: after-sub\"\\]");
-        Matcher afterMat = afterPat.matcher(mermaid);
-        Assert.assertTrue(afterMat.find());
-        String afterId = afterMat.group(1);
-
-        // 1. Entry into subflow
-        Assert.assertTrue(mermaid.contains(beforeId + " --> " + subStepId));
-
-        // 2. Failure edge to recover inside subflow
-        Assert.assertTrue(mermaid.contains(subStepId + " -.->|on failure| " + subRecId));
-
-        // Normal and recovered success converge on the continuation through
-        // distinct recover outcome gateways.
-        Assert.assertTrue(mermaid.contains(subStepId + " --> " + afterId));
-        Assert.assertTrue(pathExists(mermaid, subRecId, afterId));
-        Assert.assertFalse(mermaid.contains(subStepId + " --> " + subRecId));
-    }
-
-    @Test
-    public void mermaid_branchGuardStop_routesToParentEnsureAndBypassesContinuation() {
-        Flow<String, String> flow = Flows.<String>begin("branch-guard-flow")
-                .choose("branch-selector", in -> in)
-                    .when("FAST", Flows.step("fast-step", in -> in))
-                    .when("SECURE", Flows.<String>begin("secure-branch")
-                            .guard("sec-guard", in -> true, in -> StopReason.of("UNAUTHORIZED"))
-                            .step("sec-step", in -> in)
-                            .build())
-                .end()
-                .step("after-choose", in -> in)
-                .ensure("audit-clean", (in, c) -> {})
-                .build();
-
-        String mermaid = FlowGraphs.mermaid().render(flow.describe());
-
-        Pattern stopPat = Pattern.compile("(stop_\\d+)\\(\\[\"STOPPED\"\\]\\)");
-        Matcher stopMat = stopPat.matcher(mermaid);
-        Assert.assertTrue(stopMat.find());
-        String stopId = stopMat.group(1);
-
-        String stoppedEnsureId = findProcessNodeId(mermaid, "Ensure: audit-clean [stopped]");
-
-        Pattern joinPat = Pattern.compile("(join_\\d+)\\(\\(\\s*\\)\\)");
-        Matcher joinMat = joinPat.matcher(mermaid);
-        Assert.assertTrue(joinMat.find());
-        String joinId = joinMat.group(1);
-
-        Pattern afterPat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Step: after-choose\"\\]");
-        Matcher afterMat = afterPat.matcher(mermaid);
-        Assert.assertTrue(afterMat.find());
-        String afterId = afterMat.group(1);
-
-        Pattern secStepPat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Step: sec-step\"\\]");
-        Matcher secStepMat = secStepPat.matcher(mermaid);
-        Assert.assertTrue(secStepMat.find());
-        String secStepId = secStepMat.group(1);
-
-        Assert.assertTrue(pathExists(mermaid, stopId, stoppedEnsureId));
-        Assert.assertTrue(mermaid.contains(joinId + " --> " + afterId));
-        Assert.assertFalse(pathExists(mermaid, stopId, joinId));
-        Assert.assertFalse(pathExists(mermaid, stopId, afterId));
-        Assert.assertFalse(pathExists(mermaid, stopId, secStepId));
-    }
-
-    @Test
-    public void mermaid_failureFromEarlyBodyNode_routesToRecover() {
-        Flow<String, String> flow = Flows.<String>begin("multi-step-recover")
-                .step("step-1", in -> in)
-                .step("step-2", in -> in)
-                .step("step-3", in -> in)
-                .recover("handle-err", (in, f) -> FlowResult.succeeded("recovered"))
-                .ensure("clean-all", (in, c) -> {})
-                .build();
-
-        String mermaid = FlowGraphs.mermaid().render(flow.describe());
-
-        Pattern step1Pat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Step: step-1\"\\]");
-        Matcher step1Mat = step1Pat.matcher(mermaid);
-        Assert.assertTrue(step1Mat.find());
-        String step1Id = step1Mat.group(1);
-
-        Pattern step2Pat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Step: step-2\"\\]");
-        Matcher step2Mat = step2Pat.matcher(mermaid);
-        Assert.assertTrue(step2Mat.find());
-        String step2Id = step2Mat.group(1);
-
-        Pattern step3Pat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Step: step-3\"\\]");
-        Matcher step3Mat = step3Pat.matcher(mermaid);
-        Assert.assertTrue(step3Mat.find());
-        String step3Id = step3Mat.group(1);
-
-        Pattern recPat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Recover: handle-err\"\\]");
-        Matcher recMat = recPat.matcher(mermaid);
-        Assert.assertTrue(recMat.find());
-        String recId = recMat.group(1);
-
-        String successEnsureId = findProcessNodeId(mermaid, "Ensure: clean-all");
-
-        // Sequential normal execution reaches the success ensure lane.
-        Assert.assertTrue(mermaid.contains(step1Id + " --> " + step2Id));
-        Assert.assertTrue(mermaid.contains(step2Id + " --> " + step3Id));
-        Assert.assertTrue(mermaid.contains(step3Id + " -->|success| " + successEnsureId));
-
-        // 2. Early and late body nodes route failure to recover
-        Assert.assertTrue(mermaid.contains(step1Id + " -.->|on failure| " + recId));
-        Assert.assertTrue(mermaid.contains(step2Id + " -.->|on failure| " + recId));
-        Assert.assertTrue(mermaid.contains(step3Id + " -.->|on failure| " + recId));
-
-        // Recovered success reaches the success ensure lane.
-        Assert.assertTrue(pathExists(mermaid, recId, successEnsureId));
-
-        // 4. Absence: no normal success edges from steps to recover
-        Assert.assertFalse(mermaid.contains(step1Id + " --> " + recId));
-        Assert.assertFalse(mermaid.contains(step2Id + " --> " + recId));
-        Assert.assertFalse(mermaid.contains(step3Id + " --> " + recId));
-    }
-
-    @Test
-    public void mermaid_repeatedScopesAndNodes_noCollisionsOrSpuriousEdges() {
-        Flow<String, String> reusableSub = Flows.<String>begin("shared-sub")
-                .guard("check", in -> true, in -> StopReason.of("STOPPED"))
-                .step("process", in -> in)
-                .ensure("sub-clean", (in, c) -> {})
-                .build();
-
-        Flow<String, String> mainFlow = Flows.<String>begin("repeated-flow")
-                .then(reusableSub)
-                .then(reusableSub)
-                .ensure("root-clean", (in, c) -> {})
-                .build();
-
-        String mermaid = FlowGraphs.mermaid().render(mainFlow.describe());
-
-        // Collect all subgraphs and ensure distinct IDs
-        Pattern subPattern = Pattern.compile("subgraph\\s+([a-zA-Z0-9_]+)");
-        Matcher subMatcher = subPattern.matcher(mermaid);
-        Set<String> subIds = new HashSet<>();
-        int subCount = 0;
-        while (subMatcher.find()) {
-            subCount++;
-            Assert.assertTrue("Subgraph ID must be unique: " + subMatcher.group(1), subIds.add(subMatcher.group(1)));
+        Assert.assertTrue(text.contains("path=\"$\" kind=ROUTE label=<none> routes=1"));
+        Assert.assertTrue(text.contains("path=\"$/selector\" kind=INVOKE"));
+        Assert.assertTrue(text.contains("contract=" + Select.class.getName()));
+        Assert.assertFalse(text.contains("implementation"));
+        Assert.assertFalse(text.contains("SECRET_CASE_VALUE"));
+        Assert.assertFalse(text.contains("SECRET_OUTPUT"));
+        for (String line : text.split("\\n")) {
+            Assert.assertFalse("Text output must stay one line per node", line.contains("\n"));
         }
-        Assert.assertEquals(2, subCount);
+    }
 
-        // Collect all process step node IDs and ensure distinct
-        Pattern processPat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Step: process\"\\]");
-        Matcher processMat = processPat.matcher(mermaid);
-        Set<String> processIds = new HashSet<>();
-        int processCount = 0;
-        while (processMat.find()) {
-            processCount++;
-            Assert.assertTrue("Process node ID must be unique: " + processMat.group(1), processIds.add(processMat.group(1)));
+    @Test
+    public void bothRenderersHandleFiveThousandNestedScopesIteratively() {
+        Flow<String, String> current = Flow.step(Echo.class);
+        for (int index = 0; index < 5000; index++) {
+            current = Flow.scope("scope-" + index, current);
         }
-        Assert.assertEquals(2, processCount);
+        FlowDescription description = current.describe("deep");
 
-        // Collect all guard STOPPED node IDs and ensure distinct
-        Pattern stopPat = Pattern.compile("(stop_\\d+)\\(\\[\"STOPPED\"\\]\\)");
-        Matcher stopMat = stopPat.matcher(mermaid);
-        Set<String> stopIds = new HashSet<>();
-        int stopCount = 0;
-        while (stopMat.find()) {
-            stopCount++;
-            Assert.assertTrue("Stop node ID must be unique: " + stopMat.group(1), stopIds.add(stopMat.group(1)));
+        String text = FlowGraphs.text().render(description);
+        Assert.assertEquals(5000, occurrences(text, " kind=SEQUENCE "));
+        Assert.assertTrue(text.contains(" kind=INVOKE "));
+        text = null;
+
+        String graph = FlowGraphs.mermaid().render(description);
+        Assert.assertEquals(5000, occurrences(graph, "SEQUENCE &#124; path="));
+        Assert.assertTrue(graph.contains("INVOKE &#124; path="));
+    }
+
+    @Test
+    public void productionDependsOnlyOnStaticDescriptionSurface() throws IOException {
+        Path sourceRoot = Paths.get(System.getProperty("basedir"), "src", "main", "java",
+                "com", "team4u", "framework", "flow", "graph");
+        Assert.assertTrue("Missing production source root: " + sourceRoot, Files.isDirectory(sourceRoot));
+        StringBuilder sources = new StringBuilder();
+        for (String file : new String[] {"FlowGraphRenderer.java", "FlowGraphs.java",
+                "MermaidFlowGraphRenderer.java", "TextFlowGraphRenderer.java"}) {
+            sources.append(new String(Files.readAllBytes(sourceRoot.resolve(file)),
+                    StandardCharsets.UTF_8));
         }
-        Assert.assertEquals(2, stopCount);
+        String code = sources.toString();
+        Assert.assertFalse(code.contains("import com.team4u.framework.flow.Flow;"));
+        Assert.assertFalse(code.contains(".project("));
+        Assert.assertFalse(code.contains("ExecutableFlowVisitor"));
+        Assert.assertFalse(code.contains("Step"));
+        Assert.assertFalse(code.contains("Guard"));
+        Assert.assertFalse(code.contains("Choose"));
+        Assert.assertFalse(code.contains("Subflow"));
+        Assert.assertFalse(code.contains("Recover"));
+        Assert.assertFalse(code.contains("Ensure"));
+        Assert.assertFalse(code.contains("STOPPED"));
+        Matcher imports = Pattern.compile("import com\\.team4u\\.framework\\.flow\\.([^;]+);")
+                .matcher(code);
+        while (imports.find()) {
+            String imported = imports.group(1);
+            Assert.assertTrue("Unexpected Core dependency: " + imported,
+                    "FlowDescription".equals(imported)
+                            || "NodeDescription".equals(imported)
+                            || "BindingDescriptor".equals(imported)
+                            || "Retry".equals(imported));
+        }
     }
 
     @Test
-    public void mermaid_nestedSubflowWithoutEnsure_parentEnsure() {
-        Flow<String, String> subflow = Flows.<String>begin("sub-no-ens")
-                .guard("sub-g", in -> true, in -> StopReason.of("STOPPED_IN_SUB"))
-                .step("sub-s", in -> in)
-                .build();
+    public void parallelBranchCancellationNeverReachesJoin() {
+        // 分支含 TIMEOUT control：分支会产生 CANCELLED/SUSPENDED 出口。
+        Flow<String, String> flow = Flow.<String>parallel(
+                Branch.of("hot", Flow.<String>identity()
+                        .timeout(Duration.ofMillis(100)).named("hot-body")),
+                Branch.of("cold", Flow.<String, String>accepted("cold")))
+                .join(results -> Outcome.accepted("joined"));
+        String graph = FlowGraphs.mermaid().render(flow.describe("parallel-cancel"));
 
-        Flow<String, String> mainFlow = Flows.<String>begin("main-with-ens")
-                .then(subflow)
-                .step("main-step", in -> in)
-                .ensure("main-ens", (in, c) -> {})
-                .build();
+        Map<String, List<String>> edges = parseEdges(graph);
+        String join = findNodeByLabel(graph, "JOIN &#124; static outcome contract");
+        Assert.assertNotNull("Missing JOIN node\n" + graph, join);
+        String cancel = findNodeByLabel(graph, "CANCEL &#124; branches=2");
+        Assert.assertNotNull("Missing CANCEL node\n" + graph, cancel);
 
-        String mermaid = FlowGraphs.mermaid().render(mainFlow.describe());
+        // join 只能经由 wait-all 的业务完成链到达。
+        Assert.assertTrue(graph.contains("|all branches complete| " + join));
+        Assert.assertFalse("CANCELLED must not flow into join: \n" + graph,
+                reaches(edges, cancel, join));
 
-        Pattern stopPat = Pattern.compile("(stop_\\d+)\\(\\[\"STOPPED\"\\]\\)");
-        Matcher stopMat = stopPat.matcher(mermaid);
-        Assert.assertTrue(stopMat.find());
-        String stopId = stopMat.group(1);
-
-        String stoppedEnsureId = findProcessNodeId(mermaid, "Ensure: main-ens [stopped]");
-
-        Pattern mainStepPat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Step: main-step\"\\]");
-        Matcher mainStepMat = mainStepPat.matcher(mermaid);
-        Assert.assertTrue(mainStepMat.find());
-        String mainStepId = mainStepMat.group(1);
-
-        Assert.assertTrue(pathExists(mermaid, stopId, stoppedEnsureId));
-        Assert.assertFalse(pathExists(mermaid, stopId, mainStepId));
-        Assert.assertFalse(pathExists(mermaid, stopId, findEndId(mermaid)));
+        // 所有标签含 CANCELLED 的节点均不可达 join。
+        for (String cancelled : findNodesByLabelContains(graph, "CANCELLED")) {
+            Assert.assertFalse("CANCELLED node " + cancelled + " reaches join: \n" + graph,
+                    reaches(edges, cancelled, join));
+        }
+        // SUSPENDED 同样不可达 join。
+        for (String suspended : findNodesByLabelContains(graph, "SUSPENDED")) {
+            Assert.assertFalse("SUSPENDED node " + suspended + " reaches join: \n" + graph,
+                    reaches(edges, suspended, join));
+        }
+        // 业务四态仍应经 BRANCH COMPLETE 汇入 wait-all→join。
+        Assert.assertEquals(2, occurrences(graph, "|wait-all|"));
+        Assert.assertTrue(graph.contains("WAIT ALL &#124; branches=2"));
+        // Parallel 自身取消经由 cancel 节点到达 CANCELLED 终结点。
+        Assert.assertTrue(graph.contains("-.->|CANCELLED| terminal_cancelled"));
     }
 
     @Test
-    public void mermaid_branchWithEnsure_routesToParentEnsure() {
-        Flow<String, String> branchFlow = Flows.<String>begin("branch-ens-flow")
-                .guard("branch-g", in -> true, in -> StopReason.of("STOP_IN_BRANCH"))
-                .step("branch-s", in -> in)
-                .ensure("branch-ens", (in, c) -> {})
-                .build();
+    public void parallelBranchCancelledExitsBypassWaitAll() {
+        // 分支直接是 CONTROL(RETRY)：其 CANCELLED 出口必须绕过 wait-all/join。
+        Flow<String, String> flow = Flow.<String>parallel(
+                Branch.of("a", Flow.<String>identity().retry(Retry.maxAttempts(2))),
+                Branch.of("b", Flow.<String>identity().retry(Retry.maxAttempts(3))))
+                .join(results -> Outcome.accepted("joined"));
+        String graph = FlowGraphs.mermaid().render(flow.describe("parallel-retry"));
 
-        Flow<String, String> mainFlow = Flows.<String>begin("main-ens-flow")
-                .choose("branch-choice", in -> in)
-                    .when("BRANCH_1", branchFlow)
-                    .otherwise(Flows.step("other-s", in -> in))
-                .end()
-                .step("after-all", in -> in)
-                .ensure("parent-ens", (in, c) -> {})
-                .build();
-
-        String mermaid = FlowGraphs.mermaid().render(mainFlow.describe());
-
-        Pattern stopPat = Pattern.compile("(stop_\\d+)\\(\\[\"STOPPED\"\\]\\)");
-        Matcher stopMat = stopPat.matcher(mermaid);
-        Assert.assertTrue(stopMat.find());
-        String stopId = stopMat.group(1);
-
-        String branchStoppedEnsureId = findProcessNodeId(mermaid, "Ensure: branch-ens [stopped]");
-        String parentStoppedEnsureId = findProcessNodeId(mermaid, "Ensure: parent-ens [stopped]");
-
-        Pattern joinPat = Pattern.compile("(join_\\d+)\\(\\(\\s*\\)\\)");
-        Matcher joinMat = joinPat.matcher(mermaid);
-        Assert.assertTrue(joinMat.find());
-        String joinId = joinMat.group(1);
-
-        Assert.assertTrue(pathExists(mermaid, stopId, branchStoppedEnsureId));
-        Assert.assertTrue(pathExists(mermaid, branchStoppedEnsureId, parentStoppedEnsureId));
-        Assert.assertFalse(pathExists(mermaid, stopId, joinId));
+        Map<String, List<String>> edges = parseEdges(graph);
+        String join = findNodeByLabel(graph, "JOIN &#124; static outcome contract");
+        for (String node : findNodesByLabelContains(graph, "CANCEL ")) {
+            Assert.assertFalse("cancel node " + node + " reaches join\n" + graph,
+                    reaches(edges, node, join));
+        }
+        Assert.assertEquals(2, occurrences(graph, "|wait-all|"));
     }
 
     @Test
-    public void mermaid_subflowFailurePropagatesToParentRecover() {
-        Flow<String, String> subflow = Flows.<String>begin("sub-fail-unhandled")
-                .step("sub-step-1", in -> in)
-                .step("sub-step-2", in -> in)
-                .build();
+    public void bigIntegerRouteKeyRendersExactlyAndOpaqueNeverCallsToString() {
+        BigInteger exact = new BigInteger("123456789012345678901234567890");
+        CountingKey counting = new CountingKey("SECRETS");
+        Flow<String, String> flow = Flow.<String, Object>route(ObjectSelect.class, "obj-q")
+                .caseOf((Object) exact, Flow.<String, String>accepted("big"))
+                .caseOf((Object) counting, Flow.<String, String>accepted("counted"))
+                .withoutOtherwise();
+        String graph = FlowGraphs.mermaid().render(flow.describe("route-keys"));
 
-        Flow<String, String> mainFlow = Flows.<String>begin("main-recover-flow")
-                .then(subflow)
-                .step("main-step-after", in -> in)
-                .recover("parent-fallback", (in, f) -> FlowResult.succeeded("handled"))
-                .build();
-
-        String mermaid = FlowGraphs.mermaid().render(mainFlow.describe());
-
-        Pattern sub1Pat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Step: sub-step-1\"\\]");
-        Matcher sub1Mat = sub1Pat.matcher(mermaid);
-        Assert.assertTrue(sub1Mat.find());
-        String sub1Id = sub1Mat.group(1);
-
-        Pattern sub2Pat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Step: sub-step-2\"\\]");
-        Matcher sub2Mat = sub2Pat.matcher(mermaid);
-        Assert.assertTrue(sub2Mat.find());
-        String sub2Id = sub2Mat.group(1);
-
-        Pattern mainStepPat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Step: main-step-after\"\\]");
-        Matcher mainStepMat = mainStepPat.matcher(mermaid);
-        Assert.assertTrue(mainStepMat.find());
-        String mainStepId = mainStepMat.group(1);
-
-        Pattern recPat = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\"Recover: parent-fallback\"\\]");
-        Matcher recMat = recPat.matcher(mermaid);
-        Assert.assertTrue(recMat.find());
-        String recId = recMat.group(1);
-
-        // 1. Both subflow steps route failure to parent recover
-        Assert.assertTrue(mermaid.contains(sub1Id + " -.->|on failure| " + recId));
-        Assert.assertTrue(mermaid.contains(sub2Id + " -.->|on failure| " + recId));
-        Assert.assertTrue(mermaid.contains(mainStepId + " -.->|on failure| " + recId));
-
-        // 2. Absence: subflow steps must not have normal success edge to recover
-        Assert.assertFalse(mermaid.contains(sub1Id + " --> " + recId));
-        Assert.assertFalse(mermaid.contains(sub2Id + " --> " + recId));
+        Assert.assertTrue("BigInteger exact value missing\n" + graph,
+                graph.contains("case=" + exact));
+        // 非 final 类型渲染为转义后的固定占位符，且不携带任何类名。
+        Assert.assertTrue(graph.contains("case=&lt;opaque&gt;"));
+        Assert.assertFalse("CountingKey class name leaked: \n" + graph,
+                graph.contains("CountingKey"));
+        Assert.assertFalse("CountingKey toString leaked: \n" + graph,
+                graph.contains("COUNTING-"));
+        Assert.assertFalse(graph.contains("SECRETS"));
+        Assert.assertEquals("toString must never be invoked", 0, counting.toStringCalls);
     }
 
     @Test
-    public void text_rendersCompleteTreeStructure() {
-        Flow<String, String> subflow = Flows.<String>begin("sub-payment")
-                .step("pay-step", in -> in)
-                .build();
+    public void lambdaRouteKeyRendersAsOpaqueWithoutLambdaClassName() {
+        java.util.function.Function<String, String> lambda = value -> value + "!";
+        Flow<String, Object> flow = Flow.<String, Object>route(ObjectSelect.class)
+                .caseOf((Object) lambda, Flow.<String, Object>accepted("hidden"))
+                .withoutOtherwise();
+        String graph = FlowGraphs.mermaid().render(flow.describe("lambda-key"));
 
-        Flow<String, String> flow = Flows.<String>begin("checkout")
-                .guard("validate-order", in -> true, in -> StopReason.of("INVALID"))
-                .tap("reserve-stock", in -> {})
-                .choose("choose-channel", in -> in)
-                    .when("CARD", Flows.tap("call-card-gateway", in -> {}))
-                    .when("WALLET", Flows.tap("call-wallet-gateway", in -> {}))
-                    .otherwiseStop(in -> StopReason.of("NO_CHANNEL"))
-                .end()
-                .then(subflow)
-                .step("build-receipt", in -> in)
-                .recover("fallback", (in, f) -> FlowResult.succeeded("rec"))
-                .ensure("cleanup-metrics", (in, c) -> {})
-                .build();
-
-        FlowDescription desc = flow.describe();
-        String text = FlowGraphs.text().render(desc);
-
-        Assert.assertNotNull(text);
-        Assert.assertTrue(text.startsWith("Flow: checkout\n"));
-        Assert.assertTrue(text.contains("├── GUARD: validate-order\n"));
-        Assert.assertTrue(text.contains("├── TAP: reserve-stock\n"));
-        Assert.assertTrue(text.contains("├── CHOOSE: choose-channel\n"));
-        Assert.assertTrue(text.contains("│   ├── [CARD]\n"));
-        Assert.assertTrue(text.contains("│   │   └── TAP: call-card-gateway\n"));
-        Assert.assertTrue(text.contains("│   ├── [WALLET]\n"));
-        Assert.assertTrue(text.contains("│   │   └── TAP: call-wallet-gateway\n"));
-        Assert.assertTrue(text.contains("│   └── [otherwise -> STOPPED]\n"));
-        Assert.assertTrue(text.contains("├── SUBFLOW: sub-payment\n"));
-        Assert.assertTrue(text.contains("│   └── STEP: pay-step\n"));
-        Assert.assertTrue(text.contains("├── STEP: build-receipt\n"));
-        Assert.assertTrue(text.contains("├── RECOVER: fallback\n"));
-        Assert.assertTrue(text.contains("└── ENSURE: cleanup-metrics\n"));
+        Assert.assertTrue(graph.contains("case=&lt;opaque&gt;"));
+        Assert.assertFalse("Lambda class name leaked\n" + graph, graph.contains("Lambda"));
+        Assert.assertFalse("Synthetic identity leaked\n" + graph, graph.contains("0x"));
     }
 
     @Test
-    public void text_rendersOtherwiseBranch() {
-        Flow<String, String> flow = Flows.<String>begin("otherwise-flow")
-                .choose("decision", in -> in)
-                    .when("OPT_1", Flows.step("step-1", in -> in))
-                    .otherwise(Flows.step("step-default", in -> in))
-                .end()
-                .build();
+    public void fiveThousandNestedTimeoutsRenderWithinLinearCost() {
+        Flow<String, String> current = Flow.step(Echo.class);
+        for (int index = 0; index < 5000; index++) {
+            current = current.timeout(Duration.ofSeconds(1));
+        }
+        FlowDescription description = current.describe("deep-timeouts");
 
-        String text = FlowGraphs.text().render(flow.describe());
-        Assert.assertTrue(text.contains("[OPT_1]"));
-        Assert.assertTrue(text.contains("└── [otherwise]\n"));
-        Assert.assertTrue(text.contains("STEP: step-default"));
+        String text = FlowGraphs.text().render(description);
+        Assert.assertEquals(5000, occurrences(text, "control=TIMEOUT"));
+        text = null;
+
+        String graph = FlowGraphs.mermaid().render(description);
+        Assert.assertEquals(5000, occurrences(graph, "&#124; control=TIMEOUT"));
+        Assert.assertEquals(5000, occurrences(graph, "config=timeout=1s0ns"));
+        // 嵌套 timeout 的 FAILED/CANCELLED 出口逐层声明：body 传播 1 条 + 每层自身 1 条；
+        // CANCELLED 另有 flow_start 的常量取消边。
+        Assert.assertEquals(5001, occurrences(graph, "-.->|FAILED| terminal_failed"));
+        Assert.assertEquals(5001, occurrences(graph, "-.->|CANCELLED| terminal_cancelled"));
     }
 
     @Test
-    public void text_rendersEmptyFlow() {
-        FlowDescription desc = new FlowDescription("empty-flow", null);
-        String text = FlowGraphs.text().render(desc);
-        Assert.assertEquals("Flow: empty-flow\n", text);
+    public void configurationSummariesAreStableInBothRenderers() {
+        FlowDescription retry = Flow.<String, String>step(Echo.class).retry(
+                Retry.maxAttempts(7).withBackoff(
+                        Duration.ofSeconds(11).plusNanos(500))).describe("retry-summary");
+        FlowDescription timeout = Flow.<String>identity().timeout(
+                Duration.ofSeconds(29).plusNanos(25)).describe("timeout-summary");
+
+        Assert.assertTrue(FlowGraphs.text().render(retry)
+                .contains("control=RETRY config=maxAttempts=7,backoff=11s500ns"));
+        Assert.assertTrue(FlowGraphs.text().render(timeout)
+                .contains("control=TIMEOUT config=timeout=29s25ns"));
+        Assert.assertTrue(FlowGraphs.mermaid().render(retry).contains(
+                "control=RETRY &#124; config=maxAttempts=7,backoff=11s500ns"));
+        Assert.assertTrue(FlowGraphs.mermaid().render(timeout).contains(
+                "control=TIMEOUT &#124; config=timeout=29s25ns"));
     }
 
-    private static String findProcessNodeId(String mermaid, String label) {
-        Pattern pattern = Pattern.compile("(node_\\d+_[^\\[\\s]+)\\[\\\""
-                + Pattern.quote(label) + "\\\"\\]");
-        Matcher matcher = pattern.matcher(mermaid);
-        Assert.assertTrue("Missing Mermaid node: " + label + "\n" + mermaid, matcher.find());
-        return matcher.group(1);
+    private static Reason reason(String code) {
+        return Reason.of(code, code);
     }
 
-    private static String findEndId(String mermaid) {
-        Pattern pattern = Pattern.compile("(end_\\d+)\\(");
-        Matcher matcher = pattern.matcher(mermaid);
-        Assert.assertTrue("Missing Mermaid End node\n" + mermaid, matcher.find());
-        return matcher.group(1);
+    /** 解析 Mermaid 边：source -->|label| target 或 source -.->|label| target。 */
+    private static Map<String, List<String>> parseEdges(String graph) {
+        Map<String, List<String>> edges = new HashMap<String, List<String>>();
+        Pattern pattern = Pattern.compile(
+                "^\\s*(\\S+)\\s+-\\.?->(?:\\|[^\\n]*\\|)?\\s*(\\S+)\\s*$",
+                Pattern.MULTILINE);
+        Matcher matcher = pattern.matcher(graph);
+        while (matcher.find()) {
+            String source = matcher.group(1);
+            String target = matcher.group(2);
+            List<String> targets = edges.get(source);
+            if (targets == null) {
+                targets = new ArrayList<String>();
+                edges.put(source, targets);
+            }
+            targets.add(target);
+        }
+        return edges;
     }
 
-    private static boolean pathExists(String mermaid, String source, String target) {
-        Pattern edgePattern = Pattern.compile(
-                "^\\s*([a-zA-Z0-9_]+)\\s+(?:-->|-\\.->)(?:\\|[^|]*\\|)?\\s+([a-zA-Z0-9_]+)\\s*$");
-        Map<String, Set<String>> graph = new HashMap<>();
-        for (String line : mermaid.split("\\n")) {
-            Matcher matcher = edgePattern.matcher(line);
-            if (matcher.matches()) {
-                Set<String> targets = graph.get(matcher.group(1));
+    /** 从起始节点 BFS 可达性检查（存在环时安全终止）。 */
+    private static boolean reaches(Map<String, List<String>> edges, String from, String to) {
+        if (from.equals(to)) {
+            return true;
+        }
+        List<String> frontier = new ArrayList<String>();
+        Set<String> visited = new HashSet<String>();
+        frontier.add(from);
+        visited.add(from);
+        while (!frontier.isEmpty()) {
+            List<String> next = new ArrayList<String>();
+            for (String node : frontier) {
+                List<String> targets = edges.get(node);
                 if (targets == null) {
-                    targets = new HashSet<>();
-                    graph.put(matcher.group(1), targets);
+                    continue;
                 }
-                targets.add(matcher.group(2));
+                for (String target : targets) {
+                    if (target.equals(to)) {
+                        return true;
+                    }
+                    if (visited.add(target)) {
+                        next.add(target);
+                    }
+                }
             }
-        }
-
-        Deque<String> pending = new ArrayDeque<>();
-        Set<String> visited = new HashSet<>();
-        pending.add(source);
-        while (!pending.isEmpty()) {
-            String current = pending.removeFirst();
-            if (!visited.add(current)) {
-                continue;
-            }
-            if (target.equals(current)) {
-                return true;
-            }
-            Set<String> next = graph.get(current);
-            if (next != null) {
-                pending.addAll(next);
-            }
+            frontier = next;
         }
         return false;
+    }
+
+    /** 按 label 全文查找节点 id：形如 {@code n12(["LABEL"])}，label 需传转义后的文本。 */
+    private static String findNodeByLabel(String graph, String label) {
+        for (String id : findNodesByLabelContains(graph, label)) {
+            return id;
+        }
+        return null;
+    }
+
+    /** 查找 label 含指定片段（应为转义后文本）的所有节点 id。 */
+    private static List<String> findNodesByLabelContains(String graph, String fragment) {
+        List<String> ids = new ArrayList<String>();
+        Pattern pattern = Pattern.compile(
+                "^\\s*(\\S+)(?:\\[\\[|\\[\\{|\\[|\\{|\\(\\[)\"([^\"]*)\"",
+                Pattern.MULTILINE);
+        Matcher matcher = pattern.matcher(graph);
+        while (matcher.find()) {
+            if (matcher.group(2).contains(fragment)) {
+                ids.add(matcher.group(1));
+            }
+        }
+        return ids;
+    }
+
+    private static int occurrences(String value, String needle) {
+        int count = 0;
+        int from = 0;
+        while ((from = value.indexOf(needle, from)) >= 0) {
+            count++;
+            from += needle.length();
+        }
+        return count;
     }
 }
