@@ -19,10 +19,10 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 业务友好型确定性 Mermaid 流程图渲染器。
+ * 业务友好型确定性 Mermaid 流程图渲染器（纯文本极简风格）。
  *
- * <p>将 {@link FlowDescription} 静态拓扑描述模型渲染为直观、清晰、符合人类阅读直觉的 Mermaid 流程图（{@code flowchart TD}）。
- * 采用显式工作栈消除 JVM 递归开销，自动折叠底层 AST 胶水节点，将超时/策略控制作为属性标签附着在节点上。</p>
+ * <p>将 {@link FlowDescription} 静态拓扑描述模型渲染为直观、清晰、规范的 Mermaid 流程图（{@code flowchart TD}）。
+ * 采用显式工作栈消除 JVM 递归开销，自动折叠底层 AST 胶水节点，将超时/策略控制作为标准化属性标签附着在节点上。</p>
  *
  * @author jay.wu
  */
@@ -200,6 +200,21 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
                 for (NodeDescription child : node.children()) {
                     nodeMetas.put(child, childMeta);
                 }
+            } else if (node.kind() == NodeDescriptor.Kind.FALLBACK && !node.children().isEmpty()) {
+                // FALLBACK 继承外层修饰并传递给主分支 (child 0)
+                NodeMeta parentMeta = nodeMetas.get(node);
+                if (parentMeta != null) {
+                    NodeDescription mainBranch = node.children().get(0);
+                    NodeMeta mainMeta = nodeMetas.get(mainBranch);
+                    if (mainMeta == null) {
+                        mainMeta = new NodeMeta();
+                        nodeMetas.put(mainBranch, mainMeta);
+                    }
+                    mainMeta.badges.addAll(parentMeta.badges);
+                    if (mainMeta.inheritedLabel == null) {
+                        mainMeta.inheritedLabel = parentMeta.inheritedLabel;
+                    }
+                }
             }
 
             workStack.addLast(new Work(node, true));
@@ -217,7 +232,7 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
             state.emitEdge(startId, rootBlock.entryNodeId, null, false);
             if (!rootBlock.normalExitIds.isEmpty()) {
                 String endId = "flow_end";
-                state.emitNode(endId, "([", "])", "✅ 结束 (ACCEPTED)");
+                state.emitNode(endId, "([", "])", "结束 (ACCEPTED)");
                 state.addStartEndNode(endId);
                 for (String exitId : rootBlock.normalExitIds) {
                     state.emitEdge(exitId, endId, null, false);
@@ -289,32 +304,32 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         String kind = controlNode.controlKind();
         if ("TIMEOUT".equalsIgnoreCase(kind)) {
             if (controlNode.configuration() instanceof Duration) {
-                return "⏱️ " + FlowGraphFormatters.escapeMermaid(FlowGraphFormatters.durationFriendly((Duration) controlNode.configuration()));
+                return "[timeout: " + FlowGraphFormatters.escapeMermaid(FlowGraphFormatters.durationFriendly((Duration) controlNode.configuration())) + "]";
             }
-            return "⏱️ timeout";
+            return "[timeout]";
         }
         if ("POLICY".equalsIgnoreCase(kind)) {
             if (controlNode.binding().isPresent() && controlNode.binding().get().qualifier().isPresent()) {
-                return "🛡️ " + FlowGraphFormatters.escapeMermaid(controlNode.binding().get().qualifier().get());
+                return "[policy: " + FlowGraphFormatters.escapeMermaid(controlNode.binding().get().qualifier().get()) + "]";
             }
             if (controlNode.binding().isPresent() && controlNode.binding().get().contractClass().isPresent()) {
-                return "🛡️ " + FlowGraphFormatters.escapeMermaid(FlowGraphFormatters.simpleClassName(controlNode.binding().get().contractClass().get()));
+                return "[policy: " + FlowGraphFormatters.escapeMermaid(FlowGraphFormatters.simpleClassName(controlNode.binding().get().contractClass().get())) + "]";
             }
-            return "🛡️ policy";
+            return "[policy]";
         }
         if ("PERSISTENT_POLICY".equalsIgnoreCase(kind)) {
             if (controlNode.binding().isPresent() && controlNode.binding().get().qualifier().isPresent()) {
-                return "💾 " + FlowGraphFormatters.escapeMermaid(controlNode.binding().get().qualifier().get());
+                return "[persistent: " + FlowGraphFormatters.escapeMermaid(controlNode.binding().get().qualifier().get()) + "]";
             }
             if (controlNode.binding().isPresent() && controlNode.binding().get().contractClass().isPresent()) {
-                return "💾 " + FlowGraphFormatters.escapeMermaid(FlowGraphFormatters.simpleClassName(controlNode.binding().get().contractClass().get()));
+                return "[persistent: " + FlowGraphFormatters.escapeMermaid(FlowGraphFormatters.simpleClassName(controlNode.binding().get().contractClass().get())) + "]";
             }
-            return "💾 policy";
+            return "[persistent-policy]";
         }
         if ("RETRY".equalsIgnoreCase(kind)) {
-            return "🔄 retry";
+            return "[retry]";
         }
-        return kind != null ? "⚙️ " + FlowGraphFormatters.escapeMermaid(kind.toLowerCase()) : "";
+        return kind != null ? "[" + FlowGraphFormatters.escapeMermaid(kind.toLowerCase()) + "]" : "";
     }
 
     private static String resolveEffectiveLabel(NodeDescription node, String inheritedLabel) {
@@ -381,10 +396,10 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         String title;
         String subtitle = "";
         if (effectiveLabel != null && !effectiveLabel.isEmpty()) {
-            title = "⏳ " + FlowGraphFormatters.escapeMermaid(effectiveLabel) + badgeText;
+            title = FlowGraphFormatters.escapeMermaid(effectiveLabel) + badgeText;
             subtitle = "await: " + FlowGraphFormatters.escapeMermaid(resumePoint);
         } else {
-            title = "⏳ 挂起等待: " + FlowGraphFormatters.escapeMermaid(resumePoint) + badgeText;
+            title = "挂起等待: " + FlowGraphFormatters.escapeMermaid(resumePoint) + badgeText;
         }
 
         String content = subtitle.isEmpty() ? title : title + "<br/><small>" + subtitle + "</small>";
@@ -417,25 +432,25 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
                 ? FlowGraphFormatters.escapeMermaid(effectiveLabel) : null;
         switch (kind) {
             case ACCEPTED: {
-                String title = "✅ " + (customLabel != null ? customLabel : "ACCEPTED") + badgeText;
+                String title = (customLabel != null ? customLabel : "[ACCEPTED]") + badgeText;
                 state.emitNode(id, "([", "])", title);
                 state.addSuccessNode(id);
                 return new Block(id, Collections.singletonList(id), Collections.singletonList(id));
             }
             case REJECTED: {
-                String title = "❌ " + (customLabel != null ? customLabel : "REJECTED") + badgeText;
+                String title = (customLabel != null ? customLabel : "[REJECTED]") + badgeText;
                 state.emitNode(id, "([", "])", title);
                 state.addDangerNode(id);
                 return new Block(id, Collections.emptyList(), Collections.singletonList(id));
             }
             case SKIPPED: {
-                String title = "⏭️ " + (customLabel != null ? customLabel : "SKIPPED") + badgeText;
+                String title = (customLabel != null ? customLabel : "[SKIPPED]") + badgeText;
                 state.emitNode(id, "([", "])", title);
                 state.addDangerNode(id);
                 return new Block(id, Collections.emptyList(), Collections.singletonList(id));
             }
             case FAILED: {
-                String title = "⚠️ " + (customLabel != null ? customLabel : "FAILED") + badgeText;
+                String title = (customLabel != null ? customLabel : "[FAILED]") + badgeText;
                 state.emitNode(id, "([", "])", title);
                 state.addDangerNode(id);
                 return new Block(id, Collections.emptyList(), Collections.singletonList(id));
@@ -507,7 +522,7 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
             }
         } else {
             String noMatchId = state.nextId();
-            state.emitNode(noMatchId, "([", "])", "⏭️ 未匹配 (SKIPPED)");
+            state.emitNode(noMatchId, "([", "])", "未匹配 (SKIPPED)");
             state.addDangerNode(noMatchId);
             state.emitEdge(id, noMatchId, "no match", true);
             allNodes.add(noMatchId);

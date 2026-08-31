@@ -139,7 +139,7 @@ public class FlowGraphTest {
 
         Assert.assertTrue(graph.contains("flowchart TD"));
         Assert.assertTrue(graph.contains("flow_start([\"开始: channels\"])"));
-        Assert.assertTrue(graph.contains("flow_end([\"✅ 结束 (ACCEPTED)\"])"));
+        Assert.assertTrue(graph.contains("flow_end([\"结束 (ACCEPTED)\"])"));
         Assert.assertTrue(graph.contains("classDef startEnd"));
         Assert.assertTrue(graph.contains("classDef actionNode"));
         Assert.assertTrue(graph.contains("class flow_start,flow_end startEnd"));
@@ -210,7 +210,7 @@ public class FlowGraphTest {
                 .await(ResumePoint.<String>named("manual-review"))
                 .describe("await"));
 
-        Assert.assertTrue(graph.contains("⏳ 挂起等待: manual-review"));
+        Assert.assertTrue(graph.contains("挂起等待: manual-review"));
         Assert.assertTrue(graph.contains("awaitNode"));
     }
 
@@ -236,20 +236,20 @@ public class FlowGraphTest {
         Assert.assertTrue(text.contains("control=PERSISTENT_POLICY config=<none>"));
 
         String timeoutGraph = FlowGraphs.mermaid().render(timeout);
-        Assert.assertTrue(timeoutGraph.contains("⏱️ 29s"));
+        Assert.assertTrue(timeoutGraph.contains("[timeout: 29s]"));
 
         String policyGraph = FlowGraphs.mermaid().render(policy);
-        Assert.assertTrue(policyGraph.contains("🛡️ policy-q"));
+        Assert.assertTrue(policyGraph.contains("[policy: policy-q]"));
 
         String persistentGraph = FlowGraphs.mermaid().render(persistent);
-        Assert.assertTrue(persistentGraph.contains("💾 persistent-q"));
+        Assert.assertTrue(persistentGraph.contains("[persistent: persistent-q]"));
 
         String persistentNoQGraph = FlowGraphs.mermaid().render(persistentNoQualifier);
-        Assert.assertTrue(persistentNoQGraph.contains("💾 TestPersistentPolicy"));
+        Assert.assertTrue(persistentNoQGraph.contains("[persistent: TestPersistentPolicy]"));
 
         String multiControlGraph = FlowGraphs.mermaid().render(multiControl);
-        Assert.assertTrue(multiControlGraph.contains("⏱️ 3s"));
-        Assert.assertTrue(multiControlGraph.contains("🛡️ sec&#91;tenant&#93;"));
+        Assert.assertTrue(multiControlGraph.contains("[timeout: 3s]"));
+        Assert.assertTrue(multiControlGraph.contains("[policy: sec&#91;tenant&#93;]"));
     }
 
     @Test
@@ -451,7 +451,7 @@ public class FlowGraphTest {
 
         Assert.assertTrue(FlowGraphs.text().render(timeout)
                 .contains("control=TIMEOUT config=timeout=29s25ns"));
-        Assert.assertTrue(FlowGraphs.mermaid().render(timeout).contains("⏱️ 29s25ns"));
+        Assert.assertTrue(FlowGraphs.mermaid().render(timeout).contains("[timeout: 29s25ns]"));
     }
 
     private static Reason reason(String code) {
@@ -523,8 +523,8 @@ public class FlowGraphTest {
         Assert.assertNotNull(text);
         Assert.assertTrue(mermaid.contains("flow_start"));
         Assert.assertTrue(mermaid.contains("flow_end"));
-        Assert.assertTrue(mermaid.contains("库存预占 ⏱️ 2s"));
-        Assert.assertTrue(mermaid.contains("主通道支付扣款 ⏱️ 5s"));
+        Assert.assertTrue(mermaid.contains("库存预占 [timeout: 2s]"));
+        Assert.assertTrue(mermaid.contains("主通道支付扣款 [timeout: 5s]"));
         Assert.assertTrue(mermaid.contains("FAILED 降级"));
         Assert.assertTrue(mermaid.contains("合并 (Join)"));
         Assert.assertTrue(text.contains("flow id=\"order-fulfillment-flow\""));

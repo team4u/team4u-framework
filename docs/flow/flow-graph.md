@@ -164,18 +164,18 @@ flowchart TD
     n1["前置风控拦截<br/><small>RiskCheckOperation (risk-checker)</small>"]
     n2(["低风险直通 (透传)"])
     n3(["透传 (Identity)"])
-    n4["⏳ 挂起等待: manual-audit"]
+    n4["挂起等待: manual-audit"]
     n5["PassAuditOperation<br/><small>(audit-handler)</small>"]
-    n7(["❌ REJECTED"])
+    n7(["[REJECTED]"])
     n8{"RiskRouter<br/><small>(risk-router)</small>"}
-    n9["库存预占 ⏱️ 2s<br/><small>LockInventoryOperation (stock-service)</small>"]
+    n9["库存预占 [timeout: 2s]<br/><small>LockInventoryOperation (stock-service)</small>"]
     n10["卡券锁定<br/><small>LockCouponOperation (coupon-service)</small>"]
     n11{{"并行: 并行资源锁定"}}
     n12["合并 (Join)"]
-    n13["主通道支付扣款 ⏱️ 5s<br/><small>ChargePaymentOperation (main-gateway)</small>"]
+    n13["主通道支付扣款 [timeout: 5s]<br/><small>ChargePaymentOperation (main-gateway)</small>"]
     n14["备用通道降级<br/><small>BackupPaymentOperation (backup-gateway)</small>"]
     n15["生成出货单据<br/><small>IssueReceiptOperation (receipt-service)</small>"]
-    flow_end(["✅ 结束 (ACCEPTED)"])
+    flow_end(["结束 (ACCEPTED)"])
 
     subgraph sg_n6 ["高风险人工审核"]
         n3
@@ -321,10 +321,10 @@ public class FlowGraphVisualizerController {
 | :--- | :--- | :--- |
 | **主干推进** | `A --> B` (实线) | 正常业务成功推进通道（Happy Path） |
 | **异常 / 降级** | `A -.->|FAILED 降级| B` (虚线) | `recoverWith` 失败降级或 `otherwise` 分支 |
-| **控制策略徽章** | `⏱️ 2s`, `🛡️ rate-limit` | 超时、限流等策略直接作为属性徽章显示在步骤上，不产生冗余 AST 方块 |
+| **控制策略徽章** | `[timeout: 2s]`, `[policy: rate-limit]` | 超时、限流等策略直接作为纯文本属性徽章显示在步骤上，不产生冗余 AST 方块 |
 | **路由决策** | 菱形 `{}` 节点 | 动态选择器与分支判定，条件清晰标注在出边上（`LOW`, `HIGH`, `otherwise`） |
 | **并行分发与合并** | 六边形 `{{}}` 与 `[合并 (Join)]` | 并行分支分发与汇聚点，自动折叠底层 Wait-All 胶水网关 |
-| **挂起等待** | `⏳ 挂起等待: point` | 人工审批或外部信号注入点 |
+| **挂起等待** | `挂起等待: point` | 人工审批或外部信号注入点 |
 | **作用域** | `subgraph` 容器框 | 具名 Scope 自动渲染为清晰的边界分组矩形 |
 
 ---
