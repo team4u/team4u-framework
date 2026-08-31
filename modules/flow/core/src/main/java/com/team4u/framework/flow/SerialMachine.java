@@ -13,7 +13,7 @@ import java.util.concurrent.ExecutorService;
  *
  * <p>架构与设计原则：
  * <ul>
- *   <li><b>无栈递归状态机</b>：通过在堆上显式维护 {@link RuntimeFrame} 栈结构驱动 AST 节点展开与归约，彻底消除 JVM 方法调用栈溢出风险；</li>
+ *   <li><b>无栈递归状态机</b>：通过在堆上显式维护 {@link RuntimeFrame} 栈结构，结合 {@link NodeExecutionHandlerRegistry} 驱动 AST 节点展开与归约，彻底消除 JVM 方法调用栈溢出风险；</li>
  *   <li><b>线程独占与非线程安全</b>：单次 {@link #drive()} 调用独占当前线程推进状态机，状态推进期间外部只能通过 {@link Cancellation} 注入取消信号；</li>
  *   <li><b>取消/超时协同</b>：每帧循环优先检测取消标志与作用域截止时间（Deadline），支持精确定位并终止最内层超时作用域；</li>
  *   <li><b>四态结果逐层归约</b>：子节点产生 Outcome 后弹出当前帧，由 {@link FrameReducer} 驱动父帧决策（如 Sequence 下一步、Fallback 下一分支、Retry 重试或冒泡向上传播）。</li>
@@ -54,8 +54,8 @@ final class SerialMachine {
      *
      * @return 状态机推进结果 {@link MachineResult}
      */
+    @SuppressWarnings("unchecked")
     MachineResult drive() {
-
         if (state.lifecycle != MachineState.Lifecycle.ACTIVE)
             return MachineResult.from(state, wakeAt());
         Thread thread = Thread.currentThread();
@@ -76,51 +76,12 @@ final class SerialMachine {
                 RuntimeFrame frame = state.frames.get(state.frames.size() - 1);
                 PlanNode node = frame.node;
                 events.nodeStarted(frame);
-                if (node instanceof PlanNode.Invoke) {
-                    PlanNode.Invoke invoke = (PlanNode.Invoke) node;
-                    Outcome<?> outcome;
-                    try {
-                        outcome = invocations.invoke(invoke, frame.entry, deadline());
-                    } catch (CancellationException cancelled) {
-                        if (cancellation.isCancelled()) {
-                            cancel();
-                            break;
-                        }
-                        outcome = Outcome.failed(Failure.of(
-                                "OPERATION_CANCELLED", "Operation was cancelled"));
-                    }
-                    finish(outcome);
-                } else if (node instanceof PlanNode.Sequence) {
-                    FrameEntrant.sequence(this, frame, (PlanNode.Sequence) node);
-                } else if (node instanceof PlanNode.Route) {
-                    FrameEntrant.route(this, frame, (PlanNode.Route) node);
-                } else if (node instanceof PlanNode.Fallback) {
-                    FrameEntrant.fallback(this, frame, (PlanNode.Fallback) node);
-                } else if (node instanceof PlanNode.Parallel) {
-                    PlanNode.Parallel parallel = (PlanNode.Parallel) node;
-                    Outcome<?> outcome;
-                    try {
-                        outcome = new ParallelRunner(flowId, flowVersion, state.executionId,
-                                cancellation, observer, executor).run(parallel, frame.entry, deadline());
-                    } catch (CancellationException cancelled) {
-                        cancel();
-                        break;
-                    }
-                    finish(outcome);
-                } else if (node instanceof PlanNode.Await) {
-                    MachineResult suspension = FrameEntrant.await(this, state, frame, (PlanNode.Await) node);
-                    if (suspension != null) return suspension;
-                } else if (node instanceof PlanNode.Control) {
-                    MachineResult waiting = ControlExecutor.enter(this, frame, (PlanNode.Control) node);
-                    if (waiting != null) return waiting;
-                } else if (node instanceof PlanNode.Complete) {
-                    PlanNode.Complete complete = (PlanNode.Complete) node;
-                    Outcome<?> outcome = complete.identity()
-                            ? Outcome.accepted(frame.entry) : complete.outcome();
-                    finish(outcome);
-                } else {
-                    throw new IllegalStateException("Unknown plan node: " + node.getClass());
-                }
+
+                NodeExecutionHandler<PlanNode> handler = (NodeExecutionHandler<PlanNode>) NodeExecutionHandlerRegistry.global()
+                        .get(node.getClass())
+                        .orElseThrow(() -> new IllegalStateException("Unknown plan node: " + node.getClass()));
+                MachineResult result = handler.execute(node, frame, this);
+                if (result != null) return result;
             }
             return MachineResult.from(state, wakeAt());
         } catch (CancellationException cancelled) {
@@ -325,6 +286,34 @@ final class SerialMachine {
 
     boolean cancelled() {
         return cancellation.isCancelled();
+    }
+
+    String flowId() {
+        return flowId;
+    }
+
+    int flowVersion() {
+        return flowVersion;
+    }
+
+    MachineState state() {
+        return state;
+    }
+
+    Cancellation cancellation() {
+        return cancellation;
+    }
+
+    FlowObserver observer() {
+        return observer;
+    }
+
+    InvocationRunner invocations() {
+        return invocations;
+    }
+
+    ExecutorService executor() {
+        return executor;
     }
 
     private static String text(String value, String name) {

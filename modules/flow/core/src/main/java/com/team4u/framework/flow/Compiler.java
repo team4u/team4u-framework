@@ -22,7 +22,7 @@ import java.util.Set;
  *
  * <p>核心职责：
  * <ul>
- *   <li><b>降级转换（Lowering）</b>：将高层逻辑抽象语法树（{@link Logical}）降级编译为运行时密封的物理执行树（{@link PlanNode}）；</li>
+ *   <li><b>降级转换（Lowering）</b>：通过 {@link LogicalLowererRegistry} 将高层逻辑抽象语法树（{@link Logical}）降级编译为运行时密封的物理执行树（{@link PlanNode}）；</li>
  *   <li><b>依赖组件绑定（Resolution）</b>：结合 {@link OperationResolver} 将流程中声明的 Class/Qualifier 一次性解析并绑定为单例 Bean 实例；</li>
  *   <li><b>静态拓扑约束检查</b>：
  *     <ul>
@@ -39,7 +39,7 @@ import java.util.Set;
  *
  * @author jay.wu
  */
-final class Compiler {
+final class Compiler implements LoweringContext {
 
     /**
      * 流程静态编译结果密封容器。
@@ -152,7 +152,7 @@ final class Compiler {
     @Getter
     @Accessors(fluent = true)
     @AllArgsConstructor
-    private static final class Work {
+    static final class Work {
         private final Logical logical;
         private final String path;
         private final String label;
@@ -163,7 +163,7 @@ final class Compiler {
     @Getter
     @Accessors(fluent = true)
     @AllArgsConstructor
-    private static final class Child {
+    static final class Child {
         private final Logical logical;
         private final String path;
         private final boolean parallel;
@@ -242,135 +242,30 @@ final class Compiler {
         return new Normalized(logical, label);
     }
 
-    /** 返回某节点的直接子 Logical 及其路径，Parallel 子项标记为 parallel=true。 */
+    /** 委托 Lowerer 策略返回某节点的直接子 Logical 及其路径。 */
+    @SuppressWarnings("unchecked")
     private List<Child> children(Work work) {
-        List<Child> children = new ArrayList<Child>();
-        if (work.logical() instanceof Logical.Sequence) {
-            Logical.Sequence sequence = (Logical.Sequence) work.logical();
-            for (int index = 0; index < sequence.children().size(); index++) {
-                Logical child = sequence.children().get(index);
-                children.add(new Child(child, childPath(work.path(), index), work.parallel()));
-            }
-        } else if (work.logical() instanceof Logical.Route) {
-            Logical.Route route = (Logical.Route) work.logical();
-            for (int index = 0; index < route.cases().size(); index++) {
-                children.add(new Child(route.cases().get(index).branch(),
-                        work.path() + "/case:" + index, work.parallel()));
-            }
-            if (route.otherwise() != null) {
-                children.add(new Child(route.otherwise(),
-                        work.path() + "/otherwise", work.parallel()));
-            }
-        } else if (work.logical() instanceof Logical.Fallback) {
-            Logical.Fallback fallback = (Logical.Fallback) work.logical();
-            for (int index = 0; index < fallback.branches().size(); index++) {
-                children.add(new Child(fallback.branches().get(index),
-                        work.path() + "/branch:" + index, work.parallel()));
-            }
-        } else if (work.logical() instanceof Logical.Parallel) {
-            Logical.Parallel parallel = (Logical.Parallel) work.logical();
-            for (int index = 0; index < parallel.branches().size(); index++) {
-                children.add(new Child(parallel.branches().get(index).flow(),
-                        work.path() + "/branch:" + index, true));
-            }
-        } else if (work.logical() instanceof Logical.Control) {
-            Logical.Control control = (Logical.Control) work.logical();
-            children.add(new Child(control.body(), work.path() + "/body", work.parallel()));
-        }
-        return children;
+        LogicalLowerer<Logical> lowerer = (LogicalLowerer<Logical>) LogicalLowererRegistry.global()
+                .get(work.logical().getClass())
+                .orElseThrow(() -> new IllegalStateException("Unknown logical node: " + work.logical().getClass()));
+        return lowerer.children(work.logical(), work);
     }
 
-    /** 根据 Logical 类型构造对应的 PlanNode，并校验 scope/branch/ResumePoint 唯一性与并行约束。 */
+    /** 委托 Lowerer 策略根据 Logical 类型构造对应的 PlanNode，并校验 scope/branch/ResumePoint 唯一性与并行约束。 */
+    @SuppressWarnings("unchecked")
     private void build(Work work) {
         Logical logical = work.logical();
-        PlanNode node;
-        if (logical instanceof Logical.Invoke) {
-            node = invoke((Logical.Invoke) logical, work.path(), work.label());
-        } else if (logical instanceof Logical.Sequence) {
-            Logical.Sequence sequence = (Logical.Sequence) logical;
-            if (sequence.scopeName() != null && !scopeNames.add(sequence.scopeName())) {
-                problem("DUPLICATE_SCOPE", work.path(), "Duplicate scope: " + sequence.scopeName());
-            }
-            List<PlanNode> children = new ArrayList<PlanNode>();
-            for (int index = 0; index < sequence.children().size(); index++) {
-                children.add(required(childPath(work.path(), index)));
-            }
-            node = new PlanNode.Sequence(descriptor(work, NodeDescriptor.Kind.SEQUENCE),
-                    children, sequence.scopeName());
-        } else if (logical instanceof Logical.Route) {
-            Logical.Route route = (Logical.Route) logical;
-            String selectorPath = work.path() + "/selector";
-            PlanNode.Invoke selector = invoke(new Logical.Invoke(route.selector(),
-                    value -> value, (ignored, value) -> value), selectorPath, null);
-            byPath.put(selectorPath, selector);
-            List<PlanNode.Route.RouteCase> cases = new ArrayList<PlanNode.Route.RouteCase>();
-            for (int index = 0; index < route.cases().size(); index++) {
-                cases.add(new PlanNode.Route.RouteCase(route.cases().get(index).key(),
-                        required(work.path() + "/case:" + index)));
-            }
-            PlanNode otherwise = route.otherwise() == null ? null
-                    : required(work.path() + "/otherwise");
-            node = new PlanNode.Route(descriptor(work, NodeDescriptor.Kind.ROUTE),
-                    selector, cases, otherwise);
-        } else if (logical instanceof Logical.Fallback) {
-            Logical.Fallback fallback = (Logical.Fallback) logical;
-            List<PlanNode> branches = new ArrayList<PlanNode>();
-            for (int index = 0; index < fallback.branches().size(); index++) {
-                branches.add(required(work.path() + "/branch:" + index));
-            }
-            PlanNode.Fallback.Trigger trigger = fallback.trigger() == Logical.Fallback.Trigger.SKIPPED
-                    ? PlanNode.Fallback.Trigger.SKIPPED : PlanNode.Fallback.Trigger.FAILED;
-            node = new PlanNode.Fallback(descriptor(work, NodeDescriptor.Kind.FALLBACK),
-                    trigger, branches);
-        } else if (logical instanceof Logical.Parallel) {
-            Logical.Parallel parallel = (Logical.Parallel) logical;
-            List<PlanNode.ParallelBranch> branches = new ArrayList<PlanNode.ParallelBranch>();
-            for (int index = 0; index < parallel.branches().size(); index++) {
-                Branch<?, ?> token = parallel.branches().get(index).token();
-                if (!branchNames.add(token.name())) {
-                    problem("DUPLICATE_BRANCH", work.path(), "Duplicate branch: " + token.name());
-                }
-                branches.add(new PlanNode.ParallelBranch(token,
-                        required(work.path() + "/branch:" + index)));
-            }
-            node = new PlanNode.Parallel(descriptor(work, NodeDescriptor.Kind.PARALLEL),
-                    branches, parallel.join());
-        } else if (logical instanceof Logical.Await) {
-            Logical.Await await = (Logical.Await) logical;
-            if (work.parallel()) {
-                problem("PARALLEL_AWAIT", work.path(), "Parallel branches cannot await");
-            }
-            ResumePoint<?> existing = resumePoints.putIfAbsent(await.point().name(), await.point());
-            if (existing != null) {
-                problem("DUPLICATE_RESUME_POINT", work.path(),
-                        "Duplicate ResumePoint name " + await.point().name());
-            }
-            node = new PlanNode.Await(descriptor(work, NodeDescriptor.Kind.AWAIT), await.point());
-        } else if (logical instanceof Logical.Control) {
-            Logical.Control control = (Logical.Control) logical;
-            if (work.parallel() && control.kind() == Logical.Control.Kind.PERSISTENT_POLICY) {
-                problem("PARALLEL_PERSISTENT_POLICY", work.path(),
-                        "Parallel branches cannot use PersistentPolicy");
-            }
-            PlanNode.BoundTarget target = control.binding() == null ? null
-                    : resolve(control.binding(), work.path());
-            PlanNode.Control.Kind kind = PlanNode.Control.Kind.valueOf(control.kind().name());
-            node = new PlanNode.Control(descriptor(work, NodeDescriptor.Kind.CONTROL), kind,
-                    required(work.path() + "/body"), target,
-                    control.keyProjection(), control.configuration());
-        } else if (logical instanceof Logical.Complete) {
-            Logical.Complete complete = (Logical.Complete) logical;
-            node = new PlanNode.Complete(descriptor(work, NodeDescriptor.Kind.COMPLETE),
-                    complete.outcome(), complete.identity());
-        } else {
-            throw new IllegalStateException("Unknown logical node: " + logical.getClass());
-        }
+        LogicalLowerer<Logical> lowerer = (LogicalLowerer<Logical>) LogicalLowererRegistry.global()
+                .get(logical.getClass())
+                .orElseThrow(() -> new IllegalStateException("Unknown logical node: " + logical.getClass()));
+        PlanNode node = lowerer.build(logical, work, this);
         if (byPath.put(work.path(), node) != null) {
             problem("DUPLICATE_PATH", work.path(), "Compiler generated a duplicate path");
         }
     }
 
-    private PlanNode.Invoke invoke(Logical.Invoke invoke, String path, String label) {
+    @Override
+    public PlanNode.Invoke invoke(Logical.Invoke invoke, String path, String label) {
         PlanNode.BoundTarget target = resolve(invoke.binding(), path);
         NodeDescriptor descriptor = target == null
                 ? NodeDescriptor.structural(path, label, NodeDescriptor.Kind.INVOKE)
@@ -385,7 +280,8 @@ final class Compiler {
      * 解析 Logical.Binding 为 PlanNode.BoundTarget：实例绑定直接采用，类绑定通过 resolver 查询。
      * 同一个 BindingKey 的解析结果与失败都会缓存，避免重复解析。
      */
-    private PlanNode.BoundTarget resolve(Logical.Binding binding, String path) {
+    @Override
+    public PlanNode.BoundTarget resolve(Logical.Binding binding, String path) {
         Class<?> marker;
         if (binding.kind() == Logical.BindingKind.OPERATION) {
             marker = Operation.class;
@@ -456,21 +352,39 @@ final class Compiler {
         }
     }
 
-    private PlanNode required(String path) {
+    @Override
+    public PlanNode required(String path) {
         PlanNode node = byPath.get(path);
         if (node == null) throw new IllegalStateException("Missing lowered child: " + path);
         return node;
     }
 
-    private static String childPath(String parent, int index) {
-        return parent + "/" + index;
+    @Override
+    public Set<String> scopeNames() {
+        return scopeNames;
     }
 
-    private static NodeDescriptor descriptor(Work work, NodeDescriptor.Kind kind) {
+    @Override
+    public Set<String> branchNames() {
+        return branchNames;
+    }
+
+    @Override
+    public Map<String, ResumePoint<?>> resumePoints() {
+        return resumePoints;
+    }
+
+    @Override
+    public Map<String, PlanNode> byPath() {
+        return byPath;
+    }
+
+    static NodeDescriptor descriptor(Work work, NodeDescriptor.Kind kind) {
         return NodeDescriptor.structural(work.path(), work.label(), kind);
     }
 
-    private void problem(String code, String path, String message) {
+    @Override
+    public void problem(String code, String path, String message) {
         problems.add(new FlowBuildException.Problem(code, path,
                 message == null || message.trim().isEmpty() ? code : message));
     }
