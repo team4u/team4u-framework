@@ -25,8 +25,8 @@
 
 ```mermaid
 graph LR
-    Step1["Step 1"] -->|Accepted(v1)| Step2["Step 2"]
-    Step2 -->|Accepted(v2)| Step3["Step 3"]
+    Step1["Step 1"] -->|"Accepted(v1)"| Step2["Step 2"]
+    Step2 -->|"Accepted(v2)"| Step3["Step 3"]
     Step1 -.->|Rejected / Skipped / Failed| ShortCircuit["短路退出 (终止后续执行)"]
     Step2 -.->|Rejected / Skipped / Failed| ShortCircuit
 ```
@@ -114,7 +114,7 @@ Flow<Order, String> routed = Flow.route(Order::getCategory)
 
 ```mermaid
 graph LR
-    Main["主业务流水线"] -->|Failed(failure)| Rec["recoverWith 边界"]
+    Main["主业务流水线"] -->|"Failed(failure)"| Rec["recoverWith 边界"]
     Main -->|Accepted / Rejected / Skipped| Out["原样透传结果"]
     Rec -->|"注入 Recovery&lt;I&gt; (原始输入 + Failure)"| Comp["补偿 / 降级流程"]
     Comp --> Final["补偿后产生新的 Outcome"]

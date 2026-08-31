@@ -12,9 +12,9 @@
 graph TD
     subgraph "治理拦截洋葱模型 (Onion Interception)"
         IN["输入数据 Input"] --> P_BEFORE["Policy.before (前置网关评估)"]
-        P_BEFORE -->|Gate.proceed()| R_LOOP["Retry 循环 (重试控制器)"]
-        P_BEFORE -->|Gate.reject()| OUT_REJ["直接输出 Rejected(Reason)"]
-        P_BEFORE -->|Gate.fail()| OUT_FAIL["直接输出 Failed(Failure)"]
+        P_BEFORE -->|"Gate.proceed()"| R_LOOP["Retry 循环 (重试控制器)"]
+        P_BEFORE -->|"Gate.reject()"| OUT_REJ["直接输出 Rejected(Reason)"]
+        P_BEFORE -->|"Gate.fail()"| OUT_FAIL["直接输出 Failed(Failure)"]
         
         R_LOOP --> T_SCOPE["Timeout 作用域时限监控"]
         T_SCOPE --> OP["核心业务 Operation.execute"]
