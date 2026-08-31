@@ -8,7 +8,11 @@
   * [核心语义全景总览](flow-semantics.md)
 
 * **控制与治理**
-  * [流程治理：Policy、Retry 与 Timeout](flow-governance.md)
+  * [流程治理概览：Policy、Retry 与 Timeout](flow-governance.md)
+  * [限流治理策略 (team4u-flow-ratelimiter)](policy-ratelimiter.md)
+  * [重试与退避治理策略 (team4u-flow-retry)](policy-retry.md)
+  * [表达式规则门控策略 (team4u-flow-criterion)](policy-criterion.md)
+  * [自定义治理策略开发指南](policy-custom.md)
   * [并行分支与汇合治理](flow-parallel.md)
   * [挂起续接与协作式取消合同](flow-suspend.md)
   * [Local 线程模型与死锁防御](flow-threading.md)

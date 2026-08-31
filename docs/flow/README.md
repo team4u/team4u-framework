@@ -96,7 +96,11 @@ graph TD
 - [核心语义全景总览](flow-semantics.md)：核心机制全景摘要与快速索引。
 
 ### 3. 控制与治理
-- [流程治理：Policy 策略、Retry 重试与 Timeout 控制](flow-governance.md)：无状态 `Policy<K>` 网关拦截、指数退避重试与幂等键继承、`Timeout` 作用域超时与洋葱圈嵌套顺序。
+- [流程治理概览：Policy、Retry 与 Timeout](flow-governance.md)：治理架构概览、无状态与有状态策略模型速查、超时控制与洋葱圈嵌套顺序。
+- [限流治理策略 (team4u-flow-ratelimiter)](policy-ratelimiter.md)：基于 `team4u-ratelimiter` 的分布式限流、`RateLimitAction` 决策矩阵与动态 Permits。
+- [重试与退避治理策略 (team4u-flow-retry)](policy-retry.md)：基于 `team4u-retry` 的多算法退避、随机抖动防风暴、条件快速短路与双引擎调度。
+- [表达式规则门控策略 (team4u-flow-criterion)](policy-criterion.md)：基于 `team4u-criterion` 的动态规则文本表达式门控与条件分支谓词。
+- [自定义治理策略开发指南](policy-custom.md)：`Policy<K>` 无状态切面、`PersistentPolicy<K, S>` 有状态调度与 Spring 依赖注入。
 - [并行分支与汇合治理](flow-parallel.md)：`parallel` 并发执行、四大内置 `JoinStrategy`、True Wait-All 退出合同与 Local/Durable 调度差异。
 - [挂起续接与协作式取消合同](flow-suspend.md)：`await` 与 `ResumePoint`、Local 单次消费句柄 `Suspension`、`Cancellation` CAS 取消令牌与竞态防御。
 - [Local 线程模型与死锁防御机制](flow-threading.md)：Dispatcher 与 Worker 双线程池分工、`ForkJoinPool` 工作窃取补偿与两级静态死锁防御规则。
