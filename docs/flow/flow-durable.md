@@ -205,6 +205,22 @@ public interface DurableStore {
 - `expectedRevision = -1` 表示仅在记录不存在时创建（用于 `start` 命令）；
 - `compareAndSet` 返回 `false` 表示乐观锁版本冲突。
 
+### 开箱即用存储实现
+
+| 实现类 | 所属模块 | 说明 | 适用场景 |
+| :--- | :--- | :--- | :--- |
+| `InMemoryDurableStore` | `team4u-flow-durable` | 基于 `ConcurrentHashMap` 的纯内存实现 | 单元测试、本地调试与快速原型验证 |
+| `KvDurableStore` | `team4u-flow-durable-kv` | 基于统一 `KvStore` 与 `CasCapable` 的多后端存储适配器，支持 Redis / JDBC / 内存，可选 TTL 与装饰链 | 生产环境持久化、分布式多节点部署 |
+
+```java
+// 生产环境使用 KvDurableStore 接入 Redis 或 JDBC 存储
+KvStore redisStore = new RedisKvStore(redisTemplate);
+DurableStore durableStore = new KvDurableStore(redisStore, "flow_durable", 86400_000L); // 可选 1 天 TTL
+
+DurableRuntime runtime = DurableRuntime.builder(durableStore)
+        .build();
+```
+
 ### DurableException 错误码闭集与处理指引
 
 | 错误码 (`DurableException.Error`) | 触发原因 | 处理策略 |

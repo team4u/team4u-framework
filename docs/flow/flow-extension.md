@@ -208,7 +208,26 @@ public class RateWindowPolicy implements PersistentPolicy<String, long[]> {
 }
 ```
 
-### DurableStore 实战：JDBC 存储适配
+### DurableStore 实战：KvDurableStore 键值存储适配（推荐）
+
+通过引入 `team4u-flow-durable-kv`，可直接复用框架提供的 `KvStore` 基础设施（如 Redis、JDBC、分层缓存）：
+
+```java
+import com.team4u.framework.flow.durable.kv.KvDurableStore;
+import com.team4u.framework.flow.durable.store.DurableStore;
+import com.team4u.framework.kv.KvStore;
+import com.team4u.framework.kv.redis.RedisKvStore;
+
+// 1. 获取已有的 KvStore（如 Redis）
+KvStore kvStore = new RedisKvStore(redisTemplate);
+
+// 2. 构建 KvDurableStore（支持指定 key 空间与 TTL）
+DurableStore durableStore = new KvDurableStore(kvStore, "order_flow_store", 86400_000L);
+```
+
+### DurableStore 实战：原生 JDBC 存储适配
+
+若不引入 KV 组件，亦可直接编写数据库访问逻辑实现 `DurableStore`：
 
 ```java
 import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;

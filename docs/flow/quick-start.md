@@ -299,8 +299,9 @@ import com.team4u.framework.flow.durable.DurableResult;
 import com.team4u.framework.flow.durable.DurableRuntime;
 import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
 
-// 1. 构建 Durable 运行时
-DurableRuntime runtime = DurableRuntime.builder(new InMemoryDurableStore())
+// 1. 构建 Durable 运行时（单测使用 InMemoryDurableStore，生产环境引入 team4u-flow-durable-kv 使用 KvDurableStore）
+DurableStore store = new InMemoryDurableStore(); // 生产环境: new KvDurableStore(redisKvStore)
+DurableRuntime runtime = DurableRuntime.builder(store)
         .build();
 
 // 2. 编译为持久化可执行对象（绑定 flowId 与 flowVersion）

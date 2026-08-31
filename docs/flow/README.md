@@ -96,6 +96,7 @@ graph TD
 | :--- | :--- | :--- |
 | `team4u-flow` | 核心模块：Flow DSL、四态 Outcome、Local 执行器、并行与挂起机制 | 仅依赖 JDK |
 | `team4u-flow-durable` | 持久化模块：Durable 执行器、快照信封、StateMapper、CAS 检查点与恢复 | 依赖 `team4u-flow` |
+| `team4u-flow-durable-kv` | KV 存储适配模块：基于 `KvStore` 与 CAS 乐观锁的持久化快照存储实现 (`KvDurableStore`) | 依赖 `team4u-flow-durable`、`team4u-kv`、`team4u-serializer-json` |
 | `team4u-flow-graph` | 可视化模块：Mermaid 流程图与紧凑文本树渲染器 | 依赖 `team4u-flow`（仅描述面） |
 | `team4u-flow-bean` | 容器集成模块：BeanManager 容器绑定解析器，保留 AOP 与代理 | 依赖 `team4u-flow`、`team4u-bean` |
 | `team4u-flow-test` | 测试支持模块：桩对象、Trace 收集器、断言库与测试夹具 | 依赖 `team4u-flow`、JUnit |
@@ -118,6 +119,10 @@ com.team4u.framework.flow.durable
 ├── store                        # 存储 SPI 与内存实现 (DurableStore, InMemoryDurableStore)
 ├── DurableExecutable.java       # Durable 可执行句柄
 └── DurableRuntime.java          # Durable 运行时构建器
+
+com.team4u.framework.flow.durable.kv
+├── DurableSnapshotDto.java      # 快照 JSON 序列化 DTO
+└── KvDurableStore.java          # 基于 KvStore 的 DurableStore 实现
 
 com.team4u.framework.flow.graph
 └── FlowGraphs.java              # Mermaid 与紧凑文本树渲染门面
@@ -142,7 +147,7 @@ com.team4u.framework.flow.test
 
 - [**对象容器组件**](../bean/README.md)：通过 `team4u-flow-bean` 与 `team4u-bean-spring`，支持以 Class 和限定符直接声明节点，透明保留 Spring 事务与 AOP 代理。
 - [**表达式组件**](../criterion/README.md)：可在 `route` 选择器或 `Policy` 中结合 Criterion DSL 实现动态规则路由与风控过滤。
-- [**键值存储组件**](../kv/README.md)：可基于统一存储抽象实现自定义 `DurableStore`。
+- [**键值存储组件**](../kv/README.md)：通过 `team4u-flow-durable-kv`，基于统一 `KvStore` 抽象与 CAS 乐观锁快速接入 Redis/JDBC 等外部存储作为 `DurableStore`。
 
 ---
 
