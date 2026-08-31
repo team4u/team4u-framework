@@ -130,15 +130,146 @@ Flow<BatchOrderRequest, BatchReceipt> flow = Flow.step(batchChargeOperation)
 
 ---
 
-### `RateLimitResult` 裁决对象字段说明
+## 如何在流程内外获取与使用 RateLimitResult
 
-在 `failureFactory` 与 `reasonFactory` 中，限流引擎会传入只读的裁决对象 `RateLimitResult`，其主要属性如下：
+许多开发者在接入限流时关心一个核心问题：**“限流结果 `RateLimitResult` 中的数据（如算法算出来的等待时间 `retryAfterMillis`、命中的规则 `ruleId`、剩余可用配额 `remaining`）在流程中到底该如何获取和使用？”**
 
-- **`result.isAllowed()`**：`boolean`，本次请求是否成功获取到令牌；
-- **`result.getRuleId()`**：`String`，触发限流的具体规则 ID（多规则配置时方便定位是哪条规则拦截了请求）；
-- **`result.getRetryAfterMillis()`**：`Long`，算法（如令牌桶、漏桶）计算出的**建议重试等待毫秒数**（若算法无法精确估算则为 `null`）；
-- **`result.getRemaining()`**：`Long`，当前窗口内剩余的可用配额；
-- **`result.getDecisionTimeMillis()`**：`long`，限流裁决发生的时间戳（epoch 毫秒）。
+在 `team4u-flow` 中，获取限流结果主要分为**超限拦截**与**正常放行**两类场景：
+
+```mermaid
+graph TD
+    subgraph "场景 1: 被限流拦截 (超限)"
+        ACQ1["RateLimiters.acquire 超限"] --> FF["1. 在 failureFactory / reasonFactory 中直接接收 RateLimitResult 入参"]
+        FF --> DET["2. 写入 Failure / Reason 的 details() 字典"]
+        DET --> EXT["3A. 流程外读取 (Controller 设置 HTTP 429 Retry-After)"]
+        DET --> REC["3B. 流程内读取 (recoverWith 自动降级排队)"]
+    end
+
+    subgraph "场景 2: 正常放行 (未超限)"
+        ACQ2["RateLimiters.acquire 放行"] --> PROCEED["Gate.proceed() 继续执行业务步骤"]
+        PROCEED --> CHK["在业务 Operation 内部调用 RateLimiters.check(point, ctx) 只读查询剩余配额"]
+    end
+```
+
+---
+
+### 1. 超限拦截场景：写入诊断并在流程外/流程内提取
+
+#### 第一步：在策略工厂中捕获并封装进 `Failure`
+
+```java
+RateLimitPolicy<OrderRequest> customPolicy = RateLimitPolicy.<OrderRequest>builder()
+        .point("order.charge")
+        .contextExtractor(OrderRequest::getUserId)
+        .action(RateLimitAction.FAIL)
+        // 关键：第一个入参 result 即为限流引擎产生的 RateLimitResult！
+        .failureFactory((result, req) -> {
+            Long retryAfter = result.getRetryAfterMillis(); // 底层算法建议等待时间
+            String ruleId = result.getRuleId();             // 命中的规则 ID
+            Long remaining = result.getRemaining();         // 剩余配额
+
+            return Failure.of("RATE_LIMIT_EXCEEDED", "请求过于频繁")
+                    .withDetail("retryAfterMillis", String.valueOf(retryAfter))
+                    .withDetail("ruleId", ruleId)
+                    .withDetail("remaining", String.valueOf(remaining));
+        })
+        .build();
+```
+
+#### 第二步 A：在流程外部（如 Spring Controller）提取并设置响应头
+
+```java
+@PostMapping("/charge")
+public ResponseEntity<?> handleCharge(@RequestBody OrderRequest request) {
+    FlowResult<Receipt> result = orderExecutable.run(request);
+
+    if (result instanceof FlowResult.Completed) {
+        Outcome<Receipt> outcome = ((FlowResult.Completed<Receipt>) result).outcome();
+        
+        if (outcome instanceof Outcome.Accepted) {
+            return ResponseEntity.ok(((Outcome.Accepted<Receipt>) outcome).value());
+        }
+        
+        if (outcome instanceof Outcome.Failed) {
+            Failure failure = ((Outcome.Failed<Receipt>) outcome).failure();
+            if ("RATE_LIMIT_EXCEEDED".equals(failure.code())) {
+                // 提取之前放入 details 的 retryAfterMillis
+                String retryAfterMs = failure.details().get("retryAfterMillis");
+                long seconds = retryAfterMs != null ? Long.parseLong(retryAfterMs) / 1000 : 1;
+
+                // 设置标准 HTTP 429 与 Retry-After 响应头
+                return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                        .header(HttpHeaders.RETRY_AFTER, String.valueOf(Math.max(1, seconds)))
+                        .body("操作过于频繁，请在 " + seconds + " 秒后重试");
+            }
+            return ResponseEntity.status(500).body(failure.message());
+        }
+    }
+    throw new IllegalStateException("Unexpected result: " + result);
+}
+```
+
+#### 第二步 B：在流程内部通过 `recoverWith` 自动降级排队
+
+```java
+Flow<OrderRequest, Receipt> resilientFlow = Flow.step(chargeOperation)
+        .policy(customPolicy, req -> req)
+        // 捕获限流 Failed 并进行业务降级
+        .recoverWith(Flow.step((context, recovery) -> {
+            Failure failure = recovery.failure();
+            
+            if ("RATE_LIMIT_EXCEEDED".equals(failure.code())) {
+                String retryAfter = failure.details().get("retryAfterMillis");
+                log.warn("触发限流，转入异步延迟排队, 预计等待: {}ms", retryAfter);
+                
+                // 返回排队中的凭证（转为 Accepted 正常继续）
+                return Outcome.accepted(new Receipt("PENDING_QUEUE", "正在排队中，预计 " + retryAfter + "ms 后处理"));
+            }
+            // 非限流错误原样向外透传
+            return Outcome.failed(failure);
+        }));
+```
+
+---
+
+### 2. 正常放行场景：在业务步骤中只读查询当前配额
+
+当请求成功通过限流放行后，如果后续的业务 `Operation` 需要感知当前剩余多少配额（如将剩余可用次数展示给用户）：
+
+`team4u-ratelimiter` 提供了只读查询方法 `RateLimiters.check(...)`，**它只查询当前配额状态而绝不重复扣减令牌**：
+
+```java
+@Component
+public class ChargeOperation implements Operation<OrderRequest, Receipt> {
+
+    @Override
+    public Outcome<Receipt> execute(OperationContext context, OrderRequest req) {
+        // 只读查询当前检查点的限流配额状态（零副作用，不消耗令牌）
+        RateLimitResult status = RateLimiters.check("order.charge", req.getUserId());
+        
+        Long remaining = status.getRemaining(); // 当前窗口剩余可用调用次数
+        log.info("用户 [{}] 当前还剩 [{}] 次扣款配额", req.getUserId(), remaining);
+
+        // 执行核心业务扣款并返回带有配额信息的收据...
+        Receipt receipt = new Receipt(req.getOrderId(), "PAID");
+        receipt.setRemainingQuota(remaining);
+        return Outcome.accepted(receipt);
+    }
+}
+```
+
+---
+
+### `RateLimitResult` 核心字段速查表
+
+| 字段方法 | 返回类型 | 字段说明 | 业务用途 |
+| :--- | :--- | :--- | :--- |
+| **`result.isAllowed()`** | `boolean` | 本次请求是否被放行 | 核心判定标志。 |
+| **`result.getRuleId()`** | `String` | 命中的限流规则 ID | 多规则配置场景下定位具体是哪条规则（如全局规则还是租户规则）拦截了请求。 |
+| **`result.getRetryAfterMillis()`** | `Long` | 建议重试等待毫秒数 | 算法（令牌桶、漏桶）计算出的桶恢复到可用所需的时间，用于前端倒计时或 `Retry-After` 头。 |
+| **`result.getRemaining()`** | `Long` | 当前窗口剩余可用额度 | 展示给客户端或记录日志进行配额消耗监控。 |
+| **`result.getDecisionTimeMillis()`** | `long` | 裁决发生的时间戳（epoch 毫秒） | 用于分布式审计与链路追踪回溯。 |
+| **`result.getReason()`** | `RateLimitReason` | 裁决底层枚举原因 | 如 `ALLOWED`（放行）、`EXCEEDED`（超限）、`NO_RULE`（无规则放行）等。 |
 
 ---
 
