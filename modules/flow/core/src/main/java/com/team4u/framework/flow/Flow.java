@@ -150,6 +150,85 @@ public final class Flow<I, O> {
     }
 
     /**
+     * 顺序拼接“可选步骤”：该操作总会执行，但其 {@link Outcome.Skipped} 不终止流水线，
+     * 而是将进入该操作前的原值透传给后续节点继续执行。
+     *
+     * <p>结果语义：</p>
+     * <ul>
+     *   <li>{@link Outcome.Accepted}：新输出值正常作为后续节点的输入；</li>
+     *   <li>{@link Outcome.Skipped}：以本操作的输入值（原值）继续执行后续节点，流水线不中断；</li>
+     *   <li>{@link Outcome.Rejected} / {@link Outcome.Failed}：照常短路并向上传播，后续节点不执行。</li>
+     * </ul>
+     *
+     * <p>实现上脱糖为 {@code firstApplicable(step, identity())}（SKIPPED 触发的 Fallback），
+     * 不引入新的运行时节点，Local 与 Durable 行为完全一致；该步骤的 Skipped 结果仍会通过
+     * 节点完成事件正常上报，不会静默吞掉。</p>
+     *
+     * <p>类型约束：仅支持同类型 {@code O -> O} 的操作。Skipped 不携带输出载荷，无法为
+     * 类型转换节点（{@code O -> N}）安全提供续传值；跨类型场景应显式提供默认输出。</p>
+     *
+     * @param operation 同类型业务操作实例，不能为 null
+     * @return 串联后的新 {@link Flow} 实例
+     * @throws NullPointerException 当 {@code operation} 为 null 时抛出
+     */
+    public Flow<I, O> thenOptional(Operation<O, O> operation) {
+        return thenOptional(Flow.step(operation));
+    }
+
+    /**
+     * 顺序拼接延迟解析的“可选步骤”操作 Class，语义同 {@link #thenOptional(Operation)}。
+     *
+     * @param operationClass 同类型操作契约 Class，将在编译期由 {@link OperationResolver} 解析，不能为 null
+     * @return 串联后的新 {@link Flow} 实例
+     * @throws NullPointerException 当 {@code operationClass} 为 null 时抛出
+     */
+    public Flow<I, O> thenOptional(Class<? extends Operation<O, O>> operationClass) {
+        return thenOptional(Flow.step(operationClass));
+    }
+
+    /**
+     * 顺序拼接延迟解析的限定符“可选步骤”操作 Class，语义同 {@link #thenOptional(Operation)}。
+     *
+     * @param operationClass 同类型操作契约 Class，不能为 null
+     * @param qualifier      Spring/Bean 限定符名称（如 Bean 名称），可为 null
+     * @return 串联后的新 {@link Flow} 实例
+     * @throws NullPointerException 当 {@code operationClass} 为 null 时抛出
+     */
+    public Flow<I, O> thenOptional(
+            Class<? extends Operation<O, O>> operationClass, String qualifier) {
+        return thenOptional(Flow.step(operationClass, qualifier));
+    }
+
+    /**
+     * 顺序拼接“可选子流程”：子流程总会执行，但其<b>最终</b> {@link Outcome.Skipped} 不终止流水线，
+     * 而是回退为进入该子流程前的值继续执行后续节点。
+     *
+     * <p>结果语义：</p>
+     * <ul>
+     *   <li>子流程最终 {@link Outcome.Accepted}：其输出正常作为后续节点的输入；</li>
+     *   <li>子流程最终 {@link Outcome.Skipped}：以<b>进入子流程前</b>的值继续执行后续节点；</li>
+     *   <li>子流程最终 {@link Outcome.Rejected} / {@link Outcome.Failed}：照常短路并向上传播。</li>
+     * </ul>
+     *
+     * <p>注意：整个子流程构成一个可选作用域（optional scope）——回退值是进入子流程前的值，
+     * <b>而不是</b>子流程内部最后一次 Accepted 的中间值。若子流程内部第一步 Accepted、
+     * 第二步 Skipped，最终仍回退到子流程入口处的原始输入。</p>
+     *
+     * <p>实现上脱糖为 {@code firstApplicable(next, identity())}（SKIPPED 触发的 Fallback），
+     * 不引入新的运行时节点，Local 与 Durable 行为完全一致。</p>
+     *
+     * <p>类型约束：仅支持同类型 {@code O -> O} 的子流程，原因同 {@link #thenOptional(Operation)}。</p>
+     *
+     * @param next 同类型后续子流程，不能为 null
+     * @return 串联后的新 {@link Flow} 实例
+     * @throws NullPointerException 当 {@code next} 为 null 时抛出
+     */
+    public Flow<I, O> thenOptional(Flow<O, O> next) {
+        Objects.requireNonNull(next, "next must not be null");
+        return then(Flow.firstApplicable(next, Flow.<O>identity()));
+    }
+
+    /**
      * 投影调用并合并结果（Use 模式）：
      * 从当前流程的输出中通过 {@code project} 函数提取入参调用子操作，
      * 并将原输出与操作的 Accepted 返回值通过 {@code merge} 函数聚合为新的输出。

@@ -1,6 +1,6 @@
 # 实战案例
 
-本章给出两个完整可运行风格的示例：订单风控路由 + firstApplicable 降级，支付审批 await/resume + Durable 恢复。
+本章给出三个完整可运行风格的示例：订单风控路由 + firstApplicable 降级，支付审批 await/resume + Durable 恢复，以及基于 Spring Bean 一等公民的企业级电商履约流。
 
 ---
 
@@ -468,3 +468,224 @@ public class PaymentApprovalTest {
 - `Resumed.state()` 保留挂起前的 scope entry，`Resumed.signal()` 携带类型化审批结果；
 - Durable resume 两段 CAS 保证"信号先落库"，崩溃在任何点都能收敛：同值幂等、异值冲突、挂起可重发；
 - `(flowId="payment-settle", flowVersion=1)` 是快照归属边界；流程结构变更必须递增版本号，旧快照不做迁移。
+
+---
+
+# 案例三：基于 Spring Bean 一等公民的企业级电商履约流
+
+## 业务场景与架构
+
+在典型的企业级 Spring Boot 应用中，业务步骤通常需要依赖容器中的组件（如数据库 DAO、RPC Client、缓存 Client、监控埋点等），并要求支持 Spring 声明式事务（`@Transactional`）与 AOP 代理。
+
+本案例演示：
+1. **Bean 是一等公民**：所有步骤（`Operation`）与准入策略（`Policy`）均作为 Spring `@Component` 注入依赖；
+2. **声明式 Class + Qualifier 编排**：流程 DSL 直接通过 `Class` 与限定符（Bean 名称）编排，不直接持有物理实例；
+3. **多渠道策略路由**：通过 Spring 中注入的不同 Qualifier 实现仓储策略路由（如云仓 `cloudWarehouseOperation` vs 门店前置仓 `localStoreOperation`）；
+4. **事务与代理透明生效**：Spring 的 `@Transactional` 事务切面在执行期无缝生效；
+5. **编译期一次性装配**：在 Spring `@Configuration` 中通过 `BeanFlows.compile(flow)` 编译为单例 `LocalExecutable`。
+
+---
+
+## 1. 业务模型
+
+```java
+package com.example.fulfillment.model;
+
+import lombok.Value;
+
+public class FulfillmentModel {
+
+    @Value
+    public static class OrderCommand {
+        String orderId;
+        String userId;
+        String sku;
+        int quantity;
+        FulfillmentType type;
+    }
+
+    public enum FulfillmentType { CLOUD, LOCAL_STORE }
+
+    @Value
+    public static class FulfillmentReceipt {
+        String orderId;
+        String trackingNumber;
+        String warehouseCode;
+    }
+}
+```
+
+---
+
+## 2. 声明 Spring Bean 业务操作与策略
+
+```java
+package com.example.fulfillment.operation;
+
+import com.example.fulfillment.model.FulfillmentModel.*;
+import com.example.fulfillment.service.InventoryService;
+import com.example.fulfillment.service.RiskRpcClient;
+import com.team4u.framework.flow.api.*;
+import com.team4u.framework.flow.model.*;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Transactional;
+
+// 1. 租户限流与准入 Policy (Spring 托管单例)
+@Component
+public class FulfillmentRatePolicy implements Policy<String> {
+
+    @Autowired
+    private RedisRateLimiter rateLimiter;
+
+    @Override
+    public Gate before(PolicyContext context, String tenantKey) {
+        if (!rateLimiter.tryAcquire(tenantKey, 1)) {
+            return Gate.reject(Reason.of("RATE_LIMITED", "租户履约请求超限"));
+        }
+        return Gate.proceed();
+    }
+}
+
+// 2. 外部风控校验 Operation (注入 RPC 客户端)
+@Component
+public class RiskCheckOperation implements Operation<OrderCommand, OrderCommand> {
+
+    @Autowired
+    private RiskRpcClient riskRpcClient;
+
+    @Override
+    public Outcome<OrderCommand> execute(OperationContext context, OrderCommand command) {
+        // 利用稳定幂等键 invocationId 进行外部调用
+        boolean isSafe = riskRpcClient.checkRisk(context.invocationId(), command.getUserId());
+        if (!isSafe) {
+            return Outcome.rejected(Reason.of("RISK_BLOCKED", "用户命中风控拦截"));
+        }
+        return Outcome.accepted(command);
+    }
+}
+
+// 3. 履约渠道路由器 Operation
+@Component
+public class WarehouseSelectorOperation implements Operation<OrderCommand, FulfillmentType> {
+    @Override
+    public Outcome<FulfillmentType> execute(OperationContext context, OrderCommand command) {
+        return Outcome.accepted(command.getType());
+    }
+}
+
+// 4a. 云仓履约通道 (Spring Bean 名称: cloudWarehouseOperation，支持声明式事务)
+@Component("cloudWarehouseOperation")
+public class CloudWarehouseOperation implements Operation<OrderCommand, FulfillmentReceipt> {
+
+    @Autowired
+    private InventoryService inventoryService;
+
+    @Override
+    @Transactional(rollbackFor = Exception.class) // Spring 事务切面原样保留并生效
+    public Outcome<FulfillmentReceipt> execute(OperationContext context, OrderCommand command) {
+        String tracking = inventoryService.lockAndDispatchCloud(
+                context.invocationId(), command.getOrderId(), command.getSku(), command.getQuantity());
+        return Outcome.accepted(new FulfillmentReceipt(command.getOrderId(), tracking, "WH-CLOUD-01"));
+    }
+}
+
+// 4b. 门店前置仓履约通道 (Spring Bean 名称: localStoreOperation)
+@Component("localStoreOperation")
+public class LocalStoreOperation implements Operation<OrderCommand, FulfillmentReceipt> {
+
+    @Autowired
+    private InventoryService inventoryService;
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Outcome<FulfillmentReceipt> execute(OperationContext context, OrderCommand command) {
+        String tracking = inventoryService.lockAndDispatchStore(
+                context.invocationId(), command.getOrderId(), command.getSku(), command.getQuantity());
+        return Outcome.accepted(new FulfillmentReceipt(command.getOrderId(), tracking, "WH-STORE-99"));
+    }
+}
+```
+
+---
+
+## 3. Spring 容器配置与 Flow 编译
+
+```java
+package com.example.fulfillment.config;
+
+import com.example.fulfillment.model.FulfillmentModel.*;
+import com.example.fulfillment.operation.*;
+import com.team4u.framework.bean.spring.Team4uBeanConfiguration;
+import com.team4u.framework.flow.Flow;
+import com.team4u.framework.flow.LocalExecutable;
+import com.team4u.framework.flow.bean.BeanFlows;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+import org.springframework.context.annotation.Import;
+
+@Configuration
+@Import(Team4uBeanConfiguration.class) // 启用 team4u-bean 对 Spring ApplicationContext 的自动桥接
+public class FulfillmentFlowConfiguration {
+
+    @Bean
+    public Flow<OrderCommand, FulfillmentReceipt> fulfillmentFlowDefinition() {
+        // 声明纯逻辑流：全部使用 Class 与 Spring Qualifier（Bean 是一等公民）
+        return Flow.step(RiskCheckOperation.class)
+                .then(
+                        Flow.route(WarehouseSelectorOperation.class)
+                                .caseOf(FulfillmentType.CLOUD, Flow.step(
+                                        CloudWarehouseOperation.class, "cloudWarehouseOperation"))
+                                .caseOf(FulfillmentType.LOCAL_STORE, Flow.step(
+                                        LocalStoreOperation.class, "localStoreOperation"))
+                                .withoutOtherwise()
+                )
+                // 挂载 Spring 托管的 Policy
+                .policy(FulfillmentRatePolicy.class, command -> "tenant:" + command.getUserId())
+                .named("ecommerce-fulfillment-flow");
+    }
+
+    @Bean
+    public LocalExecutable<OrderCommand, FulfillmentReceipt> fulfillmentExecutable(
+            Flow<OrderCommand, FulfillmentReceipt> fulfillmentFlowDefinition) {
+        // 编译期一次性从 Spring 容器解析所有 Bean 依赖，并生成高性能单例执行器
+        return BeanFlows.compile(fulfillmentFlowDefinition);
+    }
+}
+```
+
+---
+
+## 4. 业务 Service 调用
+
+```java
+package com.example.fulfillment.service;
+
+import com.example.fulfillment.model.FulfillmentModel.*;
+import com.team4u.framework.flow.FlowResult;
+import com.team4u.framework.flow.LocalExecutable;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+
+@Service
+public class OrderFulfillmentService {
+
+    @Autowired
+    private LocalExecutable<OrderCommand, FulfillmentReceipt> fulfillmentExecutable;
+
+    public FulfillmentReceipt executeFulfillment(OrderCommand command) {
+        // 极速同步执行，直接调用已绑定的 Spring Bean 单例，事务与切面完全生效
+        FlowResult<FulfillmentReceipt> result = fulfillmentExecutable.run(command);
+        return result.requireAccepted();
+    }
+}
+```
+
+---
+
+## 5. 架构优势总结
+
+1. **零手工连线**：无需在 Flow 构建处通过构造函数传递各种 Service/Repository，Flow DSL 仅持有类型契约；
+2. **Spring 生态全兼容**：`@Autowired`、`@Value`、`@Transactional`、AOP 日志拦截、Micrometer 监控在 `Operation` 中完全可用；
+3. **极速运行期性能**：编译期完成 `BeanManager` 单例解析与缓存，运行期直接调用方法，无反射、无动态查找开销；
+4. **跨环境一致**：无论在 Spring Boot Web 应用中，还是在脱离 Spring 的单元测试中，均能通过 `BeanOperationResolver` 统一解析。

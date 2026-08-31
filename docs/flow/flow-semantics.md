@@ -77,7 +77,11 @@ FlowResult<O>（Local 执行层，三态）
 
 ## 2.1 INVOKE（调用）
 
-执行绑定的 `Operation`。`Flow.step` / `then(Operation)` / `use(...)` 均编译为 INVOKE。`use` 通过 `project` 从当前输出派生入参、`merge` 合并原输出与 Operation 输出，用于"调用外部服务但不丢失主上下文"的场景。异常被捕获并转换为 `OPERATION_EXCEPTION` 稳定 Failed（见第 6 节）。
+执行绑定的 `Operation`。`Flow.step` / `then` / `thenOptional` / `use` 均编译为 INVOKE 节点。
+
+- **支持实例与 Bean 双绑定**：可以直接传入 `Operation` 实例，也可以传入 `Class<? extends Operation>` 与可选限定符 `qualifier`（Spring Bean 名称），在编译期由容器解析为单例 Bean（Bean 是一等公民）。
+- **use 上下文调用**：通过 `project` 从当前输出派生入参、`merge` 合并原输出与 Operation 输出，用于"调用外部服务但不丢失主上下文"的场景（同样支持 Class/Qualifier 绑定）。
+- **异常收敛**：异常被捕获并转换为 `OPERATION_EXCEPTION` 稳定 Failed（见第 6 节）。
 
 ## 2.2 SEQUENCE（顺序）
 
@@ -85,7 +89,7 @@ FlowResult<O>（Local 执行层，三态）
 
 ## 2.3 ROUTE（路由）
 
-先执行 selector Operation 得到路由键，再按键选中分支：
+先执行 selector Operation（支持 Lambda、实例或 `Class`/`qualifier` 容器 Bean）得到路由键，再按键选中分支：
 
 - 键匹配为精确 `equals`；重复 case 在构建期以 `DUPLICATE_ROUTE_CASE` 拒绝。
 - 声明 `otherwise` 时未匹配走默认分支；声明 `withoutOtherwise` 时未匹配整体 Skipped（`NO MATCH` 语义）。
@@ -206,6 +210,19 @@ public interface JoinStrategy<O> {
 ```
 
 接收声明顺序的分支结果集合，返回单个 Outcome。`ParallelResults` 提供按 token 的类型化查找 `outcome(branch)` 与内置合并策略（`allAccepted/firstAccepted/quorum/homogeneousCollect`），`Values` 仅包含 Accepted 分支的输出并支持 `get(branch)`/`contains(branch)`。
+
+## 3.5 组件绑定与 Bean 一等公民模型 (Binding & Resolution Model)
+
+`team4u-flow` 的所有扩展点（`Operation`、`Policy`、`PersistentPolicy`）均支持两种绑定形态：
+1. **显式实例绑定**：`Flow.step(opInstance)`，适合纯函数/测试桩/内联 Lambda；
+2. **声明式 Class / Bean 绑定**：`Flow.step(OpClass.class)`、`Flow.step(OpClass.class, "beanQualifier")`，适合 Spring / IoC 生产环境。
+
+### 核心语义与保证：
+- **编译期一次性解析**：在 `Local.compile` / `BeanFlows.compile` / `DurableRuntime.compile` 阶段由 `OperationResolver` 完成解析并缓存单例引用，运行期 `run` 时为直接方法调用，零反射损耗。
+- **代理原样保留**：Spring 的 `@Transactional` 事务拦截器、AOP 切面及 CGLIB/JDK 代理对象在解析后原样保留并执行，确保事务切面正常生效。
+- **结构与执行解耦**：Flow 定义（AST）只记录 `Class` 与 `qualifier` 契约，不持有物理容器对象，天然支持跨环境复用与图表渲染。
+- **严格诊断**：若 Bean 缺失或类型不匹配，在编译阶段统一抛出 `FlowBuildException`（内含 `MISSING_BINDING` / `BINDING_TYPE` 明确错误），杜绝运行期隐式故障。
+- 完整用法与 Spring 最佳实践详见 [Spring / Bean 容器集成](flow-bean.md)。
 
 ---
 

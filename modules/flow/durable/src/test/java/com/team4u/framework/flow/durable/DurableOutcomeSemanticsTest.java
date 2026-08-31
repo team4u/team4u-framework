@@ -41,6 +41,51 @@ public class DurableOutcomeSemanticsTest {
     }
 
     @Test
+    public void thenOptionalPassesEntryOnSkippedAndAcceptedValueOtherwise() {
+        RecordingOp skippedOptional = new RecordingOp("skipped").returns(skipped("NA"));
+        RecordingOp afterSkipped = new RecordingOp("after-skipped");
+        Flow<String, String> skippedFlow = Flow.<String>identity()
+                .thenOptional(skippedOptional)
+                .then(afterSkipped);
+        DurableResult<String> skippedResult = compile(skippedFlow,
+                new InMemoryDurableStore()).start("optional-skipped", "s");
+        assertEquals("s>after-skipped", acceptedValue(skippedResult));
+        assertEquals("s", skippedOptional.inputs().get(0));
+        assertEquals("s", afterSkipped.inputs().get(0));
+
+        RecordingOp acceptedOptional = new RecordingOp("accepted");
+        RecordingOp afterAccepted = new RecordingOp("after-accepted");
+        Flow<String, String> acceptedFlow = Flow.<String>identity()
+                .thenOptional(acceptedOptional)
+                .then(afterAccepted);
+        DurableResult<String> acceptedResult = compile(acceptedFlow,
+                new InMemoryDurableStore()).start("optional-accepted", "s");
+        assertEquals("s>accepted>after-accepted", acceptedValue(acceptedResult));
+        assertEquals("s>accepted", afterAccepted.inputs().get(0));
+    }
+
+    @Test
+    public void thenOptionalDoesNotConsumeRejectedOrFailed() {
+        RecordingOp rejectedOptional = new RecordingOp("rejected").returns(rejected("NO"));
+        RecordingOp afterRejected = new RecordingOp("after-rejected");
+        DurableResult<String> rejectedResult = compile(Flow.<String>identity()
+                        .thenOptional(rejectedOptional)
+                        .then(afterRejected), new InMemoryDurableStore())
+                .start("optional-rejected", "s");
+        assertEquals(Outcome.Kind.REJECTED, outcome(rejectedResult).kind());
+        assertEquals(0, afterRejected.calls());
+
+        RecordingOp failedOptional = new RecordingOp("failed").returns(failed("BAD"));
+        RecordingOp afterFailed = new RecordingOp("after-failed");
+        DurableResult<String> failedResult = compile(Flow.<String>identity()
+                        .thenOptional(failedOptional)
+                        .then(afterFailed), new InMemoryDurableStore())
+                .start("optional-failed", "s");
+        assertEquals(Outcome.Kind.FAILED, outcome(failedResult).kind());
+        assertEquals(0, afterFailed.calls());
+    }
+
+    @Test
     public void rejectedStopsSequenceAndRetainsScopeEntryForFallback() {
         RecordingOp a = new RecordingOp("a").returns(rejected("NOPE"));
         RecordingOp b = new RecordingOp("b");

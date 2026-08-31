@@ -18,9 +18,12 @@
   - 业务在单机验证完毕后，若需增加检查点恢复，往往需要推翻重写整个流程逻辑。
 - **布尔与异常承载业务分支语义过载**：
   - "成功产出 / 业务拒绝 / 无适用分支 / 技术失败"被压缩成 `boolean`、`null` 或 `RuntimeException`，调用方无法在类型层面区分"正常拒绝"与"需要告警的故障"。
+- **容器与依赖注入割裂**：
+  - 纯函数/Lambda 式编排在真实业务中难以直接注入 Spring 托管的 DAO、RPC 客户端与事务切面；而传统工作流的反射动态查找又带来严重的性能损耗与类型退化。
 
 `team4u-flow` 是一个专为 Java 业务流编排设计的轻量级、强类型流程组件，采用**新版四态类型化 Flow**方案回应上述痛点：
 
+- **Bean 是一等公民**：Flow DSL 原生支持以 `Class` 与 `qualifier`（Spring Bean 名称）进行声明式编排；在编译期一次性解析绑定容器单例，运行期零反射损耗，Spring AOP 代理与事务切面原样保留。
 - **一个不可变定义，两种执行器**：逻辑 `Flow<I, O>` 只描述结构、本身不可执行；同一份定义既可投影为 `Local` 同步执行器，也可投影为 `Durable` 持久化执行器，无需改写业务代码。
 - **四态 Outcome 类型化结果**：`Accepted`（携值成功）、`Rejected`（业务拒绝）、`Skipped`（弃权/跳过）、`Failed`（执行失败）严格闭集，仅 `Accepted` 携带输出，分支语义不再依赖布尔与异常约定。
 - **零 Lambda 序列化**：Durable 快照只保存框架元数据与编码后的 `StoredValue` 槽位，绝不序列化 Java 代码、Operation 实例或 Lambda 表达式。
@@ -66,6 +69,8 @@ graph TD
 
 ## 核心设计特色
 
+- **Bean 是一等公民与 Spring 无缝集成**：
+  - 编排节点原生支持以 `Class<? extends Operation>` 与可选限定符（Spring Bean 名称）声明；编译期一次性解析绑定，运行期零反射查找开销；Spring `@Transactional`、AOP 代理拦截完整保留。
 - **一个定义，两种执行器**：
   - Local 极速执行：`Local.compile(flow).run(input)` 同步驱动，零序列化、零持久化开销；挂起、取消、并行、超时全部可用。
   - Durable 崩溃恢复：`DurableExecutable.start(executionId, input)` 在节点边界 CAS 落检查点，进程重启后 `recover` 从最后提交的快照续跑。
@@ -85,7 +90,9 @@ graph TD
 
 | 概念 | 说明 |
 | :--- | :--- |
-| `Flow<I, O>` | 不可变逻辑流程定义；只描述结构，需经 `Local` / `DurableRuntime` 编译后才可执行 |
+| `Flow<I, O>` | 不可变逻辑流程定义；只描述结构，需经 `Local` / `DurableRuntime` / `BeanFlows` 编译后才可执行 |
+| `Bean 绑定` | 以 `Class` 与 `qualifier` 声明节点，编译期由 `OperationResolver` 从 Spring/Bean 容器一次性解析为单例 Bean |
+| `BeanFlows` | `team4u-flow-bean` 提供的门面工具，一行代码完成基于 `BeanManager` 的流编译 (`BeanFlows.compile(flow)`) |
 | `Operation<I, O>` | 业务步骤扩展点：`(OperationContext, I) -> Outcome<O>`，同步、可复用、线程安全 |
 | `Outcome<T>` | 业务四态闭集：`Accepted(value)` / `Rejected(Reason)` / `Skipped(Reason)` / `Failed(Failure)`，仅 Accepted 携带输出 |
 | `Reason` | 业务拒绝/弃权的稳定诊断信息：`code`（稳定业务码）、`message`、`details` |
@@ -163,22 +170,23 @@ modules/flow
 
 # 组件联动
 
-1. **定义**：以 `Flow.step(...).then(...)` 等组合方法构建 `Flow<I, O>`；定义不可变、可复用、线程安全。
+1. **定义**：以 `Flow.step(...).then(...)` 等组合方法构建 `Flow<I, O>`；支持直接传入 Lambda 实例或 `Class` / `qualifier` 容器绑定；定义不可变、可复用、线程安全。
 2. **结构投影**：`flow.describe(flowId)` 导出 `FlowDescription`，交给 graph 模块渲染 Mermaid/文本图；描述面不含任何回调实例。
 3. **可执行投影**：`flow.project(resolver, visitor)`（或 `Local.compile` / `DurableRuntime.compile` 内部调用）先经 `Compiler` 校验结构、解析 class+qualifier 绑定，再经 `ExecutableFlowVisitor` 导出强类型执行计划。
 4. **Local 执行**：`LocalExecutable.run(input)` 同步返回 `FlowResult`；`await` 挂起返回 `Suspended`，用 `resume(suspension, point, signal)` 续接（Suspension 单次消费）；并行分支由线程池真并发执行，wait-all 后交给 `JoinStrategy`。
 5. **Durable 执行**：`DurableExecutable.start(executionId, input)` 逐节点 CAS 提交检查点；挂起返回 `Suspended`，`resume(executionId, pointName, signal)` 先把信号独立落库再驱动续接；进程重启后 `recover(executionId)` 从最后提交快照继续。
 6. **观测**：`FlowObserver` 收集同步执行事件（Local 与 Durable 通用），`DurableObserver` 额外接收检查点提交/恢复/信号落库事件；test 模块的 `TraceCollector` 即其开箱实现。
-7. **容器集成**：bean 模块以 `BeanFlows.compile(flow, beanManager)` 把绑定解析交给容器，Spring 场景下代理原样保留、不拆包。
+7. **容器集成**：bean 模块以 `BeanFlows.compile(flow)` / `BeanFlows.compile(flow, beanManager)` 把绑定解析交给容器，Spring 场景下代理原样保留、不拆包，执行期直接调用单例。
 
 ---
 
 # 文档导航
 
-- [快速开始](quick-start.md)：从依赖引入到 route/parallel/await 与 Durable 恢复的最短路径。
+- [快速开始](quick-start.md)：从纯 Java 到 Spring/Bean 绑定、route/parallel/await 与 Durable 恢复的最短路径。
 - [核心语义与机制](flow-semantics.md)：四态语义与传播规则、八节点语义、Policy/重试/超时、取消合同、异常转稳定 Failed。
+- [Spring / Bean 容器集成](flow-bean.md)：Bean 是一等公民、Spring `@Transactional` 与 AOP 代理保留、编译期解析与诊断。
 - [Durable 持久化执行](flow-durable.md)：快照边界、CAS 检查点、resume 两段提交、PersistentPolicy 状态持久化与版本兼容。
 - [可视化与图表渲染](flow-graph.md)：FlowDescription 投影、六通道、取消不进 join、opaque 路由键与配置摘要。
 - [测试支持与断言](flow-test.md)：testkit 全 API 示例。
 - [扩展机制与 SPI](flow-extension.md)：扩展点清单与双投影 SPI（可执行合同 vs 纯描述）。
-- [实战案例](flow-sample.md)：订单风控路由降级、支付审批挂起恢复两个完整示例。
+- [实战案例](flow-sample.md)：订单风控路由降级、支付审批挂起恢复与 Spring Bean 一等公民履约实战。

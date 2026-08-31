@@ -28,7 +28,19 @@
         <artifactId>team4u-flow</artifactId>
     </dependency>
 
-    <!-- 可选：持久化执行器（依赖 team4u-flow） -->
+    <!-- 容器绑定（Bean 是一等公民）：支持从 Spring/BeanManager 解析 Class 与限定符 -->
+    <dependency>
+        <groupId>com.team4u</groupId>
+        <artifactId>team4u-flow-bean</artifactId>
+    </dependency>
+
+    <!-- Spring 环境桥接（可选，Spring 项目必需） -->
+    <dependency>
+        <groupId>com.team4u</groupId>
+        <artifactId>team4u-bean-spring</artifactId>
+    </dependency>
+
+    <!-- 持久化执行器（可选，支持崩溃恢复） -->
     <dependency>
         <groupId>com.team4u</groupId>
         <artifactId>team4u-flow-durable</artifactId>
@@ -36,11 +48,15 @@
 </dependencies>
 ```
 
-其他可选模块：`team4u-flow-graph`（渲染）、`team4u-flow-bean`（容器绑定）、`team4u-flow-test`（测试，scope=test）。
+其他可选模块：`team4u-flow-graph`（渲染）、`team4u-flow-test`（测试，scope=test）。
 
 ---
 
-# 2. 第一个 then 链
+# 2. 快速上手：从纯 Java 到 Spring Bean
+
+`team4u-flow` 同时支持**纯 Java 静态函数/Lambda**与 **Spring / Bean 容器一等公民**两种开发范式。
+
+## 2.1 纯 Java / Lambda 模式
 
 业务步骤实现 `Operation<I, O>`，返回四态 `Outcome`；用 `Flow.step(...).then(...)` 组合成类型化流水线：
 
@@ -69,15 +85,83 @@ public class QuickStart {
 }
 ```
 
-要点：
+## 2.2 Spring / Bean 一等公民模式（推荐生产使用）
+
+在真实业务开发中，`Operation` 往往需要注入 Spring 托管的 DAO、RPC 客户端或带有 `@Transactional` 事务注解。`team4u-flow` 将 Bean 视作一等公民：
+
+### 1. 编写 Spring 托管的 Operation
+
+```java
+@Component
+public class ValidateOrderOperation implements Operation<OrderRequest, OrderRequest> {
+    @Autowired
+    private OrderRepository repository;
+
+    @Override
+    public Outcome<OrderRequest> execute(OperationContext context, OrderRequest order) {
+        return order.getAmount() > 0 ? Outcome.accepted(order) 
+                : Outcome.rejected(Reason.of("INVALID_AMOUNT", "金额非法"));
+    }
+}
+
+@Component("chargePaymentOperation")
+public class ChargePaymentOperation implements Operation<OrderRequest, Receipt> {
+    @Autowired
+    private PaymentRpcClient paymentRpcClient;
+
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Outcome<Receipt> execute(OperationContext context, OrderRequest order) {
+        String txId = paymentRpcClient.charge(context.invocationId(), order.getAmount());
+        return Outcome.accepted(new Receipt(order.getOrderId(), txId));
+    }
+}
+```
+
+### 2. 在 Spring 配置中编排并编译
+
+```java
+@Configuration
+@Import(Team4uBeanConfiguration.class) // 桥接 Spring 容器至 BeanManager
+public class OrderFlowConfig {
+
+    @Bean
+    public LocalExecutable<OrderRequest, Receipt> orderExecutable() {
+        // 声明 Flow：直接引用 Class 与 Qualifier，解耦具体实例
+        Flow<OrderRequest, Receipt> flow = Flow.step(ValidateOrderOperation.class)
+                .then(ChargePaymentOperation.class, "chargePaymentOperation");
+
+        // 编译期一次性解析绑定容器 Bean，运行期零反射损耗，AOP 与事务切面完全生效
+        return BeanFlows.compile(flow);
+    }
+}
+```
+
+### 3. 业务 Service 注入直接调用
+
+```java
+@Service
+public class OrderService {
+    @Autowired
+    private LocalExecutable<OrderRequest, Receipt> orderExecutable;
+
+    public Receipt process(OrderRequest request) {
+        return orderExecutable.run(request).requireAccepted();
+    }
+}
+```
+
+---
+
+## 2.3 组合与上下文调用要点
 
 - `then` 前后类型严格推导：`Flow<String, Integer>.then(Operation<Integer, String>)` 得到 `Flow<String, String>`，不匹配直接编译错误。
 - 所有组合方法返回新的 `Flow` 实例，定义不可变、线程安全。
-- 需要调用外部服务又不想丢失主上下文时用 `use`：
+- 需要调用外部服务又不想丢失主上下文时用 `use`（支持 Lambda 或 Class 绑定）：
 
 ```java
 Flow<State, State> enriched = Flow.<State>identity().use(
-        riskClient,                       // Operation<RiskReq, RiskScore>
+        riskClient,                       // Operation<RiskReq, RiskScore> 或 RiskClientOp.class
         State::toRiskRequest,             // project: 从当前输出派生入参
         (state, score) -> state.withScore(score)); // merge: 合并原输出与新结果
 ```
@@ -269,5 +353,6 @@ testkit 提供 `OperationStub`/`PolicyStub` 桩、`TraceCollector` 轨迹、`Flo
 # 8. 下一步
 
 - [核心语义与机制](flow-semantics.md)：四态传播、八节点、Policy/Retry/Timeout、取消合同。
+- [Spring / Bean 容器集成](flow-bean.md)：Bean 是一等公民、Spring `@Transactional` 与 AOP 代理保留、编译期解析与诊断。
 - [Durable 持久化执行](flow-durable.md)：检查点、恢复、resume 两段 CAS。
 - [实战案例](flow-sample.md)：订单风控路由与支付审批恢复的完整示例。

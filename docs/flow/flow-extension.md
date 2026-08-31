@@ -261,24 +261,33 @@ public class RateWindowPolicy implements PersistentPolicy<String, long[]> {
 
 ---
 
-# 6. Bean 容器集成（team4u-flow-bean）
+# 6. Bean 容器集成与一等公民支持（team4u-flow-bean）
 
-`BeanOperationResolver` 从 `BeanManager` 解析 class+qualifier 绑定，解析结果原样使用（不替换、不解包代理）：
+在 `team4u-flow` 中，**Bean 是一等公民**。流程 DSL 在构建期无需持有具体对象实例，可直接通过 `Class<? extends Operation>`、`Class<? extends Policy>` 与可选限定符（Spring Bean 名称）进行声明式编排。
+
+`BeanOperationResolver` 通过 `BeanManager` 门面从 Spring 容器或本地容器中解析绑定，解析结果原样绑定至执行计划（AOP 拦截器与 `@Transactional` 代理完整保留）：
 
 ```java
 import com.team4u.framework.flow.bean.BeanFlows;
 import com.team4u.framework.flow.bean.BeanOperationResolver;
 
-// 使用全局 BeanManager
+// 1. 使用全局 BeanManager (配合 Spring: @Import(Team4uBeanConfiguration.class))
 LocalExecutable<OrderRequest, Receipt> executable = BeanFlows.compile(flow);
 
-// 显式指定 BeanManager
+// 2. 显式指定 BeanManager
 LocalExecutable<OrderRequest, Receipt> explicit =
         BeanFlows.compile(flow, beanManager);
 
-// 或仅构造 resolver，配合 Local.compile / DurableRuntime
+// 3. 构造 resolver 配合 Local.compile
 LocalExecutable<OrderRequest, Receipt> manual =
-        Local.compile(flow, new BeanOperationResolver(beanManager));
+        Local.compile(flow, BeanFlows.resolver());
+
+// 4. 构造 resolver 配合 DurableRuntime (持久化长流程)
+DurableRuntime runtime = DurableRuntime.builder(store)
+        .operationResolver(BeanFlows.resolver())
+        .build();
 ```
 
-绑定声明侧用 class 形式：`Flow.step(RiskScan.class)`、`Flow.step(RiskScan.class, "strict")`；qualifier 为 null 时走 `getRequiredBean(contract)`，非 null 时按 bean 名称查找并校验契约实现。
+- **解析规则**：`qualifier == null` 时调用 `beanManager.getRequiredBean(contract)`；非 null 时调用 `beanManager.getBean(qualifier)` 并严格校验 `contract.isInstance(bean)`。
+- **性能优势**：在 `compile` 期完成一次性解析并缓存单例引用，运行期（`run`）为原生直接调用，零反射损耗。
+- **深入指南**：完整 Spring 配置、动态代理拦截机制与常见排错详见 [Spring / Bean 容器集成](flow-bean.md)。

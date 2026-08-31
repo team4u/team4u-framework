@@ -67,6 +67,43 @@ public class TypedCompilationTest {
         String subflowInvalid = subflowValid.replace(
                 "Flow<String,Long> flow", "Flow<Boolean,Long> flow");
 
+        // thenOptional 仅允许同类型 Operation<T,T> / Flow<T,T>
+        String optionalValid = "import com.team4u.framework.flow.*;\n"
+                + "import com.team4u.framework.flow.api.*;\n"
+                + "import com.team4u.framework.flow.model.*;\n"
+                + "class ValidOptional {\n"
+                + "  static final class Same implements Operation<String,String> {\n"
+                + "    public Outcome<String> execute(OperationContext c, String i) {\n"
+                + "      return Outcome.skipped(Reason.of(\"NA\", \"na\"));\n"
+                + "    }\n"
+                + "  }\n"
+                + "  static final Flow<String,String> reusable = Flow.step(Same.class);\n"
+                + "  Flow<String,String> byInstance = Flow.<String>identity().thenOptional(new Same());\n"
+                + "  Flow<String,String> byClass = Flow.<String>identity().thenOptional(Same.class, \"same\");\n"
+                + "  Flow<String,String> byFlow = Flow.<String>identity().thenOptional(reusable);\n"
+                + "}\n";
+
+        String optionalOperationInvalid = "import com.team4u.framework.flow.*;\n"
+                + "import com.team4u.framework.flow.api.*;\n"
+                + "import com.team4u.framework.flow.model.*;\n"
+                + "class InvalidOptionalOperation {\n"
+                + "  static final class Change implements Operation<String,Integer> {\n"
+                + "    public Outcome<Integer> execute(OperationContext c, String i) {\n"
+                + "      return Outcome.accepted(i.length());\n"
+                + "    }\n"
+                + "  }\n"
+                + "  Flow<String,String> flow = Flow.<String>identity().thenOptional(Change.class);\n"
+                + "}\n";
+
+        String optionalFlowInvalid = "import com.team4u.framework.flow.*;\n"
+                + "import com.team4u.framework.flow.api.*;\n"
+                + "import com.team4u.framework.flow.model.*;\n"
+                + "class InvalidOptionalFlow {\n"
+                + "  static final Flow<String,Integer> change = Flow.step(\n"
+                + "    (Operation<String,Integer>) (c, i) -> Outcome.accepted(i.length()));\n"
+                + "  Flow<String,String> flow = Flow.<String>identity().thenOptional(change);\n"
+                + "}\n";
+
         // 闭集守护 1：外部类不得直接继承 Outcome
         String extendOutcome = "package custom.external;\n"
                 + "import com.team4u.framework.flow.model.Outcome;\n"
@@ -95,6 +132,9 @@ public class TypedCompilationTest {
         assertNotEquals(0, compile("ValidFlow", invalid));
         assertEquals(0, compile("ValidSubflow", subflowValid));
         assertNotEquals(0, compile("ValidSubflow", subflowInvalid));
+        assertEquals(0, compile("ValidOptional", optionalValid));
+        assertNotEquals(0, compile("InvalidOptionalOperation", optionalOperationInvalid));
+        assertNotEquals(0, compile("InvalidOptionalFlow", optionalFlowInvalid));
 
         assertNotEquals(0, compile("CustomOutcome", extendOutcome));
         assertNotEquals(0, compile("CustomFlowResult", extendFlowResult));
