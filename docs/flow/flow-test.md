@@ -1,6 +1,10 @@
 # 测试支持与断言
 
-`team4u-flow-test` 提供覆盖四态 Outcome、Local/Durable 双执行器的测试桩、断言、夹具与并行屏障。
+> 层级：工具 · 全层 · 模块：team4u-flow-test
+
+`team4u-flow-test`（testkit）是 Flow 的开箱测试组件：`TraceCollector` 提供 `FlowObserver` 的线程安全开箱实现（Local 与 Durable 通用，Durable 侧经 `DurableFixture.withRuntime` 注入），配合四态业务桩（`OperationStub` / `PolicyStub`）、双执行器断言（`FlowAssertions`）与编译夹具（`LocalFixture` / `DurableFixture`）、并行屏障（`ParallelBarrier`），覆盖从 L1 流水线到 L3 崩溃恢复的全部测试场景。
+
+本文按典型使用动线组织：**打桩 → 收集 → 断言 → 夹具**。
 
 ---
 
@@ -18,7 +22,7 @@
 
 ---
 
-# 2. OperationStub：四态 Operation 桩
+# 2. 打桩：OperationStub 四态 Operation 桩
 
 ```java
 import com.team4u.framework.flow.test.OperationStub;
@@ -49,7 +53,7 @@ OperationStub<String, String> throwing = OperationStub.throwing(
 
 ## 2.2 调用记录
 
-桩按到达顺序记录每次调用的 `input`、稳定 `invocationId` 与重试 `attempt`（上下文未暴露 attempt 时记 0）：
+桩按到达顺序线程安全地记录每次调用的 `input`、稳定 `invocationId` 与重试 `attempt`（OperationContext 未暴露 attempt，记 0）：
 
 ```java
 OperationStub<String, String> stub = OperationStub.accepting(x -> x);
@@ -58,7 +62,7 @@ Local.compile(Flow.step(stub)).run("in");
 java.util.List<OperationStub.Call<String>> calls = stub.calls(); // 不可变快照
 OperationStub.Call<String> last = calls.get(calls.size() - 1);
 last.input();          // "in"
-last.invocationId();   // "local:0:<executionId>:$/0"
+last.invocationId();   // "local:0:<executionId>:$"（单步流根节点 path 为 "$"）
 last.attempt();        // 0（重试场景下为重试序号）
 
 stub.callCount();      // 调用次数
@@ -66,7 +70,7 @@ stub.lastInput();      // 最近一次入参，无调用时 null
 stub.reset();          // 清空调用记录（不影响应答行为）
 ```
 
-验证 retry 使用稳定幂等键的典型断言：
+验证 retry 使用稳定幂等键的典型断言（`invocationId = flowId:flowVersion:executionId:path`，重放中不变）：
 
 ```java
 OperationStub<String, String> flaky = OperationStub.failing(Failure.of("F", "f"));
@@ -83,7 +87,7 @@ for (OperationStub.Call<String> call : flaky.calls()) {
 
 ---
 
-# 3. PolicyStub：Policy 桩
+# 3. 打桩：PolicyStub 策略桩
 
 ```java
 import com.team4u.framework.flow.test.PolicyStub;
@@ -101,7 +105,7 @@ PolicyStub<String> blocking = PolicyStub.deciding(
 proceeding.alwaysDecide(Gate.fail(Failure.of("BREAKER_OPEN", "熔断")));
 ```
 
-记录 before/after 调用（attempt、策略键、完成摘要）：
+记录 before/after 调用（`attempt` 从 1 开始递增、策略键、完成摘要）：
 
 ```java
 PolicyStub<String> policy = PolicyStub.proceeding();
@@ -115,11 +119,11 @@ policy.afterCount();
 policy.reset();
 ```
 
-`AfterCall.completion()` 返回 `Completion`（四态摘要，无输出值），可断言 `completion().kind()` 与 `reason()/failure()`。
+`AfterCall.completion()` 返回 `Completion`（四态摘要，无输出值），可断言 `completion().kind()` 与 `reason()/failure()`。Gate.Reject/Fail 不进入被治理的 body，也不会触发 after 回调。
 
 ---
 
-# 4. TraceCollector：事件轨迹收集
+# 4. 收集：TraceCollector 事件轨迹
 
 ```java
 import com.team4u.framework.flow.test.TraceCollector;
@@ -145,7 +149,7 @@ collector.clear();
 
 ---
 
-# 5. FlowAssertions：四态与双执行器断言
+# 5. 断言：FlowAssertions 四态与双执行器
 
 `FlowAssertions` 对 `FlowResult`（Local）与 `DurableResult`（Durable）提供镜像 overload，失败时抛出含期望与实际的可读 `AssertionError`。
 
@@ -180,7 +184,7 @@ FlowAssertions.assertCancelled(durable);                       // 返回 Durable
 
 ---
 
-# 6. LocalFixture：Local 执行夹具
+# 6. 夹具：LocalFixture 本地执行
 
 ```java
 import com.team4u.framework.flow.test.LocalFixture;
@@ -221,7 +225,7 @@ FlowAssertions.assertAccepted(result, "yes");
 
 ---
 
-# 7. DurableFixture：Durable 执行夹具
+# 7. 夹具：DurableFixture 持久化执行
 
 ```java
 import com.team4u.framework.flow.test.DurableFixture;
@@ -271,11 +275,7 @@ DurableResult<String> recovered =
 
 # 8. ParallelBarrier：并行重叠验证
 
-```java
-import com.team4u.framework.flow.test.ParallelBarrier;
-```
-
-基于 `CountDownLatch` 的两分支（可扩展 N 分支）屏障，用于验证 Local 并行分支**真并发**——两个分支必须同时进入屏障才能释放，否则测试超时失败而非死锁：
+基于 `CountDownLatch` 的屏障（两分支起、可扩展 N 分支），用于验证 Local 并行分支**真并发**——全部分支必须同时进入屏障才能释放。**注意必须用 `runAsync` 异步驱动**：同步 `run` 会阻塞在 wait-all，测试线程永远到不了 `release`，测试假死（`import com.team4u.framework.flow.test.ParallelBarrier;` 及 `java.util.concurrent.*` 相关类）：
 
 ```java
 ParallelBarrier barrier = new ParallelBarrier(2);
@@ -290,13 +290,21 @@ Branch<String, String> right = Branch.of("right", (context, input) -> {
 });
 
 Flow<String, String> flow = Flow.<String>parallel(left, right)
-        .join(results -> results.homogeneousCollect().map(String::valueOf));
+        .join(results -> results.allAccepted()
+                .map(values -> values.get(left) + values.get(right)));
 
-FlowResult<String> result = Local.compile(flow).run("in");
+// worker 线程数 >= 分支数，避免分支阻塞在屏障时互相争抢线程
+ExecutorService workers = Executors.newFixedThreadPool(2);
+CompletableFuture<FlowResult<String>> running = Local.compile(flow,
+        OperationResolver.rejecting(), FlowObserver.noop(), workers)
+        .runAsync("in").toCompletableFuture();
 
-org.junit.Assert.assertTrue(barrier.awaitEntered(2000)); // 2s 内两分支均已进入=真重叠
+org.junit.Assert.assertTrue(barrier.awaitEntered(2000)); // 2s 内两分支均已进入 = 真重叠
 barrier.release();                                       // 放行（幂等）
-FlowAssertions.assertCompleted(result);
+
+FlowAssertions.assertAccepted(
+        running.get(5, TimeUnit.SECONDS), "in-leftin-right");
+workers.shutdownNow();
 ```
 
 API：`new ParallelBarrier(branches)`、分支侧 `enter()` / `enter(timeout, unit)`（带超时保护）、测试侧 `awaitEntered(timeoutMillis)`（超时返回 false，不死等）、`release()`（幂等放行）。
