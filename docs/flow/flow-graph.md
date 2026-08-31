@@ -58,6 +58,57 @@ String textTree = FlowGraphs.text().render(description);
 
 ---
 
+## Spring Boot 可视化端点实战（浏览器实时渲染 Flow 图表）
+
+在微服务管理端或运维监控系统中，可以暴露一个轻量级的 Controller，将业务 Flow 渲染为网页可视化图表或纯文本 DSL：
+
+```java
+@RestController
+@RequestMapping("/admin/flows")
+public class FlowGraphVisualizerController {
+
+    @Autowired
+    private Flow<OrderRequest, Receipt> orderFlow;
+
+    /**
+     * 1. 获取原始 Mermaid DSL 脚本接口 (供前端组件或 Docsify 渲染)
+     */
+    @GetMapping(value = "/order/mermaid", produces = MediaType.TEXT_PLAIN_VALUE)
+    public String getOrderFlowMermaid() {
+        FlowDescription desc = orderFlow.describe("order-fulfillment-flow");
+        return FlowGraphs.mermaid().render(desc);
+    }
+
+    /**
+     * 2. 直接在浏览器中查看可视化流程图 HTML 页面
+     */
+    @GetMapping(value = "/order/view", produces = MediaType.TEXT_HTML_VALUE)
+    public String viewOrderFlowHtml() {
+        FlowDescription desc = orderFlow.describe("order-fulfillment-flow");
+        String mermaidDsl = FlowGraphs.mermaid().render(desc);
+
+        return "<!DOCTYPE html>\n" +
+                "<html>\n" +
+                "<head>\n" +
+                "  <title>Flow Visualization</title>\n" +
+                "  <script type=\"module\">\n" +
+                "    import mermaid from 'https://cdn.jsdelivr.net/npm/mermaid@10/dist/mermaid.esm.min.mjs';\n" +
+                "    mermaid.initialize({ startOnLoad: true, theme: 'default' });\n" +
+                "  </script>\n" +
+                "</head>\n" +
+                "<body style=\"padding: 20px; font-family: sans-serif;\">\n" +
+                "  <h2>订单履约流程拓扑图 (Live)</h2>\n" +
+                "  <pre class=\"mermaid\">\n" +
+                mermaidDsl + "\n" +
+                "  </pre>\n" +
+                "</body>\n" +
+                "</html>";
+    }
+}
+```
+
+---
+
 ## Mermaid 六通道终结模型
 
 Mermaid 渲染器通过**六个全局终结通道**刻画一次执行的所有可能归宿：

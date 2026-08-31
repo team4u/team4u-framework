@@ -184,6 +184,69 @@ DurableRuntime runtime = DurableRuntime.builder(durableStore)
 
 ---
 
+## 如何在代码中只读查询与解析快照（进度查询与排障）
+
+在实际业务中，前端或管理后台经常需要查询长流程的当前执行进度（例如：“审批流处于哪一步”、“当前等待的是哪个挂起点”、“历史节点的计算结果是什么”）。
+
+通过 `executable.snapshot(executionId)` 可以进行**纯只读查询（零写入副作用、零 CAS 竞争）**，并结合 `StateMapper` 解码业务槽位：
+
+```java
+@RestController
+@RequestMapping("/api/durable/orders")
+public class OrderProgressController {
+
+    @Autowired
+    private DurableExecutable<OrderRequest, Receipt> orderExecutable;
+
+    @Autowired
+    private StateMapper stateMapper;
+
+    /**
+     * 查询订单长流程执行进度与快照详情
+     */
+    @GetMapping("/{orderId}/progress")
+    public ResponseEntity<?> getOrderProgress(@PathVariable("orderId") String orderId) throws Exception {
+        // 1. 只读加载最新快照（不存在时返回 Optional.empty）
+        Optional<DurableSnapshot> snapshotOpt = orderExecutable.snapshot(orderId);
+        
+        if (snapshotOpt.isEmpty()) {
+            return ResponseEntity.notFound().build();
+        }
+
+        DurableSnapshot snapshot = snapshotOpt.get();
+
+        // 2. 读取框架核心元数据
+        Map<String, Object> response = new LinkedHashMap<>();
+        response.put("executionId", snapshot.executionId());
+        response.put("flowId", snapshot.flowId());
+        response.put("flowVersion", snapshot.flowVersion());
+        response.put("revision", snapshot.revision());           // 当前乐观锁版本
+        response.put("lifecycle", snapshot.lifecycle().name());   // ACTIVE / SUSPENDED / COMPLETED / CANCELLED
+        response.put("awaitingPoint", snapshot.awaitingPoint()); // 当前等待的挂起点 (若处于挂起态)
+
+        // 3. 解码业务槽位数据 (StoredValue -> 领域对象)
+        Map<String, StoredValue> slots = snapshot.slots();
+        
+        // 解码初始输入参数
+        if (slots.containsKey("input")) {
+            OrderRequest originalInput = (OrderRequest) stateMapper.decode(slots.get("input"));
+            response.put("initialInput", originalInput);
+        }
+
+        // 解码指定节点的中间产出数据 (如 path="$/0/1" 的风控节点)
+        String riskNodeSlot = "node:$/0/1";
+        if (slots.containsKey(riskNodeSlot)) {
+            RiskResult riskResult = (RiskResult) stateMapper.decode(slots.get(riskNodeSlot));
+            response.put("riskResult", riskResult);
+        }
+
+        return ResponseEntity.ok(response);
+    }
+}
+```
+
+---
+
 ## 防御性快照恢复校验 (`RestoredStateValidator`)
 
 当调用 `recover(executionId)` 反序列化快照时，框架通过 `RestoredStateValidator` 对恢复后的状态机进行严格的拓扑与阶段自洽性校验：

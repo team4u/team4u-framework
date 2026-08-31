@@ -111,6 +111,46 @@ DurableRuntime runtime = DurableRuntime.builder(durableStore)
         .build();
 ```
 
+### Spring Boot 生产完整装配类示例
+
+```java
+@Configuration
+public class DurableFlowAutoConfiguration {
+
+    @Autowired
+    private StringRedisTemplate redisTemplate;
+
+    @Bean
+    public DurableStore durableStore() {
+        // 基于 Redis 构建带 7 天自动 TTL 过期清理的持久化存储
+        KvStore redisKvStore = new RedisKvStore(redisTemplate);
+        long sevenDaysTtl = 7 * 24 * 3600 * 1000L;
+        return new KvDurableStore(redisKvStore, "app:flow:durable:", sevenDaysTtl);
+    }
+
+    @Bean
+    public DurableRuntime durableRuntime(DurableStore durableStore) {
+        // 配置确定性 Jackson 序列化器
+        ObjectMapper mapper = new ObjectMapper();
+        mapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
+        SerializerStateMapper jsonMapper = new SerializerStateMapper(
+                "json:jackson", 1, mapper::writeValueAsBytes, b -> mapper.readValue(b, Object.class));
+
+        return DurableRuntime.builder(durableStore)
+                .stateMapper(CompositeStateMapper.withDefault(jsonMapper))
+                .operationResolver(BeanFlows.resolver()) // 自动绑定 Spring Bean 步骤
+                .build();
+    }
+
+    @Bean
+    public DurableExecutable<OrderRequest, Receipt> orderDurableExecutable(
+            DurableRuntime durableRuntime, Flow<OrderRequest, Receipt> orderFlow) {
+        // 编译绑定 (flowId="order-fulfillment", flowVersion=1)
+        return durableRuntime.compile(orderFlow, "order-fulfillment", 1);
+    }
+}
+```
+
 ---
 
 ## 4. 常见后端存储方案选型与表结构设计
