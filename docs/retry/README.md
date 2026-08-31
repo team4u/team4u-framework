@@ -179,6 +179,29 @@ Memory 后端只适合演示和单进程测试。部署到多个进程时，把 
 
 ---
 
+## 与流程组件集成 (`team4u-flow-retry`)
+
+当在流程编排组件 [`team4u-flow`](../flow/README.md) 中使用重试治理时，可引入专用适配模块 `team4u-flow-retry`：
+
+```xml
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-flow-retry</artifactId>
+</dependency>
+```
+
+- **统一退避体系**：将 `Backoffs`（固定、等差递增、指数、随机抖动等）无缝带入 Flow 流程节点治理中；
+- **条件重试与快速失败**：通过 `Predicate<Failure>` 过滤可重试故障码，非重试异常触发 `Rejected` 快速退出；
+- **动态规则对接**：天然支持从 `NamedRetryPolicyRegistry` / `DynamicRetryPolicyRegistry` 按名称热加载重试配置；
+- **使用示例**：
+  ```java
+  FlowRetryPolicy<OrderRequest> policy = FlowRetries.exponential(3, 100, 2.0, 1000);
+  Flow<OrderRequest, Receipt> flow = policy.wrap(Flow.step(chargeOp), Function.identity());
+  ```
+详细说明请参阅 [流程治理：Policy 策略、Retry 重试与 Timeout 控制](../flow/flow-governance.md)。
+
+---
+
 ## 文档导航
 
 - [快速开始](quick-start.md)：分别跑通 INLINE 和 MANAGED

@@ -150,29 +150,85 @@ Flow<OrderRequest, Receipt> flow3 = Flow.step(chargeOp)
 
 ---
 
-## 2. 重试治理：`Retry`
+## 2. 重试治理：`Retry` 与 `team4u-flow-retry`
 
-`Retry` 治理原语针对 `Failed` 状态提供自动化重试能力，支持固定时延、指数退避与重试次数限制。
+`Retry` 治理原语针对 `Failed` 状态提供自动化重试能力。框架支持核心轻量重试（`Retry`）以及基于 **`team4u-flow-retry`** 的高级重试治理策略（多算法退避、条件重试判定、动态规则集成）。
 
-### 声明形式
+### 1. 基础重试配置（`team4u-flow` 核心）
 
 ```java
 import com.team4u.framework.flow.api.Retry;
 import java.time.Duration;
 
-// 1. 基础重试：最多执行 3 次（包含首次执行 + 2 次重试），间隔 200ms
+// 最多执行 3 次（包含首次执行 + 2 次重试），重试固定间隔 200ms
 Flow<OrderRequest, Receipt> flow1 = Flow.step(chargeOp)
         .retry(Retry.maxAttempts(3).withBackoff(Duration.ofMillis(200)));
-
-// 2. 指数退避：初始 100ms，每次递增 2 倍，最大退避上限 2s
-Flow<OrderRequest, Receipt> flow2 = Flow.step(chargeOp)
-        .retry(Retry.maxAttempts(5)
-                .withExponentialBackoff(Duration.ofMillis(100), 2.0, Duration.ofSeconds(2)));
 ```
 
-### 关键语义与幂等保证
+---
+
+### 2. 高级重试与退避治理：`team4u-flow-retry`
+
+为了将成熟的重试退避算法体系与配置中心能力引入流程引擎，`team4u-flow-retry` 提供了基于 `Policy<K>` 契约的重试适配器 **`FlowRetryPolicy<K>`** 与工厂工具类 **`FlowRetries`**。
+
+#### 引入依赖
+
+```xml
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-flow-retry</artifactId>
+</dependency>
+```
+
+#### 核心特性与架构能力
+
+1. **多算法退避体系**：无缝接入 `team4u-retry` 的 Backoff 引擎：
+   - **固定延迟（Fixed）**：`FlowRetries.fixed(maxAttempts, delayMillis)`
+   - **指数退避（Exponential）**：`FlowRetries.exponential(maxAttempts, initialDelay, multiplier, maxDelay)`
+   - **随机抖动退避（Full / Equal Jitter）**：`FlowRetries.jitter(maxAttempts, initialDelay, multiplier, maxDelay)`，有效平抑重试风暴。
+   - **等差递增（Increment）**：`FlowRetries.of(maxAttempts, Backoffs.increment(initialDelay, stepMillis))`
+2. **条件重试判定（`Predicate<Failure>`）与快速短路**：
+   - 支持按错误码（`retryOnCodes(...)` / `abortOnCodes(...)`）或自定义谓词（`retryOn(...)`）精准过滤可重试异常；
+   - 命中不可重试异常时，下一次尝试前置门控立即返回 `Gate.reject(...)`，触发业务快速短路，**绝不空耗重试额度与阻塞线程**。
+3. **动态与命名规则注册**：
+   - 支持通过 `FlowRetries.named("policyName")` 自动检索 `NamedRetryPolicyRegistry` 或对接配置中心（`DynamicRetryPolicyRegistry`）实现重试次数与退避参数热更新。
+
+#### 编排使用示例
+
+```java
+import com.team4u.framework.flow.retry.FlowRetries;
+import com.team4u.framework.flow.retry.FlowRetryPolicy;
+import com.team4u.framework.retry.common.backoff.Backoffs;
+
+// 1. 指数退避重试（初始 100ms，2 倍递增，上限 2s，最多尝试 5 次）
+FlowRetryPolicy<OrderRequest> expPolicy = FlowRetries.exponential(5, 100, 2.0, 2000);
+Flow<OrderRequest, Receipt> flow1 = expPolicy.wrap(Flow.step(chargeOp), Function.identity());
+
+// 2. 随机抖动退避 + 条件重试（只对 TIMEOUT 与 NETWORK_ERROR 重试，其余异常快速失败）
+FlowRetryPolicy<OrderRequest> conditionalPolicy = FlowRetryPolicy.<OrderRequest>builder()
+        .maxAttempts(4)
+        .backoff(Backoffs.exponentialJitter(50, 2.0, 1000))
+        .retryOnCodes("TIMEOUT", "NETWORK_ERROR") // 仅对网络超时重试
+        .build();
+
+Flow<OrderRequest, Receipt> flow2 = conditionalPolicy.wrap(Flow.step(chargeOp), Function.identity());
+
+// 3. 动态配置规则（按名称动态从注册表或配置中心加载）
+FlowRetryPolicy<OrderRequest> namedPolicy = FlowRetries.named("order-charge-retry");
+Flow<OrderRequest, Receipt> flow3 = namedPolicy.wrap(Flow.step(chargeOp), Function.identity());
+
+// 4. 标准洋葱圈链式 DSL 写法（等价于 policy.wrap(...)）
+Flow<OrderRequest, Receipt> flow4 = Flow.step(chargeOp)
+        .policy(conditionalPolicy, Function.identity())
+        .retry(conditionalPolicy.toRetry());
+```
+
+---
+
+### 3. 关键语义与幂等保证
 
 - **仅对 `Failed` 重试**：若步骤返回 `Rejected`（业务拒绝）或 `Skipped`（弃权跳过），框架认为这是正常业务结论，**绝不发起重试**；
+- **条件快速失败（Fast-Fail）**：若步骤返回不可重试的 `Failed`，`FlowRetryPolicy` 将后续尝试转换为 `Rejected`，阻断外层 `Retry` 循环；
 - **稳定幂等键（`invocationId`）**：在多次重试过程中，节点上下文的 `context.invocationId()` 保持恒定不变（`flowId:flowVersion:executionId:path`）。外部服务可以安全地使用该 ID 进行幂等防重校验。
 
 ---
