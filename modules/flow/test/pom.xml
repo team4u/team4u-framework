@@ -12,12 +12,17 @@
     </parent>
 
     <artifactId>team4u-flow-test</artifactId>
-    <description>Flow 测试支持库：Step stub、结果断言、Trace 断言与共享契约</description>
+    <description>Flow 测试支持库：四态 Operation/Policy 桩、Trace 收集器、结果断言与 Local/Durable fixture</description>
 
     <dependencies>
         <dependency>
             <groupId>com.team4u</groupId>
             <artifactId>team4u-flow</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-flow-durable</artifactId>
             <version>${project.version}</version>
         </dependency>
         <dependency>
