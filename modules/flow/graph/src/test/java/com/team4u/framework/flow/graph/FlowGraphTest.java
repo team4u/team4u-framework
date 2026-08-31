@@ -223,6 +223,11 @@ public class FlowGraphTest {
         FlowDescription persistent = Flow.<String>identity().persistentPolicy(
                 TestPersistentPolicy.class, "persistent-q", value -> value).describe("persistent");
 
+        FlowDescription persistentNoQualifier = Flow.<String>identity().persistentPolicy(
+                TestPersistentPolicy.class, value -> value).describe("persistent-no-q");
+        FlowDescription multiControl = Flow.<String, String>step(Echo.class).timeout(Duration.ofSeconds(3))
+                .policy(TestPolicy.class, "sec[tenant]", value -> value).describe("multi-control");
+
         String text = FlowGraphs.text().render(timeout)
                 + FlowGraphs.text().render(policy)
                 + FlowGraphs.text().render(persistent);
@@ -238,6 +243,13 @@ public class FlowGraphTest {
 
         String persistentGraph = FlowGraphs.mermaid().render(persistent);
         Assert.assertTrue(persistentGraph.contains("💾 persistent-q"));
+
+        String persistentNoQGraph = FlowGraphs.mermaid().render(persistentNoQualifier);
+        Assert.assertTrue(persistentNoQGraph.contains("💾 TestPersistentPolicy"));
+
+        String multiControlGraph = FlowGraphs.mermaid().render(multiControl);
+        Assert.assertTrue(multiControlGraph.contains("⏱️ 3s"));
+        Assert.assertTrue(multiControlGraph.contains("🛡️ sec&#91;tenant&#93;"));
     }
 
     @Test

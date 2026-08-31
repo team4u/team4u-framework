@@ -242,14 +242,16 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
             }
             return children;
         }
-
+        if (node.kind() == NodeDescriptor.Kind.PARALLEL) {
+            if (node.parallelBranches() != null) {
+                for (ParallelBranchDescription b : node.parallelBranches()) {
+                    if (b.branch() != null) children.add(b.branch());
+                }
+            }
+            return children;
+        }
         if (node.children() != null) {
             children.addAll(node.children());
-        }
-        if (node.parallelBranches() != null) {
-            for (ParallelBranchDescription b : node.parallelBranches()) {
-                if (b.branch() != null) children.add(b.branch());
-            }
         }
         return children;
     }
@@ -287,29 +289,32 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         String kind = controlNode.controlKind();
         if ("TIMEOUT".equalsIgnoreCase(kind)) {
             if (controlNode.configuration() instanceof Duration) {
-                return "⏱️ " + FlowGraphFormatters.durationFriendly((Duration) controlNode.configuration());
+                return "⏱️ " + FlowGraphFormatters.escapeMermaid(FlowGraphFormatters.durationFriendly((Duration) controlNode.configuration()));
             }
             return "⏱️ timeout";
         }
         if ("POLICY".equalsIgnoreCase(kind)) {
             if (controlNode.binding().isPresent() && controlNode.binding().get().qualifier().isPresent()) {
-                return "🛡️ " + controlNode.binding().get().qualifier().get();
+                return "🛡️ " + FlowGraphFormatters.escapeMermaid(controlNode.binding().get().qualifier().get());
             }
             if (controlNode.binding().isPresent() && controlNode.binding().get().contractClass().isPresent()) {
-                return "🛡️ " + FlowGraphFormatters.simpleClassName(controlNode.binding().get().contractClass().get());
+                return "🛡️ " + FlowGraphFormatters.escapeMermaid(FlowGraphFormatters.simpleClassName(controlNode.binding().get().contractClass().get()));
             }
             return "🛡️ policy";
         }
         if ("PERSISTENT_POLICY".equalsIgnoreCase(kind)) {
             if (controlNode.binding().isPresent() && controlNode.binding().get().qualifier().isPresent()) {
-                return "💾 " + controlNode.binding().get().qualifier().get();
+                return "💾 " + FlowGraphFormatters.escapeMermaid(controlNode.binding().get().qualifier().get());
+            }
+            if (controlNode.binding().isPresent() && controlNode.binding().get().contractClass().isPresent()) {
+                return "💾 " + FlowGraphFormatters.escapeMermaid(FlowGraphFormatters.simpleClassName(controlNode.binding().get().contractClass().get()));
             }
             return "💾 policy";
         }
         if ("RETRY".equalsIgnoreCase(kind)) {
             return "🔄 retry";
         }
-        return kind != null ? "⚙️ " + kind.toLowerCase() : "";
+        return kind != null ? "⚙️ " + FlowGraphFormatters.escapeMermaid(kind.toLowerCase()) : "";
     }
 
     private static String resolveEffectiveLabel(NodeDescription node, String inheritedLabel) {
