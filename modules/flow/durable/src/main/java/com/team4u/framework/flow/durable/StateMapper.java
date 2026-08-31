@@ -1,27 +1,15 @@
 package com.team4u.framework.flow.durable;
 
 /**
- * 流程状态编解码 SPI：负责在 Durable 检查点将 Java 对象编码为 {@link StoredValue}，或从快照解码出全新 Java 对象。
+ * Maps application state to and from an opaque durable value.
  *
- * @author jay.wu
+ * <p><b>确定性契约</b>：同一状态值多次 {@link #encode} 必须产生 {@code equals}
+ * 相等的 {@link StoredValue}（相同 codec 标识与字节序列）。resume 信号的幂等比较
+ * （同值重驱动、异值 RESUME_SIGNAL_CONFLICT）依赖编码的确定性；不确定编码
+ * （如包含随机标识、时间戳或哈希迭代序的 payload）会破坏幂等语义。</p>
  */
 public interface StateMapper {
-
-    /**
-     * 将业务对象编码为可存储的值。
-     *
-     * @param value 业务对象
-     * @return 存储值包装对象
-     * @throws Exception 编码异常
-     */
     StoredValue encode(Object value) throws Exception;
 
-    /**
-     * 将存储值解码为业务对象。
-     *
-     * @param storedValue 存储值包装对象
-     * @return 解码后的业务对象
-     * @throws Exception 解码异常
-     */
     Object decode(StoredValue storedValue) throws Exception;
 }

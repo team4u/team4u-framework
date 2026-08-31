@@ -1,245 +1,226 @@
 package com.team4u.framework.flow.durable;
 
-import com.team4u.framework.flow.*;
+import com.team4u.framework.flow.Branch;
+import com.team4u.framework.flow.ControlKind;
+import com.team4u.framework.flow.ExecutableBinding;
+import com.team4u.framework.flow.FallbackTrigger;
+import com.team4u.framework.flow.JoinStrategy;
+import com.team4u.framework.flow.NodeDescriptor;
+import com.team4u.framework.flow.Outcome;
+import com.team4u.framework.flow.ResumePoint;
 
+import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
+import java.util.Objects;
+import java.util.Optional;
+import java.util.function.BiFunction;
 import java.util.function.Function;
 
-/**
- * 编译后的持久化节点执行树结构。
- *
- * @author jay.wu
- */
+/** Private executable topology owned by the durable module. */
 interface DurablePlanNode {
+    NodeDescriptor descriptor();
 
-    String id();
+    final class Invoke implements DurablePlanNode {
+        private final NodeDescriptor descriptor;
+        private final ExecutableBinding binding;
+        private final Function<Object, Object> project;
+        private final BiFunction<Object, Object, Object> merge;
 
-    String path();
-
-    String address();
-
-    NodeKind kind();
-
-    final class StepPlanNode implements DurablePlanNode {
-        private final String id;
-        private final String path;
-        private final String address;
-        private final boolean contextual;
-        private final Step<Object, Object> step;
-        private final Step.Contextual<Object, Object> contextualStep;
-        private final List<StepInterceptor> interceptors;
-
-        @SuppressWarnings("unchecked")
-        public StepPlanNode(Flow.StepInfo info, Step<?, ?> step, Step.Contextual<?, ?> contextualStep, List<StepInterceptor> interceptors) {
-            this.id = info.id();
-            this.path = info.path();
-            this.address = info.address();
-            this.contextual = info.isContextual();
-            this.step = (Step<Object, Object>) step;
-            this.contextualStep = (Step.Contextual<Object, Object>) contextualStep;
-            this.interceptors = interceptors != null ? interceptors : Collections.emptyList();
+        Invoke(NodeDescriptor descriptor, ExecutableBinding binding,
+               Function<Object, Object> project,
+               BiFunction<Object, Object, Object> merge) {
+            this.descriptor = Objects.requireNonNull(descriptor, "descriptor must not be null");
+            this.binding = Objects.requireNonNull(binding, "binding must not be null");
+            this.project = Objects.requireNonNull(project, "project must not be null");
+            this.merge = Objects.requireNonNull(merge, "merge must not be null");
         }
 
-        @Override public String id() { return id; }
-        @Override public String path() { return path; }
-        @Override public String address() { return address; }
-        @Override public NodeKind kind() { return NodeKind.STEP; }
-        public boolean isContextual() { return contextual; }
-        public Step<Object, Object> step() { return step; }
-        public Step.Contextual<Object, Object> contextualStep() { return contextualStep; }
-        public List<StepInterceptor> interceptors() { return interceptors; }
+        @Override public NodeDescriptor descriptor() { return descriptor; }
+        ExecutableBinding binding() { return binding; }
+        Function<Object, Object> project() { return project; }
+        BiFunction<Object, Object, Object> merge() { return merge; }
     }
 
-    final class TapPlanNode implements DurablePlanNode {
-        private final String id;
-        private final String path;
-        private final String address;
-        private final boolean contextual;
-        private final Action<Object> action;
-        private final Action.Contextual<Object> contextualAction;
-        private final List<StepInterceptor> interceptors;
-
-        @SuppressWarnings("unchecked")
-        public TapPlanNode(Flow.TapInfo info, Action<?> action, Action.Contextual<?> contextualAction, List<StepInterceptor> interceptors) {
-            this.id = info.id();
-            this.path = info.path();
-            this.address = info.address();
-            this.contextual = info.isContextual();
-            this.action = (Action<Object>) action;
-            this.contextualAction = (Action.Contextual<Object>) contextualAction;
-            this.interceptors = interceptors != null ? interceptors : Collections.emptyList();
-        }
-
-        @Override public String id() { return id; }
-        @Override public String path() { return path; }
-        @Override public String address() { return address; }
-        @Override public NodeKind kind() { return NodeKind.TAP; }
-        public boolean isContextual() { return contextual; }
-        public Action<Object> action() { return action; }
-        public Action.Contextual<Object> contextualAction() { return contextualAction; }
-        public List<StepInterceptor> interceptors() { return interceptors; }
-    }
-
-    final class GuardPlanNode implements DurablePlanNode {
-        private final String id;
-        private final String path;
-        private final String address;
-        private final Condition<Object> condition;
-        private final Function<Object, StopReason> reasonFactory;
-
-        @SuppressWarnings("unchecked")
-        public GuardPlanNode(Flow.GuardInfo info, Condition<?> condition, Function<?, StopReason> reasonFactory) {
-            this.id = info.id();
-            this.path = info.path();
-            this.address = info.address();
-            this.condition = (Condition<Object>) condition;
-            this.reasonFactory = (Function<Object, StopReason>) reasonFactory;
-        }
-
-        @Override public String id() { return id; }
-        @Override public String path() { return path; }
-        @Override public String address() { return address; }
-        @Override public NodeKind kind() { return NodeKind.GUARD; }
-        public Condition<Object> condition() { return condition; }
-        public Function<Object, StopReason> reasonFactory() { return reasonFactory; }
-    }
-
-    final class ChoosePlanNode implements DurablePlanNode {
-        private final String id;
-        private final String path;
-        private final String address;
-        private final Function<Object, Object> selector;
-        private final Map<Object, DurablePlanNode> branches;
-        private final DurablePlanNode otherwiseBranch;
-        private final Function<Object, StopReason> otherwiseStopReason;
-
-        @SuppressWarnings("unchecked")
-        public ChoosePlanNode(Flow.ChooseInfo<?> info, Function<?, ?> selector,
-                              Map<?, DurablePlanNode> branches, DurablePlanNode otherwiseBranch,
-                              Function<?, StopReason> otherwiseStopReason) {
-            this.id = info.id();
-            this.path = info.path();
-            this.address = info.address();
-            this.selector = (Function<Object, Object>) selector;
-            this.branches = branches != null ? new LinkedHashMap<>(branches) : Collections.emptyMap();
-            this.otherwiseBranch = otherwiseBranch;
-            this.otherwiseStopReason = (Function<Object, StopReason>) otherwiseStopReason;
-        }
-
-        @Override public String id() { return id; }
-        @Override public String path() { return path; }
-        @Override public String address() { return address; }
-        @Override public NodeKind kind() { return NodeKind.CHOOSE; }
-        public Function<Object, Object> selector() { return selector; }
-        public Map<Object, DurablePlanNode> branches() { return branches; }
-        public DurablePlanNode otherwiseBranch() { return otherwiseBranch; }
-        public Function<Object, StopReason> otherwiseStopReason() { return otherwiseStopReason; }
-    }
-
-    final class SubflowPlanNode implements DurablePlanNode {
-        private final String id;
-        private final String path;
-        private final String address;
-        private final String subflowId;
-        private final DurablePlanNode subflowPlan;
-
-        public SubflowPlanNode(Flow.SubflowInfo info, DurablePlanNode subflowPlan) {
-            this.id = info.id();
-            this.path = info.path();
-            this.address = info.address();
-            this.subflowId = info.subflowId();
-            this.subflowPlan = subflowPlan;
-        }
-
-        @Override public String id() { return id; }
-        @Override public String path() { return path; }
-        @Override public String address() { return address; }
-        @Override public NodeKind kind() { return NodeKind.SUBFLOW; }
-        public String subflowId() { return subflowId; }
-        public DurablePlanNode subflowPlan() { return subflowPlan; }
-    }
-
-    final class RecoverPlanNode implements DurablePlanNode {
-        private final String id;
-        private final String path;
-        private final String address;
-        private final boolean contextual;
-        private final Recovery<Object, Object> recovery;
-        private final Recovery.Contextual<Object, Object> contextualRecovery;
-
-        @SuppressWarnings("unchecked")
-        public RecoverPlanNode(Flow.RecoverInfo info, Recovery<?, ?> recovery, Recovery.Contextual<?, ?> contextualRecovery) {
-            this.id = info.id();
-            this.path = info.path();
-            this.address = info.address();
-            this.contextual = info.isContextual();
-            this.recovery = (Recovery<Object, Object>) recovery;
-            this.contextualRecovery = (Recovery.Contextual<Object, Object>) contextualRecovery;
-        }
-
-        @Override public String id() { return id; }
-        @Override public String path() { return path; }
-        @Override public String address() { return address; }
-        @Override public NodeKind kind() { return NodeKind.RECOVER; }
-        public boolean isContextual() { return contextual; }
-        public Recovery<Object, Object> recovery() { return recovery; }
-        public Recovery.Contextual<Object, Object> contextualRecovery() { return contextualRecovery; }
-    }
-
-    final class EnsurePlanNode implements DurablePlanNode {
-        private final String id;
-        private final String path;
-        private final String address;
-        private final boolean contextual;
-        private final CompletionAction<Object, Object> completionAction;
-        private final CompletionAction.Contextual<Object, Object> contextualCompletionAction;
-
-        @SuppressWarnings("unchecked")
-        public EnsurePlanNode(Flow.EnsureInfo info, CompletionAction<?, ?> completionAction, CompletionAction.Contextual<?, ?> contextualCompletionAction) {
-            this.id = info.id();
-            this.path = info.path();
-            this.address = info.address();
-            this.contextual = info.isContextual();
-            this.completionAction = (CompletionAction<Object, Object>) completionAction;
-            this.contextualCompletionAction = (CompletionAction.Contextual<Object, Object>) contextualCompletionAction;
-        }
-
-        @Override public String id() { return id; }
-        @Override public String path() { return path; }
-        @Override public String address() { return address; }
-        @Override public NodeKind kind() { return NodeKind.ENSURE; }
-        public boolean isContextual() { return contextual; }
-        public CompletionAction<Object, Object> completionAction() { return completionAction; }
-        public CompletionAction.Contextual<Object, Object> contextualCompletionAction() { return contextualCompletionAction; }
-    }
-
-    final class SequencePlanNode implements DurablePlanNode {
-        private final String id;
-        private final String path;
-        private final String address;
+    final class Sequence implements DurablePlanNode {
+        private final NodeDescriptor descriptor;
         private final List<DurablePlanNode> children;
-        private RecoverPlanNode recoverNode;
-        private EnsurePlanNode ensureNode;
+        private final Optional<String> scopeName;
 
-        public SequencePlanNode(Flow.SequenceInfo info, List<DurablePlanNode> children) {
-            this.id = info.id();
-            this.path = info.path();
-            this.address = info.address();
-            this.children = children != null ? children : Collections.emptyList();
+        Sequence(NodeDescriptor descriptor, List<DurablePlanNode> children,
+                 Optional<String> scopeName) {
+            this.descriptor = Objects.requireNonNull(descriptor, "descriptor must not be null");
+            this.children = immutable(children, "children");
+            this.scopeName = Objects.requireNonNull(scopeName, "scopeName must not be null");
         }
 
-        @Override public String id() { return id; }
-        @Override public String path() { return path; }
-        @Override public String address() { return address; }
-        @Override public NodeKind kind() { return NodeKind.SEQUENCE; }
-        public List<DurablePlanNode> children() { return children; }
-        public RecoverPlanNode recoverNode() { return recoverNode; }
-        public EnsurePlanNode ensureNode() { return ensureNode; }
+        @Override public NodeDescriptor descriptor() { return descriptor; }
+        List<DurablePlanNode> children() { return children; }
+        Optional<String> scopeName() { return scopeName; }
+    }
 
-        public void setRecoverNode(RecoverPlanNode recoverNode) { this.recoverNode = recoverNode; }
-        public void setEnsureNode(EnsurePlanNode ensureNode) { this.ensureNode = ensureNode; }
+    final class Route implements DurablePlanNode {
+        private final NodeDescriptor descriptor;
+        private final Invoke selector;
+        private final List<RouteCase> cases;
+        private final DurablePlanNode otherwise;
+
+        Route(NodeDescriptor descriptor, Invoke selector, List<RouteCase> cases,
+              DurablePlanNode otherwise) {
+            this.descriptor = Objects.requireNonNull(descriptor, "descriptor must not be null");
+            this.selector = Objects.requireNonNull(selector, "selector must not be null");
+            this.cases = immutable(cases, "cases");
+            this.otherwise = otherwise;
+        }
+
+        @Override public NodeDescriptor descriptor() { return descriptor; }
+        Invoke selector() { return selector; }
+        List<RouteCase> cases() { return cases; }
+        DurablePlanNode otherwise() { return otherwise; }
+
+        static final class RouteCase {
+            private final Object key;
+            private final DurablePlanNode branch;
+
+            RouteCase(Object key, DurablePlanNode branch) {
+                this.key = Objects.requireNonNull(key, "key must not be null");
+                this.branch = Objects.requireNonNull(branch, "branch must not be null");
+            }
+
+            Object key() { return key; }
+            DurablePlanNode branch() { return branch; }
+        }
+    }
+
+    final class Fallback implements DurablePlanNode {
+        private final NodeDescriptor descriptor;
+        private final FallbackTrigger trigger;
+        private final List<DurablePlanNode> branches;
+
+        Fallback(NodeDescriptor descriptor, FallbackTrigger trigger,
+                 List<DurablePlanNode> branches) {
+            this.descriptor = Objects.requireNonNull(descriptor, "descriptor must not be null");
+            this.trigger = Objects.requireNonNull(trigger, "trigger must not be null");
+            this.branches = immutable(branches, "branches");
+            if (this.branches.isEmpty()) {
+                throw new IllegalArgumentException("fallback branches must not be empty");
+            }
+        }
+
+        @Override public NodeDescriptor descriptor() { return descriptor; }
+        FallbackTrigger trigger() { return trigger; }
+        List<DurablePlanNode> branches() { return branches; }
+    }
+
+    final class Parallel implements DurablePlanNode {
+        private final NodeDescriptor descriptor;
+        private final List<ParallelBranch> branches;
+        private final JoinStrategy<?> join;
+
+        Parallel(NodeDescriptor descriptor, List<ParallelBranch> branches,
+                 JoinStrategy<?> join) {
+            this.descriptor = Objects.requireNonNull(descriptor, "descriptor must not be null");
+            this.branches = immutable(branches, "branches");
+            if (this.branches.isEmpty()) {
+                throw new IllegalArgumentException("parallel branches must not be empty");
+            }
+            this.join = Objects.requireNonNull(join, "join must not be null");
+        }
+
+        @Override public NodeDescriptor descriptor() { return descriptor; }
+        List<ParallelBranch> branches() { return branches; }
+        JoinStrategy<?> join() { return join; }
+
+        static final class ParallelBranch {
+            private final Branch<?, ?> token;
+            private final DurablePlanNode plan;
+
+            ParallelBranch(Branch<?, ?> token, DurablePlanNode plan) {
+                this.token = Objects.requireNonNull(token, "token must not be null");
+                this.plan = Objects.requireNonNull(plan, "plan must not be null");
+            }
+
+            Branch<?, ?> token() { return token; }
+            DurablePlanNode plan() { return plan; }
+        }
+    }
+
+    final class Await implements DurablePlanNode {
+        private final NodeDescriptor descriptor;
+        private final ResumePoint<?> point;
+
+        Await(NodeDescriptor descriptor, ResumePoint<?> point) {
+            this.descriptor = Objects.requireNonNull(descriptor, "descriptor must not be null");
+            this.point = Objects.requireNonNull(point, "point must not be null");
+        }
+
+        @Override public NodeDescriptor descriptor() { return descriptor; }
+        ResumePoint<?> point() { return point; }
+    }
+
+    final class Control implements DurablePlanNode {
+        private final NodeDescriptor descriptor;
+        private final ControlKind kind;
+        private final DurablePlanNode body;
+        private final Optional<ExecutableBinding> binding;
+        private final Function<Object, Object> keyProjection;
+        private final Object configuration;
+
+        Control(NodeDescriptor descriptor, ControlKind kind, DurablePlanNode body,
+                Optional<ExecutableBinding> binding,
+                Function<Object, Object> keyProjection, Object configuration) {
+            this.descriptor = Objects.requireNonNull(descriptor, "descriptor must not be null");
+            this.kind = Objects.requireNonNull(kind, "kind must not be null");
+            this.body = Objects.requireNonNull(body, "body must not be null");
+            this.binding = Objects.requireNonNull(binding, "binding must not be null");
+            this.keyProjection = Objects.requireNonNull(
+                    keyProjection, "keyProjection must not be null");
+            this.configuration = configuration;
+            boolean policy = kind == ControlKind.POLICY
+                    || kind == ControlKind.PERSISTENT_POLICY;
+            if (policy != binding.isPresent()) {
+                throw new IllegalArgumentException("control binding does not match kind " + kind);
+            }
+            if ((kind == ControlKind.RETRY || kind == ControlKind.TIMEOUT)
+                    && configuration == null) {
+                throw new IllegalArgumentException("control configuration is required for " + kind);
+            }
+        }
+
+        @Override public NodeDescriptor descriptor() { return descriptor; }
+        ControlKind kind() { return kind; }
+        DurablePlanNode body() { return body; }
+        Optional<ExecutableBinding> binding() { return binding; }
+        Function<Object, Object> keyProjection() { return keyProjection; }
+        Object configuration() { return configuration; }
+    }
+
+    final class Complete implements DurablePlanNode {
+        private final NodeDescriptor descriptor;
+        private final Outcome<?> outcome;
+        private final boolean identity;
+
+        Complete(NodeDescriptor descriptor, Outcome<?> outcome, boolean identity) {
+            this.descriptor = Objects.requireNonNull(descriptor, "descriptor must not be null");
+            this.outcome = outcome;
+            this.identity = identity;
+            if (identity == (outcome != null)) {
+                throw new IllegalArgumentException(
+                        "identity complete must not contain a fixed outcome");
+            }
+        }
+
+        @Override public NodeDescriptor descriptor() { return descriptor; }
+        Outcome<?> outcome() { return outcome; }
+        boolean identity() { return identity; }
+    }
+
+    static <T> List<T> immutable(List<T> source, String name) {
+        Objects.requireNonNull(source, name + " must not be null");
+        ArrayList<T> copy = new ArrayList<T>(source.size());
+        for (T value : source) {
+            copy.add(Objects.requireNonNull(value, name + " must not contain null"));
+        }
+        return Collections.unmodifiableList(copy);
     }
 }

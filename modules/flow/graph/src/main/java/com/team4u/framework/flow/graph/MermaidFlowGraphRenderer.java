@@ -1,466 +1,629 @@
 package com.team4u.framework.flow.graph;
 
+import com.team4u.framework.flow.BindingDescriptor;
 import com.team4u.framework.flow.FlowDescription;
 import com.team4u.framework.flow.NodeDescription;
-import com.team4u.framework.flow.NodeKind;
+import com.team4u.framework.flow.Retry;
 
+import java.math.BigDecimal;
+import java.math.BigInteger;
+import java.time.Duration;
+import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
-import java.util.LinkedHashSet;
+import java.util.Deque;
+import java.util.IdentityHashMap;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * Mermaid format flow graph renderer.
- *
- * @author jay.wu
+ * Deterministic Mermaid renderer for the static flow description model.
  */
 final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
 
     static final MermaidFlowGraphRenderer INSTANCE = new MermaidFlowGraphRenderer();
 
+    private enum Channel {
+        ACCEPTED, REJECTED, SKIPPED, FAILED, SUSPENDED, CANCELLED
+    }
+
+    private static final class Exit {
+        private final String source;
+        private final Channel channel;
+
+        private Exit(String source, Channel channel) {
+            this.source = source;
+            this.channel = channel;
+        }
+    }
+
+    /**
+     * 出口集合的不可变组合（rope）：追加与合并均为 O(1) 且结构共享，
+     * 嵌套组合不会随层数放大复制成本；遍历必须使用显式栈，禁止递归。
+     */
+    private abstract static class Exits {
+        static final Exits EMPTY = EmptyExits.INSTANCE;
+
+        static Exits single(Exit exit) {
+            return new SingleExit(exit);
+        }
+
+        static Exits concat(Exits left, Exits right) {
+            if (left == EMPTY) {
+                return right;
+            }
+            if (right == EMPTY) {
+                return left;
+            }
+            return new ConcatExits(left, right);
+        }
+    }
+
+    private static final class EmptyExits extends Exits {
+        static final EmptyExits INSTANCE = new EmptyExits();
+    }
+
+    private static final class SingleExit extends Exits {
+        private final Exit exit;
+
+        SingleExit(Exit exit) {
+            this.exit = exit;
+        }
+    }
+
+    private static final class ConcatExits extends Exits {
+        private final Exits left;
+        private final Exits right;
+
+        ConcatExits(Exits left, Exits right) {
+            this.left = left;
+            this.right = right;
+        }
+    }
+
+    private interface ExitVisitor {
+        void visit(Exit exit);
+    }
+
+    private static final class Fragment {
+        private final String entry;
+        private Exits exits = Exits.EMPTY;
+
+        private Fragment(String entry) {
+            this.entry = entry;
+        }
+
+        private void add(String source, Channel channel) {
+            add(new Exit(source, channel));
+        }
+
+        private void add(Exit exit) {
+            exits = Exits.concat(exits, Exits.single(exit));
+        }
+
+        private void addAll(Fragment fragment) {
+            exits = Exits.concat(exits, fragment.exits);
+        }
+
+        private void addExcept(final Fragment fragment, final Channel excluded) {
+            forEachExit(fragment.exits, new ExitVisitor() {
+                @Override
+                public void visit(Exit exit) {
+                    if (exit.channel != excluded) {
+                        add(exit);
+                    }
+                }
+            });
+        }
+    }
+
+    private static final class Work {
+        private final NodeDescription node;
+        private final boolean build;
+
+        private Work(NodeDescription node, boolean build) {
+            this.node = node;
+            this.build = build;
+        }
+    }
+
+    private static final class RenderState {
+        private final StringBuilder output = new StringBuilder();
+        private int sequence;
+
+        private String nextId() {
+            sequence++;
+            return "n" + sequence;
+        }
+
+        private void node(String id, String open, String close, String label) {
+            output.append("    ").append(id).append(open).append("\"")
+                    .append(escape(label)).append("\"").append(close).append("\n");
+        }
+
+        private void edge(String source, String target, String label, Channel channel) {
+            output.append("    ").append(source);
+            if (channel == Channel.FAILED || channel == Channel.SKIPPED
+                    || channel == Channel.SUSPENDED || channel == Channel.CANCELLED) {
+                output.append(" -.->");
+            } else {
+                output.append(" -->");
+            }
+            if (label != null && !label.isEmpty()) {
+                output.append("|").append(escape(label)).append("|");
+            }
+            output.append(" ").append(target).append("\n");
+        }
+    }
+
     @Override
     public String render(FlowDescription description) {
         Objects.requireNonNull(description, "FlowDescription must not be null");
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("flowchart TD\n");
+        RenderState state = new RenderState();
+        state.output.append("flowchart TD\n");
+        state.node("flow_start", "([", "])", "START | flow=" + display(description.flowId()));
 
-        AtomicInteger idSeq = new AtomicInteger();
-        String startId = "start_" + idSeq.incrementAndGet();
-        sb.append("    ").append(startId).append("([\"Start: ")
-                .append(escapeLabel(description.flowId())).append("\"])\n");
-
-        ScopeExits rootExits = renderScope(sb, description.nodes(),
-                Collections.singletonList(startId), null, idSeq, "    ");
-
-        String endId = "end_" + idSeq.incrementAndGet();
-        sb.append("    ").append(endId).append("([\"End: ")
-                .append(escapeLabel(description.flowId())).append("\"])\n");
-        for (String exitId : rootExits.successExits) {
-            sb.append("    ").append(exitId).append(" --> ").append(endId).append("\n");
-        }
-
-        if (!rootExits.stoppedExits.isEmpty()) {
-            String stoppedId = "terminal_stopped_" + idSeq.incrementAndGet();
-            sb.append("    ").append(stoppedId).append("([\"STOPPED\"])\n");
-            sb.append("    style ").append(stoppedId).append(" fill:#f9f,stroke:#333\n");
-            for (String exitId : rootExits.stoppedExits) {
-                sb.append("    ").append(exitId).append(" -->|stopped| ")
-                        .append(stoppedId).append("\n");
+        IdentityHashMap<NodeDescription, Fragment> fragments =
+                new IdentityHashMap<NodeDescription, Fragment>();
+        IdentityHashMap<NodeDescription, Boolean> scheduled =
+                new IdentityHashMap<NodeDescription, Boolean>();
+        Deque<Work> work = new ArrayDeque<Work>();
+        scheduled.put(description.root(), Boolean.TRUE);
+        work.addLast(new Work(description.root(), false));
+        while (!work.isEmpty()) {
+            Work item = work.removeLast();
+            if (item.build) {
+                fragments.put(item.node, build(item.node, fragments, state));
+                continue;
             }
-        }
-
-        if (!rootExits.failureExits.isEmpty()) {
-            String failedId = "terminal_failed_" + idSeq.incrementAndGet();
-            sb.append("    ").append(failedId).append("([\"FAILED\"])\n");
-            sb.append("    style ").append(failedId).append(" fill:#fee2e2,stroke:#991b1b\n");
-            for (String exitId : rootExits.failureExits) {
-                sb.append("    ").append(exitId).append(" -.->|failed| ")
-                        .append(failedId).append("\n");
-            }
-        }
-
-        return sb.toString();
-    }
-
-    private static final class ScopeExits {
-        private final List<String> successExits;
-        private final List<String> failureExits;
-        private final List<String> stoppedExits;
-
-        private ScopeExits(List<String> successExits,
-                           List<String> failureExits,
-                           List<String> stoppedExits) {
-            this.successExits = immutableDistinct(successExits);
-            this.failureExits = immutableDistinct(failureExits);
-            this.stoppedExits = immutableDistinct(stoppedExits);
-        }
-
-        private static ScopeExits empty(List<String> entryNodes) {
-            return new ScopeExits(entryNodes, Collections.emptyList(), Collections.emptyList());
-        }
-    }
-
-    private ScopeExits renderScope(StringBuilder sb,
-                                   List<NodeDescription> nodes,
-                                   List<String> entryNodes,
-                                   String incomingEdgeLabel,
-                                   AtomicInteger idSeq,
-                                   String indent) {
-        if (nodes == null || nodes.isEmpty()) {
-            return ScopeExits.empty(entryNodes);
-        }
-
-        List<NodeDescription> bodyNodes = new ArrayList<>();
-        NodeDescription recoverNode = null;
-        NodeDescription ensureNode = null;
-        for (NodeDescription node : nodes) {
-            if (node.kind() == NodeKind.RECOVER) {
-                recoverNode = node;
-            } else if (node.kind() == NodeKind.ENSURE) {
-                ensureNode = node;
-            } else {
-                bodyNodes.add(node);
-            }
-        }
-
-        List<String> successExits = distinct(entryNodes);
-        List<String> failureExits = new ArrayList<>();
-        List<String> stoppedExits = new ArrayList<>();
-
-        for (int i = 0; i < bodyNodes.size(); i++) {
-            String edgeLabel = i == 0 ? incomingEdgeLabel : null;
-            ScopeExits nodeExits = renderNode(sb, bodyNodes.get(i), successExits,
-                    edgeLabel, idSeq, indent);
-            successExits = nodeExits.successExits;
-            failureExits.addAll(nodeExits.failureExits);
-            stoppedExits.addAll(nodeExits.stoppedExits);
-        }
-
-        failureExits = distinct(failureExits);
-        stoppedExits = distinct(stoppedExits);
-
-        if (recoverNode != null && !failureExits.isEmpty()) {
-            ScopeExits recovered = renderRecover(sb, recoverNode, failureExits, idSeq, indent);
-            List<String> mergedSuccess = new ArrayList<>(successExits);
-            mergedSuccess.addAll(recovered.successExits);
-            successExits = distinct(mergedSuccess);
-
-            List<String> mergedStopped = new ArrayList<>(stoppedExits);
-            mergedStopped.addAll(recovered.stoppedExits);
-            stoppedExits = distinct(mergedStopped);
-            failureExits = recovered.failureExits;
-        }
-
-        if (ensureNode != null) {
-            return renderEnsure(sb, ensureNode, successExits, stoppedExits,
-                    failureExits, idSeq, indent);
-        }
-
-        return new ScopeExits(successExits, failureExits, stoppedExits);
-    }
-
-    private ScopeExits renderRecover(StringBuilder sb,
-                                     NodeDescription recoverNode,
-                                     List<String> failureInputs,
-                                     AtomicInteger idSeq,
-                                     String indent) {
-        String recoverId = makeNodeId(recoverNode, idSeq);
-        sb.append(indent).append(recoverId).append("[\"Recover: ")
-                .append(escapeLabel(recoverNode.id())).append("\"]\n");
-        for (String failureInput : failureInputs) {
-            sb.append(indent).append(failureInput).append(" -.->|on failure| ")
-                    .append(recoverId).append("\n");
-        }
-
-        String successId = makeGatewayId("recover_success", idSeq);
-        String stoppedId = makeGatewayId("recover_stopped", idSeq);
-        String failedId = makeGatewayId("recover_failed", idSeq);
-        appendGateway(sb, successId, indent);
-        appendGateway(sb, stoppedId, indent);
-        appendGateway(sb, failedId, indent);
-        sb.append(indent).append(recoverId).append(" -->|recovered| ")
-                .append(successId).append("\n");
-        sb.append(indent).append(recoverId).append(" -->|stopped| ")
-                .append(stoppedId).append("\n");
-        sb.append(indent).append(recoverId).append(" -.->|failed| ")
-                .append(failedId).append("\n");
-
-        return new ScopeExits(Collections.singletonList(successId),
-                Collections.singletonList(failedId), Collections.singletonList(stoppedId));
-    }
-
-    private ScopeExits renderEnsure(StringBuilder sb,
-                                    NodeDescription ensureNode,
-                                    List<String> successInputs,
-                                    List<String> stoppedInputs,
-                                    List<String> failureInputs,
-                                    AtomicInteger idSeq,
-                                    String indent) {
-        List<String> successExits = new ArrayList<>();
-        List<String> stoppedExits = new ArrayList<>();
-        List<String> failureExits = new ArrayList<>();
-
-        if (!successInputs.isEmpty()) {
-            String ensureId = appendEnsureNode(sb, ensureNode, null, idSeq, indent);
-            connectOutcomeInputs(sb, successInputs, ensureId, false, "success", indent);
-
-            String completedId = makeGatewayId("ensure_success", idSeq);
-            String failedId = makeGatewayId("ensure_failed", idSeq);
-            appendGateway(sb, completedId, indent);
-            appendGateway(sb, failedId, indent);
-            sb.append(indent).append(ensureId).append(" -->|completed| ")
-                    .append(completedId).append("\n");
-            sb.append(indent).append(ensureId).append(" -.->|failed| ")
-                    .append(failedId).append("\n");
-            successExits.add(completedId);
-            failureExits.add(failedId);
-        }
-
-        if (!stoppedInputs.isEmpty()) {
-            String ensureId = appendEnsureNode(sb, ensureNode, "stopped", idSeq, indent);
-            connectOutcomeInputs(sb, stoppedInputs, ensureId, false, "stopped", indent);
-
-            String preservedId = makeGatewayId("ensure_stopped", idSeq);
-            String failedId = makeGatewayId("ensure_failed", idSeq);
-            appendGateway(sb, preservedId, indent);
-            appendGateway(sb, failedId, indent);
-            sb.append(indent).append(ensureId).append(" -->|stop preserved| ")
-                    .append(preservedId).append("\n");
-            sb.append(indent).append(ensureId).append(" -.->|failed| ")
-                    .append(failedId).append("\n");
-            stoppedExits.add(preservedId);
-            failureExits.add(failedId);
-        }
-
-        if (!failureInputs.isEmpty()) {
-            String ensureId = appendEnsureNode(sb, ensureNode, "failed", idSeq, indent);
-            connectOutcomeInputs(sb, failureInputs, ensureId, true, "failed", indent);
-
-            String preservedId = makeGatewayId("ensure_failure", idSeq);
-            appendGateway(sb, preservedId, indent);
-            sb.append(indent).append(ensureId).append(" -.->|failure preserved| ")
-                    .append(preservedId).append("\n");
-            failureExits.add(preservedId);
-        }
-
-        return new ScopeExits(successExits, failureExits, stoppedExits);
-    }
-
-    private ScopeExits renderNode(StringBuilder sb,
-                                  NodeDescription node,
-                                  List<String> entryNodes,
-                                  String incomingEdgeLabel,
-                                  AtomicInteger idSeq,
-                                  String indent) {
-        String nodeId = makeNodeId(node, idSeq);
-
-        switch (node.kind()) {
-            case STEP:
-                appendProcessNode(sb, nodeId, "Step: " + node.id(), indent);
-                connectEntries(sb, entryNodes, incomingEdgeLabel, nodeId, indent);
-                return new ScopeExits(Collections.singletonList(nodeId),
-                        Collections.singletonList(nodeId), Collections.emptyList());
-
-            case TAP:
-                appendProcessNode(sb, nodeId, "Tap: " + node.id(), indent);
-                connectEntries(sb, entryNodes, incomingEdgeLabel, nodeId, indent);
-                return new ScopeExits(Collections.singletonList(nodeId),
-                        Collections.singletonList(nodeId), Collections.emptyList());
-
-            case GUARD:
-                sb.append(indent).append(nodeId).append("{\"Guard: ")
-                        .append(escapeLabel(node.id())).append("\"}\n");
-                connectEntries(sb, entryNodes, incomingEdgeLabel, nodeId, indent);
-
-                String stopId = "stop_" + idSeq.incrementAndGet();
-                sb.append(indent).append(stopId).append("([\"STOPPED\"])\n");
-                sb.append(indent).append("style ").append(stopId)
-                        .append(" fill:#f9f,stroke:#333\n");
-                sb.append(indent).append(nodeId).append(" -->|stopped| ")
-                        .append(stopId).append("\n");
-
-                String passId = makeGatewayId("guard_pass", idSeq);
-                appendGateway(sb, passId, indent);
-                sb.append(indent).append(nodeId).append(" -->|passed| ")
-                        .append(passId).append("\n");
-                return new ScopeExits(Collections.singletonList(passId),
-                        Collections.singletonList(nodeId), Collections.singletonList(stopId));
-
-            case CHOOSE:
-                return renderChoose(sb, node, nodeId, entryNodes,
-                        incomingEdgeLabel, idSeq, indent);
-
-            case SUBFLOW:
-                String subgraphId = "sub_" + nodeId;
-                sb.append(indent).append("subgraph ").append(subgraphId)
-                        .append(" [\"Subflow: ").append(escapeLabel(node.id())).append("\"]\n");
-                FlowDescription subflow = node.subflow();
-                List<NodeDescription> subNodes = subflow != null
-                        ? subflow.nodes() : Collections.emptyList();
-                ScopeExits subExits = renderScope(sb, subNodes, entryNodes,
-                        incomingEdgeLabel, idSeq, indent + "    ");
-                sb.append(indent).append("end\n");
-                return subExits;
-
-            case SEQUENCE:
-                return renderScope(sb, node.children(), entryNodes,
-                        incomingEdgeLabel, idSeq, indent);
-
-            default:
-                appendProcessNode(sb, nodeId, node.id(), indent);
-                connectEntries(sb, entryNodes, incomingEdgeLabel, nodeId, indent);
-                return new ScopeExits(Collections.singletonList(nodeId),
-                        Collections.singletonList(nodeId), Collections.emptyList());
-        }
-    }
-
-    private ScopeExits renderChoose(StringBuilder sb,
-                                    NodeDescription node,
-                                    String chooseId,
-                                    List<String> entryNodes,
-                                    String incomingEdgeLabel,
-                                    AtomicInteger idSeq,
-                                    String indent) {
-        sb.append(indent).append(chooseId).append("{\"Choose: ")
-                .append(escapeLabel(node.id())).append("\"}\n");
-        connectEntries(sb, entryNodes, incomingEdgeLabel, chooseId, indent);
-
-        String joinId = makeGatewayId("join", idSeq);
-        appendGateway(sb, joinId, indent);
-        boolean hasSuccess = false;
-        List<String> failureExits = new ArrayList<>();
-        failureExits.add(chooseId);
-        List<String> stoppedExits = new ArrayList<>();
-
-        if (node.branches() != null) {
-            for (Map.Entry<String, FlowDescription> branch : node.branches().entrySet()) {
-                ScopeExits branchExits = renderScope(sb,
-                        branch.getValue() != null ? branch.getValue().nodes() : Collections.emptyList(),
-                        Collections.singletonList(chooseId),
-                        "\"" + escapeEdgeLabel(branch.getKey()) + "\"", idSeq, indent);
-                for (String successId : branchExits.successExits) {
-                    sb.append(indent).append(successId).append(" --> ")
-                            .append(joinId).append("\n");
-                    hasSuccess = true;
+            work.addLast(new Work(item.node, true));
+            List<NodeDescription> children = item.node.children();
+            for (int index = children.size() - 1; index >= 0; index--) {
+                NodeDescription child = children.get(index);
+                if (scheduled.put(child, Boolean.TRUE) == null) {
+                    work.addLast(new Work(child, false));
                 }
-                failureExits.addAll(branchExits.failureExits);
-                stoppedExits.addAll(branchExits.stoppedExits);
             }
         }
 
-        if (node.otherwiseBranch() != null) {
-            ScopeExits otherwiseExits = renderScope(sb, node.otherwiseBranch().nodes(),
-                    Collections.singletonList(chooseId), "otherwise", idSeq, indent);
-            for (String successId : otherwiseExits.successExits) {
-                sb.append(indent).append(successId).append(" --> ")
-                        .append(joinId).append("\n");
-                hasSuccess = true;
+        appendTerminals(state);
+        Fragment root = required(fragments, description.root());
+        state.edge("flow_start", root.entry, null, null);
+        state.edge("flow_start", "terminal_cancelled", "CANCELLED", Channel.CANCELLED);
+        for (Exit exit : allExits(root)) {
+            state.edge(exit.source, terminal(exit.channel), exit.channel.name(), exit.channel);
+        }
+        appendStyles(state.output);
+        return state.output.toString();
+    }
+
+    private static Fragment build(NodeDescription node,
+                                  IdentityHashMap<NodeDescription, Fragment> fragments,
+                                  RenderState state) {
+        switch (node.kind()) {
+            case INVOKE:
+                return invoke(node, state);
+            case SEQUENCE:
+                return sequence(node, fragments, state);
+            case ROUTE:
+                return route(node, fragments, state);
+            case FALLBACK:
+                return fallback(node, fragments, state);
+            case PARALLEL:
+                return parallel(node, fragments, state);
+            case AWAIT:
+                return await(node, state);
+            case CONTROL:
+                return control(node, fragments, state);
+            case COMPLETE:
+                return complete(node, state);
+            default:
+                throw new IllegalStateException("Unknown node kind: " + node.kind());
+        }
+    }
+
+    private static Fragment invoke(NodeDescription node, RenderState state) {
+        String id = state.nextId();
+        state.node(id, "[", "]", metadata(node) + binding(node));
+        Fragment result = new Fragment(id);
+        addBusinessOutcomes(result, id);
+        return result;
+    }
+
+    private static Fragment sequence(NodeDescription node,
+                                     IdentityHashMap<NodeDescription, Fragment> fragments,
+                                     RenderState state) {
+        String id = state.nextId();
+        String scope = node.scopeName() == null ? "anonymous" : display(node.scopeName());
+        state.node(id, "[[", "]]", metadata(node) + " | scope=" + scope);
+        Fragment result = new Fragment(id);
+        List<NodeDescription> children = node.children();
+        if (children.isEmpty()) {
+            result.add(id, Channel.ACCEPTED);
+            return result;
+        }
+
+        Fragment first = required(fragments, children.get(0));
+        state.edge(id, first.entry, "enter", null);
+        List<Exit> currentAccepted = channelExits(first, Channel.ACCEPTED);
+        result.addExcept(first, Channel.ACCEPTED);
+        for (int index = 1; index < children.size(); index++) {
+            Fragment next = required(fragments, children.get(index));
+            for (Exit accepted : currentAccepted) {
+                state.edge(accepted.source, next.entry, "ACCEPTED", Channel.ACCEPTED);
             }
-            failureExits.addAll(otherwiseExits.failureExits);
-            stoppedExits.addAll(otherwiseExits.stoppedExits);
-        } else if (node.hasOtherwiseStop()) {
-            String stopId = "stop_" + idSeq.incrementAndGet();
-            sb.append(indent).append(stopId).append("([\"STOPPED\"])\n");
-            sb.append(indent).append("style ").append(stopId)
-                    .append(" fill:#f9f,stroke:#333\n");
-            sb.append(indent).append(chooseId).append(" -->|otherwise| ")
-                    .append(stopId).append("\n");
-            stoppedExits.add(stopId);
+            currentAccepted = channelExits(next, Channel.ACCEPTED);
+            result.addExcept(next, Channel.ACCEPTED);
+        }        for (Exit accepted : currentAccepted) {
+            result.add(accepted);
+        }
+        return result;
+    }
+
+    private static Fragment route(NodeDescription node,
+                                  IdentityHashMap<NodeDescription, Fragment> fragments,
+                                  RenderState state) {
+        String id = state.nextId();
+        String otherwise = node.otherwise() == null ? "no-match=SKIPPED" : "otherwise=branch";
+        state.node(id, "{", "}", metadata(node) + " | cases=" + node.routeCases().size()
+                + " | " + otherwise);
+        Fragment result = new Fragment(id);
+        if (node.children().isEmpty()) {
+            result.add(id, Channel.SKIPPED);
+            return result;
         }
 
-        return new ScopeExits(hasSuccess ? Collections.singletonList(joinId) : Collections.emptyList(),
-                failureExits, stoppedExits);
-    }
+        Fragment selector = required(fragments, node.children().get(0));
+        state.edge(id, selector.entry, "selector", null);
+        result.addExcept(selector, Channel.ACCEPTED);
 
-    private static String appendEnsureNode(StringBuilder sb,
-                                           NodeDescription ensureNode,
-                                           String outcome,
-                                           AtomicInteger idSeq,
-                                           String indent) {
-        String ensureId = makeNodeId(ensureNode, idSeq);
-        String suffix = outcome == null ? "" : " [" + outcome + "]";
-        appendProcessNode(sb, ensureId, "Ensure: " + ensureNode.id() + suffix, indent);
-        return ensureId;
-    }
-
-    private static void appendProcessNode(StringBuilder sb,
-                                          String nodeId,
-                                          String label,
-                                          String indent) {
-        sb.append(indent).append(nodeId).append("[\"")
-                .append(escapeLabel(label)).append("\"]\n");
-    }
-
-    private static void appendGateway(StringBuilder sb, String gatewayId, String indent) {
-        sb.append(indent).append(gatewayId).append("(( ))\n");
-    }
-
-    private static void connectOutcomeInputs(StringBuilder sb,
-                                             List<String> inputs,
-                                             String targetId,
-                                             boolean failureEdge,
-                                             String edgeLabel,
-                                             String indent) {
-        for (String input : distinct(inputs)) {
-            sb.append(indent).append(input)
-                    .append(failureEdge ? " -.->|" : " -->|")
-                    .append(edgeLabel).append("| ").append(targetId).append("\n");
-        }
-    }
-
-    private static void connectEntries(StringBuilder sb,
-                                       List<String> entryNodes,
-                                       String edgeLabel,
-                                       String targetId,
-                                       String indent) {
-        for (String entry : distinct(entryNodes)) {
-            sb.append(indent).append(entry).append(" -->");
-            if (edgeLabel != null && !edgeLabel.isEmpty()) {
-                sb.append("|").append(edgeLabel).append("|");
+        for (int caseIndex = 0; caseIndex < node.routeCases().size(); caseIndex++) {
+            Fragment branch = required(fragments, node.routeCases().get(caseIndex).branch());
+            String key = stableConstant(node.routeCases().get(caseIndex).key());
+            for (Exit accepted : channelExits(selector, Channel.ACCEPTED)) {
+                state.edge(accepted.source, branch.entry, "ACCEPTED | case=" + key,
+                        Channel.ACCEPTED);
             }
-            sb.append(" ").append(targetId).append("\n");
+            result.addAll(branch);
+        }
+
+        if (node.otherwise() != null) {
+            Fragment otherwiseBranch = required(fragments, node.otherwise());
+            for (Exit accepted : channelExits(selector, Channel.ACCEPTED)) {
+                state.edge(accepted.source, otherwiseBranch.entry, "ACCEPTED | otherwise",
+                        Channel.ACCEPTED);
+            }
+            result.addAll(otherwiseBranch);
+        } else {
+            String noMatch = state.nextId();
+            state.node(noMatch, "([", "])", "NO MATCH | SKIPPED");
+            for (Exit accepted : channelExits(selector, Channel.ACCEPTED)) {
+                state.edge(accepted.source, noMatch, "ACCEPTED | no match", Channel.SKIPPED);
+            }
+            result.add(noMatch, Channel.SKIPPED);
+        }
+        return result;
+    }
+
+    private static Fragment fallback(NodeDescription node,
+                                     IdentityHashMap<NodeDescription, Fragment> fragments,
+                                     RenderState state) {
+        String id = state.nextId();
+        Channel trigger = "FAILED".equals(node.trigger()) ? Channel.FAILED : Channel.SKIPPED;
+        String mode = trigger == Channel.FAILED ? "recoverWith" : "firstApplicable";
+        state.node(id, "{", "}", metadata(node) + " | " + mode + " | trigger=" + trigger);
+        Fragment result = new Fragment(id);
+        List<NodeDescription> branches = node.children();
+        if (branches.isEmpty()) {
+            result.add(id, trigger);
+            return result;
+        }
+
+        Fragment first = required(fragments, branches.get(0));
+        state.edge(id, first.entry, "branch=0", null);
+        for (int index = 0; index < branches.size(); index++) {
+            Fragment branch = required(fragments, branches.get(index));
+            boolean hasNext = index + 1 < branches.size();
+            for (Exit exit : allExits(branch)) {
+                if (exit.channel == trigger && hasNext) {
+                    Fragment next = required(fragments, branches.get(index + 1));
+                    String action = trigger == Channel.FAILED ? "recover" : "next applicable";
+                    state.edge(exit.source, next.entry, trigger + " | " + action,
+                            trigger);
+                } else {
+                    result.add(exit);
+                }
+            }
+        }
+        return result;
+    }
+
+    private static Fragment parallel(NodeDescription node,
+                                     IdentityHashMap<NodeDescription, Fragment> fragments,
+                                     RenderState state) {
+        String id = state.nextId();
+        state.node(id, "{{", "}}", metadata(node) + " | branches="
+                + node.parallelBranches().size());
+        Fragment result = new Fragment(id);
+        String waitAll = state.nextId();
+        state.node(waitAll, "[[", "]]", "WAIT ALL | branches=" + node.parallelBranches().size());
+        String cancel = state.nextId();
+        state.node(cancel, "([", "])", "CANCEL | branches=" + node.parallelBranches().size());
+        String suspendedNode = null;
+
+        for (int index = 0; index < node.parallelBranches().size(); index++) {
+            String token = display(node.parallelBranches().get(index).name());
+            Fragment branch = required(fragments, node.parallelBranches().get(index).branch());
+            String done = state.nextId();
+            state.node(done, "([", "])", "BRANCH COMPLETE | token=" + token);
+            state.edge(id, branch.entry, "branch=" + token, null);
+            for (Exit exit : allExits(branch)) {
+                if (exit.channel == Channel.CANCELLED) {
+                    state.edge(exit.source, cancel, exit.channel.name(), exit.channel);
+                } else if (exit.channel == Channel.SUSPENDED) {
+                    if (suspendedNode == null) {
+                        suspendedNode = state.nextId();
+                        state.node(suspendedNode, "([", "])",
+                                "SUSPENDED | branches=" + node.parallelBranches().size());
+                    }
+                    state.edge(exit.source, suspendedNode, exit.channel.name(), exit.channel);
+                } else {
+                    state.edge(exit.source, done, exit.channel.name(), exit.channel);
+                }
+            }
+            state.edge(done, waitAll, "wait-all", null);
+        }
+
+        String join = state.nextId();
+        state.node(join, "[", "]", "JOIN | static outcome contract");
+        state.edge(waitAll, join, "all branches complete", null);
+        addBusinessOutcomes(result, join);
+        state.edge(id, cancel, Channel.CANCELLED.name(), Channel.CANCELLED);
+        result.add(cancel, Channel.CANCELLED);
+        if (suspendedNode != null) {
+            result.add(suspendedNode, Channel.SUSPENDED);
+        }
+        return result;
+    }
+
+    private static Fragment await(NodeDescription node, RenderState state) {
+        String id = state.nextId();
+        state.node(id, "[", "]", metadata(node) + " | resume=" + display(node.resumePoint()));
+        String suspended = state.nextId();
+        state.node(suspended, "([", "])", "SUSPENDED | resume=" + display(node.resumePoint()));
+        String resumed = state.nextId();
+        state.node(resumed, "([", "])", "RESUMED | resume=" + display(node.resumePoint()));
+        state.edge(id, suspended, "SUSPENDED", Channel.SUSPENDED);
+        state.edge(suspended, resumed, "resume signal", null);
+        Fragment result = new Fragment(id);
+        result.add(resumed, Channel.ACCEPTED);
+        result.add(suspended, Channel.SUSPENDED);
+        result.add(suspended, Channel.CANCELLED);
+        return result;
+    }
+
+    private static Fragment control(NodeDescription node,
+                                    IdentityHashMap<NodeDescription, Fragment> fragments,
+                                    RenderState state) {
+        String id = state.nextId();
+        String kind = display(node.controlKind());
+        state.node(id, "[", "]", metadata(node) + " | control=" + kind
+                + " | config=" + configurationSummary(node.configuration()) + binding(node));
+        Fragment result = new Fragment(id);
+        if (node.children().isEmpty()) {
+            addBusinessOutcomes(result, id);
+            return result;
+        }
+
+        Fragment body = required(fragments, node.children().get(0));
+        state.edge(id, body.entry, "proceed", null);
+        result.addAll(body);
+        if ("RETRY".equals(node.controlKind())) {
+            for (Exit failed : channelExits(body, Channel.FAILED)) {
+                state.edge(failed.source, body.entry, "FAILED | retry while configured",
+                        Channel.FAILED);
+            }
+        }
+        if ("POLICY".equals(node.controlKind())
+                || "PERSISTENT_POLICY".equals(node.controlKind())) {
+            result.add(id, Channel.REJECTED);
+            result.add(id, Channel.FAILED);
+        } else if ("TIMEOUT".equals(node.controlKind())) {
+            result.add(id, Channel.FAILED);
+        }
+        result.add(id, Channel.CANCELLED);
+        return result;
+    }
+
+    private static Fragment complete(NodeDescription node, RenderState state) {
+        String id = state.nextId();
+        String completion = node.identity() ? "IDENTITY" : node.outcome().kind().name();
+        state.node(id, "([", "])", metadata(node) + " | complete=" + completion);
+        Fragment result = new Fragment(id);
+        result.add(id, node.identity() ? Channel.ACCEPTED : Channel.valueOf(completion));
+        return result;
+    }
+
+    private static void appendTerminals(RenderState state) {
+        state.node("terminal_accepted", "([", "])", "COMPLETED | ACCEPTED");
+        state.node("terminal_rejected", "([", "])", "COMPLETED | REJECTED");
+        state.node("terminal_skipped", "([", "])", "COMPLETED | SKIPPED");
+        state.node("terminal_failed", "([", "])", "COMPLETED | FAILED");
+        state.node("terminal_suspended", "([", "])", "SUSPENDED");
+        state.node("terminal_cancelled", "([", "])", "CANCELLED");
+    }
+
+    private static void appendStyles(StringBuilder output) {
+        output.append("    classDef accepted fill:#dcfce7,stroke:#166534,color:#14532d\n")
+                .append("    classDef rejected fill:#ffedd5,stroke:#c2410c,color:#7c2d12\n")
+                .append("    classDef skipped fill:#f3f4f6,stroke:#4b5563,color:#1f2937\n")
+                .append("    classDef failed fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d\n")
+                .append("    classDef suspended fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a\n")
+                .append("    classDef cancelled fill:#e5e7eb,stroke:#111827,color:#111827\n")
+                .append("    class terminal_accepted accepted\n")
+                .append("    class terminal_rejected rejected\n")
+                .append("    class terminal_skipped skipped\n")
+                .append("    class terminal_failed failed\n")
+                .append("    class terminal_suspended suspended\n")
+                .append("    class terminal_cancelled cancelled\n");
+    }
+
+    private static void addBusinessOutcomes(Fragment fragment, String source) {
+        fragment.add(source, Channel.ACCEPTED);
+        fragment.add(source, Channel.REJECTED);
+        fragment.add(source, Channel.SKIPPED);
+        fragment.add(source, Channel.FAILED);
+    }
+
+    private static void forEachExit(Exits exits, ExitVisitor visitor) {
+        if (exits == Exits.EMPTY) {
+            return;
+        }
+        Deque<Exits> stack = new ArrayDeque<Exits>();
+        stack.push(exits);
+        while (!stack.isEmpty()) {
+            Exits node = stack.pop();
+            if (node instanceof SingleExit) {
+                visitor.visit(((SingleExit) node).exit);
+            } else if (node instanceof ConcatExits) {
+                ConcatExits concat = (ConcatExits) node;
+                stack.push(concat.right);
+                stack.push(concat.left);
+            }
         }
     }
 
-    private static String makeNodeId(NodeDescription node, AtomicInteger idSeq) {
-        int sequence = idSeq.incrementAndGet();
-        String address = node.address();
-        String source = address != null && !address.isEmpty() && !"/".equals(address)
-                ? address : node.id();
-        return "node_" + sequence + "_" + sanitize(source);
+    private static List<Exit> allExits(Fragment fragment) {
+        final List<Exit> collected = new ArrayList<Exit>();
+        forEachExit(fragment.exits, new ExitVisitor() {
+            @Override
+            public void visit(Exit exit) {
+                collected.add(exit);
+            }
+        });
+        return collected;
     }
 
-    private static String makeGatewayId(String prefix, AtomicInteger idSeq) {
-        return prefix + "_" + idSeq.incrementAndGet();
+    private static List<Exit> channelExits(final Fragment fragment, final Channel channel) {
+        final List<Exit> matches = new ArrayList<Exit>();
+        forEachExit(fragment.exits, new ExitVisitor() {
+            @Override
+            public void visit(Exit exit) {
+                if (exit.channel == channel) {
+                    matches.add(exit);
+                }
+            }
+        });
+        return matches;
     }
 
-    private static List<String> immutableDistinct(List<String> values) {
-        return Collections.unmodifiableList(distinct(values));
-    }
-
-    private static List<String> distinct(List<String> values) {
-        if (values == null || values.isEmpty()) {
-            return Collections.emptyList();
+    private static Fragment required(IdentityHashMap<NodeDescription, Fragment> fragments,
+                                     NodeDescription node) {
+        Fragment fragment = fragments.get(node);
+        if (fragment == null) {
+            throw new IllegalStateException("Missing rendered child description at " + node.path());
         }
-        Set<String> unique = new LinkedHashSet<>(values);
-        return new ArrayList<>(unique);
+        return fragment;
     }
 
-    private static String sanitize(String value) {
-        if (value == null || value.isEmpty()) {
-            return "node";
-        }
-        String sanitized = value.replaceAll("[^a-zA-Z0-9_]", "_")
-                .replaceAll("_+", "_")
-                .replaceAll("^_|_$", "");
-        return sanitized.isEmpty() ? "node" : sanitized;
+    private static String terminal(Channel channel) {
+        return "terminal_" + channel.name().toLowerCase(java.util.Locale.ROOT);
     }
 
-    private static String escapeLabel(String value) {
-        if (value == null) {
+    private static String metadata(NodeDescription node) {
+        return node.kind().name() + " | path=" + display(node.path())
+                + " | label=" + (node.label().isPresent()
+                ? display(node.label().get()) : "<none>");
+    }
+
+    private static String binding(NodeDescription node) {
+        if (!node.binding().isPresent()) {
             return "";
         }
-        return value.replace("\\", "#92;")
-                .replace("\"", "#quot;")
-                .replace("\r\n", "<br/>")
-                .replace("\n", "<br/>")
-                .replace("\r", "");
+        BindingDescriptor binding = node.binding().get();
+        String contract = binding.contractClass().isPresent()
+                ? binding.contractClass().get().getName() : "<unresolved>";
+        String qualifier = binding.qualifier().isPresent()
+                ? display(binding.qualifier().get()) : "<none>";
+        return " | binding=" + display(binding.kind()) + " contract=" + contract
+                + " qualifier=" + qualifier;
     }
 
-    private static String escapeEdgeLabel(String value) {
-        if (value == null) {
-            return "";
+    /**
+     * 稳定配置摘要：只读取 final 配置类（Retry / Duration）的字段，
+     * 绝不调用任意 configuration 的 toString。
+     */
+    private static String configurationSummary(Object configuration) {
+        if (configuration instanceof Retry) {
+            Retry retry = (Retry) configuration;
+            return "maxAttempts=" + retry.maxAttempts()
+                    + ",backoff=" + durationSummary(retry.backoff());
         }
-        return value.replace("\\", "#92;")
-                .replace("\"", "#quot;")
-                .replace("|", "#124;")
-                .replace("\r\n", "<br/>")
-                .replace("\n", "<br/>")
-                .replace("\r", "");
+        if (configuration instanceof Duration) {
+            return "timeout=" + durationSummary((Duration) configuration);
+        }
+        return "<none>";
+    }
+
+    private static String durationSummary(Duration duration) {
+        return duration.getSeconds() + "s" + duration.getNano() + "ns";
+    }
+
+    /**
+     * 稳定路由键渲染：仅对不可子类化且 toString 确定的精确类型输出值，
+     * 其余一律输出固定占位符，不暴露任何类名（含 lambda/synthetic 类名）。
+     */
+    private static String stableConstant(Object value) {
+        Class<?> type = value.getClass();
+        if (type == String.class) {
+            return display((String) value);
+        }
+        if (type == Integer.class || type == Long.class || type == Short.class
+                || type == Byte.class || type == Character.class || type == Boolean.class
+                || type == Float.class || type == Double.class) {
+            return String.valueOf(value);
+        }
+        if (type == BigInteger.class || type == BigDecimal.class) {
+            return value.toString();
+        }
+        if (value instanceof Enum<?>) {
+            Enum<?> enumValue = (Enum<?>) value;
+            return enumValue.getDeclaringClass().getName() + "." + enumValue.name();
+        }
+        if (type == Class.class) {
+            Class<?> classValue = (Class<?>) value;
+            return classValue.isSynthetic() ? "<opaque>" : classValue.getName();
+        }
+        return "<opaque>";
+    }
+
+    private static String display(String value) {
+        return value == null ? "<unnamed>" : value;
+    }
+
+    private static String escape(String value) {
+        StringBuilder escaped = new StringBuilder(value.length());
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            switch (character) {
+                case '\\': escaped.append("&#92;"); break;
+                case '"': escaped.append("&quot;"); break;
+                case '\n': escaped.append("<br/>"); break;
+                case '\r': break;
+                case '|': escaped.append("&#124;"); break;
+                case '&': escaped.append("&amp;"); break;
+                case '<': escaped.append("&lt;"); break;
+                case '>': escaped.append("&gt;"); break;
+                case '[': escaped.append("&#91;"); break;
+                case ']': escaped.append("&#93;"); break;
+                case '{': escaped.append("&#123;"); break;
+                case '}': escaped.append("&#125;"); break;
+                case '(': escaped.append("&#40;"); break;
+                case ')': escaped.append("&#41;"); break;
+                case '`': escaped.append("&#96;"); break;
+                default: escaped.append(character);
+            }
+        }
+        return escaped.toString();
     }
 }

@@ -16,8 +16,19 @@ public final class ParallelResults {
     private final List<Outcome<?>> outcomes;
 
     ParallelResults(List<Branch<?, ?>> branches, List<Outcome<?>> outcomes) {
-        this.branches = Collections.unmodifiableList(new ArrayList<Branch<?, ?>>(branches));
-        this.outcomes = Collections.unmodifiableList(new ArrayList<Outcome<?>>(outcomes));
+        this(validate(branches, outcomes));
+    }
+
+    private ParallelResults(Validated validated) {
+        this.branches = validated.branches;
+        this.outcomes = validated.outcomes;
+    }
+
+    /**
+     * Creates an immutable, declaration-ordered view of parallel branch outcomes.
+     */
+    public static ParallelResults of(List<Branch<?, ?>> branches, List<Outcome<?>> outcomes) {
+        return new ParallelResults(validate(branches, outcomes));
     }
 
     /** 按 token 查找分支结果（token 必须属于本集合）。 */
@@ -95,6 +106,39 @@ public final class ParallelResults {
     @SuppressWarnings("unchecked")
     private static <T> Outcome<T> cast(Outcome<?> outcome) {
         return (Outcome<T>) outcome;
+    }
+
+    private static Validated validate(List<Branch<?, ?>> branches, List<Outcome<?>> outcomes) {
+        Objects.requireNonNull(branches, "branches must not be null");
+        Objects.requireNonNull(outcomes, "outcomes must not be null");
+        if (branches.size() != outcomes.size()) {
+            throw new IllegalArgumentException("branches and outcomes must have the same size");
+        }
+
+        List<Branch<?, ?>> branchCopy = new ArrayList<Branch<?, ?>>(branches.size());
+        List<Outcome<?>> outcomeCopy = new ArrayList<Outcome<?>>(outcomes.size());
+        IdentityHashMap<Branch<?, ?>, Boolean> seen = new IdentityHashMap<Branch<?, ?>, Boolean>();
+        for (int index = 0; index < branches.size(); index++) {
+            Branch<?, ?> branch = Objects.requireNonNull(
+                    branches.get(index), "branch must not be null at index " + index);
+            if (seen.put(branch, Boolean.TRUE) != null) {
+                throw new IllegalArgumentException("duplicate branch token at index " + index + ": " + branch.name());
+            }
+            branchCopy.add(branch);
+            outcomeCopy.add(Objects.requireNonNull(
+                    outcomes.get(index), "outcome must not be null at index " + index));
+        }
+        return new Validated(branchCopy, outcomeCopy);
+    }
+
+    private static final class Validated {
+        private final List<Branch<?, ?>> branches;
+        private final List<Outcome<?>> outcomes;
+
+        private Validated(List<Branch<?, ?>> branches, List<Outcome<?>> outcomes) {
+            this.branches = Collections.unmodifiableList(branches);
+            this.outcomes = Collections.unmodifiableList(outcomes);
+        }
     }
 
     /** 按 token 收集的各分支输出值，仅包含 Accepted 分支。 */

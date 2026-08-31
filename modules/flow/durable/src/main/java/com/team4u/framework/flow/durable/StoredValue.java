@@ -1,62 +1,63 @@
 package com.team4u.framework.flow.durable;
 
-import java.nio.charset.StandardCharsets;
 import java.util.Arrays;
 import java.util.Objects;
 
 /**
- * 编码后的持久化值包装对象。
- *
- * @author jay.wu
+ * An encoded application value. The runtime treats the payload as opaque data.
  */
 public final class StoredValue {
+    private final String codecId;
+    private final int codecVersion;
+    private final byte[] payload;
 
-    private final String typeId;
-    private final byte[] data;
-
-    public StoredValue(String typeId, byte[] data) {
-        if (typeId == null || typeId.trim().isEmpty()) {
-            throw new IllegalArgumentException("typeId must not be null or blank");
+    public StoredValue(String codecId, int codecVersion, byte[] payload) {
+        this.codecId = text(codecId, "codecId");
+        if (codecVersion < 1) {
+            throw new IllegalArgumentException("codecVersion must be positive");
         }
-        this.typeId = typeId;
-        this.data = data != null ? data.clone() : new byte[0];
+        this.codecVersion = codecVersion;
+        this.payload = Objects.requireNonNull(payload, "payload must not be null").clone();
     }
 
-    public static StoredValue of(String typeId, byte[] data) {
-        return new StoredValue(typeId, data);
+    public String codecId() {
+        return codecId;
     }
 
-    public static StoredValue ofString(String str) {
-        return new StoredValue("string", str != null ? str.getBytes(StandardCharsets.UTF_8) : new byte[0]);
+    public int codecVersion() {
+        return codecVersion;
     }
 
-    public String typeId() {
-        return typeId;
-    }
-
-    public byte[] data() {
-        return data.clone();
-    }
-
-    public String asString() {
-        return new String(data, StandardCharsets.UTF_8);
+    public byte[] payload() {
+        return payload.clone();
     }
 
     @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (!(o instanceof StoredValue)) return false;
-        StoredValue that = (StoredValue) o;
-        return Objects.equals(typeId, that.typeId) && Arrays.equals(data, that.data);
+    public boolean equals(Object other) {
+        if (this == other) return true;
+        if (!(other instanceof StoredValue)) return false;
+        StoredValue that = (StoredValue) other;
+        return codecVersion == that.codecVersion
+                && codecId.equals(that.codecId)
+                && Arrays.equals(payload, that.payload);
     }
 
     @Override
     public int hashCode() {
-        return 31 * Objects.hash(typeId) + Arrays.hashCode(data);
+        return 31 * (31 * codecId.hashCode() + codecVersion) + Arrays.hashCode(payload);
     }
 
     @Override
     public String toString() {
-        return "StoredValue{" + typeId + ", " + data.length + " bytes}";
+        return "StoredValue[codecId=" + codecId + ", codecVersion=" + codecVersion
+                + ", payloadBytes=" + payload.length + "]";
+    }
+
+    private static String text(String value, String name) {
+        Objects.requireNonNull(value, name + " must not be null");
+        if (value.trim().isEmpty()) {
+            throw new IllegalArgumentException(name + " must not be blank");
+        }
+        return value;
     }
 }

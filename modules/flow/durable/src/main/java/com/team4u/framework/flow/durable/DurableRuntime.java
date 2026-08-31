@@ -1,29 +1,65 @@
 package com.team4u.framework.flow.durable;
 
 import com.team4u.framework.flow.Flow;
+import com.team4u.framework.flow.FlowObserver;
+import com.team4u.framework.flow.OperationResolver;
 
 import java.util.Objects;
-import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.ExecutorService;
 
 /**
- * Durable 运行时环境：统一管理存储、编解码器以及各版本的流程注册表。
+ * Durable 运行时环境：持有存储、状态编解码器、观察者与可选的调用方线程池，
+ * 并负责把逻辑 Flow 编译为可跨进程恢复的 {@link DurableExecutable}。
  *
- * @author jay.wu
+ * <p>运行时不拥有任何线程资源：{@code executor} 仅被借用（用于超时 worker 与异步命令），
+ * 生命周期完全由调用方管理，运行时绝不创建或关闭线程池。</p>
+ *
+ * <p><b>并行分支串行驱动</b>：Durable 的 Parallel 分支按声明顺序串行驱动
+ * （前序分支完成后才开始后序），不做并发执行——这是崩溃一致性合同允许的简化。
+ * 需要真实并发执行时请使用 Core 的 Local 执行器。</p>
+ *
+ * <p><b>StateMapper 确定性契约</b>：resume 信号的幂等比较依赖
+ * {@link StateMapper#encode} 的确定性——同一信号值多次编码必须产生
+ * {@code equals} 相等的 {@link StoredValue}，否则幂等重驱动会被误判为
+ * RESUME_SIGNAL_CONFLICT。选用 {@link DefaultStateMapper#INSTANCE} 或
+ * 自定义 mapper 时都必须遵守该契约。</p>
  */
 public final class DurableRuntime {
 
     private final DurableStore store;
     private final StateMapper stateMapper;
-    private final ConcurrentMap<String, DurableFlow<?, ?>> registeredFlows = new ConcurrentHashMap<>();
+    private final OperationResolver operationResolver;
+    private final FlowObserver observer;
+    private final DurableObserver durableObserver;
+    private final ExecutorService executor;
 
-    private DurableRuntime(DurableStore store, StateMapper stateMapper) {
-        this.store = Objects.requireNonNull(store, "DurableStore must not be null");
-        this.stateMapper = stateMapper != null ? stateMapper : DefaultStateMapper.INSTANCE;
+    private DurableRuntime(Builder builder) {
+        this.store = builder.store;
+        this.stateMapper = builder.stateMapper;
+        this.operationResolver = builder.operationResolver;
+        this.observer = builder.observer;
+        this.durableObserver = builder.durableObserver;
+        this.executor = builder.executor;
     }
 
     public static Builder builder(DurableStore store) {
         return new Builder(store);
+    }
+
+    /**
+     * 编译指定版本的 Flow 为可执行的 DurableExecutable。
+     * 编译通过 Core 公开投影 SPI 进行；返回的 executable 仅持有绑定实例引用。
+     *
+     * <p>文档化降级：计划含 TIMEOUT 且未配置 executor 时不会拒绝编译——
+     * 超时不再由 worker 强制截止，而是依赖循环顶部的协作检查点与
+     * invoke 入口的剩余时间检查（未到期时 body 同步执行）。</p>
+     */
+    public <I, O> DurableExecutable<I, O> compile(Flow<I, O> flow, String flowId, int flowVersion) {
+        Objects.requireNonNull(flow, "flow must not be null");
+        DurablePlanCompiler.Definition definition = DurablePlanCompiler.compile(
+                flow, operationResolver);
+        return new DurableExecutable<I, O>(flowId, flowVersion, definition, store,
+                stateMapper, observer, durableObserver, executor);
     }
 
     public DurableStore store() {
@@ -34,60 +70,47 @@ public final class DurableRuntime {
         return stateMapper;
     }
 
-    /**
-     * 注册特定版本的 Flow 定义。
-     *
-     * @param flow    流程定义，非 null
-     * @param version 流程版本（正整数）
-     * @param <I>     输入类型
-     * @param <O>     输出类型
-     * @return 注册后的 DurableFlow 实例
-     */
-    @SuppressWarnings("unchecked")
-    public <I, O> DurableFlow<I, O> register(Flow<I, O> flow, int version) {
-        Objects.requireNonNull(flow, "Flow must not be null");
-        if (version <= 0) {
-            throw new IllegalArgumentException("flowVersion must be a positive integer, got: " + version);
-        }
-        String key = flow.id() + ":" + version;
-        DurableFlow<I, O> durableFlow = new DurableFlow<>(flow.id(), version, flow, store, stateMapper);
-        DurableFlow<?, ?> existing = registeredFlows.putIfAbsent(key, durableFlow);
-        if (existing != null) {
-            throw new IllegalArgumentException("DurableFlow [" + flow.id() + "] version [" + version + "] is already registered");
-        }
-        return durableFlow;
-    }
-
-    /**
-     * 获取已注册的特定版本 DurableFlow。
-     *
-     * @param flowId  流程 ID
-     * @param version 流程版本
-     * @param <I>     输入类型
-     * @param <O>     输出类型
-     * @return DurableFlow 实例，若未注册返回 null
-     */
-    @SuppressWarnings("unchecked")
-    public <I, O> DurableFlow<I, O> get(String flowId, int version) {
-        String key = flowId + ":" + version;
-        return (DurableFlow<I, O>) registeredFlows.get(key);
-    }
-
     public static final class Builder {
         private final DurableStore store;
-        private StateMapper stateMapper;
+        private StateMapper stateMapper = DefaultStateMapper.INSTANCE;
+        private OperationResolver operationResolver = OperationResolver.rejecting();
+        private FlowObserver observer = FlowObserver.noop();
+        private DurableObserver durableObserver = DurableObserver.noop();
+        private ExecutorService executor;
 
         Builder(DurableStore store) {
             this.store = Objects.requireNonNull(store, "DurableStore must not be null");
         }
 
         public Builder stateMapper(StateMapper stateMapper) {
-            this.stateMapper = stateMapper;
+            this.stateMapper = stateMapper != null ? stateMapper : DefaultStateMapper.INSTANCE;
+            return this;
+        }
+
+        public Builder operationResolver(OperationResolver operationResolver) {
+            this.operationResolver = Objects.requireNonNull(
+                    operationResolver, "operationResolver must not be null");
+            return this;
+        }
+
+        public Builder observer(FlowObserver observer) {
+            this.observer = observer != null ? observer : FlowObserver.noop();
+            return this;
+        }
+
+        public Builder durableObserver(DurableObserver durableObserver) {
+            this.durableObserver = durableObserver != null ? durableObserver : DurableObserver.noop();
+            return this;
+        }
+
+        /** 配置调用方拥有的线程池，仅借用、绝不关闭。 */
+        public Builder executor(ExecutorService executor) {
+            this.executor = executor;
             return this;
         }
 
         public DurableRuntime build() {
-            return new DurableRuntime(store, stateMapper);
+            return new DurableRuntime(this);
         }
     }
 }

@@ -2,12 +2,15 @@ package com.team4u.framework.flow;
 
 import org.junit.Test;
 
+import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Collections;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * ParallelResults 类型签名守护：firstAccepted()/homogeneousCollect() 收紧为通配符返回类型后，
@@ -15,6 +18,72 @@ import static org.junit.Assert.assertTrue;
  * 直接构造 ParallelResults（包级构造器）以隔离验证合并语义，无需驱动真实 Parallel 执行。
  */
 public class ParallelResultsTest {
+
+    @Test
+    public void factoryPreservesDeclarationOrderAndDefensivelyCopiesInputs() {
+        Branch<String, String> first = Branch.of("same",
+                (context, input) -> Outcome.accepted(input));
+        Branch<String, String> second = Branch.of("same",
+                (context, input) -> Outcome.accepted(input));
+        Outcome<String> firstOutcome = Outcome.accepted("first");
+        Outcome<String> secondOutcome = Outcome.accepted("second");
+        List<Branch<?, ?>> branches = new ArrayList<Branch<?, ?>>(
+                Arrays.<Branch<?, ?>>asList(first, second));
+        List<Outcome<?>> outcomes = new ArrayList<Outcome<?>>(
+                Arrays.<Outcome<?>>asList(firstOutcome, secondOutcome));
+
+        ParallelResults results = ParallelResults.of(branches, outcomes);
+        branches.clear();
+        outcomes.clear();
+
+        assertEquals(Arrays.<Branch<?, ?>>asList(first, second), results.branches());
+        assertSame(firstOutcome, results.outcome(first));
+        assertSame(secondOutcome, results.outcome(second));
+        assertThrowsException(UnsupportedOperationException.class,
+                () -> results.branches().clear());
+    }
+
+    @Test
+    public void factoryValidatesListsEntriesSizesAndDuplicateTokenIdentity() {
+        Branch<String, String> first = Branch.of("first",
+                (context, input) -> Outcome.accepted(input));
+        Branch<String, String> sameNameButDistinct = Branch.of("first",
+                (context, input) -> Outcome.accepted(input));
+        Outcome<String> accepted = Outcome.accepted("value");
+
+        assertThrowsException(NullPointerException.class,
+                () -> ParallelResults.of(null, Collections.<Outcome<?>>emptyList()));
+        assertThrowsException(NullPointerException.class,
+                () -> ParallelResults.of(Collections.<Branch<?, ?>>emptyList(), null));
+        assertThrowsException(IllegalArgumentException.class,
+                () -> ParallelResults.of(Collections.<Branch<?, ?>>singletonList(first),
+                        Collections.<Outcome<?>>emptyList()));
+        assertThrowsException(NullPointerException.class,
+                () -> ParallelResults.of(Collections.<Branch<?, ?>>singletonList(null),
+                        Collections.<Outcome<?>>singletonList(accepted)));
+        assertThrowsException(NullPointerException.class,
+                () -> ParallelResults.of(Collections.<Branch<?, ?>>singletonList(first),
+                        Collections.<Outcome<?>>singletonList(null)));
+        assertThrowsException(IllegalArgumentException.class,
+                () -> ParallelResults.of(Arrays.<Branch<?, ?>>asList(first, first),
+                        Arrays.<Outcome<?>>asList(accepted, accepted)));
+
+        ParallelResults distinctTokens = ParallelResults.of(
+                Arrays.<Branch<?, ?>>asList(first, sameNameButDistinct),
+                Arrays.<Outcome<?>>asList(accepted, accepted));
+        assertEquals(Arrays.<Branch<?, ?>>asList(first, sameNameButDistinct), distinctTokens.branches());
+    }
+
+    @Test
+    public void packagePrivateConstructorUsesTheSameValidation() {
+        Branch<String, String> branch = Branch.of("branch",
+                (context, input) -> Outcome.accepted(input));
+        Outcome<String> accepted = Outcome.accepted("value");
+
+        assertThrowsException(IllegalArgumentException.class,
+                () -> new ParallelResults(Arrays.<Branch<?, ?>>asList(branch, branch),
+                        Arrays.<Outcome<?>>asList(accepted, accepted)));
+    }
 
     @Test
     public void firstAcceptedReturnsOpaqueOutcomeInDeclarationOrder() {
@@ -88,5 +157,17 @@ public class ParallelResultsTest {
         ParallelResults.Values values = ((Outcome.Accepted<ParallelResults.Values>) all).value();
         assertEquals(Integer.valueOf(4), values.get(length));
         assertEquals("FLOW", values.get(upper));
+    }
+
+    private static <T extends Throwable> void assertThrowsException(
+            Class<T> expectedType, Runnable executable) {
+        try {
+            executable.run();
+            fail("Expected " + expectedType.getName() + " was not thrown");
+        } catch (Throwable actual) {
+            if (!expectedType.isInstance(actual)) {
+                fail("Expected " + expectedType.getName() + " but was " + actual.getClass().getName());
+            }
+        }
     }
 }
