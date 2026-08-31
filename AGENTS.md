@@ -71,17 +71,3 @@ mvn enforcer:enforce
 ### 控制极端防爆栈测试的规模
 
 - 验证非递归栈安全的测试，嵌套层级建议设定为 **1200 ~ 1500 层**（足以超越 JVM 默认 1MB 栈的 1000~1024 栈溢出阈值），避免不必要的 $O(N^2)$ 集合拷贝与超大字符串开销。
-
----
-
-## 模块架构与包路径规范
-
-### 零依赖与轻量化原则
-
-- 各核心模块（`core`）保持纯 Java 8 实现，绝不引入 Spring、Jackson、ByteBuddy 等第三方重量级依赖；
-- 扩展适配统一放入独立的子模块（如 `*-spring`、`*-jackson`、`*-proxy`）。
-
-### 模块重命名与兼容性
-
-- `team4u-flow-diagram` 统一承载 Flow 的 Mermaid 流程图与文本树渲染；
-- 核心入口类为 `FlowDiagrams.mermaid()` 与 `FlowDiagrams.text()`。
