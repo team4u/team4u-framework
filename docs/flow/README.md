@@ -73,6 +73,7 @@ graph TD
 | `team4u-flow` | 核心模块：Flow DSL、四态 Outcome、Local 执行器、并行与挂起机制 | 仅依赖 JDK |
 | `team4u-flow-durable` | 持久化模块：Durable 执行器、快照信封、StateMapper、CAS 检查点与恢复 | 依赖 `team4u-flow` |
 | `team4u-flow-durable-kv` | KV 存储适配模块：基于 `KvStore` 与 CAS 乐观锁的持久化快照存储实现 (`KvDurableStore`) | 依赖 `team4u-flow-durable`、`team4u-kv`、`team4u-serializer-json` |
+| `team4u-flow-ratelimiter` | 限流治理适配模块：基于 `team4u-ratelimiter` 的开箱即用限流策略（`RateLimitPolicy`） | 依赖 `team4u-flow`、`team4u-ratelimiter` |
 | `team4u-flow-graph` | 可视化模块：Mermaid 流程图与紧凑文本树渲染器 | 依赖 `team4u-flow`（仅描述面） |
 | `team4u-flow-bean` | 容器集成模块：BeanManager 容器绑定解析器，保留 AOP 与代理 | 依赖 `team4u-flow`、`team4u-bean` |
 | `team4u-flow-test` | 测试支持模块：桩对象、Trace 收集器、断言库与测试夹具 | 依赖 `team4u-flow`、JUnit |

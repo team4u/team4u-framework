@@ -64,7 +64,7 @@ public interface Policy<K> {
 - `Gate.reject(Reason.of("BLACKLIST", "用户已被列入黑名单"))`：拦截并直接以 `Rejected` 短路退出，不执行后续业务，亦不触发系统重试；
 - `Gate.fail(Failure.of("RATE_LIMIT_EXCEEDED", "触发系统级限流熔断"))`：拦截并直接以 `Failed` 退出，可触发上层容灾恢复。
 
-### 示例：用户级别风控限流策略
+### 示例：自定义风控校验策略
 
 ```java
 public class UserRiskPolicy implements Policy<String> {
@@ -76,9 +76,6 @@ public class UserRiskPolicy implements Policy<String> {
     public Gate before(PolicyContext context, String userId) {
         if (riskService.isBlacklisted(userId)) {
             return Gate.reject(Reason.of("USER_BLOCKED", "该账户处于风险冻结状态"));
-        }
-        if (!riskService.tryAcquireToken(userId)) {
-            return Gate.fail(Failure.of("TOO_MANY_REQUESTS", "操作过于频繁，请稍后再试"));
         }
         return Gate.proceed();
     }
@@ -97,6 +94,58 @@ public class UserRiskPolicy implements Policy<String> {
 ```java
 Flow<OrderRequest, Receipt> protectedFlow = flow
         .policy(UserRiskPolicy.class, OrderRequest::getUserId);
+```
+
+---
+
+### 开箱即用限流适配：`team4u-flow-ratelimiter`
+
+为了保持 `team4u-flow` 内核的极简与零外部冗余依赖，流程限流能力由独立的桥接适配模块 **`team4u-flow-ratelimiter`** 提供。该模块将 Flow 的 `Policy<K>` 契约与框架的分布式限流引擎 [`team4u-ratelimiter`](../ratelimiter/README.md) 无缝融合。
+
+#### 1. 引入依赖
+
+```xml
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-flow-ratelimiter</artifactId>
+</dependency>
+```
+
+#### 2. 限流决策动作：`RateLimitAction`
+
+| 动作枚举 | 门控返回值 | 适用场景 |
+| :--- | :--- | :--- |
+| **`RateLimitAction.FAIL`** *(默认)* | `Gate.fail(Failure)` | 系统级限流/排队。配合外层 `flow.retry(...)` 实现退避重试获取令牌。 |
+| **`RateLimitAction.REJECT`** | `Gate.reject(Reason)` | 业务级快速失败/降级短路。直接产生 `Rejected` 结果，**绝不发起重试**。 |
+
+#### 3. 编排示例
+
+```java
+import com.team4u.framework.flow.ratelimiter.RateLimitPolicy;
+import com.team4u.framework.flow.ratelimiter.RateLimitPolicies;
+import com.team4u.framework.flow.ratelimiter.RateLimitAction;
+
+// 1. 最简模式：直接指定限流检查点（默认 FAIL 模式，触发重试）
+Flow<OrderRequest, Receipt> flow1 = Flow.step(chargeOp)
+        .policy(RateLimitPolicy.of("order.charge"), OrderRequest::getUserId);
+
+// 2. 拒绝模式：限流直接短路业务，不重试
+Flow<OrderRequest, Receipt> flow2 = Flow.step(chargeOp)
+        .policy(RateLimitPolicies.reject("order.charge", OrderRequest::getUserId));
+
+// 3. 高级定制：动态消耗多 Permits + 提取复杂上下文 + 自定义失败诊断
+RateLimitPolicy<OrderRequest> customPolicy = RateLimitPolicy.<OrderRequest>builder()
+        .point("order.batch")
+        .contextExtractor(OrderRequest::getUserId)
+        .permitsExtractor(OrderRequest::getItemCount) // 按批量大小动态扣减
+        .action(RateLimitAction.FAIL)
+        .failureFactory((result, req) -> Failure.of("RATE_LIMIT_EXCEEDED", 
+                "下单频次超限，建议等待 " + result.getRetryAfterMillis() + "ms"))
+        .build();
+
+Flow<OrderRequest, Receipt> flow3 = Flow.step(chargeOp)
+        .retry(Retry.maxAttempts(3).withBackoff(Duration.ofMillis(200)))
+        .policy(customPolicy, req -> req);
 ```
 
 ---
