@@ -1,5 +1,8 @@
 package com.team4u.framework.flow;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 import java.util.Objects;
 
 /**
@@ -18,6 +21,8 @@ import java.util.Objects;
  * @param <O> 分支输出结果类型
  * @author jay.wu
  */
+@Getter
+@Accessors(fluent = true)
 public final class Branch<I, O> {
     /** 分支唯一名称标识。 */
     private final String name;
@@ -96,24 +101,6 @@ public final class Branch<I, O> {
     public static <I, O> Branch<I, O> of(
             String name, Class<? extends Operation<I, O>> operationClass, String qualifier) {
         return new Branch<I, O>(name, Flow.step(operationClass, qualifier));
-    }
-
-    /**
-     * 获取分支名称。
-     *
-     * @return 分支名称
-     */
-    public String name() {
-        return name;
-    }
-
-    /**
-     * 获取分支关联的子流程。
-     *
-     * @return 子流程实例
-     */
-    Flow<I, O> flow() {
-        return flow;
     }
 
     @Override

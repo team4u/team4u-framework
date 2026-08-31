@@ -13,6 +13,9 @@ import com.team4u.framework.flow.OperationResolver;
 import com.team4u.framework.flow.Outcome;
 import com.team4u.framework.flow.ResumePoint;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -38,6 +41,8 @@ final class DurablePlanCompiler implements ExecutableFlowVisitor<DurablePlanNode
     /**
      * 耐久化流程定义元数据密封容器。
      */
+    @Getter
+    @Accessors(fluent = true)
     static final class Definition {
         private final DurablePlanNode root;
         private final Map<String, DurablePlanNode> byPath;
@@ -57,12 +62,6 @@ final class DurablePlanCompiler implements ExecutableFlowVisitor<DurablePlanNode
                     new LinkedHashMap<String, ResumePoint<?>>(resumePoints));
             this.requiresExecutor = requiresExecutor;
         }
-
-        DurablePlanNode root() { return root; }
-        Map<String, DurablePlanNode> byPath() { return byPath; }
-        Set<String> slotRoles() { return slotRoles; }
-        Map<String, ResumePoint<?>> resumePoints() { return resumePoints; }
-        boolean requiresExecutor() { return requiresExecutor; }
     }
 
     private final LinkedHashMap<String, DurablePlanNode> byPath =

@@ -1,5 +1,9 @@
 package com.team4u.framework.flow;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.Collections;
@@ -20,46 +24,21 @@ import java.util.Objects;
  * @author jay.wu
  */
 final class ControlExecutor {
+    @Getter
+    @Accessors(fluent = true)
+    @AllArgsConstructor
     private static final class PolicyBefore {
         private final Object key;
         private final Gate gate;
-
-        public PolicyBefore(Object key, Gate gate) {
-            this.key = key;
-            this.gate = gate;
-        }
-
-        public Object key() {
-            return key;
-        }
-
-        public Gate gate() {
-            return gate;
-        }
     }
 
+    @Getter
+    @Accessors(fluent = true)
+    @AllArgsConstructor
     private static final class PersistentBefore {
         private final Object key;
         private final Object state;
         private final PersistentPolicy.Before<Object> decision;
-
-        public PersistentBefore(Object key, Object state, PersistentPolicy.Before<Object> decision) {
-            this.key = key;
-            this.state = state;
-            this.decision = decision;
-        }
-
-        public Object key() {
-            return key;
-        }
-
-        public Object state() {
-            return state;
-        }
-
-        public PersistentPolicy.Before<Object> decision() {
-            return decision;
-        }
     }
 
     private ControlExecutor() { }

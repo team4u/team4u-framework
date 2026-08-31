@@ -10,6 +10,9 @@ import com.team4u.framework.flow.durable.DurableSnapshot;
 import com.team4u.framework.flow.durable.DurableStore;
 import com.team4u.framework.flow.durable.InMemoryDurableStore;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 import java.util.Objects;
 import java.util.Optional;
 
@@ -23,6 +26,8 @@ import java.util.Optional;
  * @param <O> 流程输出类型
  * @author jay.wu
  */
+@Getter
+@Accessors(fluent = true)
 public final class DurableFixture<I, O> {
 
     private final DurableExecutable<I, O> executable;
@@ -89,9 +94,5 @@ public final class DurableFixture<I, O> {
             throw new AssertionError("missing durable execution: " + executionId);
         }
         return found.get();
-    }
-
-    public DurableExecutable<I, O> executable() {
-        return executable;
     }
 }

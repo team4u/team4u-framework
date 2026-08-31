@@ -1,5 +1,8 @@
 package com.team4u.framework.flow;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 import java.util.Objects;
 import java.util.concurrent.atomic.AtomicBoolean;
 
@@ -24,6 +27,8 @@ public final class Suspension<O> {
     private final Object executableIdentity;
     private final MachineState state;
     /** 创建时快照的挂起点；resume 会清空 state.awaitingPoint，故此 getter 不再读共享可变字段。 */
+    @Getter
+    @Accessors(fluent = true)
     private final String resumePoint;
     private final AtomicBoolean consumed = new AtomicBoolean();
 
@@ -46,15 +51,6 @@ public final class Suspension<O> {
      */
     public String executionId() {
         return state.executionId;
-    }
-
-    /**
-     * 获取当前挂起的挂起点名称（与 {@link ResumePoint#name()} 对应）。
-     *
-     * @return 挂起点名称
-     */
-    public String resumePoint() {
-        return resumePoint;
     }
 
     /**

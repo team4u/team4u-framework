@@ -1,5 +1,10 @@
 package com.team4u.framework.flow;
 
+import lombok.AllArgsConstructor;
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -41,6 +46,8 @@ final class Compiler {
      *
      * <p>包含编译后的根执行节点、路径索引字典、挂起点映射表以及并发死锁防御特征标记。</p>
      */
+    @Getter
+    @Accessors(fluent = true)
     static final class Compiled {
         private final PlanNode root;
         private final Map<String, PlanNode> byPath;
@@ -124,175 +131,50 @@ final class Compiler {
             }
             return false;
         }
-
-        /**
-         * 获取编译后的根物理节点。
-         *
-         * @return 根节点
-         */
-        public PlanNode root() {
-            return root;
-        }
-
-        /**
-         * 获取按树路径索引的节点映射字典。
-         *
-         * @return 节点路径映射
-         */
-        public Map<String, PlanNode> byPath() {
-            return byPath;
-        }
-
-        /**
-         * 获取流程中所有挂起点映射字典。
-         *
-         * @return 挂起点映射
-         */
-        public Map<String, ResumePoint<?>> resumePoints() {
-            return resumePoints;
-        }
-
-        /**
-         * 流程是否包含嵌套并发工作线程任务（如并行或超时）。
-         *
-         * @return 若包含返回 true
-         */
-        public boolean hasNestedWorkerTasks() {
-            return hasNestedWorkerTasks;
-        }
-
-        /**
-         * 流程是否包含需要 ForkJoinPool 补偿机制以防止死锁的嵌套任务。
-         *
-         * @return 若需要返回 true
-         */
-        public boolean requiresCompensatingWorker() {
-            return requiresCompensatingWorker;
-        }
     }
 
-
+    @AllArgsConstructor
+    @EqualsAndHashCode
     private static final class BindingKey {
         private final Class<?> contract;
         private final String qualifier;
         private final Logical.BindingKind kind;
-
-        public BindingKey(Class<?> contract, String qualifier, Logical.BindingKind kind) {
-            this.contract = contract;
-            this.qualifier = qualifier;
-            this.kind = kind;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            BindingKey that = (BindingKey) o;
-            return Objects.equals(contract, that.contract)
-                    && Objects.equals(qualifier, that.qualifier)
-                    && kind == that.kind;
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(contract, qualifier, kind);
-        }
     }
 
+    @Getter
+    @Accessors(fluent = true)
+    @AllArgsConstructor
     private static final class Resolved {
         private final Object instance;
         private final Class<?> implementation;
-
-        public Resolved(Object instance, Class<?> implementation) {
-            this.instance = instance;
-            this.implementation = implementation;
-        }
-
-        public Object instance() {
-            return instance;
-        }
-
-        public Class<?> implementation() {
-            return implementation;
-        }
     }
 
+    @Getter
+    @Accessors(fluent = true)
+    @AllArgsConstructor
     private static final class Work {
         private final Logical logical;
         private final String path;
         private final String label;
         private final boolean parallel;
         private final boolean build;
-
-        public Work(Logical logical, String path, String label, boolean parallel, boolean build) {
-            this.logical = logical;
-            this.path = path;
-            this.label = label;
-            this.parallel = parallel;
-            this.build = build;
-        }
-
-        public Logical logical() {
-            return logical;
-        }
-
-        public String path() {
-            return path;
-        }
-
-        public String label() {
-            return label;
-        }
-
-        public boolean parallel() {
-            return parallel;
-        }
-
-        public boolean build() {
-            return build;
-        }
     }
 
+    @Getter
+    @Accessors(fluent = true)
+    @AllArgsConstructor
     private static final class Child {
         private final Logical logical;
         private final String path;
         private final boolean parallel;
-
-        public Child(Logical logical, String path, boolean parallel) {
-            this.logical = logical;
-            this.path = path;
-            this.parallel = parallel;
-        }
-
-        public Logical logical() {
-            return logical;
-        }
-
-        public String path() {
-            return path;
-        }
-
-        public boolean parallel() {
-            return parallel;
-        }
     }
 
+    @Getter
+    @Accessors(fluent = true)
+    @AllArgsConstructor
     private static final class Normalized {
         private final Logical logical;
         private final String label;
-
-        public Normalized(Logical logical, String label) {
-            this.logical = logical;
-            this.label = label;
-        }
-
-        public Logical logical() {
-            return logical;
-        }
-
-        public String label() {
-            return label;
-        }
     }
 
     private final OperationResolver resolver;

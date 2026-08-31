@@ -1,5 +1,8 @@
 package com.team4u.framework.flow;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 import java.util.Collections;
 import java.util.Objects;
 import java.util.Set;
@@ -31,6 +34,8 @@ public final class Cancellation {
     private final Set<Cancellation> children =
             Collections.newSetFromMap(new ConcurrentHashMap<Cancellation, Boolean>());
     /** 暴露给外部的只读取消信号对象。 */
+    @Getter
+    @Accessors(fluent = true)
     private final Signal signal = new Signal() {
         @Override
         public boolean isCancelled() {
@@ -76,15 +81,6 @@ public final class Cancellation {
      */
     static Cancellation linked(Cancellation parent) {
         return new Cancellation(Objects.requireNonNull(parent, "parent must not be null"));
-    }
-
-    /**
-     * 获取关联的只读取消信号视图。
-     *
-     * @return {@link Signal} 信号实例
-     */
-    public Signal signal() {
-        return signal;
     }
 
     /**

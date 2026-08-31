@@ -9,6 +9,9 @@ import com.team4u.framework.flow.OperationResolver;
 import com.team4u.framework.flow.ResumePoint;
 import com.team4u.framework.flow.Suspension;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 import java.util.Objects;
 
 /**
@@ -20,6 +23,8 @@ import java.util.Objects;
  * @param <O> 流程输出类型
  * @author jay.wu
  */
+@Getter
+@Accessors(fluent = true)
 public final class LocalFixture<I, O> {
 
     private final LocalExecutable<I, O> executable;
@@ -76,9 +81,5 @@ public final class LocalFixture<I, O> {
     public <R> FlowResult<O> resume(Suspension<O> suspension,
                                     ResumePoint<R> point, R signal) {
         return executable.resume(suspension, point, signal);
-    }
-
-    public LocalExecutable<I, O> executable() {
-        return executable;
     }
 }

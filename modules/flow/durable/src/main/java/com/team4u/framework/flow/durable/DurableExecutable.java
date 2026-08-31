@@ -3,6 +3,9 @@ package com.team4u.framework.flow.durable;
 import com.team4u.framework.flow.FlowObserver;
 import com.team4u.framework.flow.Outcome;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 import java.time.Instant;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -26,7 +29,11 @@ import java.util.concurrent.ExecutorService;
  * @author jay.wu
  */
 public final class DurableExecutable<I, O> {
+    @Getter
+    @Accessors(fluent = true)
     private final String flowId;
+    @Getter
+    @Accessors(fluent = true)
     private final int flowVersion;
     private final DurablePlanCompiler.Definition definition;
     private final DurableStore store;
@@ -52,24 +59,6 @@ public final class DurableExecutable<I, O> {
         this.durableObserver = Objects.requireNonNull(
                 durableObserver, "durableObserver must not be null");
         this.executor = executor;
-    }
-
-    /**
-     * 获取绑定的流程唯一标识。
-     *
-     * @return 流程标识
-     */
-    public String flowId() {
-        return flowId;
-    }
-
-    /**
-     * 获取绑定的流程版本号。
-     *
-     * @return 版本号
-     */
-    public int flowVersion() {
-        return flowVersion;
     }
 
     // ------------------------------------------------------------------

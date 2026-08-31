@@ -1,5 +1,10 @@
 package com.team4u.framework.flow;
 
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
+import lombok.experimental.Accessors;
+
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -13,6 +18,8 @@ import java.util.Objects;
  *
  * @author jay.wu
  */
+@Getter
+@Accessors(fluent = true)
 public final class FlowBuildException extends IllegalArgumentException {
     /** 聚合的全部构建问题诊断列表。 */
     private final List<Problem> problems;
@@ -43,17 +50,12 @@ public final class FlowBuildException extends IllegalArgumentException {
     }
 
     /**
-     * 获取聚合的诊断问题结构化列表。
-     *
-     * @return 只读问题列表
-     */
-    public List<Problem> problems() {
-        return problems;
-    }
-
-    /**
      * 单条构建诊断问题。
      */
+    @Getter
+    @Accessors(fluent = true)
+    @EqualsAndHashCode
+    @ToString
     public static final class Problem {
         /** 诊断错误码（如 DUPLICATE_SCOPE, ILLEGAL_AWAIT, DUPLICATE_BRANCH 等）。 */
         private final String code;
@@ -73,51 +75,6 @@ public final class FlowBuildException extends IllegalArgumentException {
             this.code = Objects.requireNonNull(code, "code must not be null");
             this.path = Objects.requireNonNull(path, "path must not be null");
             this.message = Objects.requireNonNull(message, "message must not be null");
-        }
-
-        /**
-         * 获取诊断错误码。
-         *
-         * @return 错误码
-         */
-        public String code() {
-            return code;
-        }
-
-        /**
-         * 获取问题节点路径。
-         *
-         * @return 树路径
-         */
-        public String path() {
-            return path;
-        }
-
-        /**
-         * 获取诊断说明。
-         *
-         * @return 说明信息
-         */
-        public String message() {
-            return message;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            Problem problem = (Problem) o;
-            return code.equals(problem.code) && path.equals(problem.path) && message.equals(problem.message);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(code, path, message);
-        }
-
-        @Override
-        public String toString() {
-            return "Problem[code=" + code + ", path=" + path + ", message=" + message + "]";
         }
     }
 }

@@ -1,5 +1,8 @@
 package com.team4u.framework.flow;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.ArrayList;
@@ -17,6 +20,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Future;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.LinkedBlockingQueue;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
@@ -36,6 +40,8 @@ import java.util.concurrent.atomic.AtomicReference;
  */
 final class ParallelRunner {
 
+    @Getter
+    @Accessors(fluent = true)
     private static final class Task {
         private final PlanNode.ParallelBranch branch;
         private final Cancellation cancellation;
@@ -47,30 +53,6 @@ final class ParallelRunner {
         public Task(PlanNode.ParallelBranch branch, Cancellation cancellation) {
             this.branch = branch;
             this.cancellation = cancellation;
-        }
-
-        public PlanNode.ParallelBranch branch() {
-            return branch;
-        }
-
-        public Cancellation cancellation() {
-            return cancellation;
-        }
-
-        public CountDownLatch doneLatch() {
-            return doneLatch;
-        }
-
-        public AtomicReference<MachineResult> resultRef() {
-            return resultRef;
-        }
-
-        public AtomicReference<Throwable> failureRef() {
-            return failureRef;
-        }
-
-        public Future<?> future() {
-            return future;
         }
 
         public void setFuture(Future<?> future) {

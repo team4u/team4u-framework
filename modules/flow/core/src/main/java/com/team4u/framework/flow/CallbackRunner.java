@@ -1,5 +1,9 @@
 package com.team4u.framework.flow;
 
+import lombok.AllArgsConstructor;
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 import java.time.Duration;
 import java.time.Instant;
 import java.util.concurrent.Callable;
@@ -25,28 +29,13 @@ final class CallbackRunner {
      *
      * @param <T> 回调返回值类型
      */
+    @Getter
+    @Accessors(fluent = true)
+    @AllArgsConstructor
     static final class Result<T> {
         private final T value;
         private final Throwable failure;
         private final boolean timeout;
-
-        public Result(T value, Throwable failure, boolean timeout) {
-            this.value = value;
-            this.failure = failure;
-            this.timeout = timeout;
-        }
-
-        public T value() {
-            return value;
-        }
-
-        public Throwable failure() {
-            return failure;
-        }
-
-        public boolean timeout() {
-            return timeout;
-        }
     }
 
     private final Cancellation parent;
