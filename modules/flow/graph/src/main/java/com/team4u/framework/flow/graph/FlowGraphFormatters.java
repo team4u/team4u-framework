@@ -16,7 +16,37 @@ final class FlowGraphFormatters {
     private FlowGraphFormatters() { }
 
     /**
-     * 稳定配置摘要：针对 Duration 生成确定性文本摘要，避免直接 toString。
+     * 提取 Class 的简短类名（去除包名，处理内部类与合成类）。
+     */
+    static String simpleClassName(Class<?> clazz) {
+        if (clazz == null) return "<unresolved>";
+        String simpleName = clazz.getSimpleName();
+        if (simpleName != null && !simpleName.isEmpty()) {
+            return simpleName;
+        }
+        String fullName = clazz.getName();
+        int lastDot = Math.max(fullName.lastIndexOf('.'), fullName.lastIndexOf('$'));
+        return lastDot >= 0 ? fullName.substring(lastDot + 1) : fullName;
+    }
+
+    /**
+     * 人类友好的确定性时长摘要（如 2s, 500ms, 1s500ms）。
+     */
+    static String durationFriendly(Duration duration) {
+        if (duration == null) return "<none>";
+        long seconds = duration.getSeconds();
+        int nanos = duration.getNano();
+        if (nanos == 0) {
+            return seconds + "s";
+        }
+        if (seconds == 0 && nanos % 1_000_000 == 0) {
+            return (nanos / 1_000_000) + "ms";
+        }
+        return seconds + "s" + nanos + "ns";
+    }
+
+    /**
+     * 稳定配置摘要：针对 Duration 生成确定性文本摘要。
      */
     static String configurationSummary(Object configuration) {
         if (configuration instanceof Duration) {
@@ -29,6 +59,7 @@ final class FlowGraphFormatters {
      * 纳秒级确定性时长摘要。
      */
     static String durationSummary(Duration duration) {
+        if (duration == null) return "<none>";
         return duration.getSeconds() + "s" + duration.getNano() + "ns";
     }
 

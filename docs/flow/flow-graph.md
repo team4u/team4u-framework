@@ -1,6 +1,6 @@
 # 可视化图表渲染与双投影架构
 
-`team4u-flow-graph` 负责将流程结构渲染为标准 Mermaid 流程图与紧凑文本树，适用于架构评审、开发文档自动化生成与日志排障。
+`team4u-flow-graph` 负责将流程结构渲染为直观的 Mermaid 流程图与紧凑文本树，适用于架构评审、开发文档自动化生成与日志排障。
 
 渲染器仅消费由 `flow.describe(flowId)` 导出的只读结构模型 **`FlowDescription`**，不触及任何业务回调实例或执行状态，因此可在任何环境下安全调用而绝无副作用。
 
@@ -27,7 +27,7 @@ graph TD
     
     subgraph "结构描述通道 (Description Projection)"
         F -->|"flow.describe(flowId)"| FD["FlowDescription<br/>冻结只读数据模型（无回调实例、零执行副作用）"]
-        FD --> MM["MermaidFlowGraphRenderer<br/>渲染标准 Mermaid 6 通道流程图"]
+        FD --> MM["MermaidFlowGraphRenderer<br/>渲染直观清晰的 Mermaid 业务流程图"]
         FD --> TX["TextFlowGraphRenderer<br/>渲染先序遍历紧凑文本树"]
     end
 
@@ -156,122 +156,82 @@ public class OrderFulfillmentExample {
 
 > [!TIP]
 > 下图由 `FlowGraphs.mermaid().render(desc)` 生成的标准 Mermaid 脚本直接渲染呈现。
-> 流程图完整展现了**主干推进（实线 ACCEPTED）、异常与短路分流（虚线 REJECTED / SKIPPED / FAILED）、Await 挂起与恢复信号通道、Parallel 并行分支与汇聚 Join、超时控制与 Fallback 降级边**，以及**全生命周期的六大全局终结通道**与彩色标记。
+> 流程图直观展示了**主干推进、风控分支决策、人工审核挂起与唤醒、并行分叉与合并 Join、超时控制徽章与降级容错**，层次分明，一目了然。
 
 ```mermaid
 flowchart TD
-    flow_start(["START &#124; flow=order-fulfillment-flow"])
-    n1["INVOKE &#124; path=$/0/0 &#124; label=前置风控拦截 &#124; binding=OPERATION contract=com.example.order.RiskCheckOperation qualifier=risk-checker"]
-    n2["INVOKE &#124; path=$/0/1/selector &#124; label=&lt;none&gt; &#124; binding=OPERATION contract=com.example.order.RiskRouter qualifier=risk-router"]
-    n3(["COMPLETE &#124; path=$/0/1/case:0 &#124; label=低风险直通 &#124; complete=IDENTITY"])
-    n4(["COMPLETE &#124; path=$/0/1/case:1/0 &#124; label=&lt;none&gt; &#124; complete=IDENTITY"])
-    n5["AWAIT &#124; path=$/0/1/case:1/1 &#124; label=&lt;none&gt; &#124; resume=manual-audit"]
-    n6(["SUSPENDED &#124; resume=manual-audit"])
-    n7(["RESUMED &#124; resume=manual-audit"])
-    n5 -.->|SUSPENDED| n6
-    n6 -->|resume signal| n7
-    n8["INVOKE &#124; path=$/0/1/case:1/2 &#124; label=&lt;none&gt; &#124; binding=OPERATION contract=com.example.order.PassAuditOperation qualifier=audit-handler"]
-    n9[["SEQUENCE &#124; path=$/0/1/case:1 &#124; label=高风险人工审核 &#124; scope=anonymous"]]
-    n9 -->|enter| n4
-    n4 -->|ACCEPTED| n5
-    n7 -->|ACCEPTED| n8
-    n10(["COMPLETE &#124; path=$/0/1/otherwise &#124; label=&lt;none&gt; &#124; complete=REJECTED"])
-    n11{"ROUTE &#124; path=$/0/1 &#124; label=&lt;none&gt; &#124; cases=2 &#124; otherwise=branch"}
-    n11 -->|selector| n2
-    n2 -->|ACCEPTED &#124; case=LOW| n3
-    n2 -->|ACCEPTED &#124; case=HIGH| n9
-    n2 -->|ACCEPTED &#124; otherwise| n10
-    n12["INVOKE &#124; path=$/0/2/branch:0/body &#124; label=&lt;none&gt; &#124; binding=OPERATION contract=com.example.order.LockInventoryOperation qualifier=stock-service"]
-    n13["CONTROL &#124; path=$/0/2/branch:0 &#124; label=库存预占 &#124; control=TIMEOUT &#124; config=timeout=2s0ns"]
-    n13 -->|proceed| n12
-    n14["INVOKE &#124; path=$/0/2/branch:1 &#124; label=卡券锁定 &#124; binding=OPERATION contract=com.example.order.LockCouponOperation qualifier=coupon-service"]
-    n15{{"PARALLEL &#124; path=$/0/2 &#124; label=并行资源锁定 &#124; branches=2"}}
-    n16[["WAIT ALL &#124; branches=2"]]
-    n17(["CANCEL &#124; branches=2"])
-    n18(["BRANCH COMPLETE &#124; token=lock-inventory"])
-    n15 -->|branch=lock-inventory| n13
-    n12 -->|ACCEPTED| n18
-    n12 -->|REJECTED| n18
-    n12 -.->|SKIPPED| n18
-    n12 -.->|FAILED| n18
-    n13 -.->|FAILED| n18
-    n13 -.->|CANCELLED| n17
-    n18 -->|wait-all| n16
-    n19(["BRANCH COMPLETE &#124; token=lock-coupon"])
-    n15 -->|branch=lock-coupon| n14
-    n14 -->|ACCEPTED| n19
-    n14 -->|REJECTED| n19
-    n14 -.->|SKIPPED| n19
-    n14 -.->|FAILED| n19
-    n19 -->|wait-all| n16
-    n20["JOIN &#124; static outcome contract"]
-    n16 -->|all branches complete| n20
-    n15 -.->|CANCELLED| n17
-    n21["INVOKE &#124; path=$/0/3/branch:0/body &#124; label=主通道支付扣款 &#124; binding=OPERATION contract=com.example.order.ChargePaymentOperation qualifier=main-gateway"]
-    n22["CONTROL &#124; path=$/0/3/branch:0 &#124; label=&lt;none&gt; &#124; control=TIMEOUT &#124; config=timeout=5s0ns"]
-    n22 -->|proceed| n21
-    n23["INVOKE &#124; path=$/0/3/branch:1 &#124; label=备用通道降级 &#124; binding=OPERATION contract=com.example.order.BackupPaymentOperation qualifier=backup-gateway"]
-    n24{"FALLBACK &#124; path=$/0/3 &#124; label=&lt;none&gt; &#124; recoverWith &#124; trigger=FAILED"}
-    n24 -->|branch=0| n22
-    n21 -.->|FAILED &#124; recover| n23
-    n22 -.->|FAILED &#124; recover| n23
-    n25["INVOKE &#124; path=$/0/4 &#124; label=生成出货单据 &#124; binding=OPERATION contract=com.example.order.IssueReceiptOperation qualifier=receipt-service"]
-    n26[["SEQUENCE &#124; path=$/0 &#124; label=&lt;none&gt; &#124; scope=anonymous"]]
-    n26 -->|enter| n1
-    n1 -->|ACCEPTED| n11
-    n3 -->|ACCEPTED| n15
-    n8 -->|ACCEPTED| n15
-    n20 -->|ACCEPTED| n24
-    n21 -->|ACCEPTED| n25
-    n23 -->|ACCEPTED| n25
-    n27[["SEQUENCE &#124; path=$ &#124; label=order-fulfillment-flow &#124; scope=order-checkout-process"]]
-    n27 -->|enter| n26
-    terminal_accepted(["COMPLETED &#124; ACCEPTED"])
-    terminal_rejected(["COMPLETED &#124; REJECTED"])
-    terminal_skipped(["COMPLETED &#124; SKIPPED"])
-    terminal_failed(["COMPLETED &#124; FAILED"])
-    terminal_suspended(["SUSPENDED"])
-    terminal_cancelled(["CANCELLED"])
-    flow_start --> n27
-    flow_start -.->|CANCELLED| terminal_cancelled
-    n1 -->|REJECTED| terminal_rejected
-    n1 -.->|SKIPPED| terminal_skipped
-    n1 -.->|FAILED| terminal_failed
-    n2 -->|REJECTED| terminal_rejected
-    n2 -.->|SKIPPED| terminal_skipped
-    n2 -.->|FAILED| terminal_failed
-    n6 -.->|SUSPENDED| terminal_suspended
-    n6 -.->|CANCELLED| terminal_cancelled
-    n8 -->|REJECTED| terminal_rejected
-    n8 -.->|SKIPPED| terminal_skipped
-    n8 -.->|FAILED| terminal_failed
-    n10 -->|REJECTED| terminal_rejected
-    n20 -->|REJECTED| terminal_rejected
-    n20 -.->|SKIPPED| terminal_skipped
-    n20 -.->|FAILED| terminal_failed
-    n17 -.->|CANCELLED| terminal_cancelled
-    n21 -->|REJECTED| terminal_rejected
-    n21 -.->|SKIPPED| terminal_skipped
-    n22 -.->|CANCELLED| terminal_cancelled
-    n23 -->|REJECTED| terminal_rejected
-    n23 -.->|SKIPPED| terminal_skipped
-    n23 -.->|FAILED| terminal_failed
-    n25 -->|REJECTED| terminal_rejected
-    n25 -.->|SKIPPED| terminal_skipped
-    n25 -.->|FAILED| terminal_failed
-    n25 -->|ACCEPTED| terminal_accepted
-    classDef accepted fill:#dcfce7,stroke:#166534,color:#14532d
-    classDef rejected fill:#ffedd5,stroke:#c2410c,color:#7c2d12
-    classDef skipped fill:#f3f4f6,stroke:#4b5563,color:#1f2937
-    classDef failed fill:#fee2e2,stroke:#b91c1c,color:#7f1d1d
-    classDef suspended fill:#dbeafe,stroke:#1d4ed8,color:#1e3a8a
-    classDef cancelled fill:#e5e7eb,stroke:#111827,color:#111827
-    class terminal_accepted accepted
-    class terminal_rejected rejected
-    class terminal_skipped skipped
-    class terminal_failed failed
-    class terminal_suspended suspended
-    class terminal_cancelled cancelled
+    flow_start(["开始: order-fulfillment-flow"])
+    n1["前置风控拦截<br/><small>RiskCheckOperation (risk-checker)</small>"]
+    n2(["低风险直通 (透传)"])
+    n3(["透传 (Identity)"])
+    n4["⏳ 挂起等待: manual-audit"]
+    n5["PassAuditOperation<br/><small>(audit-handler)</small>"]
+    n7(["❌ REJECTED"])
+    n8{"RiskRouter<br/><small>(risk-router)</small>"}
+    n9["库存预占 ⏱️ 2s<br/><small>LockInventoryOperation (stock-service)</small>"]
+    n10["卡券锁定<br/><small>LockCouponOperation (coupon-service)</small>"]
+    n11{{"并行: 并行资源锁定"}}
+    n12["合并 (Join)"]
+    n13["主通道支付扣款 ⏱️ 5s<br/><small>ChargePaymentOperation (main-gateway)</small>"]
+    n14["备用通道降级<br/><small>BackupPaymentOperation (backup-gateway)</small>"]
+    n15["生成出货单据<br/><small>IssueReceiptOperation (receipt-service)</small>"]
+    flow_end(["✅ 结束 (ACCEPTED)"])
+
+    subgraph sg_n6 ["高风险人工审核"]
+        n3
+        n4
+        n5
+    end
+    subgraph sg_n16 ["作用域: order-checkout-process"]
+        n1
+        n8
+        n2
+        n3
+        n4
+        n5
+        n7
+        n11
+        n9
+        n10
+        n12
+        n13
+        n14
+        n15
+    end
+
+    n3 --> n4
+    n4 --> n5
+    n8 -->|LOW| n2
+    n8 -->|HIGH| n3
+    n8 -.->|otherwise| n7
+    n11 -->|lock-inventory| n9
+    n11 -->|lock-coupon| n10
+    n9 --> n12
+    n10 --> n12
+    n13 -.->|FAILED (降级)| n14
+    n1 --> n8
+    n2 --> n11
+    n5 --> n11
+    n12 --> n13
+    n13 --> n15
+    n14 --> n15
+    flow_start --> n1
+    n15 --> flow_end
+
+    classDef startEnd fill:#f1f5f9,stroke:#475569,stroke-width:2px;
+    classDef actionNode fill:#ffffff,stroke:#3b82f6,stroke-width:1.5px;
+    classDef routeNode fill:#fef3c7,stroke:#d97706,stroke-width:1.5px;
+    classDef parallelNode fill:#f3e8ff,stroke:#9333ea,stroke-width:1.5px;
+    classDef awaitNode fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px;
+    classDef successNode fill:#dcfce7,stroke:#166534,stroke-width:2px;
+    classDef dangerNode fill:#fee2e2,stroke:#b91c1c,stroke-width:2px;
+    class flow_start,flow_end startEnd;
+    class n1,n5,n9,n10,n12,n13,n14,n15 actionNode;
+    class n8 routeNode;
+    class n11 parallelNode;
+    class n4 awaitNode;
+    class n2,n3 successNode;
+    class n7 dangerNode;
 ```
 
 ### 3. 真实效果：紧凑文本树 (Text Tree)
@@ -355,34 +315,17 @@ public class FlowGraphVisualizerController {
 
 ---
 
-## Mermaid 六通道终结模型与流向规范
+## 流程图渲染设计规范
 
-Mermaid 渲染器通过**六个全局终结通道**刻画一次执行的所有可能归宿：
-
-| 通道标识 | 对应终结点 | 含义说明 | 色彩规范 |
-| :--- | :--- | :--- | :--- |
-| `terminal_accepted` | `COMPLETED \| ACCEPTED` | 正常成功完成，携带业务输出 | 绿色（`#dcfce7`） |
-| `terminal_rejected` | `COMPLETED \| REJECTED` | 业务拒绝完成（预期内短路） | 橙色（`#ffedd5`） |
-| `terminal_skipped` | `COMPLETED \| SKIPPED` | 弃权跳过完成 | 灰色（`#f3f4f6`） |
-| `terminal_failed` | `COMPLETED \| FAILED` | 发生技术失败或系统异常 | 红色（`#fee2e2`） |
-| `terminal_suspended` | `SUSPENDED` | 挂起等待外部信号注入 | 蓝色（`#dbeafe`） |
-| `terminal_cancelled` | `CANCELLED` | 流程被协作取消令牌终止 | 深灰（`#e5e7eb`） |
-
-```mermaid
-graph LR
-    subgraph "推进与短路分离机制"
-        Step1["Step 1"] -->|"ACCEPTED"| Step2["Step 2"]
-        Step1 -.->|"REJECTED"| R_TERM["terminal_rejected"]
-        Step1 -.->|"FAILED"| F_TERM["terminal_failed"]
-        Step2 -->|"ACCEPTED"| A_TERM["terminal_accepted"]
-    end
-```
-
-### 渲染规则要点
-- **推进与短路分离**：Sequence 推进边仅标注推进态（`-->|ACCEPTED|`），非推进态（REJECTED / SKIPPED / FAILED）使用虚线直接连接至对应的全局终结点；
-- **可选步骤可视化**：`thenOptional` 描述为带有 SKIPPED 触发边的 Fallback 结构，图中直观展示 Skipped 被局部消费后经由 Identity 分支重新接入 Accepted 通道；
-- **降级触发清晰**：`firstApplicable` 标注 `SKIPPED | next applicable` 边，`recoverWith` 标注 `FAILED | recover` 边；
-- **取消出口绕过汇聚**：在 `parallel` 并行块中，分支若被取消（`CANCELLED`），其流向直接导向 `terminal_cancelled`，**绝不经过 wait-all 网关与 join 汇合节点**。
+| 结构 / 语义 | 图形表示 | 说明 |
+| :--- | :--- | :--- |
+| **主干推进** | `A --> B` (实线) | 正常业务成功推进通道（Happy Path） |
+| **异常 / 降级** | `A -.->|FAILED (降级)| B` (虚线) | `recoverWith` 失败降级或 `otherwise` 分支 |
+| **控制策略徽章** | `⏱️ 2s`, `🛡️ rate-limit` | 超时、限流等策略直接作为属性徽章显示在步骤上，不产生冗余 AST 方块 |
+| **路由决策** | 菱形 `{}` 节点 | 动态选择器与分支判定，条件清晰标注在出边上（`LOW`, `HIGH`, `otherwise`） |
+| **并行分发与合并** | 六边形 `{{}}` 与 `[合并 (Join)]` | 并行分支分发与汇聚点，自动折叠底层 Wait-All 胶水网关 |
+| **挂起等待** | `⏳ 挂起等待: point` | 人工审批或外部信号注入点 |
+| **作用域** | `subgraph` 容器框 | 具名 Scope 自动渲染为清晰的边界分组矩形 |
 
 ---
 
@@ -392,19 +335,6 @@ graph LR
 - **不透明路由键 (Opaque Keys)**：无法安全确定性序列化的路由键（如匿名类、闭包等）统一渲染为 `<opaque>` 占位符，渲染器从不主动调用其 `toString()`，防止引发副作用或泄露敏感信息；
 - **确定性输出**：同一 `FlowDescription` 的渲染结果逐字节确定，无随机生成的 ID，便于进行自动化测试断言与 Git 版本比对；
 - **特殊字符转义**：节点标签中的引号、换行符与管道符自动转义为标准 HTML 实体。
-
----
-
-## 控制节点配置摘要
-
-Control 节点在图表中渲染紧凑且标准化的配置摘要：
-
-```text
-control=RETRY config=maxAttempts=3,backoff=2s
-control=TIMEOUT config=timeout=5s
-control=POLICY config=<none>
-control=PERSISTENT_POLICY config=<none>
-```
 
 ---
 
