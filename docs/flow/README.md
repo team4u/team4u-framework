@@ -26,6 +26,7 @@
 - **Bean 是一等公民**：Flow DSL 原生支持以 `Class` 与限定符（Bean 名称）进行声明式编排；在编译期一次性解析绑定容器单例，运行期零反射损耗，Spring 动态代理与事务切面原样保留。
 - **一个不可变定义，两种执行器**：逻辑 `Flow<I, O>` 只描述结构、本身不可执行；同一份定义既可投影为 `Local` 同步执行器，也可投影为 `Durable` 持久化执行器，无需改写业务代码。
 - **四态 Outcome 类型化结果**：`Accepted`（携值成功）、`Rejected`（业务拒绝）、`Skipped`（弃权/跳过）、`Failed`（执行失败）严格闭集，仅 `Accepted` 携带输出，分支语义不再依赖布尔与异常约定。
+- **可选步骤保留真实 Skipped 语义**：同类型节点可通过 `thenOptional` 声明“当前节点不适用时保留原值继续”；节点仍返回并上报 `Skipped`，无需用 `Accepted(input)` 伪装未处理。
 - **零 Lambda 序列化**：Durable 快照只保存框架元数据与编码后的 `StoredValue` 槽位，绝不序列化 Java 代码、Operation 实例或 Lambda 表达式。
 - **确定性幂等调用键**：每个节点注入 `flowId:flowVersion:executionId:path` 格式的 `invocationId`，在重试与崩溃恢复重放时保持稳定，直击外部副作用幂等难题。
 
@@ -76,6 +77,7 @@ graph TD
   - Durable 崩溃恢复：`DurableExecutable.start(executionId, input)` 在节点边界 CAS 落检查点，进程重启后 `recover` 从最后提交的快照续跑。
 - **强类型流水线与不可变定义**：
   - 步骤前后输入输出严格推导（`A -> B -> C`），类型不匹配在编译期报错；所有组合方法返回新的 `Flow` 实例，定义天然线程安全。
+  - 普通 `then` 仍然只由 Accepted 推进；`thenOptional` 仅接受 `O -> O` 的同类型步骤，在该局部边界消费 Skipped 并以进入步骤前的 `O` 原值继续。
 - **四态业务结果 + 三态执行结果分层**：
   - 业务层 `Outcome<T>`：Accepted / Rejected / Skipped / Failed，仅 Accepted 携带输出。
   - 执行层 `FlowResult<O>`：Completed（携带最终 Outcome）/ Suspended（携带续接句柄）/ Cancelled（仅保留 executionId）。
@@ -94,6 +96,7 @@ graph TD
 | `Bean 绑定` | 以类型与限定符声明节点，编译期由 `OperationResolver` 从容器一次性解析为单例 Bean |
 | `BeanFlows` | `team4u-flow-bean` 提供的门面工具，一行代码完成基于 `BeanManager` 的流编译 (`BeanFlows.compile(flow)`) |
 | `Operation<I, O>` | 业务步骤扩展点：`(OperationContext, I) -> Outcome<O>`，同步、可复用、线程安全 |
+| `thenOptional` | 同类型可选步骤组合：Accepted 使用新值继续，Skipped 保留步骤入口值继续，Rejected/Failed 仍短路；支持实例、Class、Class+qualifier 与 `Flow<O, O>` |
 | `Outcome<T>` | 业务四态闭集：`Accepted(value)` / `Rejected(Reason)` / `Skipped(Reason)` / `Failed(Failure)`，仅 Accepted 携带输出 |
 | `Reason` | 业务拒绝/弃权的稳定诊断信息：`code`（稳定业务码）、`message`、`details` |
 | `Failure` | 执行失败的稳定诊断信息：`code`、`message`、`details`；异常统一转 `OPERATION_EXCEPTION` / `TIMEOUT` 稳定码 |
@@ -136,7 +139,7 @@ graph TD
 ```text
 modules/flow
 ├── core    (com.team4u:team4u-flow, 包 com.team4u.framework.flow)
-│   ├── Flow.java                # 不可变类型化 DSL（step/then/use/route/parallel/await/policy/retry/timeout）
+│   ├── Flow.java                # 不可变类型化 DSL（step/then/thenOptional/use/route/parallel/await/policy/retry/timeout）
 │   ├── Outcome.java             # 业务四态闭集
 │   ├── FlowResult.java          # Local 执行三态闭集
 │   ├── Local.java               # Local 投影入口
@@ -170,7 +173,7 @@ modules/flow
 
 # 组件联动
 
-1. **定义**：以 `Flow.step(...).then(...)` 等组合方法构建 `Flow<I, O>`；支持直接传入 Lambda 实例或 `Class` / `qualifier` 容器绑定；定义不可变、可复用、线程安全。
+1. **定义**：以 `Flow.step(...).then(...)`、`thenOptional(...)` 等组合方法构建 `Flow<I, O>`；支持直接传入 Lambda 实例或 `Class` / `qualifier` 容器绑定；定义不可变、可复用、线程安全。
 2. **结构投影**：`flow.describe(flowId)` 导出 `FlowDescription`，交给 graph 模块渲染 Mermaid/文本图；描述面不含任何回调实例。
 3. **可执行投影**：`flow.project(resolver, visitor)`（或 `Local.compile` / `DurableRuntime.compile` 内部调用）先经 `Compiler` 校验结构、解析 class+qualifier 绑定，再经 `ExecutableFlowVisitor` 导出强类型执行计划。
 4. **Local 执行**：`LocalExecutable.run(input)` 同步返回 `FlowResult`；`await` 挂起返回 `Suspended`，用 `resume(suspension, point, signal)` 续接（Suspension 单次消费）；并行分支由线程池真并发执行，wait-all 后交给 `JoinStrategy`。
