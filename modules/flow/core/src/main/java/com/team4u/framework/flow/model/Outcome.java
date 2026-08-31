@@ -8,7 +8,6 @@ import lombok.experimental.Accessors;
 import java.util.Objects;
 import java.util.function.Function;
 import com.team4u.framework.flow.api.Policy;
-import com.team4u.framework.flow.api.Retry;
 
 /**
  * 业务逻辑执行的严格四态结果代数类型：Accepted（携带有效输出）、Rejected（业务拒绝）、Skipped（弃权/跳过）、Failed（执行失败）。
@@ -24,7 +23,7 @@ import com.team4u.framework.flow.api.Retry;
  *       <li>{@link Failed} 携带非 null 失败诊断 {@link Failure}，表示系统/运行时异常或策略判定故障，可触发重试或失败恢复（{@code recoverWith}）。</li>
  *     </ul>
  *   </li>
- *   <li><b>传播与映射行为</b>：在流水线编排中，仅 {@link Accepted} 状态会驱动后续节点执行；其余三种非成功态会保留当前作用域的上下文并原样向上传播/短路，直到命中对应的恢复机制（如 Fallback/Retry）或作为最终结果输出。</li>
+ *   <li><b>传播与映射行为</b>：在流水线编排中，仅 {@link Accepted} 状态会驱动后续节点执行；其余三种非成功态会保留当前作用域的上下文并原样向上传播/短路，直到命中对应的恢复机制（如 Fallback/Policy）或作为最终结果输出。</li>
  * </ul>
  * </p>
  *
@@ -204,7 +203,7 @@ public abstract class Outcome<T> {
 
     /**
      * 执行失败态：步骤抛出异常或策略判定不可恢复故障，携带诊断 {@link Failure}。
-     * 可触发重试机制（Retry）或失败恢复（{@code recoverWith}）。
+     * 可触发重试机制或失败恢复（{@code recoverWith}）。
      *
      * @param <T> 泛型类型参数
      */

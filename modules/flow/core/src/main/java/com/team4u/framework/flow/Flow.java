@@ -15,7 +15,6 @@ import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.Policy;
 import com.team4u.framework.flow.api.ResumePoint;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.compiler.Compiler;
 import com.team4u.framework.flow.compiler.ExecutableProjector;
 import com.team4u.framework.flow.compiler.Logical;
@@ -38,7 +37,7 @@ import com.team4u.framework.flow.spi.OperationResolver;
  *   <li><b>纯逻辑 AST 模型（Declaration Separation）</b>：Flow 仅构建和持有不可变的逻辑抽象语法树（AST），本身不分配线程、不维护执行状态、不可直接执行；需通过 {@link Local#compile} 编译为 {@link LocalExecutable} 或通过 {@link #project} 导出到 Durable 引擎中运行；</li>
  *   <li><b>不可变链式调用（Immutability）</b>：所有方法（如 {@code then}、{@code use}、{@code named}、{@code policy} 等）均严格遵循函数式不可变规范，每次调用均返回全新的 Flow 实例，原实例保持不变，天然线程安全；</li>
  *   <li><b>结构扁平化优化</b>：相邻的匿名流水线步骤（{@code then}）在底层自动扁平化合并为同一个 Sequence 列表，避免过深的递归与帧栈开销；而具名 {@link #scope} 则显式保留层次边界；</li>
- *   <li><b>四态流转规则</b>：在编排流水线中，仅 {@link Outcome.Accepted} 会驱动下一节点；{@link Outcome.Rejected}、{@link Outcome.Skipped}、{@link Outcome.Failed} 会短路并向上传播，直到命中相应的控制节点（如 Fallback/Retry）或作为最终结果输出。</li>
+ *   <li><b>四态流转规则</b>：在编排流水线中，仅 {@link Outcome.Accepted} 会驱动下一节点；{@link Outcome.Rejected}、{@link Outcome.Skipped}、{@link Outcome.Failed} 会短路并向上传播，直到命中相应的控制节点（如 Fallback/Policy/PersistentPolicy）或作为最终结果输出。</li>
  * </ul>
  * </p>
  *
@@ -512,20 +511,6 @@ public final class Flow<I, O> {
         return control(Logical.Control.Kind.PERSISTENT_POLICY,
                 binding(policyClass, qualifier, Logical.BindingKind.PERSISTENT_POLICY),
                 keyProjection, null);
-    }
-
-    /**
-     * 失败重试治理（Retry）：
-     * 当步骤产生 {@link Outcome.Failed} 时，在经过 {@code retry.backoff()} 退避延迟后重新尝试执行，
-     * 最多尝试 {@code retry.maxAttempts()} 次（含首次执行）。
-     *
-     * @param retry 重试配置，不能为 null
-     * @return 附加重试控制后的新 {@link Flow} 实例
-     * @throws NullPointerException 当 {@code retry} 为 null 时抛出
-     */
-    public Flow<I, O> retry(Retry retry) {
-        return control(Logical.Control.Kind.RETRY, null, Function.identity(),
-                Objects.requireNonNull(retry, "retry must not be null"));
     }
 
     /**

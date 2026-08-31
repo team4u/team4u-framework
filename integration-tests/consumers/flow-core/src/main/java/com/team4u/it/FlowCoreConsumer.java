@@ -9,13 +9,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
 import com.team4u.framework.flow.model.Cancellation;
-import com.team4u.framework.flow.spi.NodeDescriptor;
 import com.team4u.framework.flow.api.Branch;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.api.PersistentPolicy;
+import com.team4u.framework.flow.api.PolicyContext;
 import com.team4u.framework.flow.api.ResumePoint;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.desc.FlowDescription;
+import com.team4u.framework.flow.model.Completion;
 import com.team4u.framework.flow.model.Failure;
 import com.team4u.framework.flow.model.FlowResult;
 import com.team4u.framework.flow.model.Outcome;
@@ -180,6 +181,18 @@ public class FlowCoreConsumer {
 
     private static void testRetryAndTimeout() {
         final AtomicInteger attempts = new AtomicInteger();
+        PersistentPolicy<String, Integer> retryPolicy = new PersistentPolicy<String, Integer>() {
+            @Override public Integer initialState(String key) { return 1; }
+            @Override public Before<Integer> before(PolicyContext ctx, String key, Integer state) {
+                return PersistentPolicy.proceed(state);
+            }
+            @Override public After<Integer> after(PolicyContext ctx, String key, Integer state, Completion completion) {
+                if (completion != null && completion.kind() == Outcome.Kind.FAILED && state < 3) {
+                    return PersistentPolicy.retryAt(java.time.Instant.now(), state + 1);
+                }
+                return PersistentPolicy.returning(state);
+            }
+        };
         Flow<String, String> retryFlow = Flow.<String, String>step(new Operation<String, String>() {
             @Override
             public Outcome<String> execute(OperationContext context, String input) {
@@ -188,7 +201,7 @@ public class FlowCoreConsumer {
                 }
                 return Outcome.accepted("ok@" + attempts.get());
             }
-        }).retry(Retry.maxAttempts(3));
+        }).persistentPolicy(retryPolicy, s -> s);
         FlowResult<String> retried = Local.compile(retryFlow).run("x");
         if (!"ok@3".equals(acceptedValue(retried))) {
             throw new AssertionError("retry failed: " + retried);

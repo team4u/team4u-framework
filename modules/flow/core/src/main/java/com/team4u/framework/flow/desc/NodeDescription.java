@@ -46,7 +46,7 @@ public final class NodeDescription {
     private final List<ParallelBranchDescription> parallelBranches;
     /** 挂起点标识名称（针对 AWAIT 节点）。 */
     private final String resumePoint;
-    /** 控制种类（针对 CONTROL 节点，如 POLICY / RETRY / TIMEOUT）。 */
+    /** 控制种类（针对 CONTROL 节点，如 POLICY / PERSISTENT_POLICY / TIMEOUT）。 */
     private final String controlKind;
     /** 控制策略配置对象。 */
     private final Object configuration;

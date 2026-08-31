@@ -258,12 +258,12 @@ if (firstResult instanceof FlowResult.Suspended) {
 }
 ```
 
-### 容错治理 (retry / timeout / recoverWith)
+### 容错治理 (FlowRetries / timeout / recoverWith)
 
 ```java
-// 重试治理：Failed 时按退避重试（maxAttempts 包含首次）
-Flow<OrderRequest, Receipt> retryFlow = Flow.step(chargeOperation)
-        .retry(Retry.maxAttempts(3).withBackoff(Duration.ofMillis(200)));
+// 重试治理：基于 FlowRetries 有状态持久化策略在 Failed 时按退避重试（maxAttempts 包含首次）
+Flow<OrderRequest, Receipt> retryFlow = FlowRetries.fixed(3, 200)
+        .wrap(Flow.step(chargeOperation), Function.identity());
 
 // 超时控制：超出时限产生 TIMEOUT 失败并终止作用域
 Flow<OrderRequest, Receipt> timeoutFlow = Flow.step(chargeOperation)

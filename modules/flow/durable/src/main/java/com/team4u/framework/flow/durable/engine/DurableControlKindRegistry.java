@@ -14,7 +14,6 @@ public final class DurableControlKindRegistry extends KeyedPolicyRegistry<Contro
 
     static {
         GLOBAL.register(new DurableControlKindHandlers.TimeoutHandler());
-        GLOBAL.register(new DurableControlKindHandlers.RetryHandler());
         GLOBAL.register(new DurableControlKindHandlers.PolicyHandler());
         GLOBAL.register(new DurableControlKindHandlers.PersistentPolicyHandler());
     }

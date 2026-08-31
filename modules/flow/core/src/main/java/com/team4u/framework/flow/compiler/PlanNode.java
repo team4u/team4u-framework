@@ -16,7 +16,6 @@ import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.Policy;
 import com.team4u.framework.flow.api.ResumePoint;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.engine.SerialMachine;
 import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.spi.NodeDescriptor;
@@ -153,7 +152,7 @@ public interface PlanNode {
         private final ResumePoint<?> point;
     }
 
-    /** 环绕治理控制执行计划节点（Policy / PersistentPolicy / Retry / Timeout）。 */
+    /** 环绕治理控制执行计划节点（Policy / PersistentPolicy / Timeout）。 */
     @Getter
     @Accessors(fluent = true)
     @AllArgsConstructor
@@ -164,8 +163,6 @@ public interface PlanNode {
             POLICY,
             /** 持久化策略。 */
             PERSISTENT_POLICY,
-            /** 重试控制。 */
-            RETRY,
             /** 超时时限。 */
             TIMEOUT
         }

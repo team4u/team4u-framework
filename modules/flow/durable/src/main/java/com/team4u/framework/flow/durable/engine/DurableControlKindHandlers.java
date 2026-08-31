@@ -12,7 +12,6 @@ import com.team4u.framework.flow.api.FlowObserver;
 import com.team4u.framework.flow.api.Gate;
 import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.Policy;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.spi.ControlKind;
 
@@ -54,45 +53,6 @@ public final class DurableControlKindHandlers {
             return timedOut
                     ? DurableState.MachineOutcome.of(machine.timeoutFailure())
                     : child;
-        }
-    }
-
-    static final class RetryHandler implements DurableControlKindHandler {
-        @Override
-        public ControlKind key() {
-            return ControlKind.RETRY;
-        }
-
-        @Override
-        public void enter(DurablePlanNode.Control control, DurableState.RuntimeFrame frame, DurableMachine machine) {
-            if (frame.phase == 0 || frame.phase == 2) {
-                if (frame.phase == 2 && frame.wake != null
-                        && Instant.now().isBefore(frame.wake)) {
-                    machine.waitOrPark(frame, control);
-                    return;
-                }
-                frame.wake = null;
-                frame.phase = 1;
-                machine.push(control.body(), frame.entry, frame.entryRole);
-                return;
-            }
-            throw new IllegalStateException("Retry body frame missing at " + control.descriptor().path());
-        }
-
-        @Override
-        public DurableState.MachineOutcome reduce(DurablePlanNode.Control control, DurableState.RuntimeFrame frame,
-                                                  DurableState.MachineOutcome child, DurableMachine machine) {
-            Retry retry = (Retry) control.configuration();
-            if (child.outcome() instanceof Outcome.Failed
-                    && frame.attempt < retry.maxAttempts()) {
-                frame.attempt++;
-                frame.wake = Instant.now().plus(retry.backoff());
-                frame.phase = 2;
-                machine.commitCheckpoint(CheckpointReasons.control(control.descriptor().path()));
-                machine.waitingEvent(control, frame);
-                return null;
-            }
-            return child;
         }
     }
 

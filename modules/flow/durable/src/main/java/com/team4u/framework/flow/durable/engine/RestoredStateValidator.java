@@ -4,7 +4,6 @@ package com.team4u.framework.flow.durable.engine;
 import java.util.List;
 import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.Policy;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.durable.DurableException;
 import com.team4u.framework.flow.durable.DurableLifecycle;
 import com.team4u.framework.flow.durable.snapshot.SnapshotCodec;
@@ -212,14 +211,6 @@ public final class RestoredStateValidator {
             case TIMEOUT:
                 if (frame.phase != 0 && frame.phase != 1) {
                     throw frame("Timeout frame phase invalid at " + path);
-                }
-                return;
-            case RETRY:
-                if (frame.phase != 0 && frame.phase != 1 && frame.phase != 2) {
-                    throw frame("Retry frame phase invalid at " + path);
-                }
-                if (frame.phase == 2 && frame.wake == null) {
-                    throw frame("Waiting retry frame requires wake at " + path);
                 }
                 return;
             case POLICY:

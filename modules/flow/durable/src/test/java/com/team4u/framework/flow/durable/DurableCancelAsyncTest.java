@@ -14,7 +14,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
 import com.team4u.framework.flow.durable.store.DurableStore;
 import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
@@ -31,7 +31,7 @@ public class DurableCancelAsyncTest {
     private static final ResumePoint<String> GATE = ResumePoint.named("gate");
 
     private static DurableExecutable<String, String> activeExecutable(DurableStore store) {
-        // 退避等待中的 RETRY 使执行停留在 ACTIVE（wake 远在本测试之后）
+        // 退避等待中的 PersistentPolicy 使执行停留在 ACTIVE（wake 远在本测试之后）
         Operation<String, String> flaky = new Operation<String, String>() {
             @Override
             public Outcome<String> execute(OperationContext context, String input) {
@@ -40,8 +40,15 @@ public class DurableCancelAsyncTest {
             }
         };
         Flow<String, String> flow = Flow.<String, String>step(flaky)
-                .retry(new com.team4u.framework.flow.api.Retry(5,
-                        java.time.Duration.ofMillis(60_000)));
+                .persistentPolicy(new PersistentPolicy<String, Integer>() {
+                    @Override public Integer initialState(String key) { return 1; }
+                    @Override public Before<Integer> before(com.team4u.framework.flow.api.PolicyContext ctx, String key, Integer state) {
+                        return PersistentPolicy.proceed(state);
+                    }
+                    @Override public After<Integer> after(com.team4u.framework.flow.api.PolicyContext ctx, String key, Integer state, com.team4u.framework.flow.model.Completion completion) {
+                        return PersistentPolicy.retryAt(java.time.Instant.now().plusMillis(60_000), state + 1);
+                    }
+                }, s -> s);
         return DurableRuntime.builder(store).build().compile(flow, "cancel", 1);
     }
 

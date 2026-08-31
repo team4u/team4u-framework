@@ -13,7 +13,6 @@ import com.team4u.framework.flow.api.Metadata;
 import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.Policy;
 import com.team4u.framework.flow.api.PolicyContext;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.compiler.PlanNode;
 import com.team4u.framework.flow.model.Cancellation;
 import com.team4u.framework.flow.model.Failure;
@@ -28,7 +27,7 @@ import com.team4u.framework.flow.spi.NodeDescriptor;
  *   <li><b>无栈递归状态机</b>：通过在堆上显式维护 {@link RuntimeFrame} 栈结构，结合 {@link NodeExecutionHandlerRegistry} 驱动 AST 节点展开与归约，彻底消除 JVM 方法调用栈溢出风险；</li>
  *   <li><b>线程独占与非线程安全</b>：单次 {@link #drive()} 调用独占当前线程推进状态机，状态推进期间外部只能通过 {@link Cancellation} 注入取消信号；</li>
  *   <li><b>取消/超时协同</b>：每帧循环优先检测取消标志与作用域截止时间（Deadline），支持精确定位并终止最内层超时作用域；</li>
- *   <li><b>四态结果逐层归约</b>：子节点产生 Outcome 后弹出当前帧，由 {@link FrameReducer} 驱动父帧决策（如 Sequence 下一步、Fallback 下一分支、Retry 重试或冒泡向上传播）。</li>
+ *   <li><b>四态结果逐层归约</b>：子节点产生 Outcome 后弹出当前帧，由 {@link FrameReducer} 驱动父帧决策（如 Sequence 下一步、Fallback 下一分支、PersistentPolicy 重试或冒泡向上传播）。</li>
  * </ul>
  * </p>
  *
@@ -108,7 +107,7 @@ public final class SerialMachine {
     }
 
     /**
-     * 在 Retry/PersistentPolicy 的退避唤醒点阻塞等待。
+     * 在 PersistentPolicy 的退避唤醒点阻塞等待。
      * 按 {@code frame.wake} 与 deadline 的较小者睡眠。
      */
     MachineResult awaitWake(RuntimeFrame frame) {

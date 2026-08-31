@@ -22,7 +22,6 @@ import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.OperationContext;
 import com.team4u.framework.flow.api.Policy;
 import com.team4u.framework.flow.api.PolicyContext;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.model.Completion;
 import com.team4u.framework.flow.model.Failure;
 import com.team4u.framework.flow.model.Outcome;
@@ -149,8 +148,23 @@ public class DurableControlTest {
     }
 
     // ------------------------------------------------------------------
-    // RETRY
+    // RETRY (via PersistentPolicy)
     // ------------------------------------------------------------------
+
+    private static PersistentPolicy<String, Integer> retryPolicy(final int maxAttempts, final Duration backoff) {
+        return new PersistentPolicy<String, Integer>() {
+            @Override public Integer initialState(String key) { return 1; }
+            @Override public Before<Integer> before(PolicyContext context, String key, Integer state) {
+                return PersistentPolicy.proceed(state);
+            }
+            @Override public After<Integer> after(PolicyContext context, String key, Integer state, Completion completion) {
+                if (completion != null && completion.kind() == Outcome.Kind.FAILED && state < maxAttempts) {
+                    return PersistentPolicy.retryAt(java.time.Instant.now().plus(backoff), state + 1);
+                }
+                return PersistentPolicy.returning(state);
+            }
+        };
+    }
 
     @Test
     public void retrySucceedsAfterTransientFailures() {
@@ -166,7 +180,7 @@ public class DurableControlTest {
             }
         };
         Flow<String, String> flow = Flow.<String, String>step(flaky)
-                .retry(new Retry(3, Duration.ofMillis(10)));
+                .persistentPolicy(retryPolicy(3, Duration.ofMillis(10)), s -> s);
         DurableExecutable<String, String> executable =
                 compile(flow, new InMemoryDurableStore(), null);
         DurableResult<String> current = executable.start("e", "in");
@@ -192,7 +206,7 @@ public class DurableControlTest {
             }
         };
         Flow<String, String> flow = Flow.<String, String>step(alwaysFails)
-                .retry(new Retry(2, Duration.ofMillis(5)));
+                .persistentPolicy(retryPolicy(2, Duration.ofMillis(5)), s -> s);
         DurableExecutable<String, String> executable =
                 compile(flow, new InMemoryDurableStore(), null);
         DurableResult<String> first = executable.start("e", "in");
@@ -221,7 +235,7 @@ public class DurableControlTest {
             }
         };
         Flow<String, String> flow = Flow.<String, String>step(flaky)
-                .retry(new Retry(2, Duration.ofMillis(20)));
+                .persistentPolicy(retryPolicy(2, Duration.ofMillis(20)), s -> s);
         DurableExecutable<String, String> executable =
                 compile(flow, new InMemoryDurableStore(), null);
         DurableResult<String> first = executable.start("e", "in");
@@ -385,7 +399,7 @@ public class DurableControlTest {
         };
         Flow<String, String> flow = Flow.<String, String>step(flaky)
                 .policy(policy, input -> "K")
-                .retry(new Retry(2, Duration.ofMillis(5)));
+                .persistentPolicy(retryPolicy(2, Duration.ofMillis(5)), s -> s);
         DurableExecutable<String, String> executable =
                 compile(flow, new InMemoryDurableStore(), null);
         DurableResult<String> first = executable.start("e", "in");

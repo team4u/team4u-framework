@@ -7,7 +7,7 @@ package com.team4u.framework.flow.ratelimiter;
  */
 public enum RateLimitAction {
     /**
-     * 故障决策（Gate.fail）：产生 Failed 状态，可配合 Flow.retry() 退避重试（适用于令牌桶/排队等待）。
+     * 故障决策（Gate.fail）：产生 Failed 状态，可配合重试策略（如 FlowRetryPolicy）退避重试（适用于令牌桶/排队等待）。
      */
     FAIL,
 

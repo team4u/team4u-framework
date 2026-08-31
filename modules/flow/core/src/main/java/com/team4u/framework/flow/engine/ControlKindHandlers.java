@@ -15,13 +15,12 @@ import com.team4u.framework.flow.api.FlowObserver;
 import com.team4u.framework.flow.api.Gate;
 import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.Policy;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.compiler.PlanNode;
 import com.team4u.framework.flow.model.Completion;
 import com.team4u.framework.flow.model.Outcome;
 
 /**
- * 治理控制类型（TIMEOUT / RETRY / POLICY / PERSISTENT_POLICY）策略实现族。
+ * 治理控制类型（TIMEOUT / POLICY / PERSISTENT_POLICY）策略实现族。
  *
  * @author jay.wu
  */
@@ -90,41 +89,6 @@ public final class ControlKindHandlers {
             boolean timedOut = frame.deadline != null && !Instant.now().isBefore(frame.deadline);
             frame.deadline = null;
             return timedOut ? SerialMachine.timeoutFailure() : child;
-        }
-    }
-
-    static final class RetryHandler implements ControlKindHandler {
-        @Override
-        public PlanNode.Control.Kind key() {
-            return PlanNode.Control.Kind.RETRY;
-        }
-
-        @Override
-        public MachineResult enter(PlanNode.Control control, RuntimeFrame frame, SerialMachine machine) {
-            if (frame.phase == 0) {
-                frame.phase = 1;
-                machine.push(control.body(), frame.entry);
-                return null;
-            }
-            requirePhase(frame, control, 2, "Retry");
-            MachineResult waiting = machine.awaitWake(frame);
-            if (waiting != null) return waiting;
-            frame.phase = 1;
-            machine.push(control.body(), frame.entry);
-            return null;
-        }
-
-        @Override
-        public Outcome<?> reduce(PlanNode.Control control, RuntimeFrame frame, SerialMachine machine, Outcome<?> child) {
-            Retry retry = (Retry) control.configuration();
-            if (child instanceof Outcome.Failed && frame.attempt < retry.maxAttempts()) {
-                frame.attempt++;
-                frame.wake = Instant.now().plus(retry.backoff());
-                frame.phase = 2;
-                machine.waitingEvent(control, frame);
-                return null;
-            }
-            return child;
         }
     }
 

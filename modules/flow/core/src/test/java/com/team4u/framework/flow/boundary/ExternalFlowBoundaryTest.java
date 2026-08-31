@@ -23,7 +23,6 @@ import com.team4u.framework.flow.api.PolicyContext;
 import com.team4u.framework.flow.model.Reason;
 import com.team4u.framework.flow.api.ResumePoint;
 import com.team4u.framework.flow.model.Resumed;
-import com.team4u.framework.flow.api.Retry;
 import org.junit.Test;
 
 import java.time.Duration;
@@ -146,7 +145,6 @@ public class ExternalFlowBoundaryTest {
         Flow<String, String> controlled = parallel
                 .policy(SamplePolicy.class, s -> s)
                 .persistentPolicy(SamplePersistentPolicy.class, "p-qual", s -> s)
-                .retry(Retry.maxAttempts(3).withBackoff(Duration.ofMillis(10)))
                 .timeout(Duration.ofSeconds(5));
 
         Flow<String, Resumed<String, String>> completeFlow = scoped
@@ -256,7 +254,6 @@ public class ExternalFlowBoundaryTest {
         assertTrue(visitedNodes.stream().anyMatch(n -> n.startsWith("Await:") && n.contains("user-approval")));
         assertTrue(visitedNodes.stream().anyMatch(n -> n.startsWith("Control:") && n.contains("POLICY")));
         assertTrue(visitedNodes.stream().anyMatch(n -> n.startsWith("Control:") && n.contains("PERSISTENT_POLICY")));
-        assertTrue(visitedNodes.stream().anyMatch(n -> n.startsWith("Control:") && n.contains("RETRY")));
         assertTrue(visitedNodes.stream().anyMatch(n -> n.startsWith("Control:") && n.contains("TIMEOUT")));
         assertTrue(visitedNodes.stream().anyMatch(n -> n.startsWith("Complete:")));
     }

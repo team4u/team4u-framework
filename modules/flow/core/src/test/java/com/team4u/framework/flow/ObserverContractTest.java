@@ -22,7 +22,6 @@ import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.Policy;
 import com.team4u.framework.flow.api.PolicyContext;
 import com.team4u.framework.flow.api.ResumePoint;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.model.FlowResult;
 import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.model.Reason;
@@ -55,7 +54,6 @@ public class ObserverContractTest {
         };
         Flow<String, String> controlled = routed
                 .policy(policy, value -> value)
-                .retry(Retry.maxAttempts(2))
                 .timeout(Duration.ofSeconds(2));
         Flow<String, String> flow = Flow.scope("observed", controlled)
                 .await(point)

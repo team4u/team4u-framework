@@ -1,6 +1,5 @@
 package com.team4u.framework.flow.graph;
 
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.desc.NodeDescription;
 import com.team4u.framework.flow.spi.BindingDescriptor;
 
@@ -17,14 +16,9 @@ final class FlowGraphFormatters {
     private FlowGraphFormatters() { }
 
     /**
-     * 稳定配置摘要：针对 Retry 与 Duration 生成确定性文本摘要，避免直接 toString。
+     * 稳定配置摘要：针对 Duration 生成确定性文本摘要，避免直接 toString。
      */
     static String configurationSummary(Object configuration) {
-        if (configuration instanceof Retry) {
-            Retry retry = (Retry) configuration;
-            return "maxAttempts=" + retry.maxAttempts()
-                    + ",backoff=" + durationSummary(retry.backoff());
-        }
         if (configuration instanceof Duration) {
             return "timeout=" + durationSummary((Duration) configuration);
         }

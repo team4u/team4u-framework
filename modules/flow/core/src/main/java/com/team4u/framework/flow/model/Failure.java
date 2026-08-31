@@ -9,7 +9,6 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
-import com.team4u.framework.flow.api.Retry;
 
 /**
  * 流程步骤执行失败（Failed）的不可变稳定诊断信息。
@@ -22,7 +21,7 @@ import com.team4u.framework.flow.api.Retry;
  * </ul>
  * </p>
  *
- * <p>该状态通常由操作异常抛出、执行超时、策略报错或显式返回触发，可被 {@link Retry} 重试拦截或 {@code recoverWith} 恢复降级。</p>
+ * <p>该状态通常由操作异常抛出、执行超时、策略报错或显式返回触发，可被重试策略拦截或 {@code recoverWith} 恢复降级。</p>
  *
  * @author jay.wu
  */

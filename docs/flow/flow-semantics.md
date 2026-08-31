@@ -218,29 +218,21 @@ public interface JoinStrategy<O> {
 > [!TIP]
 > 专章详述请参阅：[流程治理：Policy 策略、Retry 重试与 Timeout 控制](flow-governance.md)
 
-### retry 重试策略
+### 治理策略体系与架构对称性
+
+- **无状态治理（`Policy<K>`）**：如 `team4u-flow-ratelimiter`，提供基于纯内存或分布式缓存的快速准入裁决（`proceed` / `reject` / `fail`）；
+- **有状态治理（`PersistentPolicy<K, S>`）**：如 `team4u-flow-retry`，通过不可变状态变迁承载重试尝试、退避调度（`retryAt`）与崩溃恢复；
+- **时效控制（`Timeout`）**：`flow.timeout(Duration)` 为当前作用域设置超时时限，超时后产生 `TIMEOUT` 失败并终止当前作用域。
+
+### 重试策略（`team4u-flow-retry`）
 
 ```java
-Flow<OrderRequest, Receipt> retried = Flow.step(chargeOperation)
-        .retry(Retry.maxAttempts(3).withBackoff(Duration.ofSeconds(1)));
+FlowRetryPolicy<OrderRequest> policy = FlowRetries.exponential(3, 100, 2.0, 1000);
+Flow<OrderRequest, Receipt> retried = policy.wrap(Flow.step(chargeOperation), Function.identity());
 ```
 
 - `maxAttempts` 包含首次执行；在 Failed 时按 backoff 间隔重试，直到成功或次数耗尽；
 - 重试过程中 `invocationId`（`flowId:flowVersion:executionId:path`）保持稳定，便于下游做幂等去重。
-
-### timeout 超时控制
-
-```java
-Flow<OrderRequest, Receipt> timedOut = flow.timeout(Duration.ofSeconds(5));
-```
-
-为当前作用域设置超时时限；超时后产生 `TIMEOUT` 失败并终止当前作用域。
-
-### 控制节点挂载顺序
-
-链式调用的控制方法自外向内包裹生效：
-- `flow.policy(p, k).retry(r)`：Policy 位于外层，评估放行后其内部执行 retry；
-- `flow.retry(r).policy(p, k)`：Retry 位于外层，每次重试均重新触发 Policy 评估。
 
 ---
 

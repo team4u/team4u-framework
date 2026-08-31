@@ -6,7 +6,6 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import com.team4u.framework.flow.api.JoinStrategy;
 import com.team4u.framework.flow.api.ResumePoint;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.compiler.Compiler;
 import com.team4u.framework.flow.compiler.PlanNode;
 import com.team4u.framework.flow.model.Outcome;
@@ -105,11 +104,11 @@ public interface ExecutableFlowVisitor<R> {
      * 投影治理控制节点。
      *
      * @param descriptor    节点静态描述符
-     * @param kind          控制类型（POLICY / RETRY / TIMEOUT 等）
+     * @param kind          控制类型（POLICY / PERSISTENT_POLICY / TIMEOUT 等）
      * @param body          已投影的主体节点
      * @param binding       可选的策略绑定
      * @param keyProjection 策略键提取函数
-     * @param configuration 控制配置数据（如 Retry / Duration）
+     * @param configuration 控制配置数据（如 Duration）
      * @return 投影结果
      */
     R visitControl(NodeDescriptor descriptor,

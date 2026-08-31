@@ -170,8 +170,7 @@ public interface DurablePlanNode {
             if (policy != binding.isPresent()) {
                 throw new IllegalArgumentException("control binding does not match kind " + kind);
             }
-            if ((kind == ControlKind.RETRY || kind == ControlKind.TIMEOUT)
-                    && configuration == null) {
+            if (kind == ControlKind.TIMEOUT && configuration == null) {
                 throw new IllegalArgumentException("control configuration is required for " + kind);
             }
         }

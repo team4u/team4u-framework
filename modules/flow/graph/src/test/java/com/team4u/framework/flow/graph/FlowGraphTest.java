@@ -30,7 +30,6 @@ import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.Policy;
 import com.team4u.framework.flow.api.PolicyContext;
 import com.team4u.framework.flow.api.ResumePoint;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.desc.FlowDescription;
 import com.team4u.framework.flow.model.Completion;
 import com.team4u.framework.flow.model.Failure;
@@ -118,7 +117,6 @@ public class FlowGraphTest {
                         .then(Flow.firstApplicable(
                                 Flow.skipped(reason("SKIP")), Flow.accepted("usable")))
                         .then(parallel)
-                        .retry(Retry.maxAttempts(2))
                         .timeout(Duration.ofSeconds(3))
                         .recoverWith(Flow.accepted("recovered")))
                 .await(ResumePoint.<String>named("approval"))
@@ -237,8 +235,6 @@ public class FlowGraphTest {
 
     @Test
     public void rendersAllControlKindsAndConfigurationTypesWithoutValues() {
-        FlowDescription retry = Flow.<String, String>step(Echo.class).retry(
-                Retry.maxAttempts(7).withBackoff(Duration.ofSeconds(11))).describe("retry");
         FlowDescription timeout = Flow.<String>identity().timeout(
                 Duration.ofSeconds(29)).describe("timeout");
         FlowDescription policy = Flow.<String>identity().policy(
@@ -246,23 +242,16 @@ public class FlowGraphTest {
         FlowDescription persistent = Flow.<String>identity().persistentPolicy(
                 TestPersistentPolicy.class, "persistent-q", value -> value).describe("persistent");
 
-        String text = FlowGraphs.text().render(retry)
-                + FlowGraphs.text().render(timeout)
+        String text = FlowGraphs.text().render(timeout)
                 + FlowGraphs.text().render(policy)
                 + FlowGraphs.text().render(persistent);
-        Assert.assertTrue(text.contains("control=RETRY config=maxAttempts=7,backoff=11s0ns"));
         Assert.assertTrue(text.contains("control=TIMEOUT config=timeout=29s0ns"));
         Assert.assertTrue(text.contains("control=POLICY config=<none>"));
         Assert.assertTrue(text.contains("control=PERSISTENT_POLICY config=<none>"));
         Assert.assertTrue(text.contains("contract=" + TestPolicy.class.getName()
                 + " qualifier=\"policy-q\""));
-        Assert.assertFalse(text.contains("PT11S"));
         Assert.assertFalse(text.contains("PT29S"));
 
-        String retryGraph = FlowGraphs.mermaid().render(retry);
-        Assert.assertTrue(retryGraph.contains("FAILED &#124; retry while configured"));
-        Assert.assertTrue(retryGraph.contains(
-                "control=RETRY &#124; config=maxAttempts=7,backoff=11s0ns"));
         String timeoutGraph = FlowGraphs.mermaid().render(timeout);
         Assert.assertTrue(timeoutGraph.contains("config=timeout=29s0ns"));
     }
@@ -445,12 +434,12 @@ public class FlowGraphTest {
 
     @Test
     public void parallelBranchCancelledExitsBypassWaitAll() {
-        // 分支直接是 CONTROL(RETRY)：其 CANCELLED 出口必须绕过 wait-all/join。
+        // 分支直接是 CONTROL(TIMEOUT)：其 CANCELLED 出口必须绕过 wait-all/join。
         Flow<String, String> flow = Flow.<String>parallel(
-                Branch.of("a", Flow.<String>identity().retry(Retry.maxAttempts(2))),
-                Branch.of("b", Flow.<String>identity().retry(Retry.maxAttempts(3))))
+                Branch.of("a", Flow.<String>identity().timeout(Duration.ofSeconds(2))),
+                Branch.of("b", Flow.<String>identity().timeout(Duration.ofSeconds(3))))
                 .join(results -> Outcome.accepted("joined"));
-        String graph = FlowGraphs.mermaid().render(flow.describe("parallel-retry"));
+        String graph = FlowGraphs.mermaid().render(flow.describe("parallel-timeout"));
 
         Map<String, List<String>> edges = parseEdges(graph);
         String join = findNodeByLabel(graph, "JOIN &#124; static outcome contract");
@@ -519,18 +508,11 @@ public class FlowGraphTest {
 
     @Test
     public void configurationSummariesAreStableInBothRenderers() {
-        FlowDescription retry = Flow.<String, String>step(Echo.class).retry(
-                Retry.maxAttempts(7).withBackoff(
-                        Duration.ofSeconds(11).plusNanos(500))).describe("retry-summary");
         FlowDescription timeout = Flow.<String>identity().timeout(
                 Duration.ofSeconds(29).plusNanos(25)).describe("timeout-summary");
 
-        Assert.assertTrue(FlowGraphs.text().render(retry)
-                .contains("control=RETRY config=maxAttempts=7,backoff=11s500ns"));
         Assert.assertTrue(FlowGraphs.text().render(timeout)
                 .contains("control=TIMEOUT config=timeout=29s25ns"));
-        Assert.assertTrue(FlowGraphs.mermaid().render(retry).contains(
-                "control=RETRY &#124; config=maxAttempts=7,backoff=11s500ns"));
         Assert.assertTrue(FlowGraphs.mermaid().render(timeout).contains(
                 "control=TIMEOUT &#124; config=timeout=29s25ns"));
     }

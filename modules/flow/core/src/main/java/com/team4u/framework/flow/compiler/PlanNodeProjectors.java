@@ -212,9 +212,6 @@ public final class PlanNodeProjectors {
                 case PERSISTENT_POLICY:
                     kind = ControlKind.PERSISTENT_POLICY;
                     break;
-                case RETRY:
-                    kind = ControlKind.RETRY;
-                    break;
                 case TIMEOUT:
                     kind = ControlKind.TIMEOUT;
                     break;

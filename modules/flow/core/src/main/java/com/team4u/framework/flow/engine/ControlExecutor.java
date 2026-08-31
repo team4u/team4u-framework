@@ -1,11 +1,10 @@
 package com.team4u.framework.flow.engine;
 import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.Policy;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.compiler.PlanNode;
 
 /**
- * 环绕治理控制节点（Timeout / Retry / Policy / PersistentPolicy）进栈执行与前置判定调度器。
+ * 环绕治理控制节点（Timeout / Policy / PersistentPolicy）进栈执行与前置判定调度器。
  *
  * <p>核心职责：结合 {@link ControlKindRegistry} 将进栈调度委托给具体的控制类型策略实现。</p>
  *

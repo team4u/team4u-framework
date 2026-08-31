@@ -40,6 +40,12 @@
         </dependency>
         <dependency>
             <groupId>com.team4u</groupId>
+            <artifactId>team4u-flow-durable</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.team4u</groupId>
             <artifactId>team4u-retry-config</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>

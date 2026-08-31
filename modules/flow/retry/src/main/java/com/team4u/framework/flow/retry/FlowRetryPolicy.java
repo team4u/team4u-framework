@@ -1,16 +1,11 @@
 package com.team4u.framework.flow.retry;
 
-import com.team4u.framework.base.cache.Cache;
-import com.team4u.framework.base.cache.CacheUtil;
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.api.Gate;
-import com.team4u.framework.flow.api.Policy;
+import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.PolicyContext;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.model.Completion;
 import com.team4u.framework.flow.model.Failure;
 import com.team4u.framework.flow.model.Outcome;
-import com.team4u.framework.flow.model.Reason;
 import com.team4u.framework.retry.api.NamedRetryPolicyFactory;
 import com.team4u.framework.retry.api.NamedRetryPolicyRegistry;
 import com.team4u.framework.retry.api.RetryPolicy;
@@ -20,56 +15,35 @@ import lombok.Builder;
 import lombok.Getter;
 
 import java.lang.reflect.Method;
-import java.time.Duration;
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
-import java.util.concurrent.atomic.AtomicInteger;
-import java.util.function.BiFunction;
+import java.util.Objects;
 import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
- * 基于 team4u-retry 的流程重试与退避治理策略适配器
- * <p>
- * 通过将 team4u-retry 模块的 Backoff 退避体系（{@link Backoff}、{@link Backoffs}）、
- * 条件重试判定（{@link Predicate<Failure>}）、最大尝试次数控制以及动态规则注册中心
- * （{@link NamedRetryPolicyRegistry} / {@code DynamicRetryPolicyRegistry}）与 Flow 的 {@link Policy}
- * 网关机制深度融合，实现精细化、多算法与自适应的流程步骤重试控制。
+ * 基于 team4u-retry 与 {@link PersistentPolicy} 契约的流程有状态重试与退避治理策略。
+ *
+ * <p>架构对称性说明：
+ * <ul>
+ *   <li>无状态治理（如限流、鉴权）：基于 {@code Policy<K>}（如 team4u-flow-ratelimiter）；</li>
+ *   <li>有状态治理（如重试、断点变迁）：基于 {@code PersistentPolicy<K, S>}（如 team4u-flow-retry），状态为不可变的 {@link FlowRetryState}；</li>
+ *   <li>超时治理：基于 {@code Timeout} 作用域。</li>
+ * </ul>
  * </p>
  *
- * @param <K> 策略路由键（或步骤入参）类型
+ * @param <K> 策略路由键类型
  * @author jay.wu
  */
 @Getter
-public class FlowRetryPolicy<K> implements Policy<K> {
-
-    /**
-     * 默认不可重试异常中止诊断码
-     */
-    public static final String DEFAULT_ABORT_CODE = "NON_RETRYABLE";
-
-    /**
-     * 默认重试次数耗尽诊断码
-     */
-    public static final String DEFAULT_EXHAUSTED_CODE = "RETRY_EXHAUSTED";
-
-    /**
-     * 默认重试等待被中断诊断码
-     */
-    public static final String DEFAULT_INTERRUPTED_CODE = "RETRY_INTERRUPTED";
+public class FlowRetryPolicy<K> implements PersistentPolicy<K, FlowRetryState> {
 
     private final Integer maxAttempts;
     private final Backoff backoff;
     private final Predicate<Failure> retryPredicate;
     private final String policyName;
     private final NamedRetryPolicyRegistry namedRegistry;
-    private final boolean sleepOnRetry;
-    private final String nonRetryableReasonCode;
-    private final BiFunction<Failure, K, Reason> reasonFactory;
-    private final BiFunction<Integer, K, Failure> failureFactory;
-    private final Function<K, ?> contextExtractor;
-    private final Cache<String, NonRetryableRecord> nonRetryableCache;
-    private final Cache<String, AtomicInteger> attemptCache;
 
     @Builder(toBuilder = true)
     public FlowRetryPolicy(
@@ -77,12 +51,7 @@ public class FlowRetryPolicy<K> implements Policy<K> {
             Backoff backoff,
             Predicate<Failure> retryPredicate,
             String policyName,
-            NamedRetryPolicyRegistry namedRegistry,
-            Boolean sleepOnRetry,
-            String nonRetryableReasonCode,
-            BiFunction<Failure, K, Reason> reasonFactory,
-            BiFunction<Integer, K, Failure> failureFactory,
-            Function<K, ?> contextExtractor) {
+            NamedRetryPolicyRegistry namedRegistry) {
         if (maxAttempts != null && maxAttempts <= 0) {
             throw new IllegalArgumentException("maxAttempts must be greater than 0");
         }
@@ -91,17 +60,10 @@ public class FlowRetryPolicy<K> implements Policy<K> {
         this.retryPredicate = retryPredicate;
         this.policyName = policyName;
         this.namedRegistry = namedRegistry;
-        this.sleepOnRetry = sleepOnRetry != null ? sleepOnRetry : true;
-        this.nonRetryableReasonCode = nonRetryableReasonCode != null ? nonRetryableReasonCode : DEFAULT_ABORT_CODE;
-        this.reasonFactory = reasonFactory;
-        this.failureFactory = failureFactory;
-        this.contextExtractor = contextExtractor;
-        this.nonRetryableCache = CacheUtil.newLRUCache(1000);
-        this.attemptCache = CacheUtil.newLRUCache(1000);
     }
 
     /**
-     * 创建基于指定最大尝试次数与退避策略的重试策略
+     * 创建基于指定最大尝试次数与退避策略的重试策略。
      *
      * @param maxAttempts 最大尝试次数（包含初试，>= 1）
      * @param backoff     退避策略
@@ -116,7 +78,7 @@ public class FlowRetryPolicy<K> implements Policy<K> {
     }
 
     /**
-     * 创建基于指定最大尝试次数、退避策略及失败判定谓词的重试策略
+     * 创建基于指定最大尝试次数、退避策略及失败判定谓词的重试策略。
      *
      * @param maxAttempts    最大尝试次数（包含初试，>= 1）
      * @param backoff        退避策略
@@ -133,7 +95,7 @@ public class FlowRetryPolicy<K> implements Policy<K> {
     }
 
     /**
-     * 创建指数退避重试策略
+     * 创建指数退避重试策略。
      *
      * @param maxAttempts        最大尝试次数（包含初试，>= 1）
      * @param initialDelayMillis 初始延迟毫秒数
@@ -147,7 +109,7 @@ public class FlowRetryPolicy<K> implements Policy<K> {
     }
 
     /**
-     * 创建带随机抖动的指数退避重试策略
+     * 创建带随机抖动的指数退避重试策略。
      *
      * @param maxAttempts        最大尝试次数（包含初试，>= 1）
      * @param initialDelayMillis 初始延迟毫秒数
@@ -161,7 +123,7 @@ public class FlowRetryPolicy<K> implements Policy<K> {
     }
 
     /**
-     * 创建固定延迟退避重试策略
+     * 创建固定延迟退避重试策略。
      *
      * @param maxAttempts 最大尝试次数（包含初试，>= 1）
      * @param delayMillis 延迟毫秒数
@@ -173,7 +135,20 @@ public class FlowRetryPolicy<K> implements Policy<K> {
     }
 
     /**
-     * 创建基于动态/命名规则的重试策略
+     * 创建递增延迟退避重试策略。
+     *
+     * @param maxAttempts          最大尝试次数（包含初试，>= 1）
+     * @param initialDelayMillis   初始延迟毫秒数
+     * @param incrementDelayMillis 递增延迟毫秒数
+     * @param <K>                  键类型
+     * @return FlowRetryPolicy 实例
+     */
+    public static <K> FlowRetryPolicy<K> increment(int maxAttempts, long initialDelayMillis, long incrementDelayMillis) {
+        return of(maxAttempts, Backoffs.increment(initialDelayMillis, incrementDelayMillis));
+    }
+
+    /**
+     * 创建基于动态/命名规则的重试策略。
      *
      * @param policyName 策略名称
      * @param <K>        键类型
@@ -186,7 +161,7 @@ public class FlowRetryPolicy<K> implements Policy<K> {
     }
 
     /**
-     * 创建基于指定命名注册表与策略名称的重试策略
+     * 创建基于指定命名注册表与策略名称的重试策略。
      *
      * @param registry   命名策略注册表
      * @param policyName 策略名称
@@ -201,81 +176,36 @@ public class FlowRetryPolicy<K> implements Policy<K> {
     }
 
     @Override
-    public Gate before(PolicyContext context, K key) {
-        String execKey = executionKey(context);
-        NonRetryableRecord record = nonRetryableCache.get(execKey);
-        if (record != null) {
-            nonRetryableCache.remove(execKey);
-            attemptCache.remove(execKey);
-            String code = nonRetryableReasonCode != null ? nonRetryableReasonCode : DEFAULT_ABORT_CODE;
-            Reason reason = reasonFactory != null
-                    ? reasonFactory.apply(record.getFailure(), key)
-                    : Reason.of(code, "Retry aborted: non-retryable failure ["
-                            + record.getFailure().code() + "] " + record.getFailure().message());
-            return Gate.reject(reason);
-        }
-
-        int attempt = nextAttempt(execKey, context);
-        int effectiveMaxAttempts = resolveMaxAttempts();
-        if (effectiveMaxAttempts > 0 && attempt > effectiveMaxAttempts) {
-            nonRetryableCache.remove(execKey);
-            attemptCache.remove(execKey);
-            Failure failure = failureFactory != null
-                    ? failureFactory.apply(attempt, key)
-                    : Failure.of(DEFAULT_EXHAUSTED_CODE, "Retry attempts exhausted: " + attempt + "/" + effectiveMaxAttempts);
-            return Gate.fail(failure);
-        }
-
-        if (attempt > 1) {
-            Backoff effectiveBackoff = resolveBackoff();
-            long delayMillis = effectiveBackoff.calculateMillis(attempt - 1);
-            if (sleepOnRetry && delayMillis > 0) {
-                if (context != null && context.cancellation() != null) {
-                    context.cancellation().throwIfCancelled();
-                }
-                try {
-                    Thread.sleep(delayMillis);
-                } catch (InterruptedException e) {
-                    Thread.currentThread().interrupt();
-                    if (context != null && context.cancellation() != null && context.cancellation().isCancelled()) {
-                        context.cancellation().throwIfCancelled();
-                    }
-                    return Gate.fail(Failure.of(DEFAULT_INTERRUPTED_CODE, "Retry backoff interrupted: " + e.getMessage()));
-                }
-            }
-        }
-
-        return Gate.proceed();
+    public FlowRetryState initialState(K key) {
+        return FlowRetryState.initial();
     }
 
     @Override
-    public void after(PolicyContext context, K key, Completion completion) {
-        String execKey = executionKey(context);
-        if (completion != null && completion.kind() == Outcome.Kind.FAILED) {
-            Failure failure = completion.failure().orElse(null);
-            if (failure != null && !isRetryable(failure)) {
-                nonRetryableCache.put(execKey, new NonRetryableRecord(failure));
-            }
-        } else {
-            nonRetryableCache.remove(execKey);
-            attemptCache.remove(execKey);
-        }
+    public Before<FlowRetryState> before(PolicyContext context, K key, FlowRetryState state) {
+        FlowRetryState current = state != null ? state : FlowRetryState.initial();
+        return PersistentPolicy.proceed(current);
     }
 
-    private int nextAttempt(String execKey, PolicyContext context) {
-        int ctxAttempt = context != null ? context.attempt() : 1;
-        AtomicInteger counter = attemptCache.get(execKey);
-        if (counter == null) {
-            counter = new AtomicInteger(Math.max(1, ctxAttempt));
-            attemptCache.put(execKey, counter);
-            return counter.get();
+    @Override
+    public After<FlowRetryState> after(PolicyContext context, K key, FlowRetryState state, Completion completion) {
+        FlowRetryState current = state != null ? state : FlowRetryState.initial();
+        if (completion != null && completion.kind() == Outcome.Kind.FAILED && completion.failure().isPresent()) {
+            Failure failure = completion.failure().get();
+            int effectiveMaxAttempts = resolveMaxAttempts();
+            if (isRetryable(failure) && current.getAttempt() < effectiveMaxAttempts) {
+                Backoff effectiveBackoff = resolveBackoff();
+                long delayMillis = effectiveBackoff.calculateMillis(current.getAttempt());
+                Instant wakeInstant = delayMillis > 0
+                        ? Instant.now().plusMillis(delayMillis)
+                        : Instant.now();
+                return PersistentPolicy.retryAt(wakeInstant, current.nextAttempt());
+            }
         }
-        int next = counter.incrementAndGet();
-        return Math.max(next, ctxAttempt);
+        return PersistentPolicy.returning(current);
     }
 
     /**
-     * 判断当前失败是否可被重试
+     * 判断当前失败是否可被重试。
      *
      * @param failure 步骤失败诊断对象
      * @return 若可重试返回 true，若不可重试返回 false
@@ -291,7 +221,7 @@ public class FlowRetryPolicy<K> implements Policy<K> {
     }
 
     /**
-     * 解析生效的重试策略配置（优先查询 DynamicRetryPolicyRegistry，其次查询 NamedRetryPolicyRegistry）
+     * 解析生效的重试策略配置（优先查询 DynamicRetryPolicyRegistry，其次查询 NamedRetryPolicyRegistry）。
      *
      * @return 解析到的基础 RetryPolicy 实例，若未指定或不存在返回 null
      */
@@ -318,7 +248,7 @@ public class FlowRetryPolicy<K> implements Policy<K> {
     }
 
     /**
-     * 解析最终生效的退避算法实例
+     * 解析最终生效的退避算法实例。
      *
      * @return 退避算法实例
      */
@@ -334,7 +264,7 @@ public class FlowRetryPolicy<K> implements Policy<K> {
     }
 
     /**
-     * 解析最终生效的最大尝试次数（含首次执行）
+     * 解析最终生效的最大尝试次数（含首次执行）。
      *
      * @return 最大尝试总次数
      */
@@ -351,26 +281,7 @@ public class FlowRetryPolicy<K> implements Policy<K> {
     }
 
     /**
-     * 将当前重试策略转化为 Flow 专用的 Retry 控制配置（无额外外部退避延迟，由 Policy 统一精确控制算法退避）。
-     *
-     * @return 不可变 Retry 配置实例
-     */
-    public Retry toRetry() {
-        return Retry.maxAttempts(resolveMaxAttempts());
-    }
-
-    /**
-     * 将当前重试策略转化为指定外部退避时长的 Retry 配置。
-     *
-     * @param externalBackoff 外部退避时长
-     * @return 不可变 Retry 配置实例
-     */
-    public Retry toRetry(Duration externalBackoff) {
-        return new Retry(resolveMaxAttempts(), externalBackoff);
-    }
-
-    /**
-     * 将当前重试策略与 Flow 编排治理无缝结合（构建 [Retry 控制 -> [Policy 策略 -> 步骤]] 的标准洋葱模型）。
+     * 将当前重试策略挂载到 Flow 流程上。
      *
      * @param flow          目标流程
      * @param keyProjection 策略键投影提取函数
@@ -379,30 +290,26 @@ public class FlowRetryPolicy<K> implements Policy<K> {
      * @return 附加重试与退避治理后的新 Flow 实例
      */
     public <I, O> Flow<I, O> wrap(Flow<I, O> flow, Function<? super I, ? extends K> keyProjection) {
-        return flow.policy(this, keyProjection).retry(toRetry());
-    }
-
-    private String executionKey(PolicyContext context) {
-        if (context == null) {
-            return String.valueOf(Thread.currentThread().getId());
-        }
-        if (context.metadata() != null) {
-            return context.metadata().executionId() + ":" + context.metadata().nodePath();
-        }
-        return String.valueOf(Thread.currentThread().getId());
-    }
-
-    @Getter
-    private static final class NonRetryableRecord {
-        private final Failure failure;
-
-        private NonRetryableRecord(Failure failure) {
-            this.failure = failure;
-        }
+        Objects.requireNonNull(flow, "flow must not be null");
+        Objects.requireNonNull(keyProjection, "keyProjection must not be null");
+        return flow.persistentPolicy(this, keyProjection);
     }
 
     /**
-     * FlowRetryPolicy 自定义 Builder 扩展方法
+     * 将当前重试策略以恒等键挂载到 Flow 流程上。
+     *
+     * @param flow 目标流程
+     * @param <I>  流程输入类型
+     * @param <O>  流程输出类型
+     * @return 附加重试与退避治理后的新 Flow 实例
+     */
+    @SuppressWarnings("unchecked")
+    public <I, O> Flow<I, O> wrap(Flow<I, O> flow) {
+        return wrap(flow, in -> (K) in);
+    }
+
+    /**
+     * FlowRetryPolicy 自定义 Builder 扩展方法。
      */
     public static class FlowRetryPolicyBuilder<K> {
 

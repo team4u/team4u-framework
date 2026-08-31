@@ -24,7 +24,6 @@ import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.Policy;
 import com.team4u.framework.flow.api.PolicyContext;
 import com.team4u.framework.flow.api.ResumePoint;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.model.Cancellation;
 import com.team4u.framework.flow.model.Completion;
 import com.team4u.framework.flow.model.Failure;
@@ -88,7 +87,7 @@ public class ControlParallelSuspendTest {
             return calls.incrementAndGet() < 3
                     ? Outcome.failed(Failure.of("RETRY", "retry"))
                     : Outcome.accepted(input + "-ok");
-        }).retry(Retry.maxAttempts(3));
+        }).persistentPolicy(retryStub(3), v -> v);
         assertEquals("value-ok", Local.compile(flow).run("value").requireAccepted());
         assertEquals(3, calls.get());
         int distinct = 0;
@@ -112,7 +111,7 @@ public class ControlParallelSuspendTest {
         };
         Flow<String, String> retryOutside = Flow.step(firstSlow)
                 .timeout(Duration.ofMillis(15))
-                .retry(Retry.maxAttempts(2));
+                .persistentPolicy(retryStub(2), v -> v);
         assertEquals("value", Local.compile(retryOutside)
                 .run("value").requireAccepted());
         assertEquals(2, retryOutsideCalls.get());
@@ -124,7 +123,7 @@ public class ControlParallelSuspendTest {
             return Outcome.accepted(input);
         };
         FlowResult.Completed<String> timed = (FlowResult.Completed<String>) Local.compile(
-                Flow.step(alwaysSlow).retry(Retry.maxAttempts(2))
+                Flow.step(alwaysSlow).persistentPolicy(retryStub(2), v -> v)
                         .timeout(Duration.ofMillis(15))).run("value");
         assertEquals("TIMEOUT",
                 ((Outcome.Failed<String>) timed.outcome()).failure().code());
@@ -360,6 +359,22 @@ public class ControlParallelSuspendTest {
                 elapsedMillis >= 250 && elapsedMillis < 3000);
     }
 
+
+    private static PersistentPolicy<String, Integer> retryStub(final int maxAttempts) {
+        return new PersistentPolicy<String, Integer>() {
+            @Override public Integer initialState(String key) { return 1; }
+            @Override public Before<Integer> before(PolicyContext context, String key, Integer state) {
+                return PersistentPolicy.proceed(state);
+            }
+            @Override public After<Integer> after(PolicyContext context, String key, Integer state,
+                                         Completion completion) {
+                if (completion != null && completion.kind() == Outcome.Kind.FAILED && state < maxAttempts) {
+                    return PersistentPolicy.retryAt(java.time.Instant.now(), state + 1);
+                }
+                return PersistentPolicy.returning(state);
+            }
+        };
+    }
 
     private static PersistentPolicy<String, Integer> persistentBlocking(final boolean before) {
         return new PersistentPolicy<String, Integer>() {

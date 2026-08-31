@@ -12,7 +12,6 @@ import static org.junit.Assert.assertTrue;
 import com.team4u.framework.flow.api.Branch;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.ResumePoint;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.desc.FlowDescription;
 import com.team4u.framework.flow.desc.FlowVisitor;
 import com.team4u.framework.flow.desc.NodeDescription;
@@ -42,7 +41,6 @@ public class FlowStructureTest {
                 .then(Flow.parallel(b1, b2).join(results -> results.firstAccepted().map(Object::toString)))
                 .await(ResumePoint.<String>named("point1"))
                 .then((c, resumed) -> Outcome.accepted(resumed.state()))
-                .retry(Retry.maxAttempts(3))
                 .timeout(Duration.ofSeconds(5))
                 .recoverWith(Flow.step((c, recovery) -> Outcome.accepted("recovered")));
 

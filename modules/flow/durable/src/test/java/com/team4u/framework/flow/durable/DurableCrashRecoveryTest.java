@@ -12,7 +12,7 @@ import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.OperationContext;
-import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.durable.store.DurableStore;
 import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
 import com.team4u.framework.flow.model.Recovery;
@@ -148,8 +148,18 @@ public class DurableCrashRecoveryTest {
         // 嵌套 ≥ 20 帧：scope(sequence) > route(case) > fallback > retry > invoke 链
         RecordingOp deep = new RecordingOp("deep").crashOnCall(1);
         Flow<String, String> leaf = Flow.<String, String>step(deep)
-                .retry(new com.team4u.framework.flow.api.Retry(2,
-                        java.time.Duration.ofMillis(1)));
+                .persistentPolicy(new PersistentPolicy<String, Integer>() {
+                    @Override public Integer initialState(String key) { return 1; }
+                    @Override public Before<Integer> before(com.team4u.framework.flow.api.PolicyContext ctx, String key, Integer state) {
+                        return PersistentPolicy.proceed(state);
+                    }
+                    @Override public After<Integer> after(com.team4u.framework.flow.api.PolicyContext ctx, String key, Integer state, com.team4u.framework.flow.model.Completion completion) {
+                        if (completion != null && completion.kind() == Outcome.Kind.FAILED && state < 2) {
+                            return PersistentPolicy.retryAt(java.time.Instant.now().plusMillis(1), state + 1);
+                        }
+                        return PersistentPolicy.returning(state);
+                    }
+                }, s -> s);
         Flow<String, String> branch = Flow.firstApplicable(
                 Flow.<String, String>skipped(Reason.of("NA", "na")),
                 leaf);

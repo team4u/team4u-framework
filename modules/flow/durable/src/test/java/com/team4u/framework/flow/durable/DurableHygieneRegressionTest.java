@@ -12,7 +12,7 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
-import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.durable.engine.DurablePlanCompiler;
 import com.team4u.framework.flow.durable.engine.DurableState;
 import com.team4u.framework.flow.durable.snapshot.DefaultStateMapper;
@@ -58,7 +58,18 @@ public class DurableHygieneRegressionTest {
             }
         };
         Flow<String, String> flow = Flow.<String, String>step(flaky)
-                .retry(new com.team4u.framework.flow.api.Retry(3, Duration.ofSeconds(30)))
+                .persistentPolicy(new com.team4u.framework.flow.api.PersistentPolicy<String, Integer>() {
+                    @Override public Integer initialState(String key) { return 1; }
+                    @Override public Before<Integer> before(com.team4u.framework.flow.api.PolicyContext ctx, String key, Integer state) {
+                        return PersistentPolicy.proceed(state);
+                    }
+                    @Override public After<Integer> after(com.team4u.framework.flow.api.PolicyContext ctx, String key, Integer state, com.team4u.framework.flow.model.Completion completion) {
+                        if (completion != null && completion.kind() == com.team4u.framework.flow.model.Outcome.Kind.FAILED && state < 3) {
+                            return PersistentPolicy.retryAt(java.time.Instant.now().plus(Duration.ofSeconds(30)), state + 1);
+                        }
+                        return PersistentPolicy.returning(state);
+                    }
+                }, s -> s)
                 .timeout(Duration.ofSeconds(2));
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable =

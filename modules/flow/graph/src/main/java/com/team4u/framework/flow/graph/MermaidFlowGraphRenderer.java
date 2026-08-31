@@ -10,7 +10,6 @@ import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.desc.FlowDescription;
 import com.team4u.framework.flow.desc.NodeDescription;
 import com.team4u.framework.flow.spi.BindingDescriptor;
@@ -410,12 +409,6 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         Fragment body = required(fragments, node.children().get(0));
         state.edge(id, body.entry, "proceed", null);
         result.addAll(body);
-        if ("RETRY".equals(node.controlKind())) {
-            for (Exit failed : channelExits(body, Channel.FAILED)) {
-                state.edge(failed.source, body.entry, "FAILED | retry while configured",
-                        Channel.FAILED);
-            }
-        }
         if ("POLICY".equals(node.controlKind())
                 || "PERSISTENT_POLICY".equals(node.controlKind())) {
             result.add(id, Channel.REJECTED);

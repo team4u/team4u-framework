@@ -6,7 +6,7 @@ import com.team4u.framework.flow.Local;
 import com.team4u.framework.flow.api.Gate;
 import com.team4u.framework.flow.api.Metadata;
 import com.team4u.framework.flow.api.PolicyContext;
-import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.model.Cancellation;
 import com.team4u.framework.flow.model.Failure;
 import com.team4u.framework.flow.model.FlowResult;
@@ -177,14 +177,14 @@ public class RateLimitPolicyTest {
 
             AtomicInteger executeCount = new AtomicInteger(0);
 
-            // Retry 在外，Policy 在内：每次重试重新获取令牌
+            // PersistentPolicy 在外，Policy 在内：每次重试重新获取令牌
             Flow<String, String> flow = Flow.<String, String>step(
                     (ctx, in) -> {
                         executeCount.incrementAndGet();
                         return Outcome.accepted("done:" + in);
                     })
                     .policy(RateLimitPolicy.fail("retry.point"), in -> in)
-                    .retry(Retry.maxAttempts(3).withBackoff(Duration.ofMillis(10)));
+                    .persistentPolicy(retryStub(3, Duration.ofMillis(10)), in -> in);
 
             // 第一次执行成功
             FlowResult<String> result1 = Local.compile(flow).run("key1");
@@ -314,5 +314,20 @@ public class RateLimitPolicyTest {
 
     private void policyAcquireTwice(RateLimitPolicy<String> policy) {
         policy.before(testContext(), "k1");
+    }
+
+    private static PersistentPolicy<String, Integer> retryStub(final int maxAttempts, final Duration backoff) {
+        return new PersistentPolicy<String, Integer>() {
+            @Override public Integer initialState(String key) { return 1; }
+            @Override public Before<Integer> before(PolicyContext ctx, String key, Integer state) {
+                return PersistentPolicy.proceed(state);
+            }
+            @Override public After<Integer> after(PolicyContext ctx, String key, Integer state, com.team4u.framework.flow.model.Completion completion) {
+                if (completion != null && completion.kind() == Outcome.Kind.FAILED && state < maxAttempts) {
+                    return PersistentPolicy.retryAt(java.time.Instant.now().plus(backoff), state + 1);
+                }
+                return PersistentPolicy.returning(state);
+            }
+        };
     }
 }

@@ -218,13 +218,12 @@ Flow<ExpenseRequest, ExpenseReport> flow = Flow.<ExpenseRequest>identity()
 
 ## 7. CONTROL 节点（治理控制）
 
-`CONTROL` 节点包裹在子流程外部，提供横切治理能力。包含四种控制形态（`ControlKind`）：
+`CONTROL` 节点包裹在子流程外部，提供横切治理能力。包含三种纯粹控制形态（`ControlKind`）：
 
 | 治理类型 | DSL 声明方法 | 作用 |
 | :--- | :--- | :--- |
-| **POLICY** | `flow.policy(policyInstance, keyFn)` | 无状态网关拦截（放行 / 拒绝 / 失败）及后置监控 |
-| **PERSISTENT_POLICY** | `flow.persistentPolicy(policyClass, keyFn)` | 状态持久化的策略（支持定时唤醒 `WaitUntil`） |
-| **RETRY** | `flow.retry(Retry.maxAttempts(3))` | Failed 时自动重试，支持固定与指数退避 |
+| **POLICY** | `flow.policy(policyInstance, keyFn)` | 无状态网关拦截（放行 / 拒绝 / 失败）及后置监控（如限流 `team4u-flow-ratelimiter`） |
+| **PERSISTENT_POLICY** | `flow.persistentPolicy(policy, keyFn)` | 有状态持久化策略（支持状态变迁、故障重试 `RetryAt` 与延时唤醒 `WaitUntil`，如 `team4u-flow-retry`） |
 | **TIMEOUT** | `flow.timeout(Duration.ofSeconds(3))` | 限定子流程最大执行时限，超时产生 TIMEOUT 失败 |
 
 ---

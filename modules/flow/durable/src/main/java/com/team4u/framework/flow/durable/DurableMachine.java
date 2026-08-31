@@ -20,7 +20,6 @@ import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.api.Branch;
 import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.Policy;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.durable.engine.CheckpointReasons;
 import com.team4u.framework.flow.durable.engine.Checkpoints;
 import com.team4u.framework.flow.durable.engine.DurableFrameReducePolicy;
@@ -53,7 +52,7 @@ import com.team4u.framework.flow.spi.NodeDescriptor;
  * <ul>
  *   <li><b>严格与 Core 对齐</b>：通过 {@link DurableNodeExecutionHandlerRegistry} 与 {@link DurableFrameReducePolicyRegistry} 实现微内核策略分发，保持与 Core 一致的四态逻辑语义；</li>
  *   <li><b>检查点原子持久化（At-least-once）</b>：每个稳定边界通过 {@link Checkpoints} 提交 CAS 快照；</li>
- *   <li><b>无线程占用的 Park 机制</b>：在遇到 Retry 退避或 PersistentPolicy 调度时，主执行栈持久化快照后退出线程（Parked）；</li>
+ *   <li><b>无线程占用的 Park 机制</b>：在遇到 PersistentPolicy 调度或退避时，主执行栈持久化快照后退出线程（Parked）；</li>
  *   <li><b>声明顺序串行驱动 Parallel</b>：Parallel 的分支按声明顺序逐个完整执行并落库，保障确定的崩溃恢复拓扑。</li>
  * </ul>
  * </p>

@@ -5,9 +5,7 @@ import org.junit.Assert;
 
 import java.util.Objects;
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.Local;
 import com.team4u.framework.flow.api.PersistentPolicy;
-import com.team4u.framework.flow.api.Retry;
 import com.team4u.framework.flow.api.ResumePoint;
 import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
 import com.team4u.framework.flow.model.Failure;

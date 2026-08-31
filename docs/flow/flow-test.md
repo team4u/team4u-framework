@@ -60,17 +60,18 @@ System.out.println(stub.lastInput());    // "in"
 stub.reset();                            // 清空调用历史
 ```
 
-验证 Retry 重试时使用相同幂等键的断言示例：
+验证重试策略下使用相同幂等键的断言示例：
 
 ```java
 OperationStub<String, String> flaky = OperationStub.failing(Failure.of("FAIL", "error"));
+FlowRetryPolicy<String> retryPolicy = FlowRetries.fixed(3, 0);
 FlowResult<String> result = Local.compile(
-        Flow.step(flaky).retry(Retry.maxAttempts(3))).run("input");
+        retryPolicy.wrap(Flow.step(flaky))).run("input");
 
 FlowAssertions.assertFailed(result, "FAIL");
 org.junit.Assert.assertEquals(3, flaky.callCount());
 
-// 断言三次重试的 invocationId 严格相同
+// 断言三次尝试的 invocationId 严格相同
 String initialInvocationId = flaky.calls().get(0).invocationId();
 for (OperationStub.Call<String> call : flaky.calls()) {
     org.junit.Assert.assertEquals(initialInvocationId, call.invocationId());

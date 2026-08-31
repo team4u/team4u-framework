@@ -14,7 +14,6 @@ public final class ControlKindRegistry extends KeyedPolicyRegistry<PlanNode.Cont
 
     static {
         GLOBAL.register(new ControlKindHandlers.TimeoutHandler());
-        GLOBAL.register(new ControlKindHandlers.RetryHandler());
         GLOBAL.register(new ControlKindHandlers.PolicyHandler());
         GLOBAL.register(new ControlKindHandlers.PersistentPolicyHandler());
     }

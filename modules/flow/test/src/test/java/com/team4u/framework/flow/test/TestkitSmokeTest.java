@@ -13,7 +13,7 @@ import com.team4u.framework.flow.spi.OperationResolver;
 import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.model.Reason;
 import com.team4u.framework.flow.api.ResumePoint;
-import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.model.Resumed;
 import com.team4u.framework.flow.model.Suspension;
 import com.team4u.framework.flow.durable.DurableLifecycle;
@@ -82,7 +82,7 @@ public class TestkitSmokeTest {
     public void retryingStubKeepsStableInvocationIdAcrossAttempts() {
         OperationStub<String, String> failing =
                 OperationStub.failing(Failure.of("UNSTABLE", "unstable"));
-        Flow<String, String> flow = Flow.step(failing).retry(Retry.maxAttempts(3));
+        Flow<String, String> flow = Flow.step(failing).persistentPolicy(retryStub(3, Duration.ZERO), s -> s);
         FlowResult<String> result = LocalFixture.compile(flow).run("in");
 
         FlowAssertions.assertFailed(result, "UNSTABLE");
@@ -307,7 +307,7 @@ public class TestkitSmokeTest {
         OperationStub<String, String> failing =
                 OperationStub.failing(Failure.of("BOOM", "boom"));
         Flow<String, String> flow = Flow.step(failing)
-                .retry(Retry.maxAttempts(2).withBackoff(Duration.ofHours(1)));
+                .persistentPolicy(retryStub(2, Duration.ofHours(1)), s -> s);
         DurableFixture<String, String> fixture = DurableFixture.compile(flow, "smoke-retry", 1);
 
         DurableResult.Active<String> active =
@@ -400,7 +400,7 @@ public class TestkitSmokeTest {
         }
     }
 
-    private static void until(int timeoutMillis, BooleanSupplier condition)
+    private static void until(int timeoutMillis, java.util.function.BooleanSupplier condition)
             throws InterruptedException {
         long deadline = System.currentTimeMillis() + timeoutMillis;
         while (!condition.getAsBoolean()) {
@@ -409,5 +409,20 @@ public class TestkitSmokeTest {
             }
             Thread.sleep(5);
         }
+    }
+
+    private static PersistentPolicy<String, Integer> retryStub(final int maxAttempts, final Duration backoff) {
+        return new PersistentPolicy<String, Integer>() {
+            @Override public Integer initialState(String key) { return 1; }
+            @Override public Before<Integer> before(com.team4u.framework.flow.api.PolicyContext ctx, String key, Integer state) {
+                return PersistentPolicy.proceed(state);
+            }
+            @Override public After<Integer> after(com.team4u.framework.flow.api.PolicyContext ctx, String key, Integer state, com.team4u.framework.flow.model.Completion completion) {
+                if (completion != null && completion.kind() == Outcome.Kind.FAILED && state < maxAttempts) {
+                    return PersistentPolicy.retryAt(java.time.Instant.now().plus(backoff), state + 1);
+                }
+                return PersistentPolicy.returning(state);
+            }
+        };
     }
 }
