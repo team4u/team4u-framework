@@ -35,6 +35,8 @@ import com.team4u.framework.flow.model.Completion;
 import com.team4u.framework.flow.model.Failure;
 import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.model.Reason;
+import com.team4u.framework.flow.model.Recovery;
+import com.team4u.framework.flow.model.Resumed;
 
 /** Tests for rendering the frozen Core static description model. */
 public class FlowGraphTest {
@@ -603,4 +605,63 @@ public class FlowGraphTest {
         }
         return count;
     }
+
+    public static interface RiskCheckOperation extends Operation<String, String> {}
+    public static interface RiskRouter extends Operation<String, String> {}
+    public static interface PassAuditOperation extends Operation<Resumed<String, String>, String> {}
+    public static interface LockInventoryOperation extends Operation<String, String> {}
+    public static interface LockCouponOperation extends Operation<String, String> {}
+    public static interface ChargePaymentOperation extends Operation<String, String> {}
+    public static interface BackupPaymentOperation extends Operation<Recovery<String>, String> {}
+    public static interface IssueReceiptOperation extends Operation<String, String> {}
+
+    @Test
+    public void printRealisticBusinessFlow() {
+        Branch<String, String> inventoryBranch = Branch.of("lock-inventory",
+                Flow.<String, String>step(LockInventoryOperation.class, "stock-service")
+                        .timeout(Duration.ofSeconds(2))
+                        .named("库存预占"));
+
+        Branch<String, String> couponBranch = Branch.of("lock-coupon",
+                Flow.<String, String>step(LockCouponOperation.class, "coupon-service")
+                        .named("卡券锁定"));
+
+        Flow<String, String> parallelLock = Flow.parallel(inventoryBranch, couponBranch)
+                .join(results -> Outcome.accepted("resources-locked"))
+                .named("并行资源锁定");
+
+        Flow<String, String> manualAuditFlow = Flow.<String>identity()
+                .await(ResumePoint.<String>named("manual-audit"))
+                .then(Flow.step(PassAuditOperation.class, "audit-handler"))
+                .named("高风险人工审核");
+
+        Flow<String, String> riskRoute = Flow.route(RiskRouter.class, "risk-router")
+                .caseOf("LOW", Flow.<String>identity().named("低风险直通"))
+                .caseOf("HIGH", manualAuditFlow)
+                .otherwise(Flow.<String, String>rejected(Reason.of("HIGH_RISK_REJECT", "高风险直接阻断")));
+
+        Flow<String, String> paymentStep = Flow.<String, String>step(ChargePaymentOperation.class, "main-gateway")
+                .named("主通道支付扣款")
+                .timeout(Duration.ofSeconds(5))
+                .recoverWith(Flow.<Recovery<String>, String>step(BackupPaymentOperation.class, "backup-gateway").named("备用通道降级"));
+
+        Flow<String, String> orderFlow = Flow.scope("order-checkout-process",
+                Flow.<String, String>step(RiskCheckOperation.class, "risk-checker").named("前置风控拦截")
+                        .then(riskRoute)
+                        .then(parallelLock)
+                        .then(paymentStep)
+                        .then(Flow.<String, String>step(IssueReceiptOperation.class, "receipt-service").named("生成出货单据"))
+        ).named("order-fulfillment-flow");
+
+        FlowDescription desc = orderFlow.describe("order-fulfillment-flow");
+        String mermaid = FlowGraphs.mermaid().render(desc);
+        String text = FlowGraphs.text().render(desc);
+
+        Assert.assertNotNull(mermaid);
+        Assert.assertNotNull(text);
+        Assert.assertTrue(mermaid.contains("flow_start"));
+        Assert.assertTrue(mermaid.contains("terminal_accepted"));
+        Assert.assertTrue(text.contains("flow id=\"order-fulfillment-flow\""));
+    }
 }
+
