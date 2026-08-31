@@ -1,10 +1,10 @@
 # 表达式规则门控策略：`team4u-flow-criterion`
 
-在复杂多变的业务场景中（如营销圈选、动态风控、权限准入、A/B 实验分流），业务人员通常需要动态调整判定规则，而无需频繁修改 Java 代码或重新发布服务。`team4u-flow-criterion` 模块将流程引擎的无状态治理契约 [`Policy<K>`](flow-governance.md#1-无状态网关策略policyk) 与规则表达式引擎 [`team4u-criterion`](../criterion/README.md) 结合，支持直接使用**低开销、高性能的类 SQL 文本表达式**进行前置门控拦截与流程分支路由。
+在复杂多变的业务场景中（如营销圈选、动态风控、权限准入、A/B 实验分流），业务人员通常需要动态调整判定规则，而无需频繁修改 Java 代码或重新发布服务。`team4u-flow-criterion` 模块将流程引擎的无状态治理契约 [`Policy<K>`](flow-governance.md#核心治理契约) 与规则表达式引擎 [`team4u-criterion`](../criterion/README.md) 结合，支持直接使用**低开销、高性能的类 SQL 文本表达式**进行前置门控拦截与流程分支路由。
 
 ---
 
-## 1. 引入依赖
+## 引入依赖
 
 ```xml
 <dependency>
@@ -18,7 +18,7 @@
 
 ---
 
-## 2. 核心架构与能力双模态
+## 核心架构与能力双模态
 
 `team4u-flow-criterion` 为 Flow 提供了两套正交且互补的集成形式：
 
@@ -41,11 +41,11 @@ graph TD
 
 ---
 
-## 3. 门控策略：`CriterionPolicy<K>`
+## 门控策略：`CriterionPolicy<K>`
 
 用于在节点执行前进行**准入校验、风控拦截与黑白名单过滤**。
 
-### 3.1 三大门控模式
+### 门控模式
 
 | 模式枚举 | 便捷工厂方法 | 行为语义 | 适用场景 |
 | :--- | :--- | :--- | :--- |
@@ -53,7 +53,7 @@ graph TD
 | **`REJECT_IF`** | `CriterionPolicies.rejectIf(expr)` | **满足表达式则以 `Rejected` 短路退出**；不满足时放行。 | **风险拦截**：如“处于黑名单中或风险评分超标”。 |
 | **`FAIL_IF`** | `CriterionPolicies.failIf(expr, code, msg)` | **满足表达式则以 `Failed` 系统故障退出**；不满足时放行。 | **严重故障熔断**：如“系统探测指标异常，需触发容灾或重试”。 |
 
-### 3.2 编排使用示例
+### 编排使用示例
 
 ```java
 import com.team4u.framework.flow.Flow;
@@ -81,7 +81,7 @@ Flow<OrderRequest, Receipt> flow3 = Flow.step(chargeOperation)
 
 ---
 
-## 4. 条件分支谓词：`CriterionPredicate<T>`
+## 条件分支谓词：`CriterionPredicate<T>`
 
 `CriterionPredicate<T>` 实现了标准 Java `Predicate<T>` 接口，可在 Flow 的条件判断、路由分发、步骤跳过中无缝复用：
 
@@ -102,28 +102,28 @@ Flow<Order, Receipt> flow = Flow.step((ctx, order) ->
 
 ---
 
-## 5. 常用表达式语法速查
+## 常用表达式语法速查
 
 `team4u-criterion` 针对 Flow 上下文中的 JavaBean、Map 与集合对象提供开箱即用的高阶语法支持：
 
 ```text
-// 1. 数值与关系比较
+// 数值与关系比较
 amount >= 100 && score < 60 && status != 'CANCELLED'
 
-// 2. 集合与容器包含
+// 集合与容器包含
 tags contains 'VIP' && roles contains all ['AUDITOR', 'MANAGER']
 grade in ['A', 'B', 'A+']
 
-// 3. 区间范围判断
+// 区间范围判断
 age between [18, 60] && score between (60, 100]
 
-// 4. 空值与存在性检查
+// 空值与存在性检查
 address is not null && items is not empty
 
-// 5. 正则与通配符
+// 正则与通配符
 email =~ '.*@team4u\\.com$' && username like 'admin_*'
 
-// 6. 概率与哈希灰度分流
+// 概率与哈希灰度分流
 userId hash 0.2 // 按用户 ID 稳定 Hash 圈选 20% 流量
 ```
 
@@ -131,7 +131,7 @@ userId hash 0.2 // 按用户 ID 稳定 Hash 圈选 20% 流量
 
 ---
 
-## 6. 关联章节
+## 关联章节
 
 - [流程治理概览与洋葱模型](flow-governance.md)
 - [限流治理策略 (team4u-flow-ratelimiter)](policy-ratelimiter.md)

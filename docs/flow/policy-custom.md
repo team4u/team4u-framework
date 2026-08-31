@@ -8,9 +8,9 @@
 
 ---
 
-## 1. 无状态策略契约：`Policy<K>`
+## 无状态策略契约：`Policy<K>`
 
-### 1.1 接口定义
+### 接口定义
 
 ```java
 package com.team4u.framework.flow.api;
@@ -36,7 +36,7 @@ public interface Policy<K> {
 }
 ```
 
-### 1.2 `Gate` 三态门控裁决
+### `Gate` 三态门控裁决
 
 | 门控决策 | 构造方式 | 引擎执行动作 |
 | :--- | :--- | :--- |
@@ -44,7 +44,7 @@ public interface Policy<K> {
 | **业务拒绝 (Reject)** | `Gate.reject(Reason.of("CODE", "msg"))` | 立即以 `Outcome.Rejected` 短路退出，不执行业务步骤，**绝不触发重试**。 |
 | **系统故障 (Fail)** | `Gate.fail(Failure.of("CODE", "msg"))` | 立即以 `Outcome.Failed` 退出，可被外层重试策略捕获并触发退避重试。 |
 
-### 1.3 开发示例：用户权限与审计策略
+### 开发示例：用户权限与审计策略
 
 ```java
 import com.team4u.framework.flow.api.Gate;
@@ -79,7 +79,7 @@ public class UserAuthPolicy implements Policy<String> {
 }
 ```
 
-### 1.4 DSL 挂载
+### DSL 挂载
 
 ```java
 Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
@@ -88,11 +88,11 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
 
 ---
 
-## 2. 有状态持久化策略契约：`PersistentPolicy<K, S>`
+## 有状态持久化策略契约：`PersistentPolicy<K, S>`
 
 当策略需要在多轮尝试之间**维护不可变状态（State）、计算唤醒时刻（`wakeAt`）、支持 Durable 检查点存储**时，实现 `PersistentPolicy<K, S>`。
 
-### 2.1 接口定义
+### 接口定义
 
 ```java
 package com.team4u.framework.flow.api;
@@ -109,7 +109,7 @@ public interface PersistentPolicy<K, S> {
 }
 ```
 
-### 2.2 前置与后置决策原语
+### 前置与后置决策原语
 
 - **前置决策 `Before<S>`**：
   - `PersistentPolicy.proceed(state)`：放行并更新状态；
@@ -120,7 +120,7 @@ public interface PersistentPolicy<K, S> {
   - `PersistentPolicy.returning(state)`：正常结束当前策略环绕，返回业务 `Outcome`；
   - `PersistentPolicy.retryAt(instant, nextState)`：**触发重试调度**。流程引擎将进入退避等待并在 `instant` 到期后重新拉起节点执行，并将 `nextState` 传递到下一轮。
 
-### 2.3 开发示例：自定义指数退避重试策略
+### 开发示例：自定义指数退避重试策略
 
 ```java
 import com.team4u.framework.flow.api.PersistentPolicy;
@@ -171,7 +171,7 @@ public class CustomBackoffPolicy implements PersistentPolicy<String, CustomBacko
 }
 ```
 
-### 2.4 DSL 挂载
+### DSL 挂载
 
 ```java
 Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
@@ -180,7 +180,7 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
 
 ---
 
-## 3. Spring 容器集成与依赖注入
+## Spring 容器集成与依赖注入
 
 若策略需要注入 Spring Bean（如 DAO、RPC Client 等），可直接通过 [`team4u-flow-bean`](flow-bean.md) 在编译期自动完成依赖注入与 AOP 代理保留：
 
@@ -192,7 +192,7 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
 
 ---
 
-## 4. 关联章节
+## 关联章节
 
 - [流程治理概览与洋葱模型](flow-governance.md)
 - [限流治理策略 (team4u-flow-ratelimiter)](policy-ratelimiter.md)

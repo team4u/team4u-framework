@@ -1,10 +1,10 @@
 # 重试与退避治理策略：`team4u-flow-retry`
 
-在分布式流水线中，网络抖动、偶发超时、下游负载突增等临时性故障（Transient Failures）是常态。`team4u-flow-retry` 模块将成熟的重试退避算法引擎 [`team4u-retry`](../retry/README.md) 与流程引擎的持久化策略契约 [`PersistentPolicy<K, FlowRetryState>`](flow-governance.md#2-有状态持久化策略persistentpolicyk-s) 深度整合，为业务提供抗重试风暴、条件快速失败、状态断点恢复的企业级重试治理能力。
+在分布式流水线中，网络抖动、偶发超时、下游负载突增等临时性故障（Transient Failures）是常态。`team4u-flow-retry` 模块将成熟的重试退避算法引擎 [`team4u-retry`](../retry/README.md) 与流程引擎的持久化策略契约 [`PersistentPolicy<K, FlowRetryState>`](flow-governance.md#核心治理契约) 深度整合，为业务提供抗重试风暴、条件快速失败、状态断点恢复的企业级重试治理能力。
 
 ---
 
-## 1. 引入依赖
+## 引入依赖
 
 ```xml
 <dependency>
@@ -18,7 +18,7 @@
 
 ---
 
-## 2. 核心架构与调度模型
+## 核心架构与调度模型
 
 重试治理在 Flow 中被统一建模为**有状态持久化策略**（`PersistentPolicy`）。每次尝试的轮次与延迟状态由不可变值对象 [`FlowRetryState`](file:///root/code/team4u-framework/modules/flow/retry/src/main/java/com/team4u/framework/flow/retry/FlowRetryState.java) 精确记录：
 
@@ -42,7 +42,7 @@ graph TD
 
 ---
 
-## 3. 多算法退避体系
+## 多算法退避体系
 
 模块完整继承了 `team4u-retry` 强大的退避算法，有效防止高并发下的重试雪崩与下游二次打垮：
 
@@ -55,9 +55,9 @@ graph TD
 
 ---
 
-## 4. 编排使用示例
+## 编排使用示例
 
-### 4.1 基础用法：指数与随机抖动退避
+### 基础用法：指数与随机抖动退避
 
 ```java
 import com.team4u.framework.flow.Flow;
@@ -73,7 +73,7 @@ FlowRetryPolicy<OrderRequest> jitterPolicy = FlowRetries.jitter(4, 50, 2.0, 1000
 Flow<OrderRequest, Receipt> flow2 = jitterPolicy.wrap(Flow.step(chargeOperation), Function.identity());
 ```
 
-### 4.2 条件重试判定与快速短路（Fast-Fail）
+### 条件重试判定与快速短路（Fast-Fail）
 
 在实际业务中，只有部分瞬时故障（如 `TIMEOUT`、`CONNECTION_RESET`）才应重试；而业务参数错误（如 `INVALID_ACCOUNT`、`BALANCE_NOT_ENOUGH`）若盲目重试不仅无意义，还会白白消耗线程与资源：
 
@@ -95,7 +95,7 @@ FlowRetryPolicy<OrderRequest> conditionalPolicy = FlowRetryPolicy.<OrderRequest>
 Flow<OrderRequest, Receipt> flow = conditionalPolicy.wrap(Flow.step(chargeOperation), Function.identity());
 ```
 
-### 4.3 动态配置规则与热重载
+### 动态配置规则与热重载
 
 支持从内存注册表（[`NamedRetryPolicyRegistry`](file:///root/code/team4u-framework/modules/retry/core/src/main/java/com/team4u/framework/retry/api/NamedRetryPolicyRegistry.java)）或配置中心（[`DynamicRetryPolicyRegistry`](file:///root/code/team4u-framework/modules/retry/config/src/main/java/com/team4u/framework/retry/dynamic/DynamicRetryPolicyRegistry.java)）按名称动态加载重试参数，修改配置即刻热生效：
 
@@ -107,7 +107,7 @@ Flow<OrderRequest, Receipt> flow = dynamicPolicy.wrap(Flow.step(chargeOperation)
 
 ---
 
-## 5. Local 与 Durable 双引擎行为
+## Local 与 Durable 双引擎行为
 
 | 引擎类型 | 重试退避行为 | 中断与恢复保证 |
 | :--- | :--- | :--- |
@@ -116,16 +116,14 @@ Flow<OrderRequest, Receipt> flow = dynamicPolicy.wrap(Flow.step(chargeOperation)
 
 ---
 
-## 6. 关键语义与幂等保证
+## 关键语义与幂等保证
 
-1. **仅对 `Failed` 状态重试**：
-   - 若步骤返回 `Accepted`（成功）、`Rejected`（业务拒绝）或 `Skipped`（弃权跳过），框架均视为正常业务结论，**绝不触发重试**。
-2. **稳定的幂等键 (`invocationId`)**：
-   - 节点在初次执行以及后续的所有重试轮次中，`context.invocationId()`（格式：`flowId:flowVersion:executionId:nodePath`）**保持绝对恒定**。下游外部 RPC 服务可安全使用该 ID 作为全局幂等防重键。
+- **仅对 `Failed` 状态重试**：若步骤返回 `Accepted`（成功）、`Rejected`（业务拒绝）或 `Skipped`（弃权跳过），框架均视为正常业务结论，**绝不触发重试**。
+- **稳定的幂等键 (`invocationId`)**：节点在初次执行以及后续的所有重试轮次中，`context.invocationId()`（格式：`flowId:flowVersion:executionId:nodePath`）**保持绝对恒定**。下游外部 RPC 服务可安全使用该 ID 作为全局幂等防重键。
 
 ---
 
-## 7. 关联章节
+## 关联章节
 
 - [流程治理概览与洋葱模型](flow-governance.md)
 - [限流治理策略 (team4u-flow-ratelimiter)](policy-ratelimiter.md)

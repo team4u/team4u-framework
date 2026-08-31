@@ -1,10 +1,10 @@
 # 限流治理策略：`team4u-flow-ratelimiter`
 
-在微服务与高并发系统中，特定业务步骤（如第三方支付请求、高成本计算、发券发信等）需要实施严格的流量控制。`team4u-flow-ratelimiter` 模块将流程引擎的无状态治理契约 [`Policy<K>`](flow-governance.md#1-无状态网关策略policyk) 与框架的分布式限流引擎 [`team4u-ratelimiter`](../ratelimiter/README.md) 无缝融合，提供开箱即用的流程级限流能力。
+在微服务与高并发系统中，特定业务步骤（如第三方支付请求、高成本计算、发券发信等）需要实施严格的流量控制。`team4u-flow-ratelimiter` 模块将流程引擎的无状态治理契约 [`Policy<K>`](flow-governance.md#核心治理契约) 与框架的分布式限流引擎 [`team4u-ratelimiter`](../ratelimiter/README.md) 无缝融合，提供开箱即用的流程级限流能力。
 
 ---
 
-## 1. 引入依赖
+## 引入依赖
 
 ```xml
 <dependency>
@@ -18,7 +18,7 @@
 
 ---
 
-## 2. 核心架构与决策模型
+## 核心架构与决策模型
 
 限流策略作为无状态拦截器，在前置门控阶段（`before`）调用 `team4u-ratelimiter` 引擎尝试获取令牌，并将裁决结果转换为 Flow 标准门控决策：
 
@@ -44,9 +44,9 @@ graph TD
 
 ---
 
-## 3. 编排使用示例
+## 编排使用示例
 
-### 3.1 基础用法（默认 FAIL 模式）
+### 基础用法（默认 FAIL 模式）
 
 通过 [`RateLimitPolicies.of`](file:///root/code/team4u-framework/modules/flow/ratelimiter/src/main/java/com/team4u/framework/flow/ratelimiter/RateLimitPolicies.java) 绑定限流检查点，默认使用 `FAIL` 模式：
 
@@ -59,7 +59,7 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
         .policy(RateLimitPolicies.of("order.charge", OrderRequest::getUserId));
 ```
 
-### 3.2 拒绝模式（快速短路，不重试）
+### 拒绝模式（快速短路，不重试）
 
 当需要对高频恶意流量实施即时拒绝时，使用 [`RateLimitPolicies.reject`](file:///root/code/team4u-framework/modules/flow/ratelimiter/src/main/java/com/team4u/framework/flow/ratelimiter/RateLimitPolicies.java)：
 
@@ -69,7 +69,7 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
         .policy(RateLimitPolicies.reject("order.charge", OrderRequest::getUserId));
 ```
 
-### 3.3 高级定制（动态 Permits + 自定义失败诊断）
+### 高级定制（动态 Permits + 自定义失败诊断）
 
 通过 [`RateLimitPolicy.builder()`](file:///root/code/team4u-framework/modules/flow/ratelimiter/src/main/java/com/team4u/framework/flow/ratelimiter/RateLimitPolicy.java) 支持复杂业务参数提取与自定义诊断构造：
 
@@ -91,7 +91,7 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
         .policy(customPolicy, req -> req);
 ```
 
-### 3.4 与重试治理联动（限流排队削峰）
+### 与重试治理联动（限流排队削峰）
 
 将限流策略（`Policy`）作为内层拦截，重试策略（`FlowRetryPolicy`）作为外层控制器。当限流返回 `FAIL` 时，外层重试策略会自动在退避延迟后重新尝试获取令牌：
 
@@ -115,7 +115,7 @@ Flow<OrderRequest, Receipt> protectedFlow = FlowRetries.policy(
 
 ---
 
-## 4. 限流规则配置驱动与热生效
+## 限流规则配置驱动与热生效
 
 限流引擎支持通过配置中心（`team4u-config`）动态下发限流算法（固定窗口、滑动窗口、令牌桶、漏桶）与阈值配置，无需重启服务即可即时热生效：
 
@@ -136,7 +136,7 @@ Flow<OrderRequest, Receipt> protectedFlow = FlowRetries.policy(
 
 ---
 
-## 5. 关联章节
+## 关联章节
 
 - [流程治理概览与洋葱模型](flow-governance.md)
 - [重试与退避治理策略 (team4u-flow-retry)](policy-retry.md)

@@ -86,16 +86,16 @@ graph TD
 
 为了便于深入研读，组件文档按照语义层级、控制治理、持久化以及工程运维拆分为独立专章：
 
-### 1. 入门与概览
+### 入门与概览
 - [快速开始 (Quick Start)](quick-start.md)：5 分钟体验流水线编排、条件路由、挂起恢复与持久化断点续跑。
 
-### 2. 核心语义与模型
+### 核心语义与模型
 - [四态业务结果与生命周期模型](flow-outcome.md)：深入剖析 `Outcome<T>` 四态闭集、`Reason` / `Failure` 诊断值对象、`Outcome.map` 映射与 `FlowResult` / `DurableResult` 执行生命周期。
 - [四态传播规则与消费机制](flow-propagation.md)：顺序流水线短路机制、`Skipped` 弃权的三大消费场景（`thenOptional` / `firstApplicable` / `route`）与 `recoverWith` 补偿。
 - [运行时节点与 DSL 编排原语](flow-nodes.md)：8 种封闭运行时节点（`INVOKE`, `SEQUENCE`, `ROUTE`, `FALLBACK`, `PARALLEL`, `AWAIT`, `CONTROL`, `COMPLETE`）与 AST 降级编译。
 - [核心语义全景总览](flow-semantics.md)：核心机制全景摘要与快速索引。
 
-### 3. 控制与治理
+### 控制与治理
 - [流程治理概览：Policy、Retry 与 Timeout](flow-governance.md)：治理架构概览、无状态与有状态策略模型速查、超时控制与洋葱圈嵌套顺序。
 - [限流治理策略 (team4u-flow-ratelimiter)](policy-ratelimiter.md)：基于 `team4u-ratelimiter` 的分布式限流、`RateLimitAction` 决策矩阵与动态 Permits。
 - [重试与退避治理策略 (team4u-flow-retry)](policy-retry.md)：基于 `team4u-retry` 的多算法退避、随机抖动防风暴、条件快速短路与双引擎调度。
@@ -105,7 +105,7 @@ graph TD
 - [挂起续接与协作式取消合同](flow-suspend.md)：`await` 与 `ResumePoint`、Local 单次消费句柄 `Suspension`、`Cancellation` CAS 取消令牌与竞态防御。
 - [Local 线程模型与死锁防御机制](flow-threading.md)：Dispatcher 与 Worker 双线程池分工、`ForkJoinPool` 工作窃取补偿与两级静态死锁防御规则。
 
-### 4. 容器与持久化
+### 容器与持久化
 - [Bean 容器集成与 Spring 治理](flow-bean.md)：声明式 Class 与限定符绑定、`BeanOperationResolver` 编译期解析、Spring `@Transactional` 与 AOP 代理无损保留。
 - [Durable 状态机与 CAS 检查点机制](flow-durable-core.md)：Durable 核心架构、命令集、节点边界 CAS 检查点、`revision` 乐观锁、版本强隔离与 `invocationId` 稳定幂等键。
 - [Durable 两段式恢复协议与 PersistentPolicy](flow-durable-resume.md)：挂起恢复两阶段 CAS 提交、崩溃重放与信号冲突防御、`PersistentPolicy` 状态持久化与 `WaitUntil`/`RetryAt` 定时唤醒。
@@ -113,7 +113,7 @@ graph TD
 - [DurableStore 存储 SPI 与 KV 适配](flow-durable-kv.md)：`DurableStore` SPI 契约、`InMemoryDurableStore` 与基于 `team4u-kv` 的 `KvDurableStore` 多存储后端适配。
 - [Durable 持久化全景总览](flow-durable.md)：Durable 执行器设计与使用全景摘要。
 
-### 5. 运维与工程化
+### 运维与工程化
 - [可视化图表渲染与双投影架构](flow-graph.md)：双投影架构、`FlowDescription` 只读描述模型、Mermaid 6 通道流程图与紧凑文本树渲染。
 - [测试支持与测试套件](flow-test.md)：`FlowAssertions` 流畅断言库、`OperationStub`/`PolicyStub` 桩对象、`ParallelBarrier` 并发同步屏障与测试夹具。
 - [诊断码体系与故障排查手册](flow-diagnostics.md)：运行时 Failed 失败码、Skipped 弃权码、编译期校验码与 Durable 异常排查自查清单。
