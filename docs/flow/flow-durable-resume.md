@@ -176,7 +176,7 @@ graph LR
     
     RES -.->|"当前调用线程立即释放退出"| EXIT["线程释放 (Parked)"]
     
-    SCHED["外部定时调度器 (如 Quartz/ShedLock/Cron)"] -->|"扫描到到达 wakeAt 的记录"| REC["调用 executable.recover(executionId)"]
+    SCHED["外部定时调度器 (结合 team4u-kv-lock 分布式锁)"] -->|"扫描到到达 wakeAt 的记录"| REC["调用 executable.recover(executionId)"]
     REC --> NEXT["从快照恢复策略状态并继续执行"]
 ```
 

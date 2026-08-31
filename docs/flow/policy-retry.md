@@ -259,7 +259,7 @@ sequenceDiagram
     participant Worker as 业务工作线程
     participant Engine as Durable 状态机
     participant DB as MySQL / Redis 快照库
-    participant Sched as 后台定时任务 (Quartz / ShedLock)
+    participant Sched as 后台定时任务 (结合 team4u-kv-lock)
 
     Note over Worker, DB: 阶段 1：首次执行失败，触发退避
     Worker->>Engine: start("order-001", req)
@@ -298,13 +298,15 @@ sequenceDiagram
 
 ---
 
-### 3. 后台定时唤醒调度器实战代码
+### 3. 后台定时唤醒调度器实战代码（结合 `team4u-kv-lock` 分布式锁）
 
-在生产环境中，只需要配置一个轻量级的 Spring 定时任务（建议结合 ShedLock 保证分布式单实例执行），每隔数秒扫描并调用 `recover` 即可：
+在分布式多实例部署环境下，为了防止多个节点同时执行定时扫描产生重复唤醒，推荐使用框架原生的分布式锁组件 [`team4u-kv-lock`](../kv/kv-lock.md)（基于 `KvLockManager`）确保单实例调度：
 
 ```java
 import com.team4u.framework.flow.durable.DurableExecutable;
 import com.team4u.framework.flow.durable.DurableResult;
+import com.team4u.framework.kv.lock.KvLock;
+import com.team4u.framework.kv.lock.KvLockManager;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.scheduling.annotation.Scheduled;
@@ -323,27 +325,42 @@ public class DurableWakeScheduler {
     @Autowired
     private DurableExecutable<OrderRequest, Receipt> orderExecutable;
 
+    @Autowired
+    private KvLockManager kvLockManager; // 框架原生分布式锁管理器 (基于 Redis / JDBC)
+
     /**
      * 每 5 秒轮询一次到达唤醒时刻的持久化实例
      */
     @Scheduled(fixedRate = 5000)
     public void pollAndWakeReadyExecutions() {
-        Instant now = Instant.now();
-        
-        // 1. 扫描 lifecycle = 'ACTIVE' 且 wake_at <= 当前时间 的所有 executionId
-        List<String> readyExecutionIds = snapshotRepository.findReadyToWake(now);
+        // 1. 使用 team4u-kv-lock 抢占分布式调度锁（租约 10 秒，非阻塞抢锁）
+        KvLock lock = kvLockManager.tryAcquire("scheduler:flow:wake", 10_000);
+        if (lock == null) {
+            // 未抢到锁的集群节点直接跳过，保证同一时间仅有单实例执行扫描
+            return;
+        }
 
-        for (String executionId : readyExecutionIds) {
-            try {
-                log.info("触发到期重试唤醒: executionId={}", executionId);
-                
-                // 2. 核心：调用 recover 从快照恢复执行栈与 attempt=2，原位继续重试
-                DurableResult<Receipt> result = orderExecutable.recover(executionId);
-                
-                log.info("唤醒执行结果: executionId={}, status={}", executionId, result.getClass().getSimpleName());
-            } catch (Exception e) {
-                log.error("唤醒执行异常: executionId={}", executionId, e);
+        try {
+            Instant now = Instant.now();
+            
+            // 2. 扫描 lifecycle = 'ACTIVE' 且 wake_at <= 当前时间 的所有 executionId
+            List<String> readyExecutionIds = snapshotRepository.findReadyToWake(now);
+
+            for (String executionId : readyExecutionIds) {
+                try {
+                    log.info("触发到期重试唤醒: executionId={}", executionId);
+                    
+                    // 3. 核心：调用 recover 从快照恢复执行栈与 attempt=2，原位继续重试
+                    DurableResult<Receipt> result = orderExecutable.recover(executionId);
+                    
+                    log.info("唤醒执行结果: executionId={}, status={}", executionId, result.getClass().getSimpleName());
+                } catch (Exception e) {
+                    log.error("唤醒执行异常: executionId={}", executionId, e);
+                }
             }
+        } finally {
+            // 4. 释放分布式锁 (安全的 compareAndRemove 机制，绝不误删他人令牌)
+            lock.release();
         }
     }
 }
