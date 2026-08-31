@@ -366,12 +366,19 @@ public class FlowTest {
 
 ---
 
-## 下一步
+## 下一步与专栏导航
 
-- 深入了解四态流转、八节点语义与死锁防御：[核心语义与机制](flow-semantics.md)
-- 掌握 Spring 容器绑定、动态代理与切面保留：[Bean 容器集成](flow-bean.md)
-- 探索 CAS 检查点、状态编解码与断点恢复：[Durable 持久化执行](flow-durable.md)
-- 查看 Mermaid 结构渲染与配置摘要：[可视化与图表渲染](flow-graph.md)
-- 查阅测试桩、Trace 收集器与并行屏障：[测试支持与断言](flow-test.md)
-- 了解自定义扩展点与双投影 SPI：[扩展机制与 SPI](flow-extension.md)
-- 学习综合实战项目：[实战案例](flow-sample.md)
+- 深入掌握四态代数模型与生命周期：[四态业务结果与生命周期模型](flow-outcome.md)
+- 深入理解四态传播与消费规则：[四态传播规则与消费机制](flow-propagation.md)
+- 掌握 8 种运行时节点与 DSL 原语：[运行时节点与 DSL 编排原语](flow-nodes.md)
+- 掌握 Policy 策略、重试与超时控制：[流程治理：Policy 策略、Retry 重试与 Timeout 控制](flow-governance.md)
+- 掌握多分支并发与汇聚：[并行分支与汇合治理](flow-parallel.md)
+- 探索挂起等待与协作取消：[挂起续接与协作式取消合同](flow-suspend.md)
+- 了解 Local 线程池与静态死锁防御：[Local 线程模型与死锁防御机制](flow-threading.md)
+- 掌握 Spring 容器绑定与切面代理：[Bean 容器集成与 Spring 治理](flow-bean.md)
+- 深入 CAS 检查点与崩溃恢复：[Durable 状态机与 CAS 检查点机制](flow-durable-core.md)
+- 深入快照槽位与 StateMapper 编解码：[快照存储结构与 StateMapper 编解码](flow-durable-snapshot.md)
+- 了解 Mermaid 流程图与紧凑文本树：[可视化图表渲染与双投影架构](flow-graph.md)
+- 查阅单元测试断言库与测试夹具：[测试支持与测试套件](flow-test.md)
+- 查阅全链路诊断码与故障排查手册：[诊断码体系与故障排查手册](flow-diagnostics.md)
+- 学习综合电商履约与风控实战：[实战案例库与生产模式](flow-sample.md)

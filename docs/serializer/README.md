@@ -2,71 +2,51 @@
 
 # 背景
 
-在微服务与分布式系统中，数据的序列化与反序列化是网络传输、数据持久化与跨进程通信的基础。然而在实际架构设计中，常常遇到以下痛点：
+在微服务 RPC 调用、Redis / KV 缓存存储、事件消息队列以及配置持久化中，序列化与反序列化是不可或缺的基础设施。然而直接在业务中硬编码第三方工具类常常带来以下问题：
 
-- **底层序列化库强耦合**：业务代码或底层 SDK 内部若直接硬编码使用 FastJSON、Jackson 或 Gson 的原生静态类（如 `JSON.toJSONString`、`new ObjectMapper()`），一旦宿主工程版本冲突或存在安全漏洞，很难完成平滑替换。
-- **复杂嵌套泛型类型擦除**：对于 `List<Map<String, User>>` 或多层嵌套结构，手动处理 `JavaType`、`TypeToken` 或反射类型容易出现冗余样板代码和类型转换异常。
-- **配置容错与空值处理标准不一**：各序列化库对 `null` 值过滤、Java 8 日期时间（`LocalDateTime`）支持以及未知字段容错的处理行为各不相同。
+- **组件库耦合**：业务代码直接依赖特定的 Jackson、Fastjson 或 Gson API，更换或升级底层库时需要大面积重构；
+- **配置割裂**：不同业务模块各自定义 `ObjectMapper`，日期格式、空值忽略与命名策略不一致；
+- **缺乏 SPI 扩展机制**：难以向全局序列化器动态注入自定义类型 Module（如 JSR-310 日期模块、Guava 集合支持）。
 
-`team4u-serializer` 提供了**接口策略驱动（Strategy Pattern）**与**统一静态门面** (`JsonUtil`)，实现了底层序列化引擎的无感替换与复杂泛型的高性能反序列化。
-
----
-
-# 设计
-
-## 设计理念
-
-```mermaid
-graph TD
-    User["业务 / SDK 调用 JsonUtil 静态门面"] --> JU["JsonUtil"]
-    JU --> OPC["OrderedPolicyChain 策略链"]
-    OPC --> SPI["META-INF/services SPI 自动发现"]
-    SPI --> JP["JacksonSerializerPolicy<br/>team4u-serializer-jackson 模块"]
-    SPI -.-> Custom["自定义 JsonSerializerPolicy<br/>如 FastJSON2 / Gson"]
-    JP --> Jackson["Jackson ObjectMapper<br/>JSR310 / 非空过滤 / 未知字段容错"]
-```
-
-## 核心概念
-
-| 概念 | 类/接口路径 | 说明 |
-| :--- | :--- | :--- |
-| `JsonUtil` | `com.team4u.framework.serializer.json.JsonUtil` | 统一操作门面，提供 `toJsonStr`、`toBean`、`toList`、`parseObj` 等静态方法 |
-| `JsonSerializerPolicy` | `com.team4u.framework.serializer.json.JsonSerializerPolicy` | 序列化策略 SPI 接口，继承 `ContextPolicy<Void>` 与 `KeyedPolicy<String>` |
-| `JacksonSerializerPolicy` | `com.team4u.framework.serializer.json.jackson.JacksonSerializerPolicy` | 基于 Jackson 实现的高性能默认策略（优先级 `HIGH`） |
-| `TypeReference<T>` | `com.team4u.framework.base.util.TypeReference` | 复杂泛型标记抽象类，用于在运行期保留完整的泛型元数据 |
+`team4u-serializer` 提供了统一的抽象序列化门面 `JsonUtil`，基于标准 Java SPI 支持动态接入高性能序列化引擎，并通过 `JacksonModuleContributor` 支持无侵入的模块注册扩展。
 
 ---
 
-## 模块结构
+# 核心特性
 
-| 模块 ArtifactId | 说明 | 核心依赖 |
-| :--- | :--- | :--- |
-| `team4u-serializer-json` | 统一门面与 SPI 策略接口定义（`JsonUtil`, `JsonSerializerPolicy`） | `team4u-base`, `team4u-policy` |
-| `team4u-serializer-jackson` | 基于 Jackson 实现的官方序列化驱动；由应用或显式集成模块添加 | `team4u-serializer-json`, `jackson-databind`, `jackson-datatype-jsr310` |
-
-`team4u-serializer-json` 只提供 API，不传递任何 JSON 引擎。使用 `JsonUtil` 的应用必须显式添加 `team4u-serializer-jackson`，或通过 ServiceLoader 注册自定义 `JsonSerializerPolicy`。上游库只能在测试中使用官方 Jackson provider；生产 provider 归应用和显式集成模块所有。
+- **统一门面 API**：`JsonUtil` 提供最简洁的 `toJson`、`fromJson`、`toJsonBytes` 与 `TypeReference` 泛型反序列化；
+- **SPI 引擎解耦**：通过 `JsonSerializerPolicy` SPI 抽象底层序列化实现，无缝适配 Jackson 等现代引擎；
+- **`JacksonModuleContributor` SPI**：第三方模块可通过 SPI 动态向全局 `ObjectMapper` 贡献自定义 Module；
+- **开箱即用最佳实践**：默认预置 JSR-310 时间支持、忽略未知字段、Map 键有序输出（保证确定性散列）。
 
 ---
 
-## 组件位置与包结构
+## 模块坐标
 
-```text
-team4u-serializer
-├── team4u-serializer-json
-│   └── src/main/java/com/team4u/framework/serializer/json
-│       ├── JsonSerializerPolicy.java        # 策略 SPI 契约接口
-│       └── JsonUtil.java                    # 统一操作门面工具类
-└── team4u-serializer-jackson
-    └── src/main/java/com/team4u/framework/serializer/json/jackson
-        └── JacksonSerializerPolicy.java     # Jackson 驱动实现
+```xml
+<dependencies>
+    <!-- 核心门面与 SPI 契约 -->
+    <dependency>
+        <groupId>com.team4u</groupId>
+        <artifactId>team4u-serializer-json</artifactId>
+    </dependency>
+
+    <!-- Jackson 核心适配实现 (推荐引入) -->
+    <dependency>
+        <groupId>com.team4u</groupId>
+        <artifactId>team4u-serializer-json-jackson</artifactId>
+    </dependency>
+</dependencies>
 ```
 
 ---
 
-## 文档导航
+## 章节导航与专题专栏
 
-- [快速开始](quick-start.md)：依赖引入、基础序列化与泛型反序列化
-- [统一门面与泛型解析 (JsonUtil)](serializer-facade.md)：`JsonUtil` 核心 API 清单、`TypeReference` 与错误容忍
-- [Jackson 驱动与性能优化](serializer-jackson.md)：Jackson 配置细节与 JSR310 时间支持
-- [SPI 扩展与引擎替换](serializer-spi.md)：自定义 FastJSON / Gson 策略与动态注册
-- [实战案例](serializer-sample.md)：通用 SDK 序列化解耦与复杂泛型报文解析实战
+- [快速开始](quick-start.md)：5 分钟掌握对象序列化与泛型反序列化。
+- [JsonUtil 统一门面与操作](serializer-facade.md)：`JsonUtil` 门面常用方法与类型推导。
+- [Jackson 序列化策略与配置](serializer-jackson.md)：全局 ObjectMapper 基础配置与特性说明。
+- [自定义 SPI 策略扩展](serializer-spi.md)：实现 `JsonSerializerPolicy` 接入自定义序列化引擎。
+- [JacksonModuleContributor SPI](serializer-custom.md)：通过 SPI 动态注册自定义 Jackson 模块。
+- [序列化避坑与诊断手册](serializer-diagnostics.md)：泛型擦除、确定性 Map 输出与常见异常自查。
+- [序列化组件实战案例](serializer-sample.md)：复杂领域模型、多层集合与通用报文转换实战。

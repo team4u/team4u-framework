@@ -1,0 +1,171 @@
+# 挂起续接与协作式取消合同
+
+在现代分布式业务架构中，流程往往不是一口气执行完的短事务。诸如“用户转账后等待二次短信验证”、“订单生成后等待支付网关异步 Webhook 回调”、“请假工单等待主管审批”等场景，都需要流程引擎具备**非阻塞挂起（Suspend）**、**精准恢复（Resume）**以及**安全取消（Cancellation）**的能力。
+
+本文将深入解析 Local 模式下的挂起续接机制、单次消费句柄 `Suspension`、协作式取消令牌契约以及挂起与取消之间的竞态防御。
+
+---
+
+## 挂起与恢复模型
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant App as 业务调用方
+    participant Exec as LocalExecutable
+    participant Flow as 流程引擎内核
+    participant Ext as 外部系统 (如审批/网关)
+
+    App->>Exec: 1. run(input)
+    Exec->>Flow: 执行前置步骤 (INVOKE)
+    Flow-->>Exec: 遇到 await(ResumePoint) 节点
+    Exec-->>App: 2. 返回 FlowResult.Suspended(suspension)
+    
+    Note over App, Ext: 业务方持久化或暂存 suspension 句柄
+
+    Ext->>App: 3. 外部回调注入 (如审批通过 Signal)
+    App->>Exec: 4. resume(suspension, resumePoint, signal)
+    Exec->>Flow: 校验单次消费并注入 Signal 恢复执行
+    Flow-->>Exec: 执行后续步骤直到完成
+    Exec-->>App: 5. 返回最终 FlowResult.Completed
+```
+
+---
+
+## 1. 声明挂起点：`ResumePoint<R>`
+
+挂起点（`ResumePoint`）是一个类型安全的标识，用于标记流程挂起的位置以及恢复时预期的信号（Signal）数据类型：
+
+```java
+import com.team4u.framework.flow.api.ResumePoint;
+
+// 声明一个名为 "managerApproval" 且预期接收 ApprovalSignal 信号的挂起点
+ResumePoint<ApprovalSignal> approvalPoint = ResumePoint.named("managerApproval");
+```
+
+### DSL 挂起与续接声明
+
+```java
+Flow<OrderRequest, OrderReceipt> approvalFlow = Flow.<OrderRequest>identity()
+        .then(createDraftOrderOp)
+        .await(approvalPoint) // 流程在此挂起！
+        .then((context, resumed) -> {
+            // resumed 包含了挂起前的上下文数据 state 与外部注入的 signal
+            OrderRequest draftOrder = resumed.state();
+            ApprovalSignal signal = resumed.signal();
+            
+            if (!signal.isApproved()) {
+                return Outcome.rejected(Reason.of("REJECTED_BY_MANAGER", signal.getComment()));
+            }
+            return Outcome.accepted(new OrderReceipt(draftOrder.getOrderId(), "APPROVED"));
+        });
+```
+
+---
+
+## 2. Local 挂起句柄：`Suspension<O>`
+
+当 Local 执行器遇到 `AWAIT` 节点时，执行器立即释放当前线程，并返回一个 `FlowResult.Suspended` 实例：
+
+```java
+LocalExecutable<OrderRequest, OrderReceipt> executable = Local.compile(approvalFlow);
+
+// 首次执行
+FlowResult<OrderReceipt> result = executable.run(request);
+
+if (result instanceof FlowResult.Suspended) {
+    Suspension<OrderReceipt> suspension = ((FlowResult.Suspended<OrderReceipt>) result).suspension();
+    
+    // 暂存 suspension 句柄（如存入内存 Map 或 Session）
+    sessionCache.put(request.getOrderId(), suspension);
+}
+```
+
+### 单次消费（Single-use）安全保证
+
+- **防重放与双花防御**：`Suspension` 是一个不透明的**单次消费句柄**；
+- 一旦通过 `executable.resume(suspension, ...)` 消费过一次，该句柄立即失效；
+- 若尝试对同一个 `Suspension` 实例调用两次 `resume`，框架会严格抛出 `IllegalStateException`，从底层杜绝重放攻击与并发双花。
+
+---
+
+## 3. 恢复执行 API
+
+Local 执行器提供同步与异步两种恢复方式：
+
+| API 方法 | 签名 | 说明 |
+| :--- | :--- | :--- |
+| **`resume`** | `resume(suspension, resumePoint, signal[, cancellation])` | 在当前调用线程同步恢复并驱动后续步骤 |
+| **`resumeAsync`** | `resumeAsync(suspension, resumePoint, signal[, cancellation])` | 提交至 Dispatcher 线程池异步恢复，返回 `CompletionStage` |
+
+```java
+// 外部回调触发恢复
+ApprovalSignal signal = new ApprovalSignal(true, "主管同意");
+
+FlowResult<OrderReceipt> finalResult = executable.resume(suspension, approvalPoint, signal);
+System.out.println("最终结果: " + finalResult.requireAccepted());
+```
+
+---
+
+## 4. 协作式取消：`Cancellation`
+
+`Cancellation` 是 `team4u-flow` 的轻量级协作式取消令牌，用于跨线程、跨层级取消正在运行的流程。
+
+### 核心特性
+
+```mermaid
+graph TD
+    Root["根取消令牌 (Root Cancellation)"] --> Link1["子令牌 A (Linked Cancellation)"]
+    Root --> Link2["子令牌 B (Linked Cancellation)"]
+    
+    Root -.->|"root.cancel()"| Inter["1. CAS 原子状态翻转<br/>2. 级联通知所有子令牌<br/>3. 向注册的线程发送 Thread.interrupt()"]
+```
+
+1. **CAS 原子置位**：令牌内部通过 CAS 保证取消状态只被置位一次，并发安全；
+2. **物理线程中断**：当执行器在阻塞 I/O、`Thread.sleep`、并行等待屏障时，`cancel()` 会自动向执行线程发送中断信号；
+3. **父子级联取消**：通过 `Cancellation.linked(parent)` 创建的子令牌会自动监听父令牌的状态，父令牌取消时所有子令牌同步生效；
+4. **清理屏障**：流程取消后，所有下游节点均不会被调度，并行块严格等待正在运行的子线程退出。
+
+### 使用示例
+
+```java
+import com.team4u.framework.flow.model.Cancellation;
+
+Cancellation cancellation = Cancellation.create();
+
+// 异步提交耗时任务
+CompletableFuture<FlowResult<Receipt>> future = executable.runAsync(orderRequest, cancellation)
+        .toCompletableFuture();
+
+// 如果前端用户点击了“取消支付”
+if (userClickedCancel) {
+    cancellation.cancel(); // 触发协作取消与线程中断
+}
+
+FlowResult<Receipt> result = future.join();
+if (result instanceof FlowResult.Cancelled) {
+    log.info("流程已成功取消: executionId={}", ((FlowResult.Cancelled<Receipt>) result).executionId());
+}
+```
+
+---
+
+## 5. 挂起与取消的竞态防御
+
+在并发高压环境下，可能出现“调用方刚刚触发 `cancel()`，而执行器正好在进入 `await()` 挂起节点”的极端时序竞态。
+
+框架内部建立了以下时序安全防御：
+
+1. **挂起前检测取消**：在将状态包装为 `Suspended` 之前，框架执行 CAS 校验；若检测到取消信号，直接丢弃挂起状态并流向 `Cancelled`；
+2. **恢复时检测取消**：在 `resume` 调用入口处校验传入的 `Cancellation` 令牌；若已被取消，直接返回 `Cancelled` 且不驱动后续节点；
+3. **挂起句柄安全作废**：被取消流程对应的 `Suspension` 句柄会被立即标记为作废，防止后续错误的外部信号再次唤醒已取消的流程。
+
+---
+
+## 关联章节与进一步阅读
+
+- 了解 Durable 模式下的跨进程两段式 CAS 挂起与恢复：[Durable 两段式恢复协议与 PersistentPolicy](flow-durable-resume.md)
+- 了解 Local 执行器的线程模型与 Dispatcher 调度：[Local 线程模型与死锁防御机制](flow-threading.md)
+- 查阅挂起与取消相关的测试夹具：[测试支持与测试套件](flow-test.md)
+- 查看完整的审批流实战代码：[实战案例库与生产模式](flow-sample.md)

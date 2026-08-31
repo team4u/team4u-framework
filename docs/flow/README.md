@@ -2,7 +2,7 @@
 
 # 背景
 
-订单履约、支付结算、逆向退款、复杂数据清洗等业务场景中，流程通常由一系列线性转换、条件分支、外部交互与补偿清理逻辑组成。传统的实现方式通常面临以下困境：
+在订单履约、支付结算、逆向退款、复杂审批流与数据清洗等业务场景中，流程通常由一系列线性转换、条件分支、外部交互与补偿清理逻辑组成。传统的实现方式通常面临以下困境：
 
 - **大单体 Service / 脚本方法**：业务逻辑、RPC 调用、异常捕获与状态回滚深度耦合在单一方法中；步骤难以独立测试与 Mock，局部修改极易产生意外副作用。
 - **重型工作流引擎（BPMN / 反射式 DSL）**：引入庞大依赖、表结构与运行时容器；强类型退化为 `Object` 与字符串反射，丢失编译期类型安全；启动慢、调用栈深，内存级同步编排成本过高。
@@ -66,30 +66,6 @@ graph TD
 
 ---
 
-## 核心概念
-
-| 概念 | 说明 |
-| :--- | :--- |
-| `Flow<I, O>` | 不可变逻辑流程定义，仅描述拓扑结构，需经编译后方可执行 |
-| `Local` / `LocalExecutable` | 本地同步执行器门面与可执行句柄，提供同步 `run` 与异步 `runAsync` |
-| `DurableRuntime` / `DurableExecutable` | 持久化执行器运行时与可执行句柄，支持 `start`、`resume`、`recover` 与 `cancel` |
-| `Operation<I, O>` | 业务步骤扩展点，接收上下文与输入，返回四态 `Outcome<O>` |
-| `Outcome<T>` | 业务结果四态闭集：`Accepted(value)`、`Rejected(reason)`、`Skipped(reason)`、`Failed(failure)` |
-| `Reason` / `Failure` | 不可变诊断信息对象，包含稳定的业务码 `code`、说明 `message` 与扩展详情 `details` |
-| `FlowResult<O>` | Local 执行结果闭集：`Completed(outcome)`、`Suspended(suspension)`、`Cancelled(executionId)` |
-| `DurableResult<O>` | Durable 执行结果闭集：`Completed(outcome)`、`Suspended(resumePoint)`、`Active(wakeAt)`、`Cancelled` |
-| `Suspension<O>` | Local 挂起续接句柄，不透明且单次消费，仅可由对应执行器恢复 |
-| `ResumePoint<R>` | 类型化挂起点标识，持有挂起点名称与恢复信号类型 `R` |
-| `Cancellation` | 协作式取消令牌，支持 CAS 置位、线程中断与级联取消 |
-| `Policy<K>` | 无状态网关策略扩展点，提供 `before` 拦截与 `after` 回调 |
-| `PersistentPolicy<K, S>` | 状态由框架持久化的控制策略扩展点，支持跨崩溃恢复 |
-| `JoinStrategy<O>` | 并行分支汇聚策略，将全部分支结果合并为单个 `Outcome<O>` |
-| `DurableStore` | 持久化快照存储 SPI，提供 `load` 与 `compareAndSet` 乐观锁操作 |
-| `StateMapper` | 应用状态编解码 SPI，提供确定性序列化与反序列化契约 |
-| `FlowObserver` / `DurableObserver` | 流程执行与持久化事件观察者，提供全链路事件监听 |
-
----
-
 ## 模块划分与包结构
 
 | Maven 坐标 (`com.team4u`) | 定位 | 依赖说明 |
@@ -101,63 +77,38 @@ graph TD
 | `team4u-flow-bean` | 容器集成模块：BeanManager 容器绑定解析器，保留 AOP 与代理 | 依赖 `team4u-flow`、`team4u-bean` |
 | `team4u-flow-test` | 测试支持模块：桩对象、Trace 收集器、断言库与测试夹具 | 依赖 `team4u-flow`、JUnit |
 
-```text
-com.team4u.framework.flow
-├── api                          # 核心扩展点 (Operation, Policy, PersistentPolicy, JoinStrategy, ResumePoint)
-├── compiler                     # 拓扑校验与运行时执行计划 (Compiler, PlanNode, NodeDescriptor)
-├── desc                         # 只读描述模型 (FlowDescription, NodeDescription, BindingDescriptor)
-├── engine                       # 同步内核与驱动机制 (SerialMachine, ParallelRunner, CancellationCoordinator)
-├── model                        # 结果模型 (Outcome, FlowResult, Reason, Failure, Cancellation, Suspension)
-├── spi                          # 核心 SPI (OperationResolver, ExecutableFlowVisitor, ControlKind)
-├── Flow.java                    # 不可变 DSL 构建入口
-├── Local.java                   # Local 执行器门面
-└── LocalExecutable.java         # Local 可执行句柄
-
-com.team4u.framework.flow.durable
-├── engine                       # 状态机内核与断点恢复 (DurableMachine, CheckpointManager)
-├── snapshot                     # 快照信封与编解码 (DurableSnapshot, StateMapper, StoredValue)
-├── store                        # 存储 SPI 与内存实现 (DurableStore, InMemoryDurableStore)
-├── DurableExecutable.java       # Durable 可执行句柄
-└── DurableRuntime.java          # Durable 运行时构建器
-
-com.team4u.framework.flow.durable.kv
-├── DurableSnapshotDto.java      # 快照 JSON 序列化 DTO
-└── KvDurableStore.java          # 基于 KvStore 的 DurableStore 实现
-
-com.team4u.framework.flow.graph
-└── FlowGraphs.java              # Mermaid 与紧凑文本树渲染门面
-
-com.team4u.framework.flow.bean
-├── BeanFlows.java               # 容器绑定编译门面
-└── BeanOperationResolver.java   # BeanManager 绑定解析器
-
-com.team4u.framework.flow.test
-├── FlowAssertions.java          # 统一流断言工具
-├── LocalFixture.java            # Local 测试夹具
-├── DurableFixture.java          # Durable 测试夹具
-├── OperationStub.java           # 业务操作桩
-├── PolicyStub.java              # 控制策略桩
-├── ParallelBarrier.java         # 并行并发验证屏障
-└── TraceCollector.java          # 事件轨迹收集器
-```
-
 ---
 
-## 与其他组件联动
+## 完整章节导航与主题专栏
 
-- [**对象容器组件**](../bean/README.md)：通过 `team4u-flow-bean` 与 `team4u-bean-spring`，支持以 Class 和限定符直接声明节点，透明保留 Spring 事务与 AOP 代理。
-- [**表达式组件**](../criterion/README.md)：可在 `route` 选择器或 `Policy` 中结合 Criterion DSL 实现动态规则路由与风控过滤。
-- [**键值存储组件**](../kv/README.md)：通过 `team4u-flow-durable-kv`，基于统一 `KvStore` 抽象与 CAS 乐观锁快速接入 Redis/JDBC 等外部存储作为 `DurableStore`。
+为了便于深入研读，组件文档按照语义层级、控制治理、持久化以及工程运维拆分为独立专章：
 
----
+### 1. 入门与概览
+- [快速开始 (Quick Start)](quick-start.md)：5 分钟体验流水线编排、条件路由、挂起恢复与持久化断点续跑。
 
-## 文档导航
+### 2. 核心语义与模型
+- [四态业务结果与生命周期模型](flow-outcome.md)：深入剖析 `Outcome<T>` 四态闭集、`Reason` / `Failure` 诊断值对象、`Outcome.map` 映射与 `FlowResult` / `DurableResult` 执行生命周期。
+- [四态传播规则与消费机制](flow-propagation.md)：顺序流水线短路机制、`Skipped` 弃权的三大消费场景（`thenOptional` / `firstApplicable` / `route`）与 `recoverWith` 补偿。
+- [运行时节点与 DSL 编排原语](flow-nodes.md)：8 种封闭运行时节点（`INVOKE`, `SEQUENCE`, `ROUTE`, `FALLBACK`, `PARALLEL`, `AWAIT`, `CONTROL`, `COMPLETE`）与 AST 降级编译。
+- [核心语义全景总览](flow-semantics.md)：核心机制全景摘要与快速索引。
 
-- [快速开始](quick-start.md)：从引入依赖到执行基础流水线、条件路由、挂起恢复与持久化执行
-- [核心语义与机制](flow-semantics.md)：四态传播规则、八节点语义、控制策略、线程模型与完整诊断码
-- [Bean 容器集成](flow-bean.md)：声明式 Bean 绑定、编译期解析、Spring 事务与 AOP 切面保留
-- [Durable 持久化执行](flow-durable.md)：CAS 检查点协议、StateMapper 确定性契约、恢复机制与存储 SPI
-- [可视化与图表渲染](flow-graph.md)：FlowDescription 结构投影、Mermaid 六通道图与文本树渲染
-- [测试支持与断言](flow-test.md)：桩对象、Trace 轨迹收集、双执行器断言与测试夹具
-- [扩展机制与 SPI](flow-extension.md)：自定义扩展点、双投影 SPI 与框架集成
-- [实战案例](flow-sample.md)：电商履约、订单风控降级与支付审批挂起恢复实战
+### 3. 控制与治理
+- [流程治理：Policy 策略、Retry 重试与 Timeout 控制](flow-governance.md)：无状态 `Policy<K>` 网关拦截、指数退避重试与幂等键继承、`Timeout` 作用域超时与洋葱圈嵌套顺序。
+- [并行分支与汇合治理](flow-parallel.md)：`parallel` 并发执行、四大内置 `JoinStrategy`、True Wait-All 退出合同与 Local/Durable 调度差异。
+- [挂起续接与协作式取消合同](flow-suspend.md)：`await` 与 `ResumePoint`、Local 单次消费句柄 `Suspension`、`Cancellation` CAS 取消令牌与竞态防御。
+- [Local 线程模型与死锁防御机制](flow-threading.md)：Dispatcher 与 Worker 双线程池分工、`ForkJoinPool` 工作窃取补偿与两级静态死锁防御规则。
+
+### 4. 容器与持久化
+- [Bean 容器集成与 Spring 治理](flow-bean.md)：声明式 Class 与限定符绑定、`BeanOperationResolver` 编译期解析、Spring `@Transactional` 与 AOP 代理无损保留。
+- [Durable 状态机与 CAS 检查点机制](flow-durable-core.md)：Durable 核心架构、命令集、节点边界 CAS 检查点、`revision` 乐观锁、版本强隔离与 `invocationId` 稳定幂等键。
+- [Durable 两段式恢复协议与 PersistentPolicy](flow-durable-resume.md)：挂起恢复两阶段 CAS 提交、崩溃重放与信号冲突防御、`PersistentPolicy` 状态持久化与 `WaitUntil`/`RetryAt` 定时唤醒。
+- [快照存储结构与 StateMapper 编解码](flow-durable-snapshot.md)：`DurableSnapshot` 槽位布局、`StateMapper` 确定性编解码契约与 Jackson 生产配置。
+- [DurableStore 存储 SPI 与 KV 适配](flow-durable-kv.md)：`DurableStore` SPI 契约、`InMemoryDurableStore` 与基于 `team4u-kv` 的 `KvDurableStore` 多存储后端适配。
+- [Durable 持久化全景总览](flow-durable.md)：Durable 执行器设计与使用全景摘要。
+
+### 5. 运维与工程化
+- [可视化图表渲染与双投影架构](flow-graph.md)：双投影架构、`FlowDescription` 只读描述模型、Mermaid 6 通道流程图与紧凑文本树渲染。
+- [测试支持与测试套件](flow-test.md)：`FlowAssertions` 流畅断言库、`OperationStub`/`PolicyStub` 桩对象、`ParallelBarrier` 并发同步屏障与测试夹具。
+- [诊断码体系与故障排查手册](flow-diagnostics.md)：运行时 Failed 失败码、Skipped 弃权码、编译期校验码与 Durable 异常排查自查清单。
+- [扩展机制与 SPI 开发指南](flow-extension.md)：自定义 Operation、Policy、JoinStrategy、OperationResolver、Observer、StateMapper 与 DurableStore。
+- [实战案例库与生产模式](flow-sample.md)：电商订单履约全链路、风控校验与动态规则路由、多支付降级重试与跨系统异步审批恢复实战。

@@ -2,6 +2,14 @@
 
 `team4u-flow-durable` 是独立于核心的持久化执行器组件。在 `Local` 上验证通过的 `Flow<I, O>` 逻辑定义，无需修改任何代码，原样交给 `DurableRuntime.compile` 编译后，即可获得节点级 CAS 检查点与跨进程断点恢复能力。
 
+本章提供 Durable 执行器的全景总览。各项专题已细化并独立成章，推荐结合各独立专章深入研读：
+
+- 核心状态机与 CAS 检查点：[Durable 状态机与 CAS 检查点机制](flow-durable-core.md)
+- 两段式恢复与 PersistentPolicy：[Durable 两段式恢复协议与 PersistentPolicy](flow-durable-resume.md)
+- 快照存储槽位与 StateMapper：[快照存储结构与 StateMapper 编解码](flow-durable-snapshot.md)
+- DurableStore 存储 SPI 与 KV 实现：[DurableStore 存储 SPI 与 KV 适配](flow-durable-kv.md)
+- Durable 异常与排查诊断手册：[诊断码体系与故障排查手册](flow-diagnostics.md)
+
 ---
 
 ## 架构设计

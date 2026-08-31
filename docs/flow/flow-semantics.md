@@ -1,10 +1,22 @@
 # 核心语义与机制
 
-本章详细介绍 `team4u-flow` 的核心语义与运行机制，包括结果类型体系、四态传播规则、八种运行时节点、扩展点契约、治理机制、线程驱动与死锁防御、取消合同及完整诊断码。
+本章提供 `team4u-flow` 核心语义与运行机制的全景总览。各项专题已细化并独立成章，推荐结合各独立专章深入研读：
+
+- 结果类型体系与代数映射：[四态业务结果与生命周期模型](flow-outcome.md)
+- 状态传播与短路规则：[四态传播规则与消费机制](flow-propagation.md)
+- 8 种运行时节点详解：[运行时节点与 DSL 编排原语](flow-nodes.md)
+- Policy、Retry 与 Timeout：[流程治理：Policy 策略、Retry 重试与 Timeout 控制](flow-governance.md)
+- 并行执行与汇合策略：[并行分支与汇合治理](flow-parallel.md)
+- 挂起恢复与协作取消：[挂起续接与协作式取消合同](flow-suspend.md)
+- 线程模型与死锁防御：[Local 线程模型与死锁防御机制](flow-threading.md)
+- 全链路诊断码与排查：[诊断码体系与故障排查手册](flow-diagnostics.md)
 
 ---
 
 ## 结果类型体系
+
+> [!TIP]
+> 专章详述请参阅：[四态业务结果与生命周期模型](flow-outcome.md)
 
 ### 结果类型对照
 
@@ -27,6 +39,9 @@
 ---
 
 ## 四态 Outcome 与传播规则
+
+> [!TIP]
+> 专章详述请参阅：[四态传播规则与消费机制](flow-propagation.md)
 
 ### 四态定义
 
@@ -96,6 +111,9 @@ flow.then(Flow.firstApplicable(next, Flow.identity()));
 ---
 
 ## 运行时节点语义
+
+> [!TIP]
+> 专章详述请参阅：[运行时节点与 DSL 编排原语](flow-nodes.md)
 
 编译后的运行时计划封闭为八种 `NodeDescriptor.Kind`，不开放自定义节点类型：
 
@@ -197,6 +215,9 @@ public interface JoinStrategy<O> {
 
 ## 治理控制机制
 
+> [!TIP]
+> 专章详述请参阅：[流程治理：Policy 策略、Retry 重试与 Timeout 控制](flow-governance.md)
+
 ### retry 重试策略
 
 ```java
@@ -225,6 +246,9 @@ Flow<OrderRequest, Receipt> timedOut = flow.timeout(Duration.ofSeconds(5));
 
 ## Local 执行驱动与线程模型
 
+> [!TIP]
+> 专章详述请参阅：[Local 线程模型与死锁防御机制](flow-threading.md)
+
 ### 执行入口 API
 
 | API 方法 | 签名要点 | 语义说明 |
@@ -251,6 +275,9 @@ Flow<OrderRequest, Receipt> timedOut = flow.timeout(Duration.ofSeconds(5));
 
 ## 协作式取消与 wait-all 合同
 
+> [!TIP]
+> 专章详述请参阅：[挂起续接与协作式取消合同](flow-suspend.md) 与 [并行分支与汇合治理](flow-parallel.md)
+
 `Cancellation` 是协作式取消令牌：
 - `cancel()` 通过 CAS 标记取消，并向绑定的运行线程发送中断信号；
 - 子令牌（`Cancellation.linked(parent)`）级联响应父令牌取消；
@@ -260,6 +287,9 @@ Flow<OrderRequest, Receipt> timedOut = flow.timeout(Duration.ofSeconds(5));
 ---
 
 ## 异常收敛与诊断码体系
+
+> [!TIP]
+> 专章详述请参阅：[诊断码体系与故障排查手册](flow-diagnostics.md)
 
 框架将所有异常统一收敛至 `FlowDiagnosticCodes` 诊断码，不向外逃逸未受检异常。
 
