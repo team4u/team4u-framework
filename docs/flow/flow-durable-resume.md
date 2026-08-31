@@ -1,6 +1,6 @@
 # Durable 两段式恢复协议与 PersistentPolicy
 
-在分布式异步工作流与长事务编排中，挂起等待外部信号（如审批、支付 Webhook）以及跨节点定时延时调度（如 10 分钟后重试、等待特定时间点执行）是核心场景。
+在分布式异步工作流与长事务编排中，挂起等待外部信号（如审批流、支付 Webhook）以及跨节点定时延时调度（如 10 分钟后重试、等待特定时间点执行）是核心场景。
 
 `team4u-flow-durable` 提出了**两段式 CAS 恢复协议（Two-Phase Resume Protocol）**与**持久化状态策略（`PersistentPolicy`）**，在遭遇任意时序的网络分区与机器崩溃时，仍能保证状态一致性与防冲突幂等。
 
@@ -98,13 +98,13 @@ graph LR
     M -->|"保存 slots['policy:...']=newState<br/>保存 wakeAt=wakeInstant<br/>设置 lifecycle=ACTIVE"| DS[("DurableStore")]
     DS --> RES["返回 DurableResult.Active(wakeAt)"]
     
-    RES -.->|"当前调用线程立即释放退出"| EXIT["线程释放"]
+    RES -.->|"当前调用线程立即释放退出"| EXIT["线程释放 (Parked)"]
     
-    SCHED["外部定时调度器 (如 Quartz/ShedLock)"] -->|"扫描到到达 wakeAt 的记录"| REC["调用 executable.recover(executionId)"]
+    SCHED["外部定时调度器 (如 Quartz/ShedLock/Cron)"] -->|"扫描到到达 wakeAt 的记录"| REC["调用 executable.recover(executionId)"]
     REC --> NEXT["从快照恢复策略状态并继续执行"]
 ```
 
-### 示例：最大重试间隔控制策略
+### 示例：每日配额控制策略
 
 ```java
 public class DailyQuotaPolicy implements PersistentPolicy<String, DailyQuotaState> {

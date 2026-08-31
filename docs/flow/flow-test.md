@@ -1,6 +1,6 @@
-# 测试支持与断言
+# 测试支持与测试套件
 
-`team4u-flow-test` 为流程编排提供完整的测试套件（testkit），包含业务操作桩（`OperationStub`）、策略桩（`PolicyStub`）、事件轨迹收集器（`TraceCollector`）、双执行器断言工具（`FlowAssertions`）、执行夹具（`LocalFixture` / `DurableFixture`）以及并发屏障（`ParallelBarrier`）。
+`team4u-flow-test` 为流程编排提供开箱即用的测试套件（testkit），包含业务操作桩（`OperationStub`）、策略桩（`PolicyStub`）、事件轨迹收集器（`TraceCollector`）、双执行器断言库（`FlowAssertions`）、测试执行夹具（`LocalFixture` / `DurableFixture`）以及并发重叠验证屏障（`ParallelBarrier`）。
 
 ---
 
@@ -16,9 +16,9 @@
 
 ---
 
-## 业务操作打桩 (OperationStub)
+## 1. 业务操作打桩 (`OperationStub`)
 
-### 桩对象构造
+### 桩对象工厂方法
 
 ```java
 import com.team4u.framework.flow.model.*;
@@ -28,59 +28,60 @@ import com.team4u.framework.flow.test.OperationStub;
 OperationStub<String, Integer> custom = OperationStub.answering(
         (context, input) -> Outcome.accepted(input.length()));
 
-// 2. 快捷成功
+// 2. 快捷成功产出
 OperationStub<String, String> accepting = OperationStub.accepting(x -> x + "!");
 
 // 3. 固定四态返回
-OperationStub<String, String> rejecting = OperationStub.rejecting(Reason.of("REJECT", "拒绝"));
-OperationStub<String, String> skipping = OperationStub.skipping(Reason.of("SKIP", "跳过"));
-OperationStub<String, String> failing = OperationStub.failing(Failure.of("FAIL", "失败"));
+OperationStub<String, String> rejecting = OperationStub.rejecting(Reason.of("REJECT", "业务拒绝"));
+OperationStub<String, String> skipping  = OperationStub.skipping(Reason.of("SKIP", "弃权跳过"));
+OperationStub<String, String> failing   = OperationStub.failing(Failure.of("FAIL", "系统失败"));
 
 // 4. 模拟异常抛出（框架统一收敛为 OPERATION_EXCEPTION Failed）
-OperationStub<String, String> throwing = OperationStub.throwing(
+OperationStub<String, String> throwing  = OperationStub.throwing(
         () -> new java.io.IOException("网络连接中断"));
 ```
 
-### 调用记录与断言
+### 调用历史记录与断言
 
-桩对象线程安全地记录调用历史，支持验证入参、调用次数与幂等键：
+桩对象线程安全地记录调用历史，支持断言入参、调用次数与幂等键：
 
 ```java
 OperationStub<String, String> stub = OperationStub.accepting(x -> x);
-Local.compile(Flow.step(stub)).run("in");
+Local.compile(Flow.step(stub)).run("input-data");
 
 // 获取调用快照
 List<OperationStub.Call<String>> calls = stub.calls();
-OperationStub.Call<String> last = calls.get(calls.size() - 1);
+OperationStub.Call<String> last = stub.lastCall();
 
-System.out.println(last.input());        // "in"
+System.out.println(last.input());        // "input-data"
 System.out.println(last.invocationId()); // "local:0:<executionId>:$"
 System.out.println(stub.callCount());    // 1
-System.out.println(stub.lastInput());    // "in"
+System.out.println(stub.lastInput());    // "input-data"
 stub.reset();                            // 清空调用历史
 ```
 
-验证重试策略下使用相同幂等键的断言示例：
+#### 验证重试策略下使用相同幂等键的测试示例
 
 ```java
 OperationStub<String, String> flaky = OperationStub.failing(Failure.of("FAIL", "error"));
 FlowRetryPolicy<String> retryPolicy = FlowRetries.fixed(3, 0);
+
 FlowResult<String> result = Local.compile(
-        retryPolicy.wrap(Flow.step(flaky))).run("input");
+        retryPolicy.wrap(Flow.step(flaky), Function.identity())).run("test-in");
 
 FlowAssertions.assertFailed(result, "FAIL");
 org.junit.Assert.assertEquals(3, flaky.callCount());
 
-// 断言三次尝试的 invocationId 严格相同
-String initialInvocationId = flaky.calls().get(0).invocationId();
+// 断言三次尝试的 invocationId 严格相同（外部防重关键）
+String firstInvocationId = flaky.calls().get(0).invocationId();
 for (OperationStub.Call<String> call : flaky.calls()) {
-    org.junit.Assert.assertEquals(initialInvocationId, call.invocationId());
+    org.junit.Assert.assertEquals(firstInvocationId, call.invocationId());
 }
 ```
 
 ---
 
-## 控制策略打桩 (PolicyStub)
+## 2. 控制策略打桩 (`PolicyStub`)
 
 ```java
 import com.team4u.framework.flow.test.PolicyStub;
@@ -101,7 +102,7 @@ System.out.println(proceeding.afterCount());  // 1
 
 ---
 
-## 事件轨迹收集 (TraceCollector)
+## 3. 事件轨迹收集 (`TraceCollector`)
 
 `TraceCollector` 是线程安全的 `FlowObserver` 实现，用于捕获流程执行轨迹并在单测中进行顺序断言：
 
@@ -114,23 +115,23 @@ LocalExecutable<String, String> executable = Local.compile(
         flow, OperationResolver.rejecting(), collector);
 executable.run("input");
 
-// 获取全部事件
+// 获取全部事件列表
 List<FlowObserver.Event> events = collector.events();
 
-// 按事件类型过滤与断言
+// 按事件类型过滤
 List<FlowObserver.Event> completedEvents =
         collector.ofType(FlowObserver.Type.NODE_COMPLETED);
 
-// 提取事件类型序列与节点路径
+// 提取事件类型序列与节点路径列表
 List<FlowObserver.Type> types = collector.types();
 List<String> paths = collector.nodePaths(FlowObserver.Type.NODE_STARTED);
 ```
 
 ---
 
-## 流程断言工具 (FlowAssertions)
+## 4. 流程断言库 (`FlowAssertions`)
 
-### Local 结果断言 (FlowResult)
+### Local 执行结果断言 (`FlowResult`)
 
 ```java
 import com.team4u.framework.flow.test.FlowAssertions;
@@ -146,7 +147,7 @@ FlowAssertions.assertSuspended(result, approvalPoint);         // 断言挂起�
 FlowAssertions.assertCancelled(result);                        // 断言流程已取消
 ```
 
-### Durable 结果断言 (DurableResult)
+### Durable 执行结果断言 (`DurableResult`)
 
 ```java
 DurableResult<String> durableResult = executable.start("exec-01", "input");
@@ -160,12 +161,12 @@ FlowAssertions.assertCancelled(durableResult);
 
 ---
 
-## 本地执行夹具 (LocalFixture)
+## 5. 本地执行夹具 (`LocalFixture`)
 
 ```java
 import com.team4u.framework.flow.test.LocalFixture;
 
-// 1. 编译夹具（内置默认拒绝解析器与空观察者）
+// 1. 编译夹具
 LocalFixture<String, String> fixture = LocalFixture.compile(flow);
 
 // 2. 挂起与恢复测试
@@ -183,7 +184,7 @@ FlowAssertions.assertAccepted(finalResult, "approved");
 
 ---
 
-## 持久化执行夹具 (DurableFixture)
+## 6. 持久化执行夹具 (`DurableFixture`)
 
 ```java
 import com.team4u.framework.flow.test.DurableFixture;
@@ -215,9 +216,9 @@ FlowAssertions.assertCompleted(recovered);
 
 ---
 
-## 并行重叠验证 (ParallelBarrier)
+## 7. 并行重叠验证屏障 (`ParallelBarrier`)
 
-`ParallelBarrier` 基于并发计数器，用于严格验证 Local 并行分支是否真正实现了**多线程并发执行**：
+`ParallelBarrier` 基于并发计数器与等待屏障，用于严格验证 Local 并行分支是否真正实现了**多线程并发执行（而非串行推进）**：
 
 ```java
 import com.team4u.framework.flow.test.ParallelBarrier;
@@ -246,7 +247,7 @@ CompletableFuture<FlowResult<String>> future = Local.compile(
         flow, OperationResolver.rejecting(), FlowObserver.noop(), workers
 ).runAsync("in").toCompletableFuture();
 
-// 验证两分支在 2 秒内均到达屏障（证明真并发）
+// 验证两分支在 2 秒内均到达屏障（证明真并发重叠）
 org.junit.Assert.assertTrue(barrier.awaitEntered(2000));
 barrier.release(); // 放行
 
@@ -258,20 +259,20 @@ workers.shutdownNow();
 
 ## 推荐测试矩阵
 
-| 验证目标 | 推荐工具组合 |
-| :--- | :--- |
-| **四态传播与短路** | `OperationStub` 四态工厂 + `FlowAssertions.assertAccepted / Rejected / Skipped / Failed` |
-| **Retry 幂等键与次数** | `OperationStub.failing` + `calls()` 中 `invocationId()` 相等校验 + `callCount()` |
-| **Policy 决策与顺序** | `PolicyStub.proceeding / deciding` + `beforeCalls() / afterCalls()` |
-| **挂起与恢复 (Local)** | `LocalFixture.requireSuspension` + `resume` + `assertSuspended / assertAccepted` |
-| **Durable 崩溃恢复** | `DurableFixture.withStore` + `recover` + `snapshot` |
-| **resume 信号幂等** | `DurableFixture.resume` 同值/异值信号注入 + `assertActive` |
-| **并行并发与隔离** | `ParallelBarrier` + `TraceCollector.ofType(PARALLEL_BRANCH_COMPLETED)` |
-| **执行事件顺序** | `TraceCollector.types()` / `nodePaths(...)` |
+| 验证目标 | 推荐工具组合 | 核心断言方法 |
+| :--- | :--- | :--- |
+| **四态传播与短路** | `OperationStub` 四态工厂 | `FlowAssertions.assertAccepted / Rejected / Skipped / Failed` |
+| **Retry 幂等键与重试次数** | `OperationStub.failing` + `calls()` | `call.invocationId()` 相等校验 + `callCount()` |
+| **Policy 拦截与顺序** | `PolicyStub.proceeding / deciding` | `beforeCount()` / `afterCount()` |
+| **Local 挂起与恢复** | `LocalFixture.requireSuspension` + `resume` | `assertSuspended` + `assertAccepted` |
+| **Durable 崩溃恢复** | `DurableFixture.withStore` + `recover` | `assertCompleted` + `snapshot()` |
+| **resume 信号幂等** | `DurableFixture.resume` 同值/异值信号注入 | `assertActive` / `assertCompleted` |
+| **多线程真并发** | `ParallelBarrier` + `TraceCollector` | `barrier.awaitEntered()` + `ofType(PARALLEL_BRANCH_COMPLETED)` |
+| **全链路事件顺序** | `TraceCollector.types()` | `org.junit.Assert.assertEquals(expectedTypes, types)` |
 
 ---
 
-## 下一步
+## 关联章节与进一步阅读
 
-- 了解自定义扩展点契约与双投影 SPI：[扩展机制与 SPI](flow-extension.md)
-- 查看完整的端到端实战与测试用例：[实战案例](flow-sample.md)
+- 了解自定义扩展点契约与双投影 SPI：[扩展机制与 SPI 开发指南](flow-extension.md)
+- 查看完整的端到端实战与测试用例：[实战案例库与生产模式](flow-sample.md)

@@ -1,45 +1,68 @@
 # 运行时节点与 DSL 编排原语
 
-`team4u-flow` 采用“**不可变声明（Logical AST） -> 编译期降级校验（Compiler Lowering） -> 运行时封闭节点（PlanNode）**”的架构。在 DSL 构建阶段，用户使用丰富流畅的语义方法组装流程；在编译期，这些结构被统一规范化降级为八种封闭的运行时核心节点。
+`team4u-flow` 采用“**不可变声明（Logical AST） -> 编译期降级校验（Compiler Lowering） -> 运行时封闭节点（PlanNode）**”的三层架构。
 
-本文将详细剖析这八种核心节点的运行语义、DSL 声明方式以及内部执行机制。
+在 DSL 构建阶段，开发者使用丰富流畅的语义方法组装流程；在编译阶段，这些结构经过静态校验、扁平化优化与降级，统一规范化为八种封闭的运行时核心节点。
+
+本文将深入剖析这八种核心节点的运行时状态机、DSL 声明形式、节点路径（Path）规范以及内部执行机制。
 
 ---
 
-## 节点体系与架构总览
+## 节点体系与降级编译架构
 
 ```mermaid
 graph TD
     subgraph "DSL 声明层 (Logical AST)"
         L1["Flow.step / use"]
         L2["flow.then / scope"]
-        L3["Flow.route / caseOf"]
+        L3["Flow.route / caseOf / otherwise"]
         L4["firstApplicable / recoverWith / thenOptional"]
         L5["Flow.parallel / join"]
         L6["flow.await(ResumePoint)"]
-        L7["flow.policy / retry / timeout"]
+        L7["flow.policy / persistentPolicy / timeout"]
         L8["Flow.identity / accepted / rejected / ..."]
     end
 
-    subgraph "编译期降级与校验 (Compiler Lowering)"
-        COMP["Compiler.compile"]
+    subgraph "编译期降级校验 (Compiler Lowering)"
+        COMP["Compiler.compile<br/>1. 静态拓扑校验<br/>2. 匿名 Sequence 扁平化<br/>3. thenOptional 降级为 Fallback<br/>4. Bean 容器依赖解析与绑定"]
         L1 & L2 & L3 & L4 & L5 & L6 & L7 & L8 --> COMP
     end
 
     subgraph "运行时封闭执行计划 (PlanNode)"
-        COMP --> N1["INVOKE (业务操作)"]
-        COMP --> N2["SEQUENCE (顺序流水线)"]
-        COMP --> N3["ROUTE (条件路由)"]
-        COMP --> N4["FALLBACK (候选与降级)"]
-        COMP --> N5["PARALLEL (并行等待)"]
-        COMP --> N6["AWAIT (挂起等待)"]
-        COMP --> N7["CONTROL (治理控制)"]
-        COMP --> N8["COMPLETE (常数终态)"]
+        COMP --> N1["INVOKE (业务调用原子节点)"]
+        COMP --> N2["SEQUENCE (顺序流水线节点)"]
+        COMP --> N3["ROUTE (条件路由分发节点)"]
+        COMP --> N4["FALLBACK (候选降级与失败补偿节点)"]
+        COMP --> N5["PARALLEL (并行等待与汇合节点)"]
+        COMP --> N6["AWAIT (挂起等待外部信号节点)"]
+        COMP --> N7["CONTROL (治理控制与策略切面节点)"]
+        COMP --> N8["COMPLETE (常数终态与透传节点)"]
     end
 ```
 
 > [!IMPORTANT]
-> **运行时节点封闭原则**：框架的运行时节点类型（`NodeDescriptor.Kind`）是严格封闭的闭集，不开放自定义节点类型。所有高级业务编排语义均通过这八种基础节点进行正交组合，从而确保了 Local 引擎与 Durable 状态机引擎的绝对确定性与可维护性。
+> **运行时节点封闭原则（Closed PlanNode Set）**：
+> 框架的运行时节点类型（`NodeDescriptor.Kind`）是严格封闭的闭集（仅 8 种），**绝不开放自定义节点类型**。
+> 所有高级业务编排语义均通过这八种基础节点进行正交组合。封闭性使得执行器内核（`SerialMachine`）、持久化状态机（`DurableMachine`）、Mermaid 渲染器（`FlowGraphs`）与调试工具具备了 100% 的确定性与可靠性。
+
+---
+
+## 节点路径命名规范 (AST Node Path)
+
+每个运行时节点在 AST 树中都分配有严格唯一的层级路径（`path`），格式如下：
+
+| 节点位置 | 路径示例 | 含义说明 |
+| :--- | :--- | :--- |
+| **根节点** | `$` | 整个 Flow 的根节点 |
+| **Sequence 子节点** | `$/0`, `$/1`, `$/0/2` | 父路径加子步骤索引号 |
+| **Route 关键组件** | `$/1/selector` | 路由选择器节点 |
+| **Route 分支** | `$/1/case:0`, `$/1/case:1` | 第 0、1 个 case 分支 |
+| **Route 兜底** | `$/1/otherwise` | 路由兜底分支 |
+| **Parallel 分支** | `$/0/branch:risk` | 具名并行分支 |
+| **Control 子流程** | `$/0/body` | 治理策略包裹的业务主体 |
+
+该 `path` 会直接注入到节点的稳定幂等键中：
+$$\text{invocationId} = \text{flowId} : \text{flowVersion} : \text{executionId} : \text{path}$$
 
 ---
 
@@ -47,28 +70,29 @@ graph TD
 
 `INVOKE` 节点是业务逻辑执行的最小原子单元，负责调用绑定的 `Operation`。
 
-### 声明形式
+### 声明形式与容器绑定
 
 ```java
 // 1. 实例绑定 / Lambda
-Flow<Order, Receipt> flow1 = Flow.step((context, order) -> Outcome.accepted(new Receipt(order.getId())));
+Flow<Order, Receipt> flow1 = Flow.step((context, order) -> 
+        Outcome.accepted(new Receipt(order.getId())));
 
-// 2. Class 绑定（编译期由 BeanManager 解析单例）
+// 2. Class 绑定（编译期由 BeanManager 唯一解析单例）
 Flow<Order, Receipt> flow2 = Flow.step(OnlinePaymentOperation.class);
 
-// 3. Class + 限定符绑定
-Flow<Order, Receipt> flow3 = Flow.step(OnlinePaymentOperation.class, "wechatPayment");
+// 3. Class + Qualifier 限定符绑定（按 Bean 名称查找）
+Flow<Order, Receipt> flow3 = Flow.step(OnlinePaymentOperation.class, "wechatPaymentOperation");
 ```
 
-### `use` 上下文投影与合并调用
+### `use` 上下文投影与合并机制
 
-在长流水线中，后续步骤可能只需要主上下文的一部分字段作为入参，并将产出的新字段写回主上下文。`use` 提供了声明式的入参投影（`project`）与结果合并（`merge`）：
+在长流水线中，上下文对象通常很大，而某个业务步骤只需其中一部分字段作为输入，并将产出的新字段合并回主上下文。`use` 提供了声明式的字段投影（`project`）与结果合并（`merge`）：
 
 ```mermaid
 graph LR
     Ctx["主上下文 OrderState"] -->|"project: state.toRiskReq()"| Req["临时入参 RiskReq"]
-    Req -->|"INVOKE RiskOperation"| Res["中间产出 RiskScore"]
-    Res & Ctx -->|"merge: state.withRisk(score)"| NewCtx["新上下文 OrderState"]
+    Req -->|"INVOKE RiskCheckOperation"| Res["产出 RiskScore"]
+    Res & Ctx -->|"merge: state.withRiskScore(score)"| NewCtx["新上下文 OrderState"]
 ```
 
 ```java
@@ -79,35 +103,40 @@ Flow<OrderState, OrderState> flow = Flow.<OrderState>identity().use(
 );
 ```
 
-- 如果被调用的 `Operation` 返回 `Accepted(score)`，则触发 `merge` 函数合成新的 `OrderState` 并继续后续流水线；
-- 若返回 `Rejected`、`Skipped` 或 `Failed`，则直接短路，不调用 `merge`。
+#### 内核执行机制
+1. 执行 `project(entry)` 派生出局部入参；
+2. 调用绑定的 `Operation.execute(context, projectedInput)`；
+3. 若返回 `Accepted(value)`，调用 `merge(entry, value)` 合成新上下文，并封装为 `Accepted(merged)` 继续推进；
+4. 若返回 `Rejected`、`Skipped` 或 `Failed`，**不调用 merge**，直接将非 Accepted 状态向外短路。
 
 ---
 
 ## 2. SEQUENCE 节点（顺序流水线）
 
-`SEQUENCE` 节点按声明顺序串联子节点。
+`SEQUENCE` 节点按声明顺序串联子节点列表。
 
-### 声明形式
+### 声明形式与作用域
 
 ```java
 Flow<A, D> flow = Flow.step(stepA) // Step<A, B>
         .then(stepB)               // Step<B, C>
         .then(stepC);              // Step<C, D>
-```
 
-### 匿名合并优化与 `scope` 具名作用域
-
-- **扁平化优化**：连续的匿名 `then` 步骤在编译期会被自动扁平化合并到同一个 `SEQUENCE` 的节点数组中，消除深层嵌套带来的调用栈开销；
-- **具名作用域（`scope`）**：显式创建作用域边界，常用于界定事务、治理策略或超时控制范围：
-
-```java
-Flow<Order, Order> scopedFlow = Flow.scope("inventory-group", 
+// 具名作用域 (scope)
+Flow<Order, Order> scopedFlow = Flow.scope("inventory-scope", 
         Flow.step(checkStockOp)
             .then(lockStockOp)
             .then(deductStockOp)
 );
 ```
+
+### 扁平化优化与帧状态机
+- **编译期扁平化**：连续的匿名 `then` 步骤在编译期会被自动扁平化合并到同一个 `SEQUENCE` 的节点数组中，消除深层嵌套带来的调用栈与帧开销；
+- **状态机阶段（Phases）**：
+  - `phase = 0`：初始进入序列；
+  - `phase = 1`：当前正在执行第 `index` 个子步骤；
+  - 当第 `index` 个子步骤返回 `Accepted(value)` 时，`index++` 并将新值作为下一子步骤的输入；
+  - 若子步骤返回非 `Accepted`，序列立即终止并归约弹出。
 
 ---
 
@@ -123,44 +152,42 @@ Flow<OrderRequest, Receipt> routedFlow = Flow
         .caseOf("ALIPAY", alipayFlow)
         .caseOf("WECHAT", wechatFlow)
         .caseOf("CREDIT_CARD", creditCardFlow)
-        .otherwise(manualReviewFlow); // 可选：兜底分支
+        .otherwise(manualReviewFlow); // 可选：兜底分支，或 .withoutOtherwise()
 ```
 
-### 契约与规则
-
-1. **唯一性校验**：`caseOf` 中的路由键不能重复，否则在声明时立即抛出 `DUPLICATE_ROUTE_CASE`；
-2. **`withoutOtherwise()`**：若未配置 `otherwise` 且未匹配到任何分支，整体流程产出 `Skipped(NO_ROUTE)`；
-3. **选择器短路**：路由选择器本身若返回 `Rejected`、`Skipped` 或 `Failed`，则不进入任何分支，直接向外短路。
+### 状态机阶段与契约
+- **`phase = 1`（选择器阶段）**：执行 `selector` 节点计算路由键；若选择器返回非 `Accepted`，直接短路退出；
+- **`phase = 2`（分支执行阶段）**：根据路由键匹配对应的 `caseOf` 分支；若未命中且配置了 `otherwise`，进入兜底分支；若未配置 `otherwise`（`withoutOtherwise()`），整体产出 `Skipped(NO_ROUTE)`；
+- **编译期唯一性校验**：`caseOf` 中的路由键不能重复，否则在声明时立即抛出 `DUPLICATE_ROUTE_CASE`。
 
 ---
 
 ## 4. FALLBACK 节点（降级与恢复）
 
-`FALLBACK` 节点按触发条件在多个候选分支间切换，包含两种底层触发器：
+`FALLBACK` 节点按触发条件在候选分支序列中切换，包含两种底层触发器：
 
-### SKIPPED 触发器（`firstApplicable` 与 `thenOptional`）
+```mermaid
+graph TD
+    subgraph "SKIPPED 触发器 (firstApplicable / thenOptional)"
+        F1["分支 1"] -->|Skipped| F2["分支 2"]
+        F2 -->|Skipped| F3["分支 3"]
+        F1 & F2 & F3 -->|Accepted / Rejected / Failed| OUT_WIN["立即胜出作为整体结果"]
+    end
 
-当分支返回 `Skipped` 时，尝试后续候选分支：
-
-```java
-Flow<User, AccessToken> loginFlow = Flow.firstApplicable(
-        ssoAuthFlow,      // 若无 SSO Token 返回 Skipped
-        cookieAuthFlow,   // 若无 Cookie 返回 Skipped
-        passwordAuthFlow  // 最终账号密码认证
-);
+    subgraph "FAILED 触发器 (recoverWith)"
+        M1["主流程"] -->|Failed| REC["注入 Recovery&lt;I&gt; 进入补偿分支"]
+        M1 -->|Accepted / Rejected / Skipped| OUT_PASS["原样透传"]
+    end
 ```
 
-### FAILED 触发器（`recoverWith`）
+### 1. SKIPPED 触发器（`firstApplicable` 与 `thenOptional`）
+- 依次执行候选分支；
+- 遇到 `Skipped` 时，消费弃权信号并尝试下一个候选分支；
+- 遇到 `Accepted`、`Rejected` 或 `Failed` 时立即胜出作为最终结果。
 
-当主分支返回 `Failed` 时，携带原始输入与 `Failure` 进入恢复分支：
-
-```java
-Flow<Order, Receipt> resilientFlow = Flow.step(chargeOperation)
-        .recoverWith(Flow.step((context, recovery) -> {
-            log.warn("主支付通道失败 [{}], 启动异步降级单", recovery.failure().code());
-            return Outcome.accepted(createPendingReceipt(recovery.input()));
-        }));
-```
+### 2. FAILED 触发器（`recoverWith`）
+- 主流程正常完成（`Accepted` / `Rejected` / `Skipped`）时原样透传；
+- 主流程返回 `Failed` 时，将原始输入与 `Failure` 封装为 `Recovery<I>`，交由恢复分支执行补偿。
 
 ---
 
@@ -175,26 +202,21 @@ Branch<Order, RiskResult> riskBranch = Branch.of("riskBranch", riskFlow);
 Branch<Order, InventoryResult> stockBranch = Branch.of("stockBranch", stockFlow);
 
 Flow<Order, CheckoutResult> parallelFlow = Flow.<Order>parallel(riskBranch, stockBranch)
-        .join(results -> {
-            if (!results.allAccepted().isPresent()) {
-                return Outcome.failed(Failure.of("PARALLEL_CHECK_FAILED", "风控或库存检查失败"));
-            }
-            return Outcome.accepted(new CheckoutResult(...));
-        });
+        .join(results -> results.allAccepted()
+                .map(map -> new CheckoutResult(map.get(riskBranch), map.get(stockBranch))));
 ```
 
-### 静态约束校验
-
+### 静态约束校验（Static Constraints）
 为了防止并发环境下的状态竞争与死锁，编译期实施严格校验：
-- **禁止在并行分支内部使用 `await`**（违规抛出 `PARALLEL_AWAIT`）；
-- **禁止在并行分支内部使用 `persistentPolicy`**（违规抛出 `PARALLEL_PERSISTENT_POLICY`）；
-- 分支名称在同一并行块内必须唯一（`DUPLICATE_BRANCH`）。
+- **`PARALLEL_AWAIT`**：严禁在并行分支内部使用 `await` 挂起点；
+- **`PARALLEL_PERSISTENT_POLICY`**：严禁在并行分支内部挂载持久化策略；
+- **`DUPLICATE_BRANCH`**：同一并行块内各分支名称必须全局唯一。
 
 ---
 
 ## 6. AWAIT 节点（挂起等待）
 
-`AWAIT` 节点显式将当前执行挂起，等待外部系统（如人工审批、异步支付回调、延时 Webhook）注入信号。
+`AWAIT` 节点显式将当前执行挂起，等待外部系统注入恢复信号（Signal）。
 
 ### 声明形式
 
@@ -203,34 +225,34 @@ ResumePoint<ApprovalSignal> approvalPoint = ResumePoint.named("managerApproval")
 
 Flow<ExpenseRequest, ExpenseReport> flow = Flow.<ExpenseRequest>identity()
         .then(submitExpenseOp)
-        .await(approvalPoint) // 流程在此挂起
+        .await(approvalPoint) // 流程在此挂起！
         .then((context, resumed) -> {
-            ExpenseRequest req = resumed.state();
-            ApprovalSignal signal = resumed.signal();
-            return Outcome.accepted(new ExpenseReport(req, signal.isApproved()));
+            ExpenseRequest req = resumed.state();    // 挂起前的原值
+            ApprovalSignal sig = resumed.signal();   // 外部注入的信号
+            return Outcome.accepted(new ExpenseReport(req, sig.isApproved()));
         });
 ```
 
-- Local 执行器在此处返回 `FlowResult.Suspended`，持有 `Suspension` 句柄；
-- Durable 执行器在此处将快照更新为 `SUSPENDED` 并落库，等待调用 `resume(executionId, "managerApproval", signal)`。
+- **Local 模式**：释放当前线程并返回 `FlowResult.Suspended`，持有单次消费句柄 `Suspension`；
+- **Durable 模式**：将快照生命周期更新为 `SUSPENDED` 并通过 CAS 落库，等待调用 `resume(executionId, "managerApproval", signal)`。
 
 ---
 
 ## 7. CONTROL 节点（治理控制）
 
-`CONTROL` 节点包裹在子流程外部，提供横切治理能力。包含三种纯粹控制形态（`ControlKind`）：
+`CONTROL` 节点包裹在业务子流程外部，提供洋葱圈式的横切治理能力。包含三种纯粹控制形态（`ControlKind`）：
 
-| 治理类型 | DSL 声明方法 | 作用 |
+| 控制类型 | DSL 声明方法 | 核心作用与行为 |
 | :--- | :--- | :--- |
-| **POLICY** | `flow.policy(policyInstance, keyFn)` | 无状态网关拦截（放行 / 拒绝 / 失败）及后置监控（如限流 `team4u-flow-ratelimiter`） |
-| **PERSISTENT_POLICY** | `flow.persistentPolicy(policy, keyFn)` | 有状态持久化策略（支持状态变迁、故障重试 `RetryAt` 与延时唤醒 `WaitUntil`，如 `team4u-flow-retry`） |
-| **TIMEOUT** | `flow.timeout(Duration.ofSeconds(3))` | 限定子流程最大执行时限，超时产生 TIMEOUT 失败 |
+| **POLICY** | `flow.policy(policy, keyFn)` | 无状态准入网关：在 `before` 执行放行/拒绝/失败判定，在 `after` 收集完成指标 |
+| **PERSISTENT_POLICY** | `flow.persistentPolicy(policy, keyFn)` | 有状态持久化策略：维护不可变状态 `S`，支持 `WaitUntil` 定时挂起与 `RetryAt` 故障退避重试 |
+| **TIMEOUT** | `flow.timeout(Duration.ofSeconds(3))` | 施加最大执行时限：超时向执行线程发送中断信号并产出 `TIMEOUT` 失败 |
 
 ---
 
 ## 8. COMPLETE 节点（常数终态）
 
-`COMPLETE` 节点用于快速构建常数结果或透传节点，无需编写单独的 `Operation`：
+`COMPLETE` 节点用于快速构建静态常量结果或恒等透传节点，无需编写单独的 `Operation`：
 
 ```java
 Flow<User, User> identityFlow = Flow.identity(); // 原样透传输入
@@ -240,6 +262,25 @@ Flow<Void, String> rejectedFlow = Flow.rejected(Reason.of("ACCESS_DENIED", "无�
 Flow<Void, String> skippedFlow  = Flow.skipped(Reason.of("NOT_CONFIGURED", "未配置"));
 Flow<Void, String> failedFlow   = Flow.failed(Failure.of("SYSTEM_ERROR", "系统错误"));
 ```
+
+---
+
+## 编译期静态校验诊断码 (FlowBuildException)
+
+在 `Compiler.compile(flow)` 阶段，框架会对整个 AST 树进行静态完整性校验，违规时聚合抛出 `FlowBuildException`：
+
+| 诊断码 | 校验类别 | 违规原因 |
+| :--- | :--- | :--- |
+| `DUPLICATE_LABEL` | 节点标签 | 同一节点被重复调用 `.named("xxx")` 赋予了不同标签 |
+| `DUPLICATE_SCOPE` | 具名作用域 | 流程中存在同名的 `Flow.scope("name", ...)` |
+| `DUPLICATE_BRANCH` | 并行分支 | `Flow.parallel` 中声明了相同名称的 `Branch.of("name", ...)` |
+| `DUPLICATE_RESUME_POINT` | 挂起点 | 同一流程定义内声明了同名的 `ResumePoint.named("point")` |
+| `PARALLEL_AWAIT` | 并发约束 | 在 `parallel` 分支内部使用了 `await` 挂起点 |
+| `PARALLEL_PERSISTENT_POLICY` | 并发约束 | 在 `parallel` 分支内部使用了 `persistentPolicy` |
+| `INVALID_BINDING` | 契约违规 | 绑定的 Class 未实现 `Operation`、`Policy` 或 `PersistentPolicy` 接口 |
+| `MISSING_BINDING` | 容器缺失 | `BeanManager` 容器中未找到声明的 Bean（类型或限定符不匹配） |
+| `BINDING_TYPE` | 契约类型 | 容器解析出的 Bean 实例与 Flow 声明的泛型契约不一致 |
+| `DUPLICATE_ROUTE_CASE` | 路由键 | `route` 中声明了重复的 case 键（声明时即刻抛出） |
 
 ---
 

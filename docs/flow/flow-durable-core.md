@@ -16,7 +16,7 @@ graph TD
     EX --> CMD["命令入口: start / resume / recover / cancel / snapshot"]
     CMD --> M["DurableMachine<br/>单命令驱动至下一个稳定检查点"]
     
-    M <--> CK["Checkpoints 管理器<br/>节点边界 CAS 乐观锁提交 (revision++)"]
+    M <--> CK["Checkpoints 协调器<br/>节点边界 CAS 乐观锁提交 (revision++)"]
     CK <--> ST[("DurableStore (存储 SPI)<br/>load / compareAndSet")]
     CK <--> SM["StateMapper (确定性编解码)<br/>StoredValue 槽位转换"]
     
@@ -28,7 +28,7 @@ graph TD
 1. **同一份 Flow 定义，零代码修改**：
    业务逻辑 `Flow<I, O>` 纯粹描述拓扑结构，既能交付给 `Local.compile` 作为微秒级同步执行器，也能交付给 `DurableRuntime.compile` 作为持久化状态机；
 2. **零 Lambda 与代码序列化**：
-   底层快照绝不序列化 Java 字节码、Lambda 闭包或 Bean 实例引用；快照中仅保存框架元数据与由 `StateMapper` 编码的业务槽位（`StoredValue`）；
+   底层快照绝不序列化 Java 字节码、Lambda 闭包或 Bean 实例引用；快照中仅保存框架运行元数据与由 `StateMapper` 编码的业务槽位（`StoredValue`）；
 3. **节点边界 CAS 检查点（Revision 乐观锁）**：
    每前进一步都在节点边界以 CAS 乐观锁推进 `revision`，防止多实例并发写冲突与脏写；
 4. **版本强隔离 `(flowId, flowVersion)`**：
@@ -43,10 +43,10 @@ graph TD
 ```mermaid
 stateDiagram-v2
     [*] --> ACTIVE: start(executionId, input) [CAS rev=1]
-    ACTIVE --> COMPLETED: 正常执行到达终点
-    ACTIVE --> SUSPENDED: 遇到 await 节点 [落库等待]
+    ACTIVE --> COMPLETED: 正常执行到达终态
+    ACTIVE --> SUSPENDED: 遇到 await 节点 [落库等待外部信号]
     SUSPENDED --> ACTIVE: resume(pointName, signal) [CAS rev++]
-    ACTIVE --> ACTIVE: recover(executionId) [崩溃断点恢复]
+    ACTIVE --> ACTIVE: recover(executionId) [崩溃断点续跑]
     ACTIVE --> CANCELLED: cancel(executionId) [CAS 撤销]
     SUSPENDED --> CANCELLED: cancel(executionId) [CAS 撤销]
 ```
@@ -76,7 +76,7 @@ sequenceDiagram
     
     M->>CK: 节点执行成功，准备提交检查点
     CK->>CK: 递增 revision (当前 rev + 1)
-    CK->>CK: 将新状态编码至 slots Map
+    CK->>CK: 将新状态编码至 slots 字典
     CK->>DS: compareAndSet(executionId, expectedRev, newSnapshot)
     
     alt CAS 成功 (返回 true)
@@ -89,7 +89,6 @@ sequenceDiagram
 ```
 
 ### 乐观锁并发冲突处理
-
 - 若两个分布式节点由于时序重试同时尝试驱动同一个 `executionId`，后提交的节点将遭遇 CAS 失败；
 - 框架会抛出 `DurableException(REVISION_CONFLICT)`，安全阻止双重推进与重复执行。
 
@@ -101,9 +100,7 @@ sequenceDiagram
 
 框架为每一个执行节点计算了严格确定性的**稳定幂等键**：
 
-```text
-invocationId = flowId : flowVersion : executionId : path
-```
+$$\text{invocationId} = \text{flowId} : \text{flowVersion} : \text{executionId} : \text{path}$$
 
 - **`flowId`**：流程业务标识（如 `order-checkout`）；
 - **`flowVersion`**：流程拓扑版本号（如 `1`）；
@@ -111,10 +108,7 @@ invocationId = flowId : flowVersion : executionId : path
 - **`path`**：当前节点在 AST 树中的拓扑路径（如 `$/0/1`）。
 
 ### 幂等公式
-
-```text
-At-Least-Once 框架驱动 + invocationId 外部防重 = Exactly-Once 业务效果
-```
+$$\text{At-Least-Once 框架驱动} + \text{invocationId 外部防重} = \text{Exactly-Once 业务效果}$$
 
 ```java
 @Component

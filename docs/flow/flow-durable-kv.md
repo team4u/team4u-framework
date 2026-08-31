@@ -12,12 +12,12 @@
 graph TD
     D["DurableMachine 状态机"] -->|"load / compareAndSet"| SPI["DurableStore (存储 SPI 接口)"]
     
-    SPI --> M["InMemoryDurableStore<br/>(team4u-flow-durable 核心包)<br/>ConcurrentHashMap 内存实现"]
+    SPI --> M["InMemoryDurableStore<br/>(team4u-flow-durable 核心包)<br/>ConcurrentHashMap 纯内存实现"]
     SPI --> K["KvDurableStore<br/>(team4u-flow-durable-kv 适配包)<br/>基于统一 KvStore 抽象"]
     
     K --> KV_REDIS["RedisKvStore (分布式缓存/持久化)"]
-    K --> KV_JDBC["JdbcKvStore (关系型数据库 MySQL/PG)"]
-    K --> KV_TIERED["TieredKvStore (内存+Redis 多级缓存)"]
+    K --> KV_JDBC["JdbcKvStore (关系型数据库 MySQL/PostgreSQL)"]
+    K --> KV_TIERED["TieredKvStore (内存 + Redis 分层多级缓存)"]
 ```
 
 ---
@@ -45,9 +45,9 @@ public interface DurableStore {
      * 针对指定执行实例执行 CAS 乐观锁比较与更新。
      *
      * @param executionId      执行流水号
-     * @param expectedRevision 期望的当前版本号。特别地，-1 表示仅在记录不存在时创建（用于 start）
+     * @param expectedRevision 期望的当前版本号。特别地，-1 表示仅在记录不存在时创建（用于 start 命令）
      * @param update           待持久化的新快照实例
-     * @return true 表示 CAS 成功；false 表示版本冲突已被其他实例抢占
+     * @return true 表示 CAS 成功；false 表示版本冲突已被其他实例抢占修改
      */
     boolean compareAndSet(String executionId, long expectedRevision, DurableSnapshot update);
 }
@@ -113,13 +113,33 @@ DurableRuntime runtime = DurableRuntime.builder(durableStore)
 
 ---
 
-## 4. 常见后端存储方案选型
+## 4. 常见后端存储方案选型与表结构设计
 
-| 后端方案 | 适用场景 | 优势 | 注意事项 |
+| 后端方案 | 适用场景 | 架构优势 | 运维注意事项 |
 | :--- | :--- | :--- | :--- |
-| **`RedisKvStore`** | 高并发短/中周期流程、微秒级状态机 | 极高的读写吞吐，原生支持 TTL 自动过期淘汰 | 需开启 AOF 持久化防止机房断电丢状态 |
-| **`JdbcKvStore`** | 金融交易、长事务审批、永久审计归档 | 严格 ACID、支持 SQL 查询与报表统计 | 需建立 `(execution_id, revision)` 唯一索引与更新版本字段 |
+| **`RedisKvStore`** | 高并发短/中周期流程、微秒级状态机 | 极高的读写吞吐，原生支持 TTL 自动过期淘汰 | 需开启 AOF / RDB 持久化防止机房断电丢状态 |
+| **`JdbcKvStore`** | 金融交易、长事务审批、永久审计归档 | 严格 ACID、支持 SQL 复杂条件查询与报表统计 | 需建立 `execution_id` 唯一索引与 `revision` 乐观锁字段 |
 | **`TieredKvStore`** | 超高频读取流程 | L1 本地内存 + L2 Redis，极大降低网络 I/O | 写操作自动广播同步，适用于读多写少场景 |
+
+### 关系型数据库 (JDBC) 推荐表结构
+
+```sql
+CREATE TABLE `flow_durable_snapshot` (
+  `execution_id` varchar(128) NOT NULL COMMENT '执行实例流水号',
+  `flow_id` varchar(128) NOT NULL COMMENT '流程标识',
+  `flow_version` int NOT NULL COMMENT '流程拓扑版本号',
+  `revision` bigint NOT NULL COMMENT '单调递增乐观锁版本号',
+  `lifecycle` varchar(32) NOT NULL COMMENT '生命周期状态 (ACTIVE/SUSPENDED/COMPLETED/CANCELLED)',
+  `awaiting_point` varchar(128) DEFAULT NULL COMMENT '当前等待的挂起点',
+  `wake_at` datetime(3) DEFAULT NULL COMMENT '计划定时唤醒时间戳',
+  `snapshot_payload` longblob NOT NULL COMMENT 'DurableSnapshot 序列化二进制载荷',
+  `created_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+  `updated_at` datetime(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+  PRIMARY KEY (`execution_id`),
+  KEY `idx_wake_at` (`lifecycle`, `wake_at`),
+  KEY `idx_flow_version` (`flow_id`, `flow_version`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COMMENT='流程持久化快照表';
+```
 
 ---
 

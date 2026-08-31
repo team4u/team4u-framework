@@ -1,29 +1,29 @@
-# 扩展机制与 SPI
+# 扩展机制与 SPI 开发指南
 
 `team4u-flow` 遵循“**扩展点开放、运行时节点封闭**”的架构设计原则：
 
-- **运行时节点封闭**：编译后的执行计划仅由八种确定节点（INVOKE / SEQUENCE / ROUTE / FALLBACK / PARALLEL / AWAIT / CONTROL / COMPLETE）组成，保证内核语义的一致性与稳定性；
-- **扩展点开放**：业务逻辑收敛于 `Operation`，治理控制收敛于 `Policy` / `PersistentPolicy`，并行合并收敛于 `JoinStrategy`，容器依赖解析收敛于 `OperationResolver`，自定义执行器与结构接入收敛于双投影 SPI。
+- **运行时节点封闭（Closed PlanNode Set）**：编译后的执行计划仅由八种确定节点（`INVOKE`, `SEQUENCE`, `ROUTE`, `FALLBACK`, `PARALLEL`, `AWAIT`, `CONTROL`, `COMPLETE`）组成，保证内核语义的一致性与稳定性；
+- **扩展点开放（Open SPIs）**：业务逻辑收敛于 `Operation`，治理控制收敛于 `Policy` / `PersistentPolicy`，并行合并收敛于 `JoinStrategy`，容器依赖解析收敛于 `OperationResolver`，状态持久化收敛于 `StateMapper` 与 `DurableStore`，全链路监控收敛于 `FlowObserver` / `DurableObserver`，自定义执行引擎收敛于 `ExecutableFlowVisitor`。
 
 ---
 
-## 扩展点总览与选型
+## 扩展点总览与选型矩阵
 
 | 扩展接口 | 核心方法签名 | 适用场景 |
 | :--- | :--- | :--- |
-| `Operation<I, O>` | `Outcome<O> execute(OperationContext ctx, I input)` | 业务转换、RPC 调用、外部副作用与数据处理 |
-| `Policy<K>` | `Gate before(PolicyContext, K)` + `after(...)` | 无状态准入、租户限流、熔断与鉴权 |
-| `PersistentPolicy<K, S>` | `initialState` + `before` + `after` | 有状态且需跨重启持久化的治理策略（如延时重试、滑动窗口） |
-| `JoinStrategy<O>` | `Outcome<O> join(ParallelResults results)` | 并行分支执行结果的自定义合并与裁决 |
-| `OperationResolver` | `Object resolve(Class<?> contract, String qualifier)` | 容器依赖解析（Spring 或自定义 IoC 容器集成） |
-| `StateMapper` | `StoredValue encode(Object)` / `decode(StoredValue)` | Durable 持久化应用状态的自定义序列化与反序列化 |
-| `DurableStore` | `load(id)` + `compareAndSet(id, revision, snapshot)` | 快照存储适配（如 JDBC、Redis 等外部存储） |
-| `FlowObserver` / `DurableObserver` | `void onEvent(Event)` | 全链路执行追踪、监控指标收集与审计日志 |
-| `ExecutableFlowVisitor<R>` | `visitInvoke` / `visitSequence` / ... | 自建执行器、静态分析工具或安全审计工具 |
+| **`Operation<I, O>`** | `Outcome<O> execute(OperationContext ctx, I input)` | 业务转换、RPC 调用、数据库操作与外部副作用 |
+| **`Policy<K>`** | `Gate before(PolicyContext, K)` + `after(...)` | 无状态准入、租户限流、动态风控与权限鉴权 |
+| **`PersistentPolicy<K, S>`** | `initialState` + `before` + `after` | 有状态且需跨重启持久化的治理策略（如延时重试、配额窗口） |
+| **`JoinStrategy<O>`** | `Outcome<O> join(ParallelResults results)` | 并行分支执行结果的自定义合并、加权与仲裁 |
+| **`OperationResolver`** | `Object resolve(Class<?> contract, String qualifier)` | 容器依赖解析（Spring / Guice 或自定义 IoC 容器集成） |
+| **`StateMapper`** | `StoredValue encode(Object)` / `decode(StoredValue)` | Durable 持久化应用状态的确定性序列化与反序列化 |
+| **`DurableStore`** | `load(id)` + `compareAndSet(id, revision, snapshot)` | 快照存储适配（如 Redis、MySQL、PostgreSQL 等外部存储） |
+| **`FlowObserver` / `DurableObserver`** | `void onEvent(Event)` | 全链路执行追踪、监控指标收集与审计日志 |
+| **`ExecutableFlowVisitor<R>`** | `visitInvoke` / `visitSequence` / ... | 自建自定义执行器、静态分析工具或安全审计引擎 |
 
 ---
 
-## 业务操作扩展 (Operation)
+## 1. 业务操作扩展 (`Operation`)
 
 `Operation` 是承载业务逻辑的核心扩展点：
 
@@ -33,17 +33,17 @@ public interface Operation<I, O> {
 }
 ```
 
-实现规范与最佳实践：
-- **线程安全与无状态**：实现应保持无状态，避免在实例中维护跨请求的可变字段；
-- **上下文辅助**：`OperationContext` 提供稳定幂等键 `invocationId()`（`flowId:flowVersion:executionId:path`），可直接作为分布式防重 Token；提供 `await(CompletionStage)` 用于在响应取消的同时安全完成异步等待；
+### 开发规范与最佳实践
+- **线程安全与无状态**：实现类通常为单例，应保持无状态，避免在实例中维护跨请求的可变字段；
+- **上下文辅助**：`OperationContext` 提供稳定幂等键 `invocationId()`（`flowId:flowVersion:executionId:path`），可直接作为分布式防重 Token；提供 `cancellation()` 用于协作取消检测；
 - **异常收敛**：未捕获异常统一由框架收敛为 `OPERATION_EXCEPTION` 诊断码的 `Failed`；
 - **可选步骤弃权**：若当前数据不适用但不应阻断流程，返回 `Outcome.skipped(reason)` 并通过 `thenOptional` 编排。
 
 ---
 
-## 治理控制扩展 (Policy 与 PersistentPolicy)
+## 2. 治理控制扩展 (`Policy` 与 `PersistentPolicy`)
 
-### Policy 无状态网关
+### 无状态策略：`Policy<K>`
 
 用于在流程执行前后进行拦截裁决：
 
@@ -55,10 +55,10 @@ public interface Policy<K> {
 ```
 
 - `Gate` 决策闭集：`Gate.proceed()`（放行）、`Gate.reject(Reason)`（业务拒绝）、`Gate.fail(Failure)`（技术故障）；
-- `after` 回调接收四态完成摘要 `Completion`（不含业务数据载荷），用于监控指标统计或资源清理；
+- `after` 回调接收四态完成摘要 `Completion`（包含四态 `kind` 与耗时 `durationMs`），用于监控指标统计或资源清理；
 - 通过 `flow.policy(policy, keyFunction)` 将输入对象映射为策略键 $K$。
 
-### PersistentPolicy 有状态策略
+### 有状态持久化策略：`PersistentPolicy<K, S>`
 
 用于状态需由框架自动持久化并在崩溃后原位恢复的场景：
 
@@ -76,64 +76,48 @@ public interface PersistentPolicy<K, S> {
 
 ---
 
-## 并行汇聚扩展 (JoinStrategy)
+## 3. 并行汇聚扩展 (`JoinStrategy`)
 
 ```java
+@FunctionalInterface
 public interface JoinStrategy<O> {
-    Outcome<O> join(ParallelResults results);
+    Outcome<O> join(ParallelResults results) throws Exception;
 }
 ```
 
-接收全部并行分支的执行结果并合并为单个 `Outcome`。`ParallelResults` 提供按 Token 检索的 `results.outcome(branch)` 与内置策略（`allAccepted`、`firstAccepted`、`quorum` 等）：
+接收全部并行分支的执行结果并合并为单个 `Outcome`。`ParallelResults` 提供按 Token 检索的 `results.get(branch)` 与内置策略（`allAccepted`、`firstAccepted`、`quorum` 等）：
 
 ```java
 JoinStrategy<String> customStrategy = results -> {
-    Outcome<RiskReport> risk = results.outcome(riskBranch);
+    Outcome<RiskReport> risk = results.get(riskBranch);
     if (!(risk instanceof Outcome.Accepted)) {
         return Outcome.skipped(Reason.of("RISK_UNAVAILABLE", "风控结果不可用"));
     }
-    return results.outcome(stockBranch).map(stock ->
+    return results.get(stockBranch).map(stock ->
             ((Outcome.Accepted<RiskReport>) risk).value().summary() + "/" + stock.summary());
 };
 ```
 
 ---
 
-## 容器解析扩展 (OperationResolver)
-
-### OperationResolver 接口契约
+## 4. 容器解析扩展 (`OperationResolver`)
 
 ```java
 public interface OperationResolver {
     Object resolve(Class<?> contract, String qualifier);
-    default Class<?> implementationClass(Object resolved) { ... }
+    default Class<?> implementationClass(Object resolved) { return resolved.getClass(); }
 }
 ```
 
 - 在编译阶段按 Class 和限定符解析对应的单例 Bean；
-- 默认 `OperationResolver.rejecting()` 在遇到类绑定时抛出 `IllegalStateException`。
-
-### Bean 容器集成 (team4u-flow-bean)
-
-框架内置的 `BeanOperationResolver` 通过 `BeanManager` 统一桥接 Spring 容器与本地容器，透明保留 `@Transactional`、AOP 切面与动态代理：
-
-```java
-import com.team4u.framework.flow.bean.BeanFlows;
-
-// 1. 本地同步编译
-LocalExecutable<OrderRequest, Receipt> local = BeanFlows.compile(flow);
-
-// 2. Durable 持久化运行时挂载
-DurableRuntime runtime = DurableRuntime.builder(store)
-        .operationResolver(BeanFlows.resolver())
-        .build();
-```
+- 默认 `OperationResolver.rejecting()` 在遇到类绑定时抛出 `IllegalStateException`；
+- `team4u-flow-bean` 模块内置的 `BeanOperationResolver` 通过 `BeanManager` 门面统一桥接 Spring 容器与本地容器。
 
 ---
 
-## 自定义状态映射器 (StateMapper)
+## 5. 状态编解码扩展 (`StateMapper`)
 
-在 Durable 持久化模式下，`StateMapper` 负责业务对象与字节载荷之间的编解码：
+在 Durable 持久化模式下，`StateMapper` 负责业务对象与字节载荷之间的确定性编解码：
 
 ```java
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -143,13 +127,13 @@ import com.team4u.framework.flow.durable.snapshot.StoredValue;
 
 public class JacksonStateMapper implements StateMapper {
 
-    private static final String CODEC = "json-jackson";
+    private static final String CODEC = "json:jackson";
     private static final int VERSION = 1;
 
     private final ObjectMapper objectMapper;
 
     public JacksonStateMapper(ObjectMapper objectMapper) {
-        // 开启 Map Key 排序，确保序列化字节确定性
+        // 必须开启 Map Key 排序，确保序列化字节逐字节确定性！
         this.objectMapper = objectMapper.copy()
                 .configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
     }
@@ -157,77 +141,22 @@ public class JacksonStateMapper implements StateMapper {
     @Override
     public StoredValue encode(Object value) throws Exception {
         byte[] payload = objectMapper.writeValueAsBytes(value);
-        return new StoredValue(CODEC, VERSION, payload);
+        return new StoredValue(value.getClass().getName(), CODEC, VERSION, payload);
     }
 
     @Override
     public Object decode(StoredValue storedValue) throws Exception {
-        return objectMapper.readValue(storedValue.payload(), Object.class);
+        Class<?> targetClass = Class.forName(storedValue.typeName());
+        return objectMapper.readValue(storedValue.payload(), targetClass);
     }
 }
 ```
-
-> [!IMPORTANT]
-> **确定性契约**：同一对象多次调用 `encode` 必须生成逐字节相同的载荷。避免在载荷中包含随机 ID、时间戳或未排序的 Map 键值对，以确保 resume 恢复信号幂等比对的准确性。
 
 ---
 
-## 自定义持久化存储与策略实战
+## 6. 快照存储扩展 (`DurableStore`)
 
-### PersistentPolicy 实战：滑动限流窗口
-
-```java
-public class RateWindowPolicy implements PersistentPolicy<String, long[]> {
-
-    @Override
-    public long[] initialState(String key) {
-        return new long[]{0L, 0L}; // [windowStartMillis, count]
-    }
-
-    @Override
-    public Before<long[]> before(PolicyContext context, String key, long[] state) {
-        long now = System.currentTimeMillis();
-        long[] nextState = new long[]{state[0], state[1]};
-        if (now - nextState[0] >= 60_000L) {
-            nextState[0] = now;
-            nextState[1] = 0;
-        }
-        if (nextState[1] >= 100) {
-            return PersistentPolicy.reject(
-                    Reason.of("RATE_LIMITED", "窗口内请求超限"), nextState);
-        }
-        nextState[1] = nextState[1] + 1;
-        return PersistentPolicy.proceed(nextState);
-    }
-
-    @Override
-    public After<long[]> after(PolicyContext context, String key,
-                               long[] state, Completion completion) {
-        return PersistentPolicy.returning(state);
-    }
-}
-```
-
-### DurableStore 实战：KvDurableStore 键值存储适配（推荐）
-
-通过引入 `team4u-flow-durable-kv`，可直接复用框架提供的 `KvStore` 基础设施（如 Redis、JDBC、分层缓存）：
-
-```java
-import com.team4u.framework.flow.durable.kv.KvDurableStore;
-import com.team4u.framework.flow.durable.store.DurableStore;
-import com.team4u.framework.kv.KvStore;
-import com.team4u.framework.kv.redis.RedisKvStore;
-
-// 1. 获取已有的 KvStore（如 Redis）
-KvStore kvStore = new RedisKvStore(redisTemplate);
-
-// 2. 构建 KvDurableStore（支持指定 key 空间与 TTL）
-DurableStore durableStore = new KvDurableStore(kvStore, "order_flow_store", 86400_000L);
-```
-
-### DurableStore 实战：原生 JDBC 存储适配
-
-若不引入 KV 组件，亦可直接编写数据库访问逻辑实现 `DurableStore`：
+若不使用 `team4u-flow-durable-kv`，可直接实现 `DurableStore` 适配原生数据库：
 
 ```java
 import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
@@ -239,7 +168,7 @@ public class JdbcDurableStore implements DurableStore {
     @Override
     public Optional<DurableSnapshot> load(String executionId) {
         // 执行 SQL: SELECT snapshot_bytes FROM flow_snapshot WHERE execution_id = ?
-        // 反序列化为 DurableSnapshot
+        // 反序列化为 DurableSnapshot 并返回
         return Optional.empty();
     }
 
@@ -256,7 +185,27 @@ public class JdbcDurableStore implements DurableStore {
 
 ---
 
-## 双投影 SPI：可执行合同与结构描述
+## 7. 全链路观察者扩展 (`FlowObserver` 与 `DurableObserver`)
+
+```java
+import com.team4u.framework.flow.api.FlowObserver;
+import lombok.extern.slf4j.Slf4j;
+
+@Slf4j
+public class LoggingFlowObserver implements FlowObserver {
+
+    @Override
+    public void onEvent(Event event) {
+        log.info("[FLOW-EVENT] type={}, executionId={}, path={}, attrs={}",
+                event.type(), event.metadata().executionId(),
+                event.descriptor().path(), event.attributes());
+    }
+}
+```
+
+---
+
+## 8. 双投影 SPI：可执行合同与结构描述
 
 `Flow<I, O>` 对外提供两条职责严格隔离的投影通道：
 
@@ -266,7 +215,7 @@ Flow<I, O>
   └── project(resolver, visitor) -> R              可执行计划通道（强类型合同）
 ```
 
-### ExecutableFlowVisitor：可执行合同
+### ExecutableFlowVisitor：可执行计划编译器
 
 ```java
 public interface ExecutableFlowVisitor<R> {
@@ -290,25 +239,13 @@ public interface ExecutableFlowVisitor<R> {
 ```
 
 - 输入为已完成静态拓扑校验与 Bean 绑定的运行时计划；
-- `DurableRuntime.compile` 内部通过实现 `ExecutableFlowVisitor` 构建持久化执行计划；
-- 开发者可基于该 SPI 自定义执行内核或进行代码静态分析。
-
-### FlowDescription：只读结构描述
-
-- `flow.describe(flowId)` 导出冻结的只读数据模型 `FlowDescription`；
-- 仅包含拓扑路径、节点类型、标签与绑定描述，**不包含任何回调实例或业务值**；
-- `team4u-flow-graph` 模块完全基于该模型生成 Mermaid 图与文本树。
-
-### 双投影选择指引
-
-| 业务需求 | 推荐方式 |
-| :--- | :--- |
-| 图表渲染 / 文档生成 / 拓扑比对 | 使用 `describe(flowId)` 导出 `FlowDescription` |
-| 自定义执行器 / 依赖分析 / 静态校验 | 使用 `project(resolver, visitor)` 实现 `ExecutableFlowVisitor` |
-| 标准同步或持久化流程执行 | 直接使用 `Local.compile` 或 `DurableRuntime.compile` |
+- `Local.compile` 与 `DurableRuntime.compile` 内部均通过实现 `ExecutableFlowVisitor` 构建各自的执行计划；
+- 开发者可基于该 SPI 自定义执行内核或进行代码静态安全审计。
 
 ---
 
-## 下一步
+## 关联章节与进一步阅读
 
-- 掌握综合业务场景实战：[实战案例](flow-sample.md)
+- 掌握综合业务场景实战：[实战案例库与生产模式](flow-sample.md)
+- 了解全链路诊断码体系：[诊断码体系与故障排查手册](flow-diagnostics.md)
+- 查阅单元测试与断言工具：[测试支持与测试套件](flow-test.md)

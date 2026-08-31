@@ -33,12 +33,12 @@ graph TD
     end
 ```
 
-### 角色职责分工
+### 角色职责与分工
 
 | 线程池角色 | 负责内容 | 默认配置 | 建议策略 |
 | :--- | :--- | :--- | :--- |
 | **调用方线程 / Dispatcher** | 执行 `SerialMachine` 主流水线状态机；串行调度 `INVOKE`、`ROUTE`、`FALLBACK` 等节点 | 同步调用使用当前调用者线程；`runAsync` 提交至传入的调度池 | 适合轻量 I/O 或纯计算密集型流水线调度 |
-| **Worker 线程池** | 执行 `Flow.parallel` 中的子分支；执行 `timeout` 超时监控与任务打断 | `ForkJoinPool.commonPool()` | 必须支持工作窃取或具备动态线程补偿机制（推荐 `ForkJoinPool`） |
+| **Worker 线程池** | 执行 `Flow.parallel` 中的子分支；执行 `timeout` 超时监控与任务打断 | `ForkJoinPool.commonPool()` | 必须支持工作窃取或具备动态线程补偿机制（强烈推荐 `ForkJoinPool`） |
 
 ---
 
@@ -80,7 +80,7 @@ LocalExecutable<OrderRequest, Receipt> customExecutable =
 
 ## 静态死锁防御规则（Deadlock Defense）
 
-为了在开发与测试阶段彻底根绝线程饥饿死锁，框架在编译与构建期内置了两级静态校验规则。一旦检测到高危配置，立即抛出明确的 `IllegalArgumentException` 阻断启动：
+为了在开发与测试阶段彻底根绝线程饥饿死锁，框架在编译期（`Local.compile`）与构建期内置了两级静态校验规则。一旦检测到高危配置，立即抛出明确的 `IllegalArgumentException` 阻断启动：
 
 ```mermaid
 graph TD
@@ -100,13 +100,15 @@ graph TD
 ### 规则 1：Dispatcher 与 Worker 隔离校验
 
 - **规则说明**：凡是包含 `parallel`（并行）或 `timeout`（超时）的流程，**严禁将同一个非 ForkJoinPool 的单线程或固定大小线程池（FixedThreadPool）同时用作 Dispatcher 与 Worker**；
-- **死锁原因**：若 Dispatcher 占有了线程池中唯一的可用线程，并在 `parallel` 处阻塞等待子分支完成；而子分支又排队等待同一个线程池分配线程，导致互相永久死锁；
-- **防御触发**：编译期检测到相同实例时立即报错，杜绝隐患上线。
+- **死锁机理**：若 Dispatcher 占有了线程池中唯一的可用线程，并在 `parallel` 处阻塞等待子分支完成；而子分支又排队等待同一个线程池分配线程，导致互相永久死锁；
+- **防御触发**：编译期检测到相同实例时立即抛出 `IllegalArgumentException`，杜绝死锁隐患上线。
 
 ### 规则 2：嵌套并行补偿校验
 
 - **规则说明**：当 `parallel` 分支内部还嵌套包含 `parallel` 或 `timeout` 时，Worker 线程池**必须是支持工作窃取（Work-Stealing）与动态线程补偿的 `ForkJoinPool`**；
-- **技术原理**：`ForkJoinPool` 在工作线程遇到 `ForkJoinTask.join()` 阻塞时，会自动从其他双端队列窃取就绪任务执行，或通过 `ManagedBlocker` 动态拉起补偿线程，从而打破死锁循环。
+- **技术原理**：
+  - `ForkJoinPool` 在工作线程遇到阻塞时，会自动从其他任务双端队列窃取就绪任务执行；
+  - 框架结合 `ManagedBlocker` 机制，在工作线程阻塞时能够通知池动态拉起临时补偿线程，从而打破有限线程池中的依赖死锁循环。
 
 ---
 
