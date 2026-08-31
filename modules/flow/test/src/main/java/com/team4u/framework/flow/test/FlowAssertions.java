@@ -19,7 +19,7 @@ import java.util.Objects;
  * Local 执行结果 {@link FlowResult}（Completed/Suspended/Cancelled）
  * 以及 Durable 执行结果 {@link DurableResult}（Completed/Suspended/Active/Cancelled）的强类型流式断言方法。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 public final class FlowAssertions {
     private FlowAssertions() { }

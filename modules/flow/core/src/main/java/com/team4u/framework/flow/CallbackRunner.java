@@ -17,7 +17,7 @@ import java.util.function.Function;
  * <p>在执行策略的 {@link Policy#before} / {@link Policy#after} 等扩展点时，统一施加 Deadline 截止时间保护、
  * 取消信号级联传播以及受控异常包装。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class CallbackRunner {
     /**

@@ -15,7 +15,7 @@ import java.util.Optional;
  * <p>以不可变纯数据结构反映 Flow AST 的完整结构，支持通过访问者模式（{@link FlowVisitor}）
  * 遍历各类型节点生成 Graphviz / Mermaid / 字符文本渲染输出。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 @Getter
 @Accessors(fluent = true)

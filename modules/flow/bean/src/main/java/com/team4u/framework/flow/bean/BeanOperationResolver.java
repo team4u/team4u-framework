@@ -11,7 +11,7 @@ import java.util.Objects;
  *
  * <p>实现 {@link OperationResolver} 接口，支持根据契约类型（Class）和限定符（Qualifier/BeanName）从 Spring/Team4u 容器中解析单例 Bean 实例。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 public final class BeanOperationResolver implements OperationResolver {
     private final BeanManager beanManager;

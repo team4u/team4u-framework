@@ -14,7 +14,7 @@ import java.util.concurrent.TimeoutException;
  *
  * <p>封装 {@link ForkJoinPool#managedBlock(ForkJoinPool.ManagedBlocker)} 补偿调用，在 ForkJoinPool 环境下发生同步等待（如 CountDownLatch 等待、阻塞队列出队、Future 结果获取）时通知池动态补偿新工作线程，防止在小线程池或单核环境下发生死锁与线程饥饿。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class ManagedBlockers {
     private ManagedBlockers() { }

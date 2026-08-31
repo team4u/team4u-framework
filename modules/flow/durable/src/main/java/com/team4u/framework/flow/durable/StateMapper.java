@@ -10,7 +10,7 @@ package com.team4u.framework.flow.durable;
  * 引擎对外部恢复信号（Resume Signal）的幂等性比较（同信号重复恢复重驱动、不同信号触发 {@link DurableException.Error#RESUME_SIGNAL_CONFLICT}）完全依赖该确定性保证。
  * 实现自定义 StateMapper 时切勿在载荷中包含随机盐、当前时间戳或未排序的 Map 键值对。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 public interface StateMapper {
 

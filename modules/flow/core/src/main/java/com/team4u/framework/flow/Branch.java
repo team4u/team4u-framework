@@ -16,7 +16,7 @@ import java.util.Objects;
  *
  * @param <I> 分支输入参数类型
  * @param <O> 分支输出结果类型
- * @author team4u
+ * @author jay.wu
  */
 public final class Branch<I, O> {
     /** 分支唯一名称标识。 */

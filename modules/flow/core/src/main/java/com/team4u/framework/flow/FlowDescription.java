@@ -11,7 +11,7 @@ import java.util.Objects;
  *
  * <p>包含流程标识以及根节点描述树 {@link NodeDescription}。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 @Getter
 @Accessors(fluent = true)

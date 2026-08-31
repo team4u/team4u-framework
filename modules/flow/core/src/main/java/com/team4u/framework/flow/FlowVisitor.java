@@ -7,7 +7,7 @@ package com.team4u.framework.flow;
  * 常用于构建图表渲染引擎（Mermaid/Graphviz）、文本打印器、合规审计工具等。</p>
  *
  * @param <R> 访问遍历的返回值类型
- * @author team4u
+ * @author jay.wu
  */
 public interface FlowVisitor<R> {
 

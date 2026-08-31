@@ -11,7 +11,7 @@ import java.time.Instant;
  *
  * <p>包含生命周期阶段、业务四态结果、等待挂起点标识以及下一次计划唤醒时间戳，供 Local/Durable 投影层转译为外层结果。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 @Getter
 @Accessors(fluent = true)

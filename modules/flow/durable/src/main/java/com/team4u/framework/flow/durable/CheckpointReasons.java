@@ -12,7 +12,7 @@ import java.util.Map;
  *
  * <p>用于在触发 CAS 持久化提交时，提供结构化的诊断原因与属性信息，供 {@link DurableObserver} 监听消费。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class CheckpointReasons {
 

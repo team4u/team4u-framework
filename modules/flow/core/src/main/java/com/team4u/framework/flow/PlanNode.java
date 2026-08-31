@@ -17,7 +17,7 @@ import java.util.function.Function;
  * <p>由 {@link Compiler} 对 {@link Logical} 进行静态验证与 Bean 解析后生成，具有固定的拓扑路径与类型化属性，
  * 在 {@link SerialMachine} 驱动下完成内存无栈递归执行。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 interface PlanNode {
     /** 获取节点的静态描述符（包含拓扑路径与绑定类信息）。 */

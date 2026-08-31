@@ -10,7 +10,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  *
  * <p>线程安全且完全基于 JDK 原生组件，适用于单元测试、本地调试与无需跨进程恢复的快速验证场景。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 public final class InMemoryDurableStore implements DurableStore {
     private final ConcurrentHashMap<String, DurableSnapshot> snapshots =

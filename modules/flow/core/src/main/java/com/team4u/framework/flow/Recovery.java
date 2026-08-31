@@ -19,7 +19,7 @@ import java.util.Objects;
  * </p>
  *
  * @param <I> 进入失败作用域时的原始输入类型
- * @author team4u
+ * @author jay.wu
  */
 @Getter
 @Accessors(fluent = true)

@@ -17,7 +17,7 @@ import java.util.function.Function;
  * </p>
  *
  * @param <R> 访问者投影产物的目标类型（非 null）
- * @author team4u
+ * @author jay.wu
  */
 public interface ExecutableFlowVisitor<R> {
 

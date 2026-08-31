@@ -14,7 +14,7 @@ import java.util.Objects;
  * 携带角色追踪的执行结果（{@link MachineOutcome}）、执行栈帧（{@link RuntimeFrame}）、
  * 状态机整体状态（{@link MachineState}）以及单次推进结果（{@link MachineResult}）。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class DurableState {
     private DurableState() { }

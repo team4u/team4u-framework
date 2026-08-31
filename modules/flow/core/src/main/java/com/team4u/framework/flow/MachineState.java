@@ -10,7 +10,7 @@ import java.util.Objects;
  * 终态四态结果（{@link Outcome}）、等待恢复的挂起点名称及待注入的外部信号等。
  * 本类非线程安全，由单个 {@link SerialMachine} 驱动线程独占。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class MachineState {
 

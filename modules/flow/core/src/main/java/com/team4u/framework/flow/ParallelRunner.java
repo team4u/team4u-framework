@@ -32,7 +32,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class ParallelRunner {
 

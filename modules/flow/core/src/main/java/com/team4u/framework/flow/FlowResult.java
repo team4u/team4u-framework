@@ -19,7 +19,7 @@ import java.util.Objects;
  * </p>
  *
  * @param <O> 流程最终执行成功时的输出载荷类型
- * @author team4u
+ * @author jay.wu
  */
 public abstract class FlowResult<O> {
 

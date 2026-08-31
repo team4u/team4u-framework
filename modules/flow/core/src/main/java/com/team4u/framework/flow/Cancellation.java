@@ -20,7 +20,7 @@ import java.util.concurrent.atomic.AtomicReference;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 public final class Cancellation {
     private final Cancellation parent;

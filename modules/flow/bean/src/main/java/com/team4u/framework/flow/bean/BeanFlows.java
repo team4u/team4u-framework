@@ -10,7 +10,7 @@ import com.team4u.framework.flow.LocalExecutable;
  *
  * <p>提供基于 {@link BeanManager} 容器的便捷静态编译入口，将流程 DSL 中声明的 Operation/Policy 绑定为 IoC 容器中的单例 Bean。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 public final class BeanFlows {
     private BeanFlows() { }

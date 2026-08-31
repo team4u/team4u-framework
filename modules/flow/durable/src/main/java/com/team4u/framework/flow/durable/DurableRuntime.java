@@ -21,7 +21,7 @@ import java.util.concurrent.ExecutorService;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 public final class DurableRuntime {
 

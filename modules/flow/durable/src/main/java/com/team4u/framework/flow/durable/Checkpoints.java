@@ -10,7 +10,7 @@ import java.util.Map;
  * 将内存中的 {@link DurableState.MachineState} 编码为紧凑快照（{@link DurableSnapshot}），
  * 并调用 {@link DurableStore#compareAndSet} 进行版本自增原子落库。若发生并发版本冲突则抛出 {@link DurableException.Error#REVISION_CONFLICT}。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class Checkpoints {
     private static final class InertMarker {

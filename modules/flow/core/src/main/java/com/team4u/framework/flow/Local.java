@@ -17,7 +17,7 @@ import java.util.concurrent.ForkJoinPool;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 public final class Local {
     private Local() { }

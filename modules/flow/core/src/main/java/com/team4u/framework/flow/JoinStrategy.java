@@ -17,7 +17,7 @@ package com.team4u.framework.flow;
  * </p>
  *
  * @param <O> 汇聚计算后的最终输出结果类型
- * @author team4u
+ * @author jay.wu
  */
 @FunctionalInterface
 public interface JoinStrategy<O> {

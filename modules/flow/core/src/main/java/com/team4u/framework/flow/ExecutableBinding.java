@@ -13,7 +13,7 @@ import java.util.Optional;
  * <p>持有已被解析并实例化的目标组件（{@link Operation}、{@link Policy} 或 {@link PersistentPolicy}）、
  * 契约接口、真实实现类、Spring 限定符与绑定类型。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 @Getter
 @Accessors(fluent = true)

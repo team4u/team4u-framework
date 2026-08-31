@@ -5,7 +5,7 @@ package com.team4u.framework.flow;
  *
  * <p>确保取消信号处于最高裁决优先级（Cancellation Wins），在检测到取消时原子清空帧栈并标记为 CANCELLED 生命周期。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class MachineCancellationCoordinator {
     private final MachineState state;

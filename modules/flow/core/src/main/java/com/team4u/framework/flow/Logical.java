@@ -16,7 +16,7 @@ import java.util.function.Function;
  *
  * <p>仅表达用户的编排逻辑意图，纯不可变且本身不可执行；由 {@link Compiler} 降级为 {@link PlanNode}。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 interface Logical {
 

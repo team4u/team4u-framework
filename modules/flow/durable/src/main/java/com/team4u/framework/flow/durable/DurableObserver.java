@@ -14,7 +14,7 @@ import java.util.Objects;
  * <p>用于监听检查点提交（{@link Type#CHECKPOINT_COMMITTED}）、崩溃恢复重建（{@link Type#CHECKPOINT_RESTORED}）
  * 以及挂起恢复信号持久化（{@link Type#RESUME_SIGNAL_PERSISTED}）等持久化特有事件。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 @FunctionalInterface
 public interface DurableObserver {

@@ -13,7 +13,7 @@ import java.util.Optional;
  *
  * <p>用于向外暴露步骤所依赖的契约类型、实现类型、Spring 限定符以及绑定类型（OPERATION/POLICY/PERSISTENT_POLICY）。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 @Getter
 @Accessors(fluent = true)

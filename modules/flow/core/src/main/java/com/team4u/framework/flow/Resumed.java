@@ -20,7 +20,7 @@ import java.util.Objects;
  *
  * @param <S> 挂起前当前作用域状态类型
  * @param <R> 恢复时传入的外部信号数据类型
- * @author team4u
+ * @author jay.wu
  */
 @Getter
 @Accessors(fluent = true)

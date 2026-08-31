@@ -11,7 +11,7 @@ import java.util.Optional;
  *
  * <p>封装对 {@link FlowObserver} 的事件派发逻辑，负责构造规范化的 {@link Metadata} 上下文、节点属性，并提供异常隔离保护。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class MachineObserver {
     private final String flowId;

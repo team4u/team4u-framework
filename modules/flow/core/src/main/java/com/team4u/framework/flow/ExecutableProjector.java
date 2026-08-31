@@ -17,7 +17,7 @@ import java.util.Optional;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class ExecutableProjector {
     private ExecutableProjector() { }

@@ -15,7 +15,7 @@ import java.util.Objects;
  * <p>表示流程实例在特定时间点的完整序列化状态，用于跨进程持久化与崩溃恢复。
  * 快照内只包含元数据（Format / Version / Revision / Lifecycle）与业务载荷插槽（{@link StoredValue}），绝不包含任何可执行代码或动态代理引用。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 @Getter
 @Accessors(fluent = true)

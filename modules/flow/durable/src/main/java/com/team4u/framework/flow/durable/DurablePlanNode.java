@@ -24,7 +24,7 @@ import java.util.function.Function;
  *
  * <p>由 {@link DurablePlanCompiler} 从 Core 物理节点投影生成，持有确定的插槽标识与绑定的实例引用，供 {@link DurableMachine} 驱动执行。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 interface DurablePlanNode {
     /** 获取节点静态描述符。 */

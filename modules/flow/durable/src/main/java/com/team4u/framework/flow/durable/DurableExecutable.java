@@ -23,7 +23,7 @@ import java.util.concurrent.ExecutorService;
  *
  * @param <I> 流程输入类型
  * @param <O> 流程输出类型
- * @author team4u
+ * @author jay.wu
  */
 public final class DurableExecutable<I, O> {
     private final String flowId;

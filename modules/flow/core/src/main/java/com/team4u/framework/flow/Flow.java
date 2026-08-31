@@ -24,7 +24,7 @@ import java.util.function.Function;
  *
  * @param <I> 流程的初始输入数据类型
  * @param <O> 流程的最终输出数据类型
- * @author team4u
+ * @author jay.wu
  */
 public final class Flow<I, O> {
     private final Logical root;

@@ -22,7 +22,7 @@ import java.util.Optional;
  * </p>
  *
  * @param <O> 流程成功完成时的业务载荷类型
- * @author team4u
+ * @author jay.wu
  */
 @Getter
 @Accessors(fluent = true)

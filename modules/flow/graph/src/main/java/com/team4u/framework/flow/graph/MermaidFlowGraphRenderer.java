@@ -21,7 +21,7 @@ import java.util.Objects;
  * <p>基于 {@link FlowDescription} 静态拓扑描述模型，生成标准、美观且具有确定性节点 ID 与样式的 Mermaid 流程图代码（{@code flowchart TD}）。
  * 采用 Rope 树状出口集合（Exits）与显式工作栈，保证深层嵌套流程图渲染时无额外内存拷贝与栈溢出风险。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
 

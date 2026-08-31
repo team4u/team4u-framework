@@ -18,7 +18,7 @@ import java.util.concurrent.atomic.AtomicBoolean;
  * </p>
  *
  * @param <O> 流程最终执行完成后的输出类型
- * @author team4u
+ * @author jay.wu
  */
 public final class Suspension<O> {
     private final Object executableIdentity;

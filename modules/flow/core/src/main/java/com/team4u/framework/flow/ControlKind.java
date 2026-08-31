@@ -12,7 +12,7 @@ package com.team4u.framework.flow;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 public enum ControlKind {
     /** 内存无状态策略拦截。 */

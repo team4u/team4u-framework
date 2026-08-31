@@ -9,7 +9,7 @@ import java.util.Objects;
 /**
  * 动态条件路由（Route）单个分支的只读结构描述。
  *
- * @author team4u
+ * @author jay.wu
  */
 @Getter
 @Accessors(fluent = true)

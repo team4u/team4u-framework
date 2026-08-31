@@ -14,7 +14,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * <p>实现 {@link FlowObserver} 接口，以线程安全的方式记录执行生命周期全过程触发的事件（{@link FlowObserver.Event}），
  * 提供按事件类型（{@link FlowObserver.Type}）过滤、事件类型序列提取与节点拓扑路径查询等断言辅助方法。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 public final class TraceCollector implements FlowObserver {
 

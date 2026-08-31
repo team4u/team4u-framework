@@ -21,7 +21,7 @@ import java.util.Objects;
  * {@code resume(suspension, point, signal)} 并传入相匹配的信号恢复后续执行。</p>
  *
  * @param <R> 恢复该挂起点时所需信号数据的泛型类型
- * @author team4u
+ * @author jay.wu
  */
 @Getter
 @Accessors(fluent = true)

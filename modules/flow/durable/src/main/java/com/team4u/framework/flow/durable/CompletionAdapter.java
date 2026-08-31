@@ -10,7 +10,7 @@ import java.util.Optional;
  *
  * <p>根据业务四态结果（{@link Outcome}）安全构造供 Policy 回调使用的只读摘要信息。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class CompletionAdapter {
     private CompletionAdapter() {

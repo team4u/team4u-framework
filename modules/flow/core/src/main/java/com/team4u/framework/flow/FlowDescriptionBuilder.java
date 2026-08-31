@@ -13,7 +13,7 @@ import lombok.AllArgsConstructor;
  *
  * <p>采用显式工作栈后序构建算法，确保在面对任意超深层级嵌套时不会发生 JVM 栈溢出（StackOverflowError）。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class FlowDescriptionBuilder {
     private FlowDescriptionBuilder() { }

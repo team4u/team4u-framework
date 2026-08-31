@@ -23,7 +23,7 @@ import java.util.concurrent.ForkJoinPool;
  *
  * @param <I> 流程输入参数类型
  * @param <O> 流程输出结果类型
- * @author team4u
+ * @author jay.wu
  */
 public final class LocalExecutable<I, O> {
     private final Compiler.Compiled compiled;

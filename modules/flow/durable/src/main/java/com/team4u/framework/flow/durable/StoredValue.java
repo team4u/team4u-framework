@@ -11,7 +11,7 @@ import java.util.Objects;
  *
  * <p>表示经过 {@link StateMapper} 编码后的不可变应用数据二进制块，Durable 运行时将其作为不透明载荷（Opaque Data）安全存入快照插槽。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 @Getter
 @Accessors(fluent = true)

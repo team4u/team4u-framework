@@ -27,7 +27,7 @@ import java.util.function.Function;
  * </p>
  *
  * @param <T> 成功态时携带的输出载荷类型
- * @author team4u
+ * @author jay.wu
  */
 public abstract class Outcome<T> {
 

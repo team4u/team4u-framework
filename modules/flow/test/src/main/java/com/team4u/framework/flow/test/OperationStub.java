@@ -23,7 +23,7 @@ import java.util.function.Supplier;
  *
  * @param <I> 输入类型
  * @param <O> 输出类型
- * @author team4u
+ * @author jay.wu
  */
 public final class OperationStub<I, O> implements Operation<I, O> {
 

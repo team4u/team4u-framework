@@ -10,7 +10,7 @@ package com.team4u.framework.flow;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 public enum FallbackTrigger {
     /** 弃权触发：当前序步骤产生 Skipped 结果时尝试下一分支。 */

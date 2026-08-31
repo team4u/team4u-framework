@@ -18,7 +18,7 @@ import java.util.concurrent.CopyOnWriteArrayList;
  * 并以线程安全列表记录前置拦截 {@link BeforeCall} 与后置回调 {@link AfterCall}。</p>
  *
  * @param <K> 策略键类型
- * @author team4u
+ * @author jay.wu
  */
 public final class PolicyStub<K> implements Policy<K> {
 

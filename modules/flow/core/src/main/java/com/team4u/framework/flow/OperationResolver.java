@@ -14,7 +14,7 @@ import java.util.Objects;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 @FunctionalInterface
 public interface OperationResolver {

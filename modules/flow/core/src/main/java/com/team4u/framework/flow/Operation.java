@@ -14,7 +14,7 @@ package com.team4u.framework.flow;
  *
  * @param <I> 输入数据类型
  * @param <O> 输出数据类型
- * @author team4u
+ * @author jay.wu
  */
 @FunctionalInterface
 public interface Operation<I, O> {

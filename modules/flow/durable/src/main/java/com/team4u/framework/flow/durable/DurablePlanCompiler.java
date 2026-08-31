@@ -31,7 +31,7 @@ import java.util.function.Function;
  * <p>实现 Core 公开的投影 SPI {@link ExecutableFlowVisitor}，将已校验的拓扑计划投影为 Durable 专属物理树 {@link DurablePlanNode}，
  * 并预计算生成所有插槽角色列表（{@code slotRoles}）、挂起点映射表（{@code resumePoints}）以及线程池需求特征。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class DurablePlanCompiler implements ExecutableFlowVisitor<DurablePlanNode> {
 

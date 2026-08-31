@@ -35,7 +35,7 @@ import java.util.TreeMap;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class SnapshotCodec {
     private static final int MAGIC = 0x54344644;

@@ -7,7 +7,7 @@ import java.util.Collections;
  *
  * <p>负责在状态机遇到结构节点时，完成初始状态设置、首个子帧压栈（Push）以及挂起点拦截（Await Suspension）。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class FrameEntrant {
     private FrameEntrant() { }

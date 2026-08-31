@@ -15,7 +15,7 @@ import java.util.List;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class RestoredStateValidator {
     private RestoredStateValidator() {

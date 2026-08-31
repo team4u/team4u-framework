@@ -17,7 +17,7 @@ import java.util.Objects;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class ControlExecutor {
     private static final class PolicyBefore {

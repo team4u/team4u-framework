@@ -23,7 +23,7 @@ import java.util.Objects;
  *
  * <p>该状态通常由操作异常抛出、执行超时、策略报错或显式返回触发，可被 {@link Retry} 重试拦截或 {@code recoverWith} 恢复降级。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 @Getter
 @Accessors(fluent = true)

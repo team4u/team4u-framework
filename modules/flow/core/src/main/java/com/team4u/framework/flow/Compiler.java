@@ -32,7 +32,7 @@ import java.util.Set;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class Compiler {
 

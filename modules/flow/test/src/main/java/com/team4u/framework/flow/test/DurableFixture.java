@@ -21,7 +21,7 @@ import java.util.Optional;
  *
  * @param <I> 流程输入类型
  * @param <O> 流程输出类型
- * @author team4u
+ * @author jay.wu
  */
 public final class DurableFixture<I, O> {
 

@@ -12,7 +12,7 @@ package com.team4u.framework.flow.durable;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 public enum DurableLifecycle {
     /** 活跃推进中（含等待下一次退避重试唤醒）。 */

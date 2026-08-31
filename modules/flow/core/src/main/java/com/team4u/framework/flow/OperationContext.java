@@ -18,7 +18,7 @@ import java.util.concurrent.ExecutionException;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 public interface OperationContext {
 

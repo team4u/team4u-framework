@@ -11,7 +11,7 @@ package com.team4u.framework.flow;
  * </p>
  *
  * @param <K> 策略键类型（由节点输入通过 keyProjection 投影生成）
- * @author team4u
+ * @author jay.wu
  */
 public interface Policy<K> {
 

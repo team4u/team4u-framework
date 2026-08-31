@@ -11,7 +11,7 @@ import java.util.Objects;
  * 结构化并行（Parallel）单条分支的强类型可执行投影视图。
  *
  * @param <R> 目标执行拓扑节点的泛型类型
- * @author team4u
+ * @author jay.wu
  */
 @Getter
 @Accessors(fluent = true)

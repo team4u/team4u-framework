@@ -24,7 +24,7 @@ import java.util.Objects;
  *
  * @param <K> 策略键类型
  * @param <S> 策略不可变内部状态类型（需可被 StateMapper 序列化）
- * @author team4u
+ * @author jay.wu
  */
 public interface PersistentPolicy<K, S> {
 

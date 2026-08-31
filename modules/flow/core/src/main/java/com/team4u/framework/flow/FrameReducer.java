@@ -19,7 +19,7 @@ import java.util.concurrent.CancellationException;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class FrameReducer {
     private FrameReducer() { }

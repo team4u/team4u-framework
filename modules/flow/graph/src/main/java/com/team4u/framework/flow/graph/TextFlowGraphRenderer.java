@@ -16,7 +16,7 @@ import java.util.Objects;
  *
  * <p>基于 {@link FlowDescription} 静态拓扑描述模型，按先序遍历逐行输出紧凑、结构化的纯文本节点与属性信息，便于日志打印、断言比对与纯命令行环境排查。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class TextFlowGraphRenderer implements FlowGraphRenderer {
 

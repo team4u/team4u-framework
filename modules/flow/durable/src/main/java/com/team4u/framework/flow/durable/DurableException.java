@@ -10,7 +10,7 @@ import java.util.Objects;
  *
  * <p>封装持久化存储、版本冲突、快照编解码、拓扑校验及生命周期调度过程中的所有错误，包含固定的错误码枚举 {@link Error}。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 @Getter
 @Accessors(fluent = true)

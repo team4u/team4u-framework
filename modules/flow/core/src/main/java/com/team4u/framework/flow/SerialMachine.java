@@ -20,7 +20,7 @@ import java.util.concurrent.ExecutorService;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class SerialMachine {
     private final String flowId;

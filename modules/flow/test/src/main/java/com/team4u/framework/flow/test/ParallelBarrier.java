@@ -9,7 +9,7 @@ import java.util.concurrent.TimeUnit;
  * <p>基于 {@link CountDownLatch} 实现，用于测试多分支并行执行时（如 {@link com.team4u.framework.flow.Flow#parallel}）
  * 验证各分支是否真正实现并发交织运行，具备超时保护以防止测试死锁。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 public final class ParallelBarrier {
 

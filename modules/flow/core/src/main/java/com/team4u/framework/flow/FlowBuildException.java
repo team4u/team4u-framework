@@ -11,7 +11,7 @@ import java.util.Objects;
  * <p>用于在流程编译或合法性检查（如重复 scope 名称、非法 await 节点、并行内挂起、缺失 Operation 绑定等）
  * 聚合所有诊断问题 {@link Problem} 并一次性报告，便于开发者快速定位所有结构设计缺陷。</p>
  *
- * @author team4u
+ * @author jay.wu
  */
 public final class FlowBuildException extends IllegalArgumentException {
     /** 聚合的全部构建问题诊断列表。 */

@@ -48,7 +48,7 @@ import java.util.concurrent.TimeoutException;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class DurableMachine {
     private final DurablePlanCompiler.Definition definition;

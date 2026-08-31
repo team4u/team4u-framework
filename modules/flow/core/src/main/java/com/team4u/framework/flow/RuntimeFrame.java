@@ -18,7 +18,7 @@ import java.util.Objects;
  * </ul>
  * </p>
  *
- * @author team4u
+ * @author jay.wu
  */
 final class RuntimeFrame {
     final PlanNode node;
