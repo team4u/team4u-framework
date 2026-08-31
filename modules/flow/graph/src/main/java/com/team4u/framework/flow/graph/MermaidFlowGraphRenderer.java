@@ -16,24 +16,26 @@ import java.util.List;
 import java.util.Objects;
 
 /**
- * Deterministic Mermaid renderer for the static flow description model.
+ * 确定性 Mermaid 流程图渲染器（Deterministic Mermaid Flow Graph Renderer）。
+ *
+ * <p>基于 {@link FlowDescription} 静态拓扑描述模型，生成标准、美观且具有确定性节点 ID 与样式的 Mermaid 流程图代码（{@code flowchart TD}）。
+ * 采用 Rope 树状出口集合（Exits）与显式工作栈，保证深层嵌套流程图渲染时无额外内存拷贝与栈溢出风险。</p>
+ *
+ * @author team4u
  */
 final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
 
     static final MermaidFlowGraphRenderer INSTANCE = new MermaidFlowGraphRenderer();
 
+
     private enum Channel {
         ACCEPTED, REJECTED, SKIPPED, FAILED, SUSPENDED, CANCELLED
     }
 
+    @lombok.AllArgsConstructor
     private static final class Exit {
         private final String source;
         private final Channel channel;
-
-        private Exit(String source, Channel channel) {
-            this.source = source;
-            this.channel = channel;
-        }
     }
 
     /**
@@ -62,35 +64,25 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         static final EmptyExits INSTANCE = new EmptyExits();
     }
 
+    @lombok.AllArgsConstructor
     private static final class SingleExit extends Exits {
         private final Exit exit;
-
-        SingleExit(Exit exit) {
-            this.exit = exit;
-        }
     }
 
+    @lombok.AllArgsConstructor
     private static final class ConcatExits extends Exits {
         private final Exits left;
         private final Exits right;
-
-        ConcatExits(Exits left, Exits right) {
-            this.left = left;
-            this.right = right;
-        }
     }
 
     private interface ExitVisitor {
         void visit(Exit exit);
     }
 
+    @lombok.RequiredArgsConstructor
     private static final class Fragment {
         private final String entry;
         private Exits exits = Exits.EMPTY;
-
-        private Fragment(String entry) {
-            this.entry = entry;
-        }
 
         private void add(String source, Channel channel) {
             add(new Exit(source, channel));

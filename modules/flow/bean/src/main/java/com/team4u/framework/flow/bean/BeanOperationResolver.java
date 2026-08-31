@@ -7,26 +7,37 @@ import com.team4u.framework.flow.OperationResolver;
 import java.util.Objects;
 
 /**
- * Resolves flow extension-point bindings from a {@link BeanManager} without
- * replacing or unwrapping the object supplied by the container.
+ * 基于 {@link BeanManager} 的组件依赖查找解析器（Bean-Backed Operation Resolver）。
+ *
+ * <p>实现 {@link OperationResolver} 接口，支持根据契约类型（Class）和限定符（Qualifier/BeanName）从 Spring/Team4u 容器中解析单例 Bean 实例。</p>
+ *
+ * @author team4u
  */
 public final class BeanOperationResolver implements OperationResolver {
     private final BeanManager beanManager;
 
-    /** Uses the global {@link BeanManager}. */
+    /**
+     * 使用全局默认的 {@link BeanManager#getInstance()} 构造解析器。
+     */
     public BeanOperationResolver() {
         this(BeanManager.getInstance());
     }
 
     /**
-     * Uses the supplied manager. This is primarily useful when container setup
-     * already exposes the manager explicitly.
+     * 使用指定的 {@link BeanManager} 容器构造解析器。
+     *
+     * @param beanManager Bean 管理器，不能为 null
+     * @throws NullPointerException 当 beanManager 为 null 时抛出
      */
     public BeanOperationResolver(BeanManager beanManager) {
         this.beanManager = Objects.requireNonNull(beanManager, "beanManager must not be null");
     }
 
-    /** Returns a resolver backed by the global {@link BeanManager}. */
+    /**
+     * 获取基于全局 {@link BeanManager} 的解析器实例。
+     *
+     * @return 解析器实例
+     */
     public static BeanOperationResolver global() {
         return new BeanOperationResolver(BeanManager.getInstance());
     }
@@ -50,3 +61,4 @@ public final class BeanOperationResolver implements OperationResolver {
         return bean;
     }
 }
+

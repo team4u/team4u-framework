@@ -6,14 +6,21 @@ import java.time.Instant;
 import java.util.Objects;
 
 /**
- * Small JDK-only mapper for scalar values. Domain values require a custom mapper.
+ * 默认基础标量类型业务数据编解码器（Default State Mapper）。
+ *
+ * <p>基于原生 JDK 实现，内置支持 String、Integer、Long、Boolean、Double、Float、Short、Byte、Character、byte[] 以及 Instant 类型的确定性编解码。
+ * 若业务流携带复杂的领域实体对象（DTO/POJO），建议通过 Jackson/Fastjson/Protobuf 实现自定义 {@link StateMapper}。</p>
+ *
+ * @author team4u
  */
 public final class DefaultStateMapper implements StateMapper {
+    /** 默认单例实例。 */
     public static final DefaultStateMapper INSTANCE = new DefaultStateMapper();
     private static final int VERSION = 1;
 
     private DefaultStateMapper() {
     }
+
 
     @Override
     public StoredValue encode(Object value) {

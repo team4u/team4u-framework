@@ -13,8 +13,17 @@ import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutorService;
 
 /**
- * 绑定 flowId/flowVersion 的可恢复执行入口。所有命令都遵循同一模式：
- * load（无副作用）→ 校验生命周期 → 状态变更 → CAS 提交 → 驱动机器。
+ * 绑定特定 flowId 与 flowVersion 的可持久化流程执行句柄（Durable Executable Handle）。
+ *
+ * <p>提供受 CAS 乐观锁版本保护的崩溃恢复、启动、挂起信号注入与状态查询能力。所有写操作遵循统一的状态机事务范式：
+ * <pre>{@code
+ *   Load Snapshot (无副作用读取) -> 校验当前生命周期 -> 计算状态转移变更 -> CAS 提交更新 -> 驱动内存状态机执行
+ * }</pre>
+ * </p>
+ *
+ * @param <I> 流程输入类型
+ * @param <O> 流程输出类型
+ * @author team4u
  */
 public final class DurableExecutable<I, O> {
     private final String flowId;
@@ -45,10 +54,20 @@ public final class DurableExecutable<I, O> {
         this.executor = executor;
     }
 
+    /**
+     * 获取绑定的流程唯一标识。
+     *
+     * @return 流程标识
+     */
     public String flowId() {
         return flowId;
     }
 
+    /**
+     * 获取绑定的流程版本号。
+     *
+     * @return 版本号
+     */
     public int flowVersion() {
         return flowVersion;
     }
@@ -57,8 +76,19 @@ public final class DurableExecutable<I, O> {
     // start
     // ------------------------------------------------------------------
 
-    /** 开启新执行：先 CAS 创建 ACTIVE 初始快照（revision=1），再驱动首段。重复 start 以 EXECUTION_EXISTS 拒绝。 */
+    /**
+     * 开启并驱动全新流程实例执行。
+     *
+     * <p>首先向持久化存储以 CAS 提交版本号为 1 的初始活跃快照（ACTIVE），若已存在同名 executionId 则抛出 {@link DurableException.Error#EXECUTION_EXISTS}；
+     * 随后启动状态机驱动执行直至完成、挂起或需要外部退避唤醒。</p>
+     *
+     * @param executionId 流程执行实例全局唯一 ID，不能为空
+     * @param input       流程初始输入载荷，不能为 null
+     * @return 持久化执行结果 {@link DurableResult}
+     * @throws DurableException 当 executionId 已存在或底层存储失败时抛出
+     */
     public DurableResult<O> start(String executionId, I input) {
+
         text(executionId, "executionId");
         Objects.requireNonNull(input, "input must not be null");
         if (store.load(executionId).isPresent()) {
@@ -78,7 +108,24 @@ public final class DurableExecutable<I, O> {
     // resume
     // ------------------------------------------------------------------
 
-    /** 向 SUSPENDED 执行注入信号：先独立提交信号（pendingResume），再驱动 continuation。 */
+    /**
+     * 向处于挂起状态（{@link DurableLifecycle#SUSPENDED}）的流程注入恢复信号并续跑执行。
+     *
+     * <p>执行流程：
+     * <ul>
+     *   <li>读取快照并校验处于 SUSPENDED 状态且目标挂起点（pointName）完全匹配；</li>
+     *   <li>将 signal 编码为持久化 StoredValue 写入快照插槽，并通过 CAS 提交为 ACTIVE 状态；</li>
+     *   <li>若 CAS 成功，驱动内存状态机消费该恢复信号并继续推进后续编排流程。</li>
+     * </ul>
+     * </p>
+     *
+     * @param executionId 流程执行实例 ID，不能为空
+     * @param pointName   目标挂起点名称，不能为空
+     * @param signal      外部注入的恢复信号载荷，不能为 null
+     * @param <R>         恢复信号泛型类型
+     * @return 执行推进结果
+     * @throws DurableException 若状态不为 SUSPENDED、挂起点不匹配或信号发生冲突时抛出
+     */
     public <R> DurableResult<O> resume(String executionId, String pointName, R signal) {
         return resume(executionId, pointName, signal, true);
     }
@@ -188,7 +235,15 @@ public final class DurableExecutable<I, O> {
     // recover
     // ------------------------------------------------------------------
 
-    /** 恢复 ACTIVE 执行：从最后提交的快照解码并继续驱动。 */
+    /**
+     * 从崩溃或重启中恢复处于活跃状态（{@link DurableLifecycle#ACTIVE}）的流程执行。
+     *
+     * <p>从底层存储读取最新检查点快照，重建执行帧栈状态机，并从最近一次成功提交的检查点之后继续驱动执行。</p>
+     *
+     * @param executionId 流程执行实例 ID，不能为空
+     * @return 恢复执行结果
+     * @throws DurableException 若流程不存在或其生命周期并非 ACTIVE 时抛出
+     */
     @SuppressWarnings("unchecked")
     public DurableResult<O> recover(String executionId) {
         text(executionId, "executionId");
@@ -207,7 +262,15 @@ public final class DurableExecutable<I, O> {
     // cancel
     // ------------------------------------------------------------------
 
-    /** 取消 ACTIVE/SUSPENDED 执行：CAS 落 CANCELLED 终态。 */
+    /**
+     * 取消处于活跃（ACTIVE）或挂起（SUSPENDED）状态的流程执行。
+     *
+     * <p>原子将快照状态 CAS 置为 {@link DurableLifecycle#CANCELLED} 终态；若已处于 COMPLETED 或 CANCELLED 终态则抛出生命周期异常。</p>
+     *
+     * @param executionId 流程执行实例 ID，不能为空
+     * @return 取消终态结果
+     * @throws DurableException 若流程已处于终态或 CAS 冲突时抛出
+     */
     public DurableResult<O> cancel(String executionId) {
         text(executionId, "executionId");
         Loaded loaded = load(executionId);
@@ -237,6 +300,12 @@ public final class DurableExecutable<I, O> {
     // load（无副作用）
     // ------------------------------------------------------------------
 
+    /**
+     * 只读加载流程实例的最新快照（无副作用）。
+     *
+     * @param executionId 流程执行实例 ID，不能为空
+     * @return 若存在返回快照 Optional，否则返回 empty
+     */
     public Optional<DurableSnapshot> snapshot(String executionId) {
         text(executionId, "executionId");
         try {
@@ -252,7 +321,14 @@ public final class DurableExecutable<I, O> {
     // async
     // ------------------------------------------------------------------
 
-    /** 异步 start：借用调用方 executor，缺失时抛 ASYNC_EXECUTOR_MISSING。 */
+    /**
+     * 异步启动流程执行。
+     *
+     * @param executionId 流程执行实例 ID，不能为空
+     * @param input       初始输入载荷，不能为 null
+     * @return 异步执行阶段 Future
+     * @throws DurableException 若未配置 executor 时抛出
+     */
     public CompletionStage<DurableResult<O>> startAsync(final String executionId, final I input) {
         final ExecutorService async = requireExecutor();
         final CompletableFuture<DurableResult<O>> future = new CompletableFuture<DurableResult<O>>();
@@ -268,10 +344,20 @@ public final class DurableExecutable<I, O> {
         return future;
     }
 
-    /** 异步 resume：借用调用方 executor，缺失时抛 ASYNC_EXECUTOR_MISSING。 */
+    /**
+     * 异步恢复挂起流程执行。
+     *
+     * @param executionId 流程执行实例 ID，不能为空
+     * @param pointName   目标挂起点名称，不能为空
+     * @param signal      恢复信号载荷，不能为 null
+     * @param <R>         恢复信号泛型
+     * @return 异步执行阶段 Future
+     * @throws DurableException 若未配置 executor 时抛出
+     */
     public <R> CompletionStage<DurableResult<O>> resumeAsync(final String executionId,
                                                              final String pointName,
                                                              final R signal) {
+
         final ExecutorService async = requireExecutor();
         final CompletableFuture<DurableResult<O>> future = new CompletableFuture<DurableResult<O>>();
         async.execute(new Runnable() {

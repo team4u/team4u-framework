@@ -6,27 +6,33 @@ import java.util.Collections;
 import java.util.List;
 import java.util.Optional;
 
+import lombok.AllArgsConstructor;
+
 /**
- * 遍历 Logical 树并生成 NodeDescription 树的内部构建器。
- * 采用显式工作栈后序构建，支持任意深度的嵌套流结构而不会发生栈溢出。
+ * 遍历 Logical 树并生成 {@link NodeDescription} 树的内部结构构建器。
+ *
+ * <p>采用显式工作栈后序构建算法，确保在面对任意超深层级嵌套时不会发生 JVM 栈溢出（StackOverflowError）。</p>
+ *
+ * @author team4u
  */
 final class FlowDescriptionBuilder {
     private FlowDescriptionBuilder() { }
 
+    @AllArgsConstructor
     private static final class WorkItem {
         final Logical logical;
         final String path;
         final String label;
         final boolean build;
-
-        WorkItem(Logical logical, String path, String label, boolean build) {
-            this.logical = logical;
-            this.path = path;
-            this.label = label;
-            this.build = build;
-        }
     }
 
+    /**
+     * 遍历逻辑 AST 并生成结构化描述树。
+     *
+     * @param rootLogical 逻辑 AST 根节点
+     * @param rootPath    根节点路径（通常为 {@code "$"}）
+     * @return 节点描述树
+     */
     static NodeDescription describe(Logical rootLogical, String rootPath) {
         ArrayDeque<WorkItem> workStack = new ArrayDeque<WorkItem>();
         ArrayList<NodeDescription> resultStack = new ArrayList<NodeDescription>();
@@ -105,7 +111,7 @@ final class FlowDescriptionBuilder {
     }
 
     private static NodeDescription buildDescription(Logical logical, String path, String label,
-                                                    ArrayList<NodeDescription> resultStack) {
+                                                     ArrayList<NodeDescription> resultStack) {
         Optional<String> optLabel = Optional.ofNullable(label);
 
         if (logical instanceof Logical.Invoke) {
@@ -209,3 +215,4 @@ final class FlowDescriptionBuilder {
         return new BindingDescriptor(contract, impl, binding.qualifier(), binding.kind().name());
     }
 }
+

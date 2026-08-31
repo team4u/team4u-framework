@@ -27,6 +27,11 @@
         </dependency>
 
         <dependency>
+            <groupId>org.projectlombok</groupId>
+            <artifactId>lombok</artifactId>
+        </dependency>
+
+        <dependency>
             <groupId>com.team4u</groupId>
             <artifactId>team4u-bean-spring</artifactId>
             <version>${project.version}</version>
@@ -67,15 +72,12 @@
                                     <excludes>
                                         <exclude>org.springframework*:*:*:*:compile</exclude>
                                         <exclude>org.springframework*:*:*:*:runtime</exclude>
-                                        <exclude>org.projectlombok:*:*:*:compile</exclude>
-                                        <exclude>org.projectlombok:*:*:*:runtime</exclude>
-                                        <exclude>org.projectlombok:*:*:*:provided</exclude>
                                         <exclude>org.slf4j:*:*:*:compile</exclude>
                                         <exclude>org.slf4j:*:*:*:runtime</exclude>
                                         <exclude>com.fasterxml.jackson*:*:*:*:compile</exclude>
                                         <exclude>com.fasterxml.jackson*:*:*:*:runtime</exclude>
                                     </excludes>
-                                    <message>team4u-flow-bean production code may depend only on team4u-flow and team4u-bean; Spring, Lombok, SLF4J, and Jackson are forbidden as direct production dependencies.</message>
+                                    <message>team4u-flow-bean production code may depend only on team4u-flow and team4u-bean; Spring, SLF4J, and Jackson are forbidden as direct production dependencies.</message>
                                 </bannedDependencies>
                             </rules>
                         </configuration>

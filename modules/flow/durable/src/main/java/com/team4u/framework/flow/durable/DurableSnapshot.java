@@ -1,5 +1,8 @@
 package com.team4u.framework.flow.durable;
 
+import lombok.Getter;
+import lombok.experimental.Accessors;
+
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -7,25 +10,59 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * Immutable durable envelope. Framework metadata and encoded value slots are the
- * only persisted payloads; executable callbacks never belong in a snapshot.
+ * 不可变耐久化快照信封（Immutable Durable Snapshot Envelope）。
+ *
+ * <p>表示流程实例在特定时间点的完整序列化状态，用于跨进程持久化与崩溃恢复。
+ * 快照内只包含元数据（Format / Version / Revision / Lifecycle）与业务载荷插槽（{@link StoredValue}），绝不包含任何可执行代码或动态代理引用。</p>
+ *
+ * @author team4u
  */
+@Getter
+@Accessors(fluent = true)
 public final class DurableSnapshot {
+    /** 当前快照格式唯一标识。 */
     public static final String CURRENT_FORMAT_ID = "team4u-typed-flow-durable";
+    /** 当前快照格式版本号。 */
     public static final int CURRENT_FORMAT_VERSION = 1;
 
+    /** 流程执行实例唯一 ID。 */
     private final String executionId;
+    /** 流程定义唯一 ID。 */
     private final String flowId;
+    /** 流程定义版本号。 */
     private final int flowVersion;
+    /** 快照编码格式 ID。 */
     private final String formatId;
+    /** 快照编码格式版本。 */
     private final int formatVersion;
+    /** 乐观锁单调递增版本号（从 0 开始）。 */
     private final long revision;
+    /** 流程生命周期阶段。 */
     private final DurableLifecycle lifecycle;
+    /** 执行帧栈紧凑二进制拓扑元数据。 */
     private final byte[] frameMetadata;
+    /** 业务插槽字典（按 SlotRole 索引）。 */
     private final Map<String, StoredValue> slots;
+    /** 正在等待的挂起点名称（若处于 SUSPENDED 或待消费信号状态）。 */
     private final String awaitingPoint;
+    /** 是否包含待消费的恢复信号（Pending Resume Signal）。 */
     private final boolean pendingResume;
 
+    /**
+     * 构造不可变快照对象并严格校验生命周期约束不变式。
+     *
+     * @param executionId   流程实例 ID
+     * @param flowId        流程 ID
+     * @param flowVersion   流程版本
+     * @param formatId      格式 ID
+     * @param formatVersion 格式版本
+     * @param revision      版本号
+     * @param lifecycle     生命周期
+     * @param frameMetadata 帧拓扑字节数组
+     * @param slots         业务数据插槽映射
+     * @param awaitingPoint 挂起点名称
+     * @param pendingResume 是否包含挂起信号
+     */
     public DurableSnapshot(String executionId, String flowId, int flowVersion,
                            String formatId, int formatVersion, long revision,
                            DurableLifecycle lifecycle, byte[] frameMetadata,
@@ -55,6 +92,7 @@ public final class DurableSnapshot {
         validateLifecycle();
     }
 
+
     private void validateLifecycle() {
         if (lifecycle == DurableLifecycle.SUSPENDED) {
             if (awaitingPoint == null || pendingResume) {
@@ -72,17 +110,7 @@ public final class DurableSnapshot {
         }
     }
 
-    public String executionId() { return executionId; }
-    public String flowId() { return flowId; }
-    public int flowVersion() { return flowVersion; }
-    public String formatId() { return formatId; }
-    public int formatVersion() { return formatVersion; }
-    public long revision() { return revision; }
-    public DurableLifecycle lifecycle() { return lifecycle; }
     public byte[] frameMetadata() { return frameMetadata.clone(); }
-    public Map<String, StoredValue> slots() { return slots; }
-    public String awaitingPoint() { return awaitingPoint; }
-    public boolean pendingResume() { return pendingResume; }
 
     @Override
     public boolean equals(Object other) {

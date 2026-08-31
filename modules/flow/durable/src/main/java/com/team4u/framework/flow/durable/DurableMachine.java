@@ -37,21 +37,18 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * 单个帧栈的同步推进内核，执行语义与 Core SerialMachine 严格一致：
- * sequence 仅 Accepted 推进；route 两阶段选择；fallback 按触发条件换分支；
- * control 维护 attempt/deadline/wake；parallel 顺序驱动 wait-all 后显式 join。
+ * 耐久化流程状态机执行内核（Durable Execution State Machine）。
  *
- * <p>每个稳定边界通过 {@link Checkpoints} 提交 CAS 快照。提交总是发生在
- * "压入下一子帧之后"，因此已提交快照的栈顶永远是尚未（在本 revision 内）执行的节点，
- * 崩溃恢复从栈顶重放即可获得 at-least-once 语义。</p>
+ * <p>核心架构与执行语义：
+ * <ul>
+ *   <li><b>严格与 Core 对齐</b>：与 Core 的 {@link com.team4u.framework.flow.SerialMachine} 保持严格一致的四态逻辑语义（Sequence 仅 Accepted 推进、Route 双阶段选择、Fallback 触发重试等）；</li>
+ *   <li><b>检查点原子持久化（At-least-once）</b>：每个稳定边界通过 {@link Checkpoints} 提交 CAS 快照。提交总发生在“压入下一子帧之后”，因此已提交快照的栈顶永远是尚未在当前 revision 内执行的节点，崩溃重启重放栈顶即可天然获得 At-least-once 保证；</li>
+ *   <li><b>无线程占用的 Park 机制</b>：在遇到 Retry 退避或 PersistentPolicy 调度时，主执行栈直接将快照持久化后退出线程（Parked），彻底释放底层工作线程，由外部定时调度器按 {@code wakeAt} 重新拉起；</li>
+ *   <li><b>声明顺序串行驱动 Parallel</b>：Parallel 的分支按声明顺序逐个完整执行并落库，保障强一致性与确定的崩溃恢复拓扑。</li>
+ * </ul>
+ * </p>
  *
- * <p>branchMode 用于 Parallel 分支：不提交检查点（仅分支完成由父帧记录），
- * 退避等待在线程内睡眠完成。</p>
- *
- * <p><b>并行分支串行驱动（合同允许的简化）</b>：Parallel 的分支按声明顺序逐个
- * 完整驱动（前序分支完成后才开始后序），不做并发执行。顺序驱动保证每次检查点
- * 提交时快照状态自洽、崩溃恢复只需重放首个空槽位之后的分支。需要真实并发执行
- * 时请使用 Core 的 Local 执行器。</p>
+ * @author team4u
  */
 final class DurableMachine {
     private final DurablePlanCompiler.Definition definition;
@@ -77,8 +74,13 @@ final class DurableMachine {
         this.branchMode = branchMode;
     }
 
-    /** 同步推进帧栈直至完成、挂起或退避等待（parked，不占线程）。 */
+    /**
+     * 同步单线程推进帧栈，直至完成（COMPLETED）、挂起（SUSPENDED）或进入退避等待（Parked，不占用线程）。
+     *
+     * @return 状态机推进结果 {@link DurableState.MachineResult}
+     */
     DurableState.MachineResult drive() {
+
         while (state.lifecycle == DurableLifecycle.ACTIVE && !parked) {
             checkTimeout();
             if (state.lifecycle != DurableLifecycle.ACTIVE || parked) {

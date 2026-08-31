@@ -7,7 +7,11 @@ import java.util.Map;
 import java.util.Optional;
 
 /**
- * MachineObserver 向 FlowObserver 转发事件的内部适配器，构造稳定的 Metadata 与节点属性。
+ * 流程状态机事件发布适配器（Machine Event Dispatcher）。
+ *
+ * <p>封装对 {@link FlowObserver} 的事件派发逻辑，负责构造规范化的 {@link Metadata} 上下文、节点属性，并提供异常隔离保护。</p>
+ *
+ * @author team4u
  */
 final class MachineObserver {
     private final String flowId;
@@ -22,6 +26,7 @@ final class MachineObserver {
         this.state = state;
         this.observer = observer;
     }
+
 
     /** 帧首次进入时发布 NODE_STARTED（observerStarted 去重保证幂等）。 */
     void nodeStarted(RuntimeFrame frame) {

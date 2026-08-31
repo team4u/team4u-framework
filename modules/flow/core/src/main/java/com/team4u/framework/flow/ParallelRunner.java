@@ -21,11 +21,21 @@ import java.util.concurrent.atomic.AtomicInteger;
 import java.util.concurrent.atomic.AtomicReference;
 
 /**
- * 在线程池上并行执行 Parallel 节点的各分支，wait-all 汇合后交给 JoinStrategy。
- * 取消、超时与异常均实现真正的 wait-all 退出保证：通过任务 finally + CountDownLatch
- * 确保调用返回前所有已启动分支的工作线程完全退出，杜绝后台并发线程泄漏。
+ * 结构化并行（Parallel）多分支并发调度与汇聚执行器（Parallel Fork-Join Runner）。
+ *
+ * <p>核心机制与并发可靠性保证：
+ * <ul>
+ *   <li><b>多分支独立隔离</b>：每个并发分支运行在各自独立的 {@link SerialMachine} 栈中，互不干扰；</li>
+ *   <li><b>非队头阻塞汇合</b>：通过内部任务就绪队列（{@link LinkedBlockingQueue}）驱动多路完成监听，结合 {@link ManagedBlockers} 支持 ForkJoinPool 补偿，避免公共池线程饥饿与死锁；</li>
+ *   <li><b>True Wait-All 退出保证</b>：采用显式 3 状态机（{@code NOT_STARTED, RUNNING, EXITED}）的 {@code TrackedTask} 与 {@link CountDownLatch}，确保在任何正常返回、异常中断、超时或取消场景下，主线程均等待所有已提交的工作线程完全安全退出，彻底杜绝并发孤儿线程泄漏；</li>
+ *   <li><b>声明顺序汇聚</b>：所有分支执行完成后，按原始声明顺序构造 {@link ParallelResults} 交付给 {@link JoinStrategy#join} 聚合。</li>
+ * </ul>
+ * </p>
+ *
+ * @author team4u
  */
 final class ParallelRunner {
+
     private static final class Task {
         private final PlanNode.ParallelBranch branch;
         private final Cancellation cancellation;

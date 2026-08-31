@@ -24,13 +24,28 @@ import java.util.Objects;
 import java.util.Set;
 import java.util.TreeMap;
 
-/** Encodes runtime state as framework metadata plus opaque application slots. */
+/**
+ * 流程快照二进制紧凑编解码器（Durable Snapshot Codec）。
+ *
+ * <p>核心职责：
+ * <ul>
+ *   <li><b>帧栈拓扑与插槽分离</b>：将执行帧栈拓扑（Frame Hierarchy）、状态阶段、超时时间等结构元数据编码为二进制字节块（{@code frameMetadata}），将实际业务对象通过 {@link StateMapper} 编码为扁平的插槽字典（{@code slots}）；</li>
+ *   <li><b>防篡改与完整性校验</b>：解码时校验魔数（Magic）、版本号，并严格核对反序列化用到的插槽键集合与快照携带的插槽集合完全一致，防止插槽悬空或遗漏；</li>
+ *   <li><b>独立挂起信号信封</b>：挂起信号（Pending Resume Signal）仅存放于快照信封，无需重新编码帧栈拓扑，优化网络与存储 I/O 开销。</li>
+ * </ul>
+ * </p>
+ *
+ * @author team4u
+ */
 final class SnapshotCodec {
     private static final int MAGIC = 0x54344644;
     private static final int METADATA_VERSION = 1;
     private static final int MAX_COUNT = 1_000_000;
     private static final int MAX_TEXT_BYTES = 16 * 1024 * 1024;
 
+    /**
+     * 快照编码后的二进制元数据与插槽载荷容器。
+     */
     static final class Payload {
         private final byte[] metadata;
         private final Map<String, StoredValue> slots;
@@ -45,6 +60,7 @@ final class SnapshotCodec {
     }
 
     private SnapshotCodec() { }
+
 
     static Payload encode(DurableState.MachineState state, StateMapper mapper,
                           Set<String> knownRoles) {

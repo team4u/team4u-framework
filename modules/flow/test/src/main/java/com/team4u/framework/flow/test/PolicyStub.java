@@ -12,66 +12,36 @@ import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * 记录 before/after 调用并可配置 Gate 决策的线程安全 Policy 桩。
+ * 线程安全的可编程控制策略测试桩（Programmable Policy Test Stub）。
  *
- * <p>before 每次调用记录 {@link BeforeCall}（attempt 与策略键），after 每次调用记录
- * {@link AfterCall}（attempt 与完成摘要）。默认决策为 {@link Gate#proceed()}。</p>
+ * <p>实现 {@link Policy} 接口，支持配置 {@link Gate} 决策（Proceed/Reject/Fail），
+ * 并以线程安全列表记录前置拦截 {@link BeforeCall} 与后置回调 {@link AfterCall}。</p>
+ *
+ * @param <K> 策略键类型
+ * @author team4u
  */
 public final class PolicyStub<K> implements Policy<K> {
 
+
     /** before 调用记录：重试 attempt 与策略键。 */
+    @lombok.Getter
+    @lombok.experimental.Accessors(fluent = true)
+    @lombok.AllArgsConstructor
+    @lombok.ToString
     public static final class BeforeCall<K> {
         private final int attempt;
         private final K key;
-
-        BeforeCall(int attempt, K key) {
-            this.attempt = attempt;
-            this.key = key;
-        }
-
-        public int attempt() {
-            return attempt;
-        }
-
-        public K key() {
-            return key;
-        }
-
-        @Override
-        public String toString() {
-            return "BeforeCall[attempt=" + attempt + ", key=" + key + "]";
-        }
     }
 
     /** after 调用记录：重试 attempt 与完成摘要。 */
+    @lombok.Getter
+    @lombok.experimental.Accessors(fluent = true)
+    @lombok.AllArgsConstructor
+    @lombok.ToString
     public static final class AfterCall<K> {
         private final int attempt;
         private final K key;
         private final Completion completion;
-
-        AfterCall(int attempt, K key, Completion completion) {
-            this.attempt = attempt;
-            this.key = key;
-            this.completion = completion;
-        }
-
-        public int attempt() {
-            return attempt;
-        }
-
-        public K key() {
-            return key;
-        }
-
-        public Completion completion() {
-            return completion;
-        }
-
-        @Override
-        public String toString() {
-            return "AfterCall[attempt=" + attempt + ", key=" + key
-                    + ", completion=" + completion + "]";
-        }
     }
 
     private final CopyOnWriteArrayList<BeforeCall<K>> beforeCalls =

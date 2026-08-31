@@ -4,8 +4,13 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
- * 检查点提交协调器：把机器的内存状态编码为快照并按 revision CAS 提交。
- * 提交失败（revision 冲突）立即以 REVISION_CONFLICT 终止推进。
+ * 检查点持久化协调器（Checkpoints Coordinator）。
+ *
+ * <p>负责在关键流程生命周期与步骤边界（如 Invoke 步进、Route 决策、Parallel 分支汇聚、Await 挂起、Complete 结束等）处，
+ * 将内存中的 {@link DurableState.MachineState} 编码为紧凑快照（{@link DurableSnapshot}），
+ * 并调用 {@link DurableStore#compareAndSet} 进行版本自增原子落库。若发生并发版本冲突则抛出 {@link DurableException.Error#REVISION_CONFLICT}。</p>
+ *
+ * @author team4u
  */
 final class Checkpoints {
     private static final class InertMarker {
@@ -13,8 +18,9 @@ final class Checkpoints {
                 0, null, null, null);
     }
 
-    /** 分支机器使用的空提交器：分支内不落检查点。 */
+    /** 分支机器使用的空提交器：分支内部不单独落检查点。 */
     static final Checkpoints INERT = InertMarker.INSTANCE;
+
 
     private final DurableStore store;
     private final String executionId;

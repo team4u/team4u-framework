@@ -10,8 +10,20 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 
 /**
- * 逻辑 Flow 的不可变 Local 投影。提供同步与异步的 run/resume 入口；
- * 每个 LocalExecutable 拥有唯一 identity，用于校验 Suspension 归属。
+ * 逻辑 Flow 在 Local 内存模式下的编译后可执行句柄。
+ *
+ * <p>核心能力与设计特性：
+ * <ul>
+ *   <li><b>多模式执行驱动</b>：提供同步（{@link #run}）与异步（{@link #runAsync}）驱动入口；</li>
+ *   <li><b>异步挂起与恢复</b>：提供同步（{@link #resume}）与异步（{@link #resumeAsync}）续接入口，通过私有 {@code identity} 严格校验 {@link Suspension} 归属与防重复消费；</li>
+ *   <li><b>死锁防御机制</b>：自动校验工作线程池配置，当流程包含并行分支或超时控制时，强制防御非 ForkJoinPool 线程池饥饿导致的死锁；</li>
+ *   <li><b>可重配置性</b>：通过 {@link #withExecutor(ExecutorService)} 派生指定新工作线程池的执行实例。</li>
+ * </ul>
+ * </p>
+ *
+ * @param <I> 流程输入参数类型
+ * @param <O> 流程输出结果类型
+ * @author team4u
  */
 public final class LocalExecutable<I, O> {
     private final Compiler.Compiled compiled;
@@ -27,15 +39,36 @@ public final class LocalExecutable<I, O> {
         validateWorkerExecutor(compiled, this.workerExecutor);
     }
 
+    /**
+     * 派生指定工作线程池的新 LocalExecutable 实例。
+     *
+     * @param workerExecutor 新的工作线程池（为 null 时使用 commonPool）
+     * @return 重新绑定线程池的 {@link LocalExecutable}
+     */
     public LocalExecutable<I, O> withExecutor(ExecutorService workerExecutor) {
         return new LocalExecutable<I, O>(compiled, observer,
                 workerExecutor != null ? workerExecutor : ForkJoinPool.commonPool());
     }
 
+    /**
+     * 同步启动流程执行（使用默认新创建的取消令牌）。
+     *
+     * @param input 流程输入数据，不能为 null
+     * @return 执行结果 {@link FlowResult}（Completed / Suspended / Cancelled）
+     * @throws NullPointerException 当 {@code input} 为 null 时抛出
+     */
     public FlowResult<O> run(I input) {
         return run(input, Cancellation.create());
     }
 
+    /**
+     * 同步启动流程执行（传入指定的取消令牌）。
+     *
+     * @param input        流程输入数据，不能为 null
+     * @param cancellation 外部取消令牌，不能为 null
+     * @return 执行结果 {@link FlowResult}
+     * @throws NullPointerException 当参数为 null 时抛出
+     */
     public FlowResult<O> run(I input, Cancellation cancellation) {
         Objects.requireNonNull(input, "input must not be null");
         cancellation = Objects.requireNonNull(cancellation, "cancellation must not be null");
@@ -46,18 +79,46 @@ public final class LocalExecutable<I, O> {
         return drive(state, cancellation);
     }
 
+    /**
+     * 异步启动流程执行（使用默认 commonPool 调度）。
+     *
+     * @param input 流程输入数据，不能为 null
+     * @return 异步执行结果阶段 {@link CompletionStage}
+     */
     public CompletionStage<FlowResult<O>> runAsync(I input) {
         return runAsync(input, Cancellation.create(), ForkJoinPool.commonPool());
     }
 
+    /**
+     * 异步启动流程执行（传入取消令牌，使用 commonPool 调度）。
+     *
+     * @param input        流程输入数据，不能为 null
+     * @param cancellation 取消令牌，不能为 null
+     * @return 异步执行结果阶段 {@link CompletionStage}
+     */
     public CompletionStage<FlowResult<O>> runAsync(I input, Cancellation cancellation) {
         return runAsync(input, cancellation, ForkJoinPool.commonPool());
     }
 
+    /**
+     * 异步启动流程执行（传入指定的调度线程池）。
+     *
+     * @param input      流程输入数据，不能为 null
+     * @param dispatcher 外部调度线程池
+     * @return 异步执行结果阶段 {@link CompletionStage}
+     */
     public CompletionStage<FlowResult<O>> runAsync(I input, ExecutorService dispatcher) {
         return runAsync(input, Cancellation.create(), dispatcher);
     }
 
+    /**
+     * 异步启动流程执行（全参重载）。
+     *
+     * @param input        流程输入数据，不能为 null
+     * @param cancellation 取消令牌，不能为 null
+     * @param dispatcher   外部调度线程池（为 null 时使用 commonPool）
+     * @return 异步执行结果阶段 {@link CompletionStage}
+     */
     public CompletionStage<FlowResult<O>> runAsync(final I input, final Cancellation cancellation, ExecutorService dispatcher) {
         Objects.requireNonNull(cancellation, "cancellation must not be null");
         ExecutorService dispatchExec = dispatcher != null ? dispatcher : ForkJoinPool.commonPool();
@@ -70,13 +131,31 @@ public final class LocalExecutable<I, O> {
         }, dispatchExec);
     }
 
+    /**
+     * 同步恢复挂起的流程执行。
+     *
+     * @param suspension 挂起句柄，不能为 null
+     * @param point      挂起点标识，不能为 null
+     * @param signal     恢复信号数据，不能为 null
+     * @param <R>        恢复信号数据类型
+     * @return 执行推进后的结果 {@link FlowResult}
+     */
     public <R> FlowResult<O> resume(Suspension<O> suspension,
                                     ResumePoint<R> point, R signal) {
         return resume(suspension, point, signal, Cancellation.create());
     }
 
     /**
-     * 恢复挂起的执行：校验 Suspension 归属与未被消费，装入恢复信号后继续驱动。
+     * 同步恢复挂起的流程执行（传入取消令牌）。
+     *
+     * @param suspension   挂起句柄，不能为 null
+     * @param point        挂起点标识，不能为 null
+     * @param signal       恢复信号数据，不能为 null
+     * @param cancellation 取消令牌，不能为 null
+     * @param <R>          恢复信号数据类型
+     * @return 执行推进后的结果 {@link FlowResult}
+     * @throws IllegalArgumentException 当句柄不属于当前执行器或挂起点名称不匹配时抛出
+     * @throws IllegalStateException    当句柄已被消费或内部状态非挂起态时抛出
      */
     public <R> FlowResult<O> resume(Suspension<O> suspension, ResumePoint<R> point,
                                     R signal, Cancellation cancellation) {
@@ -105,23 +184,63 @@ public final class LocalExecutable<I, O> {
         return drive(state, cancellation);
     }
 
+    /**
+     * 异步恢复挂起的流程执行（使用 commonPool 调度）。
+     *
+     * @param suspension 挂起句柄，不能为 null
+     * @param point      挂起点标识，不能为 null
+     * @param signal     恢复信号数据，不能为 null
+     * @param <R>        恢复信号数据类型
+     * @return 异步推进结果阶段 {@link CompletionStage}
+     */
     public <R> CompletionStage<FlowResult<O>> resumeAsync(
             Suspension<O> suspension, ResumePoint<R> point, R signal) {
         return resumeAsync(suspension, point, signal, Cancellation.create(), ForkJoinPool.commonPool());
     }
 
+    /**
+     * 异步恢复挂起的流程执行（传入取消令牌）。
+     *
+     * @param suspension   挂起句柄，不能为 null
+     * @param point        挂起点标识，不能为 null
+     * @param signal       恢复信号数据，不能为 null
+     * @param cancellation 取消令牌，不能为 null
+     * @param <R>          恢复信号数据类型
+     * @return 异步推进结果阶段 {@link CompletionStage}
+     */
     public <R> CompletionStage<FlowResult<O>> resumeAsync(
             Suspension<O> suspension, ResumePoint<R> point, R signal,
             Cancellation cancellation) {
         return resumeAsync(suspension, point, signal, cancellation, ForkJoinPool.commonPool());
     }
 
+    /**
+     * 异步恢复挂起的流程执行（传入调度线程池）。
+     *
+     * @param suspension 挂起句柄，不能为 null
+     * @param point      挂起点标识，不能为 null
+     * @param signal     恢复信号数据，不能为 null
+     * @param dispatcher 调度线程池
+     * @param <R>        恢复信号数据类型
+     * @return 异步推进结果阶段 {@link CompletionStage}
+     */
     public <R> CompletionStage<FlowResult<O>> resumeAsync(
             Suspension<O> suspension, ResumePoint<R> point, R signal,
             ExecutorService dispatcher) {
         return resumeAsync(suspension, point, signal, Cancellation.create(), dispatcher);
     }
 
+    /**
+     * 异步恢复挂起的流程执行（全参重载）。
+     *
+     * @param suspension   挂起句柄，不能为 null
+     * @param point        挂起点标识，不能为 null
+     * @param signal       恢复信号数据，不能为 null
+     * @param cancellation 取消令牌，不能为 null
+     * @param dispatcher   调度线程池（为 null 时使用 commonPool）
+     * @param <R>          恢复信号数据类型
+     * @return 异步推进结果阶段 {@link CompletionStage}
+     */
     public <R> CompletionStage<FlowResult<O>> resumeAsync(
             final Suspension<O> suspension, final ResumePoint<R> point, final R signal,
             final Cancellation cancellation, ExecutorService dispatcher) {
@@ -211,3 +330,4 @@ public final class LocalExecutable<I, O> {
         T get();
     }
 }
+

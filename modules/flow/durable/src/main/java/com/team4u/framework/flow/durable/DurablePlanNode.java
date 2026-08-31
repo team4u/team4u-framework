@@ -8,6 +8,8 @@ import com.team4u.framework.flow.JoinStrategy;
 import com.team4u.framework.flow.NodeDescriptor;
 import com.team4u.framework.flow.Outcome;
 import com.team4u.framework.flow.ResumePoint;
+import lombok.Getter;
+import lombok.experimental.Accessors;
 
 import java.util.ArrayList;
 import java.util.Collections;
@@ -17,10 +19,20 @@ import java.util.Optional;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-/** Private executable topology owned by the durable module. */
+/**
+ * 耐久化模块专用的物理执行计划节点接口族（Durable Plan Node Family）。
+ *
+ * <p>由 {@link DurablePlanCompiler} 从 Core 物理节点投影生成，持有确定的插槽标识与绑定的实例引用，供 {@link DurableMachine} 驱动执行。</p>
+ *
+ * @author team4u
+ */
 interface DurablePlanNode {
+    /** 获取节点静态描述符。 */
     NodeDescriptor descriptor();
 
+
+    @Getter
+    @Accessors(fluent = true)
     final class Invoke implements DurablePlanNode {
         private final NodeDescriptor descriptor;
         private final ExecutableBinding binding;
@@ -35,13 +47,10 @@ interface DurablePlanNode {
             this.project = Objects.requireNonNull(project, "project must not be null");
             this.merge = Objects.requireNonNull(merge, "merge must not be null");
         }
-
-        @Override public NodeDescriptor descriptor() { return descriptor; }
-        ExecutableBinding binding() { return binding; }
-        Function<Object, Object> project() { return project; }
-        BiFunction<Object, Object, Object> merge() { return merge; }
     }
 
+    @Getter
+    @Accessors(fluent = true)
     final class Sequence implements DurablePlanNode {
         private final NodeDescriptor descriptor;
         private final List<DurablePlanNode> children;
@@ -53,12 +62,10 @@ interface DurablePlanNode {
             this.children = immutable(children, "children");
             this.scopeName = Objects.requireNonNull(scopeName, "scopeName must not be null");
         }
-
-        @Override public NodeDescriptor descriptor() { return descriptor; }
-        List<DurablePlanNode> children() { return children; }
-        Optional<String> scopeName() { return scopeName; }
     }
 
+    @Getter
+    @Accessors(fluent = true)
     final class Route implements DurablePlanNode {
         private final NodeDescriptor descriptor;
         private final Invoke selector;
@@ -73,11 +80,8 @@ interface DurablePlanNode {
             this.otherwise = otherwise;
         }
 
-        @Override public NodeDescriptor descriptor() { return descriptor; }
-        Invoke selector() { return selector; }
-        List<RouteCase> cases() { return cases; }
-        DurablePlanNode otherwise() { return otherwise; }
-
+        @Getter
+        @Accessors(fluent = true)
         static final class RouteCase {
             private final Object key;
             private final DurablePlanNode branch;
@@ -86,12 +90,11 @@ interface DurablePlanNode {
                 this.key = Objects.requireNonNull(key, "key must not be null");
                 this.branch = Objects.requireNonNull(branch, "branch must not be null");
             }
-
-            Object key() { return key; }
-            DurablePlanNode branch() { return branch; }
         }
     }
 
+    @Getter
+    @Accessors(fluent = true)
     final class Fallback implements DurablePlanNode {
         private final NodeDescriptor descriptor;
         private final FallbackTrigger trigger;
@@ -106,12 +109,10 @@ interface DurablePlanNode {
                 throw new IllegalArgumentException("fallback branches must not be empty");
             }
         }
-
-        @Override public NodeDescriptor descriptor() { return descriptor; }
-        FallbackTrigger trigger() { return trigger; }
-        List<DurablePlanNode> branches() { return branches; }
     }
 
+    @Getter
+    @Accessors(fluent = true)
     final class Parallel implements DurablePlanNode {
         private final NodeDescriptor descriptor;
         private final List<ParallelBranch> branches;
@@ -127,10 +128,8 @@ interface DurablePlanNode {
             this.join = Objects.requireNonNull(join, "join must not be null");
         }
 
-        @Override public NodeDescriptor descriptor() { return descriptor; }
-        List<ParallelBranch> branches() { return branches; }
-        JoinStrategy<?> join() { return join; }
-
+        @Getter
+        @Accessors(fluent = true)
         static final class ParallelBranch {
             private final Branch<?, ?> token;
             private final DurablePlanNode plan;
@@ -139,12 +138,11 @@ interface DurablePlanNode {
                 this.token = Objects.requireNonNull(token, "token must not be null");
                 this.plan = Objects.requireNonNull(plan, "plan must not be null");
             }
-
-            Branch<?, ?> token() { return token; }
-            DurablePlanNode plan() { return plan; }
         }
     }
 
+    @Getter
+    @Accessors(fluent = true)
     final class Await implements DurablePlanNode {
         private final NodeDescriptor descriptor;
         private final ResumePoint<?> point;
@@ -153,11 +151,10 @@ interface DurablePlanNode {
             this.descriptor = Objects.requireNonNull(descriptor, "descriptor must not be null");
             this.point = Objects.requireNonNull(point, "point must not be null");
         }
-
-        @Override public NodeDescriptor descriptor() { return descriptor; }
-        ResumePoint<?> point() { return point; }
     }
 
+    @Getter
+    @Accessors(fluent = true)
     final class Control implements DurablePlanNode {
         private final NodeDescriptor descriptor;
         private final ControlKind kind;
@@ -186,15 +183,10 @@ interface DurablePlanNode {
                 throw new IllegalArgumentException("control configuration is required for " + kind);
             }
         }
-
-        @Override public NodeDescriptor descriptor() { return descriptor; }
-        ControlKind kind() { return kind; }
-        DurablePlanNode body() { return body; }
-        Optional<ExecutableBinding> binding() { return binding; }
-        Function<Object, Object> keyProjection() { return keyProjection; }
-        Object configuration() { return configuration; }
     }
 
+    @Getter
+    @Accessors(fluent = true)
     final class Complete implements DurablePlanNode {
         private final NodeDescriptor descriptor;
         private final Outcome<?> outcome;
@@ -209,10 +201,6 @@ interface DurablePlanNode {
                         "identity complete must not contain a fixed outcome");
             }
         }
-
-        @Override public NodeDescriptor descriptor() { return descriptor; }
-        Outcome<?> outcome() { return outcome; }
-        boolean identity() { return identity; }
     }
 
     static <T> List<T> immutable(List<T> source, String name) {

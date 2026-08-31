@@ -1,17 +1,48 @@
 package com.team4u.framework.flow;
 
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
+import lombok.experimental.Accessors;
+
 import java.util.Objects;
 import java.util.Optional;
 
 /**
- * 不携带输出值的结果摘要，作为 Policy.before/after 的完成信息传入。
- * reason 与 outcome kind 须匹配：REJECTED/SKIPPED 必须带 reason，FAILED 必须带 failure。
+ * 步骤完成状态摘要信息（不包含业务输出载荷）。
+ *
+ * <p>专门作为 {@link Policy#after} 与 {@link PersistentPolicy#after} 观察或后置决策时的入参。
+ * 具有严格的状态一致性校验：
+ * <ul>
+ *   <li>{@link Outcome.Kind#ACCEPTED}：不含 {@code reason} 与 {@code failure}；</li>
+ *   <li>{@link Outcome.Kind#REJECTED} 与 {@link Outcome.Kind#SKIPPED}：必须包含 {@link Reason}，且不含 {@link Failure}；</li>
+ *   <li>{@link Outcome.Kind#FAILED}：必须包含 {@link Failure}，且不含 {@link Reason}。</li>
+ * </ul>
+ * </p>
+ *
+ * @author team4u
  */
+@Getter
+@Accessors(fluent = true)
+@EqualsAndHashCode
+@ToString
 public final class Completion {
+    /** 步骤完成的结果种类。 */
     private final Outcome.Kind kind;
+    /** 拒绝或跳过时的诊断原因（若状态为 REJECTED 或 SKIPPED 时存在）。 */
     private final Optional<Reason> reason;
+    /** 失败时的故障诊断信息（若状态为 FAILED 时存在）。 */
     private final Optional<Failure> failure;
 
+    /**
+     * 构造完成状态摘要，并执行严格的状态-诊断信息一致性校验。
+     *
+     * @param kind    结果类型枚举，不能为 null
+     * @param reason  诊断原因 Optional 容器，不能为 null
+     * @param failure 故障信息 Optional 容器，不能为 null
+     * @throws NullPointerException     当任何参数为 null 时抛出
+     * @throws IllegalArgumentException 当诊断原因/故障信息与结果种类不匹配时抛出
+     */
     public Completion(Outcome.Kind kind, Optional<Reason> reason, Optional<Failure> failure) {
         this.kind = Objects.requireNonNull(kind, "kind must not be null");
         this.reason = Objects.requireNonNull(reason, "reason must not be null");
@@ -24,7 +55,13 @@ public final class Completion {
         }
     }
 
-    /** 丢弃 Outcome 的输出值，仅保留 kind/reason/failure 以供 Policy 评估。 */
+    /**
+     * 从完整的 {@link Outcome} 提取不含载荷的完成摘要。
+     *
+     * @param outcome 原始四态结果，不能为 null
+     * @return 对应的完成摘要实例
+     * @throws IllegalStateException 当遇到未知的 Outcome 子类时抛出
+     */
     static Completion from(Outcome<?> outcome) {
         if (outcome instanceof Outcome.Accepted) {
             return new Completion(Outcome.Kind.ACCEPTED, Optional.empty(), Optional.empty());
@@ -37,34 +74,5 @@ public final class Completion {
         }
         throw new IllegalStateException("Unknown outcome: " + outcome);
     }
-
-    public Outcome.Kind kind() {
-        return kind;
-    }
-
-    public Optional<Reason> reason() {
-        return reason;
-    }
-
-    public Optional<Failure> failure() {
-        return failure;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        Completion that = (Completion) o;
-        return kind == that.kind && reason.equals(that.reason) && failure.equals(that.failure);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(kind, reason, failure);
-    }
-
-    @Override
-    public String toString() {
-        return "Completion[kind=" + kind + ", reason=" + reason + ", failure=" + failure + "]";
-    }
 }
+

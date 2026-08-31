@@ -9,13 +9,15 @@ import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
 
 /**
- * 线程安全的执行事件收集器：按到达顺序保留全部 {@link FlowObserver.Event}。
+ * 线程安全的流程执行事件轨迹收集器（Thread-Safe Execution Trace Collector）。
  *
- * <p>框架本身隔离 observer 异常（回调抛出的运行时异常不影响执行）；
- * 本 stub 自身不抛异常，只做收集。Parallel 分支事件来自多个工作线程，
- * 因此使用 CopyOnWriteArrayList 保证线程安全。</p>
+ * <p>实现 {@link FlowObserver} 接口，以线程安全的方式记录执行生命周期全过程触发的事件（{@link FlowObserver.Event}），
+ * 提供按事件类型（{@link FlowObserver.Type}）过滤、事件类型序列提取与节点拓扑路径查询等断言辅助方法。</p>
+ *
+ * @author team4u
  */
 public final class TraceCollector implements FlowObserver {
+
 
     private final CopyOnWriteArrayList<Event> events = new CopyOnWriteArrayList<Event>();
 

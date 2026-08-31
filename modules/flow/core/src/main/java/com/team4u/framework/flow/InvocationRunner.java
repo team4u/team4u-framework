@@ -15,8 +15,17 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * 执行 Invoke 节点：调用 Operation 并处理超时、取消与异常。
- * 无 deadline 时直接在当前线程同步执行；有 deadline 时在 executor 上执行并带时限等待。
+ * 原子业务操作（{@link Operation}）调用执行器。
+ *
+ * <p>特性与调度机制：
+ * <ul>
+ *   <li><b>自适应执行模式</b>：无 Deadline 约束时直接在当前线程同步调用以消除线程上下文切换；存在 Deadline 时提交到线程池带时限受控执行；</li>
+ *   <li><b>全生命周期上下文</b>：构造并注入只读的 {@link OperationContext}（包含元数据、幂等 {@code invocationId} 及协作式取消信号）；</li>
+ *   <li><b>异常安全捕获</b>：自动捕获业务抛出的受检与未受检异常并转换为 {@link Outcome.Failed}，同时正确处理 {@link InterruptedException} 与取消级联。</li>
+ * </ul>
+ * </p>
+ *
+ * @author team4u
  */
 final class InvocationRunner {
     private final String flowId;
@@ -36,8 +45,16 @@ final class InvocationRunner {
         this.executor = executor;
     }
 
-    /** 执行单个 Invoke 节点：根据是否有 deadline 选择同步或带时限执行。 */
+    /**
+     * 执行单步 Invoke 节点。
+     *
+     * @param node     调用计划节点
+     * @param entry    当前帧输入
+     * @param deadline 截止时间点（为 null 表示无超时时限）
+     * @return 业务执行的四态结果
+     */
     Outcome<?> invoke(PlanNode.Invoke node, Object entry, Instant deadline) {
+
         long started = System.nanoTime();
         Outcome<?> outcome;
         if (deadline == null) {

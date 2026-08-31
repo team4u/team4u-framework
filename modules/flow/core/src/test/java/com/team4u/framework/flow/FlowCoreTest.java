@@ -16,30 +16,11 @@ import static org.junit.Assert.assertTrue;
  */
 public class FlowCoreTest {
 
-    static final class State {
-        private final String text;
-        private final int length;
-
-        public State(String text, int length) {
-            this.text = text;
-            this.length = length;
-        }
-
-        public String text() { return text; }
-        public int length() { return length; }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            State state = (State) o;
-            return length == state.length && Objects.equals(text, state.text);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(text, length);
-        }
+    @lombok.Value
+    @lombok.experimental.Accessors(fluent = true)
+    static class State {
+        String text;
+        int length;
     }
 
     @Test

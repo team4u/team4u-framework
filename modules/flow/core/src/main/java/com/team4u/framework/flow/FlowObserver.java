@@ -1,5 +1,10 @@
 package com.team4u.framework.flow;
 
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
+import lombok.experimental.Accessors;
+
 import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Collections;
@@ -9,24 +14,84 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 同步执行观察者。回调中抛出的运行时异常被框架隔离，不会影响 flow 行为。
+ * 流程生命周期与节点执行事件观察者 SPI（可用于链路追踪、指标监控、日志审计等）。
+ *
+ * <p>设计与异常隔离契约：
+ * <ul>
+ *   <li><b>异常安全隔离</b>：观察者在回调中抛出的任何异常都会被框架底层捕获并静默隔离，绝不会影响主流程的正常编排与执行结果；</li>
+ *   <li><b>细粒度事件流</b>：涵盖流程生命周期（STARTED/COMPLETED/SUSPENDED/CANCELLED）、节点生命周期（STARTED/COMPLETED）、路由分支选择、策略判定（BEFORE/AFTER/WAITING）以及并行分支状态（STARTED/BRANCH_COMPLETED/JOINED）等；</li>
+ *   <li><b>组合广播</b>：通过 {@link #composite(FlowObserver...)} 支持将多个观察者组合广播。</li>
+ * </ul>
+ * </p>
+ *
+ * @author team4u
  */
 @FunctionalInterface
 public interface FlowObserver {
+
+    /**
+     * 流程执行事件类型枚举。
+     */
     enum Type {
-        FLOW_STARTED, FLOW_COMPLETED, FLOW_SUSPENDED, FLOW_CANCELLED,
-        NODE_STARTED, NODE_COMPLETED, ROUTE_SELECTED, FALLBACK_SELECTED,
-        POLICY_BEFORE, POLICY_AFTER, POLICY_WAITING,
-        PARALLEL_STARTED, PARALLEL_BRANCH_COMPLETED, PARALLEL_JOINED
+        /** 流程开始执行。 */
+        FLOW_STARTED,
+        /** 流程执行完成。 */
+        FLOW_COMPLETED,
+        /** 流程进入挂起态。 */
+        FLOW_SUSPENDED,
+        /** 流程被取消。 */
+        FLOW_CANCELLED,
+        /** 单个节点开始执行。 */
+        NODE_STARTED,
+        /** 单个节点执行完成。 */
+        NODE_COMPLETED,
+        /** 路由分支命中选择。 */
+        ROUTE_SELECTED,
+        /** 降级分支命中选择。 */
+        FALLBACK_SELECTED,
+        /** 策略前置检查前。 */
+        POLICY_BEFORE,
+        /** 策略后置观察。 */
+        POLICY_AFTER,
+        /** 策略进入等待退避。 */
+        POLICY_WAITING,
+        /** 并行分支开始。 */
+        PARALLEL_STARTED,
+        /** 单个并行分支完成。 */
+        PARALLEL_BRANCH_COMPLETED,
+        /** 并行分支全部完成并汇聚。 */
+        PARALLEL_JOINED
     }
 
+    /**
+     * 流程执行事件对象。
+     */
+    @Getter
+    @Accessors(fluent = true)
+    @EqualsAndHashCode
+    @ToString
     final class Event {
+        /** 事件类型。 */
         private final Type type;
+        /** 事件发生的绝对时间戳。 */
         private final Instant at;
+        /** 关联的节点运行时元数据。 */
         private final Metadata metadata;
+        /** 关联的静态节点描述符。 */
         private final NodeDescriptor descriptor;
+        /** 结构化键值属性字典（不可变集合）。 */
         private final Map<String, String> attributes;
 
+        /**
+         * 构造流程事件对象。
+         *
+         * @param type       事件类型，不能为 null
+         * @param at         发生时间，不能为 null
+         * @param metadata   元数据，不能为 null
+         * @param descriptor 节点描述符，不能为 null
+         * @param attributes 扩展属性，不能为 null
+         * @throws NullPointerException 当任何入参为 null 时抛出
+         */
         public Event(Type type, Instant at, Metadata metadata,
                      NodeDescriptor descriptor, Map<String, String> attributes) {
             this.type = Objects.requireNonNull(type, "type must not be null");
@@ -36,54 +101,20 @@ public interface FlowObserver {
             Objects.requireNonNull(attributes, "attributes must not be null");
             this.attributes = Collections.unmodifiableMap(new LinkedHashMap<String, String>(attributes));
         }
-
-        public Type type() {
-            return type;
-        }
-
-        public Instant at() {
-            return at;
-        }
-
-        public Metadata metadata() {
-            return metadata;
-        }
-
-        public NodeDescriptor descriptor() {
-            return descriptor;
-        }
-
-        public Map<String, String> attributes() {
-            return attributes;
-        }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            Event event = (Event) o;
-            return type == event.type
-                    && at.equals(event.at)
-                    && metadata.equals(event.metadata)
-                    && descriptor.equals(event.descriptor)
-                    && attributes.equals(event.attributes);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(type, at, metadata, descriptor, attributes);
-        }
-
-        @Override
-        public String toString() {
-            return "Event[type=" + type + ", at=" + at + ", metadata=" + metadata
-                    + ", descriptor=" + descriptor + ", attributes=" + attributes + "]";
-        }
     }
 
+    /**
+     * 接收并处理流程事件。
+     *
+     * @param event 流程事件对象，保证非 null
+     */
     void onEvent(Event event);
 
-    /** 不处理任何事件的空观察者。 */
+    /**
+     * 创建无操作的空观察者（单例）。
+     *
+     * @return 不做任何处理的 {@link FlowObserver}
+     */
     static FlowObserver noop() {
         return new FlowObserver() {
             @Override
@@ -92,7 +123,13 @@ public interface FlowObserver {
         };
     }
 
-    /** 按顺序广播给全部 observers；单个 observer 抛出的异常被吞掉，不影响后续与执行。 */
+    /**
+     * 将多个观察者组合为一个复合观察者，按传入顺序广播。
+     *
+     * @param observers 观察者数组，不能为 null 且元素不能为 null
+     * @return 复合 {@link FlowObserver} 实例
+     * @throws NullPointerException 当参数或其元素为 null 时抛出
+     */
     static FlowObserver composite(FlowObserver... observers) {
         Objects.requireNonNull(observers, "observers must not be null");
         final List<FlowObserver> copy = new ArrayList<FlowObserver>();
@@ -113,3 +150,4 @@ public interface FlowObserver {
         };
     }
 }
+

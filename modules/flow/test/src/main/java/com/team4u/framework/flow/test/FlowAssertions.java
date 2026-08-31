@@ -13,12 +13,17 @@ import org.junit.Assert;
 import java.util.Objects;
 
 /**
- * 针对四态 Outcome、Local 三态 FlowResult 与 DurableResult 的聚焦静态断言。
+ * 流程测试断言工具集（Flow Testkit Assertions）。
  *
- * <p>全部断言失败时抛出携带可读消息的 AssertionError，消息包含期望与实际。</p>
+ * <p>提供针对 {@link Outcome}（Accepted/Rejected/Skipped/Failed）、
+ * Local 执行结果 {@link FlowResult}（Completed/Suspended/Cancelled）
+ * 以及 Durable 执行结果 {@link DurableResult}（Completed/Suspended/Active/Cancelled）的强类型流式断言方法。</p>
+ *
+ * @author team4u
  */
 public final class FlowAssertions {
     private FlowAssertions() { }
+
 
     // ------------------------------------------------------------------
     // FlowResult（Local）

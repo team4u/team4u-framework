@@ -4,18 +4,21 @@ import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
 
 /**
- * 基于 CountDownLatch 的两分支（可扩展为 N 分支）并行屏障，用于验证 Local
- * 并行分支真并发（两个分支必须同时进入屏障才能释放，否则测试超时失败而非死锁）。
+ * 并行并发同步屏障测试工具（Parallel Execution Sync Barrier）。
  *
- * <p>每个分支调用 {@link #enter()}：先 countDown 入场闭锁，再阻塞在释放闭锁上；
- * 测试线程以 {@link #awaitEntered(long)} 等待全部分支进入（带 timeout 保护），
- * 证实重叠后调用 {@link #release()} 放行。</p>
+ * <p>基于 {@link CountDownLatch} 实现，用于测试多分支并行执行时（如 {@link com.team4u.framework.flow.Flow#parallel}）
+ * 验证各分支是否真正实现并发交织运行，具备超时保护以防止测试死锁。</p>
+ *
+ * @author team4u
  */
 public final class ParallelBarrier {
 
+    @lombok.Getter
+    @lombok.experimental.Accessors(fluent = true)
     private final int branches;
     private final CountDownLatch entered;
     private final CountDownLatch release = new CountDownLatch(1);
+
 
     public ParallelBarrier(int branches) {
         if (branches < 1) {
@@ -23,10 +26,6 @@ public final class ParallelBarrier {
         }
         this.branches = branches;
         this.entered = new CountDownLatch(branches);
-    }
-
-    public int branches() {
-        return branches;
     }
 
     /** 分支侧调用：登记入场后阻塞直到 release。阻塞被中断时提前返回。 */

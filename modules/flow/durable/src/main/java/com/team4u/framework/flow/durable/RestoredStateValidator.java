@@ -5,20 +5,32 @@ import com.team4u.framework.flow.ControlKind;
 import java.util.List;
 
 /**
- * 恢复态防御校验：帧栈结构必须与计划拓扑一致（父帧待完成的子帧真实存在、
- * phase 与节点类型匹配、parallel 分支不含挂起语义等），否则拒绝恢复。
+ * 崩溃恢复快照防御性拓扑与状态校验器（Restored State Defensive Validator）。
  *
- * <p>phase=0 的结构帧（Sequence/Route/Fallback/Parallel）是合法栈顶：start 的
- * 初始快照（revision=1）与「sequence 归约压入下一子节点后立即提交」的检查点都会
- * 产生该形态，恢复后由 DurableMachine 的 enterXxx 正常进入（机器侧对 phase!=0
- * 的防御性检查与本校验互补）。</p>
+ * <p>核心校验规则：
+ * <ul>
+ *   <li><b>根帧拓扑一致性</b>：恢复快照的根帧节点必须与当前代码编译出的 Definition 根节点完全一致；</li>
+ *   <li><b>父子帧拓扑与游标匹配</b>：父帧声明的当前子步骤下标（index）对应的物理子节点必须与栈中的实际子帧完全匹配；</li>
+ *   <li><b>阶段（Phase）与状态自洽</b>：校验 Sequence/Route/Fallback/Control/Parallel 各节点的 phase 处于合法取值区间，且等待阶段（Waiting Phase）必须具备有效的绝对唤醒时间点（wakeAt）。</li>
+ * </ul>
+ * </p>
+ *
+ * @author team4u
  */
 final class RestoredStateValidator {
     private RestoredStateValidator() {
     }
 
+    /**
+     * 对反序列化恢复的 MachineState 进行严格的拓扑与状态自洽性校验。
+     *
+     * @param definition 编译期流程定义
+     * @param state      待恢复的状态机快照对象
+     * @throws DurableException 当拓扑不匹配或快照损坏时抛出
+     */
     static void validate(DurablePlanCompiler.Definition definition,
                          DurableState.MachineState state) {
+
         List<DurableState.RuntimeFrame> frames = state.frames;
         if (frames.isEmpty()) {
             if (state.lifecycle == DurableLifecycle.ACTIVE) {

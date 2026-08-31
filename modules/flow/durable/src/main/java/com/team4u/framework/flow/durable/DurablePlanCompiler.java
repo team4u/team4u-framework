@@ -25,8 +25,19 @@ import java.util.Set;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
-/** Builds a durable-owned executable plan exclusively through the public projection SPI. */
+/**
+ * 耐久化物理执行树编译器（Durable Plan Compiler）。
+ *
+ * <p>实现 Core 公开的投影 SPI {@link ExecutableFlowVisitor}，将已校验的拓扑计划投影为 Durable 专属物理树 {@link DurablePlanNode}，
+ * 并预计算生成所有插槽角色列表（{@code slotRoles}）、挂起点映射表（{@code resumePoints}）以及线程池需求特征。</p>
+ *
+ * @author team4u
+ */
 final class DurablePlanCompiler implements ExecutableFlowVisitor<DurablePlanNode> {
+
+    /**
+     * 耐久化流程定义元数据密封容器。
+     */
     static final class Definition {
         private final DurablePlanNode root;
         private final Map<String, DurablePlanNode> byPath;
@@ -65,7 +76,15 @@ final class DurablePlanCompiler implements ExecutableFlowVisitor<DurablePlanNode
         slotRoles.add("input");
     }
 
+    /**
+     * 编译 Flow 为 Durable 执行定义。
+     *
+     * @param flow     逻辑流定义
+     * @param resolver 组件解析器
+     * @return DurablePlanCompiler.Definition
+     */
     static Definition compile(Flow<?, ?> flow, OperationResolver resolver) {
+
         Objects.requireNonNull(flow, "flow must not be null");
         Objects.requireNonNull(resolver, "resolver must not be null");
         DurablePlanCompiler compiler = new DurablePlanCompiler();

@@ -8,13 +8,30 @@ import java.util.Objects;
 import java.util.concurrent.CancellationException;
 
 /**
- * 父帧消费子帧 Outcome 的归约器：按节点类型决定是否推进、压入下一子帧或直接完成。
- * 返回 null 表示已压入新子帧、需继续推进；返回非 null 表示当前帧完成并向上传递。
+ * 运行时帧栈结果归约与状态转移协调器（Runtime Stack Frame Reducer）。
+ *
+ * <p>负责在子物理节点执行完毕返回 {@link Outcome} 时，驱动父物理帧进行状态转移裁决：
+ * <ul>
+ *   <li><b>Sequence 归约</b>：若子节点 Accepted 则更新当前数据并压入下一个子步骤；若已是最后一步则作为整段结果完成；若非 Accepted 则短路向上传播；</li>
+ *   <li><b>Route 归约</b>：处理选择器判别结果并分发压入匹配的 case 或 otherwise 分支；</li>
+ *   <li><b>Fallback 归约</b>：根据 Skipped/Failed 触发条件依次尝试备选分支，所有分支尝试完毕则透传最终结果；</li>
+ *   <li><b>Control 归约</b>：处理 Timeout 超时判定、Retry 重试轮次推进与退避、无状态策略 {@link Policy#after} 观察以及持久化策略 {@link PersistentPolicy#after} 状态提交与定时重试（RetryAt）。</li>
+ * </ul>
+ * </p>
+ *
+ * @author team4u
  */
 final class FrameReducer {
     private FrameReducer() { }
 
-    /** 按帧节点类型分发到具体的归约逻辑；叶节点不应出现在此入口。 */
+    /**
+     * 将子节点的四态结果交给父帧进行归约。
+     *
+     * @param machine 状态机实例
+     * @param frame   当前父帧
+     * @param child   子节点返回的四态结果
+     * @return 若父帧自身已执行完成则返回父帧的最终 Outcome（向上传递）；若压入了新的子节点继续推进则返回 null
+     */
     static Outcome<?> consume(SerialMachine machine, RuntimeFrame frame, Outcome<?> child) {
         if (frame.node instanceof PlanNode.Sequence) {
             return sequence(machine, frame, (PlanNode.Sequence) frame.node, child);
@@ -29,6 +46,7 @@ final class FrameReducer {
                     + frame.node.getClass());
         }
     }
+
 
     /**
      * Sequence 归约：子帧 Accepted 后更新 current，推进到下一个子节点；

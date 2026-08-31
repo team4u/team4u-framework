@@ -4,12 +4,35 @@ import java.util.ArrayList;
 import java.util.Objects;
 
 /**
- * 内核可变运行状态：帧栈、生命周期、最终结果、挂起点与待处理 resume 信号。
- * 非线程安全，由单个 SerialMachine 独占。
+ * 流程状态机运行期内存可变状态（Execution Machine State）。
+ *
+ * <p>封装单次流程实例的完整运行快照，包括当前活跃帧栈（{@link RuntimeFrame}）、生命周期阶段（{@link Lifecycle}）、
+ * 终态四态结果（{@link Outcome}）、等待恢复的挂起点名称及待注入的外部信号等。
+ * 本类非线程安全，由单个 {@link SerialMachine} 驱动线程独占。</p>
+ *
+ * @author team4u
  */
 final class MachineState {
-    /** 执行生命周期状态机：ACTIVE 推进中、SUSPENDED 挂起、COMPLETED/CANCELLED 终态。 */
-    enum Lifecycle { ACTIVE, SUSPENDED, COMPLETED, CANCELLED }
+
+    /**
+     * 状态机生命周期枚举：
+     * <ul>
+     *   <li>{@link #ACTIVE}：正在活跃推进中；</li>
+     *   <li>{@link #SUSPENDED}：在某个 Await 挂起点暂停等待恢复；</li>
+     *   <li>{@link #COMPLETED}：已执行完成并落定最终业务四态结果；</li>
+     *   <li>{@link #CANCELLED}：已被取消信号中断终止。</li>
+     * </ul>
+     */
+    enum Lifecycle {
+        /** 推进中。 */
+        ACTIVE,
+        /** 异步挂起。 */
+        SUSPENDED,
+        /** 执行完成。 */
+        COMPLETED,
+        /** 已被取消。 */
+        CANCELLED
+    }
 
     Lifecycle lifecycle = Lifecycle.ACTIVE;
     final ArrayList<RuntimeFrame> frames;
@@ -31,3 +54,4 @@ final class MachineState {
         return value;
     }
 }
+

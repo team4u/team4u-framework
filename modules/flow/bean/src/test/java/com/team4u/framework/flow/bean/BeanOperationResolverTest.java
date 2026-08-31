@@ -233,6 +233,8 @@ public class BeanOperationResolverTest {
         AtomicInteger afterCalls();
     }
 
+    @lombok.Getter
+    @lombok.experimental.Accessors(fluent = true)
     public static final class ClassPersistentPolicy
             implements PersistentPolicy<String, Integer>, PersistentCalls {
         private final AtomicInteger initialCalls = new AtomicInteger();
@@ -257,14 +259,12 @@ public class BeanOperationResolverTest {
             afterCalls.incrementAndGet();
             return PersistentPolicy.returning(state);
         }
-
-        @Override public AtomicInteger initialCalls() { return initialCalls; }
-        @Override public AtomicInteger beforeCalls() { return beforeCalls; }
-        @Override public AtomicInteger afterCalls() { return afterCalls; }
     }
 
     public interface QualifiedPersistentPolicy extends PersistentPolicy<String, Integer> { }
 
+    @lombok.Getter
+    @lombok.experimental.Accessors(fluent = true)
     public static final class QualifiedPersistentPolicyImpl
             implements QualifiedPersistentPolicy, PersistentCalls {
         private final AtomicInteger initialCalls = new AtomicInteger();
@@ -289,10 +289,6 @@ public class BeanOperationResolverTest {
             afterCalls.incrementAndGet();
             return PersistentPolicy.returning(state);
         }
-
-        @Override public AtomicInteger initialCalls() { return initialCalls; }
-        @Override public AtomicInteger beforeCalls() { return beforeCalls; }
-        @Override public AtomicInteger afterCalls() { return afterCalls; }
     }
 
     public interface MissingOperation extends Operation<String, String> { }

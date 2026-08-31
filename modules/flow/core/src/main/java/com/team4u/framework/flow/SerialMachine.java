@@ -9,9 +9,18 @@ import java.util.concurrent.CancellationException;
 import java.util.concurrent.ExecutorService;
 
 /**
- * 同步推进单个帧栈的运行时内核。本类非线程安全，每次调用 {@link #drive()} 的线程独占状态；
- * 异步入口与 Parallel 分支各自构造独立的 SerialMachine 并运行于线程池。
- * 取消、超时与挂起均通过 Cancellation、deadline 与帧栈状态协同实现。
+ * 同步单线程堆栈推进执行引擎内核（Serial Execution State Machine）。
+ *
+ * <p>架构与设计原则：
+ * <ul>
+ *   <li><b>无栈递归状态机</b>：通过在堆上显式维护 {@link RuntimeFrame} 栈结构驱动 AST 节点展开与归约，彻底消除 JVM 方法调用栈溢出风险；</li>
+ *   <li><b>线程独占与非线程安全</b>：单次 {@link #drive()} 调用独占当前线程推进状态机，状态推进期间外部只能通过 {@link Cancellation} 注入取消信号；</li>
+ *   <li><b>取消/超时协同</b>：每帧循环优先检测取消标志与作用域截止时间（Deadline），支持精确定位并终止最内层超时作用域；</li>
+ *   <li><b>四态结果逐层归约</b>：子节点产生 Outcome 后弹出当前帧，由 {@link FrameReducer} 驱动父帧决策（如 Sequence 下一步、Fallback 下一分支、Retry 重试或冒泡向上传播）。</li>
+ * </ul>
+ * </p>
+ *
+ * @author team4u
  */
 final class SerialMachine {
     private final String flowId;
@@ -40,8 +49,13 @@ final class SerialMachine {
         cancellationCoordinator = new MachineCancellationCoordinator(state, cancellation);
     }
 
-    /** 同步推进帧栈直至完成、挂起、取消或超时。 */
+    /**
+     * 同步驱动推进帧栈，直至到达终态（COMPLETED）、挂起等待外部信号（SUSPENDED）、收到取消信号（CANCELLED）或超时。
+     *
+     * @return 状态机推进结果 {@link MachineResult}
+     */
     MachineResult drive() {
+
         if (state.lifecycle != MachineState.Lifecycle.ACTIVE)
             return MachineResult.from(state, wakeAt());
         Thread thread = Thread.currentThread();

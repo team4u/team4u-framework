@@ -12,9 +12,13 @@ import com.team4u.framework.flow.Suspension;
 import java.util.Objects;
 
 /**
- * Local 执行的类型化 fixture：包装 {@link Local#compile}，提供 run/resume 便捷方法。
+ * 本地流测试夹具（Local Flow Test Fixture）。
  *
- * <p>典型用法：以 {@link TraceCollector} 编译后 run，断言结果并检查事件轨迹。</p>
+ * <p>封装 {@link LocalExecutable} 的编译与运行过程，内置支持 {@link TraceCollector} 事件轨迹捕获与 {@link Suspension} 快捷挂起恢复验证。</p>
+ *
+ * @param <I> 流程输入类型
+ * @param <O> 流程输出类型
+ * @author team4u
  */
 public final class LocalFixture<I, O> {
 
@@ -23,6 +27,7 @@ public final class LocalFixture<I, O> {
     private LocalFixture(LocalExecutable<I, O> executable) {
         this.executable = Objects.requireNonNull(executable, "executable must not be null");
     }
+
 
     /** 默认 fixture：rejecting resolver + noop observer。 */
     public static <I, O> LocalFixture<I, O> compile(Flow<I, O> flow) {

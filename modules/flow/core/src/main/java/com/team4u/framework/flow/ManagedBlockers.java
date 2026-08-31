@@ -10,11 +10,15 @@ import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
 
 /**
- * 封装在 ForkJoinPool 环境下的 ManagedBlocker 补偿阻塞调用，
- * 防止在有限并行度或单核 ForkJoinPool（如 ForkJoinPool.commonPool()）下发生嵌套饥饿死锁。
+ * ForkJoinPool 协作阻塞补偿工具类（ManagedBlockers Helper）。
+ *
+ * <p>封装 {@link ForkJoinPool#managedBlock(ForkJoinPool.ManagedBlocker)} 补偿调用，在 ForkJoinPool 环境下发生同步等待（如 CountDownLatch 等待、阻塞队列出队、Future 结果获取）时通知池动态补偿新工作线程，防止在小线程池或单核环境下发生死锁与线程饥饿。</p>
+ *
+ * @author team4u
  */
 final class ManagedBlockers {
     private ManagedBlockers() { }
+
 
     static void await(final CountDownLatch latch) throws InterruptedException {
         ForkJoinPool.managedBlock(new ForkJoinPool.ManagedBlocker() {

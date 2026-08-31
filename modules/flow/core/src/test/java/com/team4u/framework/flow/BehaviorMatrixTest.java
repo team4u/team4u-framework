@@ -25,37 +25,16 @@ import static org.junit.Assert.fail;
  */
 public class BehaviorMatrixTest {
 
-    static final class State {
-        private final String value;
-
-        public State(String value) {
-            this.value = value;
-        }
-
-        public String value() { return value; }
-
-        @Override
-        public boolean equals(Object o) {
-            if (this == o) return true;
-            if (o == null || getClass() != o.getClass()) return false;
-            State state = (State) o;
-            return Objects.equals(value, state.value);
-        }
-
-        @Override
-        public int hashCode() {
-            return Objects.hash(value);
-        }
+    @lombok.Value
+    @lombok.experimental.Accessors(fluent = true)
+    static class State {
+        String value;
     }
 
-    static final class Request {
-        private final String tenant;
-
-        public Request(String tenant) {
-            this.tenant = tenant;
-        }
-
-        public String tenant() { return tenant; }
+    @lombok.Value
+    @lombok.experimental.Accessors(fluent = true)
+    static class Request {
+        String tenant;
     }
 
     @Test

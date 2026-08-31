@@ -8,21 +8,20 @@ import java.util.Objects;
 import java.util.concurrent.ExecutorService;
 
 /**
- * Durable 运行时环境：持有存储、状态编解码器、观察者与可选的调用方线程池，
- * 并负责把逻辑 Flow 编译为可跨进程恢复的 {@link DurableExecutable}。
+ * 耐久化流编排运行时环境（Durable Runtime Environment）。
  *
- * <p>运行时不拥有任何线程资源：{@code executor} 仅被借用（用于超时 worker 与异步命令），
- * 生命周期完全由调用方管理，运行时绝不创建或关闭线程池。</p>
+ * <p>持有持久化存储（{@link DurableStore}）、业务状态编解码器（{@link StateMapper}）、组件解析器（{@link OperationResolver}）、
+ * 观察者与可选的异步线程池，并负责将高层逻辑 {@link Flow} 编译为具备崩溃恢复、检查点持久化与长流程挂起能力的 {@link DurableExecutable}。</p>
  *
- * <p><b>并行分支串行驱动</b>：Durable 的 Parallel 分支按声明顺序串行驱动
- * （前序分支完成后才开始后序），不做并发执行——这是崩溃一致性合同允许的简化。
- * 需要真实并发执行时请使用 Core 的 Local 执行器。</p>
+ * <p><b>核心架构与契约保证：</b>
+ * <ul>
+ *   <li><b>外部线程池借用</b>：运行时绝不主动创建或关闭线程池，{@code executor} 的完整生命周期由外部容器管理；</li>
+ *   <li><b>并行分支串行化执行</b>：Durable 引擎对 Parallel 节点的并发分支采用声明顺序串行驱动（前序分支完成后驱动后序），保障检查点状态强一致性；若需高并发并行，请使用 Core 的 {@code Local} 运行时；</li>
+ *   <li><b>StateMapper 确定性契约</b>：外部恢复信号（Resume Signal）的幂等校验依赖 {@link StateMapper#encode} 的确定性（同一信号值多次编码必须产生 {@code equals} 相等的 {@link StoredValue}），否则会引发冲突拒绝。</li>
+ * </ul>
+ * </p>
  *
- * <p><b>StateMapper 确定性契约</b>：resume 信号的幂等比较依赖
- * {@link StateMapper#encode} 的确定性——同一信号值多次编码必须产生
- * {@code equals} 相等的 {@link StoredValue}，否则幂等重驱动会被误判为
- * RESUME_SIGNAL_CONFLICT。选用 {@link DefaultStateMapper#INSTANCE} 或
- * 自定义 mapper 时都必须遵守该契约。</p>
+ * @author team4u
  */
 public final class DurableRuntime {
 
@@ -42,17 +41,27 @@ public final class DurableRuntime {
         this.executor = builder.executor;
     }
 
+    /**
+     * 创建 DurableRuntime 构造器。
+     *
+     * @param store 持久化存储后端，不能为 null
+     * @return 构造器实例
+     * @throws NullPointerException 当 store 为 null 时抛出
+     */
     public static Builder builder(DurableStore store) {
         return new Builder(store);
     }
 
     /**
-     * 编译指定版本的 Flow 为可执行的 DurableExecutable。
-     * 编译通过 Core 公开投影 SPI 进行；返回的 executable 仅持有绑定实例引用。
+     * 编译指定业务标识与版本的 Flow 为可持久化执行句柄 {@link DurableExecutable}。
      *
-     * <p>文档化降级：计划含 TIMEOUT 且未配置 executor 时不会拒绝编译——
-     * 超时不再由 worker 强制截止，而是依赖循环顶部的协作检查点与
-     * invoke 入口的剩余时间检查（未到期时 body 同步执行）。</p>
+     * @param flow        逻辑编排定义，不能为 null
+     * @param flowId      流程全局唯一标识，不能为空
+     * @param flowVersion 流程版本号
+     * @param <I>         流程输入类型
+     * @param <O>         流程输出类型
+     * @return 可执行句柄
+     * @throws NullPointerException 当 flow 为 null 时抛出
      */
     public <I, O> DurableExecutable<I, O> compile(Flow<I, O> flow, String flowId, int flowVersion) {
         Objects.requireNonNull(flow, "flow must not be null");
@@ -62,14 +71,27 @@ public final class DurableRuntime {
                 stateMapper, observer, durableObserver, executor);
     }
 
+    /**
+     * 获取当前运行时绑定的持久化存储。
+     *
+     * @return 持久化存储
+     */
     public DurableStore store() {
         return store;
     }
 
+    /**
+     * 获取当前运行时绑定的状态编解码器。
+     *
+     * @return 状态编解码器
+     */
     public StateMapper stateMapper() {
         return stateMapper;
     }
 
+    /**
+     * DurableRuntime 流式构建器。
+     */
     public static final class Builder {
         private final DurableStore store;
         private StateMapper stateMapper = DefaultStateMapper.INSTANCE;
@@ -82,35 +104,70 @@ public final class DurableRuntime {
             this.store = Objects.requireNonNull(store, "DurableStore must not be null");
         }
 
+        /**
+         * 设置业务状态编解码器。
+         *
+         * @param stateMapper 编解码器（为 null 时回退为 {@link DefaultStateMapper#INSTANCE}）
+         * @return 当前构建器
+         */
         public Builder stateMapper(StateMapper stateMapper) {
             this.stateMapper = stateMapper != null ? stateMapper : DefaultStateMapper.INSTANCE;
             return this;
         }
 
+        /**
+         * 设置依赖注入解析器。
+         *
+         * @param operationResolver 解析器，不能为 null
+         * @return 当前构建器
+         */
         public Builder operationResolver(OperationResolver operationResolver) {
             this.operationResolver = Objects.requireNonNull(
                     operationResolver, "operationResolver must not be null");
             return this;
         }
 
+        /**
+         * 设置通用流程观察者。
+         *
+         * @param observer 观察者
+         * @return 当前构建器
+         */
         public Builder observer(FlowObserver observer) {
             this.observer = observer != null ? observer : FlowObserver.noop();
             return this;
         }
 
+        /**
+         * 设置持久化专用生命周期观察者。
+         *
+         * @param durableObserver 持久化观察者
+         * @return 当前构建器
+         */
         public Builder durableObserver(DurableObserver durableObserver) {
             this.durableObserver = durableObserver != null ? durableObserver : DurableObserver.noop();
             return this;
         }
 
-        /** 配置调用方拥有的线程池，仅借用、绝不关闭。 */
+        /**
+         * 配置调用方拥有的外部线程池（仅借用用于超时控制与异步派发，运行时绝不关闭该线程池）。
+         *
+         * @param executor 线程池
+         * @return 当前构建器
+         */
         public Builder executor(ExecutorService executor) {
             this.executor = executor;
             return this;
         }
 
+        /**
+         * 构建持久化运行时实例。
+         *
+         * @return DurableRuntime 实例
+         */
         public DurableRuntime build() {
             return new DurableRuntime(this);
         }
     }
 }
+

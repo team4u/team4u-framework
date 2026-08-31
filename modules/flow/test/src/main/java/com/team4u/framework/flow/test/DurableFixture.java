@@ -14,16 +14,14 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * Durable 执行的精简类型化 facade：默认以 {@link InMemoryDurableStore} 构建
- * {@link DurableRuntime} 并编译指定 flowId/version 的 {@link DurableExecutable}，
- * 委托 start/recover/resume/cancel/snapshot 命令。
+ * 耐久化流测试夹具（Durable Flow Test Fixture）。
  *
- * <p><b>崩溃即重抛</b>：Durable 命令遵循 load → 校验 → 变更 → CAS 提交 → 驱动 的顺序。
- * 若进程在 CAS 提交后、驱动完成前崩溃（或注入的 store 在提交时抛错），命令会直接
- * 向调用方重抛原异常（如 {@code DurableException} 的 STORE_FAILURE/REVISION_CONFLICT，
- * 或自定义 Error）；由于快照已落库，后续以同一 flow 重新 compile 并调用
- * {@link #recover(String)} 即可从最后提交的检查点继续。本 fixture 不吞异常、
- * 不自动重试——测试需要模拟崩溃时直接捕获重抛的异常即可。</p>
+ * <p>默认使用 {@link InMemoryDurableStore} 与 {@link DurableRuntime} 编译 {@link DurableExecutable}，
+ * 为单元测试提供 start / recover / resume / cancel / snapshot 的精简操作门面与断言能力。</p>
+ *
+ * @param <I> 流程输入类型
+ * @param <O> 流程输出类型
+ * @author team4u
  */
 public final class DurableFixture<I, O> {
 
@@ -32,6 +30,7 @@ public final class DurableFixture<I, O> {
     private DurableFixture(DurableExecutable<I, O> executable) {
         this.executable = Objects.requireNonNull(executable, "executable must not be null");
     }
+
 
     /** 默认 fixture：InMemoryDurableStore + rejecting resolver。 */
     public static <I, O> DurableFixture<I, O> compile(

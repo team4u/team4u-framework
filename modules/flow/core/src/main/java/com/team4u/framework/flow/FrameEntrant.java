@@ -3,12 +3,22 @@ package com.team4u.framework.flow;
 import java.util.Collections;
 
 /**
- * 结构节点（Sequence/Route/Fallback/Await）进入帧栈的辅助逻辑：压入首个子帧或挂起。
- * 每个方法假定帧 phase==0 表示尚未进入，进入后置位以避免重复压栈。
+ * 结构复合节点（Sequence / Route / Fallback / Await）进入与子帧入栈调度器（Frame Entrant Dispatcher）。
+ *
+ * <p>负责在状态机遇到结构节点时，完成初始状态设置、首个子帧压栈（Push）以及挂起点拦截（Await Suspension）。</p>
+ *
+ * @author team4u
  */
 final class FrameEntrant {
     private FrameEntrant() { }
 
+    /**
+     * 顺序流水线节点进栈处理：压入首个子节点执行。
+     *
+     * @param machine  状态机实例
+     * @param frame    当前流水线帧
+     * @param sequence 顺序物理节点
+     */
     static void sequence(SerialMachine machine, RuntimeFrame frame,
                          PlanNode.Sequence sequence) {
         if (frame.phase != 0) throw new IllegalStateException(
@@ -22,6 +32,13 @@ final class FrameEntrant {
         machine.push(sequence.children().get(0), frame.current);
     }
 
+    /**
+     * 条件路由节点进栈处理：压入选择器（Selector）计算路由判别键。
+     *
+     * @param machine 状态机实例
+     * @param frame   当前路由帧
+     * @param route   路由物理节点
+     */
     static void route(SerialMachine machine, RuntimeFrame frame,
                       PlanNode.Route route) {
         if (frame.phase != 0) throw new IllegalStateException(
@@ -30,6 +47,13 @@ final class FrameEntrant {
         machine.push(route.selector(), frame.entry);
     }
 
+    /**
+     * 降级恢复节点进栈处理：压入首个候选分支执行。
+     *
+     * @param machine  状态机实例
+     * @param frame    当前降级帧
+     * @param fallback 降级物理节点
+     */
     static void fallback(SerialMachine machine, RuntimeFrame frame,
                          PlanNode.Fallback fallback) {
         if (frame.phase != 0) throw new IllegalStateException(
@@ -39,7 +63,15 @@ final class FrameEntrant {
         machine.push(fallback.branches().get(0), frame.entry);
     }
 
-    /** 有待处理 resume 信号则恢复执行，否则置 SUSPENDED 并返回挂起结果。 */
+    /**
+     * 挂起点拦截处理：若有外部恢复信号则组合为 Resumed 继续完成；若无则使流程进入 SUSPENDED 挂起态。
+     *
+     * @param machine 状态机实例
+     * @param state   状态机状态
+     * @param frame   当前挂起帧
+     * @param await   挂起物理节点
+     * @return 挂起结果快照，若已注入信号恢复则返回 null 继续推进
+     */
     static MachineResult await(SerialMachine machine, MachineState state,
                                RuntimeFrame frame, PlanNode.Await await) {
         if (state.pendingSignal != null) {
@@ -64,3 +96,4 @@ final class FrameEntrant {
         return MachineResult.from(state, null);
     }
 }
+

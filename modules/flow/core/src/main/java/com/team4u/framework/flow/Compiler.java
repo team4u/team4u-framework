@@ -13,13 +13,33 @@ import java.util.Optional;
 import java.util.Set;
 
 /**
- * 把不可变 Logical 树下降为运行时密封 PlanNode 树，并校验结构与绑定。
- * 采用工作列表后序遍历：先 normalize 子节点、再 build 当前节点，同时收集 FlowBuildException.Problem。
+ * 流程静态编译器（AST Lowering & 拓扑校验器）。
+ *
+ * <p>核心职责：
+ * <ul>
+ *   <li><b>降级转换（Lowering）</b>：将高层逻辑抽象语法树（{@link Logical}）降级编译为运行时密封的物理执行树（{@link PlanNode}）；</li>
+ *   <li><b>依赖组件绑定（Resolution）</b>：结合 {@link OperationResolver} 将流程中声明的 Class/Qualifier 一次性解析并绑定为单例 Bean 实例；</li>
+ *   <li><b>静态拓扑约束检查</b>：
+ *     <ul>
+ *       <li>具名 Scope 名称在整个流程内必须唯一；</li>
+ *       <li>Parallel 分支名称（Token）在同一并行块内必须唯一；</li>
+ *       <li>挂起点（{@link ResumePoint}）名称在整个流程内必须全局唯一；</li>
+ *       <li>Parallel 并行分支内严禁包含 {@link ResumePoint}（Await）以及 {@link PersistentPolicy}；</li>
+ *       <li>检测是否存在重复 Label、非法 Binding 类型等；</li>
+ *     </ul>
+ *   </li>
+ *   <li><b>非递归算法保证</b>：采用显式双工作栈后序遍历（Post-order Traversal），无栈深度限制。</li>
+ * </ul>
+ * </p>
+ *
+ * @author team4u
  */
 final class Compiler {
 
     /**
-     * 编译产物：root 节点、以路径索引的节点表、ResumePoint 名表，以及是否包含嵌套工作线程任务。
+     * 流程静态编译结果密封容器。
+     *
+     * <p>包含编译后的根执行节点、路径索引字典、挂起点映射表以及并发死锁防御特征标记。</p>
      */
     static final class Compiled {
         private final PlanNode root;
@@ -28,6 +48,13 @@ final class Compiler {
         private final boolean hasNestedWorkerTasks;
         private final boolean requiresCompensatingWorker;
 
+        /**
+         * 构造编译产物容器。
+         *
+         * @param root         执行根节点
+         * @param byPath       按节点路径索引的只读字典
+         * @param resumePoints 挂起点只读字典
+         */
         public Compiled(PlanNode root, Map<String, PlanNode> byPath,
                         Map<String, ResumePoint<?>> resumePoints) {
             this.root = root;
@@ -98,26 +125,52 @@ final class Compiler {
             return false;
         }
 
+        /**
+         * 获取编译后的根物理节点。
+         *
+         * @return 根节点
+         */
         public PlanNode root() {
             return root;
         }
 
+        /**
+         * 获取按树路径索引的节点映射字典。
+         *
+         * @return 节点路径映射
+         */
         public Map<String, PlanNode> byPath() {
             return byPath;
         }
 
+        /**
+         * 获取流程中所有挂起点映射字典。
+         *
+         * @return 挂起点映射
+         */
         public Map<String, ResumePoint<?>> resumePoints() {
             return resumePoints;
         }
 
+        /**
+         * 流程是否包含嵌套并发工作线程任务（如并行或超时）。
+         *
+         * @return 若包含返回 true
+         */
         public boolean hasNestedWorkerTasks() {
             return hasNestedWorkerTasks;
         }
 
+        /**
+         * 流程是否包含需要 ForkJoinPool 补偿机制以防止死锁的嵌套任务。
+         *
+         * @return 若需要返回 true
+         */
         public boolean requiresCompensatingWorker() {
             return requiresCompensatingWorker;
         }
     }
+
 
     private static final class BindingKey {
         private final Class<?> contract;

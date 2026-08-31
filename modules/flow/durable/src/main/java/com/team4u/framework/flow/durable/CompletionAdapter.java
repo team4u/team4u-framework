@@ -6,12 +6,22 @@ import com.team4u.framework.flow.Outcome;
 import java.util.Optional;
 
 /**
- * Completion.from 在 Core 中是包私有的；这里通过公开构造器重建等价摘要。
+ * 步骤完成摘要（{@link Completion}）适配构造器。
+ *
+ * <p>根据业务四态结果（{@link Outcome}）安全构造供 Policy 回调使用的只读摘要信息。</p>
+ *
+ * @author team4u
  */
 final class CompletionAdapter {
     private CompletionAdapter() {
     }
 
+    /**
+     * 将 Outcome 转译为 Completion 摘要对象。
+     *
+     * @param outcome 业务四态结果，不能为 null
+     * @return Completion 摘要
+     */
     static Completion from(Outcome<?> outcome) {
         if (outcome instanceof Outcome.Accepted) {
             return new Completion(Outcome.Kind.ACCEPTED,
@@ -36,3 +46,4 @@ final class CompletionAdapter {
         throw new IllegalStateException("Unknown outcome: " + outcome);
     }
 }
+

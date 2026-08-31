@@ -6,9 +6,18 @@ import java.util.Collections;
 import java.util.Objects;
 
 /**
- * Control 节点（Timeout/Retry/Policy/PersistentPolicy）的进入逻辑：
- * 计算 deadline、压入 body、调用 Policy.before，并处理等待/恢复阶段。
- * 与 {@link FrameReducer} 配对：本类处理进入与等待，FrameReducer 处理子帧完成后的归约。
+ * 环绕治理控制节点（Timeout / Retry / Policy / PersistentPolicy）进栈执行与前置判定调度器。
+ *
+ * <p>核心职责：
+ * <ul>
+ *   <li><b>Timeout 控制</b>：计算绝对截止时间（Deadline）并压入受保护的主体（Body）；</li>
+ *   <li><b>Retry 控制</b>：首次直接进入 Body，重试退避阶段（Phase 2）等待唤醒后重新压入 Body；</li>
+ *   <li><b>Policy 控制</b>：通过 {@link CallbackRunner} 调用 {@link Policy#before} 做出准入裁决（Proceed 放行、Reject 拒绝、Fail 拦截）；</li>
+ *   <li><b>PersistentPolicy 控制</b>：前置调用 {@link PersistentPolicy#before} 推进状态机（Proceed / WaitUntil / Reject / Fail）。</li>
+ * </ul>
+ * </p>
+ *
+ * @author team4u
  */
 final class ControlExecutor {
     private static final class PolicyBefore {
@@ -55,9 +64,17 @@ final class ControlExecutor {
 
     private ControlExecutor() { }
 
-    /** 按类型分发到 Timeout/Retry/Policy/PersistentPolicy 的进入处理。 */
+    /**
+     * 调度进入控制节点。
+     *
+     * @param machine 状态机实例
+     * @param frame   当前控制帧
+     * @param control 控制物理节点
+     * @return 挂起/等待结果快照，若已直接压入子节点继续推进则返回 null
+     */
     static MachineResult enter(SerialMachine machine, RuntimeFrame frame,
                                PlanNode.Control control) {
+
         switch (control.kind()) {
             case TIMEOUT:
                 return timeout(machine, frame, control);

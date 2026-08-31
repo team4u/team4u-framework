@@ -12,11 +12,19 @@ import java.util.concurrent.TimeoutException;
 import java.util.function.Function;
 
 /**
- * 执行回调并强制 deadline 的运行器，供 Operation/Policy 调用复用。
- * 超时则取消子 Cancellation 与任务；父取消时将自发中断转为取消结果。
+ * 策略回调安全受控执行器（Callback Runner）。
+ *
+ * <p>在执行策略的 {@link Policy#before} / {@link Policy#after} 等扩展点时，统一施加 Deadline 截止时间保护、
+ * 取消信号级联传播以及受控异常包装。</p>
+ *
+ * @author team4u
  */
 final class CallbackRunner {
-    /** 回调执行结果：正常值、异常或超时标志三者互斥。 */
+    /**
+     * 回调执行结果代数容器（正常返回值、异常原因或超时标志三者互斥）。
+     *
+     * @param <T> 回调返回值类型
+     */
     static final class Result<T> {
         private final T value;
         private final Throwable failure;
@@ -49,8 +57,16 @@ final class CallbackRunner {
         this.executor = executor;
     }
 
-    /** 在子 Cancellation 与 deadline 约束下执行回调，返回超时/失败/成功结果。 */
+    /**
+     * 在子 Cancellation 与 Deadline 约束下受控执行回调函数。
+     *
+     * @param callback 回调函数
+     * @param deadline 截止时刻（为 null 时直接在当前线程同步执行）
+     * @param <T>      返回值类型
+     * @return 包含值、异常或超时标记的执行结果 {@link Result}
+     */
     <T> Result<T> call(final Function<Cancellation, T> callback, Instant deadline) {
+
         if (deadline == null) return direct(callback, parent);
         Duration remaining = Duration.between(Instant.now(), deadline);
         if (remaining.isNegative() || remaining.isZero()) return new Result<T>(null, null, true);

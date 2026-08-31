@@ -5,7 +5,13 @@ import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicBoolean;
 
-/** JDK-only atomic in-memory store, primarily useful for tests and local tools. */
+/**
+ * 基于内存并发哈希表（{@link ConcurrentHashMap}）的 DurableStore 内置实现。
+ *
+ * <p>线程安全且完全基于 JDK 原生组件，适用于单元测试、本地调试与无需跨进程恢复的快速验证场景。</p>
+ *
+ * @author team4u
+ */
 public final class InMemoryDurableStore implements DurableStore {
     private final ConcurrentHashMap<String, DurableSnapshot> snapshots =
             new ConcurrentHashMap<String, DurableSnapshot>();
@@ -53,3 +59,4 @@ public final class InMemoryDurableStore implements DurableStore {
         return value;
     }
 }
+

@@ -1,42 +1,38 @@
 package com.team4u.framework.flow;
 
+import lombok.EqualsAndHashCode;
+import lombok.Getter;
+import lombok.ToString;
+import lombok.experimental.Accessors;
+
 import java.util.Objects;
 
 /**
- * Route 节点的只读分支用例投影。
+ * 动态条件路由（Route）单条分支的强类型可执行投影视图。
+ *
+ * @param <R> 目标执行拓扑节点的泛型类型
+ * @author team4u
  */
+@Getter
+@Accessors(fluent = true)
+@EqualsAndHashCode
+@ToString
 public final class ExecutableRouteCase<R> {
+    /** 分支判别键。 */
     private final Object key;
+    /** 投影后的分支执行拓扑树。 */
     private final R branch;
 
+    /**
+     * 构造路由分支执行投影。
+     *
+     * @param key    分支匹配键，不能为 null
+     * @param branch 分支执行计划树，不能为 null
+     * @throws NullPointerException 当入参为 null 时抛出
+     */
     public ExecutableRouteCase(Object key, R branch) {
         this.key = Objects.requireNonNull(key, "key must not be null");
         this.branch = Objects.requireNonNull(branch, "branch must not be null");
     }
-
-    public Object key() {
-        return key;
-    }
-
-    public R branch() {
-        return branch;
-    }
-
-    @Override
-    public boolean equals(Object o) {
-        if (this == o) return true;
-        if (o == null || getClass() != o.getClass()) return false;
-        ExecutableRouteCase<?> that = (ExecutableRouteCase<?>) o;
-        return key.equals(that.key) && branch.equals(that.branch);
-    }
-
-    @Override
-    public int hashCode() {
-        return Objects.hash(key, branch);
-    }
-
-    @Override
-    public String toString() {
-        return "ExecutableRouteCase[key=" + key + ", branch=" + branch + "]";
-    }
 }
+

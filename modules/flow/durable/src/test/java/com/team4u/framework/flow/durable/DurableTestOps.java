@@ -21,9 +21,15 @@ final class DurableTestOps {
 
     /** 记录每次调用（invocationId 与输入）并可按次数抛异常模拟崩溃。 */
     static final class RecordingOp implements Operation<String, String> {
+        @lombok.Getter
+        @lombok.experimental.Accessors(fluent = true)
         private final String tag;
         private final AtomicInteger calls = new AtomicInteger();
+        @lombok.Getter
+        @lombok.experimental.Accessors(fluent = true)
         private final List<String> invocations = new ArrayList<String>();
+        @lombok.Getter
+        @lombok.experimental.Accessors(fluent = true)
         private final List<String> inputs = new ArrayList<String>();
         private int crashBeforeComplete = -1;
         private Outcome<String> fixed = null;
@@ -42,20 +48,8 @@ final class DurableTestOps {
             return this;
         }
 
-        String tag() {
-            return tag;
-        }
-
         int calls() {
             return calls.get();
-        }
-
-        List<String> invocations() {
-            return invocations;
-        }
-
-        List<String> inputs() {
-            return inputs;
         }
 
         @Override

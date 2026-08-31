@@ -16,13 +16,17 @@ import java.util.function.Function;
 import java.util.function.Supplier;
 
 /**
- * 可配置返回四态 Outcome 或抛异常的线程安全 Operation 桩。
+ * 线程安全的可编程业务操作测试桩（Programmable Operation Test Stub）。
  *
- * <p>以 CopyOnWriteArrayList 按到达顺序记录每次调用的 input、幂等 invocationId 与
- * 重试 attempt。{@link OperationContext} 本身不暴露 attempt，因此普通调用记录 0；
- * 仅当运行时传入的上下文同时实现 {@link PolicyContext}（携带 attempt）时记录其值。</p>
+ * <p>实现 {@link Operation} 接口，支持配置固定返回四态结果（{@code accepting} / {@code rejecting} / {@code skipping} / {@code failing}）
+ * 或抛出异常（{@code throwing}），并以线程安全的方式记录每次调用的入参、{@code invocationId} 与 {@code attempt}。</p>
+ *
+ * @param <I> 输入类型
+ * @param <O> 输出类型
+ * @author team4u
  */
 public final class OperationStub<I, O> implements Operation<I, O> {
+
 
     /** 自定义应答函数：按上下文与入参产生 Outcome。 */
     @FunctionalInterface
@@ -31,34 +35,14 @@ public final class OperationStub<I, O> implements Operation<I, O> {
     }
 
     /** 单次调用记录：入参、幂等 invocationId 与重试 attempt。 */
+    @lombok.Getter
+    @lombok.experimental.Accessors(fluent = true)
+    @lombok.AllArgsConstructor
+    @lombok.ToString
     public static final class Call<I> {
         private final I input;
         private final String invocationId;
         private final int attempt;
-
-        Call(I input, String invocationId, int attempt) {
-            this.input = input;
-            this.invocationId = invocationId;
-            this.attempt = attempt;
-        }
-
-        public I input() {
-            return input;
-        }
-
-        public String invocationId() {
-            return invocationId;
-        }
-
-        public int attempt() {
-            return attempt;
-        }
-
-        @Override
-        public String toString() {
-            return "Call[input=" + input + ", invocationId=" + invocationId
-                    + ", attempt=" + attempt + "]";
-        }
     }
 
     private final Answer<I, O> answer;
