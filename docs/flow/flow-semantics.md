@@ -37,8 +37,9 @@ Outcome<Integer> length = ok.map(String::length);
 | 传播场景 | 规则 |
 | :--- | :--- |
 | `then`（Sequence） | **仅 Accepted 推进**：前节点 Accepted 时其输出作为后节点输入；Rejected/Skipped/Failed 直接短路为该 Sequence 的最终 Outcome，后续节点不执行 |
+| `thenOptional` | 仅用于同类型 `O -> O` 节点：Accepted 以新值推进；Skipped 在该局部边界被消费，并以节点入口值推进；Rejected/Failed 仍短路 |
 | `Rejected` | 终止当前 Sequence，向外层逐层透传；不触发 `firstApplicable` 与 `recoverWith` |
-| `Skipped` | 终止当前 Sequence；在 `firstApplicable` 容器内被消费（尝试下一分支）；否则向外透传 |
+| `Skipped` | 默认终止当前 Sequence；在 `firstApplicable` 或 `thenOptional` 生成的 SKIPPED Fallback 内被消费，否则向外透传 |
 | `Failed` | 终止当前 Sequence；触发同 scope 的 `recoverWith` 恢复边界或 `retry` 控制重试；否则向外透传 |
 | `firstApplicable` | 依次尝试各分支，**首个非 Skipped 的 Outcome 即为整体结果**；全部 Skipped 则整体 Skipped |
 | `recoverWith` | 当前 Flow Failed 时，以 `Recovery<I>`（原始 scope 输入 + 最终 Failure）作为恢复 Flow 的输入重新执行；非 Failed 原样透传 |
@@ -50,9 +51,48 @@ Outcome<Integer> length = ok.map(String::length);
 Flow<String, Integer> flow = Flow.<String, Integer>rejected(
                 Reason.of("BLACKLISTED", "命中黑名单"))
         .then((context, value) -> Outcome.accepted(value.length())); // 不会到达
+
+// Skipped 被 thenOptional 局部处理：normalize 不适用时，validate 收到原始输入
+Flow<Order, Order> optional = Flow.<Order>identity()
+        .thenOptional(normalize)
+        .then(validate);
 ```
 
-## 1.3 生命周期分层
+## 1.3 `thenOptional`：局部消费 Skipped
+
+`thenOptional` 不修改四态模型，也不改变普通 Sequence 的“仅 Accepted 推进”规则。它在 DSL 构建期复用现有 Fallback 与 Identity 原语：
+
+```java
+flow.thenOptional(next);
+
+// 语义等价于：
+flow.then(Flow.firstApplicable(next, Flow.identity()));
+```
+
+因此，可选节点返回 Skipped 时会发生两层结果：
+
+1. 节点自身真实完成为 Skipped，`NODE_COMPLETED` 保留该状态与 Reason；
+2. 外层 SKIPPED Fallback 选择 identity 分支，将 optional scope 的入口值转换为 Accepted，再由普通 Sequence 推进后续节点。
+
+这意味着 Skipped 没有被改造成携值状态，也不需要业务节点用 `Accepted(input)` 冒充“未处理”。如果 `thenOptional` 位于流程末尾且节点 Skipped，最终流程结果是 `Accepted(optionalScopeEntry)`，因为该 Skipped 已被显式处理。
+
+公共入口包括：
+
+```java
+flow.thenOptional(operation);                       // Operation<O, O>
+flow.thenOptional(OperationClass.class);            // Class<? extends Operation<O, O>>
+flow.thenOptional(OperationClass.class, "beanName");
+flow.thenOptional(optionalSubflow);                  // Flow<O, O>
+```
+
+类型与作用域合同：
+
+- 仅接受同类型 `O -> O`。Skipped 不携带输出，跨类型 `O -> N` 节点无法为后续步骤提供 `N`，调用会在 Java 编译期失败。
+- 跨类型场景应显式编排同输出类型的兜底，例如 `Flow.firstApplicable(candidate, defaultFlow)`，其中两个分支均为 `Flow<O, N>`。
+- `thenOptional(Flow<O, O>)` 把整个子流程作为 optional scope。若子流程先产生 Accepted 中间值、随后最终 Skipped，identity 使用的是子流程入口值，之前的中间值不会泄漏到外层。
+- `Rejected` 与 `Failed` 不匹配 SKIPPED 触发器，仍按普通传播规则短路。
+
+## 1.4 生命周期分层
 
 框架把"业务结果"与"执行生命周期"严格分成两层：
 
@@ -77,7 +117,7 @@ FlowResult<O>（Local 执行层，三态）
 
 ## 2.1 INVOKE（调用）
 
-执行绑定的 `Operation`。`Flow.step` / `then` / `thenOptional` / `use` 均编译为 INVOKE 节点。
+执行绑定的 `Operation`。`Flow.step`、`then(Operation)` 与 `use` 会创建 INVOKE；`thenOptional(Operation)` 则把 INVOKE 包装在 SKIPPED Fallback + Identity 结构内，而不是新增节点 Kind。
 
 - **支持实例与 Bean 双绑定**：可以直接传入 `Operation` 实例，也可以传入 `Class<? extends Operation>` 与可选限定符 `qualifier`（Spring Bean 名称），在编译期由容器解析为单例 Bean（Bean 是一等公民）。
 - **use 上下文调用**：通过 `project` 从当前输出派生入参、`merge` 合并原输出与 Operation 输出，用于"调用外部服务但不丢失主上下文"的场景（同样支持 Class/Qualifier 绑定）。
@@ -85,7 +125,9 @@ FlowResult<O>（Local 执行层，三态）
 
 ## 2.2 SEQUENCE（顺序）
 
-按声明顺序执行子节点，仅 Accepted 推进。相邻匿名 `then` 会被扁平化为同一子节点列表；`Flow.scope(name, body)` 创建具名 Sequence，是 Fallback 恢复边界与超时作用域的载体。
+按声明顺序执行子节点，普通 Sequence 仍然仅由 Accepted 推进。相邻匿名 `then` 会被扁平化为同一子节点列表；`Flow.scope(name, body)` 创建具名 Sequence，是 Fallback 恢复边界与超时作用域的载体。
+
+`thenOptional` 不放宽 Sequence reducer：它插入的 SKIPPED Fallback 会在节点 Skipped 时通过 Identity 产出 Accepted(entry)，Sequence 看到的仍然是标准 Accepted。
 
 ## 2.3 ROUTE（路由）
 
@@ -100,6 +142,7 @@ FlowResult<O>（Local 执行层，三态）
 按触发器尝试分支序列：
 
 - `Flow.firstApplicable(flowA, flowB, ...)`：Trigger 为 SKIPPED，依次尝试，首个非 Skipped 即结果。
+- `flow.thenOptional(next)`：Trigger 为 SKIPPED；`next` 最终 Skipped 时执行 Identity 分支，以 optional scope 的入口值恢复为 Accepted 并继续外层 Sequence。
 - `flow.recoverWith(recoveryFlow)`：Trigger 为 FAILED，主分支 Failed 时以 `Recovery<I>`（`input()` 原始 scope 输入 + `failure()` 最终 Failure）作为恢复分支输入。
 - 恢复分支自身 Failed 时按外层规则继续传播，不会无限递归。
 

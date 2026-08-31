@@ -10,7 +10,7 @@
 
 | 扩展点 | 签名要点 | 适用场景 | 挂载方式 |
 | :--- | :--- | :--- | :--- |
-| `Operation<I, O>` | `Outcome<O> execute(OperationContext ctx, I input) throws Exception` | 业务转换、外部调用、副作用步骤 | `Flow.step/then/use`、`Branch.of` |
+| `Operation<I, O>` | `Outcome<O> execute(OperationContext ctx, I input) throws Exception` | 业务转换、外部调用、副作用步骤 | `Flow.step/then/thenOptional/use`、`Branch.of` |
 | `Policy<K>` | `Gate before(PolicyContext, K)` + `default void after(...)` | 无状态可重放网关：限流、熔断、准入 | `flow.policy(policy, keyFn)` |
 | `PersistentPolicy<K, S>` | `S initialState(K)` + `Before<S> before(...)` + `After<S> after(...)` | 状态需跨重启持久化的控制：退避、窗口、审批等待 | `flow.persistentPolicy(policy, keyFn)` |
 | `JoinStrategy<O>` | `Outcome<O> join(ParallelResults results)` | Parallel wait-all 后的显式合并 | `Flow.parallel(...).join(strategy)` |
@@ -31,6 +31,7 @@ public interface Operation<I, O> {
 - 同步、可复用、线程安全；实现应避免持有跨调用可变状态。
 - `OperationContext` 提供 `metadata()`（flowId/version、executionId、nodePath、label）、稳定幂等键 `invocationId()`（`flowId:flowVersion:executionId:path`）、`cancellation()` 取消信号与 `await(CompletionStage)` 辅助。
 - 返回 null 被严格拒绝；抛异常统一转 `OPERATION_EXCEPTION` 稳定 Failed；超时转 `TIMEOUT`。
+- 对于“不适用但不应阻断后续”的同类型 `Operation<T, T>`，返回 `Outcome.skipped(reason)` 并通过 `thenOptional` 挂载；不要用 `Accepted(input)` 隐藏未处理状态。
 
 ## 1.2 Policy 与 PersistentPolicy
 

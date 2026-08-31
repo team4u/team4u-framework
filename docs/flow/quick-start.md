@@ -1,6 +1,6 @@
 # 快速开始
 
-本章从依赖引入开始，用最短路径走完"类型化链 -> 四态 -> route/parallel/await -> Local vs Durable -> 图渲染 -> 测试"。
+本章从依赖引入开始，用最短路径走完"类型化链 -> 可选步骤 -> 四态 -> route/parallel/await -> Local vs Durable -> 图渲染 -> 测试"。
 
 ---
 
@@ -99,7 +99,7 @@ public class ValidateOrderOperation implements Operation<OrderRequest, OrderRequ
 
     @Override
     public Outcome<OrderRequest> execute(OperationContext context, OrderRequest order) {
-        return order.getAmount() > 0 ? Outcome.accepted(order) 
+        return order.getAmount() > 0 ? Outcome.accepted(order)
                 : Outcome.rejected(Reason.of("INVALID_AMOUNT", "金额非法"));
     }
 }
@@ -153,7 +153,51 @@ public class OrderService {
 
 ---
 
-## 2.3 组合与上下文调用要点
+## 2.3 `thenOptional`：节点弃权但流水线继续
+
+当一个同类型节点不适用于当前输入，但后续节点仍应继续处理时，让该节点返回真实的 `Skipped`，并通过 `thenOptional` 组合：
+
+```java
+Operation<Order, Order> applyCoupon = (context, order) -> {
+    if (order.getCouponCode() == null) {
+        return Outcome.skipped(Reason.of("NO_COUPON", "订单没有优惠券"));
+    }
+    return Outcome.accepted(order.applyCoupon());
+};
+
+Flow<Order, Receipt> flow = Flow.<Order>identity()
+        .thenOptional(applyCoupon)
+        .then(createReceipt);
+```
+
+`applyCoupon` 总会执行，结果按以下规则归约：
+
+| 可选节点结果 | 是否执行后续节点 | 后续节点输入 |
+| :--- | :--- | :--- |
+| `Accepted(value)` | 是 | `value` |
+| `Skipped(reason)` | 是 | 进入可选节点前的原值 |
+| `Rejected(reason)` | 否 | Rejected 向外短路 |
+| `Failed(failure)` | 否 | Failed 向外短路 |
+
+支持的四种入口与普通 `then` 对齐：
+
+```java
+flow.thenOptional(operationInstance);
+flow.thenOptional(OptionalOperation.class);
+flow.thenOptional(OptionalOperation.class, "optionalOperationBean");
+flow.thenOptional(optionalSubflow);
+```
+
+关键约束：
+
+- 仅支持 `Operation<O, O>` 或 `Flow<O, O>`。Skipped 不携带输出，类型转换节点 `O -> N` 无法凭空提供 `N`，因此会在编译期被拒绝。
+- `thenOptional(Flow<O, O>)` 把整个子流程视为一个 optional scope。子流程最终 Skipped 时恢复的是进入子流程前的值，不是子流程内部最后一次 Accepted 的中间值。
+- 节点级 `NODE_COMPLETED` 仍会记录 Skipped；组合层随后选择 identity 兜底并继续，业务观测不会被伪装成节点 Accepted。
+- 跨类型候选需要显式提供同输出类型的兜底流程，例如 `then(Flow.firstApplicable(candidate, defaultFlow))`，其中两个分支都必须是 `Flow<O, N>`。
+
+`thenOptional` 与 `firstApplicable` 解决不同问题：前者无论节点 Accepted 还是 Skipped 都继续外层流水线；后者在 Skipped 时尝试下一个候选，并以首个非 Skipped 结果结束候选选择。
+
+## 2.4 组合与上下文调用要点
 
 - `then` 前后类型严格推导：`Flow<String, Integer>.then(Operation<Integer, String>)` 得到 `Flow<String, String>`，不匹配直接编译错误。
 - 所有组合方法返回新的 `Flow` 实例，定义不可变、线程安全。
@@ -206,7 +250,7 @@ if (result instanceof FlowResult.Completed) {
 }
 ```
 
-传播要点：`then` 仅 Accepted 推进；Rejected 终止透传；Skipped 可被 `firstApplicable` 消费；Failed 触发 `recoverWith`/`retry`（详见[核心语义](flow-semantics.md)）。测试时用 testkit 的 `FlowAssertions.assertAccepted/assertRejected/...` 一行断言。
+传播要点：普通 `then` 仅 Accepted 推进；`thenOptional` 在局部边界把 Skipped 处理为原值透传；Rejected 终止透传；Skipped 还可被 `firstApplicable` 消费；Failed 触发 `recoverWith`/`retry`（详见[核心语义](flow-semantics.md)）。测试时用 testkit 的 `FlowAssertions.assertAccepted/assertRejected/...` 一行断言。
 
 ---
 
@@ -234,6 +278,8 @@ Flow<OrderRequest, Receipt> degraded = Flow.firstApplicable(
         manualChannelFlow);      // 兜底
 // 首个非 Skipped 的分支即整体结果；全部 Skipped 则整体 Skipped
 ```
+
+这里的候选分支不会像 `thenOptional` 一样在 Accepted 后继续尝试其他候选；二者分别表达“选择首个适用处理器”和“可选处理后继续流水线”。
 
 ## 4.3 parallel：显式 join 的并行
 

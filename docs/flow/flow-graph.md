@@ -54,7 +54,8 @@ Mermaid 输出以**六个终结通道**刻画一次执行的全部可能归宿�
 
 - 四个业务通道与两个生命周期通道（挂起/取消）互不混淆；只有 Accepted 通道表达"携带输出成功"。
 - Sequence 边上只标注推进通道（`-->|ACCEPTED|`），非推进态（REJECTED/SKIPPED/FAILED）直接流向对应终结点，可视化地呈现"then 仅 Accepted 推进"。
-- 降级节点只渲染其配置的触发器：`firstApplicable` 渲染 `SKIPPED | next applicable`，`recoverWith` 渲染 `FAILED | recover`，不会混入其他通道。
+- `thenOptional` 不增加第九种节点：它描述为 `FALLBACK(trigger=SKIPPED)`，包含可选步骤与 `COMPLETE(identity)` 两个分支。图中可直接看到 Skipped 被局部消费后通过 identity 回到 Accepted 通道。
+- 降级节点只渲染其配置的触发器：`firstApplicable` 和 `thenOptional` 渲染 SKIPPED 触发边，`recoverWith` 渲染 `FAILED | recover`，不会混入其他通道。
 - Route 渲染 `case=<key>` 分支、`otherwise` 与 `NO MATCH | SKIPPED`（`withoutOtherwise` 时）。
 
 ---

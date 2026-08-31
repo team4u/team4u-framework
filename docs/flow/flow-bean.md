@@ -87,11 +87,40 @@ graph TD
 | :--- | :--- | :--- | :--- |
 | **单步起点** | `Flow.step(Class<Op>)` | `Flow.step(Class<Op>, "beanName")` | 以 Bean 作为流程首个节点 |
 | **顺序步骤** | `flow.then(Class<Op>)` | `flow.then(Class<Op>, "beanName")` | 串联后续 Bean 节点 |
-| **可选步骤** | `flow.thenOptional(Class<Op>)` | `flow.thenOptional(Class<Op>, "beanName")` | 结果为 Skipped 时透传原值继续执行 |
+| **可选步骤** | `flow.thenOptional(Class<Op>)` | `flow.thenOptional(Class<Op>, "beanName")` | 同类型 Bean 返回 Skipped 时透传步骤入口值继续执行 |
 | **上下文调用** | `flow.use(Class<Op>, proj, merge)` | `flow.use(Class<Op>, "beanName", proj, merge)` | 调用 Bean 但保留主流程上下文 |
 | **条件路由** | `Flow.route(Class<Op>)` | `Flow.route(Class<Op>, "beanName")` | 使用 Bean 计算路由选择键 |
 | **无状态网关** | `flow.policy(Class<Policy>, keyFn)` | `flow.policy(Class<Policy>, "beanName", keyFn)` | 挂载 Bean 网关策略（限流/熔断等） |
 | **持久化策略** | `flow.persistentPolicy(Class<PPolicy>, keyFn)` | `flow.persistentPolicy(Class<PPolicy>, "beanName", keyFn)` | 挂载持久化状态策略（跨重启控制） |
+
+## 可选 Bean 步骤
+
+当 Spring Bean 只适用于部分输入，但后续节点仍需继续处理时，Bean 应返回真实 Skipped，并使用 `thenOptional` 编排：
+
+```java
+@Component
+public class CouponEnrichmentOperation
+        implements Operation<OrderRequest, OrderRequest> {
+
+    @Override
+    public Outcome<OrderRequest> execute(
+            OperationContext context, OrderRequest order) {
+        if (order.getCouponCode() == null) {
+            return Outcome.skipped(Reason.of("NO_COUPON", "订单没有优惠券"));
+        }
+        return Outcome.accepted(order.applyCoupon());
+    }
+}
+
+Flow<OrderRequest, Receipt> flow = Flow.step(ValidateOrderOperation.class)
+        .thenOptional(CouponEnrichmentOperation.class)
+        .thenOptional(MemberEnrichmentOperation.class, "memberEnrichmentOperation")
+        .then(PaymentOperation.class, "onlinePaymentOperation");
+```
+
+解析仍发生在 `BeanFlows.compile` 阶段，Skipped 节点的代理、Qualifier、节点元数据和完成事件都会保留。只有 Skipped 会被 optional 边界处理；Rejected/Failed 仍然终止流水线。
+
+`thenOptional` 的 Bean 契约必须是 `Operation<O, O>`：原值透传只有在输入输出类型相同时才安全。`Operation<O, N>` 应使用普通 `then`，或用两个同为 `Flow<O, N>` 的候选流程显式构造 `firstApplicable`。可选子流程的完整作用域规则见[核心语义](flow-semantics.md)。
 
 ---
 

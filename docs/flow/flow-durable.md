@@ -25,6 +25,8 @@ graph TD
 3. **revision CAS 检查点**：每次状态推进以乐观锁提交，多实例并发操作同一执行时冲突方失败。
 4. **版本强隔离**：以 `flowId + flowVersion` 显式标识；快照与可执行不匹配时直接拒绝，不做结构猜测与自动迁移。
 
+`thenOptional` 在核心 DSL 中会展开为现有的 `FALLBACK(trigger=SKIPPED)` + `COMPLETE(identity)`，Durable 不需要新增控制种类或快照字段。因此 Local 与 Durable 共享完全相同的 Skipped 原值透传、Rejected/Failed 短路及 optional scope 入口值语义。
+
 命令统一遵循模式：**load（无副作用）→ 校验生命周期 → 状态变更 → CAS 提交 → 驱动机器**。若进程在 CAS 提交后、驱动完成前崩溃，命令向调用方重抛原异常；由于快照已落库，重新 compile 后 `recover` 即可从最后提交的检查点继续。
 
 ---
