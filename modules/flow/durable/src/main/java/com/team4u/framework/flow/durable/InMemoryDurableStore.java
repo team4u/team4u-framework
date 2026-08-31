@@ -1,48 +1,55 @@
 package com.team4u.framework.flow.durable;
 
+import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.concurrent.ConcurrentMap;
+import java.util.concurrent.atomic.AtomicBoolean;
 
-/**
- * 内存型 CAS 快照存储实现（用于测试与本地单机执行）。
- *
- * @author jay.wu
- */
-public class InMemoryDurableStore implements DurableStore {
+/** JDK-only atomic in-memory store, primarily useful for tests and local tools. */
+public final class InMemoryDurableStore implements DurableStore {
+    private final ConcurrentHashMap<String, DurableSnapshot> snapshots =
+            new ConcurrentHashMap<String, DurableSnapshot>();
 
-    private final ConcurrentMap<String, DurableSnapshot> store = new ConcurrentHashMap<>();
-
-    private String key(String flowId, String executionId) {
-        return flowId + ":" + executionId;
+    @Override
+    public Optional<DurableSnapshot> load(String executionId) {
+        return Optional.ofNullable(snapshots.get(text(executionId)));
     }
 
     @Override
-    public DurableSnapshot load(String flowId, String executionId) {
-        return store.get(key(flowId, executionId));
+    public boolean compareAndSet(String executionId, long expectedRevision,
+                                 DurableSnapshot update) {
+        final String key = text(executionId);
+        Objects.requireNonNull(update, "update must not be null");
+        if (!key.equals(update.executionId())) {
+            throw new IllegalArgumentException("snapshot executionId does not match store key");
+        }
+        if (expectedRevision < -1) {
+            throw new IllegalArgumentException("expectedRevision must be at least -1");
+        }
+        if (update.revision() != expectedRevision + 1) {
+            throw new IllegalArgumentException("update revision must equal expectedRevision + 1");
+        }
+        if (expectedRevision == -1) {
+            return snapshots.putIfAbsent(key, update) == null;
+        }
+        final AtomicBoolean changed = new AtomicBoolean();
+        snapshots.computeIfPresent(key, (ignored, current) -> {
+            if (current.revision() != expectedRevision) return current;
+            changed.set(true);
+            return update;
+        });
+        return changed.get();
     }
 
-    @Override
-    public synchronized boolean save(DurableSnapshot snapshot, long expectedRevision) {
-        String k = key(snapshot.flowId(), snapshot.executionId());
-        DurableSnapshot existing = store.get(k);
-
-        if (existing == null) {
-            if (expectedRevision == 0) {
-                store.put(k, snapshot);
-                return true;
-            }
-            return false;
-        }
-
-        if (existing.revision() == expectedRevision) {
-            store.put(k, snapshot);
-            return true;
-        }
-
-        return false;
+    /** 测试辅助：绕过 CAS 直接落库一张手工构造的快照。 */
+    void insertForTest(String executionId, DurableSnapshot snapshot) {
+        snapshots.put(text(executionId), snapshot);
     }
 
-    public void clear() {
-        store.clear();
+    private static String text(String value) {
+        Objects.requireNonNull(value, "executionId must not be null");
+        if (value.trim().isEmpty()) throw new IllegalArgumentException(
+                "executionId must not be blank");
+        return value;
     }
 }

@@ -1,102 +1,87 @@
 package com.team4u.framework.flow.durable;
 
+import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
+import java.time.Instant;
+import java.util.Objects;
 
 /**
- * 默认的基础状态编解码器实现。
- * 支持基础原始类型（String, Integer, Long, Boolean, Double, Float, Short, Byte, Character, byte[]）与 null。
- * 领域对象需要自定义 {@link StateMapper} 实现。
- *
- * @author jay.wu
+ * Small JDK-only mapper for scalar values. Domain values require a custom mapper.
  */
-public class DefaultStateMapper implements StateMapper {
-
+public final class DefaultStateMapper implements StateMapper {
     public static final DefaultStateMapper INSTANCE = new DefaultStateMapper();
+    private static final int VERSION = 1;
 
-    @Override
-    public StoredValue encode(Object value) throws Exception {
-        if (value == null) {
-            return new StoredValue("null", new byte[0]);
-        }
-        if (value instanceof String) {
-            return new StoredValue("string", ((String) value).getBytes(StandardCharsets.UTF_8));
-        }
-        if (value instanceof Integer) {
-            return new StoredValue("int", value.toString().getBytes(StandardCharsets.UTF_8));
-        }
-        if (value instanceof Long) {
-            return new StoredValue("long", value.toString().getBytes(StandardCharsets.UTF_8));
-        }
-        if (value instanceof Boolean) {
-            return new StoredValue("bool", value.toString().getBytes(StandardCharsets.UTF_8));
-        }
-        if (value instanceof Double) {
-            return new StoredValue("double", value.toString().getBytes(StandardCharsets.UTF_8));
-        }
-        if (value instanceof Float) {
-            return new StoredValue("float", value.toString().getBytes(StandardCharsets.UTF_8));
-        }
-        if (value instanceof Short) {
-            return new StoredValue("short", value.toString().getBytes(StandardCharsets.UTF_8));
-        }
-        if (value instanceof Byte) {
-            return new StoredValue("byte", value.toString().getBytes(StandardCharsets.UTF_8));
-        }
-        if (value instanceof Character) {
-            return new StoredValue("char", value.toString().getBytes(StandardCharsets.UTF_8));
-        }
-        if (value instanceof byte[]) {
-            return new StoredValue("bytes", (byte[]) value);
-        }
-        throw new IllegalArgumentException("Cannot encode unsupported type: " + value.getClass().getName() +
-                ". Implement custom StateMapper for domain types.");
+    private DefaultStateMapper() {
     }
 
     @Override
-    public Object decode(StoredValue storedValue) throws Exception {
-        if (storedValue == null) {
-            throw new IllegalArgumentException("storedValue must not be null");
+    public StoredValue encode(Object value) {
+        Objects.requireNonNull(value, "value must not be null");
+        if (value instanceof String) return text("string", (String) value);
+        if (value instanceof Integer) return text("int", value.toString());
+        if (value instanceof Long) return text("long", value.toString());
+        if (value instanceof Boolean) return text("boolean", value.toString());
+        if (value instanceof Double) return text("double", value.toString());
+        if (value instanceof Float) return text("float", value.toString());
+        if (value instanceof Short) return text("short", value.toString());
+        if (value instanceof Byte) return text("byte", value.toString());
+        if (value instanceof Character) return text("char", value.toString());
+        if (value instanceof byte[]) {
+            return new StoredValue("team4u-default:bytes", VERSION, (byte[]) value);
         }
-        String type = storedValue.typeId();
-        byte[] data = storedValue.data();
+        if (value instanceof Instant) {
+            Instant instant = (Instant) value;
+            ByteBuffer bytes = ByteBuffer.allocate(12);
+            bytes.putLong(instant.getEpochSecond());
+            bytes.putInt(instant.getNano());
+            return new StoredValue("team4u-default:instant", VERSION, bytes.array());
+        }
+        throw new IllegalArgumentException("Unsupported state type: "
+                + value.getClass().getName());
+    }
 
-        switch (type) {
-            case "null":
-                return null;
-            case "string":
-                return new String(data, StandardCharsets.UTF_8);
-            case "int":
-                return Integer.parseInt(new String(data, StandardCharsets.UTF_8));
-            case "long":
-                return Long.parseLong(new String(data, StandardCharsets.UTF_8));
-            case "bool":
-                String boolStr = new String(data, StandardCharsets.UTF_8);
-                if ("true".equals(boolStr)) {
-                    return Boolean.TRUE;
-                } else if ("false".equals(boolStr)) {
-                    return Boolean.FALSE;
-                } else {
-                    throw new IllegalArgumentException("Invalid boolean data in StoredValue: " + boolStr);
-                }
-            case "double":
-                return Double.parseDouble(new String(data, StandardCharsets.UTF_8));
-            case "float":
-                return Float.parseFloat(new String(data, StandardCharsets.UTF_8));
-            case "short":
-                return Short.parseShort(new String(data, StandardCharsets.UTF_8));
-            case "byte":
-                return Byte.parseByte(new String(data, StandardCharsets.UTF_8));
-            case "char":
-                String charStr = new String(data, StandardCharsets.UTF_8);
-                if (charStr.length() != 1) {
-                    throw new IllegalArgumentException("Invalid char data in StoredValue (must be exactly 1 char): " + charStr);
-                }
-                return charStr.charAt(0);
-            case "bytes":
-                return data;
-            default:
-                throw new IllegalArgumentException("Unknown or unsupported typeId in StoredValue: " + type +
-                        ". Implement custom StateMapper for domain types.");
+    @Override
+    public Object decode(StoredValue storedValue) {
+        Objects.requireNonNull(storedValue, "storedValue must not be null");
+        if (storedValue.codecVersion() != VERSION) {
+            throw new IllegalArgumentException("Unsupported default codec version: "
+                    + storedValue.codecVersion());
         }
+        String codec = storedValue.codecId();
+        byte[] payload = storedValue.payload();
+        if ("team4u-default:bytes".equals(codec)) return payload;
+        if ("team4u-default:instant".equals(codec)) {
+            if (payload.length != 12) {
+                throw new IllegalArgumentException("Invalid Instant payload");
+            }
+            ByteBuffer bytes = ByteBuffer.wrap(payload);
+            return Instant.ofEpochSecond(bytes.getLong(), bytes.getInt());
+        }
+        String value = new String(payload, StandardCharsets.UTF_8);
+        if ("team4u-default:string".equals(codec)) return value;
+        if ("team4u-default:int".equals(codec)) return Integer.valueOf(value);
+        if ("team4u-default:long".equals(codec)) return Long.valueOf(value);
+        if ("team4u-default:boolean".equals(codec)) {
+            if ("true".equals(value)) return Boolean.TRUE;
+            if ("false".equals(value)) return Boolean.FALSE;
+            throw new IllegalArgumentException("Invalid boolean payload: " + value);
+        }
+        if ("team4u-default:double".equals(codec)) return Double.valueOf(value);
+        if ("team4u-default:float".equals(codec)) return Float.valueOf(value);
+        if ("team4u-default:short".equals(codec)) return Short.valueOf(value);
+        if ("team4u-default:byte".equals(codec)) return Byte.valueOf(value);
+        if ("team4u-default:char".equals(codec)) {
+            if (value.length() != 1) {
+                throw new IllegalArgumentException("Invalid character payload");
+            }
+            return Character.valueOf(value.charAt(0));
+        }
+        throw new IllegalArgumentException("Unsupported codec: " + codec);
+    }
+
+    private static StoredValue text(String type, String value) {
+        return new StoredValue("team4u-default:" + type, VERSION,
+                value.getBytes(StandardCharsets.UTF_8));
     }
 }
