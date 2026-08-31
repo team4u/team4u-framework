@@ -127,13 +127,13 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         }
 
         private void appendStyles(StringBuilder sb) {
-            sb.append("    classDef startEnd fill:#f1f5f9,stroke:#475569,stroke-width:2px;\n")
-                    .append("    classDef actionNode fill:#ffffff,stroke:#3b82f6,stroke-width:1.5px;\n")
-                    .append("    classDef routeNode fill:#fef3c7,stroke:#d97706,stroke-width:1.5px;\n")
-                    .append("    classDef parallelNode fill:#f3e8ff,stroke:#9333ea,stroke-width:1.5px;\n")
-                    .append("    classDef awaitNode fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px;\n")
-                    .append("    classDef successNode fill:#dcfce7,stroke:#166534,stroke-width:2px;\n")
-                    .append("    classDef dangerNode fill:#fee2e2,stroke:#b91c1c,stroke-width:2px;\n");
+            sb.append("    classDef startEnd fill:#e2e8f0,stroke:#334155,stroke-width:2px,color:#0f172a;\n")
+                    .append("    classDef actionNode fill:#ffffff,stroke:#1d4ed8,stroke-width:2px,color:#0f172a;\n")
+                    .append("    classDef routeNode fill:#fef3c7,stroke:#b45309,stroke-width:2px,color:#78350f;\n")
+                    .append("    classDef parallelNode fill:#f3e8ff,stroke:#6b21a8,stroke-width:2px,color:#581c87;\n")
+                    .append("    classDef awaitNode fill:#e0f2fe,stroke:#0369a1,stroke-width:2px,color:#0c4a6e;\n")
+                    .append("    classDef successNode fill:#dcfce7,stroke:#15803d,stroke-width:2px,color:#14532d;\n")
+                    .append("    classDef dangerNode fill:#fee2e2,stroke:#b91c1c,stroke-width:2px,color:#7f1d1d;\n");
 
             applyClass(sb, startEndNodes, "startEnd");
             applyClass(sb, actionNodes, "actionNode");
@@ -369,7 +369,7 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
             }
         }
 
-        String content = subtitle.isEmpty() ? title : title + "<br/><small>" + subtitle + "</small>";
+        String content = subtitle.isEmpty() ? title : title + "<br/>" + subtitle;
         state.emitNode(id, "[", "]", content);
         state.addActionNode(id);
         return new Block(id, Collections.singletonList(id), Collections.singletonList(id));
@@ -402,7 +402,7 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
             title = "挂起等待: " + FlowGraphFormatters.escapeMermaid(resumePoint) + badgeText;
         }
 
-        String content = subtitle.isEmpty() ? title : title + "<br/><small>" + subtitle + "</small>";
+        String content = subtitle.isEmpty() ? title : title + "<br/>" + subtitle;
         state.emitNode(id, "[", "]", content);
         state.addAwaitNode(id);
         return new Block(id, Collections.singletonList(id), Collections.singletonList(id));
@@ -495,7 +495,7 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
             title = "分支路由" + badgeText;
         }
 
-        String content = subtitle.isEmpty() ? title : title + "<br/><small>" + subtitle + "</small>";
+        String content = subtitle.isEmpty() ? title : title + "<br/>" + subtitle;
         state.emitNode(id, "{", "}", content);
         state.addRouteNode(id);
 

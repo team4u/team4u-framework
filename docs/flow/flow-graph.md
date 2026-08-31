@@ -161,20 +161,20 @@ public class OrderFulfillmentExample {
 ```mermaid
 flowchart TD
     flow_start(["开始: order-fulfillment-flow"])
-    n1["前置风控拦截<br/><small>RiskCheckOperation (risk-checker)</small>"]
+    n1["前置风控拦截<br/>RiskCheckOperation (risk-checker)"]
     n2(["低风险直通 (透传)"])
     n3(["透传 (Identity)"])
     n4["挂起等待: manual-audit"]
-    n5["PassAuditOperation<br/><small>(audit-handler)</small>"]
+    n5["PassAuditOperation<br/>(audit-handler)"]
     n7(["[REJECTED]"])
-    n8{"RiskRouter<br/><small>(risk-router)</small>"}
-    n9["库存预占 [timeout: 2s]<br/><small>LockInventoryOperation (stock-service)</small>"]
-    n10["卡券锁定<br/><small>LockCouponOperation (coupon-service)</small>"]
+    n8{"RiskRouter<br/>(risk-router)"}
+    n9["库存预占 [timeout: 2s]<br/>LockInventoryOperation (stock-service)"]
+    n10["卡券锁定<br/>LockCouponOperation (coupon-service)"]
     n11{{"并行: 并行资源锁定"}}
     n12["合并 (Join)"]
-    n13["主通道支付扣款 [timeout: 5s]<br/><small>ChargePaymentOperation (main-gateway)</small>"]
-    n14["备用通道降级<br/><small>BackupPaymentOperation (backup-gateway)</small>"]
-    n15["生成出货单据<br/><small>IssueReceiptOperation (receipt-service)</small>"]
+    n13["主通道支付扣款 [timeout: 5s]<br/>ChargePaymentOperation (main-gateway)"]
+    n14["备用通道降级<br/>BackupPaymentOperation (backup-gateway)"]
+    n15["生成出货单据<br/>IssueReceiptOperation (receipt-service)"]
     flow_end(["结束 (ACCEPTED)"])
 
     subgraph sg_n6 ["高风险人工审核"]
@@ -218,13 +218,13 @@ flowchart TD
     flow_start --> n1
     n15 --> flow_end
 
-    classDef startEnd fill:#f1f5f9,stroke:#475569,stroke-width:2px;
-    classDef actionNode fill:#ffffff,stroke:#3b82f6,stroke-width:1.5px;
-    classDef routeNode fill:#fef3c7,stroke:#d97706,stroke-width:1.5px;
-    classDef parallelNode fill:#f3e8ff,stroke:#9333ea,stroke-width:1.5px;
-    classDef awaitNode fill:#e0f2fe,stroke:#0284c7,stroke-width:1.5px;
-    classDef successNode fill:#dcfce7,stroke:#166534,stroke-width:2px;
-    classDef dangerNode fill:#fee2e2,stroke:#b91c1c,stroke-width:2px;
+    classDef startEnd fill:#e2e8f0,stroke:#334155,stroke-width:2px,color:#0f172a;
+    classDef actionNode fill:#ffffff,stroke:#1d4ed8,stroke-width:2px,color:#0f172a;
+    classDef routeNode fill:#fef3c7,stroke:#b45309,stroke-width:2px,color:#78350f;
+    classDef parallelNode fill:#f3e8ff,stroke:#6b21a8,stroke-width:2px,color:#581c87;
+    classDef awaitNode fill:#e0f2fe,stroke:#0369a1,stroke-width:2px,color:#0c4a6e;
+    classDef successNode fill:#dcfce7,stroke:#15803d,stroke-width:2px,color:#14532d;
+    classDef dangerNode fill:#fee2e2,stroke:#b91c1c,stroke-width:2px,color:#7f1d1d;
     class flow_start,flow_end startEnd;
     class n1,n5,n9,n10,n12,n13,n14,n15 actionNode;
     class n8 routeNode;
