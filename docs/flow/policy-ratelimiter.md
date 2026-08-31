@@ -96,21 +96,14 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
 将限流策略（`Policy`）作为内层拦截，重试策略（`FlowRetryPolicy`）作为外层控制器。当限流返回 `FAIL` 时，外层重试策略会自动在退避延迟后重新尝试获取令牌：
 
 ```java
+import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.retry.FlowRetries;
-import com.team4u.framework.flow.retry.FlowRetryPolicy;
 import com.team4u.framework.flow.ratelimiter.RateLimitPolicies;
 
-// 限流策略：超限产生 FAIL
-RateLimitPolicy<OrderRequest> rateLimitPolicy = RateLimitPolicies.of("order.charge", OrderRequest::getUserId);
-
-// 重试策略：指数退避重试 3 次
-FlowRetryPolicy<OrderRequest> retryPolicy = FlowRetries.exponential(3, 100, 2.0, 1000);
-
-Flow<OrderRequest, Receipt> protectedFlow = FlowRetries.policy(
-        Flow.step(chargeOperation).policy(rateLimitPolicy, req -> req),
-        retryPolicy,
-        req -> req
-);
+// 链式组合：内层限流（每次重试均重新获取令牌），外层挂载 3 次指数退避重试
+Flow<OrderRequest, Receipt> protectedFlow = Flow.step(chargeOperation)
+        .policy(RateLimitPolicies.of("order.charge", OrderRequest::getUserId))
+        .persistentPolicy(FlowRetries.exponential(3, 100, 2.0, 1000), OrderRequest::getUserId);
 ```
 
 ---

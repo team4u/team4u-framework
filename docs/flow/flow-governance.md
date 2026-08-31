@@ -78,8 +78,8 @@ import com.team4u.framework.flow.retry.FlowRetries;
 import com.team4u.framework.flow.retry.FlowRetryPolicy;
 
 // 指数退避重试（最多 5 次，初始 100ms，2.0 倍递增，上限 2s）
-FlowRetryPolicy<OrderRequest> retryPolicy = FlowRetries.exponential(5, 100, 2.0, 2000);
-Flow<OrderRequest, Receipt> flow = retryPolicy.wrap(Flow.step(chargeOp), Function.identity());
+Flow<OrderRequest, Receipt> flow = Flow.step(chargeOp)
+        .persistentPolicy(FlowRetries.exponential(5, 100, 2.0, 2000), OrderRequest::getUserId);
 ```
 
 [查看专章详解：重试与退避治理策略 (team4u-flow-retry)](policy-retry.md)
@@ -112,16 +112,15 @@ Flow<UserRequest, Receipt> flow = Flow.step(chargeOp)
 
 ## 治理策略的组合与嵌套
 
-在实际编排中，各项治理策略可按洋葱圈模型自由嵌套。控制方法的声明顺序决定了拦截层级：
+在实际编排中，各项治理策略可按洋葱圈模型自由链式嵌套。控制方法的声明顺序决定了拦截层级（自内向外层层包裹）：
 
 ```java
-// 组合示例：表达式准入检查 (最外层) -> 重试控制器 (中间层) -> 限流检查 (内层) -> 业务执行
-Flow<OrderRequest, Receipt> flow = FlowRetries.exponential(3, 100, 2.0, 1000).wrap(
-        Flow.step(chargeOp)
-                .policy(RateLimitPolicies.of("order.charge", OrderRequest::getUserId))
-                .policy(CriterionPolicies.permitIf("amount > 0", "INVALID_AMOUNT", "金额必须大于0"), req -> req),
-        Function.identity()
-).timeout(Duration.ofSeconds(5));
+// 组合示例：限流检查 (内层) -> 重试控制器 (中层) -> 表达式准入 (外层) -> 超时监控 (最外层)
+Flow<OrderRequest, Receipt> flow = Flow.step(chargeOp)
+        .policy(RateLimitPolicies.of("order.charge", OrderRequest::getUserId))
+        .persistentPolicy(FlowRetries.exponential(3, 100, 2.0, 1000), OrderRequest::getUserId)
+        .policy(CriterionPolicies.permitIf("amount > 0", "INVALID_AMOUNT", "金额必须大于0"), req -> req)
+        .timeout(Duration.ofSeconds(5));
 ```
 
 ```text

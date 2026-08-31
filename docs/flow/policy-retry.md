@@ -62,15 +62,14 @@ graph TD
 ```java
 import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.retry.FlowRetries;
-import com.team4u.framework.flow.retry.FlowRetryPolicy;
 
-// 1. 指数退避：最多 5 次（首次 + 4 次重试），初始 100ms，2.0 倍递增，最大上限 2000ms
-FlowRetryPolicy<OrderRequest> expPolicy = FlowRetries.exponential(5, 100, 2.0, 2000);
-Flow<OrderRequest, Receipt> flow1 = expPolicy.wrap(Flow.step(chargeOperation), Function.identity());
+// 指数退避：最多 5 次（首次 + 4 次重试），初始 100ms，2.0 倍递增，最大上限 2000ms
+Flow<OrderRequest, Receipt> flow1 = Flow.step(chargeOperation)
+        .persistentPolicy(FlowRetries.exponential(5, 100, 2.0, 2000), OrderRequest::getUserId);
 
-// 2. 随机抖动退避：生产级防重试风暴
-FlowRetryPolicy<OrderRequest> jitterPolicy = FlowRetries.jitter(4, 50, 2.0, 1000);
-Flow<OrderRequest, Receipt> flow2 = jitterPolicy.wrap(Flow.step(chargeOperation), Function.identity());
+// 随机抖动退避：生产级防重试风暴
+Flow<OrderRequest, Receipt> flow2 = Flow.step(chargeOperation)
+        .persistentPolicy(FlowRetries.jitter(4, 50, 2.0, 1000), OrderRequest::getUserId);
 ```
 
 ### 条件重试判定与快速短路（Fast-Fail）
@@ -92,7 +91,8 @@ FlowRetryPolicy<OrderRequest> conditionalPolicy = FlowRetryPolicy.<OrderRequest>
         // .retryPredicate(failure -> failure.message().contains("Connection refused"))
         .build();
 
-Flow<OrderRequest, Receipt> flow = conditionalPolicy.wrap(Flow.step(chargeOperation), Function.identity());
+Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
+        .persistentPolicy(conditionalPolicy, OrderRequest::getUserId);
 ```
 
 ### 动态配置规则与热重载
@@ -101,8 +101,8 @@ Flow<OrderRequest, Receipt> flow = conditionalPolicy.wrap(Flow.step(chargeOperat
 
 ```java
 // 动态拉取配置键为 "order-charge-retry" 的重试规则
-FlowRetryPolicy<OrderRequest> dynamicPolicy = FlowRetries.named("order-charge-retry");
-Flow<OrderRequest, Receipt> flow = dynamicPolicy.wrap(Flow.step(chargeOperation), Function.identity());
+Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
+        .persistentPolicy(FlowRetries.named("order-charge-retry"), OrderRequest::getUserId);
 ```
 
 ---
