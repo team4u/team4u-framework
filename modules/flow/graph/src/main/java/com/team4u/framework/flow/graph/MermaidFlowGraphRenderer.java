@@ -89,7 +89,7 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
                 edges.append(" -->");
             }
             if (label != null && !label.isEmpty()) {
-                edges.append("|").append(label).append("|");
+                edges.append("|").append(FlowGraphFormatters.escapeMermaid(label)).append("|");
             }
             edges.append(" ").append(target).append("\n");
         }
@@ -484,7 +484,7 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         allNodes.add(id);
 
         for (RouteCaseDescription c : node.routeCases()) {
-            String caseKey = FlowGraphFormatters.escapeMermaid(FlowGraphFormatters.stableConstant(c.key()));
+            String caseKey = FlowGraphFormatters.stableConstant(c.key());
             Block branchBlock = blocks.get(c.branch());
             if (branchBlock != null) {
                 state.emitEdge(id, branchBlock.entryNodeId, caseKey, false);
@@ -529,7 +529,7 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         allNodes.add(forkId);
 
         for (ParallelBranchDescription b : node.parallelBranches()) {
-            String branchName = FlowGraphFormatters.escapeMermaid(b.name());
+            String branchName = b.name();
             Block branchBlock = blocks.get(b.branch());
             if (branchBlock != null) {
                 state.emitEdge(forkId, branchBlock.entryNodeId, branchName, false);
@@ -567,7 +567,7 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         if (children.size() > 1) {
             Block fallbackBlock = blocks.get(children.get(1));
             if (fallbackBlock != null) {
-                String triggerLabel = "FAILED".equals(node.trigger()) ? "FAILED (降级)" : "SKIPPED (备用)";
+                String triggerLabel = "FAILED".equals(node.trigger()) ? "FAILED 降级" : "SKIPPED 备用";
                 state.emitEdge(mainBlock.entryNodeId, fallbackBlock.entryNodeId, triggerLabel, true);
                 List<String> combinedExits = new ArrayList<String>(mainBlock.normalExitIds);
                 combinedExits.addAll(fallbackBlock.normalExitIds);

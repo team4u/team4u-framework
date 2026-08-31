@@ -163,12 +163,12 @@ public class FlowGraphTest {
         String firstApplicable = FlowGraphs.mermaid().render(Flow.firstApplicable(
                 Flow.<String, String>skipped(reason("FIRST")), Flow.accepted("second"))
                 .describe("first-applicable"));
-        Assert.assertTrue(firstApplicable.contains("SKIPPED (备用)"));
+        Assert.assertTrue(firstApplicable.contains("SKIPPED 备用"));
 
         String recover = FlowGraphs.mermaid().render(Flow.<String, String>failed(
                 Failure.of("BROKEN", "broken")).recoverWith(Flow.accepted("fixed"))
                 .describe("recover"));
-        Assert.assertTrue(recover.contains("FAILED (降级)"));
+        Assert.assertTrue(recover.contains("FAILED 降级"));
     }
 
     @Test
@@ -513,7 +513,7 @@ public class FlowGraphTest {
         Assert.assertTrue(mermaid.contains("flow_end"));
         Assert.assertTrue(mermaid.contains("库存预占 ⏱️ 2s"));
         Assert.assertTrue(mermaid.contains("主通道支付扣款 ⏱️ 5s"));
-        Assert.assertTrue(mermaid.contains("FAILED (降级)"));
+        Assert.assertTrue(mermaid.contains("FAILED 降级"));
         Assert.assertTrue(mermaid.contains("合并 (Join)"));
         Assert.assertTrue(text.contains("flow id=\"order-fulfillment-flow\""));
     }

@@ -208,7 +208,7 @@ flowchart TD
     n11 -->|lock-coupon| n10
     n9 --> n12
     n10 --> n12
-    n13 -.->|FAILED (降级)| n14
+    n13 -.->|FAILED 降级| n14
     n1 --> n8
     n2 --> n11
     n5 --> n11
@@ -320,7 +320,7 @@ public class FlowGraphVisualizerController {
 | 结构 / 语义 | 图形表示 | 说明 |
 | :--- | :--- | :--- |
 | **主干推进** | `A --> B` (实线) | 正常业务成功推进通道（Happy Path） |
-| **异常 / 降级** | `A -.->|FAILED (降级)| B` (虚线) | `recoverWith` 失败降级或 `otherwise` 分支 |
+| **异常 / 降级** | `A -.->|FAILED 降级| B` (虚线) | `recoverWith` 失败降级或 `otherwise` 分支 |
 | **控制策略徽章** | `⏱️ 2s`, `🛡️ rate-limit` | 超时、限流等策略直接作为属性徽章显示在步骤上，不产生冗余 AST 方块 |
 | **路由决策** | 菱形 `{}` 节点 | 动态选择器与分支判定，条件清晰标注在出边上（`LOW`, `HIGH`, `otherwise`） |
 | **并行分发与合并** | 六边形 `{{}}` 与 `[合并 (Join)]` | 并行分支分发与汇聚点，自动折叠底层 Wait-All 胶水网关 |
