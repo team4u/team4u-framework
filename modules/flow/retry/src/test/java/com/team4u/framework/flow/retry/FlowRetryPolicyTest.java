@@ -73,7 +73,7 @@ public class FlowRetryPolicyTest {
             return Outcome.accepted("success:" + req.getOrderId());
         });
 
-        Flow<OrderRequest, String> flow = policy.wrap(step, Function.identity());
+        Flow<OrderRequest, String> flow = step.persistentPolicy(policy, Function.identity());
 
         long start = System.currentTimeMillis();
         FlowResult<String> result = Local.compile(flow).run(new OrderRequest("1001", 10));
@@ -101,7 +101,7 @@ public class FlowRetryPolicyTest {
             return Outcome.accepted("done:" + req.getOrderId());
         });
 
-        Flow<OrderRequest, String> flow = FlowRetries.policy(step, policy, Function.identity());
+        Flow<OrderRequest, String> flow = step.persistentPolicy(policy, Function.identity());
 
         long start = System.currentTimeMillis();
         FlowResult<String> result = Local.compile(flow).run(new OrderRequest("1002", 20));
@@ -131,7 +131,7 @@ public class FlowRetryPolicyTest {
             return Outcome.accepted("ok:" + req.getOrderId());
         });
 
-        Flow<OrderRequest, String> flow = policy.wrap(step, Function.identity());
+        Flow<OrderRequest, String> flow = step.persistentPolicy(policy, Function.identity());
 
         FlowResult<String> result = Local.compile(flow).run(new OrderRequest("1003", 30));
         FlowAssertions.assertAccepted(result, "ok:1003");
@@ -153,7 +153,7 @@ public class FlowRetryPolicyTest {
             return Outcome.accepted("inc:" + req.getOrderId());
         });
 
-        Flow<OrderRequest, String> flow = FlowRetries.wrap(step, policy, Function.identity());
+        Flow<OrderRequest, String> flow = step.persistentPolicy(policy, Function.identity());
 
         FlowResult<String> result = Local.compile(flow).run(new OrderRequest("1004", 40));
         FlowAssertions.assertAccepted(result, "inc:1004");
@@ -170,7 +170,7 @@ public class FlowRetryPolicyTest {
             return Outcome.failed(Failure.of("PERSISTENT_FAILURE", "Target system is completely down"));
         });
 
-        Flow<OrderRequest, String> flow = policy.wrap(step, Function.identity());
+        Flow<OrderRequest, String> flow = step.persistentPolicy(policy, Function.identity());
 
         FlowResult<String> result = Local.compile(flow).run(new OrderRequest("1005", 50));
         Failure failure = FlowAssertions.assertFailed(result, "PERSISTENT_FAILURE");
@@ -195,7 +195,7 @@ public class FlowRetryPolicyTest {
             return Outcome.accepted("recovered:" + req.getOrderId());
         });
 
-        Flow<OrderRequest, String> flow = policy.wrap(step, Function.identity());
+        Flow<OrderRequest, String> flow = step.persistentPolicy(policy, Function.identity());
 
         FlowResult<String> result = Local.compile(flow).run(new OrderRequest("1006", 60));
         FlowAssertions.assertAccepted(result, "recovered:1006");
@@ -216,7 +216,7 @@ public class FlowRetryPolicyTest {
             return Outcome.failed(Failure.of("INVALID_PARAM", "Account does not exist"));
         });
 
-        Flow<OrderRequest, String> flow = policy.wrap(step, Function.identity());
+        Flow<OrderRequest, String> flow = step.persistentPolicy(policy, Function.identity());
 
         FlowResult<String> result = Local.compile(flow).run(new OrderRequest("1007", 70));
         Failure failure = FlowAssertions.assertFailed(result, "INVALID_PARAM");
@@ -239,7 +239,7 @@ public class FlowRetryPolicyTest {
             return Outcome.failed(Failure.of("FATAL_BIZ_CODE", "Fatal abort"));
         });
 
-        Flow<String, String> flow = policy.wrap(step);
+        Flow<String, String> flow = step.persistentPolicy(policy, Function.identity());
 
         FlowResult<String> result = Local.compile(flow).run("test-abort");
         Failure failure = FlowAssertions.assertFailed(result, "FATAL_BIZ_CODE");
@@ -277,7 +277,7 @@ public class FlowRetryPolicyTest {
             return Outcome.accepted("charged:" + req.getOrderId());
         });
 
-        Flow<OrderRequest, String> flow = policy.wrap(step, Function.identity());
+        Flow<OrderRequest, String> flow = step.persistentPolicy(policy, Function.identity());
 
         FlowResult<String> result = Local.compile(flow).run(new OrderRequest("1008", 80));
         FlowAssertions.assertAccepted(result, "charged:1008");
@@ -309,7 +309,7 @@ public class FlowRetryPolicyTest {
                 return Outcome.accepted("dynamic-ok:" + req.getOrderId());
             });
 
-            Flow<OrderRequest, String> flow = policy.wrap(step, Function.identity());
+            Flow<OrderRequest, String> flow = step.persistentPolicy(policy, Function.identity());
 
             FlowResult<String> result = Local.compile(flow).run(new OrderRequest("1009", 90));
             FlowAssertions.assertAccepted(result, "dynamic-ok:1009");
@@ -326,7 +326,7 @@ public class FlowRetryPolicyTest {
         Cancellation cancellation = Cancellation.create();
 
         Flow<String, String> step = Flow.step((ctx, in) -> Outcome.failed(Failure.of("FAIL", "fail1")));
-        Flow<String, String> flow = policy.wrap(step);
+        Flow<String, String> flow = step.persistentPolicy(policy, Function.identity());
 
         Thread asyncCanceller = new Thread(() -> {
             try {
@@ -353,7 +353,7 @@ public class FlowRetryPolicyTest {
         };
 
         FlowRetryPolicy<String> policy = FlowRetries.fixed(3, 20);
-        Flow<String, String> flow = policy.wrap(Flow.step(flaky));
+        Flow<String, String> flow = Flow.step(flaky).persistentPolicy(policy, Function.identity());
 
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable =
@@ -386,7 +386,7 @@ public class FlowRetryPolicyTest {
         };
 
         FlowRetryPolicy<String> policy = FlowRetries.fixed(2, 10);
-        Flow<String, String> flow = FlowRetries.policy(Flow.step(alwaysFails), policy);
+        Flow<String, String> flow = Flow.step(alwaysFails).persistentPolicy(policy, Function.identity());
 
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable =

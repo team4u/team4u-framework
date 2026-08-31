@@ -281,34 +281,6 @@ public class FlowRetryPolicy<K> implements PersistentPolicy<K, FlowRetryState> {
     }
 
     /**
-     * 将当前重试策略挂载到 Flow 流程上。
-     *
-     * @param flow          目标流程
-     * @param keyProjection 策略键投影提取函数
-     * @param <I>           流程输入类型
-     * @param <O>           流程输出类型
-     * @return 附加重试与退避治理后的新 Flow 实例
-     */
-    public <I, O> Flow<I, O> wrap(Flow<I, O> flow, Function<? super I, ? extends K> keyProjection) {
-        Objects.requireNonNull(flow, "flow must not be null");
-        Objects.requireNonNull(keyProjection, "keyProjection must not be null");
-        return flow.persistentPolicy(this, keyProjection);
-    }
-
-    /**
-     * 将当前重试策略以恒等键挂载到 Flow 流程上。
-     *
-     * @param flow 目标流程
-     * @param <I>  流程输入类型
-     * @param <O>  流程输出类型
-     * @return 附加重试与退避治理后的新 Flow 实例
-     */
-    @SuppressWarnings("unchecked")
-    public <I, O> Flow<I, O> wrap(Flow<I, O> flow) {
-        return wrap(flow, in -> (K) in);
-    }
-
-    /**
      * FlowRetryPolicy 自定义 Builder 扩展方法。
      */
     public static class FlowRetryPolicyBuilder<K> {
