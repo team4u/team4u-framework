@@ -47,7 +47,7 @@ graph TD
 
 用于在节点或子流程执行前进行**准入校验、风控拦截与黑白名单过滤**。
 
-### 门控模式矩阵
+### 1. 基础门控模式速查
 
 | 模式枚举 | 便捷工厂方法 | 行为语义 | 典型应用场景 |
 | :--- | :--- | :--- | :--- |
@@ -55,34 +55,67 @@ graph TD
 | **`REJECT_IF`** | `CriterionPolicies.rejectIf(expr, code, msg)` | **满足表达式则以 `Rejected` 短路退出**；不满足时放行。 | **风险拦截**：如“处于黑名单中或风险评分超标”。 |
 | **`FAIL_IF`** | `CriterionPolicies.failIf(expr, code, msg)` | **满足表达式则以 `Failed` 系统故障退出**；不满足时放行。 | **严重故障熔断**：如“探测指标异常，需触发容灾或外层重试”。 |
 
-### 编排使用示例
-
 ```java
 import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.criterion.CriterionPolicies;
-import com.team4u.framework.flow.criterion.CriterionPolicy;
-import com.team4u.framework.flow.model.Reason;
 
-// 1. 准入放行：未满 18 岁以 UNDERAGE 错误码拒绝
+// 1. 准入放行：未满 18 岁以 UNDERAGE 错误码业务拒绝
 Flow<UserRequest, Receipt> flow1 = Flow.step(chargeOperation)
         .policy(CriterionPolicies.permitIf("age >= 18", "UNDERAGE", "用户未满 18 周岁"), req -> req);
 
 // 2. 风险拦截：命中黑名单或风控分过高直接短路
 Flow<UserRequest, Receipt> flow2 = Flow.step(chargeOperation)
         .policy(CriterionPolicies.rejectIf("blacklisted == true || riskScore > 80", "RISK_BLOCKED", "触发风控拦截"), req -> req);
+```
 
-// 3. 高级定制：自定义 Reason 工厂与嵌套对象属性提取
+---
+
+### 2. 高级定制：`CriterionPolicy.builder()` 详解
+
+当表达式需要针对复杂嵌套对象、Map 结构进行求值，或者需要在拦截时携带动态诊断上下文（如当前重试轮次 `context.attempt()`、节点路径等）时，使用 Builder 进行定制：
+
+```java
+import com.team4u.framework.flow.Flow;
+import com.team4u.framework.flow.criterion.CriterionPolicy;
+import com.team4u.framework.flow.criterion.CriterionAction;
+import com.team4u.framework.flow.model.Reason;
+
 CriterionPolicy<OrderRequest> customPolicy = CriterionPolicy.<OrderRequest>builder()
+        // 1. 声明类 SQL 规则表达式
         .expression("buyer.verified == true && order.totalAmount <= 50000")
+        
+        // 2. 设定模式：PERMIT_IF (满足放行), REJECT_IF (满足拒绝), FAIL_IF (满足报错)
         .mode(CriterionPolicy.Mode.PERMIT_IF)
-        .reasonFactory((ctx, req) -> Reason.of("HIGH_VALUE_UNVERIFIED", "大额未认证交易")
+        
+        // 3. 提取目标计算实体（若入参是包装对象，提取内部用于表达式评估的领域对象）
+        .targetExtractor(OrderRequest::getPayload)
+        
+        // 4. 设定 PERMIT_IF 不匹配时的动作：REJECT（默认业务短路）或 FAIL（系统故障）
+        .action(CriterionAction.REJECT)
+        
+        // 5. 自定义 Reason 诊断工厂：注入业务详情与重试轮次
+        .reasonFactory((context, req) -> Reason.of("HIGH_VALUE_UNVERIFIED", "大额未认证交易")
                 .withDetail("buyerId", req.getBuyerId())
-                .withDetail("amount", String.valueOf(req.getTotalAmount())))
+                .withDetail("amount", String.valueOf(req.getTotalAmount()))
+                .withDetail("attempt", String.valueOf(context.attempt()))
+                .withDetail("path", context.metadata().path()))
         .build();
 
-Flow<OrderRequest, Receipt> flow3 = Flow.step(chargeOperation)
+Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
         .policy(customPolicy, req -> req);
 ```
+
+### Builder 各配置方法核心作用与原理解析
+
+| Builder 配置方法 | 参数类型 | 默认行为 | 核心作用与业务场景 |
+| :--- | :--- | :--- | :--- |
+| **`expression(String)`** | `String` | **必填**（无默认值） | **规则表达式文本**。<br/>遵循类 SQL 语法（如 `age >= 18 && tags contains 'VIP'`），支持嵌套字段、Map、集合操作。 |
+| **`mode(Mode)`** | `CriterionPolicy.Mode` | `Mode.PERMIT_IF` | **门控模式**：<br/>• `PERMIT_IF`：表达式为 true 则放行，false 则拦截；<br/>• `REJECT_IF`：表达式为 true 则以 `Reason` 拒绝，false 则放行；<br/>• `FAIL_IF`：表达式为 true 则以 `Failure` 报错，false 则放行。 |
+| **`targetExtractor(...)`** | `Function<K, Object>` | `k -> k`（直接使用入参） | **目标计算实体提取器**。<br/>若策略入参 `K` 是复合信封（如 `RequestEnvelope<UserOrder>`），可通过此函数提取内部用于表达式求值的领域 POJO 或 Map。 |
+| **`action(CriterionAction)`** | `CriterionAction` | `CriterionAction.REJECT` | **`PERMIT_IF` 不满足时的动作**：<br/>• `REJECT`：产出 `Outcome.Rejected`（正常业务短路）；<br/>• `FAIL`：产出 `Outcome.Failed`（技术故障，可触发重试）。 |
+| **`reasonFactory(...)`** | `BiFunction<PolicyContext, K, Reason>` | 默认生成 `CRITERION_REJECTED` | **自定义 Reason 工厂（在 REJECT 判定时调用）**。<br/>第一个参数 `PolicyContext` 包含当前节点路径与重试尝试轮次，第二个参数 `K` 为请求对象，便于组装丰富的诊断信息。 |
+| **`failureFactory(...)`** | `BiFunction<PolicyContext, K, Failure>` | 默认生成 `CRITERION_FAILED` | **自定义 Failure 工厂（在 FAIL 判定时调用）**。<br/>用于生成携带系统错误码与排障元数据的 `Failure` 对象。 |
+| **`criteria(Criteria)`** | `Criteria` | `Criteria.global()` | **规则求值引擎实例**。<br/>可注入自定义注册了业务自定义函数（UDF）或独立缓存的 `Criteria` 实例。 |
 
 ---
 

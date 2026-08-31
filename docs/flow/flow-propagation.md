@@ -2,7 +2,7 @@
 
 在 `team4u-flow` 中，业务四态（`Accepted`、`Rejected`、`Skipped`、`Failed`）拥有严格、确定的代数流转与短路规则。不同的编排算子对待这四种状态具有明确的边界契约。
 
-本文将深入解析流水线短路传播、`Skipped` 弃权的三大消费机制、`Failed` 故障恢复补偿、以及框架内置的异常收敛安全网。
+本文将深入解析流水线短路传播、`Skipped` 弃权的三大消费机制、`Failed` 故障恢复补偿、`Recovery<I>` 数据模型与生产补偿实战，以及框架内置的异常收敛安全网。
 
 ---
 
@@ -143,31 +143,56 @@ Flow<Order, String> routed = Flow.route(Order::getCategory)
 
 ## 3. `Failed` 失败与 `recoverWith` 补偿机制
 
-当节点发生技术故障、RPC 超时或未受检异常时，节点返回 `Outcome.failed(Failure)`。通过 `recoverWith` 可以在 Failed 边界实施补偿或降级恢复：
+当节点发生技术故障、RPC 超时或未受检异常时，节点返回 `Outcome.failed(Failure)`。通过 `recoverWith` 可以在 Failed 边界实施补偿、回滚或降级恢复：
 
 ```mermaid
 graph LR
     Main["主业务流水线"] -->|"Failed(failure)"| Rec["recoverWith 边界"]
     Main -->|"Accepted / Rejected / Skipped"| Out["原样透传结果"]
-    Rec -->|"注入 Recovery&lt;I&gt; (原始输入 + Failure)"| Comp["补偿 / 降级流程"]
-    Comp --> Final["补偿后产生新的 Outcome"]
+    Rec -->|"注入 Recovery&lt;I&gt; (原始输入 + Failure)"| Comp["补偿 / 回滚 / 降级子流程"]
+    Comp --> Final["补偿后产出新的 Outcome"]
 ```
 
+### `Recovery<I>` 数据模型与方法详解
+
+在 `recoverWith` 分支中，入参对象为不可变包装类 `Recovery<I>`，提供两个核心方法：
+
+| 方法 | 返回类型 | 说明与用途 |
+| :--- | :--- | :--- |
+| **`recovery.input()`** | `I` | **进入当前作用域时的原始输入对象**。<br/>让恢复步骤精准知道主分支是在处理哪个业务对象（如 `orderId`、`userId`、请求金额等）时发生失败的，从而能够执行针对性的回滚、库存释放或撤销操作。 |
+| **`recovery.failure()`** | `Failure` | **触发失败时的故障诊断对象**。<br/>包含错误码 `code()`、错误消息 `message()`、根因异常 `cause()` 及详细元数据 `details()`，便于恢复逻辑针对不同错误原因采取不同的补偿策略。 |
+
+---
+
+### 生产实战：支付失败后的逆向回滚与降级凭证生成
+
 ```java
-Flow<OrderRequest, Receipt> resilientFlow = Flow.step(chargePaymentOp)
+Flow<OrderRequest, Receipt> paymentWithCompensation = Flow.step(chargePaymentOp)
+        // 挂载失败补偿处理
         .recoverWith(Flow.step((context, recovery) -> {
-            OrderRequest originalInput = recovery.input(); // 触发失败时的原始输入
-            Failure failure = recovery.failure();          // 触发失败时的 Failure 诊断
-            
-            log.warn("主支付通道失败 [{}], 启动异步降级单", failure.code());
-            return Outcome.accepted(createPendingReceipt(originalInput));
+            OrderRequest originalReq = recovery.input();   // 拿到原始订单请求
+            Failure failure = recovery.failure();          // 拿到失败原因
+
+            log.error("订单 [{}] 扣款失败: [{} - {}], 启动自动回滚与补偿",
+                    originalReq.getOrderId(), failure.code(), failure.message());
+
+            // 1. 根据错误类型实施逆向补偿（如解冻预占额度）
+            inventoryService.releaseHold(originalReq.getOrderId());
+
+            // 2. 构造降级业务结果（转为 Accepted 返回给前端展示友好提示）
+            Receipt fallbackReceipt = new Receipt(
+                    originalReq.getOrderId(), 
+                    "PAYMENT_PENDING_RETRY", 
+                    "扣款遇阻，已为您锁定库存，请在 15 分钟内重新支付"
+            );
+            return Outcome.accepted(fallbackReceipt);
         }));
 ```
 
 ### 关键契约与生命周期
-1. **`Recovery<I>` 上下文封包**：`recoverWith` 的入参类型是 `Recovery<I>`，完整封装了**进入该作用域时的初始输入 `input()`** 与失败原因 `failure()`；
-2. **非 Failed 原样透传**：若主分支未发生 `Failed`（即返回了 `Accepted`、`Rejected` 或 `Skipped`），`recoverWith` 分支完全不执行，原结果原样向外透传；
-3. **补偿二次故障**：若补偿分支内部再次返回 `Failed`，则对外输出补偿分支的新 `Failed`。
+1. **非 Failed 原样透传**：若主分支未发生 `Failed`（即正常返回了 `Accepted`、`Rejected` 或 `Skipped`），`recoverWith` 分支完全不执行，原结果直接向外透传；
+2. **补偿二次故障**：若补偿分支内部再次发生未捕获异常或返回 `Failed`，则对外输出补偿分支的新 `Failed`；
+3. **支持重新抛出失败**：若补偿分支判定该错误不可恢复，可直接执行 `return Outcome.failed(recovery.failure())` 继续向上层冒泡。
 
 ---
 

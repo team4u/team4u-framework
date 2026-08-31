@@ -2,7 +2,7 @@
 
 在分布式业务聚合、并发检查（如风控、征信、库存并行校验）以及跨服务批量并发请求中，`team4u-flow` 提供了强类型、线程安全且具备严格退出合同的并行编排原语。
 
-本文将详细解析 `Flow.parallel` 的声明语法、四大内置汇聚策略、自定义 `JoinStrategy` 模式、True Wait-All 退出合同以及 Local 与 Durable 执行器的底层调度差异。
+本文将详细解析 `Flow.parallel` 的声明语法、四大内置汇聚策略、自定义 `JoinStrategy` 模式与数据提取、True Wait-All 退出合同以及 Local 与 Durable 执行器的底层调度差异。
 
 ---
 
@@ -29,13 +29,14 @@ import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.api.Branch;
 import com.team4u.framework.flow.model.Outcome;
 
-// 1. 定义独立命名的类型化分支（Branch）
+// 1. 定义独立命名的强类型分支（Branch）
 Branch<Order, RiskResult> riskBranch = Branch.of("riskBranch", riskFlow);
 Branch<Order, StockResult> stockBranch = Branch.of("stockBranch", stockFlow);
 
 // 2. 编排并行块并挂载汇聚策略
 Flow<Order, CombinedReport> parallelFlow = Flow.<Order>parallel(riskBranch, stockBranch)
         .join(results -> {
+            // results.get(branch) 返回的是 Outcome<T>（包含四态可能性）
             RiskResult risk = results.get(riskBranch).requireAccepted();
             StockResult stock = results.get(stockBranch).requireAccepted();
             return Outcome.accepted(new CombinedReport(risk, stock));
@@ -76,49 +77,60 @@ Flow<QuoteRequest, PriceSummary> quorumFlow = Flow.<QuoteRequest>parallel(b1, b2
 
 ---
 
-## 自定义汇聚策略 (`JoinStrategy<O>`)
+## 自定义汇聚策略与分支数据提取指南
 
-当内置策略无法满足复杂的业务仲裁逻辑时，可直接实现 `JoinStrategy<O>` 接口：
+很多开发者在编写自定义 `JoinStrategy` 时容易困惑：**“`ParallelResults` 里究竟能拿到什么？各个分支成功、跳过或失败时该怎么安全解包？”**
+
+### 核心解包方法与 API
+
+`ParallelResults` 提供了按分支标识提取结果的核心方法：
 
 ```java
-@FunctionalInterface
-public interface JoinStrategy<O> {
-    Outcome<O> join(ParallelResults results) throws Exception;
-}
+Outcome<T> outcome = results.get(Branch<I, T> branch);
 ```
 
-### 生产实战：强弱依赖隔离合并
+> [!IMPORTANT]
+> **关键认知**：`results.get(branch)` 返回的不是原始数据 `T`，而是 **`Outcome<T>`**！
+> 因为在并发执行中，某个分支可能成功（`Accepted`）、被风控拒绝（`Rejected`）、因不适用而弃权（`Skipped`）或抛出异常（`Failed`）。
 
-在实际业务中，不同并发分支的依赖等级往往不同：
-- **风控分支**：强依赖。若风控被拒（`Rejected`）或异常（`Failed`），整体直接阻断；
-- **推荐分支**：弱依赖。若推荐失败或超时跳过，使用默认兜底推荐降级，绝不影响主干流程：
+### 生产实战：多分支异构结果强弱依赖智能合并
+
+以下是一个生产级订单结算聚合示例：
+- **风控分支（`riskBranch`）**：强依赖。被拒或报错立即阻断；
+- **库存分支（`stockBranch`）**：强依赖。必须成功；
+- **优惠券分支（`couponBranch`）**：弱依赖。若用户无可用优惠券（返回 `Skipped`），降级为使用 0 元优惠，绝不阻断结算：
 
 ```java
-public class CheckoutJoinStrategy implements JoinStrategy<CheckoutView> {
-    private final Branch<Order, RiskResult> riskBranch;
-    private final Branch<Order, RecommendResult> recoBranch;
+Branch<Order, RiskResult> riskBranch = Branch.of("risk", riskFlow);
+Branch<Order, StockResult> stockBranch = Branch.of("stock", stockFlow);
+Branch<Order, CouponDiscount> couponBranch = Branch.of("coupon", couponFlow);
 
-    public CheckoutJoinStrategy(Branch<Order, RiskResult> riskBranch, Branch<Order, RecommendResult> recoBranch) {
-        this.riskBranch = riskBranch;
-        this.recoBranch = recoBranch;
-    }
+Flow<Order, CheckoutView> checkoutFlow = Flow.<Order>parallel(riskBranch, stockBranch, couponBranch)
+        .join(results -> {
+            // 1. 强依赖校验：风控必须通过
+            Outcome<RiskResult> riskOutcome = results.get(riskBranch);
+            if (riskOutcome.kind() != Outcome.Kind.ACCEPTED) {
+                // 阻断：原样透传风控被拒或失败信息
+                return riskOutcome.map(ignored -> null);
+            }
+            RiskResult risk = ((Outcome.Accepted<RiskResult>) riskOutcome).value();
 
-    @Override
-    public Outcome<CheckoutView> join(ParallelResults results) {
-        Outcome<RiskResult> riskOutcome = results.get(riskBranch);
-        if (riskOutcome.kind() != Outcome.Kind.ACCEPTED) {
-            // 强依赖非成功：直接向外透传，阻断结算
-            return riskOutcome.map(ignored -> null);
-        }
+            // 2. 强依赖校验：库存扣减必须成功
+            Outcome<StockResult> stockOutcome = results.get(stockBranch);
+            if (stockOutcome.kind() != Outcome.Kind.ACCEPTED) {
+                return stockOutcome.map(ignored -> null);
+            }
+            StockResult stock = ((Outcome.Accepted<StockResult>) stockOutcome).value();
 
-        Outcome<RecommendResult> recoOutcome = results.get(recoBranch);
-        RecommendResult reco = (recoOutcome instanceof Outcome.Accepted)
-                ? ((Outcome.Accepted<RecommendResult>) recoOutcome).value()
-                : RecommendResult.defaultRecommendations(); // 弱依赖降级
+            // 3. 弱依赖降级：优惠券核销（若 Skipped 则降级为 0 折扣）
+            Outcome<CouponDiscount> couponOutcome = results.get(couponBranch);
+            CouponDiscount discount = (couponOutcome instanceof Outcome.Accepted)
+                    ? ((Outcome.Accepted<CouponDiscount>) couponOutcome).value()
+                    : CouponDiscount.zero(); // 降级默认值
 
-        return Outcome.accepted(new CheckoutView(riskOutcome.requireAccepted(), reco));
-    }
-}
+            // 4. 组装最终结算视图
+            return Outcome.accepted(new CheckoutView(risk, stock, discount));
+        });
 ```
 
 ---

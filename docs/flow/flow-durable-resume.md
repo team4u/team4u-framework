@@ -1,6 +1,6 @@
 # Durable 两段式恢复协议与 PersistentPolicy
 
-在分布式异步工作流与长事务编排中，挂起等待外部信号（如审批流、支付 Webhook）以及跨节点定时延时调度（如 10 分钟后重试、等待特定时间点执行）是核心场景。
+在分布式异步工作流与长事务编排中，挂起等待外部信号（如人工审批、支付 Webhook、第三方 MQ 回调）以及跨节点定时延时调度（如 10 分钟后重试、等待次日凌晨执行）是核心场景。
 
 `team4u-flow-durable` 提出了**两段式 CAS 恢复协议（Two-Phase Resume Protocol）**与**持久化状态策略（`PersistentPolicy`）**，在遭遇任意时序的网络分区与机器崩溃时，仍能保证状态一致性与防冲突幂等。
 
@@ -44,6 +44,82 @@ sequenceDiagram
 | **阶段 1 之前崩溃** | `SUSPENDED`（无信号） | 信号未落库。外部回调方稍后重试 `resume`，可正常执行阶段 1。 |
 | **阶段 1 与阶段 2 之间崩溃** | `ACTIVE`，`pendingResume = true`，槽位已有信号 | **场景 A：外部重试同一信号**<br/>框架比对已持久化的信号；载荷一致时判定为幂等重试，直接跳过阶段 1，继续执行阶段 2。<br/><br/>**场景 B：外部传入了不同信号**<br/>框架检测到信号冲突，抛出 `DurableException(RESUME_SIGNAL_CONFLICT)` 严格拒绝脏覆盖。<br/><br/>**场景 C：由后台调度器调用 `recover(executionId)`**<br/>恢复器检测到 `pendingResume = true`，自动取出已落库的信号，继续驱动阶段 2。 |
 | **阶段 2 执行中崩溃** | 保持阶段 1 快照或中间节点快照 | 重新调用 `recover(executionId)`，从最后成功提交的节点检查点无缝续跑。 |
+
+---
+
+## Spring 生产集成：从发起执行到 Webhook 异步唤醒
+
+在微服务集群环境下，发起执行与接收回调通常发生在不同的机器节点上。Durable 执行器通过持久化快照实现了跨节点的无缝断点续跑：
+
+```java
+@RestController
+@RequestMapping("/api/durable/orders")
+public class DurableOrderController {
+
+    @Autowired
+    private DurableExecutable<OrderRequest, OrderReceipt> durableOrderExecutable;
+
+    @Autowired
+    private ResumePoint<ApprovalSignal> approvalPoint;
+
+    /**
+     * 1. 发起订单审批长流程 (节点 A 执行)
+     */
+    @PostMapping("/submit")
+    public ResponseEntity<?> startOrderFlow(@RequestBody OrderRequest request) {
+        String executionId = request.getOrderId(); // 业务单号作为全局唯一 executionId
+
+        // 启动流程并落初始 ACTIVE 检查点
+        DurableResult<OrderReceipt> result = durableOrderExecutable.start(executionId, request);
+
+        if (result instanceof DurableResult.Suspended) {
+            // 流程遇到 await(approvalPoint)，快照状态标记为 SUSPENDED 入库，线程安全释放
+            DurableResult.Suspended<OrderReceipt> suspended = (DurableResult.Suspended<OrderReceipt>) result;
+            return ResponseEntity.ok(Map.of(
+                    "executionId", executionId,
+                    "status", "SUSPENDED",
+                    "awaitingPoint", suspended.resumePoint(),
+                    "message", "订单长流程已挂起，等待主管审批"
+            ));
+        }
+
+        if (result instanceof DurableResult.Completed) {
+            return ResponseEntity.ok(((DurableResult.Completed<OrderReceipt>) result).outcome());
+        }
+
+        return ResponseEntity.status(500).body("Unexpected result");
+    }
+
+    /**
+     * 2. 接收外部审批系统 Webhook 回调 (可能由集群中任意节点 B 处理)
+     */
+    @PostMapping("/callback/approval")
+    public ResponseEntity<?> onApprovalWebhook(@RequestBody ApprovalWebhookDTO callback) {
+        String executionId = callback.getOrderId();
+        ApprovalSignal signal = new ApprovalSignal(callback.isApproved(), callback.getReviewerComment());
+
+        try {
+            // 核心：基于 executionId 和挂起点名称，注入 Signal 并两段式恢复流程
+            DurableResult<OrderReceipt> finalResult = durableOrderExecutable.resume(
+                    executionId, "managerApproval", signal);
+
+            if (finalResult instanceof DurableResult.Completed) {
+                Outcome<OrderReceipt> outcome = ((DurableResult.Completed<OrderReceipt>) finalResult).outcome();
+                return ResponseEntity.ok(outcome);
+            }
+
+            return ResponseEntity.ok(Map.of("executionId", executionId, "status", "PROCESSED"));
+
+        } catch (DurableException e) {
+            if (e.getError() == DurableException.Error.RESUME_SIGNAL_CONFLICT) {
+                // 收到冲突的重复信号报警
+                return ResponseEntity.status(409).body("收到冲突的审批信号，拒绝处理");
+            }
+            throw e;
+        }
+    }
+}
+```
 
 ---
 

@@ -2,7 +2,7 @@
 
 在现代分布式业务架构中，流程往往不是一口气执行完毕的纯同步短事务。诸如“用户下单后等待二次短信验证”、“大额支付等待人工审批流审批”、“等待异步 Webhook 回调”等场景，都需要流程引擎具备**非阻塞挂起（Suspend）**、**精准恢复（Resume）**以及**安全取消（Cancellation）**的能力。
 
-本文将深入剖析 Local 模式下的挂起续接机制、单次消费句柄 `Suspension` 的防重放设计、协作式取消令牌底层原理以及挂起与取消之间的极端竞态防御。
+本文将深入剖析 Local 模式下的挂起续接机制、单次消费句柄 `Suspension` 的防重放设计、在 Spring 控制层中实现 Webhook 异步回调的完整实战代码、协作式取消令牌底层原理以及挂起与取消之间的极端竞态防御。
 
 ---
 
@@ -11,19 +11,19 @@
 ```mermaid
 sequenceDiagram
     autonumber
-    participant App as 业务调用方
+    participant App as 业务调用方 (Controller/Service)
     participant Exec as LocalExecutable
     participant Flow as 流程引擎内核 (SerialMachine)
-    participant Ext as 外部系统 (如审批/回调网关)
+    participant Ext as 外部系统 (审批系统 / 支付 Webhook)
 
     App->>Exec: 1. run(input)
     Exec->>Flow: 执行前置步骤 (INVOKE)
     Flow-->>Exec: 遇到 await(ResumePoint) 节点，立即释放线程
     Exec-->>App: 2. 返回 FlowResult.Suspended(suspension)
     
-    Note over App, Ext: 业务方暂存 suspension 句柄 (如存入 Session/内存缓存)
+    Note over App, Ext: 业务方暂存 suspension 句柄 (如存入 Session/内存缓存 Map)
 
-    Ext->>App: 3. 外部回调到达 (注入审批通过 Signal)
+    Ext->>App: 3. 外部异步回调到达 (携带业务单号 + ApprovalSignal)
     App->>Exec: 4. resume(suspension, resumePoint, signal)
     Exec->>Flow: 校验单次消费并注入 Signal 恢复执行
     Flow-->>Exec: 继续执行后续步骤直到终态
@@ -32,26 +32,32 @@ sequenceDiagram
 
 ---
 
-## 1. 声明挂起点：`ResumePoint<R>`
+## 1. 声明挂起点与续接数据模型
+
+### 声明强类型挂起点：`ResumePoint<R>`
 
 挂起点（`ResumePoint`）是一个强类型的静态标识，用于标记流程挂起的位置以及恢复时预期的信号（Signal）数据类型：
 
 ```java
 import com.team4u.framework.flow.api.ResumePoint;
 
-// 声明一个名为 "managerApproval" 且预期接收 ApprovalSignal 信号对象的挂起点
+// 声明一个名为 "managerApproval" 且预期接收 ApprovalSignal 对象的挂起点
 ResumePoint<ApprovalSignal> approvalPoint = ResumePoint.named("managerApproval");
 ```
 
-### DSL 挂起与续接声明
+### DSL 声明与 `Resumed<State, Signal>` 解包
+
+在 `await` 节点之后的步骤中，入参类型会被自动包装为 `Resumed<State, Signal>`：
 
 ```java
 Flow<OrderRequest, OrderReceipt> approvalFlow = Flow.<OrderRequest>identity()
-        .then(createDraftOrderOp)
-        .await(approvalPoint) // 流程在此挂起并释放当前线程！
+        .then(createDraftOrderOp) // 返回草稿订单 OrderRequest
+        .await(approvalPoint)     // 流程在此挂起并释放当前线程！
         .then((context, resumed) -> {
-            // resumed 包含了挂起前的上下文数据 state 与外部注入的 signal
+            // 1. resumed.state(): 获取挂起前的原始业务状态数据 (OrderRequest)
             OrderRequest draftOrder = resumed.state();
+            
+            // 2. resumed.signal(): 获取外部调用 resume(...) 时注入的信号对象 (ApprovalSignal)
             ApprovalSignal signal = resumed.signal();
             
             if (!signal.isApproved()) {
@@ -77,18 +83,99 @@ if (result instanceof FlowResult.Suspended) {
     Suspension<OrderReceipt> suspension = ((FlowResult.Suspended<OrderReceipt>) result).suspension();
     
     // 暂存 suspension 句柄（如存入内存 Map 或 Session）
-    sessionCache.put(request.getOrderId(), suspension);
+    suspensionStore.put(request.getOrderId(), suspension);
 }
 ```
 
 ### 单次消费（Single-Use）安全保证
 - **防重放与双花防御**：`Suspension` 是一个不透明的**单次消费句柄**；
-- 一旦通过 `executable.resume(suspension, ...)` 消费过一次，该句柄内部状态立即标记为失效；
+- 一旦通过 `executable.resume(suspension, ...)` 消费过一次，该句柄内部状态立即标记为失效（`consumed = true`）；
 - 若尝试对同一个 `Suspension` 实例调用两次 `resume`，框架会严格抛出 `IllegalStateException("Suspension has already been consumed")`，从底层杜绝外部重复回调引发的重放攻击与并发双花。
 
 ---
 
-## 3. 恢复执行 API 契约
+## 3. Spring 控制层 Webhook 异步回调完整实战
+
+以下是在生产 Spring Boot 应用中，如何优雅地将 Local 流程与外部 Webhook 回调打通的完整代码：
+
+```java
+@RestController
+@RequestMapping("/api/orders")
+public class OrderApprovalController {
+
+    @Autowired
+    private LocalExecutable<OrderRequest, OrderReceipt> orderExecutable;
+    
+    @Autowired
+    private ResumePoint<ApprovalSignal> approvalPoint;
+
+    // 内存挂起句柄缓存（Local 模式适合单机内存生命周期；集群持久化请使用 Durable 模式）
+    private final Map<String, Suspension<OrderReceipt>> suspensionCache = new ConcurrentHashMap<>();
+
+    /**
+     * 1. 提交审批订单接口
+     */
+    @PostMapping("/submit")
+    public ResponseEntity<?> submitOrder(@RequestBody OrderRequest request) {
+        FlowResult<OrderReceipt> result = orderExecutable.run(request);
+
+        if (result instanceof FlowResult.Suspended) {
+            // 流程遇到 await，暂存 suspension 句柄
+            Suspension<OrderReceipt> suspension = ((FlowResult.Suspended<OrderReceipt>) result).suspension();
+            suspensionCache.put(request.getOrderId(), suspension);
+            
+            return ResponseEntity.ok(Map.of(
+                    "orderId", request.getOrderId(),
+                    "status", "SUSPENDED_WAITING_APPROVAL",
+                    "message", "订单已提交，等待主管审批"
+            ));
+        }
+
+        if (result instanceof FlowResult.Completed) {
+            return ResponseEntity.ok(((FlowResult.Completed<OrderReceipt>) result).outcome());
+        }
+
+        return ResponseEntity.status(500).body("Unexpected execution result");
+    }
+
+    /**
+     * 2. 接收外部审批系统 Webhook 回调接口
+     */
+    @PostMapping("/callback/approval")
+    public ResponseEntity<?> onApprovalCallback(@RequestBody ApprovalCallbackRequest callback) {
+        String orderId = callback.getOrderId();
+        
+        // 提取并移除暂存的 suspension 句柄
+        Suspension<OrderReceipt> suspension = suspensionCache.remove(orderId);
+        if (suspension == null) {
+            return ResponseEntity.badRequest().body("未找到该订单的挂起句柄或订单已被处理: " + orderId);
+        }
+
+        // 构造强类型审批信号
+        ApprovalSignal signal = new ApprovalSignal(callback.isApproved(), callback.getComment());
+
+        // 核心：调用 resume 注入信号，恢复流程继续向前推进
+        FlowResult<OrderReceipt> finalResult = orderExecutable.resume(suspension, approvalPoint, signal);
+
+        if (finalResult instanceof FlowResult.Completed) {
+            Outcome<OrderReceipt> outcome = ((FlowResult.Completed<OrderReceipt>) finalResult).outcome();
+            if (outcome instanceof Outcome.Accepted) {
+                return ResponseEntity.ok(((Outcome.Accepted<OrderReceipt>) outcome).value());
+            } else if (outcome instanceof Outcome.Rejected) {
+                return ResponseEntity.ok(Map.of("status", "REJECTED", "reason", ((Outcome.Rejected<?>) outcome).reason()));
+            } else {
+                return ResponseEntity.status(500).body(((Outcome.Failed<?>) outcome).failure());
+            }
+        }
+
+        return ResponseEntity.ok("处理中");
+    }
+}
+```
+
+---
+
+## 4. 恢复执行 API 契约
 
 Local 执行器提供同步与异步两种恢复方式：
 
@@ -97,17 +184,9 @@ Local 执行器提供同步与异步两种恢复方式：
 | **`resume`** | `resume(suspension, resumePoint, signal[, cancellation])` | 在当前调用线程同步恢复并驱动后续步骤 |
 | **`resumeAsync`** | `resumeAsync(suspension, resumePoint, signal[, cancellation])` | 提交至 Dispatcher 线程池异步恢复，返回 `CompletionStage` |
 
-```java
-// 外部回调触发恢复
-ApprovalSignal signal = new ApprovalSignal(true, "主管审核通过");
-
-FlowResult<OrderReceipt> finalResult = executable.resume(suspension, approvalPoint, signal);
-System.out.println("最终结果: " + finalResult.requireAccepted());
-```
-
 ---
 
-## 4. 协作式取消令牌：`Cancellation`
+## 5. 协作式取消令牌：`Cancellation`
 
 `Cancellation` 是 `team4u-flow` 的轻量级协作式取消令牌，用于跨线程、跨层级安全取消正在运行的流程。
 
@@ -128,7 +207,7 @@ graph TD
 3. **父子级联取消**：通过 `Cancellation.linked(parent)` 创建的子令牌会自动监听父令牌的状态，父令牌取消时所有子令牌同步生效；
 4. **清理屏障**：流程取消后，所有下游节点均不会被调度，并行块严格等待正在运行的子线程完全退出。
 
-### 使用示例
+### 取消使用示例
 
 ```java
 import com.team4u.framework.flow.model.Cancellation;
@@ -152,7 +231,7 @@ if (result instanceof FlowResult.Cancelled) {
 
 ---
 
-## 5. 挂起与取消的时序竞态防御
+## 6. 挂起与取消的时序竞态防御
 
 在并发高压环境下，可能出现“调用方刚刚触发 `cancel()`，而执行器正好在进入 `await()` 挂起节点”的极端时序竞态。
 
