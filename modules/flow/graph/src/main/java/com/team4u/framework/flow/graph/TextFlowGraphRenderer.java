@@ -3,9 +3,7 @@ package com.team4u.framework.flow.graph;
 import com.team4u.framework.flow.BindingDescriptor;
 import com.team4u.framework.flow.FlowDescription;
 import com.team4u.framework.flow.NodeDescription;
-import com.team4u.framework.flow.Retry;
 
-import java.time.Duration;
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
@@ -22,13 +20,12 @@ final class TextFlowGraphRenderer implements FlowGraphRenderer {
 
     static final TextFlowGraphRenderer INSTANCE = new TextFlowGraphRenderer();
 
-
     @Override
     public String render(FlowDescription description) {
         Objects.requireNonNull(description, "FlowDescription must not be null");
 
         StringBuilder output = new StringBuilder();
-        output.append("flow id=\"").append(escape(display(description.flowId())))
+        output.append("flow id=\"").append(FlowGraphFormatters.escapeText(FlowGraphFormatters.display(description.flowId())))
                 .append("\"\n");
         Deque<NodeDescription> pending = new ArrayDeque<NodeDescription>();
         pending.addLast(description.root());
@@ -44,11 +41,11 @@ final class TextFlowGraphRenderer implements FlowGraphRenderer {
     }
 
     private static void appendNode(StringBuilder output, NodeDescription node) {
-        output.append("path=\"").append(escape(node.path())).append("\"")
+        output.append("path=\"").append(FlowGraphFormatters.escapeText(node.path())).append("\"")
                 .append(" kind=").append(node.kind().name())
                 .append(" label=");
         if (node.label().isPresent()) {
-            output.append("\"").append(escape(node.label().get())).append("\"");
+            output.append("\"").append(FlowGraphFormatters.escapeText(node.label().get())).append("\"");
         } else {
             output.append("<none>");
         }
@@ -68,7 +65,7 @@ final class TextFlowGraphRenderer implements FlowGraphRenderer {
                         .append(node.otherwise() == null ? "no-match:SKIPPED" : "branch");
                 break;
             case FALLBACK:
-                output.append(" trigger=").append(display(node.trigger()))
+                output.append(" trigger=").append(FlowGraphFormatters.display(node.trigger()))
                         .append(" branches=").append(node.children().size());
                 break;
             case PARALLEL:
@@ -76,18 +73,18 @@ final class TextFlowGraphRenderer implements FlowGraphRenderer {
                         .append(" tokens=[");
                 for (int index = 0; index < node.parallelBranches().size(); index++) {
                     if (index > 0) output.append(',');
-                    output.append('"').append(escape(node.parallelBranches().get(index).name()))
+                    output.append('"').append(FlowGraphFormatters.escapeText(node.parallelBranches().get(index).name()))
                             .append('"');
                 }
                 output.append("] join=static");
                 break;
             case AWAIT:
-                output.append(" resume=\"").append(escape(display(node.resumePoint())))
+                output.append(" resume=\"").append(FlowGraphFormatters.escapeText(FlowGraphFormatters.display(node.resumePoint())))
                         .append('"');
                 break;
             case CONTROL:
-                output.append(" control=").append(display(node.controlKind()))
-                        .append(" config=").append(configurationSummary(node.configuration()));
+                output.append(" control=").append(FlowGraphFormatters.display(node.controlKind()))
+                        .append(" config=").append(FlowGraphFormatters.configurationSummary(node.configuration()));
                 break;
             case COMPLETE:
                 output.append(" complete=").append(node.identity()
@@ -102,16 +99,16 @@ final class TextFlowGraphRenderer implements FlowGraphRenderer {
     }
 
     private static void appendBinding(StringBuilder output, BindingDescriptor binding) {
-        output.append(" binding=").append(escape(binding.kind()))
+        output.append(" binding=").append(FlowGraphFormatters.escapeText(binding.kind()))
                 .append(" contract=");
         if (binding.contractClass().isPresent()) {
-            output.append(escape(binding.contractClass().get().getName()));
+            output.append(FlowGraphFormatters.escapeText(binding.contractClass().get().getName()));
         } else {
             output.append("<unresolved>");
         }
         output.append(" qualifier=");
         if (binding.qualifier().isPresent()) {
-            output.append('"').append(escape(binding.qualifier().get())).append('"');
+            output.append('"').append(FlowGraphFormatters.escapeText(binding.qualifier().get())).append('"');
         } else {
             output.append("<none>");
         }
@@ -121,48 +118,7 @@ final class TextFlowGraphRenderer implements FlowGraphRenderer {
         if (value == null) {
             output.append("<none>");
         } else {
-            output.append('"').append(escape(value)).append('"');
+            output.append('"').append(FlowGraphFormatters.escapeText(value)).append('"');
         }
-    }
-
-    /**
-     * 稳定配置摘要：只读取 final 配置类（Retry / Duration）的字段，
-     * 绝不调用任意 configuration 的 toString。
-     */
-    private static String configurationSummary(Object configuration) {
-        if (configuration instanceof Retry) {
-            Retry retry = (Retry) configuration;
-            return "maxAttempts=" + retry.maxAttempts()
-                    + ",backoff=" + durationSummary(retry.backoff());
-        }
-        if (configuration instanceof Duration) {
-            return "timeout=" + durationSummary((Duration) configuration);
-        }
-        return "<none>";
-    }
-
-    private static String durationSummary(Duration duration) {
-        return duration.getSeconds() + "s" + duration.getNano() + "ns";
-    }
-
-    private static String display(String value) {
-        return value == null ? "<unnamed>" : value;
-    }
-
-    private static String escape(String value) {
-        StringBuilder escaped = new StringBuilder(value.length());
-        for (int index = 0; index < value.length(); index++) {
-            char character = value.charAt(index);
-            switch (character) {
-                case '\\': escaped.append("\\\\"); break;
-                case '"': escaped.append("\\\""); break;
-                case '\n': escaped.append("\\n"); break;
-                case '\r': escaped.append("\\r"); break;
-                case '\t': escaped.append("\\t"); break;
-                case '|': escaped.append("\\|"); break;
-                default: escaped.append(character);
-            }
-        }
-        return escaped.toString();
     }
 }

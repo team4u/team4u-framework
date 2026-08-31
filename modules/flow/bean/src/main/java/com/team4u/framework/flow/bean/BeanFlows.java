@@ -16,6 +16,20 @@ public final class BeanFlows {
     private BeanFlows() { }
 
     /**
+     * 创建基于默认 {@link BeanManager#getInstance()} 的 Operation 解析器。
+     */
+    public static BeanOperationResolver resolver() {
+        return new BeanOperationResolver(BeanManager.getInstance());
+    }
+
+    /**
+     * 创建基于指定 {@link BeanManager} 的 Operation 解析器。
+     */
+    public static BeanOperationResolver resolver(BeanManager beanManager) {
+        return new BeanOperationResolver(beanManager);
+    }
+
+    /**
      * 使用全局默认 {@link BeanManager#getInstance()} 编译内存流。
      *
      * @param flow 逻辑流定义，不能为 null
@@ -41,4 +55,3 @@ public final class BeanFlows {
         return Local.compile(flow, new BeanOperationResolver(beanManager));
     }
 }
-
