@@ -53,9 +53,10 @@ public class DurableSmokeTest {
                 .build()
                 .compile(flow, "f", 1);
         DurableResult<String> result = executable.start("e2", "x");
-        assertTrue(result instanceof DurableResult.Completed);
-        assertEquals("BOOM", ((DurableResult.Completed<String>) result).outcome()
-                .kind().name().equals("FAILED") ? "BOOM" : "BOOM");
+        assertTrue(result.getClass().getSimpleName(), result instanceof DurableResult.Completed);
+        Outcome<String> outcome = ((DurableResult.Completed<String>) result).outcome();
+        assertEquals("非成功路径必须落定 FAILED 四态", Outcome.Kind.FAILED, outcome.kind());
+        assertEquals("BOOM", ((Outcome.Failed<String>) outcome).failure().code());
     }
 
     @Test
@@ -88,10 +89,14 @@ public class DurableSmokeTest {
                 .build()
                 .compile(flow, "r", 1);
         DurableResult<String> result = executable.start("e3", "x");
-        assertTrue(String.valueOf(result.getClass().getSimpleName()), true);
-        // with ZERO backoff the drive should park only via wake<=now -> direct completion
+        // 零退避 backoff：重试立即到期，驱动要么直接完成，要么落 ACTIVE+wake 等待外部再驱动
         if (result instanceof DurableResult.Completed) {
             assertEquals("x:ok", result.requireAccepted());
+        } else {
+            assertTrue("退避中必须是 ACTIVE，实际: " + result.getClass().getSimpleName(),
+                    result instanceof DurableResult.Active);
+            assertTrue("退避中必须携带 wakeAt",
+                    ((DurableResult.Active<String>) result).wakeAt().isPresent());
         }
     }
 }

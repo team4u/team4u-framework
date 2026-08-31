@@ -91,4 +91,14 @@ public class CriterionPredicateTest {
         FlowResult<String> nonVipResult = Local.compile(flow).run(new Order("O-2", 100, false, null));
         FlowAssertions.assertSkipped(nonVipResult, "NOT_ELIGIBLE");
     }
+
+    @Test
+    public void testNullExpressionRejectedWithNpe() {
+        try {
+            new CriterionPredicate<Order>(null, Criteria.global(), null);
+            org.junit.Assert.fail("null expression must throw NullPointerException");
+        } catch (NullPointerException expected) {
+            assertTrue(expected.getMessage().contains("expression"));
+        }
+    }
 }

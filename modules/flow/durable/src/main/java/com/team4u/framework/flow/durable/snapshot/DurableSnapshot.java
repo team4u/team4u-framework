@@ -3,6 +3,7 @@ package com.team4u.framework.flow.durable.snapshot;
 import lombok.Getter;
 import lombok.experimental.Accessors;
 
+import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collections;
 import java.util.LinkedHashMap;
@@ -48,9 +49,11 @@ public final class DurableSnapshot {
     private final String awaitingPoint;
     /** 是否包含待消费的恢复信号（Pending Resume Signal）。 */
     private final boolean pendingResume;
+    /** 最早的定时唤醒时刻（可空冗余字段：从帧栈的 wake/deadline 取最早到期者，仅 ACTIVE 快照非空）。 */
+    private final Instant firstWakeAt;
 
     /**
-     * 构造不可变快照对象并严格校验生命周期约束不变式。
+     * 构造不可变快照对象并严格校验生命周期约束不变式（无定时唤醒信息的兼容重载）。
      *
      * @param executionId   流程实例 ID
      * @param flowId        流程 ID
@@ -69,6 +72,35 @@ public final class DurableSnapshot {
                            DurableLifecycle lifecycle, byte[] frameMetadata,
                            Map<String, StoredValue> slots, String awaitingPoint,
                            boolean pendingResume) {
+        this(executionId, flowId, flowVersion, formatId, formatVersion, revision,
+                lifecycle, frameMetadata, slots, awaitingPoint, pendingResume, null);
+    }
+
+    /**
+     * 构造不可变快照对象并严格校验生命周期约束不变式。
+     *
+     * <p>{@code firstWakeAt} 为从帧栈计算出的冗余字段（最早到期的 wake/deadline），
+     * 仅允许 {@link DurableLifecycle#ACTIVE} 快照携带非空值，供外部定时调度器
+     * 通过 {@link com.team4u.framework.flow.durable.store.DurableStore#scanDue} 直接扫描，无需解码帧栈。</p>
+     *
+     * @param executionId   流程实例 ID
+     * @param flowId        流程 ID
+     * @param flowVersion   流程版本
+     * @param formatId      格式 ID
+     * @param formatVersion 格式版本
+     * @param revision      版本号
+     * @param lifecycle     生命周期
+     * @param frameMetadata 帧拓扑字节数组
+     * @param slots         业务数据插槽映射
+     * @param awaitingPoint 挂起点名称
+     * @param pendingResume 是否包含挂起信号
+     * @param firstWakeAt   最早的定时唤醒时刻（非 ACTIVE 生命周期必须为 null）
+     */
+    public DurableSnapshot(String executionId, String flowId, int flowVersion,
+                           String formatId, int formatVersion, long revision,
+                           DurableLifecycle lifecycle, byte[] frameMetadata,
+                           Map<String, StoredValue> slots, String awaitingPoint,
+                           boolean pendingResume, Instant firstWakeAt) {
         this.executionId = text(executionId, "executionId");
         this.flowId = text(flowId, "flowId");
         if (flowVersion < 1) throw new IllegalArgumentException("flowVersion must be positive");
@@ -90,6 +122,7 @@ public final class DurableSnapshot {
         this.slots = Collections.unmodifiableMap(copy);
         this.awaitingPoint = awaitingPoint == null ? null : text(awaitingPoint, "awaitingPoint");
         this.pendingResume = pendingResume;
+        this.firstWakeAt = firstWakeAt;
         validateLifecycle();
     }
 
@@ -108,6 +141,10 @@ public final class DurableSnapshot {
         } else if (awaitingPoint != null || pendingResume) {
             throw new IllegalArgumentException(
                     "terminal snapshot must not contain resume state");
+        }
+        if (lifecycle != DurableLifecycle.ACTIVE && firstWakeAt != null) {
+            throw new IllegalArgumentException(
+                    "only an ACTIVE snapshot may carry a first wake timestamp");
         }
     }
 
@@ -128,13 +165,15 @@ public final class DurableSnapshot {
                 && lifecycle == that.lifecycle
                 && Arrays.equals(frameMetadata, that.frameMetadata)
                 && slots.equals(that.slots)
-                && Objects.equals(awaitingPoint, that.awaitingPoint);
+                && Objects.equals(awaitingPoint, that.awaitingPoint)
+                && Objects.equals(firstWakeAt, that.firstWakeAt);
     }
 
     @Override
     public int hashCode() {
         int result = Objects.hash(executionId, flowId, flowVersion, formatId,
-                formatVersion, revision, lifecycle, slots, awaitingPoint, pendingResume);
+                formatVersion, revision, lifecycle, slots, awaitingPoint, pendingResume,
+                firstWakeAt);
         return 31 * result + Arrays.hashCode(frameMetadata);
     }
 
@@ -142,7 +181,8 @@ public final class DurableSnapshot {
     public String toString() {
         return "DurableSnapshot[executionId=" + executionId + ", flowId=" + flowId
                 + ", flowVersion=" + flowVersion + ", revision=" + revision
-                + ", lifecycle=" + lifecycle + ", slots=" + slots.keySet() + "]";
+                + ", lifecycle=" + lifecycle + ", firstWakeAt=" + firstWakeAt
+                + ", slots=" + slots.keySet() + "]";
     }
 
     private static String text(String value, String name) {

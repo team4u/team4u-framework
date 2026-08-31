@@ -10,6 +10,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 import com.team4u.framework.flow.api.FlowObserver;
 import com.team4u.framework.flow.api.Metadata;
+import com.team4u.framework.flow.api.ObserverSafeEmitter;
 import com.team4u.framework.flow.api.ResumePoint;
 import com.team4u.framework.flow.compiler.Compiler;
 import com.team4u.framework.flow.engine.MachineResult;
@@ -41,13 +42,45 @@ public final class LocalExecutable<I, O> {
     private final Compiler.Compiled compiled;
     private final FlowObserver observer;
     private final ExecutorService workerExecutor;
+    /** 流程标识与版本，参与 invocationId 与事件 Metadata 组成。 */
+    private final String flowId;
+    private final int flowVersion;
     /** 用于校验 Suspension 归属的私有标识。 */
     private final Object identity = new Object();
 
     LocalExecutable(Compiler.Compiled compiled, FlowObserver observer, ExecutorService workerExecutor) {
+        this(compiled, "local", 0, observer, workerExecutor);
+    }
+
+    /**
+     * 内部工厂：指定流程标识与版本构造执行器。
+     *
+     * @param compiled      编译产物
+     * @param flowId        流程标识
+     * @param flowVersion   流程版本
+     * @param observer      事件观察者
+     * @param workerExecutor 工作线程池
+     * @param <I>           输入类型
+     * @param <O>           输出类型
+     * @return 执行器实例
+     */
+    static <I, O> LocalExecutable<I, O> create(Compiler.Compiled compiled,
+                                                String flowId, int flowVersion,
+                                                FlowObserver observer,
+                                                ExecutorService workerExecutor) {
+        return new LocalExecutable<I, O>(compiled, flowId, flowVersion, observer, workerExecutor);
+    }
+
+    private LocalExecutable(Compiler.Compiled compiled, String flowId, int flowVersion,
+                            FlowObserver observer, ExecutorService workerExecutor) {
         this.compiled = Objects.requireNonNull(compiled, "compiled must not be null");
         this.observer = Objects.requireNonNull(observer, "observer must not be null");
         this.workerExecutor = Objects.requireNonNull(workerExecutor, "workerExecutor must not be null");
+        this.flowId = Objects.requireNonNull(flowId, "flowId must not be null");
+        if (flowId.trim().isEmpty()) {
+            throw new IllegalArgumentException("flowId must not be blank");
+        }
+        this.flowVersion = flowVersion;
         validateWorkerExecutor(compiled, this.workerExecutor);
     }
 
@@ -58,7 +91,7 @@ public final class LocalExecutable<I, O> {
      * @return 重新绑定线程池的 {@link LocalExecutable}
      */
     public LocalExecutable<I, O> withExecutor(ExecutorService workerExecutor) {
-        return new LocalExecutable<I, O>(compiled, observer,
+        return new LocalExecutable<I, O>(compiled, flowId, flowVersion, observer,
                 workerExecutor != null ? workerExecutor : ForkJoinPool.commonPool());
     }
 
@@ -88,11 +121,16 @@ public final class LocalExecutable<I, O> {
         MachineState state = new MachineState(compiled.root(), executionId, input);
         event(FlowObserver.Type.FLOW_STARTED, executionId,
                 compiled.root().descriptor(), Collections.emptyMap());
-        return drive(state, cancellation);
+        return drive(state, cancellation, executionId);
     }
 
     /**
      * 异步启动流程执行（使用默认 commonPool 调度）。
+     *
+     * <p><b>线程池建议</b>：默认借用 {@link ForkJoinPool#commonPool()} 调度顶层驱动。
+     * commonPool 与 JVM 内所有其他使用者共享，若流程含阻塞性 Operation 或高并发入口，
+     * 建议通过 {@link #runAsync(Object, ExecutorService)} 显式传入独立的 dispatcher 线程池，
+     * 避免与并行分支 Worker 相互干扰。</p>
      *
      * @param input 流程输入数据，不能为 null
      * @return 异步执行结果阶段 {@link CompletionStage}
@@ -181,19 +219,12 @@ public final class LocalExecutable<I, O> {
         if (suspension.consumed()) {
             throw new IllegalStateException("Suspension was already consumed");
         }
-        MachineState state = suspension.state();
-        if (state.lifecycle != MachineState.Lifecycle.SUSPENDED) {
-            throw new IllegalStateException("Suspension is not suspended");
-        }
-        if (!point.name().equals(state.awaitingPoint)) {
-            throw new IllegalArgumentException("ResumePoint does not match suspension");
-        }
+        MachineState state = MachineState.validateResume(suspension.engineState(), point.name());
         if (!suspension.consume()) {
             throw new IllegalStateException("Suspension was already consumed");
         }
-        state.lifecycle = MachineState.Lifecycle.ACTIVE;
-        state.pendingSignal = signal;
-        return drive(state, cancellation);
+        state.beginResume(signal);
+        return drive(state, cancellation, suspension.executionId());
     }
 
     /**
@@ -285,24 +316,29 @@ public final class LocalExecutable<I, O> {
 
     /**
      * 驱动 SerialMachine 并把 MachineResult 转为面向用户的 FlowResult。
+     *
+     * @param state       引擎内部状态机状态
+     * @param cancellation 取消令牌
+     * @param executionId 执行实例标识（用于事件与结果上报）
      */
     @SuppressWarnings("unchecked")
-    private FlowResult<O> drive(MachineState state, Cancellation cancellation) {
-        SerialMachine machine = new SerialMachine(compiled.root(), "local", 0, state,
+    private FlowResult<O> drive(MachineState state, Cancellation cancellation, String executionId) {
+        SerialMachine machine = new SerialMachine(compiled.root(), flowId, flowVersion, state,
                 cancellation, observer, workerExecutor);
         MachineResult result = machine.drive();
         switch (result.lifecycle()) {
             case COMPLETED:
-                event(FlowObserver.Type.FLOW_COMPLETED, state.executionId,
+                event(FlowObserver.Type.FLOW_COMPLETED, executionId,
                         compiled.root().descriptor(), Collections.singletonMap(
                                 "outcome", result.outcome().kind().name()));
                 return FlowResult.completed((Outcome<O>) result.outcome());
             case SUSPENDED:
-                return FlowResult.suspended(new Suspension<O>(identity, state));
+                return FlowResult.suspended(new Suspension<O>(identity, state,
+                        executionId, result.awaitingPoint()));
             case CANCELLED:
-                event(FlowObserver.Type.FLOW_CANCELLED, state.executionId,
+                event(FlowObserver.Type.FLOW_CANCELLED, executionId,
                         compiled.root().descriptor(), Collections.emptyMap());
-                return FlowResult.cancelled(state.executionId);
+                return FlowResult.cancelled(executionId);
             case ACTIVE:
             default:
                 throw new IllegalStateException(
@@ -312,13 +348,10 @@ public final class LocalExecutable<I, O> {
 
     private void event(FlowObserver.Type type, String executionId,
                        NodeDescriptor descriptor, java.util.Map<String, String> attributes) {
-        try {
-            observer.onEvent(new FlowObserver.Event(type, Instant.now(),
-                    new Metadata("local", 0, executionId, descriptor.path(), descriptor.label()),
-                    descriptor, attributes));
-        } catch (RuntimeException ignored) {
-            // Observers cannot alter execution.
-        }
+        if (observer.isNoop()) return;
+        ObserverSafeEmitter.emit(observer, new FlowObserver.Event(type, Instant.now(),
+                new Metadata(flowId, flowVersion, executionId, descriptor.path(), descriptor.label()),
+                descriptor, attributes));
     }
 
     /** 在执行器上运行 supplier，以 CompletableFuture 暴露结果，异常会传播到 future。 */

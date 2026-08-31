@@ -25,6 +25,24 @@
             <artifactId>team4u-retry</artifactId>
             <version>${project.version}</version>
         </dependency>
+        <!-- 可选生产依赖：FlowRetryPolicy 反射访问 DynamicRetryPolicyRegistry（存在则启用动态策略解析，缺失则降级命名注册表） -->
+        <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-retry-config</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <!-- 可选生产依赖：FlowRetryStateMapper 实现 durable 的 StateMapper SPI（无 Spring/Jackson 传递） -->
+        <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-flow-durable</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
+        <dependency>
+            <groupId>org.slf4j</groupId>
+            <artifactId>slf4j-api</artifactId>
+        </dependency>
 
         <dependency>
             <groupId>org.projectlombok</groupId>
@@ -40,22 +58,11 @@
         </dependency>
         <dependency>
             <groupId>com.team4u</groupId>
-            <artifactId>team4u-flow-durable</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.team4u</groupId>
-            <artifactId>team4u-retry-config</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.team4u</groupId>
             <artifactId>team4u-config-test</artifactId>
             <version>${project.version}</version>
             <scope>test</scope>
         </dependency>
+        <!-- 动态重试策略（team4u-retry-config）解析 JSON 配置所需的运行时 SPI 实现 -->
         <dependency>
             <groupId>com.team4u</groupId>
             <artifactId>team4u-serializer-jackson</artifactId>

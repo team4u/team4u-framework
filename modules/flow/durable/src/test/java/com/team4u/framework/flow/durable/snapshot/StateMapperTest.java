@@ -60,6 +60,70 @@ public class StateMapperTest {
     }
 
     @Test
+    public void serializerStateMapperRejectsUnknownCodecId() {
+        SerializerStateMapper mapper = new SerializerStateMapper("custom:csv", 1,
+                val -> ((String) val).getBytes(StandardCharsets.UTF_8),
+                bytes -> new String(bytes, StandardCharsets.UTF_8));
+        // codecId 不匹配：拒绝
+        try {
+            mapper.decode(new StoredValue("other:codec", 1, new byte[0]));
+            fail("未知 codecId 必须被拒绝");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("other:codec"));
+        }
+    }
+
+    @Test
+    public void serializerStateMapperRejectsVersionMismatch() {
+        SerializerStateMapper mapper = new SerializerStateMapper("custom:csv", 2,
+                val -> ((String) val).getBytes(StandardCharsets.UTF_8),
+                bytes -> new String(bytes, StandardCharsets.UTF_8));
+        // 同 codecId 不同版本：拒绝
+        try {
+            mapper.decode(new StoredValue("custom:csv", 1, new byte[0]));
+            fail("版本不匹配必须被拒绝");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("version"));
+        }
+    }
+
+    @Test
+    public void compositeStateMapperAggregatesAllFailuresOnDecode() throws Exception {
+        // 全链失败：聚合异常携带底层原因，且消息包含 codecId 便于排障
+        SerializerStateMapper pojoMapper = new SerializerStateMapper("mock:json", 1,
+                val -> ((String) val).getBytes(StandardCharsets.UTF_8),
+                bytes -> {
+                    throw new IllegalStateException("deserializer broke");
+                });
+        CompositeStateMapper composite = CompositeStateMapper.withDefault(pojoMapper);
+        StoredValue unknown = new StoredValue("nope:codec", 7, new byte[]{1});
+        try {
+            composite.decode(unknown);
+            fail("全链失败必须抛出聚合异常");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("nope:codec"));
+            assertNotNull("聚合异常必须携带底层链失败原因", expected.getCause());
+        }
+    }
+
+    @Test
+    public void compositeStateMapperAggregatesAllFailuresOnEncode() throws Exception {
+        SerializerStateMapper pojoMapper = new SerializerStateMapper("mock:json", 1,
+                val -> {
+                    throw new IllegalStateException("serializer broke");
+                },
+                bytes -> new Object());
+        CompositeStateMapper composite = CompositeStateMapper.withDefault(pojoMapper);
+        try {
+            composite.encode(new Object());
+            fail("全链失败必须抛出聚合异常");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("Object"));
+            assertNotNull("聚合异常必须携带底层链失败原因", expected.getCause());
+        }
+    }
+
+    @Test
     public void testCompositeStateMapperFallback() throws Exception {
         // 自定义 POJO 模拟器
         SerializerStateMapper pojoMapper = new SerializerStateMapper("mock:json", 1,

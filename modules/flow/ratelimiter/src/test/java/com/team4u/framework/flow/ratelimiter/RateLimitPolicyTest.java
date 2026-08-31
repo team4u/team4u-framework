@@ -6,13 +6,13 @@ import com.team4u.framework.flow.Local;
 import com.team4u.framework.flow.api.Gate;
 import com.team4u.framework.flow.api.Metadata;
 import com.team4u.framework.flow.api.PolicyContext;
-import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.model.Cancellation;
 import com.team4u.framework.flow.model.Failure;
 import com.team4u.framework.flow.model.FlowResult;
 import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.model.Reason;
 import com.team4u.framework.flow.test.FlowAssertions;
+import com.team4u.framework.flow.test.PersistentPolicyStub;
 import com.team4u.framework.kv.test.TestKvContext;
 import com.team4u.framework.ratelimiter.api.RateLimiters;
 import com.team4u.framework.ratelimiter.core.RateLimitEngine;
@@ -68,6 +68,83 @@ public class RateLimitPolicyTest {
         };
     }
 
+    /** 真实执行两次限流检查（阈值 1），第二次必然超限进入拒随/故障分支。 */
+    private void acquireTwiceToExhaustThreshold(RateLimitPolicy<String> policy) {
+        policy.before(testContext(), "k1");
+        Gate second = policy.before(testContext(), "k1");
+        assertTrue("second acquire must exceed threshold", !(second instanceof Gate.Proceed));
+    }
+
+    @Test
+    public void negativePermitsFromExtractorFailsWithClearMessage() {
+        TestConfigContext config = TestConfigContext.create();
+        config.put("team4u.ratelimiter.negative.point",
+                "[{\"id\":\"fw\",\"algorithm\":\"fixed-window\","
+                        + "\"windowMillis\":60000,\"threshold\":10}]");
+        TestKvContext kv = TestKvContext.create();
+
+        try {
+            RateLimiters.init(config.getConfigManager(), kv.store(), kv.clock());
+
+            RateLimitPolicy<String> policy = RateLimitPolicy.<String>builder()
+                    .point("negative.point")
+                    .permitsExtractor(key -> -5)
+                    .build();
+
+            try {
+                policy.before(testContext(), "k1");
+                org.junit.Assert.fail("negative permits must be rejected at before()");
+            } catch (IllegalArgumentException expected) {
+                assertTrue(expected.getMessage().contains("permits must be >= 0"));
+                assertTrue(expected.getMessage().contains("-5"));
+                assertTrue(expected.getMessage().contains("negative.point"));
+            }
+        } finally {
+            RateLimiters.destroy();
+            config.destroy();
+            kv.close();
+        }
+    }
+
+    @Test
+    public void negativeStaticPermitsRejectedAtConstruction() {
+        try {
+            RateLimitPolicy.<String>builder().point("p").permits(-1).build();
+            org.junit.Assert.fail("negative static permits must be rejected at construction");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("permits must be >= 0"));
+            assertTrue(expected.getMessage().contains("-1"));
+        }
+    }
+
+    @Test
+    public void builderPermitsDrivesAcquireCount() {
+        TestConfigContext config = TestConfigContext.create();
+        config.put("team4u.ratelimiter.static.permits.point",
+                "[{\"id\":\"fw\",\"algorithm\":\"fixed-window\","
+                        + "\"windowMillis\":60000,\"threshold\":3}]");
+        TestKvContext kv = TestKvContext.create();
+
+        try {
+            RateLimiters.init(config.getConfigManager(), kv.store(), kv.clock());
+
+            // 静态 permits=2：阈值 3 下第一次检查即消耗 2 个许可
+            RateLimitPolicy<String> policy = RateLimitPolicy.<String>builder()
+                    .point("static.permits.point")
+                    .permits(2)
+                    .build();
+
+            assertTrue(policy.getPermits() == 2);
+            assertTrue(policy.before(testContext(), "u1") instanceof Gate.Proceed);
+            // 剩余 1 < 需要 2：第二次超限
+            assertTrue(policy.before(testContext(), "u1") instanceof Gate.Fail);
+        } finally {
+            RateLimiters.destroy();
+            config.destroy();
+            kv.close();
+        }
+    }
+
     @Test
     public void proceedsWhenAllowed() {
         TestConfigContext config = TestConfigContext.create();
@@ -106,7 +183,7 @@ public class RateLimitPolicyTest {
         try {
             RateLimiters.init(config.getConfigManager(), kv.store(), kv.clock());
 
-            RateLimitPolicy<OrderRequest> policy = RateLimitPolicies.fail(
+            RateLimitPolicy<OrderRequest> policy = RateLimitPolicy.fail(
                     "order.create", OrderRequest::getUserId);
 
             Flow<OrderRequest, String> flow = Flow.<OrderRequest, String>step(
@@ -140,7 +217,7 @@ public class RateLimitPolicyTest {
         try {
             RateLimiters.init(config.getConfigManager(), kv.store(), kv.clock());
 
-            RateLimitPolicy<OrderRequest> policy = RateLimitPolicies.reject(
+            RateLimitPolicy<OrderRequest> policy = RateLimitPolicy.reject(
                     "order.create", OrderRequest::getUserId);
 
             Flow<OrderRequest, String> flow = Flow.<OrderRequest, String>step(
@@ -184,7 +261,7 @@ public class RateLimitPolicyTest {
                         return Outcome.accepted("done:" + in);
                     })
                     .policy(RateLimitPolicy.fail("retry.point"), in -> in)
-                    .persistentPolicy(retryStub(3, Duration.ofMillis(10)), in -> in);
+                    .persistentPolicy(PersistentPolicyStub.<String>counting(3, Duration.ofMillis(10)), in -> in);
 
             // 第一次执行成功
             FlowResult<String> result1 = Local.compile(flow).run("key1");
@@ -251,7 +328,7 @@ public class RateLimitPolicyTest {
         try {
             RateLimitEngine engine = new RateLimitEngine(config.getConfigManager(), kv.store(), kv.clock());
 
-            RateLimitPolicy<String> policy = RateLimitPolicies.of(engine, "custom.engine.point");
+            RateLimitPolicy<String> policy = RateLimitPolicy.<String>builder().engine(engine).point("custom.engine.point").build();
 
             Gate gate1 = policy.before(testContext(), "userA");
             assertTrue(gate1 instanceof Gate.Proceed);
@@ -284,7 +361,7 @@ public class RateLimitPolicyTest {
                     .failureFactory((result, key) -> Failure.of("MY_CUSTOM_LIMIT", "Custom limit for " + key))
                     .build();
 
-            policyAcquireTwice(failPolicy);
+            acquireTwiceToExhaustThreshold(failPolicy);
             Gate failGate = failPolicy.before(testContext(), "k1");
             assertTrue(failGate instanceof Gate.Fail);
             assertEquals("MY_CUSTOM_LIMIT", ((Gate.Fail) failGate).failure().code());
@@ -300,7 +377,7 @@ public class RateLimitPolicyTest {
                     .reasonFactory((result, key) -> Reason.of("MY_CUSTOM_REJECT", "Custom reject for " + key))
                     .build();
 
-            policyAcquireTwice(rejectPolicy);
+            acquireTwiceToExhaustThreshold(rejectPolicy);
             Gate rejectGate = rejectPolicy.before(testContext(), "k1");
             assertTrue(rejectGate instanceof Gate.Reject);
             assertEquals("MY_CUSTOM_REJECT", ((Gate.Reject) rejectGate).reason().code());
@@ -312,22 +389,4 @@ public class RateLimitPolicyTest {
         }
     }
 
-    private void policyAcquireTwice(RateLimitPolicy<String> policy) {
-        policy.before(testContext(), "k1");
-    }
-
-    private static PersistentPolicy<String, Integer> retryStub(final int maxAttempts, final Duration backoff) {
-        return new PersistentPolicy<String, Integer>() {
-            @Override public Integer initialState(String key) { return 1; }
-            @Override public Before<Integer> before(PolicyContext ctx, String key, Integer state) {
-                return PersistentPolicy.proceed(state);
-            }
-            @Override public After<Integer> after(PolicyContext ctx, String key, Integer state, com.team4u.framework.flow.model.Completion completion) {
-                if (completion != null && completion.kind() == Outcome.Kind.FAILED && state < maxAttempts) {
-                    return PersistentPolicy.retryAt(java.time.Instant.now().plus(backoff), state + 1);
-                }
-                return PersistentPolicy.returning(state);
-            }
-        };
-    }
 }

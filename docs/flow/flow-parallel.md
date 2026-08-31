@@ -36,9 +36,18 @@ Branch<Order, StockResult> stockBranch = Branch.of("stockBranch", stockFlow);
 // 2. 编排并行块并挂载汇聚策略
 Flow<Order, CombinedReport> parallelFlow = Flow.<Order>parallel(riskBranch, stockBranch)
         .join(results -> {
-            // results.get(branch) 返回的是 Outcome<T>（包含四态可能性）
-            RiskResult risk = results.get(riskBranch).requireAccepted();
-            StockResult stock = results.get(stockBranch).requireAccepted();
+            // results.outcome(branch) 返回该分支的四态结果 Outcome<T>
+            Outcome<RiskResult> riskOutcome = results.outcome(riskBranch);
+            Outcome<StockResult> stockOutcome = results.outcome(stockBranch);
+            if (!(riskOutcome instanceof Outcome.Accepted)
+                    || !(stockOutcome instanceof Outcome.Accepted)) {
+                // 存在非成功分支，原样透传首个非成功结果交由上层处理
+                return riskOutcome instanceof Outcome.Accepted
+                        ? stockOutcome.map(ignored -> null)
+                        : riskOutcome.map(ignored -> null);
+            }
+            RiskResult risk = ((Outcome.Accepted<RiskResult>) riskOutcome).value();
+            StockResult stock = ((Outcome.Accepted<StockResult>) stockOutcome).value();
             return Outcome.accepted(new CombinedReport(risk, stock));
         });
 ```
@@ -83,15 +92,22 @@ Flow<QuoteRequest, PriceSummary> quorumFlow = Flow.<QuoteRequest>parallel(b1, b2
 
 ### 核心解包方法与 API
 
-`ParallelResults` 提供了按分支标识提取结果的核心方法：
+`ParallelResults` 提供按分支令牌提取结果的核心方法：
 
 ```java
-Outcome<T> outcome = results.get(Branch<I, T> branch);
+// 按分支令牌检索该分支的四态结果（类型安全）
+Outcome<T> outcome = results.outcome(Branch<I, T> branch);
+
+// allAccepted() 成功后，可通过 Values 查找表按令牌取具体输出值
+ParallelResults.Values values = results.allAccepted().map(v -> v).value();
+T value = values.get(branch); // 仅 Accepted 分支存在
 ```
 
 > [!IMPORTANT]
-> **关键认知**：`results.get(branch)` 返回的不是原始数据 `T`，而是 **`Outcome<T>`**！
+> **关键认知**：`results.outcome(branch)` 返回的不是原始数据 `T`，而是 **`Outcome<T>`**！
 > 因为在并发执行中，某个分支可能成功（`Accepted`）、被风控拒绝（`Rejected`）、因不适用而弃权（`Skipped`）或抛出异常（`Failed`）。
+> 若传入不属于本并行块的令牌，将抛出 `IllegalArgumentException`；若需要直接解包成功值，
+> 可在流程最终结果上调用 `FlowResult.requireAccepted()` / `DurableResult.requireAccepted()`。
 
 ### 生产实战：多分支异构结果强弱依赖智能合并
 
@@ -108,22 +124,22 @@ Branch<Order, CouponDiscount> couponBranch = Branch.of("coupon", couponFlow);
 Flow<Order, CheckoutView> checkoutFlow = Flow.<Order>parallel(riskBranch, stockBranch, couponBranch)
         .join(results -> {
             // 1. 强依赖校验：风控必须通过
-            Outcome<RiskResult> riskOutcome = results.get(riskBranch);
-            if (riskOutcome.kind() != Outcome.Kind.ACCEPTED) {
+            Outcome<RiskResult> riskOutcome = results.outcome(riskBranch);
+            if (!(riskOutcome instanceof Outcome.Accepted)) {
                 // 阻断：原样透传风控被拒或失败信息
                 return riskOutcome.map(ignored -> null);
             }
             RiskResult risk = ((Outcome.Accepted<RiskResult>) riskOutcome).value();
 
             // 2. 强依赖校验：库存扣减必须成功
-            Outcome<StockResult> stockOutcome = results.get(stockBranch);
-            if (stockOutcome.kind() != Outcome.Kind.ACCEPTED) {
+            Outcome<StockResult> stockOutcome = results.outcome(stockBranch);
+            if (!(stockOutcome instanceof Outcome.Accepted)) {
                 return stockOutcome.map(ignored -> null);
             }
             StockResult stock = ((Outcome.Accepted<StockResult>) stockOutcome).value();
 
             // 3. 弱依赖降级：优惠券核销（若 Skipped 则降级为 0 折扣）
-            Outcome<CouponDiscount> couponOutcome = results.get(couponBranch);
+            Outcome<CouponDiscount> couponOutcome = results.outcome(couponBranch);
             CouponDiscount discount = (couponOutcome instanceof Outcome.Accepted)
                     ? ((Outcome.Accepted<CouponDiscount>) couponOutcome).value()
                     : CouponDiscount.zero(); // 降级默认值

@@ -1,5 +1,10 @@
 package com.team4u.framework.flow;
 
+import java.lang.ref.ReferenceQueue;
+import java.lang.ref.WeakReference;
+import java.util.Map;
+import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
 import com.team4u.framework.flow.api.FlowObserver;
@@ -42,6 +47,11 @@ public final class Local {
     /**
      * 编译逻辑流程（注入自定义组件解析器）。
      *
+     * <p><b>编译产物复用指南</b>：Flow 定义不可变且可复用，对同一 {@code flow} 实例的重复
+     * {@code compile} 调用建议在外部缓存 {@link LocalExecutable}（或 {@link Compiler.Compiled}）
+     * 并复用，避免每次调用重复降级编译与组件解析；编译产物本身线程安全，可并发驱动多次执行。
+     * 若确需在库内缓存，参见 {@link #compileCached(Flow, OperationResolver)}。</p>
+     *
      * @param flow     逻辑流程定义，不能为 null
      * @param resolver 组件解析器（如 Spring Bean 查找器），不能为 null
      * @param <I>      流程输入类型
@@ -52,6 +62,31 @@ public final class Local {
     public static <I, O> LocalExecutable<I, O> compile(
             Flow<I, O> flow, OperationResolver resolver) {
         return compile(flow, resolver, FlowObserver.noop());
+    }
+
+    /**
+     * 以弱缓存复用编译产物编译逻辑流程。
+     *
+     * <p>缓存以 {@code flow} 实例为身份键（identity key，不使用 equals），值为弱引用的
+     * {@link Compiler.Compiled} 产物；当外部不再持有 flow 引用时缓存条目可被 GC 回收，
+     * 不会阻止流程定义的释放。并发安全：基于 ConcurrentHashMap，同 一 flow 的并发首次
+     * 编译可能重复执行一次，但返回的产物一致且线程安全。</p>
+     *
+     * <p>注意：缓存的仅是静态编译产物（拓扑与绑定解析结果），不含任何运行期状态；
+     * observer 与线程池每次调用时重新绑定，不参与缓存键。</p>
+     *
+     * @param flow     逻辑流程定义，不能为 null
+     * @param resolver 组件解析器，不能为 null
+     * @param <I>      流程输入类型
+     * @param <O>      流程输出类型
+     * @return 编译就绪的 {@link LocalExecutable} 实例（同一 flow 实例返回复用产物的执行器）
+     * @throws FlowBuildException 当流程定义存在拓扑冲突或无法解析的组件时抛出
+     */
+    public static <I, O> LocalExecutable<I, O> compileCached(
+            Flow<I, O> flow, OperationResolver resolver) {
+        Compiler.Compiled compiled = CompileCache.obtain(flow, resolver);
+        return LocalExecutable.create(compiled, "local", 0,
+                FlowObserver.noop(), ForkJoinPool.commonPool());
     }
 
     /**
@@ -101,6 +136,96 @@ public final class Local {
             Flow<I, O> flow, OperationResolver resolver, FlowObserver observer, ExecutorService executor) {
         return new LocalExecutable<I, O>(Compiler.compile(flow, resolver),
                 observer, executor != null ? executor : ForkJoinPool.commonPool());
+    }
+
+    /**
+     * 全参编译逻辑流程为内存可执行实例（自定义流程标识，flowId 默认为 "local"、版本默认 0）。
+     *
+     * <p><b>invocationId 语义</b>：flowId 与 flowVersion 参与组成每个 Operation 调用的幂等键
+     * {@code invocationId = flowId:flowVersion:executionId:nodePath}（见
+     * {@link com.team4u.framework.flow.api.OperationContext#invocationId()}），可用于外部 RPC/DB
+     * 写入的幂等防重；同一流程定义的多次执行共享 flowId/flowVersion，但 executionId 每次随机生成。
+     * 自定义 flowId 后，观察者事件的 {@link com.team4u.framework.flow.api.Metadata} 亦携带该标识。</p>
+     *
+     * @param flow        逻辑流程定义，不能为 null
+     * @param flowId      流程标识，不能为 null 或空白
+     * @param flowVersion 流程版本号
+     * @param resolver    组件解析器，不能为 null
+     * @param observer    事件观察者（为 null 则自动使用 noop 观察者）
+     * @param executor    并发执行线程池（为 null 则自动使用 ForkJoinPool.commonPool）
+     * @param <I>         流程输入类型
+     * @param <O>         流程输出类型
+     * @return 编译就绪的 {@link LocalExecutable} 实例
+     * @throws FlowBuildException 当流程定义存在拓扑错误、命名冲突或组件未解析时抛出
+     */
+    public static <I, O> LocalExecutable<I, O> compile(
+            Flow<I, O> flow, String flowId, int flowVersion,
+            OperationResolver resolver, FlowObserver observer, ExecutorService executor) {
+        return LocalExecutable.create(Compiler.compile(flow, resolver),
+                flowId, flowVersion, observer,
+                executor != null ? executor : ForkJoinPool.commonPool());
+    }
+
+    /**
+     * 基于 flow 身份键的编译产物弱缓存。
+     *
+     * <p>键为 flow 实例的弱引用（identity 语义），值为编译产物；并发首次编译可能重复执行，
+     * 但返回一致产物。产物不含运行期状态，线程安全可并发复用。</p>
+     */
+    static final class CompileCache {
+        private static final Map<Key, Compiler.Compiled> CACHE =
+                new ConcurrentHashMap<Key, Compiler.Compiled>();
+        private static final ReferenceQueue<Flow<?, ?>> QUEUE =
+                new ReferenceQueue<Flow<?, ?>>();
+
+        private static final class Key extends WeakReference<Flow<?, ?>> {
+            private final int hash;
+
+            Key(Flow<?, ?> referent, ReferenceQueue<Flow<?, ?>> queue) {
+                super(referent, queue);
+                this.hash = System.identityHashCode(referent);
+            }
+
+            @Override
+            public int hashCode() {
+                return hash;
+            }
+
+            @Override
+            public boolean equals(Object other) {
+                if (this == other) return true;
+                if (!(other instanceof Key)) return false;
+                Flow<?, ?> mine = get();
+                Flow<?, ?> theirs = ((Key) other).get();
+                return mine != null && mine == theirs;
+            }
+        }
+
+        static Compiler.Compiled obtain(Flow<?, ?> flow, OperationResolver resolver) {
+            Objects.requireNonNull(flow, "flow must not be null");
+            expunge();
+            Key key = new Key(flow, QUEUE);
+            Compiler.Compiled existing = CACHE.get(key);
+            if (existing != null) {
+                return existing;
+            }
+            Compiler.Compiled compiled = Compiler.compile(flow, resolver);
+            Compiler.Compiled raced = CACHE.putIfAbsent(key, compiled);
+            if (raced != null) {
+                return raced;
+            }
+            return compiled;
+        }
+
+        /** 清理已被 GC 回收的键条目。 */
+        private static void expunge() {
+            Object polled;
+            while ((polled = QUEUE.poll()) != null) {
+                if (polled instanceof Key) {
+                    CACHE.remove(polled);
+                }
+            }
+        }
     }
 }
 

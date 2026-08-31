@@ -5,6 +5,7 @@ import java.util.Map;
 import com.team4u.framework.flow.api.Metadata;
 import com.team4u.framework.flow.durable.DurableException;
 import com.team4u.framework.flow.durable.DurableLifecycle;
+import com.team4u.framework.flow.durable.DurableMachine;
 import com.team4u.framework.flow.durable.DurableObserver;
 import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
 import com.team4u.framework.flow.durable.snapshot.SnapshotCodec;
@@ -74,7 +75,12 @@ public final class Checkpoints {
         return revision;
     }
 
-    /** 把当前机器状态以 revision+1 CAS 提交。 */
+    /**
+     * 把当前机器状态以 revision+1 CAS 提交。
+     *
+     * <p>提交后向 {@link DurableObserver} 发布 CHECKPOINT_COMMITTED 事件；事件为 best-effort
+     * 尽力投递（观察者异常不影响执行），且可能在极端时序下与并发失败者的提交事件重叠，消费方须容忍重复。</p>
+     */
     public void commit(CheckpointReasons.Reason reason) {
         if (store == null || state == null) {
             return;
@@ -106,7 +112,8 @@ public final class Checkpoints {
                 DurableSnapshot.CURRENT_FORMAT_ID, DurableSnapshot.CURRENT_FORMAT_VERSION,
                 revision + 1, lifecycle, payload.metadata(), payload.slots(),
                 state.awaitingPoint,
-                state.pendingSignal != null);
+                state.pendingSignal != null,
+                DurableMachine.earliestWake(state));
     }
 
     private void durableEvent(DurableObserver.Type type, DurableSnapshot snapshot,

@@ -46,7 +46,10 @@ graph TD
 import com.team4u.framework.flow.desc.FlowDescription;
 import com.team4u.framework.flow.diagram.FlowDiagrams;
 
-// 1. 导出只读描述模型
+// 1. 导出只读描述模型（无参重载：导出未命名流程的描述，flowId 为 null）
+FlowDescription anonymous = orderFlow.describe();
+
+// 1b. 导出携带流程标识的描述模型（常用于图表标题与多流程对比）
 FlowDescription description = orderFlow.describe("order-fulfillment-flow");
 
 // 2. 渲染为 Mermaid 流程图脚本
@@ -155,48 +158,34 @@ public class OrderFulfillmentExample {
 ### 真实效果：Mermaid 流程图 (Live Graph)
 
 > [!TIP]
-> 下图由 `FlowDiagrams.mermaid().render(desc)` 生成的标准 Mermaid 脚本直接渲染呈现。
+> 上图由 `FlowDiagrams.mermaid().render(desc)` 生成的标准 Mermaid 脚本直接渲染呈现。
 > 流程图直观展示了**主干推进、风控分支决策、人工审核挂起与唤醒、并行分叉与合并 Join、超时控制徽章与降级容错**，层次分明，一目了然。
+> 嵌套作用域按 Block 树物理嵌套输出：内层 `subgraph ... end` 完整位于外层块内部，
+> 每个节点声明行只出现一次且位于其最内层所属 subgraph 中（如 `高风险人工审核` 子图
+> 完整嵌套在 `作用域: order-checkout-process` 内部）。
 
 ```mermaid
 flowchart TD
     flow_start(["开始: order-fulfillment-flow"])
-    n1["前置风控拦截<br/>RiskCheckOperation (risk-checker)"]
-    n2(["低风险直通 (透传)"])
-    n3(["透传 (Identity)"])
-    n4["挂起等待: manual-audit"]
-    n5["PassAuditOperation<br/>(audit-handler)"]
-    n7(["[REJECTED]"])
-    n8{"RiskRouter<br/>(risk-router)"}
-    n9["库存预占 [timeout: 2s]<br/>LockInventoryOperation (stock-service)"]
-    n10["卡券锁定<br/>LockCouponOperation (coupon-service)"]
-    n11{{"并行: 并行资源锁定"}}
-    n12["合并 (Join)"]
-    n13["主通道支付扣款 [timeout: 5s]<br/>ChargePaymentOperation (main-gateway)"]
-    n14["备用通道降级<br/>BackupPaymentOperation (backup-gateway)"]
-    n15["生成出货单据<br/>IssueReceiptOperation (receipt-service)"]
     flow_end(["结束 (ACCEPTED)"])
 
-    subgraph sg_n6 ["高风险人工审核"]
-        n3
-        n4
-        n5
-    end
     subgraph sg_n16 ["作用域: order-checkout-process"]
-        n1
-        n8
-        n2
-        n3
-        n4
-        n5
-        n7
-        n11
-        n9
-        n10
-        n12
-        n13
-        n14
-        n15
+        n1["前置风控拦截<br/>RiskCheckOperation (risk-checker)"]
+        n8{"RiskRouter<br/>(risk-router)"}
+        n2(["低风险直通 (透传)"])
+        n7(["[REJECTED]"])
+        n11{{"并行: 并行资源锁定"}}
+        n9["库存预占 [timeout: 2s]<br/>LockInventoryOperation (stock-service)"]
+        n10["卡券锁定<br/>LockCouponOperation (coupon-service)"]
+        n12["合并 (Join)"]
+        n13["主通道支付扣款 [timeout: 5s]<br/>ChargePaymentOperation (main-gateway)"]
+        n14["备用通道降级<br/>BackupPaymentOperation (backup-gateway)"]
+        n15["生成出货单据<br/>IssueReceiptOperation (receipt-service)"]
+        subgraph sg_n6 ["高风险人工审核"]
+            n3(["透传 (Identity)"])
+            n4["挂起等待: manual-audit"]
+            n5["PassAuditOperation<br/>(audit-handler)"]
+        end
     end
 
     n3 --> n4
@@ -310,7 +299,7 @@ public class FlowDiagramVisualizerController {
 | **路由决策** | 菱形 `{}` 节点 | 动态选择器与分支判定，条件清晰标注在出边上（`LOW`, `HIGH`, `otherwise`） |
 | **并行分发与合并** | 六边形 `{{}}` 与 `[合并 (Join)]` | 并行分支分发与汇聚点，自动折叠底层 Wait-All 胶水网关 |
 | **挂起等待** | `挂起等待: point` | 人工审批或外部信号注入点 |
-| **作用域** | `subgraph` 容器框 | 具名 Scope 自动渲染为清晰的边界分组矩形 |
+| **作用域** | `subgraph` 容器框 | 具名 Scope 自动渲染为清晰的边界分组矩形，嵌套作用域按 Block 树物理嵌套输出（内层 `subgraph...end` 完整位于外层块内部，节点声明行只出现一次且归属最内层子图） |
 
 ---
 

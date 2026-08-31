@@ -4,7 +4,9 @@ import org.junit.Test;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.LinkedHashSet;
 import java.util.List;
+import java.util.Set;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -12,12 +14,14 @@ import static org.junit.Assert.assertTrue;
 import com.team4u.framework.flow.api.Branch;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.ResumePoint;
+import com.team4u.framework.flow.compiler.Compiler;
 import com.team4u.framework.flow.desc.FlowDescription;
 import com.team4u.framework.flow.desc.FlowVisitor;
 import com.team4u.framework.flow.desc.NodeDescription;
 import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.model.Reason;
 import com.team4u.framework.flow.spi.NodeDescriptor;
+import com.team4u.framework.flow.spi.OperationResolver;
 
 /**
  * 结构化只读描述模型与 Visitor SPI 的单元测试，验证 Invoke, Sequence, Route, Fallback, Parallel, Await, Control, Complete
@@ -71,6 +75,43 @@ public class FlowStructureTest {
         assertTrue(visitedKinds.stream().anyMatch(k -> k.startsWith("AWAIT")));
         assertTrue(visitedKinds.stream().anyMatch(k -> k.startsWith("CONTROL")));
         assertTrue(visitedKinds.stream().anyMatch(k -> k.startsWith("COMPLETE")));
+    }
+
+    @Test
+    public void describePathsMatchCompilerIndexedPaths() {
+        Branch<String, String> b1 = Branch.of("b1", Flow.step((c, i) -> Outcome.accepted(i + "-1")));
+        Branch<String, String> b2 = Branch.of("b2", Flow.step((c, i) -> Outcome.accepted(i + "-2")));
+
+        Flow<String, String> flow = Flow.step((Operation<String, String>) (c, i) -> Outcome.accepted(i + "-step"))
+                .named("my-step")
+                .then(Flow.route((Operation<String, Integer>) (c, i) -> Outcome.accepted(i.length()))
+                        .caseOf(5, Flow.accepted("five"))
+                        .caseOf(7, Flow.accepted("seven"))
+                        .withoutOtherwise())
+                .then(Flow.firstApplicable(
+                        Flow.skipped(Reason.of("SKIP", "skip")),
+                        Flow.accepted("applicable")))
+                .then(Flow.parallel(b1, b2).join(results -> results.firstAccepted().map(Object::toString)))
+                .await(ResumePoint.<String>named("point1"))
+                .then((c, resumed) -> Outcome.accepted(resumed.state()))
+                .timeout(Duration.ofSeconds(5))
+                .recoverWith(Flow.step((c, recovery) -> Outcome.accepted("recovered")));
+
+        Compiler.Compiled compiled = Compiler.compile(flow, OperationResolver.rejecting());
+        final Set<String> compilerPaths = new LinkedHashSet<String>(compiled.byPath().keySet());
+
+        final Set<String> describePaths = new LinkedHashSet<String>();
+        collectPaths(flow.describe("cross").root(), describePaths);
+
+        // describe 生成的路径集合与编译器索引的路径集合必须完全一致（含 Route selector 派生节点）
+        assertEquals(compilerPaths, describePaths);
+    }
+
+    private static void collectPaths(NodeDescription node, Set<String> into) {
+        into.add(node.path());
+        for (NodeDescription child : node.children()) {
+            collectPaths(child, into);
+        }
     }
 
     @Test

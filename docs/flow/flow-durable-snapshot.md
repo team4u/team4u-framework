@@ -25,16 +25,17 @@ graph TD
         M6["awaitingPoint: 当前等待的挂起点 (若处于挂起态)"]
         M7["pendingResume: 是否有待消费的恢复信号"]
         M8["frameMetadata: 二进制帧栈拓扑与状态阶段 (byte[])"]
+        M9["firstWakeAt: 最早的定时唤醒时刻 (仅 ACTIVE 非空，供调度器扫描)"]
     end
     
     subgraph "业务状态槽位 (Business Slots Map)"
         S1["slots['input'] → StoredValue (初始输入)"]
         S2["slots['node:$/0/1'] → StoredValue (节点中间产出)"]
-        S3["slots['policy:$/0'] → StoredValue (策略持久化状态)"]
+        S3["slots[policy:$/0] → StoredValue (策略持久化状态)"]
         S4["slots['resume:managerApproval'] → StoredValue (恢复信号)"]
     end
     
-    DS --> M1 & M2 & M3 & M4 & M5 & M6 & M7 & M8
+    DS --> M1 & M2 & M3 & M4 & M5 & M6 & M7 & M8 & M9
     DS --> S1 & S2 & S3 & S4
 ```
 
@@ -87,12 +88,21 @@ graph TD
 
 ```java
 public final class StoredValue {
-    private final String typeName;     // 类型标识 (如 "java.lang.String" 或 "com.example.Order")
-    private final String format;       // 编码格式 (如 "raw", "json:jackson", "kryo")
-    private final int version;         // 数据格式版本
-    private final byte[] payload;      // 二进制数据载荷 (严格确定性字节序列)
+    private final String codecId;      // 编码器标识（如 "raw", "json:jackson"），非空
+    private final int codecVersion;    // 编码器版本号，必须为正整数
+    private final byte[] payload;      // 二进制数据载荷（严格确定性字节序列）
+
+    public StoredValue(String codecId, int codecVersion, byte[] payload) { ... }
+
+    public String codecId() { ... }
+    public int codecVersion() { ... }
+    public byte[] payload() { ... }    // 返回内部数组的防御性副本
 }
 ```
+
+三个字段在 `equals` / `hashCode` / `toString` 中均完整参与：两个 `StoredValue` 相等当且仅当
+`codecId`、`codecVersion` 与 `payload` 字节内容逐一一致。业务类型信息不单独存储，
+需要由编码格式自描述（如 JSON）或固定的槽位类型约定承载。
 
 ---
 

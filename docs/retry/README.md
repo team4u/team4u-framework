@@ -195,8 +195,9 @@ Memory 后端只适合演示和单进程测试。部署到多个进程时，把 
 - **动态规则对接**：天然支持从 `NamedRetryPolicyRegistry` / `DynamicRetryPolicyRegistry` 按名称热加载重试配置；
 - **使用示例**：
   ```java
-  FlowRetryPolicy<OrderRequest> policy = FlowRetries.exponential(3, 100, 2.0, 1000);
-  Flow<OrderRequest, Receipt> flow = policy.wrap(Flow.step(chargeOp), Function.identity());
+  FlowRetryPolicy<OrderRequest> policy = FlowRetryPolicy.exponential(3, 100, 2.0, 1000);
+  Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
+          .persistentPolicy(policy, OrderRequest::getUserId);
   ```
 详细说明请参阅 [流程治理：Policy 策略、Retry 重试与 Timeout 控制](../flow/flow-governance.md)。
 

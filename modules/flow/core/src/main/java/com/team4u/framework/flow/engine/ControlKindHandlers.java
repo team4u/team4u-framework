@@ -78,7 +78,8 @@ public final class ControlKindHandlers {
         @Override
         public MachineResult enter(PlanNode.Control control, RuntimeFrame frame, SerialMachine machine) {
             requirePhase(frame, control, 0, "Timeout");
-            frame.deadline = Instant.now().plus((Duration) control.configuration());
+            machine.state().deadlineBound(frame,
+                    Instant.now().plus((Duration) control.configuration()));
             frame.phase = 1;
             machine.push(control.body(), frame.entry);
             return null;
@@ -87,7 +88,7 @@ public final class ControlKindHandlers {
         @Override
         public Outcome<?> reduce(PlanNode.Control control, RuntimeFrame frame, SerialMachine machine, Outcome<?> child) {
             boolean timedOut = frame.deadline != null && !Instant.now().isBefore(frame.deadline);
-            frame.deadline = null;
+            machine.state().deadlineCleared(frame);
             return timedOut ? SerialMachine.timeoutFailure() : child;
         }
     }
@@ -103,8 +104,10 @@ public final class ControlKindHandlers {
         public MachineResult enter(PlanNode.Control control, RuntimeFrame frame, SerialMachine machine) {
             requirePhase(frame, control, 0, "Policy");
             Policy<Object> policy = (Policy<Object>) control.policy().instance();
-            machine.event(FlowObserver.Type.POLICY_BEFORE, control.descriptor(),
-                    Collections.singletonMap("attempt", Integer.toString(frame.attempt)));
+            if (!machine.observer().isNoop()) {
+                machine.event(FlowObserver.Type.POLICY_BEFORE, control.descriptor(),
+                        Collections.singletonMap("attempt", Integer.toString(frame.attempt)));
+            }
             CallbackRunner.Result<PolicyBefore> call = machine.callbacks().call(signal -> {
                 Object key = Objects.requireNonNull(control.keyProjection().apply(frame.entry),
                         "policy key must not be null");
@@ -150,10 +153,12 @@ public final class ControlKindHandlers {
                     "flow execution was cancelled");
             if (call.timeout()) return SerialMachine.timeoutFailure();
             if (call.failure() != null) return reducerCallbackFailure(machine, call.failure());
-            Map<String, String> attrs = new LinkedHashMap<String, String>();
-            attrs.put("attempt", Integer.toString(frame.attempt));
-            attrs.put("outcome", child.kind().name());
-            machine.event(FlowObserver.Type.POLICY_AFTER, control.descriptor(), attrs);
+            if (!machine.observer().isNoop()) {
+                Map<String, String> attrs = new LinkedHashMap<String, String>();
+                attrs.put("attempt", Integer.toString(frame.attempt));
+                attrs.put("outcome", child.kind().name());
+                machine.event(FlowObserver.Type.POLICY_AFTER, control.descriptor(), attrs);
+            }
             return child;
         }
     }
@@ -175,8 +180,10 @@ public final class ControlKindHandlers {
             requirePhase(frame, control, 0, "PersistentPolicy");
             PersistentPolicy<Object, Object> policy =
                     (PersistentPolicy<Object, Object>) control.policy().instance();
-            machine.event(FlowObserver.Type.POLICY_BEFORE, control.descriptor(),
-                    Collections.singletonMap("attempt", Integer.toString(frame.attempt)));
+            if (!machine.observer().isNoop()) {
+                machine.event(FlowObserver.Type.POLICY_BEFORE, control.descriptor(),
+                        Collections.singletonMap("attempt", Integer.toString(frame.attempt)));
+            }
             Object existingKey = frame.key;
             Object existingState = frame.policyState;
             CallbackRunner.Result<PersistentBefore> call = machine.callbacks().call(signal -> {
@@ -251,10 +258,12 @@ public final class ControlKindHandlers {
             if (call.timeout()) return SerialMachine.timeoutFailure();
             if (call.failure() != null) return reducerCallbackFailure(machine, call.failure());
             PersistentPolicy.After<Object> decision = call.value();
-            Map<String, String> attrs = new LinkedHashMap<String, String>();
-            attrs.put("attempt", Integer.toString(frame.attempt));
-            attrs.put("outcome", child.kind().name());
-            machine.event(FlowObserver.Type.POLICY_AFTER, control.descriptor(), attrs);
+            if (!machine.observer().isNoop()) {
+                Map<String, String> attrs = new LinkedHashMap<String, String>();
+                attrs.put("attempt", Integer.toString(frame.attempt));
+                attrs.put("outcome", child.kind().name());
+                machine.event(FlowObserver.Type.POLICY_AFTER, control.descriptor(), attrs);
+            }
             if (decision instanceof PersistentPolicy.Return) {
                 PersistentPolicy.Return<Object> returning = (PersistentPolicy.Return<Object>) decision;
                 frame.policyState = returning.state();

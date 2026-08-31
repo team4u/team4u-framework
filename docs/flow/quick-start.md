@@ -85,6 +85,14 @@ public class QuickStart {
 > [!NOTE]
 > - **严格类型推导**：`Flow<String, Integer>.then(Operation<Integer, String>)` 产出 `Flow<String, String>`，类型不匹配在编译期直接报错。
 > - **定义与执行分离**：`Flow` 是纯逻辑拓扑，天然不可变且线程安全；`LocalExecutable` 是编译后的高性能单例，建议全局复用。
+> - **编译重载**：`Local.compile` 支持 `compile(flow)`、`compile(flow, resolver)`、
+> `compile(flow, resolver, observer)`、`compile(flow, resolver, observer, executor)` 与
+> `compile(flow, executor)` 等重载；全参重载 `compile(flow, flowId, flowVersion, resolver, observer, executor)`
+> 允许为 Local 执行显式指定 `flowId` / `flowVersion`（默认为 `"local"` / `0`），
+> 使 `invocationId` 与事件元数据携带真实业务标识。
+> - **编译缓存**：`Local.compileCached(flow, resolver)` 以 flow 实例为身份键的弱缓存复用编译产物，
+> 同一 flow 实例重复编译只解析一次组件绑定；缓存条目在 flow 不再被外部引用后可被 GC 自动回收。
+> 也可自行缓存 `LocalExecutable` 单例（编译产物线程安全，可并发驱动多次执行）。
 
 ---
 
@@ -258,12 +266,14 @@ if (firstResult instanceof FlowResult.Suspended) {
 }
 ```
 
-### 容错治理 (FlowRetries / timeout / recoverWith)
+### 容错治理 (persistentPolicy / timeout / recoverWith)
 
 ```java
-// 重试治理：基于 FlowRetries 有状态持久化策略在 Failed 时按退避重试（maxAttempts 包含首次）
-Flow<OrderRequest, Receipt> retryFlow = FlowRetries.fixed(3, 200)
-        .wrap(Flow.step(chargeOperation), Function.identity());
+// 重试治理：通过 persistentPolicy 挂载有状态重试策略（maxAttempts 包含首次）
+Flow<OrderRequest, Receipt> retryFlow = Flow.step(chargeOperation)
+        .persistentPolicy(
+                FlowRetryPolicy.fixed(3, 200), // 最多 3 次尝试，每次间隔 200ms
+                OrderRequest::getUserId);
 
 // 超时控制：超出时限产生 TIMEOUT 失败并终止作用域
 Flow<OrderRequest, Receipt> timeoutFlow = Flow.step(chargeOperation)
@@ -274,6 +284,11 @@ Flow<OrderRequest, Receipt> recoverFlow = Flow.step(chargeOperation)
         .recoverWith(Flow.step((context, recovery) -> Outcome.accepted(
                 manualCompensate(recovery.input(), recovery.failure().code()))));
 ```
+
+> [!NOTE]
+> 重试策略由 `team4u-flow-retry` 模块提供（`FlowRetryPolicy.fixed / exponential / jitter / increment / named` 静态工厂），
+> 通过 `flow.persistentPolicy(policy, keyProjection)` 挂载，而非独立包裹方法。详见
+> [重试与退避治理策略](policy-retry.md)。
 
 ### 上下文调用 (use)
 
@@ -314,6 +329,15 @@ DurableResult<Receipt> result = durable.start("order-0001", request);
 // 4. 进程重启后可随时从最后提交的检查点断点续跑
 DurableResult<Receipt> recovered = durable.recover("order-0001");
 ```
+
+> [!IMPORTANT]
+> **Durable timeout 与 executor 配置**：当流程包含 `timeout` 作用域（依赖限时执行能力）时，
+> 必须在 `DurableRuntime.builder(store).executor(...)` 中显式配置调用方拥有的线程池。
+> 编译期 fail-fast 校验：未配置 `executor` 且流程需要线程池时，`compile` 直接抛出
+> `DurableException(INVALID_CONFIGURATION)`，不会静默降级为同步协作式超时检查。
+> 异步命令 `startAsync` / `resumeAsync` 则始终要求配置 executor，缺失时抛出
+> `ASYNC_EXECUTOR_MISSING`。传入的线程池仅为借用，生命周期由调用方管理，
+> `DurableRuntime` 不会将其关闭。
 
 ### Local 与 Durable 差异对比
 

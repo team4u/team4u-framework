@@ -65,6 +65,9 @@ public final class DurableRuntime {
     /**
      * 编译指定业务标识与版本的 Flow 为可持久化执行句柄 {@link DurableExecutable}。
      *
+     * <p>fail-fast 校验：当流程定义需要线程池（含 TIMEOUT 控制）而当前运行时未配置 executor 时，
+     * 立即抛出 {@link DurableException.Error#INVALID_CONFIGURATION}，而非在执行期静默降级为同步超时。</p>
+     *
      * @param flow        逻辑编排定义，不能为 null
      * @param flowId      流程全局唯一标识，不能为空
      * @param flowVersion 流程版本号
@@ -72,11 +75,18 @@ public final class DurableRuntime {
      * @param <O>         流程输出类型
      * @return 可执行句柄
      * @throws NullPointerException 当 flow 为 null 时抛出
+     * @throws DurableException     当定义需要线程池而未配置 executor 时抛出 INVALID_CONFIGURATION
      */
     public <I, O> DurableExecutable<I, O> compile(Flow<I, O> flow, String flowId, int flowVersion) {
         Objects.requireNonNull(flow, "flow must not be null");
         DurablePlanCompiler.Definition definition = DurablePlanCompiler.compile(
                 flow, operationResolver);
+        if (definition.requiresExecutor() && executor == null) {
+            throw new DurableException(DurableException.Error.INVALID_CONFIGURATION,
+                    "Flow [" + flowId + ":" + flowVersion
+                            + "] requires an executor (contains TIMEOUT control)"
+                            + " but DurableRuntime has none configured");
+        }
         return new DurableExecutable<I, O>(flowId, flowVersion, definition, store,
                 stateMapper, observer, durableObserver, executor);
     }

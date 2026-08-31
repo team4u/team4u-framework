@@ -36,9 +36,13 @@ graph TD
 
 ```java
 Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
-        .policy(RateLimitPolicies.of("order.charge", OrderRequest::getUserId))     // 最内层：每次重试均重新获取令牌
-        .persistentPolicy(FlowRetries.exponential(3, 100, 2.0, 1000), OrderRequest::getUserId) // 中层：重试控制器
-        .policy(CriterionPolicies.permitIf("amount > 0", "INVALID_AMOUNT", "金额非法"), req -> req) // 外层：规则门控
+        .policy(RateLimitPolicy.of("order.charge", OrderRequest::getUserId))     // 最内层：每次重试均重新获取令牌
+        .persistentPolicy(FlowRetryPolicy.exponential(3, 100, 2.0, 1000), OrderRequest::getUserId) // 中层：重试控制器
+        .policy(CriterionPolicy.builder()
+                .expression("amount > 0")
+                .mode(CriterionPolicy.Mode.REJECT_IF)
+                .reasonFactory((ctx, req) -> Reason.of("INVALID_AMOUNT", "金额非法"))
+                .build(), req -> req) // 外层：规则门控
         .timeout(Duration.ofSeconds(5)); // 最外层：全局超时时限
 ```
 

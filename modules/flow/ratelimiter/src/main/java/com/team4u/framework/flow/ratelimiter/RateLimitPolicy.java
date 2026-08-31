@@ -10,6 +10,8 @@ import com.team4u.framework.ratelimiter.api.RateLimiters;
 import com.team4u.framework.ratelimiter.core.RateLimitEngine;
 import lombok.Builder;
 import lombok.Getter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.util.Objects;
 import java.util.function.BiFunction;
@@ -27,11 +29,21 @@ import java.util.function.Function;
  * </ul>
  * </p>
  *
+ * <p><b>容错语义（fail-open）：</b>当未显式注入 {@code engine} 且全局 {@link RateLimiters} 尚未初始化时，
+ * 首次调用会懒加载默认引擎（全局配置 + 内存存储）并输出一次 warn 日志——限流器不可用不阻断业务主链路。
+ * 许可数在每次 {@code before} 入口校验：提取结果为负数时抛出带清晰信息的 {@link IllegalArgumentException}，
+ * 由引擎转化为 {@code POLICY_EXCEPTION(Failed)}。</p>
+ *
  * @param <K> 策略路由键（或步骤入参）类型
  * @author jay.wu
  */
 @Getter
 public class RateLimitPolicy<K> implements Policy<K> {
+
+    private static final Logger LOG = LoggerFactory.getLogger(RateLimitPolicy.class);
+
+    /** 是否已输出过懒加载默认引擎的 warn 日志（仅首次告警，避免日志风暴）。 */
+    private static volatile boolean lazyEngineWarned;
 
     /**
      * 默认限流超限失败诊断码
@@ -65,6 +77,10 @@ public class RateLimitPolicy<K> implements Policy<K> {
         this.point = Objects.requireNonNull(point, "point must not be null");
         this.contextExtractor = contextExtractor;
         this.permits = permits;
+        if (permits != null && permits < 0) {
+            throw new IllegalArgumentException(
+                    "permits must be >= 0 but got " + permits + " for point [" + point + "]");
+        }
         if (permitsExtractor != null) {
             this.permitsExtractor = permitsExtractor;
         } else if (permits != null) {
@@ -169,10 +185,25 @@ public class RateLimitPolicy<K> implements Policy<K> {
     public Gate before(PolicyContext context, K key) {
         Object rateLimitCtx = contextExtractor != null ? contextExtractor.apply(key) : key;
         int permits = permitsExtractor != null ? permitsExtractor.apply(key) : 1;
+        if (permits < 0) {
+            // 会成为 POLICY_EXCEPTION(Failed)，message 说明了根因（permitsExtractor 返回负值）
+            throw new IllegalArgumentException(
+                    "Rate limit permits must be >= 0 but got " + permits
+                            + " for point [" + point + "] (check permitsExtractor/permits configuration)");
+        }
 
-        RateLimitResult result = engine != null
-                ? engine.acquire(point, rateLimitCtx, permits)
-                : RateLimiters.acquire(point, rateLimitCtx, permits);
+        RateLimitResult result;
+        if (engine != null) {
+            result = engine.acquire(point, rateLimitCtx, permits);
+        } else {
+            if (!lazyEngineWarned) {
+                lazyEngineWarned = true;
+                LOG.warn("No RateLimitEngine injected for point [{}]; falling back to global "
+                        + "RateLimiters engine (lazily created with global config + in-memory store "
+                        + "when uninitialized) -- rate limiting is fail-open until initialized", point);
+            }
+            result = RateLimiters.acquire(point, rateLimitCtx, permits);
+        }
 
         if (result.isAllowed()) {
             return Gate.proceed();

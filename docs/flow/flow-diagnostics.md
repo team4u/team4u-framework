@@ -31,22 +31,23 @@ graph TD
     end
     
     subgraph "Durable 持久化状态机异常 (DurableException.Error)"
+        D0["INVALID_DEFINITION / INVALID_CONFIGURATION / FORMAT_MISMATCH"]
         D1["REVISION_CONFLICT / FLOW_MISMATCH / RESUME_SIGNAL_CONFLICT"]
         D2["EXECUTION_EXISTS / EXECUTION_NOT_FOUND / CODEC_FAILURE / STORE_FAILURE"]
-        D3["LIFECYCLE_MISMATCH / RESUME_POINT_MISMATCH / FRAME_MISMATCH"]
+        D3["LIFECYCLE_MISMATCH / RESUME_POINT_MISMATCH / FRAME_MISMATCH / ASYNC_EXECUTOR_MISSING"]
     end
     
     DIAG --> B1 & B2 & B3
     DIAG --> R1 & R2 & R3
     DIAG --> S1
-    DIAG --> D1 & D2 & D3
+    DIAG --> D0 & D1 & D2 & D3
 ```
 
 ---
 
 ## 编译期静态校验诊断码 (`FlowBuildException`)
 
-当调用 `Local.compile(flow)`、`BeanFlows.compile(flow)` 或 `DurableRuntime.compile(flow, ...)` 时，框架对拓扑结构与 Bean 契约进行严格静态扫描。若存在违规项，将聚合所有违规路径并抛出 `FlowBuildException`：
+当调用 `Local.compile(flow)`、`BeanFlows.compile(flow)` 或 `DurableRuntime.compile(flow, ...)` 时，框架对拓扑结构与 Bean 契约进行严格静态扫描。若存在违规项，将聚合所有违规路径并抛出 `FlowBuildException`（非受检异常，直接继承自 `RuntimeException`，不会被针对参数校验异常 `IllegalArgumentException` 的通用捕获逻辑误伤），可通过 `exception.problems()` 获取全部诊断明细：
 
 | 诊断码 | 校验分类 | 触发原因 | 修复建议 |
 | :--- | :--- | :--- | :--- |
@@ -69,7 +70,7 @@ graph TD
 
 | 失败码 | 触发场景 | 排查指引与自查步骤 |
 | :--- | :--- | :--- |
-| **`OPERATION_EXCEPTION`** | 业务 `Operation` 内部抛出了未捕获的 Exception 或返回了 null | 查看 `failure.cause()` 异常堆栈，排查业务代码空指针、RPC 故障或非法返回值 |
+| **`OPERATION_EXCEPTION`** | 业务 `Operation` 内部抛出了未捕获的 Exception 或返回了 null | 查看 `failure.message()` 中的异常类名与消息（框架已将异常类名拼入消息）、结合应用日志堆栈，排查业务代码空指针、RPC 故障或非法返回值 |
 | **`OPERATION_INTERRUPTED`** | 操作执行线程被物理中断（`isInterrupted == true`） | 排查是否触发了外层 `timeout` 时限或外部调用了 `cancellation.cancel()` |
 | **`OPERATION_CANCELLED`** | 操作在执行中主动检测到 `cancellation.isCancelled()` | 正常协作取消，无需额外处理 |
 | **`TIMEOUT`** | 子流程执行耗时超出了 `timeout(Duration)` 设定的时限 | 检查下游 RPC 耗时、数据库慢查询或网络延迟 |
@@ -94,10 +95,15 @@ graph TD
 
 ## Durable 持久化异常 (`DurableException.Error`)
 
+`DurableException` 为运行时异常（`extends RuntimeException`），携带固定错误码枚举 `Error`。完整码表如下：
+
 | 错误码 | 严重级别 | 根本原因 | 运维处理指引 |
 | :--- | :--- | :--- | :--- |
+| **`INVALID_DEFINITION`** | 严重 (Error) | 流程定义非法（如快照恢复时拓扑校验失败、编译期结构违规） | 检查 Flow 定义结构，确认与落库快照的拓扑版本一致 |
+| **`INVALID_CONFIGURATION`**** | 错误 (Error) | 运行时配置非法 | 核对 `DurableRuntime` 装配参数（如 store、stateMapper 等） |
 | **`REVISION_CONFLICT`** | 警告 (Warn) | 多个分布式节点并发驱动同一个 `executionId` 导致 CAS 冲突 | 正常并发竞争保护。客户端稍后重新读取最新快照重试 |
 | **`FLOW_MISMATCH`** | 严重 (Error) | 尝试恢复的快照其 `flowId` 或 `flowVersion` 与当前代码不一致 | 确认是否发生了流程定义拓扑变更；使用与快照版本匹配的 Flow 运行时进行恢复 |
+| **`FORMAT_MISMATCH`** | 严重 (Error) | 快照格式 ID 或格式版本与当前运行时不兼容 | 检查快照 `formatId`/`formatVersion`，确认集群内框架版本一致后重试 |
 | **`RESUME_SIGNAL_CONFLICT`** | 严重 (Error) | 恢复信号落库后发生重启，外部重试时传入了**不同的信号载荷** | 检查外部回调网关的重试逻辑，确保幂等重试时注入完全相同的信号对象 |
 | **`EXECUTION_EXISTS`** | 错误 (Error) | `start` 时指定的 `executionId` 在存储中已存在 | 检查流水号生成器，避免重复生成相同的流水号 |
 | **`EXECUTION_NOT_FOUND`** | 错误 (Error) | 指定的 `executionId` 在存储中不存在 | 检查执行流水号是否正确，或确认数据库记录是否被过期清理 |
@@ -106,7 +112,7 @@ graph TD
 | **`LIFECYCLE_MISMATCH`** | 错误 (Error) | 在非法的生命周期下调用命令（例如对已 COMPLETED 实例调用 recover） | 校验调用时序，避免对终态实例再次发起驱动 |
 | **`RESUME_POINT_MISMATCH`** | 错误 (Error) | resume 传入的挂起点名称与快照中实际等待的点不一致 | 核对外部回调注入的挂起点标识 |
 | **`FRAME_MISMATCH`** | 严重 (Error) | 快照帧栈元数据损坏或与当前拓扑不匹配 | 排查存储数据完整性或代码结构变更 |
-| **`ASYNC_EXECUTOR_MISSING`** | 错误 (Error) | 调用异步命令但未配置 `executor` | 在 `DurableRuntime.builder` 中显式配置线程池 |
+| **`ASYNC_EXECUTOR_MISSING`** | 错误 (Error) | 调用异步命令（`startAsync` / `resumeAsync`）但未配置 `executor` | 在 `DurableRuntime.builder` 中显式配置线程池 |
 
 ---
 

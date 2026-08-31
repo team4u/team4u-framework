@@ -64,7 +64,6 @@ public class DurableRecoverSmokeTest {
     @Test
     public void awaitSuspendsAndResumeCompletes() {
         final ResumePoint<String> point = ResumePoint.named("approval");
-        Operation<String, Resumed<String, String>> awaitOp = null;
         Flow<String, Resumed<String, String>> flow = Flow.<String, String>step(
                 new Operation<String, String>() {
                     @Override

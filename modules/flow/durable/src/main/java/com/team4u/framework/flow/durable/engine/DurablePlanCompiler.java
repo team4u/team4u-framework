@@ -34,7 +34,7 @@ import com.team4u.framework.flow.spi.OperationResolver;
  * 耐久化物理执行树编译器（Durable Plan Compiler）。
  *
  * <p>实现 Core 公开的投影 SPI {@link ExecutableFlowVisitor}，将已校验的拓扑计划投影为 Durable 专属物理树 {@link DurablePlanNode}，
- * 并预计算生成所有插槽角色列表（{@code slotRoles}）、挂起点映射表（{@code resumePoints}）以及线程池需求特征。</p>
+ * 并预计算生成所有插槽角色列表（{@code slotRoles}）、挂起点唯一性校验以及线程池需求特征。</p>
  *
  * @author jay.wu
  */
@@ -49,19 +49,15 @@ public final class DurablePlanCompiler implements ExecutableFlowVisitor<DurableP
         private final DurablePlanNode root;
         private final Map<String, DurablePlanNode> byPath;
         private final Set<String> slotRoles;
-        private final Map<String, ResumePoint<?>> resumePoints;
         private final boolean requiresExecutor;
 
         public Definition(DurablePlanNode root, Map<String, DurablePlanNode> byPath,
-                   Set<String> slotRoles, Map<String, ResumePoint<?>> resumePoints,
-                   boolean requiresExecutor) {
+                   Set<String> slotRoles, boolean requiresExecutor) {
             this.root = Objects.requireNonNull(root, "root must not be null");
             this.byPath = Collections.unmodifiableMap(
                     new LinkedHashMap<String, DurablePlanNode>(byPath));
             this.slotRoles = Collections.unmodifiableSet(
                     new LinkedHashSet<String>(slotRoles));
-            this.resumePoints = Collections.unmodifiableMap(
-                    new LinkedHashMap<String, ResumePoint<?>>(resumePoints));
             this.requiresExecutor = requiresExecutor;
         }
     }
@@ -69,8 +65,8 @@ public final class DurablePlanCompiler implements ExecutableFlowVisitor<DurableP
     private final LinkedHashMap<String, DurablePlanNode> byPath =
             new LinkedHashMap<String, DurablePlanNode>();
     private final LinkedHashSet<String> slotRoles = new LinkedHashSet<String>();
-    private final LinkedHashMap<String, ResumePoint<?>> resumePoints =
-            new LinkedHashMap<String, ResumePoint<?>>();
+    private final java.util.Set<String> resumePointNames =
+            new java.util.LinkedHashSet<String>();
     private boolean requiresExecutor;
 
     private DurablePlanCompiler() {
@@ -94,7 +90,7 @@ public final class DurablePlanCompiler implements ExecutableFlowVisitor<DurableP
             throw invalid("Projected root is not registered at its path");
         }
         return new Definition(root, compiler.byPath, compiler.slotRoles,
-                compiler.resumePoints, compiler.requiresExecutor);
+                compiler.requiresExecutor);
     }
 
     @Override
@@ -173,8 +169,7 @@ public final class DurablePlanCompiler implements ExecutableFlowVisitor<DurableP
     @Override
     public DurablePlanNode visitAwait(NodeDescriptor descriptor,
                                       ResumePoint<?> resumePoint) {
-        ResumePoint<?> previous = resumePoints.put(resumePoint.name(), resumePoint);
-        if (previous != null) {
+        if (!resumePointNames.add(resumePoint.name())) {
             throw invalid("Duplicate ResumePoint: " + resumePoint.name());
         }
         slotRoles.add(resumeRole(resumePoint.name()));

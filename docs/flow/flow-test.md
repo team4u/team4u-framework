@@ -51,10 +51,11 @@ Local.compile(Flow.step(stub)).run("input-data");
 
 // 获取调用快照
 List<OperationStub.Call<String>> calls = stub.calls();
-OperationStub.Call<String> last = stub.lastCall();
+OperationStub.Call<String> last = calls.get(calls.size() - 1);
 
 System.out.println(last.input());        // "input-data"
 System.out.println(last.invocationId()); // "local:0:<executionId>:$"
+System.out.println(last.attempt());      // 1（重试场景下递增）
 System.out.println(stub.callCount());    // 1
 System.out.println(stub.lastInput());    // "input-data"
 stub.reset();                            // 清空调用历史
@@ -64,10 +65,12 @@ stub.reset();                            // 清空调用历史
 
 ```java
 OperationStub<String, String> flaky = OperationStub.failing(Failure.of("FAIL", "error"));
-FlowRetryPolicy<String> retryPolicy = FlowRetries.fixed(3, 0);
+FlowRetryPolicy<String> retryPolicy = FlowRetryPolicy.fixed(3, 0);
 
+// 通过 persistentPolicy 挂载重试策略（策略键直接使用输入对象）
 FlowResult<String> result = Local.compile(
-        retryPolicy.wrap(Flow.step(flaky), Function.identity())).run("test-in");
+                Flow.step(flaky).persistentPolicy(retryPolicy, Function.identity()))
+        .run("test-in");
 
 FlowAssertions.assertFailed(result, "FAIL");
 org.junit.Assert.assertEquals(3, flaky.callCount());
@@ -98,16 +101,78 @@ Local.compile(Flow.<String>identity().policy(proceeding, val -> val)).run("key")
 
 System.out.println(proceeding.beforeCount()); // 1
 System.out.println(proceeding.afterCount());  // 1
+
+// 也可逐条检查调用记录（含 attempt 与键）
+// proceeding.beforeCalls().get(0).attempt();
+// proceeding.afterCalls().get(0).completion().kind();
 ```
+
+### 持久化策略打桩（PersistentPolicyStub）
+
+`PersistentPolicyStub<K>` 是固定次数重试的 `PersistentPolicy` 测试桩，通过
+`PersistentPolicyStub.counting(maxAttempts, backoff)` 创建。它以不可变 `Integer`（当前轮次，
+从 1 起计）为策略状态：目标步骤 `Failed` 且未达到 `maxAttempts` 时按 `retryAt(now + backoff)`
+退避重试；其余情形（Accepted / Rejected / Skipped 或次数耗尽）直接返回当前状态，
+适合在测试中快速搭建“失败 N 次后成功/耗尽”的编排：
+
+```java
+import com.team4u.framework.flow.test.PersistentPolicyStub;
+import java.time.Duration;
+
+// 1. 失败重试直到次数耗尽：步骤共尝试 3 次（含初试），退避 0ms
+OperationStub<String, String> failing = OperationStub.failing(Failure.of("STUB_FAIL", "stub failure"));
+Flow<String, String> retryFlow = Flow.step(failing)
+        .persistentPolicy(PersistentPolicyStub.<String>counting(3, Duration.ZERO), s -> s);
+
+FlowAssertions.assertFailed(LocalFixture.compile(retryFlow).run("in"), "STUB_FAIL");
+org.junit.Assert.assertEquals(3, failing.callCount());
+
+// 2. 成功路径：首轮即通过，不重试
+OperationStub<String, String> ok = OperationStub.accepting(x -> x + "!");
+Flow<String, String> okFlow = Flow.step(ok)
+        .persistentPolicy(PersistentPolicyStub.<String>counting(3, Duration.ofHours(1)), s -> s);
+
+FlowAssertions.assertAccepted(LocalFixture.compile(okFlow).run("in"), "in!");
+org.junit.Assert.assertEquals(1, ok.callCount());
+```
+
+`maxAttempts` 必须为正数（包含初试，>= 1），违反时构造期抛出 `IllegalArgumentException`。
+
+### 重试状态编解码（FlowRetryStateMapper）
+
+`team4u-flow-retry` 模块提供 `FlowRetryStateMapper`：`FlowRetryState` 的手工
+`StateMapper` 实现（codecId 为 `flow-retry-attempt`、版本 1，单例 `INSTANCE`），
+以十进制文本编码唯一的 `attempt` 字段，无第三方序列化依赖。在 Durable 单测中可
+直接编解码 `policy:<path>` 槽位里的重试状态，无需业务侧自行编写序列化适配：
+
+```java
+import com.team4u.framework.flow.durable.snapshot.CompositeStateMapper;
+import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
+import com.team4u.framework.flow.durable.DurableRuntime;
+import com.team4u.framework.flow.retry.FlowRetryPolicy;
+import com.team4u.framework.flow.retry.FlowRetryStateMapper;
+
+// 将 FlowRetryStateMapper 作为 Durable 引擎的默认编解码器，重试状态获得开箱即用的持久化能力
+DurableExecutable<String, String> executable = DurableRuntime.builder(new InMemoryDurableStore())
+        .stateMapper(CompositeStateMapper.withDefault(FlowRetryStateMapper.INSTANCE))
+        .build()
+        .compile(Flow.step(flakyOp).persistentPolicy(
+                FlowRetryPolicy.fixed(3, 20), Function.identity()), "durable-retry", 1);
+```
+
+> [!NOTE]
+> `FlowRetryStateMapper` 位于 `team4u-flow-retry` 模块（依赖 `team4u-flow-durable` 的
+> `StateMapper` SPI），不在 `team4u-flow-test` testkit 内；需要编解码重试状态槽位时
+> 需额外引入 `team4u-flow-retry` 依赖。
 
 ---
 
 ## 事件轨迹收集 (`TraceCollector`)
 
-`TraceCollector` 是线程安全的 `FlowObserver` 实现，用于捕获流程执行轨迹并在单测中进行顺序断言：
+`TraceCollector` 是线程安全的 `FlowObserver` 实现（内部基于 `CopyOnWriteArrayList`，可安全接收多线程并发到达的并行分支事件），用于捕获流程执行轨迹并在单测中进行顺序断言：
 
 ```java
-import com.team4u.framework.flow.spi.FlowObserver;
+import com.team4u.framework.flow.api.FlowObserver;
 import com.team4u.framework.flow.test.TraceCollector;
 
 TraceCollector collector = new TraceCollector();

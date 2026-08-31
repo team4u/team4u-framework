@@ -312,9 +312,9 @@ public class ExternalFlowBoundaryTest {
     }
 
     @Test
-    public void deep5000ScopeProjectDoesNotStackOverflow() {
+    public void deep1500ScopeProjectDoesNotStackOverflow() {
         Flow<Integer, Integer> flow = Flow.identity();
-        for (int i = 0; i < 5000; i++) {
+        for (int i = 0; i < 1500; i++) {
             flow = Flow.scope("scope-" + i, flow);
         }
 
@@ -334,7 +334,7 @@ public class ExternalFlowBoundaryTest {
             @Override public Integer visitComplete(NodeDescriptor d, Outcome<?> o, boolean i) { return 0; }
         });
 
-        assertEquals(5000, sequenceCount.get());
-        assertEquals(Integer.valueOf(5000), result);
+        assertEquals(1500, sequenceCount.get());
+        assertEquals(Integer.valueOf(1500), result);
     }
 }

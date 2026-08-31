@@ -2,12 +2,10 @@ package com.team4u.framework.flow.desc;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.List;
-import java.util.Optional;
+import com.team4u.framework.flow.compiler.FlowPaths;
 import com.team4u.framework.flow.compiler.Logical;
 import com.team4u.framework.flow.spi.BindingDescriptor;
-import com.team4u.framework.flow.spi.NodeDescriptor;
 
 /**
  * 逻辑 AST 结构描述生成策略实现族。
@@ -44,9 +42,7 @@ public final class LogicalDescribers {
 
         @Override
         public NodeDescription build(Logical.Invoke logical, String path, String label, ArrayList<NodeDescription> resultStack) {
-            BindingDescriptor binding = describeBinding(logical.binding());
-            return new NodeDescription(path, Optional.ofNullable(label), NodeDescriptor.Kind.INVOKE,
-                    Optional.of(binding), null, null, null, null, null, null, null, null, null, null, false);
+            return NodeDescription.invoke(path, label, describeBinding(logical.binding()));
         }
     }
 
@@ -65,7 +61,7 @@ public final class LogicalDescribers {
         public void pushChildren(Logical.Sequence sequence, String path, ArrayDeque<FlowDescriptionBuilder.WorkItem> workStack) {
             List<Logical> children = sequence.children();
             for (int i = children.size() - 1; i >= 0; i--) {
-                workStack.addLast(new FlowDescriptionBuilder.WorkItem(children.get(i), path + "/" + i, null, false));
+                workStack.addLast(new FlowDescriptionBuilder.WorkItem(children.get(i), FlowPaths.child(path, i), null, false));
             }
         }
 
@@ -79,8 +75,7 @@ public final class LogicalDescribers {
             for (int i = childCount - 1; i >= 0; i--) {
                 children.set(i, pop(resultStack));
             }
-            return new NodeDescription(path, Optional.ofNullable(label), NodeDescriptor.Kind.SEQUENCE,
-                    Optional.empty(), children, sequence.scopeName(), null, null, null, null, null, null, null, null, false);
+            return NodeDescription.sequence(path, label, children, sequence.scopeName());
         }
     }
 
@@ -98,19 +93,19 @@ public final class LogicalDescribers {
         @Override
         public void pushChildren(Logical.Route route, String path, ArrayDeque<FlowDescriptionBuilder.WorkItem> workStack) {
             if (route.otherwise() != null) {
-                workStack.addLast(new FlowDescriptionBuilder.WorkItem(route.otherwise(), path + "/otherwise", null, false));
+                workStack.addLast(new FlowDescriptionBuilder.WorkItem(route.otherwise(), FlowPaths.routeOtherwise(path), null, false));
             }
             List<Logical.Route.Case> cases = route.cases();
             for (int i = cases.size() - 1; i >= 0; i--) {
-                workStack.addLast(new FlowDescriptionBuilder.WorkItem(cases.get(i).branch(), path + "/case:" + i, null, false));
+                workStack.addLast(new FlowDescriptionBuilder.WorkItem(cases.get(i).branch(), FlowPaths.routeCase(path, i), null, false));
             }
         }
 
         @Override
         public NodeDescription build(Logical.Route route, String path, String label, ArrayList<NodeDescription> resultStack) {
             BindingDescriptor binding = describeBinding(route.selector());
-            NodeDescription selector = new NodeDescription(path + "/selector", Optional.empty(),
-                    NodeDescriptor.Kind.INVOKE, Optional.of(binding), null, null, null, null, null, null, null, null, null, null, false);
+            NodeDescription selector = NodeDescription.invoke(
+                    FlowPaths.selectorPath(path), null, binding);
 
             NodeDescription otherwise = route.otherwise() == null ? null : pop(resultStack);
 
@@ -122,17 +117,7 @@ public final class LogicalDescribers {
             for (int i = caseCount - 1; i >= 0; i--) {
                 cases.set(i, new RouteCaseDescription(route.cases().get(i).key(), pop(resultStack)));
             }
-
-            List<NodeDescription> children = new ArrayList<NodeDescription>();
-            children.add(selector);
-            for (RouteCaseDescription cd : cases) {
-                children.add(cd.branch());
-            }
-            if (otherwise != null) {
-                children.add(otherwise);
-            }
-            return new NodeDescription(path, Optional.ofNullable(label), NodeDescriptor.Kind.ROUTE,
-                    Optional.empty(), children, null, null, cases, otherwise, null, null, null, null, null, false);
+            return NodeDescription.route(path, label, selector, cases, otherwise);
         }
     }
 
@@ -151,7 +136,7 @@ public final class LogicalDescribers {
         public void pushChildren(Logical.Fallback fallback, String path, ArrayDeque<FlowDescriptionBuilder.WorkItem> workStack) {
             List<Logical> branches = fallback.branches();
             for (int i = branches.size() - 1; i >= 0; i--) {
-                workStack.addLast(new FlowDescriptionBuilder.WorkItem(branches.get(i), path + "/branch:" + i, null, false));
+                workStack.addLast(new FlowDescriptionBuilder.WorkItem(branches.get(i), FlowPaths.fallbackBranch(path, i), null, false));
             }
         }
 
@@ -165,8 +150,7 @@ public final class LogicalDescribers {
             for (int i = branchCount - 1; i >= 0; i--) {
                 branches.set(i, pop(resultStack));
             }
-            return new NodeDescription(path, Optional.ofNullable(label), NodeDescriptor.Kind.FALLBACK,
-                    Optional.empty(), branches, null, fallback.trigger().name(), null, null, null, null, null, null, null, false);
+            return NodeDescription.fallback(path, label, fallback.trigger().name(), branches);
         }
     }
 
@@ -185,7 +169,7 @@ public final class LogicalDescribers {
         public void pushChildren(Logical.Parallel parallel, String path, ArrayDeque<FlowDescriptionBuilder.WorkItem> workStack) {
             List<Logical.ParallelBranch> branches = parallel.branches();
             for (int i = branches.size() - 1; i >= 0; i--) {
-                workStack.addLast(new FlowDescriptionBuilder.WorkItem(branches.get(i).flow(), path + "/branch:" + i, null, false));
+                workStack.addLast(new FlowDescriptionBuilder.WorkItem(branches.get(i).flow(), FlowPaths.parallelBranch(path, i), null, false));
             }
         }
 
@@ -193,18 +177,14 @@ public final class LogicalDescribers {
         public NodeDescription build(Logical.Parallel parallel, String path, String label, ArrayList<NodeDescription> resultStack) {
             int branchCount = parallel.branches().size();
             List<ParallelBranchDescription> branches = new ArrayList<ParallelBranchDescription>(branchCount);
-            List<NodeDescription> children = new ArrayList<NodeDescription>(branchCount);
             for (int i = 0; i < branchCount; i++) {
                 branches.add(null);
-                children.add(null);
             }
             for (int i = branchCount - 1; i >= 0; i--) {
-                NodeDescription branchDesc = pop(resultStack);
-                branches.set(i, new ParallelBranchDescription(parallel.branches().get(i).token().name(), branchDesc));
-                children.set(i, branchDesc);
+                branches.set(i, new ParallelBranchDescription(
+                        parallel.branches().get(i).token().name(), pop(resultStack)));
             }
-            return new NodeDescription(path, Optional.ofNullable(label), NodeDescriptor.Kind.PARALLEL,
-                    Optional.empty(), children, null, null, null, null, branches, null, null, null, null, false);
+            return NodeDescription.parallel(path, label, branches);
         }
     }
 
@@ -224,8 +204,7 @@ public final class LogicalDescribers {
 
         @Override
         public NodeDescription build(Logical.Await await, String path, String label, ArrayList<NodeDescription> resultStack) {
-            return new NodeDescription(path, Optional.ofNullable(label), NodeDescriptor.Kind.AWAIT,
-                    Optional.empty(), null, null, null, null, null, null, await.point().name(), null, null, null, false);
+            return NodeDescription.await(path, label, await.point().name());
         }
     }
 
@@ -242,18 +221,16 @@ public final class LogicalDescribers {
 
         @Override
         public void pushChildren(Logical.Control control, String path, ArrayDeque<FlowDescriptionBuilder.WorkItem> workStack) {
-            workStack.addLast(new FlowDescriptionBuilder.WorkItem(control.body(), path + "/body", null, false));
+            workStack.addLast(new FlowDescriptionBuilder.WorkItem(control.body(), FlowPaths.controlBody(path), null, false));
         }
 
         @Override
         public NodeDescription build(Logical.Control control, String path, String label, ArrayList<NodeDescription> resultStack) {
-            Optional<BindingDescriptor> binding = control.binding() == null
-                    ? Optional.empty() : Optional.of(describeBinding(control.binding()));
+            BindingDescriptor binding = control.binding() == null
+                    ? null : describeBinding(control.binding());
             NodeDescription body = pop(resultStack);
-            List<NodeDescription> children = Collections.singletonList(body);
-            return new NodeDescription(path, Optional.ofNullable(label), NodeDescriptor.Kind.CONTROL,
-                    binding, children, null, null, null, null, null, null, control.kind().name(),
-                    control.configuration(), null, false);
+            return NodeDescription.control(path, label, binding, body,
+                    control.kind().name(), control.configuration());
         }
     }
 
@@ -273,9 +250,9 @@ public final class LogicalDescribers {
 
         @Override
         public NodeDescription build(Logical.Complete complete, String path, String label, ArrayList<NodeDescription> resultStack) {
-            return new NodeDescription(path, Optional.ofNullable(label), NodeDescriptor.Kind.COMPLETE,
-                    Optional.empty(), null, null, null, null, null, null, null, null, null,
-                    complete.outcome(), complete.identity());
+            return complete.identity()
+                    ? NodeDescription.identityComplete(path, label)
+                    : NodeDescription.complete(path, label, complete.outcome());
         }
     }
 }

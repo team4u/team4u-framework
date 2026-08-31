@@ -272,8 +272,16 @@ public class BehaviorMatrixTest {
             resolutions.incrementAndGet();
             throw new IllegalStateException("missing");
         };
-        assertThrowsException(FlowBuildException.class, () -> Local.compile(
-                Flow.step(Missing.class).then(Missing.class), resolver));
+        try {
+            Local.compile(Flow.step(Missing.class).then(Missing.class), resolver);
+            fail("Expected FlowBuildException");
+        } catch (FlowBuildException expected) {
+            // 同一 (Class, qualifier) 绑定解析失败只重试一次，且两个引用点均产生 MISSING_BINDING 诊断
+            assertEquals(2, expected.problems().size());
+            for (FlowBuildException.Problem problem : expected.problems()) {
+                assertEquals("MISSING_BINDING", problem.code());
+            }
+        }
         assertEquals(1, resolutions.get());
     }
 

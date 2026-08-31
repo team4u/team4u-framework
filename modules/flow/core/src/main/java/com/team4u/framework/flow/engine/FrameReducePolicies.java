@@ -65,8 +65,10 @@ public final class FrameReducePolicies {
                     return Outcome.skipped(Reason.of("NO_ROUTE",
                             "No route case matched the selector"));
                 }
-                machine.event(FlowObserver.Type.ROUTE_SELECTED, route.descriptor(),
-                        Collections.singletonMap("branch", frame.selected));
+                if (!machine.observer().isNoop()) {
+                    machine.event(FlowObserver.Type.ROUTE_SELECTED, route.descriptor(),
+                            Collections.singletonMap("branch", frame.selected));
+                }
                 return null;
             }
             if (frame.phase == 2) return child;
@@ -93,8 +95,10 @@ public final class FrameReducePolicies {
             }
             frame.selected = "branch:" + frame.index;
             machine.push(fallback.branches().get(frame.index), input);
-            machine.event(FlowObserver.Type.FALLBACK_SELECTED, fallback.descriptor(),
-                    Collections.singletonMap("branch", frame.selected));
+            if (!machine.observer().isNoop()) {
+                machine.event(FlowObserver.Type.FALLBACK_SELECTED, fallback.descriptor(),
+                        Collections.singletonMap("branch", frame.selected));
+            }
             return null;
         }
     }
@@ -107,9 +111,8 @@ public final class FrameReducePolicies {
 
         @Override
         public Outcome<?> reduce(PlanNode.Control control, SerialMachine machine, RuntimeFrame frame, Outcome<?> child) {
-            ControlKindHandler handler = ControlKindRegistry.global().get(control.kind())
-                    .orElseThrow(() -> new IllegalStateException("Unknown control kind: " + control.kind()));
-            return handler.reduce(control, frame, machine, child);
+            return machine.controlKindHandler(control.kind())
+                    .reduce(control, frame, machine, child);
         }
     }
 }

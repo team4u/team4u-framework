@@ -57,13 +57,13 @@ graph TD
 
 | 退避算法 | 便捷工厂方法 | 数学计算模型 | 适用场景 |
 | :--- | :--- | :--- | :--- |
-| **固定延迟 (Fixed)** | `FlowRetries.fixed(maxAttempts, delayMillis)` | $$D(a) = \text{delay}$$ | 重试成本低、故障恢复快的内部基础调用 |
-| **指数退避 (Exponential)** | `FlowRetries.exponential(maxAttempts, initialDelay, multiplier, maxDelay)` | $$D(a) = \min(\text{maxDelay}, \text{initial} \times \text{multiplier}^{a - 1})$$ | 下游过载时的流量削峰平滑恢复 |
-| **随机抖动退避 (Jitter)** | `FlowRetries.jitter(maxAttempts, initialDelay, multiplier, maxDelay)` | $$D(a) = \text{random}(0, \min(\text{maxDelay}, \text{initial} \times \text{multiplier}^{a - 1}))$$ | **生产核心推荐：彻底打散集群并发重试请求** |
-| **等差递增 (Increment)** | `FlowRetries.increment(maxAttempts, initialDelay, stepMillis)` | $$D(a) = \text{initial} + (a - 1) \times \text{step}$$ | 排队等待耗时线性增加的异步任务 |
+| **固定延迟 (Fixed)** | `FlowRetryPolicy.fixed(maxAttempts, delayMillis)` | $$D(a) = \text{delay}$$ | 重试成本低、故障恢复快的内部基础调用 |
+| **指数退避 (Exponential)** | `FlowRetryPolicy.exponential(maxAttempts, initialDelay, multiplier, maxDelay)` | $$D(a) = \min(\text{maxDelay}, \text{initial} \times \text{multiplier}^{a - 1})$$ | 下游过载时的流量削峰平滑恢复 |
+| **随机抖动退避 (Jitter)** | `FlowRetryPolicy.jitter(maxAttempts, initialDelay, multiplier, maxDelay)` | $$D(a) = \text{random}(0, \min(\text{maxDelay}, \text{initial} \times \text{multiplier}^{a - 1}))$$ | **生产核心推荐：彻底打散集群并发重试请求** |
+| **等差递增 (Increment)** | `FlowRetryPolicy.increment(maxAttempts, initialDelay, stepMillis)` | $$D(a) = \text{initial} + (a - 1) \times \text{step}$$ | 排队等待耗时线性增加的异步任务 |
 
 > [!TIP]
-> **生产最佳实践**：在微服务集群环境下，强烈推荐优先使用 **`FlowRetries.jitter`（随机抖动退避）**。纯指数退避在集群遭遇瞬时故障时，由于各节点计算出的退避时间完全相同，会导致所有节点在同一毫秒重试，形成脉冲式的重试风暴；引入 Jitter 后重试请求在时间轴上均匀分布，大幅提升下游自愈概率。
+> **生产最佳实践**：在微服务集群环境下，强烈推荐优先使用 **`FlowRetryPolicy.jitter`（随机抖动退避）**。纯指数退避在集群遭遇瞬时故障时，由于各节点计算出的退避时间完全相同，会导致所有节点在同一毫秒重试，形成脉冲式的重试风暴；引入 Jitter 后重试请求在时间轴上均匀分布，大幅提升下游自愈概率。
 
 ---
 
@@ -73,15 +73,15 @@ graph TD
 
 ```java
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.retry.FlowRetries;
+import com.team4u.framework.flow.retry.FlowRetryPolicy;
 
 // 1. 指数退避：最多 5 次（首次 + 4 次重试），初始 100ms，2.0 倍递增，最大上限 2000ms
 Flow<OrderRequest, Receipt> flow1 = Flow.step(chargeOperation)
-        .persistentPolicy(FlowRetries.exponential(5, 100, 2.0, 2000), OrderRequest::getUserId);
+        .persistentPolicy(FlowRetryPolicy.exponential(5, 100, 2.0, 2000), OrderRequest::getUserId);
 
 // 2. 随机抖动退避：生产级抗重试风暴
 Flow<OrderRequest, Receipt> flow2 = Flow.step(chargeOperation)
-        .persistentPolicy(FlowRetries.jitter(4, 50, 2.0, 1000), OrderRequest::getUserId);
+        .persistentPolicy(FlowRetryPolicy.jitter(4, 50, 2.0, 1000), OrderRequest::getUserId);
 ```
 
 ---
@@ -110,8 +110,9 @@ FlowRetryPolicy<OrderRequest> customPolicy = FlowRetryPolicy.<OrderRequest>build
         // 4. 或：错误码精准黑名单（遇到以下错误码绝不重试，直接快速失败）
         // .abortOnCodes("INVALID_PARAM", "AUTH_FAILED", "BALANCE_NOT_ENOUGH")
         
-        // 5. 或：自定义高级谓词判定（可检查异常信息、根因类型等）
-        // .retryOn(failure -> failure.cause() instanceof java.net.SocketTimeoutException)
+        // 5. 或：自定义高级谓词判定（可检查错误码、消息或 details 键值对等）
+        // .retryOn(failure -> "TIMEOUT".equals(failure.code())
+        //         || failure.details().containsKey("retryable"))
         .build();
 
 Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
@@ -126,7 +127,7 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
 | **`backoff(Backoff)`** | `Backoff` | `Backoffs.fixed(1000)` | **退避算法实例**。<br/>指定每次重试之间的等待延迟计算器。支持 `fixed`（固定）、`exponential`（指数）、`exponentialJitter`（抖动）及 `increment`（等差）。 |
 | **`retryOnCodes(String...)`** | `String...` | 无限制（所有 Failed 均重试） | **错误码白名单匹配（推荐）**。<br/>仅当 `Failure.code()` 在指定清单中时才触发重试；遇到其他未列出的错误码直接快速失败短路（Fast-Fail）。 |
 | **`abortOnCodes(String...)`** | `String...` | 无限制 | **错误码黑名单匹配**。<br/>当命中业务参数错误、鉴权失败等确定性错误码时立即终止重试，向外透传失败。 |
-| **`retryOn(...)` / `retryPredicate(...)`** | `Predicate<Failure>` | `failure -> true` | **自定义条件谓词**。<br/>支持根据 `Failure` 中的根因异常 `cause()`、详细键值对 `details()` 或错误描述信息进行深度定制判定。 |
+| **`retryOn(...)` / `retryPredicate(...)`** | `Predicate<Failure>` | `failure -> true` | **自定义条件谓词**。<br/>支持根据 `Failure` 中的错误码 `code()`、错误描述 `message()` 或结构化键值对 `details()` 进行深度定制判定。`Failure` 不持有 `Throwable` 引用，如需按异常类型判定，请在业务代码捕获异常时将异常类名写入 `details` 后在此读取。 |
 | **`policyName(String)`** | `String` | `null` | **动态策略规则标识**。<br/>指定策略名称后，框架会尝试从配置中心（`DynamicRetryPolicyRegistry`）或命名注册表动态拉取规则，实现线上免重启热更新。 |
 | **`namedRegistry(...)`** | `NamedRetryPolicyRegistry` | 全局单例注册表 | **自定义命名注册表**。<br/>用于多租户或隔离场景下查找指定名称的重试规则模板。 |
 
@@ -140,11 +141,11 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
 
 ```java
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.retry.FlowRetries;
+import com.team4u.framework.flow.retry.FlowRetryPolicy;
 
-// 使用 FlowRetries.named 绑定策略名 "order-charge-retry"
+// 使用 FlowRetryPolicy.named 绑定策略名 "order-charge-retry"
 Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
-        .persistentPolicy(FlowRetries.named("order-charge-retry"), OrderRequest::getUserId);
+        .persistentPolicy(FlowRetryPolicy.named("order-charge-retry"), OrderRequest::getUserId);
 ```
 
 ---
@@ -236,7 +237,7 @@ graph TD
 
 ## Local 与 Durable 双引擎重试机制深度对比
 
-同一个重试策略 `FlowRetries`，在 Local 内存引擎与 Durable 持久化引擎中有着根本性的调度机制差异：
+同一个重试策略 `FlowRetryPolicy`，在 Local 内存引擎与 Durable 持久化引擎中有着根本性的调度机制差异：
 
 | 维度 | Local 内存执行器 (`team4u-flow`) | Durable 持久化执行器 (`team4u-flow-durable`) |
 | :--- | :--- | :--- |

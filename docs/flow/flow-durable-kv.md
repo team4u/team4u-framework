@@ -24,12 +24,14 @@ graph TD
 
 ## `DurableStore` SPI 接口契约
 
-`DurableStore` 仅包含两个核心方法：
+`DurableStore` 包含两个核心方法与一个可选能力方法：
 
 ```java
 package com.team4u.framework.flow.durable.store;
 
 import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
+import java.time.Instant;
+import java.util.List;
 import java.util.Optional;
 
 public interface DurableStore {
@@ -50,8 +52,28 @@ public interface DurableStore {
      * @return true 表示 CAS 成功；false 表示版本冲突已被其他实例抢占修改
      */
     boolean compareAndSet(String executionId, long expectedRevision, DurableSnapshot update);
+
+    /**
+     * 可选能力：扫描已到达定时唤醒时刻（firstWakeAt <= now）的 ACTIVE 快照。
+     * 默认不支持（返回 empty），供外部定时唤醒调度器使用。
+     */
+    default Optional<List<DurableSnapshot>> scanDue(Instant now, int limit) {
+        return Optional.empty();
+    }
 }
 ```
+
+### 到期扫描与定时唤醒调度
+
+引擎在提交快照时会把帧栈中最早的 wake/deadline 冗余写入信封字段 `firstWakeAt`
+（仅 ACTIVE 快照非空，终态快照恒为 null）。`scanDue` 基于该字段过滤：
+
+- 返回 `firstWakeAt <= now` 的 ACTIVE 快照，按到期时间升序，最多 `limit` 条；
+- 调度器逐条调用 `recover(executionId)` 驱动推进；
+- 多调度器并发扫描到同一到期执行时，CAS 乐观锁保证仅一方 recover 成功，另一方得到
+  `REVISION_CONFLICT` 后自然让位；
+- 不支持高效扫描的后端（如大键量 Redis SCAN）返回 `empty`，应维护外部到期索引
+  （如 ZSET）或独立延迟队列实现定时唤醒。
 
 ---
 
@@ -67,6 +89,13 @@ DurableStore memoryStore = new InMemoryDurableStore();
 DurableRuntime runtime = DurableRuntime.builder(memoryStore)
         .build();
 ```
+
+`load` / `compareAndSet` 与内置的 KV 实现遵循同一套严格参数校验契约：
+
+- `executionId` 不能为 null 且不能为空白字符串，否则抛出 `NullPointerException` / `IllegalArgumentException`；
+- `update` 快照不能为 null，且其 `executionId` 必须与传入的存储键一致；
+- `expectedRevision` 必须 >= -1（-1 表示“不存在时创建”），且 `update.revision()` 必须等于 `expectedRevision + 1`；
+- 内存实现支持 `scanDue` 到期扫描（全量遍历内存表并按 firstWakeAt 升序截取）。
 
 ---
 
@@ -98,18 +127,44 @@ import com.team4u.framework.kv.redis.RedisKvStore;
 // 1. 获取底层 KvStore 实例 (如 RedisKvStore 或 JdbcKvStore)
 KvStore redisStore = new RedisKvStore(redisTemplate);
 
-// 2. 构建 KvDurableStore (可指定 Key 前缀与快照 TTL 过期时间)
+// 2. 构建 KvDurableStore：终态快照 1 天归档淘汰，非终态快照永不过期（推荐策略）
 long oneDayTtlMs = 24 * 3600 * 1000L;
 DurableStore durableStore = new KvDurableStore(
         redisStore, 
-        "flow:durable:", // Redis Key 前缀
-        oneDayTtlMs      // 可选 TTL: 完成或空闲快照 1 天后自动清理
+        "flow_durable",   // 存储空间名（SpaceKey 的 space 部分，非空且不得包含 ':' 或空白）
+        oneDayTtlMs,      // terminalTtlMillis: COMPLETED/CANCELLED 快照 1 天后自动清理
+        0L                // activeTtlMillis: ACTIVE/SUSPENDED 快照永不过期
 );
 
 // 3. 构建 DurableRuntime
 DurableRuntime runtime = DurableRuntime.builder(durableStore)
         .build();
 ```
+
+### 构造器参数说明
+
+| 构造器 | 参数说明 |
+| :--- | :--- |
+| `KvDurableStore(store)` | 使用默认空间名 `flow_durable`，永不过期 |
+| `KvDurableStore(store, space)` | 指定空间名，永不过期 |
+| `KvDurableStore(store, space, ttlMillis)` | 指定空间名与终态 TTL（非终态永不过期；兼容旧签名，语义修复版） |
+| `KvDurableStore(store, space, terminalTtlMillis, activeTtlMillis)` | 按生命周期分流 TTL（推荐） |
+| `KvDurableStore(store, space, terminalTtlMillis, activeTtlMillis, clock)` | 完整参数，额外指定计算过期时间戳的时钟源 |
+
+- **`space`（存储空间名）**：作为 `SpaceKey` 的命名空间部分，用于在同一个 `KvStore` 中隔离不同业务
+  或不同应用的快照数据（如 `flow_durable`、`payment-flow`）；要求非空且不得包含 `':'` 或任何空白
+  字符（构造期真实校验，违反抛 `IllegalArgumentException`）。它不是 Redis Key 前缀拼接参数，
+  底层键的具体编码由 `KvStore` 实现决定；
+- **`terminalTtlMillis`（终态 TTL）**：写入 COMPLETED/CANCELLED 快照时附带的存活时长，到期后由
+  存储后端自动淘汰，实现历史归档数据清理；小于等于 0 表示永不过期；
+- **`activeTtlMillis`（非终态 TTL）**：写入 ACTIVE/SUSPENDED 快照时附带的存活时长，**默认 0 表示
+  永不过期（推荐）**。挂起等待人工审批等长周期流程可能停留 SUSPENDED 数天甚至数月，若对非终态
+  设置较短 TTL 会静默删除仍在推进中的执行状态，导致后续 resume/recover 直接
+  `EXECUTION_NOT_FOUND`；若确要设置，必须确保远大于业务最长挂起时长；
+- **CAS 能力要求**：底层 `KvStore` 必须实现（或通过装饰链提供）`CasCapable` 能力，否则构造时抛出
+  `IllegalArgumentException`；
+- **到期扫描（scanDue）**：已实现基于 `ScanCapable` 能力的到期扫描（详见上文「到期扫描与定时
+  唤醒调度」）；底层不支持扫描能力的后端返回 `empty`，需维护外部到期索引或延迟队列。
 
 ### Spring Boot 生产完整装配类示例
 
@@ -122,10 +177,10 @@ public class DurableFlowAutoConfiguration {
 
     @Bean
     public DurableStore durableStore() {
-        // 基于 Redis 构建带 7 天自动 TTL 过期清理的持久化存储
+        // 基于 Redis：终态快照 7 天归档淘汰，非终态（挂起/退避中）永不过期
         KvStore redisKvStore = new RedisKvStore(redisTemplate);
         long sevenDaysTtl = 7 * 24 * 3600 * 1000L;
-        return new KvDurableStore(redisKvStore, "app:flow:durable:", sevenDaysTtl);
+        return new KvDurableStore(redisKvStore, "app_flow_durable", sevenDaysTtl, 0L);
     }
 
     @Bean

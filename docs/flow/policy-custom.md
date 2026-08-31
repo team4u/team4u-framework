@@ -30,7 +30,7 @@ public interface Policy<K> {
      *
      * @param context    策略上下文
      * @param key        策略路由键
-     * @param completion 完成摘要（包含四态 kind、耗时 durationMs 等）
+     * @param completion 完成摘要（包含四态 kind 及对应的 Reason / Failure 诊断）
      */
     default void after(PolicyContext context, K key, Completion completion) { }
 }
@@ -95,8 +95,10 @@ public class UserAuthPolicy implements Policy<String> {
 
     @Override
     public void after(PolicyContext context, String userId, Completion completion) {
-        log.info("AuthPolicy Audit: user={}, outcome={}, duration={}ms",
-                userId, completion.kind(), completion.durationMs());
+        // Completion 提供 kind() 与 reason() / failure() 两个 Optional 访问器；
+        // 若需耗时统计，请在业务 Operation 内自行计时并上报
+        log.info("AuthPolicy Audit: user={}, outcome={}, reason={}, failure={}",
+                userId, completion.kind(), completion.reason(), completion.failure());
     }
 }
 ```

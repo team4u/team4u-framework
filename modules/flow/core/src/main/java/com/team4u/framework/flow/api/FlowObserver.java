@@ -19,8 +19,10 @@ import com.team4u.framework.flow.spi.NodeDescriptor;
  *
  * <p>设计与异常隔离契约：
  * <ul>
- *   <li><b>异常安全隔离</b>：观察者在回调中抛出的任何异常都会被框架底层捕获并静默隔离，绝不会影响主流程的正常编排与执行结果；</li>
+ *   <li><b>异常安全隔离</b>：观察者在回调中抛出的任何运行时异常都会被框架底层捕获并记录日志（首次 warn、后续按实例限流 debug，参见 {@link ObserverSafeEmitter}），绝不会影响主流程的正常编排与执行结果；{@link Error} 不被拦截，原样传播；</li>
+ *   <li><b>线程模型</b>：实现必须线程安全；并行分支事件可能从多个工作线程并发到达，仅保证单分支内事件有序，跨分支之间无全序保证；</li>
  *   <li><b>细粒度事件流</b>：涵盖流程生命周期（STARTED/COMPLETED/SUSPENDED/CANCELLED）、节点生命周期（STARTED/COMPLETED）、路由分支选择、策略判定（BEFORE/AFTER/WAITING）以及并行分支状态（STARTED/BRANCH_COMPLETED/JOINED）等；</li>
+ *   <li><b>事件配对性</b>：NODE_STARTED/NODE_COMPLETED 与 POLICY_BEFORE/POLICY_AFTER 事件在非取消、非超时、非重试轮次的正常路径上保证成对出现；当执行因取消、超时或 PersistentPolicy 声明重试轮次（RetryAt）而中断或循环时，事件可能不成对；</li>
  *   <li><b>组合广播</b>：通过 {@link #composite(FlowObserver...)} 支持将多个观察者组合广播。</li>
  * </ul>
  * </p>
@@ -107,9 +109,25 @@ public interface FlowObserver {
     /**
      * 接收并处理流程事件。
      *
+     * <p>线程模型契约：实现必须线程安全；并行分支事件可能从多个工作线程并发到达，
+     * 仅保证单分支内事件有序，跨分支之间无全序保证。</p>
+     *
      * @param event 流程事件对象，保证非 null
      */
     void onEvent(Event event);
+
+    /**
+     * 判断本观察者是否为无操作实现（默认 false）。
+     *
+     * <p>引擎在热路径上据此短路事件对象与属性字典的构造分配。
+     * {@link #noop()} 返回的实例覆写返回 true；自定义空观察者若可安全跳过全部事件，
+     * 建议覆写本方法返回 true 以获得更佳性能。</p>
+     *
+     * @return 若本观察者不消费任何事件则返回 true，否则返回 false
+     */
+    default boolean isNoop() {
+        return false;
+    }
 
     /**
      * 创建无操作的空观察者（单例）。
@@ -120,6 +138,11 @@ public interface FlowObserver {
         return new FlowObserver() {
             @Override
             public void onEvent(Event event) {
+            }
+
+            @Override
+            public boolean isNoop() {
+                return true;
             }
         };
     }
@@ -139,13 +162,17 @@ public interface FlowObserver {
         }
         return new FlowObserver() {
             @Override
+            public boolean isNoop() {
+                for (FlowObserver observer : copy) {
+                    if (!observer.isNoop()) return false;
+                }
+                return true;
+            }
+
+            @Override
             public void onEvent(Event event) {
                 for (FlowObserver observer : copy) {
-                    try {
-                        observer.onEvent(event);
-                    } catch (RuntimeException ignored) {
-                        // Observer failures cannot alter execution.
-                    }
+                    ObserverSafeEmitter.emit(observer, event);
                 }
             }
         };

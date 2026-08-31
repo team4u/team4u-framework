@@ -64,6 +64,21 @@ CompletableFuture<FlowResult<Receipt>> future = executable
 future.thenAccept(res -> log.info("Async result: {}", res.requireAccepted()));
 ```
 
+`runAsync` 提供四个重载，允许显式指定取消令牌与调度线程池：
+
+| 重载 | 说明 |
+| :--- | :--- |
+| `runAsync(input)` | 默认取消令牌 + `commonPool` 调度 |
+| `runAsync(input, cancellation)` | 指定取消令牌 + `commonPool` 调度 |
+| `runAsync(input, dispatcher)` | 默认取消令牌 + 显式调度线程池 |
+| `runAsync(input, cancellation, dispatcher)` | 全参重载：显式取消令牌与调度线程池（dispatcher 为 null 时回退 commonPool） |
+
+> [!IMPORTANT]
+> **Dispatcher 与 Worker 隔离**：显式传入的 `dispatcher` 仅负责顶层派发；并行分支与超时监控
+> 始终使用编译时绑定的 Worker 线程池。切勿将同一个非 ForkJoinPool 有限线程池同时用作
+> dispatcher 与 worker（运行时校验会直接抛出 `IllegalArgumentException`，详见下文死锁防御规则）。
+> `resumeAsync` 同样提供对应的 `(suspension, point, signal[, cancellation][, dispatcher])` 重载。
+
 ### 自定义 Worker 线程池绑定：`withExecutor`
 
 如果流程需要使用专用的业务 Worker 线程池，可通过 `withExecutor` 派生句柄：

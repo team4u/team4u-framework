@@ -474,6 +474,155 @@ public class FlowDiagramTest {
     public static interface IssueReceiptOperation extends Operation<String, String> {}
 
     @Test
+    public void nestedScopesRenderAsPhysicallyNestedSubgraphs() {
+        Flow<String, String> inner = Flow.scope("inner", Flow.<String, String>step(Echo.class).named("inner-step"));
+        Flow<String, String> outer = Flow.scope("outer", inner.then(Flow.<String, String>step(Echo.class).named("outer-step")));
+        String graph = FlowDiagrams.mermaid().render(outer.describe("nested-scopes"));
+
+        int outerHeader = indexOfLine(graph, "subgraph sg_", "\"\u4f5c\u7528\u57df: outer\"");
+        int innerHeader = indexOfLine(graph, "subgraph sg_", "\"\u4f5c\u7528\u57df: inner\"");
+        Assert.assertTrue("outer subgraph header missing\n" + graph, outerHeader >= 0);
+        Assert.assertTrue("inner subgraph header missing\n" + graph, innerHeader >= 0);
+        Assert.assertTrue("inner subgraph must be declared after outer header", innerHeader > outerHeader);
+
+        int innerStart = lineStartOf(graph, innerHeader);
+        int innerEnd = matchingEndLineStart(graph, innerStart);
+        int outerStart = lineStartOf(graph, outerHeader);
+        int outerEnd = matchingEndLineStart(graph, outerStart);
+        Assert.assertTrue("outer subgraph never closes\n" + graph, outerEnd > innerStart);
+        Assert.assertTrue("inner block must close before outer block", innerEnd < outerEnd);
+
+        // 节点归属：inner-step 声明行位于 inner 块内；outer-step 位于 inner 块之外、outer 块之内
+        String innerStepLine = firstLineContaining(graph, "inner-step");
+        String outerStepLine = firstLineContaining(graph, "outer-step");
+        Assert.assertNotNull(innerStepLine);
+        Assert.assertNotNull(outerStepLine);
+        Assert.assertTrue("inner-step must be declared inside inner subgraph",
+                graph.indexOf(innerStepLine) > innerStart && graph.indexOf(innerStepLine) < innerEnd);
+        Assert.assertTrue("outer-step must be declared inside outer subgraph but outside inner subgraph",
+                graph.indexOf(outerStepLine) > outerStart
+                        && (graph.indexOf(outerStepLine) < innerStart
+                            || graph.indexOf(outerStepLine) > innerEnd)
+                        && graph.indexOf(outerStepLine) < outerEnd);
+
+        // 配对性与唯一性：subgraph/end 数量相等，节点声明行不重复
+        Assert.assertEquals("subgraph/end must pair up\n" + graph,
+                occurrences(graph, "subgraph sg_"), countEndLines(graph));
+        Assert.assertEquals(1, occurrences(graph, "inner-step"));
+        Assert.assertEquals(1, occurrences(graph, "outer-step"));
+    }
+
+    @Test
+    public void nestedScopesStayBalancedInComplexFlow() {
+        Flow<String, String> inner = Flow.scope("inner", Flow.<String, String>step(Echo.class).named("inner-step"));
+        Flow<String, String> flow = Flow.scope("checkout",
+                Flow.<String, String>step(Echo.class).named("pre-check")
+                        .then(inner)
+                        .then(Flow.route(Select.class)
+                                .caseOf("A", Flow.scope("route-scope", Flow.<String, String>step(Echo.class).named("route-step")))
+                                .otherwise(Flow.<String, String>accepted("done"))));
+        String graph = FlowDiagrams.mermaid().render(flow.describe("complex-nested"));
+
+        Assert.assertEquals("subgraph/end must pair up\n" + graph,
+                occurrences(graph, "subgraph sg_"), countEndLines(graph));
+        // 每个节点声明行只出现一次
+        for (String label : new String[] {"pre-check", "inner-step", "route-step"}) {
+            Assert.assertEquals("node " + label + " declared exactly once\n" + graph,
+                    1, occurrences(graph, label));
+        }
+        // \u6df1\u5ea6\u5d4c\u5957\u4ecd\u53ef\u7ebf\u6027\u6e32\u67d3
+        Flow<String, String> deep = Flow.step(Echo.class);
+        for (int index = 0; index < 300; index++) {
+            deep = Flow.scope("scope-" + index, deep);
+        }
+        String deepGraph = FlowDiagrams.mermaid().render(deep.describe("deep-nested"));
+        Assert.assertEquals(300, occurrences(deepGraph, "subgraph sg_"));
+        Assert.assertEquals(300, countEndLines(deepGraph));
+    }
+
+    @Test
+    public void mermaidEscapesHashCharacter() {
+        String hostile = "hash# inside";
+        Flow<String, String> flow = Flow.route(Select.class, hostile)
+                .caseOf(hostile, Flow.<String, String>accepted("hidden"))
+                .withoutOtherwise()
+                .named(hostile);
+        String graph = FlowDiagrams.mermaid().render(flow.describe("hash"));
+
+        Assert.assertTrue(graph.contains("&#35;"));
+        Assert.assertFalse("raw # leaked into mermaid output\n" + graph,
+                graph.replace("&#35;", "").contains("#"));
+    }
+
+    private static int indexOfLine(String text, String... fragments) {
+        String[] lines = text.split("\\n", -1);
+        for (int index = 0; index < lines.length; index++) {
+            boolean all = true;
+            for (String fragment : fragments) {
+                if (!lines[index].contains(fragment)) {
+                    all = false;
+                    break;
+                }
+            }
+            if (all) {
+                return index;
+            }
+        }
+        return -1;
+    }
+
+    private static int lineStartOf(String text, int lineIndex) {
+        String[] lines = text.split("\\n", -1);
+        int start = 0;
+        for (int index = 0; index < lineIndex; index++) {
+            start += lines[index].length() + 1;
+        }
+        return start;
+    }
+
+    /** \u4ece subgraph \u5934\u90e8\u884c\u8d77\u627e\u914d\u5bf9\u7684 end \u884c\uff08\u8ba1\u6570\u5d4c\u5957 subgraph\uff09\uff0c\u8fd4\u56de\u8be5 end \u884c\u8d77\u59cb\u504f\u79fb\u3002 */
+    private static int matchingEndLineStart(String text, int subgraphLineStart) {
+        int depth = 0;
+        int cursor = subgraphLineStart;
+        while (cursor < text.length()) {
+            int lineEnd = text.indexOf('\n', cursor);
+            if (lineEnd < 0) {
+                lineEnd = text.length();
+            }
+            String line = text.substring(cursor, lineEnd);
+            if (line.trim().startsWith("subgraph")) {
+                depth++;
+            } else if (line.trim().equals("end")) {
+                depth--;
+                if (depth == 0) {
+                    return cursor;
+                }
+            }
+            cursor = lineEnd + 1;
+        }
+        return -1;
+    }
+
+    private static String firstLineContaining(String text, String fragment) {
+        for (String line : text.split("\\n", -1)) {
+            if (line.contains(fragment)) {
+                return line;
+            }
+        }
+        return null;
+    }
+
+    private static int countEndLines(String text) {
+        int count = 0;
+        for (String line : text.split("\\n", -1)) {
+            if (line.trim().equals("end")) {
+                count++;
+            }
+        }
+        return count;
+    }
+
+    @Test
     public void printRealisticBusinessFlow() {
         Branch<String, String> inventoryBranch = Branch.of("lock-inventory",
                 Flow.<String, String>step(LockInventoryOperation.class, "stock-service")

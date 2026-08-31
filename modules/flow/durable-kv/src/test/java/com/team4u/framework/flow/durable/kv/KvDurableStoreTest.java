@@ -14,9 +14,11 @@ import org.junit.Test;
 
 import java.time.Clock;
 import java.time.Instant;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.Collections;
 import java.util.Optional;
+import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
@@ -49,6 +51,160 @@ public class KvDurableStoreTest {
                 null,
                 false
         );
+    }
+
+    private DurableSnapshot completedSnapshot(String execId, long revision) {
+        return new DurableSnapshot(
+                execId,
+                "order-flow",
+                1,
+                DurableSnapshot.CURRENT_FORMAT_ID,
+                DurableSnapshot.CURRENT_FORMAT_VERSION,
+                revision,
+                DurableLifecycle.COMPLETED,
+                new byte[]{1, 2, 3},
+                Collections.singletonMap("in", new StoredValue("json", 1, new byte[]{10, 20})),
+                null,
+                false
+        );
+    }
+
+    private DurableSnapshot suspendedSnapshot(String execId, long revision) {
+        return new DurableSnapshot(
+                execId,
+                "order-flow",
+                1,
+                DurableSnapshot.CURRENT_FORMAT_ID,
+                DurableSnapshot.CURRENT_FORMAT_VERSION,
+                revision,
+                DurableLifecycle.SUSPENDED,
+                new byte[]{1, 2, 3},
+                Collections.singletonMap("in", new StoredValue("json", 1, new byte[]{10, 20})),
+                "approval",
+                false
+        );
+    }
+
+    /** 可手动推进的测试时钟。 */
+    static final class MutableTestClock extends Clock {
+        private volatile Instant current;
+
+        MutableTestClock(long epochMillis) {
+            this.current = Instant.ofEpochMilli(epochMillis);
+        }
+
+        void advanceMillis(long millis) {
+            this.current = current.plusMillis(millis);
+        }
+
+        @Override
+        public ZoneId getZone() {
+            return ZoneOffset.UTC;
+        }
+
+        @Override
+        public Clock withZone(ZoneId zone) {
+            return this;
+        }
+
+        @Override
+        public Instant instant() {
+            return current;
+        }
+    }
+
+    @Test
+    public void rejectsInvalidSpaceNames() {
+        InMemoryKvStore kv = new InMemoryKvStore();
+        // space 含 ':' 分隔符：拒绝（物理键 space:key 拼接歧义）
+        try {
+            new KvDurableStore(kv, "flow:durable");
+            fail("space 含 ':' 必须被拒绝");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage(), expected.getMessage().contains(":"));
+        }
+        // 空白 space：拒绝
+        try {
+            new KvDurableStore(kv, "  ");
+            fail("空白 space 必须被拒绝");
+        } catch (IllegalArgumentException expected) {
+            // blank 校验
+        }
+        try {
+            new KvDurableStore(kv, "flow durable");
+            fail("space 含内部空格必须被拒绝");
+        } catch (IllegalArgumentException expected) {
+            // whitespace 校验
+        }
+        // 合法 space 正常创建
+        assertNotNull(new KvDurableStore(kv, "flow_durable-1"));
+    }
+
+    @Test
+    public void scanDueReturnsActiveSnapshotsPastFirstWakeAt() {
+        InMemoryKvStore kv = new InMemoryKvStore();
+        KvDurableStore store = new KvDurableStore(kv);
+        Instant now = Instant.now();
+
+        // 到期的 ACTIVE 快照（firstWakeAt 已过）
+        DurableSnapshot due = new DurableSnapshot("due", "f", 1,
+                DurableSnapshot.CURRENT_FORMAT_ID, DurableSnapshot.CURRENT_FORMAT_VERSION,
+                0L, DurableLifecycle.ACTIVE, new byte[]{1},
+                Collections.singletonMap("in", new StoredValue("json", 1, new byte[]{1})),
+                null, false, now.minusSeconds(10));
+        assertTrue(store.compareAndSet("due", -1L, due));
+
+        // 未到期的 ACTIVE 快照（firstWakeAt 在未来）
+        DurableSnapshot future = new DurableSnapshot("future", "f", 1,
+                DurableSnapshot.CURRENT_FORMAT_ID, DurableSnapshot.CURRENT_FORMAT_VERSION,
+                0L, DurableLifecycle.ACTIVE, new byte[]{1},
+                Collections.singletonMap("in", new StoredValue("json", 1, new byte[]{1})),
+                null, false, now.plusSeconds(3600));
+        assertTrue(store.compareAndSet("future", -1L, future));
+
+        // 无 wake 的 ACTIVE 快照与终态快照：均不返回
+        assertTrue(store.compareAndSet("plain", -1L, createSnapshot("plain", 0L)));
+        assertTrue(store.compareAndSet("done", -1L, completedSnapshot("done", 0L)));
+
+        Optional<List<DurableSnapshot>> dueList = store.scanDue(now, 10);
+        assertTrue(dueList.isPresent());
+        assertEquals(1, dueList.get().size());
+        assertEquals("due", dueList.get().get(0).executionId());
+
+        // limit 截断：limit=1 时仅返回第一条
+        assertEquals(1, store.scanDue(now, 1).get().size());
+    }
+
+    @Test
+    public void scanDueRejectsInvalidLimit() {
+        InMemoryKvStore kv = new InMemoryKvStore();
+        KvDurableStore store = new KvDurableStore(kv);
+        try {
+            store.scanDue(Instant.now(), 0);
+            fail("limit=0 必须被拒绝");
+        } catch (IllegalArgumentException expected) {
+            // limit 校验
+        }
+    }
+
+    @Test
+    public void legacyThreeArgConstructorAppliesTtlToTerminalOnly() {
+        // 语义修复回归：旧签名 (store, space, ttl) 仅对终态生效，非终态永不过期
+        InMemoryKvStore kv = new InMemoryKvStore();
+        KvDurableStore store = new KvDurableStore(kv, "legacy", 1000L);
+        assertEquals(1000L, store.terminalTtlMillis());
+        assertEquals("非终态必须默认永不过期", 0L, store.activeTtlMillis());
+
+        String suspendedId = "legacy-suspended";
+        assertTrue(store.compareAndSet(suspendedId, -1L, suspendedSnapshot(suspendedId, 0L)));
+        // 非终态快照写入时不携带过期时间戳（永不过期）
+        assertEquals(0L, kv.get(SpaceKey.of("legacy", suspendedId)).getExpireAt());
+        assertTrue("非终态快照不得被静默过期删除", store.load(suspendedId).isPresent());
+
+        // 终态快照写入时携带 terminalTtl 过期时间戳
+        String doneId = "legacy-done";
+        assertTrue(store.compareAndSet(doneId, -1L, completedSnapshot(doneId, 0L)));
+        assertTrue(kv.get(SpaceKey.of("legacy", doneId)).canExpire());
     }
 
     @Test
@@ -104,23 +260,52 @@ public class KvDurableStoreTest {
     }
 
     @Test
-    public void customSpaceAndTtl() {
-        Clock fixedClock = Clock.fixed(Instant.ofEpochMilli(1_000_000L), ZoneOffset.UTC);
-        InMemoryKvStore clockKvStore = new InMemoryKvStore(fixedClock);
-        KvDurableStore customStore = new KvDurableStore(clockKvStore, "custom_flow", 5000L, fixedClock);
+    public void customSpaceAndLifecycleSplitTtl() {
+        MutableTestClock clock = new MutableTestClock(1_000_000L);
+        InMemoryKvStore clockKvStore = new InMemoryKvStore(clock);
+        KvDurableStore customStore = new KvDurableStore(clockKvStore, "custom_flow",
+                5000L, 0L, clock);
 
         assertEquals("custom_flow", customStore.space());
-        assertEquals(5000L, customStore.ttlMillis());
-        assertEquals(fixedClock, customStore.clock());
+        assertEquals(5000L, customStore.terminalTtlMillis());
+        assertEquals(0L, customStore.activeTtlMillis());
+        assertEquals(clock, customStore.clock());
 
-        String execId = "order-ttl";
-        DurableSnapshot snapshot = createSnapshot(execId, 0L);
-        assertTrue(customStore.compareAndSet(execId, -1L, snapshot));
+        String activeId = "order-active";
+        DurableSnapshot active = createSnapshot(activeId, 0L);
+        assertTrue(customStore.compareAndSet(activeId, -1L, active));
+        // 非终态（ACTIVE）快照：activeTtl=0 → 永不过期
+        KvRecord activeRecord = clockKvStore.get(SpaceKey.of("custom_flow", activeId));
+        assertNotNull(activeRecord);
+        assertEquals(0L, activeRecord.getExpireAt());
 
-        // 验证底层的 KvRecord 写入了 TTL
-        KvRecord record = clockKvStore.get(SpaceKey.of("custom_flow", execId));
-        assertNotNull(record);
-        assertEquals(1_000_000L + 5000L, record.getExpireAt());
+        // 推进到终态（COMPLETED）：写入按 terminalTtl=5000 计算过期时间戳
+        DurableSnapshot completed = completedSnapshot(activeId, 1L);
+        assertTrue(customStore.compareAndSet(activeId, 0L, completed));
+        KvRecord completedRecord = clockKvStore.get(SpaceKey.of("custom_flow", activeId));
+        assertNotNull(completedRecord);
+        assertEquals(1_000_000L + 5000L, completedRecord.getExpireAt());
+    }
+
+    @Test
+    public void terminalSnapshotExpiresWhileActiveSnapshotSurvives() throws Exception {
+        // 语义修复回归：同一 TTL 下，终态快照到期被清理，挂起等审批的
+        // 非终态快照永不过期、仍可 load。
+        MutableTestClock clock = new MutableTestClock(1_000_000L);
+        InMemoryKvStore kv = new InMemoryKvStore(clock);
+        KvDurableStore store = new KvDurableStore(kv, "ttl_split", 1000L, 0L, clock);
+
+        String doneId = "done-exec";
+        String suspendedId = "suspended-exec";
+        assertTrue(store.compareAndSet(doneId, -1L, completedSnapshot(doneId, 0L)));
+        assertTrue(store.compareAndSet(suspendedId, -1L, suspendedSnapshot(suspendedId, 0L)));
+
+        // 时间推进越过 terminalTtl：终态记录过期，非终态记录存活
+        clock.advanceMillis(1500L);
+        assertFalse("终态快照到期后必须被清理", store.load(doneId).isPresent());
+        assertTrue("非终态（SUSPENDED）快照不得被静默过期删除",
+                store.load(suspendedId).isPresent());
+        assertEquals(DurableLifecycle.SUSPENDED, store.load(suspendedId).get().lifecycle());
     }
 
     @Test

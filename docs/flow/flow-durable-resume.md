@@ -170,17 +170,22 @@ public interface PersistentPolicy<K, S> {
 
 ```mermaid
 graph LR
-    P_BEFORE["PersistentPolicy.before"] -->|"返回 Before.waitUntil(wakeInstant, newState)"| M["DurableMachine 写入检查点"]
+    P_BEFORE["PersistentPolicy.before"] -->|"返回 PersistentPolicy.waitUntil(wakeInstant, newState)"| M["DurableMachine 写入检查点"]
     M -->|"保存 slots['policy:...']=newState<br/>保存 wakeAt=wakeInstant<br/>设置 lifecycle=ACTIVE"| DS[("DurableStore")]
     DS --> RES["返回 DurableResult.Active(wakeAt)"]
     
     RES -.->|"当前调用线程立即释放退出"| EXIT["线程释放 (Parked)"]
     
-    SCHED["外部定时调度器 (结合 team4u-kv-lock 分布式锁)"] -->|"扫描到到达 wakeAt 的记录"| REC["调用 executable.recover(executionId)"]
+    SCHED["外部定时调度器 (结合 team4u-kv-lock 分布式锁)"`] -->|"扫描到到达 wakeAt 的记录"`| REC["调用 executable.recover(executionId)"]
     REC --> NEXT["从快照恢复策略状态并继续执行"]
 ```
 
 ### 示例：每日配额控制策略
+
+`PersistentPolicy` 的决策原语均为接口上的静态工厂方法：
+
+- 前置决策：`PersistentPolicy.proceed(state)`、`PersistentPolicy.waitUntil(instant, state)`、`PersistentPolicy.reject(reason, state)`、`PersistentPolicy.fail(failure, state)`；
+- 后置决策：`PersistentPolicy.returning(state)`、`PersistentPolicy.retryAt(instant, state)`。
 
 ```java
 public class DailyQuotaPolicy implements PersistentPolicy<String, DailyQuotaState> {
@@ -195,10 +200,10 @@ public class DailyQuotaPolicy implements PersistentPolicy<String, DailyQuotaStat
         if (state.getCount() >= 100) {
             // 超过每日额度，计算次日零点时刻并挂起等待
             Instant tomorrowMidnight = calculateTomorrowMidnight();
-            return Before.waitUntil(tomorrowMidnight, state.resetForTomorrow());
+            return PersistentPolicy.waitUntil(tomorrowMidnight, state.resetForTomorrow());
         }
         // 放行并递增计数
-        return Before.proceed(state.increment());
+        return PersistentPolicy.proceed(state.increment());
     }
 
     @Override
@@ -206,12 +211,71 @@ public class DailyQuotaPolicy implements PersistentPolicy<String, DailyQuotaStat
         if (completion.kind() == Outcome.Kind.FAILED) {
             // 失败时 5 分钟后重试
             Instant retryTime = Instant.now().plus(Duration.ofMinutes(5));
-            return After.retryAt(retryTime, state);
+            return PersistentPolicy.retryAt(retryTime, state);
         }
-        return After.result(state);
+        return PersistentPolicy.returning(state);
     }
 }
 ```
+
+---
+
+## 定时唤醒调度集成（scanDue + firstWakeAt）
+
+生产环境中，`WaitUntil` / `RetryAt` 产生的定时唤醒由外部调度器扫描到期快照并调用
+`recover(executionId)` 拉起续跑。当前版本已提供以下存储层能力：
+
+- **`DurableSnapshot` 信封携带 `firstWakeAt` 字段**：记录本实例最近一次进入定时等待的
+  首个唤醒时刻（从帧栈的 wake/deadline 取最早到期者，仅 ACTIVE 快照非空），便于
+  调度器直接扫描与水位线统计，无需解码帧栈；
+- **`DurableStore.scanDue(Instant, int)` 可选扫描接口**：按 `lifecycle = ACTIVE` 且
+  `firstWakeAt` 已到期的条件批量返回待唤醒的快照，避免依赖各存储后端自建条件查询；
+  不支持扫描的后端返回 `empty`；
+- **`KvDurableStore` TTL 按终态 / 非终态分流**：非终态（ACTIVE / SUSPENDED）快照默认
+  永不过期，保证待唤醒实例不被存储层误淘汰；终态（COMPLETED / CANCELLED）快照按
+  `terminalTtlMillis` 归档清理，构造器提供 `(store, space, terminalTtlMillis, activeTtlMillis[, clock])`
+  参数形态。
+
+配合上述能力，典型的“定时唤醒调度器”集成模式为：
+
+```text
+[定时任务 + 分布式锁 (team4u-kv-lock)]
+  -> store.scanDue(now, limit)           // 拉取到期待唤醒实例
+  -> executable.recover(executionId)     // 逐个拉起续跑（幂等，并发竞争由 CAS 保护）
+  -> 终态快照按 TTL 自动归档清理
+```
+
+---
+
+以下是基于 `scanDue` 的定时调度器参考实现：
+
+```java
+// 定时调度器示例（每 500ms 扫描一批到期执行）
+ScheduledExecutorService scheduler = Executors.newSingleThreadScheduledExecutor();
+
+scheduler.scheduleWithFixedDelay(() -> {
+    Optional<List<DurableSnapshot>> due = durableStore.scanDue(Instant.now(), 100);
+    if (!due.isPresent()) {
+        return; // 存储不支持扫描能力：需外部索引或延迟队列
+    }
+    for (DurableSnapshot snapshot : due.get()) {
+        try {
+            executable.recover(snapshot.executionId());
+        } catch (DurableException conflict) {
+            // REVISION_CONFLICT：另一节点已并发驱动，自然让位
+        }
+    }
+}, 0, 500, TimeUnit.MILLISECONDS);
+```
+
+关键语义：
+- **并发安全**：多个调度器扫描到同一到期执行时，CAS 乐观锁保证仅一方 recover 成功，
+  另一方得到 `REVISION_CONFLICT`；
+- **后端能力差异**：`InMemoryDurableStore` 与实现了 `ScanCapable` 的 KV 后端（如
+  `InMemoryKvStore`）支持扫描；大键量 Redis 等场景建议用 ZSET 维护到期索引或使用独立
+  延迟队列，`scanDue` 对不支持的存储返回 empty；
+- **与 TTL 策略配合**：非终态快照默认永不过期（不会被 TTL 静默清理），终态快照按
+  terminalTtl 归档淘汰，避免调度器扫描到已被清理的历史数据。
 
 ---
 

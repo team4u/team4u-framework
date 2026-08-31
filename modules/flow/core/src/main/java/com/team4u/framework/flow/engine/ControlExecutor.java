@@ -1,12 +1,11 @@
 package com.team4u.framework.flow.engine;
-import com.team4u.framework.flow.api.PersistentPolicy;
-import com.team4u.framework.flow.api.Policy;
 import com.team4u.framework.flow.compiler.PlanNode;
 
 /**
  * 环绕治理控制节点（Timeout / Policy / PersistentPolicy）进栈执行与前置判定调度器。
  *
- * <p>核心职责：结合 {@link ControlKindRegistry} 将进栈调度委托给具体的控制类型策略实现。</p>
+ * <p>核心职责：结合 {@link ControlKindRegistry} 将进栈调度委托给具体的控制类型策略实现；
+ * 策略经 {@link SerialMachine} 的本机 Kind 级缓存解析，避免热路径上的重复全局注册表查表。</p>
  *
  * @author jay.wu
  */
@@ -23,8 +22,6 @@ public final class ControlExecutor {
      */
     static MachineResult enter(SerialMachine machine, RuntimeFrame frame,
                                PlanNode.Control control) {
-        ControlKindHandler handler = ControlKindRegistry.global().get(control.kind())
-                .orElseThrow(() -> new IllegalStateException("Unknown control kind: " + control.kind()));
-        return handler.enter(control, frame, machine);
+        return machine.controlKindHandler(control.kind()).enter(control, frame, machine);
     }
 }

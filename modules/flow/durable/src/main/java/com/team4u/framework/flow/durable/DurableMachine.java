@@ -70,7 +70,8 @@ public final class DurableMachine {
     private final boolean branchMode;
     private boolean parked;
 
-    public DurableMachine(DurablePlanCompiler.Definition definition, String flowId, int flowVersion,
+    /** 分支模式专用构造器：分支机器不落检查点，仅在 Parallel 分支内使用。 */
+    DurableMachine(DurablePlanCompiler.Definition definition, String flowId, int flowVersion,
                    DurableState.MachineState state, Checkpoints checkpoints,
                    FlowObserver observer, ExecutorService executor, boolean branchMode) {
         this.definition = Objects.requireNonNull(definition, "definition must not be null");
@@ -447,42 +448,54 @@ public final class DurableMachine {
     }
 
     private DurableState.MachineResult result() {
-        Instant wakeAt = null;
-        if (state.lifecycle == DurableLifecycle.ACTIVE) {
-            for (DurableState.RuntimeFrame frame : state.frames) {
-                if (frame.wake != null
-                        && (wakeAt == null || frame.wake.isBefore(wakeAt))) {
-                    wakeAt = frame.wake;
-                }
-                if (frame.deadline != null
-                        && (wakeAt == null || frame.deadline.isBefore(wakeAt))) {
-                    wakeAt = frame.deadline;
-                }
-            }
-        }
+        Instant wakeAt = earliestWake(state);
         return new DurableState.MachineResult(state.lifecycle, state.outcome,
                 state.awaitingPoint, wakeAt);
     }
+
+    /**
+     * 计算帧栈中最早的定时唤醒时刻：取所有帧 wake 与 TIMEOUT deadline 的最早到期者。
+     *
+     * <p>该值同时用于驱动结果的 {@code wakeAt} 与快照信封的冗余字段 {@code firstWakeAt}，
+     * 供外部定时调度器无需解码帧栈即可发现到期执行。</p>
+     *
+     * @param state 当前状态机状态
+     * @return 最早唤醒时刻；无任何 wake/deadline 时返回 null
+     */
+    public static Instant earliestWake(DurableState.MachineState state) {
+        Instant wakeAt = null;
+        if (state.lifecycle != DurableLifecycle.ACTIVE) {
+            return null;
+        }
+        for (DurableState.RuntimeFrame frame : state.frames) {
+            if (frame.wake != null
+                    && (wakeAt == null || frame.wake.isBefore(wakeAt))) {
+                wakeAt = frame.wake;
+            }
+            if (frame.deadline != null
+                    && (wakeAt == null || frame.deadline.isBefore(wakeAt))) {
+                wakeAt = frame.deadline;
+            }
+        }
+        return wakeAt;
+    }
+
+    /**
+     * 等待或挂起当前执行：非分支模式直接 Park 退出线程（无线程占用）；分支模式阻塞等待唤醒。
+     *
+     * <p>Core 编译器已禁止 Parallel 分支内使用 PersistentPolicy（PARALLEL_PERSISTENT_POLICY 拓扑校验），
+     * 因此分支模式理论上不会进入本方法；防御性抛出 IllegalStateException 防止非法计划忙等阻塞。</p>
+     */
     public void waitOrPark(DurableState.RuntimeFrame frame, DurablePlanNode.Control node) {
         if (!branchMode) {
             parked = true;
             return;
         }
-        while (Instant.now().isBefore(frame.wake)) {
-            try {
-                Duration remaining = Duration.between(Instant.now(), frame.wake);
-                long millis = Math.max(1, remaining.toMillis());
-                Thread.sleep(Math.min(millis, 50));
-            } catch (InterruptedException interrupted) {
-                Thread.currentThread().interrupt();
-                frame.wake = null;
-                finish(DurableState.MachineOutcome.of(
-                        failed(FlowDiagnosticCodes.WAIT_INTERRUPTED, "Policy wait was interrupted")),
-                        CheckpointReasons.control(node.descriptor().path()));
-                return;
-            }
-        }
-        frame.wake = null;
+        // Core Compiler 拓扑校验（PARALLEL_PERSISTENT_POLICY）已禁止 Parallel 分支内出现
+        // PersistentPolicy；若因绕过校验的手工构造计划进入此路径，快速失败而非无限忙等。
+        throw new IllegalStateException(
+                "PersistentPolicy wait is not allowed inside a parallel branch at "
+                        + node.descriptor().path());
     }
     public void commitCheckpoint(CheckpointReasons.Reason reason) {
         checkpoints.commit(reason);
@@ -535,6 +548,13 @@ public final class DurableMachine {
                 attributes(frame, outcome));
     }
 
+    /**
+     * 发布流程事件给观察者。
+     *
+     * <p>事件为 best-effort 尽力投递：观察者异常被吞嗉且不影响执行；事件可能在对应检查点提交前发出，
+     * 若提交发生 CAS 冲突失败，已发出的事件可能对应一个最终未被采纳的中间状态（即可能与实际落库状态重复或不一致）。
+     * 依赖事件微弱持久化语义的消费方必须自行容忍重复与乱序。</p>
+     */
     public void event(FlowObserver.Type type, NodeDescriptor descriptor,
                Map<String, String> attributes) {
         try {

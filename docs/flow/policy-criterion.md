@@ -49,24 +49,39 @@ graph TD
 
 ### 基础门控模式速查
 
-| 模式枚举 | 便捷工厂方法 | 行为语义 | 典型应用场景 |
+| 模式枚举 | 构建方式 | 行为语义 | 典型应用场景 |
 | :--- | :--- | :--- | :--- |
-| **`PERMIT_IF`** | `CriterionPolicies.permitIf(expr, code, msg)` | **满足表达式则放行**；不满足时以 `Rejected` 短路退出。 | **准入许可**：如“年龄满 18 岁且已完成实名认证”。 |
-| **`REJECT_IF`** | `CriterionPolicies.rejectIf(expr, code, msg)` | **满足表达式则以 `Rejected` 短路退出**；不满足时放行。 | **风险拦截**：如“处于黑名单中或风险评分超标”。 |
-| **`FAIL_IF`** | `CriterionPolicies.failIf(expr, code, msg)` | **满足表达式则以 `Failed` 系统故障退出**；不满足时放行。 | **严重故障熔断**：如“探测指标异常，需触发容灾或外层重试”。 |
+| **`PERMIT_IF`** | `CriterionPolicy.builder().expression(expr).mode(PERMIT_IF)` | **满足表达式则放行**；不满足时以 `Rejected` 短路退出。 | **准入许可**：如“年龄满 18 岁且已完成实名认证”。 |
+| **`REJECT_IF`** | `CriterionPolicy.builder().expression(expr).mode(REJECT_IF)` | **满足表达式则以 `Rejected` 短路退出**；不满足时放行。 | **风险拦截**：如“处于黑名单中或风险评分超标”。 |
+| **`FAIL_IF`** | `CriterionPolicy.builder().expression(expr).mode(FAIL_IF)` | **满足表达式则以 `Failed` 系统故障退出**；不满足时放行。 | **严重故障熔断**：如“探测指标异常，需触发容灾或外层重试”。 |
 
 ```java
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.criterion.CriterionPolicies;
+import com.team4u.framework.flow.criterion.CriterionPolicy;
+import com.team4u.framework.flow.model.Reason;
 
 // 1. 准入放行：未满 18 岁以 UNDERAGE 错误码业务拒绝
+CriterionPolicy<UserRequest> underageGuard = CriterionPolicy.<UserRequest>builder()
+        .expression("age >= 18")
+        .mode(CriterionPolicy.Mode.PERMIT_IF)
+        .reasonFactory((ctx, req) -> Reason.of("UNDERAGE", "用户未满 18 周岁"))
+        .build();
 Flow<UserRequest, Receipt> flow1 = Flow.step(chargeOperation)
-        .policy(CriterionPolicies.permitIf("age >= 18", "UNDERAGE", "用户未满 18 周岁"), req -> req);
+        .policy(underageGuard, req -> req);
 
 // 2. 风险拦截：命中黑名单或风控分过高直接短路
+CriterionPolicy<UserRequest> riskGuard = CriterionPolicy.<UserRequest>builder()
+        .expression("blacklisted == true || riskScore > 80")
+        .mode(CriterionPolicy.Mode.REJECT_IF)
+        .reasonFactory((ctx, req) -> Reason.of("RISK_BLOCKED", "触发风控拦截"))
+        .build();
 Flow<UserRequest, Receipt> flow2 = Flow.step(chargeOperation)
-        .policy(CriterionPolicies.rejectIf("blacklisted == true || riskScore > 80", "RISK_BLOCKED", "触发风控拦截"), req -> req);
+        .policy(riskGuard, req -> req);
 ```
+
+> [!NOTE]
+> `CriterionPolicies` 工厂类仅提供 `permitIf` / `rejectIf` / `failIf` 便捷方法，已不再提供
+> `builder()` 入口；统一使用 `CriterionPolicy.builder()` 流式构建。
 
 ---
 
@@ -79,6 +94,9 @@ import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.criterion.CriterionPolicy;
 import com.team4u.framework.flow.criterion.CriterionAction;
 import com.team4u.framework.flow.model.Reason;
+
+import java.util.LinkedHashMap;
+import java.util.Map;
 
 CriterionPolicy<OrderRequest> customPolicy = CriterionPolicy.<OrderRequest>builder()
         // 1. 声明类 SQL 规则表达式
@@ -93,12 +111,15 @@ CriterionPolicy<OrderRequest> customPolicy = CriterionPolicy.<OrderRequest>build
         // 4. 设定 PERMIT_IF 不匹配时的动作：REJECT（默认业务短路）或 FAIL（系统故障）
         .action(CriterionAction.REJECT)
         
-        // 5. 自定义 Reason 诊断工厂：注入业务详情与重试轮次
-        .reasonFactory((context, req) -> Reason.of("HIGH_VALUE_UNVERIFIED", "大额未认证交易")
-                .withDetail("buyerId", req.getBuyerId())
-                .withDetail("amount", String.valueOf(req.getTotalAmount()))
-                .withDetail("attempt", String.valueOf(context.attempt()))
-                .withDetail("path", context.metadata().path()))
+        // 5. 自定义 Reason 诊断工厂：注入业务详情与重试轮次（一次构造携带全部 details）
+        .reasonFactory((context, req) -> {
+            Map<String, String> details = new LinkedHashMap<String, String>();
+            details.put("buyerId", req.getBuyerId());
+            details.put("amount", String.valueOf(req.getTotalAmount()));
+            details.put("attempt", String.valueOf(context.attempt()));
+            details.put("path", context.metadata().path());
+            return new Reason("HIGH_VALUE_UNVERIFIED", "大额未认证交易", details);
+        })
         .build();
 
 Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
@@ -113,8 +134,8 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
 | **`mode(Mode)`** | `CriterionPolicy.Mode` | `Mode.PERMIT_IF` | **门控模式**：<br/>• `PERMIT_IF`：表达式为 true 则放行，false 则拦截；<br/>• `REJECT_IF`：表达式为 true 则以 `Reason` 拒绝，false 则放行；<br/>• `FAIL_IF`：表达式为 true 则以 `Failure` 报错，false 则放行。 |
 | **`targetExtractor(...)`** | `Function<K, Object>` | `k -> k`（直接使用入参） | **目标计算实体提取器**。<br/>若策略入参 `K` 是复合信封（如 `RequestEnvelope<UserOrder>`），可通过此函数提取内部用于表达式求值的领域 POJO 或 Map。 |
 | **`action(CriterionAction)`** | `CriterionAction` | `CriterionAction.REJECT` | **`PERMIT_IF` 不满足时的动作**：<br/>• `REJECT`：产出 `Outcome.Rejected`（正常业务短路）；<br/>• `FAIL`：产出 `Outcome.Failed`（技术故障，可触发重试）。 |
-| **`reasonFactory(...)`** | `BiFunction<PolicyContext, K, Reason>` | 默认生成 `CRITERION_REJECTED` | **自定义 Reason 工厂（在 REJECT 判定时调用）**。<br/>第一个参数 `PolicyContext` 包含当前节点路径与重试尝试轮次，第二个参数 `K` 为请求对象，便于组装丰富的诊断信息。 |
-| **`failureFactory(...)`** | `BiFunction<PolicyContext, K, Failure>` | 默认生成 `CRITERION_FAILED` | **自定义 Failure 工厂（在 FAIL 判定时调用）**。<br/>用于生成携带系统错误码与排障元数据的 `Failure` 对象。 |
+| **`reasonFactory(...)`** | `BiFunction<PolicyContext, K, Reason>` | 默认生成码为 `CRITERION_REJECTED` 的 `Reason` | **自定义 Reason 工厂（在 REJECT 判定时调用）**。<br/>第一个参数 `PolicyContext` 包含当前节点路径与重试尝试轮次，第二个参数 `K` 为请求对象，便于组装丰富的诊断信息。默认拒绝码由 `CriterionPolicy.DEFAULT_REJECT_CODE` 常量暴露。 |
+| **`failureFactory(...)`** | `BiFunction<PolicyContext, K, Failure>` | 默认生成码为 `CRITERION_FAILED` 的 `Failure` | **自定义 Failure 工厂（在 FAIL 判定时调用）**。<br/>用于生成携带系统错误码与排障元数据的 `Failure` 对象。默认失败码由 `CriterionPolicy.DEFAULT_FAILURE_CODE` 常量暴露。 |
 | **`criteria(Criteria)`** | `Criteria` | `Criteria.global()` | **规则求值引擎实例**。<br/>可注入自定义注册了业务自定义函数（UDF）或独立缓存的 `Criteria` 实例。 |
 
 ---

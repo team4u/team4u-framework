@@ -36,7 +36,7 @@ public final class MachineResult {
      * @return 结果快照
      */
     static MachineResult from(MachineState state, Instant wakeAt) {
-        return new MachineResult(state.lifecycle, state.outcome, state.awaitingPoint, wakeAt);
+        return new MachineResult(state.lifecycle(), state.outcome(), state.awaitingPoint(), wakeAt);
     }
 }
 

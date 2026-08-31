@@ -23,6 +23,8 @@ public final class FlowDiagnosticCodes {
     // ====== 路由与控制治理 ======
     /** 条件路由未匹配到任何分支且无 otherwise。 */
     public static final String NO_ROUTE = "NO_ROUTE";
+    /** 路由分支键使用了数组类型（equals 为引用相等，无法可靠匹配）。 */
+    public static final String ARRAY_ROUTE_KEY = "ARRAY_ROUTE_KEY";
     /** 策略退避等待时被中断。 */
     public static final String WAIT_INTERRUPTED = "WAIT_INTERRUPTED";
     /** 策略回调执行异常。 */

@@ -97,7 +97,7 @@ public class ExecutorResourceTest {
         try {
             Flow<String, String> flow = Flow.step(
                     (Operation<String, String>) (context, input) -> {
-                Thread.sleep(200);
+                Thread.sleep(80);
                 return Outcome.accepted(input);
             }).timeout(Duration.ofMillis(30));
 
@@ -202,7 +202,7 @@ public class ExecutorResourceTest {
             Branch<String, String> b2 = Branch.of("b2", (c, i) -> {
                 b2Started.countDown();
                 try {
-                    Thread.sleep(500);
+                    Thread.sleep(80);
                 } finally {
                     b2FinallyRan.set(true);
                     b2ExitTimestamp.set(System.currentTimeMillis());
@@ -237,7 +237,8 @@ public class ExecutorResourceTest {
             Branch<String, String> b1 = Branch.of("b1", (context, input) -> {
                 branchEntered.countDown();
                 try {
-                    Thread.sleep(5000);
+                    // 有限分片等待：取消级联会在等待期间中断本线程
+                    Thread.sleep(80);
                 } catch (InterruptedException e) {
                     branchInterrupted.set(true);
                     Thread.currentThread().interrupt();
@@ -289,7 +290,7 @@ public class ExecutorResourceTest {
         ExecutorService singleWorker = Executors.newSingleThreadExecutor();
         try {
             Branch<String, String> b1 = Branch.of("b1", (c, i) -> {
-                Thread.sleep(120);
+                Thread.sleep(80);
                 return Outcome.accepted("b1");
             });
             Branch<String, String> b2 = Branch.of("b2", (c, i) -> Outcome.accepted("b2"));
@@ -355,7 +356,7 @@ public class ExecutorResourceTest {
             Branch<String, String> b1 = Branch.of("b1", (c, i) -> {
                 b1Started.countDown();
                 try {
-                    Thread.sleep(100);
+                    Thread.sleep(80);
                 } finally {
                     b1FinallyRan.set(true);
                     b1ExitTime.set(System.currentTimeMillis());
@@ -466,7 +467,8 @@ public class ExecutorResourceTest {
         Flow<String, String> flow = Flow.<String, String>step((context, input) -> {
             opStarted.countDown();
             try {
-                Thread.sleep(5000);
+                // 有限分片等待：父取消会在等待期间中断本工作线程
+                Thread.sleep(80);
             } catch (InterruptedException e) {
                 opInterrupted.set(true);
                 Thread.currentThread().interrupt();

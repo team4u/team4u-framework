@@ -4,9 +4,9 @@ import java.time.Instant;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.Optional;
 import com.team4u.framework.flow.api.FlowObserver;
 import com.team4u.framework.flow.api.Metadata;
+import com.team4u.framework.flow.api.ObserverSafeEmitter;
 import com.team4u.framework.flow.compiler.PlanNode;
 import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.spi.NodeDescriptor;
@@ -35,13 +35,14 @@ public final class MachineObserver {
 
     /** 帧首次进入时发布 NODE_STARTED（observerStarted 去重保证幂等）。 */
     void nodeStarted(RuntimeFrame frame) {
-        if (frame.observerStarted) return;
+        if (observer.isNoop() || frame.observerStarted) return;
         frame.observerStarted = true;
         event(FlowObserver.Type.NODE_STARTED, frame.node.descriptor(),
                 attributes(frame, null));
     }
 
     void nodeCompleted(RuntimeFrame frame, Outcome<?> outcome) {
+        if (observer.isNoop()) return;
         if (frame.node instanceof PlanNode.Invoke) return;
         event(FlowObserver.Type.NODE_COMPLETED, frame.node.descriptor(),
                 attributes(frame, outcome));
@@ -49,18 +50,19 @@ public final class MachineObserver {
 
     void event(FlowObserver.Type type, NodeDescriptor descriptor,
                Map<String, String> attributes) {
-        Metadata metadata = new Metadata(flowId, flowVersion, state.executionId,
+        if (observer.isNoop()) return;
+        Metadata metadata = new Metadata(flowId, flowVersion, state.executionId(),
                 descriptor.path(), descriptor.label());
-        try {
-            observer.onEvent(new FlowObserver.Event(type, Instant.now(), metadata,
-                    descriptor, attributes));
-        } catch (RuntimeException ignored) {
-            // Observers cannot alter execution.
-        }
+        ObserverSafeEmitter.emit(observer, new FlowObserver.Event(type, Instant.now(),
+                metadata, descriptor, attributes));
     }
 
     private static Map<String, String> attributes(RuntimeFrame frame,
                                                    Outcome<?> outcome) {
+        if (outcome == null && !(frame.node instanceof PlanNode.Sequence)
+                && !(frame.node instanceof PlanNode.Control) && frame.selected == null) {
+            return Collections.emptyMap();
+        }
         LinkedHashMap<String, String> attributes = new LinkedHashMap<String, String>();
         if (frame.node instanceof PlanNode.Sequence) {
             PlanNode.Sequence sequence = (PlanNode.Sequence) frame.node;

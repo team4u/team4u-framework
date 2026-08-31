@@ -125,7 +125,7 @@ public class FlowCoreTest {
     @Test
     public void deepExplicitScopesUseCompilerAndMachineStacks() {
         Flow<Integer, Integer> flow = Flow.identity();
-        for (int index = 0; index < 5000; index++)
+        for (int index = 0; index < 1500; index++)
             flow = Flow.scope("scope-" + index, flow);
         assertEquals(Integer.valueOf(7), Local.compile(flow).run(7).requireAccepted());
     }

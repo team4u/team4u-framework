@@ -36,11 +36,11 @@ public final class MachineCancellationCoordinator {
     }
 
     private void markCancelled() {
-        state.lifecycle = MachineState.Lifecycle.CANCELLED;
-        state.outcome = null;
-        state.awaitingPoint = null;
-        state.pendingSignal = null;
-        state.frames.clear();
+        state.lifecycle(MachineState.Lifecycle.CANCELLED);
+        state.outcome(null);
+        state.awaitingPoint(null);
+        state.pendingSignal(null);
+        state.clearFrames();
     }
 }
 

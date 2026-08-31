@@ -8,6 +8,7 @@ import lombok.experimental.Accessors;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import com.team4u.framework.flow.api.Branch;
@@ -172,10 +173,39 @@ public interface Logical {
     /** 常量或恒等透传终态逻辑节点。 */
     @Getter
     @Accessors(fluent = true)
-    @AllArgsConstructor
     public static final class Complete implements Logical {
         private final Outcome<?> outcome;
         private final boolean identity;
+
+        private Complete(Outcome<?> outcome, boolean identity) {
+            if (outcome == null && !identity) {
+                throw new IllegalArgumentException(
+                        "Complete requires a non-null outcome unless it is an identity node");
+            }
+            this.outcome = outcome;
+            this.identity = identity;
+        }
+
+        /**
+         * 创建恒等透传终态节点（输入直接作为 Accepted 输出）。
+         *
+         * @return 恒等透传节点
+         */
+        public static Complete identityNode() {
+            return new Complete(null, true);
+        }
+
+        /**
+         * 创建常量终态节点。
+         *
+         * @param outcome 固定输出结果，不能为 null
+         * @return 常量终态节点
+         * @throws NullPointerException 当 {@code outcome} 为 null 时抛出
+         */
+        public static Complete constant(Outcome<?> outcome) {
+            return new Complete(
+                    Objects.requireNonNull(outcome, "outcome must not be null"), false);
+        }
     }
 
     /** 携带可读标签的装饰包装逻辑节点。 */

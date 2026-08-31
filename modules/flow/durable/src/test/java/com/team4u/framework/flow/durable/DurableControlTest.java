@@ -50,12 +50,12 @@ public class DurableControlTest {
 
     @Test
     public void timeoutExpiryConvertsBodyToTimeoutFailure() {
-        // body 睡 300ms，TIMEOUT 50ms：worker 强制截止 → 稳定 Failed(TIMEOUT)
+        // body 睡 100ms，TIMEOUT 30ms：worker 强制截止 → 稳定 Failed(TIMEOUT)
         Operation<String, String> slow = new Operation<String, String>() {
             @Override
             public Outcome<String> execute(OperationContext context, String input) {
                 try {
-                    Thread.sleep(300);
+                    Thread.sleep(100);
                 } catch (InterruptedException interrupted) {
                     Thread.currentThread().interrupt();
                 }
@@ -63,7 +63,7 @@ public class DurableControlTest {
             }
         };
         Flow<String, String> flow = Flow.<String, String>step(slow)
-                .timeout(Duration.ofMillis(50));
+                .timeout(Duration.ofMillis(30));
         ExecutorService executor = Executors.newSingleThreadExecutor();
         try {
             DurableResult<String> result = compile(flow, new InMemoryDurableStore(), executor)
@@ -97,9 +97,9 @@ public class DurableControlTest {
     }
 
     @Test
-    public void timeoutWithoutExecutorRunsSynchronously() {
-        // 文档化降级：无 executor 时 body 同步执行，未到期正常通过；
-        // 到期后由循环顶部的协作检查点转换为 TIMEOUT。
+    public void timeoutWithoutExecutorFailsFastAtCompile() {
+        // 行为变更（fail-fast 优先）：定义含 TIMEOUT 而未配置 executor 时，
+        // compile 立即抛 INVALID_CONFIGURATION（旧语义为同步降级执行）。
         final AtomicInteger calls = new AtomicInteger();
         Operation<String, String> fast = new Operation<String, String>() {
             @Override
@@ -110,41 +110,38 @@ public class DurableControlTest {
         };
         Flow<String, String> flow = Flow.<String, String>step(fast)
                 .timeout(Duration.ofSeconds(30));
-        // 不配置 executor：同步降级
-        DurableResult<String> result = compile(flow, new InMemoryDurableStore(), null)
-                .start("e", "in");
-        assertEquals("in>sync", acceptedValue(result));
-        assertEquals(1, calls.get());
+        // 不配置 executor：编译期快速失败
+        try {
+            compile(flow, new InMemoryDurableStore(), null);
+            fail("含 TIMEOUT 而无 executor 必须 INVALID_CONFIGURATION");
+        } catch (DurableException error) {
+            assertEquals(DurableException.Error.INVALID_CONFIGURATION, error.error());
+        }
+        assertEquals(0, calls.get());
     }
 
     @Test
-    public void timeoutWithoutExecutorCooperativeExpiryStillFails() {
-        // 同步降级路径的到期检查：body 本身耗尽预算（同步 sleep 超过 deadline）后，
-        // 循环顶部协作检查点把最近 TIMEOUT 作用域转为 Failed(TIMEOUT)。
-        Operation<String, String> slow = new Operation<String, String>() {
+    public void timeoutWithExecutorRunsBodyWithDeadlineEnforcement() {
+        // 配置 executor 后正常：同步快路径（未到期）下 body 直接执行。
+        final AtomicInteger calls = new AtomicInteger();
+        Operation<String, String> fast = new Operation<String, String>() {
             @Override
             public Outcome<String> execute(OperationContext context, String input) {
-                try {
-                    Thread.sleep(120);
-                } catch (InterruptedException interrupted) {
-                    Thread.currentThread().interrupt();
-                }
-                return Outcome.accepted(input + ">slow");
+                calls.incrementAndGet();
+                return Outcome.accepted(input + ">sync");
             }
         };
-        // TIMEOUT 包裹 sequence：slow 完成 → 后续 step 推进前协作检查点命中 deadline
-        Flow<String, String> flow = Flow.<String, String>step(slow)
-                .then(new Operation<String, String>() {
-                    @Override
-                    public Outcome<String> execute(OperationContext ctx, String input) {
-                        return Outcome.accepted(input + ">tail");
-                    }
-                })
-                .timeout(Duration.ofMillis(40));
-        DurableResult<String> result = compile(flow, new InMemoryDurableStore(), null)
-                .start("e", "in");
-        Outcome.Failed<String> failed = (Outcome.Failed<String>) outcome(result);
-        assertEquals("TIMEOUT", failed.failure().code());
+        Flow<String, String> flow = Flow.<String, String>step(fast)
+                .timeout(Duration.ofSeconds(30));
+        ExecutorService executor = Executors.newSingleThreadExecutor();
+        try {
+            DurableResult<String> result = compile(flow, new InMemoryDurableStore(), executor)
+                    .start("e", "in");
+            assertEquals("in>sync", acceptedValue(result));
+            assertEquals(1, calls.get());
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     // ------------------------------------------------------------------

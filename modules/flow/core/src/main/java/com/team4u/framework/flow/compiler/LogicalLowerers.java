@@ -7,7 +7,6 @@ import com.team4u.framework.flow.api.Branch;
 import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.ResumePoint;
 import com.team4u.framework.flow.spi.NodeDescriptor;
-
 /**
  * 逻辑 AST 降级编译策略实现族。
  *
@@ -44,7 +43,7 @@ public final class LogicalLowerers {
             List<Compiler.Child> children = new ArrayList<Compiler.Child>(sequence.children().size());
             for (int index = 0; index < sequence.children().size(); index++) {
                 Logical child = sequence.children().get(index);
-                children.add(new Compiler.Child(child, work.path() + "/" + index, work.parallel()));
+                children.add(new Compiler.Child(child, FlowPaths.child(work.path(), index), work.parallel()));
             }
             return children;
         }
@@ -56,7 +55,7 @@ public final class LogicalLowerers {
             }
             List<PlanNode> children = new ArrayList<PlanNode>(sequence.children().size());
             for (int index = 0; index < sequence.children().size(); index++) {
-                children.add(context.required(work.path() + "/" + index));
+                children.add(context.required(FlowPaths.child(work.path(), index)));
             }
             return new PlanNode.Sequence(Compiler.descriptor(work, NodeDescriptor.Kind.SEQUENCE),
                     children, sequence.scopeName());
@@ -74,28 +73,28 @@ public final class LogicalLowerers {
             List<Compiler.Child> children = new ArrayList<Compiler.Child>(route.cases().size() + 1);
             for (int index = 0; index < route.cases().size(); index++) {
                 children.add(new Compiler.Child(route.cases().get(index).branch(),
-                        work.path() + "/case:" + index, work.parallel()));
+                        FlowPaths.routeCase(work.path(), index), work.parallel()));
             }
             if (route.otherwise() != null) {
                 children.add(new Compiler.Child(route.otherwise(),
-                        work.path() + "/otherwise", work.parallel()));
+                        FlowPaths.routeOtherwise(work.path()), work.parallel()));
             }
             return children;
         }
 
         @Override
         public PlanNode build(Logical.Route route, Compiler.Work work, LoweringContext context) {
-            String selectorPath = work.path() + "/selector";
+            String selectorPath = FlowPaths.selectorPath(work.path());
             PlanNode.Invoke selector = context.invoke(new Logical.Invoke(route.selector(),
                     value -> value, (ignored, value) -> value), selectorPath, null);
             context.byPath().put(selectorPath, selector);
             List<PlanNode.Route.RouteCase> cases = new ArrayList<PlanNode.Route.RouteCase>(route.cases().size());
             for (int index = 0; index < route.cases().size(); index++) {
                 cases.add(new PlanNode.Route.RouteCase(route.cases().get(index).key(),
-                        context.required(work.path() + "/case:" + index)));
+                        context.required(FlowPaths.routeCase(work.path(), index))));
             }
             PlanNode otherwise = route.otherwise() == null ? null
-                    : context.required(work.path() + "/otherwise");
+                    : context.required(FlowPaths.routeOtherwise(work.path()));
             return new PlanNode.Route(Compiler.descriptor(work, NodeDescriptor.Kind.ROUTE),
                     selector, cases, otherwise);
         }
@@ -112,7 +111,7 @@ public final class LogicalLowerers {
             List<Compiler.Child> children = new ArrayList<Compiler.Child>(fallback.branches().size());
             for (int index = 0; index < fallback.branches().size(); index++) {
                 children.add(new Compiler.Child(fallback.branches().get(index),
-                        work.path() + "/branch:" + index, work.parallel()));
+                        FlowPaths.fallbackBranch(work.path(), index), work.parallel()));
             }
             return children;
         }
@@ -121,7 +120,7 @@ public final class LogicalLowerers {
         public PlanNode build(Logical.Fallback fallback, Compiler.Work work, LoweringContext context) {
             List<PlanNode> branches = new ArrayList<PlanNode>(fallback.branches().size());
             for (int index = 0; index < fallback.branches().size(); index++) {
-                branches.add(context.required(work.path() + "/branch:" + index));
+                branches.add(context.required(FlowPaths.fallbackBranch(work.path(), index)));
             }
             PlanNode.Fallback.Trigger trigger = fallback.trigger() == Logical.Fallback.Trigger.SKIPPED
                     ? PlanNode.Fallback.Trigger.SKIPPED : PlanNode.Fallback.Trigger.FAILED;
@@ -141,7 +140,7 @@ public final class LogicalLowerers {
             List<Compiler.Child> children = new ArrayList<Compiler.Child>(parallel.branches().size());
             for (int index = 0; index < parallel.branches().size(); index++) {
                 children.add(new Compiler.Child(parallel.branches().get(index).flow(),
-                        work.path() + "/branch:" + index, true));
+                        FlowPaths.parallelBranch(work.path(), index), true));
             }
             return children;
         }
@@ -149,13 +148,18 @@ public final class LogicalLowerers {
         @Override
         public PlanNode build(Logical.Parallel parallel, Compiler.Work work, LoweringContext context) {
             List<PlanNode.ParallelBranch> branches = new ArrayList<PlanNode.ParallelBranch>(parallel.branches().size());
-            for (int index = 0; index < parallel.branches().size(); index++) {
-                Branch<?, ?> token = parallel.branches().get(index).token();
-                if (!context.branchNames().add(token.name())) {
-                    context.problem("DUPLICATE_BRANCH", work.path(), "Duplicate branch: " + token.name());
+            context.beginParallelBlock();
+            try {
+                for (int index = 0; index < parallel.branches().size(); index++) {
+                    Branch<?, ?> token = parallel.branches().get(index).token();
+                    if (!context.branchNames().add(token.name())) {
+                        context.problem("DUPLICATE_BRANCH", work.path(), "Duplicate branch: " + token.name());
+                    }
+                    branches.add(new PlanNode.ParallelBranch(token,
+                            context.required(FlowPaths.parallelBranch(work.path(), index))));
                 }
-                branches.add(new PlanNode.ParallelBranch(token,
-                        context.required(work.path() + "/branch:" + index)));
+            } finally {
+                context.endParallelBlock();
             }
             return new PlanNode.Parallel(Compiler.descriptor(work, NodeDescriptor.Kind.PARALLEL),
                     branches, parallel.join());
@@ -195,7 +199,8 @@ public final class LogicalLowerers {
 
         @Override
         public List<Compiler.Child> children(Logical.Control control, Compiler.Work work) {
-            return Collections.singletonList(new Compiler.Child(control.body(), work.path() + "/body", work.parallel()));
+            return Collections.singletonList(new Compiler.Child(control.body(),
+                    FlowPaths.controlBody(work.path()), work.parallel()));
         }
 
         @Override
@@ -208,7 +213,7 @@ public final class LogicalLowerers {
                     : context.resolve(control.binding(), work.path());
             PlanNode.Control.Kind kind = PlanNode.Control.Kind.valueOf(control.kind().name());
             return new PlanNode.Control(Compiler.descriptor(work, NodeDescriptor.Kind.CONTROL), kind,
-                    context.required(work.path() + "/body"), target,
+                    context.required(FlowPaths.controlBody(work.path())), target,
                     control.keyProjection(), control.configuration());
         }
     }

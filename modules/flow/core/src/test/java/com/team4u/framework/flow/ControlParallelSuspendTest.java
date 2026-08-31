@@ -182,7 +182,7 @@ public class ControlParallelSuspendTest {
     public void timeoutDiscardsLateResult() {
         Flow<String, String> flow = Flow.step(
                 (Operation<String, String>) (context, input) -> {
-            long until = System.nanoTime() + Duration.ofMillis(150).toNanos();
+            long until = System.nanoTime() + Duration.ofMillis(80).toNanos();
             while (System.nanoTime() < until) Thread.interrupted();
             return Outcome.accepted("late");
         }).timeout(Duration.ofMillis(20));
@@ -197,7 +197,7 @@ public class ControlParallelSuspendTest {
             throws Exception {
         final CountDownLatch late = new CountDownLatch(2);
         Operation<String, String> ignored = (context, input) -> {
-            ignoreInterrupts(Duration.ofMillis(120));
+            ignoreInterrupts(Duration.ofMillis(80));
             late.countDown();
             return Outcome.accepted(input);
         };
@@ -246,7 +246,7 @@ public class ControlParallelSuspendTest {
         final CountDownLatch late = new CountDownLatch(2);
         Operation<String, String> ignored = (context, input) -> {
             entered.countDown();
-            ignoreInterrupts(Duration.ofMillis(120));
+            ignoreInterrupts(Duration.ofMillis(80));
             late.countDown();
             return Outcome.accepted(input);
         };
@@ -293,7 +293,7 @@ public class ControlParallelSuspendTest {
     public void timeoutBoundsBlockingPolicyAndJoinCallbacks() {
         Policy<String> blocking = new Policy<String>() {
             @Override public Gate before(PolicyContext context, String key) {
-                ignoreInterrupts(Duration.ofMillis(300));
+                ignoreInterrupts(Duration.ofMillis(80));
                 return Gate.proceed();
             }
         };
@@ -308,7 +308,7 @@ public class ControlParallelSuspendTest {
             }
             @Override public void after(PolicyContext context, String key,
                                         Completion completion) {
-                ignoreInterrupts(Duration.ofMillis(300));
+                ignoreInterrupts(Duration.ofMillis(80));
             }
         };
         assertTimesOutQuickly(Flow.<String>identity()
@@ -327,25 +327,26 @@ public class ControlParallelSuspendTest {
         Branch<String, String> branch = Branch.of("branch", Flow.identity());
         Flow<String, String> joinFlow = Flow.parallel(branch)
                 .<String>join(results -> {
-                    ignoreInterrupts(Duration.ofMillis(300));
+                    ignoreInterrupts(Duration.ofMillis(80));
                     return results.outcome(branch);
                 })
                 .timeout(Duration.ofMillis(20));
         assertTimesOutQuickly(joinFlow);
 
         Branch<String, String> slowFirst = Branch.of("slow-first", (context, input) -> {
-            ignoreInterrupts(Duration.ofMillis(300));
+            ignoreInterrupts(Duration.ofMillis(80));
             return Outcome.accepted(input);
         });
         Branch<String, String> slowSecond = Branch.of("slow-second", (context, input) -> {
-            ignoreInterrupts(Duration.ofMillis(300));
+            ignoreInterrupts(Duration.ofMillis(80));
             return Outcome.accepted(input);
         });
 
         // 验证 slow parallel 的 wait-all 与 timeout 协同合同：
         // 1. 逻辑结果首先落定为 TIMEOUT 失败，晚到结果被严格抑制；
         // 2. 物理返回受 True Wait-All 退出保证约束：必须等待所有已启动分支的工作线程退出。
-        //    对于忽略中断的非协作代码，主线程会等待其物理结束（耗时 >= 250ms），确保调用返回后无并发线程泄漏。
+        //    对于忽略中断的非协作代码（每分支 80ms 自旋），主线程会等待其物理结束（耗时 >= 60ms），
+        //    确保调用返回后无并发线程泄漏。
         long startNanos = System.nanoTime();
         FlowResult.Completed<String> slowParallelResult = (FlowResult.Completed<String>)
                 Local.compile(Flow.parallel(slowFirst, slowSecond)
@@ -356,7 +357,7 @@ public class ControlParallelSuspendTest {
         assertTrue(slowParallelResult.outcome() instanceof Outcome.Failed<?>);
         assertEquals("TIMEOUT", ((Outcome.Failed<String>) slowParallelResult.outcome()).failure().code());
         assertTrue("True wait-all contract must wait for non-cooperative branches to exit physically: " + elapsedMillis + "ms",
-                elapsedMillis >= 250 && elapsedMillis < 3000);
+                elapsedMillis >= 60 && elapsedMillis < 3000);
     }
 
 
@@ -380,12 +381,12 @@ public class ControlParallelSuspendTest {
         return new PersistentPolicy<String, Integer>() {
             @Override public Integer initialState(String key) { return 0; }
             @Override public Before<Integer> before(PolicyContext context, String key, Integer state) {
-                if (before) ignoreInterrupts(Duration.ofMillis(300));
+                if (before) ignoreInterrupts(Duration.ofMillis(80));
                 return PersistentPolicy.proceed(state);
             }
             @Override public After<Integer> after(PolicyContext context, String key, Integer state,
                                          Completion completion) {
-                if (!before) ignoreInterrupts(Duration.ofMillis(300));
+                if (!before) ignoreInterrupts(Duration.ofMillis(80));
                 return PersistentPolicy.returning(state);
             }
         };

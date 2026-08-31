@@ -9,6 +9,7 @@ import com.team4u.framework.flow.api.OperationContext;
 import com.team4u.framework.flow.durable.DurableExecutable;
 import com.team4u.framework.flow.durable.DurableResult;
 import com.team4u.framework.flow.durable.DurableRuntime;
+import com.team4u.framework.flow.durable.snapshot.CompositeStateMapper;
 import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
 import com.team4u.framework.flow.model.Cancellation;
 import com.team4u.framework.flow.model.Failure;
@@ -26,7 +27,6 @@ import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.junit.After;
-import org.junit.Assert;
 import org.junit.Test;
 
 import java.time.Duration;
@@ -37,6 +37,7 @@ import java.util.function.Function;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * Flow 重试策略适配层单元测试（涵盖 Local 内存与 Durable 持久化状态机）。
@@ -60,7 +61,7 @@ public class FlowRetryPolicyTest {
 
     @Test
     public void testFixedBackoff() {
-        FlowRetryPolicy<OrderRequest> policy = FlowRetries.fixed(3, 50);
+        FlowRetryPolicy<OrderRequest> policy = FlowRetryPolicy.fixed(3, 50);
         assertEquals(3, policy.resolveMaxAttempts());
         assertEquals(50, policy.resolveBackoff().calculateMillis(1));
         assertEquals(50, policy.resolveBackoff().calculateMillis(2));
@@ -86,7 +87,7 @@ public class FlowRetryPolicyTest {
 
     @Test
     public void testExponentialBackoff() {
-        FlowRetryPolicy<OrderRequest> policy = FlowRetries.exponential(4, 30, 2.0, 200);
+        FlowRetryPolicy<OrderRequest> policy = FlowRetryPolicy.exponential(4, 30, 2.0, 200);
         Backoff backoff = policy.resolveBackoff();
         assertEquals(30, backoff.calculateMillis(1));
         assertEquals(60, backoff.calculateMillis(2));
@@ -115,7 +116,7 @@ public class FlowRetryPolicyTest {
 
     @Test
     public void testExponentialJitterBackoff() {
-        FlowRetryPolicy<OrderRequest> policy = FlowRetries.jitter(3, 40, 2.0, 200);
+        FlowRetryPolicy<OrderRequest> policy = FlowRetryPolicy.jitter(3, 40, 2.0, 200);
         Backoff backoff = policy.resolveBackoff();
         for (int i = 1; i <= 3; i++) {
             long delay = backoff.calculateMillis(i);
@@ -140,7 +141,7 @@ public class FlowRetryPolicyTest {
 
     @Test
     public void testIncrementBackoff() {
-        FlowRetryPolicy<OrderRequest> policy = FlowRetries.increment(3, 40, 20);
+        FlowRetryPolicy<OrderRequest> policy = FlowRetryPolicy.increment(3, 40, 20);
         assertEquals(40, policy.resolveBackoff().calculateMillis(1));
         assertEquals(60, policy.resolveBackoff().calculateMillis(2));
         assertEquals(80, policy.resolveBackoff().calculateMillis(3));
@@ -162,7 +163,7 @@ public class FlowRetryPolicyTest {
 
     @Test
     public void testRetryAttemptsExhausted() {
-        FlowRetryPolicy<OrderRequest> policy = FlowRetries.fixed(3, 10);
+        FlowRetryPolicy<OrderRequest> policy = FlowRetryPolicy.fixed(3, 10);
 
         AtomicInteger callCount = new AtomicInteger(0);
         Flow<OrderRequest, String> step = Flow.step((ctx, req) -> {
@@ -265,7 +266,7 @@ public class FlowRetryPolicyTest {
             }
         });
 
-        FlowRetryPolicy<OrderRequest> policy = FlowRetries.named(registry, "order-charge-retry");
+        FlowRetryPolicy<OrderRequest> policy = FlowRetryPolicy.named(registry, "order-charge-retry");
         assertEquals(3, policy.resolveMaxAttempts());
         assertEquals(20, policy.resolveBackoff().calculateMillis(1));
 
@@ -296,7 +297,7 @@ public class FlowRetryPolicyTest {
             config.put("retry.policy.dynamic-flow",
                     "{\"maxRetries\":3,\"backoff\":{\"type\":\"exponential\",\"params\":{\"initialDelay\":15,\"multiplier\":2.0,\"maxDelay\":100}}}");
 
-            FlowRetryPolicy<OrderRequest> policy = FlowRetries.named("dynamic-flow");
+            FlowRetryPolicy<OrderRequest> policy = FlowRetryPolicy.named("dynamic-flow");
             assertEquals(4, policy.resolveMaxAttempts());
             assertEquals(15, policy.resolveBackoff().calculateMillis(1));
             assertEquals(30, policy.resolveBackoff().calculateMillis(2));
@@ -322,7 +323,7 @@ public class FlowRetryPolicyTest {
 
     @Test
     public void testFlowCancellationDuringBackoff() {
-        FlowRetryPolicy<String> policy = FlowRetries.fixed(3, 5000);
+        FlowRetryPolicy<String> policy = FlowRetryPolicy.fixed(3, 5000);
         Cancellation cancellation = Cancellation.create();
 
         Flow<String, String> step = Flow.step((ctx, in) -> Outcome.failed(Failure.of("FAIL", "fail1")));
@@ -352,13 +353,13 @@ public class FlowRetryPolicyTest {
             return Outcome.accepted(input + ">ok@" + call);
         };
 
-        FlowRetryPolicy<String> policy = FlowRetries.fixed(3, 20);
+        FlowRetryPolicy<String> policy = FlowRetryPolicy.fixed(3, 20);
         Flow<String, String> flow = Flow.step(flaky).persistentPolicy(policy, Function.identity());
 
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable =
                 DurableRuntime.builder(store)
-                        .stateMapper(createTestStateMapper())
+                        .stateMapper(CompositeStateMapper.withDefault(FlowRetryStateMapper.INSTANCE))
                         .build()
                         .compile(flow, "durable-retry", 1);
 
@@ -385,13 +386,13 @@ public class FlowRetryPolicyTest {
             return Outcome.failed(Failure.of("PERM_ERROR", "permanent failure"));
         };
 
-        FlowRetryPolicy<String> policy = FlowRetries.fixed(2, 10);
+        FlowRetryPolicy<String> policy = FlowRetryPolicy.fixed(2, 10);
         Flow<String, String> flow = Flow.step(alwaysFails).persistentPolicy(policy, Function.identity());
 
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable =
                 DurableRuntime.builder(store)
-                        .stateMapper(createTestStateMapper())
+                        .stateMapper(CompositeStateMapper.withDefault(FlowRetryStateMapper.INSTANCE))
                         .build()
                         .compile(flow, "durable-retry-exhausted", 1);
 
@@ -407,12 +408,118 @@ public class FlowRetryPolicyTest {
         assertEquals(2, calls.get());
     }
 
-    private static com.team4u.framework.flow.durable.snapshot.StateMapper createTestStateMapper() {
-        return com.team4u.framework.flow.durable.snapshot.CompositeStateMapper.withDefault(
-                new com.team4u.framework.flow.durable.snapshot.SerializerStateMapper(
-                        "json:jackson", 1,
-                        obj -> com.team4u.framework.serializer.json.JsonUtil.toJsonStr(obj).getBytes(java.nio.charset.StandardCharsets.UTF_8),
-                        bytes -> com.team4u.framework.serializer.json.JsonUtil.toBean(new String(bytes, java.nio.charset.StandardCharsets.UTF_8), FlowRetryState.class)));
+    @Test
+    public void testMaxAttemptsMustBePositive() {
+        try {
+            FlowRetryPolicy.fixed(0, 10);
+            fail("maxAttempts=0 must be rejected");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("greater than 0"));
+        }
+        try {
+            FlowRetryPolicy.<String>builder().maxAttempts(-1).build();
+            fail("maxAttempts=-1 must be rejected");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("greater than 0"));
+        }
+    }
+
+    @Test
+    public void testDefaultsWhenNeitherStaticNorNamedConfigured() {
+        // 未配置任何静态参数与命名策略：走默认降级分支（maxAttempts=3，固定 1000ms 退避）
+        FlowRetryPolicy<String> policy = FlowRetryPolicy.named("no-such-policy");
+        assertEquals(3, policy.resolveMaxAttempts());
+        assertEquals(1000, policy.resolveBackoff().calculateMillis(1));
+    }
+
+    @Test
+    public void testAfterResolvesDynamicPolicyOnlyOncePerAttempt() {
+        // 命名策略生效路径：after() 内单次解析同时驱动 maxAttempts 与 backoff
+        NamedRetryPolicyRegistry registry = new NamedRetryPolicyRegistry();
+        final AtomicInteger creates = new AtomicInteger(0);
+        registry.register(new NamedRetryPolicyFactory() {
+            @Override
+            public String key() {
+                return "counting-policy";
+            }
+
+            @Override
+            public RetryPolicy create() {
+                creates.incrementAndGet();
+                return RetryPolicy.builder()
+                        .maxRetries(2)
+                        .backoff(Backoffs.fixed(5))
+                        .build();
+            }
+        });
+
+        FlowRetryPolicy<String> policy = FlowRetryPolicy.named(registry, "counting-policy");
+        FlowRetryState state = FlowRetryState.initial();
+        com.team4u.framework.flow.api.PersistentPolicy.After<FlowRetryState> after = policy.after(
+                testPolicyContext(), "key", state,
+                completedFailure("TRANSIENT"));
+
+        assertTrue(after instanceof com.team4u.framework.flow.api.PersistentPolicy.RetryAt);
+        assertEquals(2, state.nextAttempt().getAttempt());
+        // after() 单次解析：maxAttempts 与 backoff 共享同一次 resolveRetryPolicy
+        assertEquals("after() must resolve the policy exactly once", 1, creates.get());
+    }
+
+    @Test
+    public void testFlowRetryStateMapperRoundTrip() throws Exception {
+        FlowRetryState state = new FlowRetryState(7);
+        com.team4u.framework.flow.durable.snapshot.StoredValue stored =
+                FlowRetryStateMapper.INSTANCE.encode(state);
+        assertEquals(FlowRetryStateMapper.CODEC_ID, stored.codecId());
+        assertEquals(FlowRetryStateMapper.CODEC_VERSION, stored.codecVersion());
+
+        Object decoded = FlowRetryStateMapper.INSTANCE.decode(stored);
+        assertEquals(state, decoded);
+
+        // 编码确定性：同一状态多次编码字节一致
+        java.util.Arrays.equals(
+                FlowRetryStateMapper.INSTANCE.encode(state).payload(),
+                FlowRetryStateMapper.INSTANCE.encode(new FlowRetryState(7)).payload());
+
+        // 非 FlowRetryState 类型拒绝
+        try {
+            FlowRetryStateMapper.INSTANCE.encode("not-a-state");
+            fail("encode must reject non FlowRetryState values");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("FlowRetryState"));
+        }
+        // 错误 codecId 拒绝
+        try {
+            FlowRetryStateMapper.INSTANCE.decode(
+                    new com.team4u.framework.flow.durable.snapshot.StoredValue("other", 1, new byte[0]));
+            fail("decode must reject foreign codecId");
+        } catch (IllegalArgumentException expected) {
+            assertTrue(expected.getMessage().contains("codecId"));
+        }
+    }
+
+    private static com.team4u.framework.flow.api.PolicyContext testPolicyContext() {
+        return new com.team4u.framework.flow.api.PolicyContext() {
+            @Override
+            public com.team4u.framework.flow.api.Metadata metadata() {
+                return null;
+            }
+
+            @Override
+            public int attempt() {
+                return 1;
+            }
+
+            @Override
+            public Cancellation.Signal cancellation() {
+                return null;
+            }
+        };
+    }
+
+    private static com.team4u.framework.flow.model.Completion completedFailure(String code) {
+        return com.team4u.framework.flow.model.Completion.from(
+                Outcome.failed(Failure.of(code, "test failure")));
     }
 
     private static void waitPast(Instant wake) {

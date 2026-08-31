@@ -160,7 +160,7 @@ graph LR
 | 方法 | 返回类型 | 说明与用途 |
 | :--- | :--- | :--- |
 | **`recovery.input()`** | `I` | **进入当前作用域时的原始输入对象**。<br/>让恢复步骤精准知道主分支是在处理哪个业务对象（如 `orderId`、`userId`、请求金额等）时发生失败的，从而能够执行针对性的回滚、库存释放或撤销操作。 |
-| **`recovery.failure()`** | `Failure` | **触发失败时的故障诊断对象**。<br/>包含错误码 `code()`、错误消息 `message()`、根因异常 `cause()` 及详细元数据 `details()`，便于恢复逻辑针对不同错误原因采取不同的补偿策略。 |
+| **`recovery.failure()`** | `Failure` | **触发失败时的故障诊断对象**。<br/>包含错误码 `code()`、错误消息 `message()` 及结构化元数据 `details()`（`details()` 为不可变键值对字典），便于恢复逻辑针对不同错误原因采取不同的补偿策略。 |
 
 ---
 
@@ -211,10 +211,12 @@ Operation<String, String> op = (context, input) -> {
 
 ### 框架异常拦截与收敛机制
 1. **内核级异常沙箱**：执行引擎（`SerialMachine` / `DurableMachine`）在调用 `Operation` 时内置了异常拦截网；
-2. **统一诊断码收敛**：任何从 `Operation` 中逃逸出来的 `Exception` 会被自动捕获并封装为：
+2. **统一诊断码收敛**：任何从 `Operation` 中逃逸出来的 `Exception` 会被自动捕获，将异常类名与消息拼接后封装为：
    ```java
-   Outcome.failed(Failure.of(FlowDiagnosticCodes.OPERATION_EXCEPTION, e.getMessage(), e))
+   Outcome.failed(Failure.of(FlowDiagnosticCodes.OPERATION_EXCEPTION,
+           e.getClass().getName() + ": " + e.getMessage()))
    ```
+   若需要保留堆栈等排障上下文，可在业务代码内捕获异常并自行构造携带 `details` 的 `Failure`。
 3. **Null 安全检查**：若 `Operation` 违规返回了 `null`，框架会将其收敛为 `Failed(OPERATION_EXCEPTION, "Operation outcome must not be null")`；
 4. **中断与取消特权传递**：`InterruptedException` 与 `CancellationException` 不会被普通业务异常吞噬，而是被框架转换为标准的中断与取消生命周期事件。
 

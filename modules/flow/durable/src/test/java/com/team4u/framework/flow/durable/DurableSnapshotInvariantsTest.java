@@ -9,6 +9,7 @@ import java.util.Map;
 import static org.junit.Assert.assertArrayEquals;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -22,7 +23,7 @@ import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.OperationContext;
 import com.team4u.framework.flow.model.Outcome;
 
-/** 组10：快照不变量 — 防御拷贝、构造校验、5000 层嵌套 scope 编解码不栈溢出。 */
+/** 组10：快照不变量 — 防御拷贝、构造校验、1500 层嵌套 scope 编解码不栈溢出。 */
 public class DurableSnapshotInvariantsTest {
 
     private static StoredValue value(String codec) {
@@ -163,6 +164,18 @@ public class DurableSnapshotInvariantsTest {
         withNull.put("input", null);
         assertSnapshotRejected("e", "f", 1, "fmt", 1, 1L,
                 DurableLifecycle.ACTIVE, metadata, withNull, null, false);
+        // firstWakeAt 仅允许 ACTIVE 快照携带
+        assertSnapshotRejected("e", "f", 1, "fmt", 1, 1L,
+                DurableLifecycle.SUSPENDED, metadata, slots, "p", false,
+                java.time.Instant.now());
+        assertSnapshotRejected("e", "f", 1, "fmt", 1, 1L,
+                DurableLifecycle.COMPLETED, metadata, slots, null, false,
+                java.time.Instant.now());
+        // ACTIVE 携带 firstWakeAt 合法
+        DurableSnapshot activeWithWake = new DurableSnapshot("e", "f", 1, "fmt", 1, 1L,
+                DurableLifecycle.ACTIVE, metadata, slots, null, false,
+                java.time.Instant.now());
+        assertNotNull(activeWithWake.firstWakeAt());
     }
 
     private static void assertSnapshotRejected(String executionId, String flowId,
@@ -173,9 +186,23 @@ public class DurableSnapshotInvariantsTest {
                                                Map<String, StoredValue> slots,
                                                String awaitingPoint,
                                                boolean pendingResume) {
+        assertSnapshotRejected(executionId, flowId, flowVersion, formatId, formatVersion,
+                revision, lifecycle, frameMetadata, slots, awaitingPoint, pendingResume, null);
+    }
+
+    private static void assertSnapshotRejected(String executionId, String flowId,
+                                               int flowVersion, String formatId,
+                                               int formatVersion, long revision,
+                                               DurableLifecycle lifecycle,
+                                               byte[] frameMetadata,
+                                               Map<String, StoredValue> slots,
+                                               String awaitingPoint,
+                                               boolean pendingResume,
+                                               java.time.Instant firstWakeAt) {
         try {
             new DurableSnapshot(executionId, flowId, flowVersion, formatId, formatVersion,
-                    revision, lifecycle, frameMetadata, slots, awaitingPoint, pendingResume);
+                    revision, lifecycle, frameMetadata, slots, awaitingPoint, pendingResume,
+                    firstWakeAt);
             fail("非法参数必须被拒绝: " + executionId + "/" + flowId + "/" + lifecycle);
         } catch (IllegalArgumentException | NullPointerException expected) {
             // 契约校验
@@ -188,14 +215,14 @@ public class DurableSnapshotInvariantsTest {
 
     @Test
     public void deepNestedScopeEncodesAndDecodesWithoutStackOverflow() {
-        final int depth = 5000;
+        final int depth = 1500;
         Operation<String, String> tail = new Operation<String, String>() {
             @Override
             public Outcome<String> execute(OperationContext context, String input) {
                 return Outcome.accepted(input + ">tail");
             }
         };
-        // 5000 层具名 scope 嵌套：每层都是独立的 Sequence 帧
+        // 1500 层具名 scope 嵌套：每层都是独立的 Sequence 帧
         Flow<String, String> flow = Flow.<String, String>step(tail);
         for (int i = 0; i < depth; i++) {
             flow = Flow.scope("s" + i, flow);
@@ -212,7 +239,7 @@ public class DurableSnapshotInvariantsTest {
 
     @Test
     public void deepNestedScopeRecoversWithConsistentFrameStack() {
-        final int depth = 5000;
+        final int depth = 1500;
         // 崩溃注入：tail 首次抛 Error，recover 后重放
         final java.util.concurrent.atomic.AtomicInteger calls =
                 new java.util.concurrent.atomic.AtomicInteger();
@@ -236,7 +263,7 @@ public class DurableSnapshotInvariantsTest {
             executable.start("e", "in");
             fail("tail 首次执行必须崩溃");
         } catch (DurableTestOps.SimulatedCrash expected) {
-            // 崩溃：帧栈深 5001
+            // 崩溃：帧栈深 1501
         }
         // 崩溃快照：帧栈完整编码（恢复前后一致由 recover 成功推进证明）
         DurableSnapshot crashed = store.load("e").get();

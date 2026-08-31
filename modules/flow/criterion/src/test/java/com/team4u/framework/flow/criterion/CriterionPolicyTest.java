@@ -12,8 +12,6 @@ import lombok.Data;
 import lombok.NoArgsConstructor;
 import org.junit.Test;
 
-import java.util.Arrays;
-import java.util.Collections;
 import java.util.List;
 
 public class CriterionPolicyTest {
@@ -118,5 +116,90 @@ public class CriterionPolicyTest {
 
         FlowResult<String> normalResult = Local.compile(flow).run(new UserRequest("NORMAL_1001", 30, false, 0, null));
         FlowAssertions.assertRejected(normalResult, "NO_VIP_PREFIX");
+    }
+
+    @Test
+    public void testPermitIfPolicyWithDefaultCodes() {
+        // 单参 permitIf：未指定原因码时使用 DEFAULT_REJECT_CODE / DEFAULT_FAILURE_CODE
+        CriterionPolicy<UserRequest> rejectDefault = CriterionPolicies.permitIf("age >= 18");
+        Flow<UserRequest, String> flow = Flow.<UserRequest, String>step((ctx, req) -> Outcome.accepted("OK"))
+                .policy(rejectDefault, req -> req);
+
+        FlowResult<String> minor = Local.compile(flow).run(new UserRequest("U1", 15, false, 0, null));
+        FlowAssertions.assertRejected(minor, CriterionPolicy.DEFAULT_REJECT_CODE);
+
+        CriterionPolicy<UserRequest> failDefault = CriterionPolicy.<UserRequest>builder()
+                .expression("age >= 18")
+                .mode(CriterionPolicy.Mode.PERMIT_IF)
+                .action(CriterionAction.FAIL)
+                .build();
+        Flow<UserRequest, String> failFlow = Flow.<UserRequest, String>step((ctx, req) -> Outcome.accepted("OK"))
+                .policy(failDefault, req -> req);
+
+        FlowResult<String> failed = Local.compile(failFlow).run(new UserRequest("U2", 15, false, 0, null));
+        FlowAssertions.assertFailed(failed, CriterionPolicy.DEFAULT_FAILURE_CODE);
+    }
+
+    @Test
+    public void testInvalidExpressionFailsFastAtConstruction() {
+        // 构造期预编译：非法表达式立即抛出，而非等到首次求值
+        try {
+            CriterionPolicy.<UserRequest>builder()
+                    .expression("age >>>> 18 ((")
+                    .mode(CriterionPolicy.Mode.PERMIT_IF)
+                    .build();
+            org.junit.Assert.fail("invalid expression must fail at construction");
+        } catch (RuntimeException expected) {
+            // 具体异常类型由 criterion 底座决定（CriterionParseException 或其运行时包装）
+            org.junit.Assert.assertTrue(expected.getMessage() != null);
+        }
+    }
+
+    @Test
+    public void testInvalidModeActionCombinationRejectedAtConstruction() {
+        // REJECT_IF + action=FAIL：无效组合，构造期拒绝
+        try {
+            CriterionPolicy.<UserRequest>builder()
+                    .expression("blacklisted == true")
+                    .mode(CriterionPolicy.Mode.REJECT_IF)
+                    .action(CriterionAction.FAIL)
+                    .build();
+            org.junit.Assert.fail("REJECT_IF with action=FAIL must be rejected");
+        } catch (IllegalArgumentException expected) {
+            org.junit.Assert.assertTrue(expected.getMessage().contains("REJECT_IF"));
+        }
+
+        // FAIL_IF + action=REJECT：无效组合，构造期拒绝
+        try {
+            CriterionPolicy.<UserRequest>builder()
+                    .expression("riskScore > 99")
+                    .mode(CriterionPolicy.Mode.FAIL_IF)
+                    .action(CriterionAction.REJECT)
+                    .build();
+            org.junit.Assert.fail("FAIL_IF with action=REJECT must be rejected");
+        } catch (IllegalArgumentException expected) {
+            org.junit.Assert.assertTrue(expected.getMessage().contains("FAIL_IF"));
+        }
+    }
+
+    @Test
+    public void testEvaluationExceptionIsFailClosedAsPolicyException() {
+        // 求值异常 → 引擎转化为 POLICY_EXCEPTION(Failed)，fail-closed
+        Criteria exploding = new Criteria(null, null) {
+            @Override
+            public boolean matches(String expression, Object actual) {
+                throw new IllegalStateException("criterion engine exploded");
+            }
+        };
+        CriterionPolicy<UserRequest> policy = CriterionPolicy.<UserRequest>builder()
+                .criteria(exploding)
+                .expression("age >= 18")
+                .mode(CriterionPolicy.Mode.PERMIT_IF)
+                .build();
+
+        Flow<UserRequest, String> flow = Flow.<UserRequest, String>step((ctx, req) -> Outcome.accepted("OK"))
+                .policy(policy, req -> req);
+        FlowResult<String> result = Local.compile(flow).run(new UserRequest("U1", 20, false, 0, null));
+        FlowAssertions.assertFailed(result, "POLICY_EXCEPTION");
     }
 }

@@ -1,6 +1,5 @@
 package com.team4u.framework.flow.retry;
 
-import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.PolicyContext;
 import com.team4u.framework.flow.model.Completion;
@@ -13,13 +12,14 @@ import com.team4u.framework.retry.common.backoff.Backoff;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 import lombok.Builder;
 import lombok.Getter;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.Method;
 import java.time.Instant;
 import java.util.Arrays;
 import java.util.Collection;
 import java.util.Objects;
-import java.util.function.Function;
 import java.util.function.Predicate;
 
 /**
@@ -38,6 +38,8 @@ import java.util.function.Predicate;
  */
 @Getter
 public class FlowRetryPolicy<K> implements PersistentPolicy<K, FlowRetryState> {
+
+    private static final Logger LOG = LoggerFactory.getLogger(FlowRetryPolicy.class);
 
     private final Integer maxAttempts;
     private final Backoff backoff;
@@ -191,9 +193,11 @@ public class FlowRetryPolicy<K> implements PersistentPolicy<K, FlowRetryState> {
         FlowRetryState current = state != null ? state : FlowRetryState.initial();
         if (completion != null && completion.kind() == Outcome.Kind.FAILED && completion.failure().isPresent()) {
             Failure failure = completion.failure().get();
-            int effectiveMaxAttempts = resolveMaxAttempts();
+            // 单次解析动态策略，供 maxAttempts 与 backoff 复用，避免同一轮次重复反射解析
+            RetryPolicy resolvedPolicy = maxAttempts != null && backoff != null ? null : resolveRetryPolicy();
+            int effectiveMaxAttempts = effectiveMaxAttempts(resolvedPolicy);
             if (isRetryable(failure) && current.getAttempt() < effectiveMaxAttempts) {
-                Backoff effectiveBackoff = resolveBackoff();
+                Backoff effectiveBackoff = effectiveBackoff(resolvedPolicy);
                 long delayMillis = effectiveBackoff.calculateMillis(current.getAttempt());
                 Instant wakeInstant = delayMillis > 0
                         ? Instant.now().plusMillis(delayMillis)
@@ -223,22 +227,27 @@ public class FlowRetryPolicy<K> implements PersistentPolicy<K, FlowRetryState> {
     /**
      * 解析生效的重试策略配置（优先查询 DynamicRetryPolicyRegistry，其次查询 NamedRetryPolicyRegistry）。
      *
+     * <p>动态注册表 team4u-retry-config 为可选依赖，通过反射访问：类不存在时（ClassNotFoundException，
+     * 可选依赖缺失属预期）静默降级到命名注册表；其余异常仅记录 warn 日志后降级，不影响主流程。</p>
+     *
      * @return 解析到的基础 RetryPolicy 实例，若未指定或不存在返回 null
      */
     public RetryPolicy resolveRetryPolicy() {
         if (policyName == null || policyName.trim().isEmpty()) {
             return null;
         }
-        // 1. 尝试从 DynamicRetryPolicyRegistry 解析
-        try {
-            Class<?> clazz = Class.forName("com.team4u.framework.retry.dynamic.DynamicRetryPolicyRegistry");
-            Method method = clazz.getMethod("getPolicy", String.class);
-            RetryPolicy dynamicPolicy = (RetryPolicy) method.invoke(null, policyName);
-            if (dynamicPolicy != null) {
-                return dynamicPolicy;
+        // 1. 尝试从 DynamicRetryPolicyRegistry 解析（Class/Method 查找结果由静态 holder 缓存，仅 invoke 每次执行）
+        DynamicRegistryAccessor accessor = DynamicRegistryAccessor.INSTANCE;
+        if (accessor.available) {
+            try {
+                RetryPolicy dynamicPolicy = (RetryPolicy) accessor.method.invoke(null, policyName);
+                if (dynamicPolicy != null) {
+                    return dynamicPolicy;
+                }
+            } catch (Throwable error) {
+                LOG.warn("Dynamic retry policy resolution failed for policy [{}], falling back to named registry",
+                        policyName, error);
             }
-        } catch (Throwable ignored) {
-            // 类不存在或动态解析失败时忽略
         }
         // 2. 尝试从 NamedRetryPolicyRegistry 解析
         NamedRetryPolicyRegistry registry = namedRegistry != null ? namedRegistry : NamedRetryPolicyRegistry.global();
@@ -253,12 +262,15 @@ public class FlowRetryPolicy<K> implements PersistentPolicy<K, FlowRetryState> {
      * @return 退避算法实例
      */
     public Backoff resolveBackoff() {
+        return effectiveBackoff(resolveRetryPolicy());
+    }
+
+    private Backoff effectiveBackoff(RetryPolicy resolvedPolicy) {
         if (backoff != null) {
             return backoff;
         }
-        RetryPolicy dynamicPolicy = resolveRetryPolicy();
-        if (dynamicPolicy != null && dynamicPolicy.getBackoff() != null) {
-            return dynamicPolicy.getBackoff();
+        if (resolvedPolicy != null && resolvedPolicy.getBackoff() != null) {
+            return resolvedPolicy.getBackoff();
         }
         return Backoffs.fixed(1000);
     }
@@ -269,15 +281,47 @@ public class FlowRetryPolicy<K> implements PersistentPolicy<K, FlowRetryState> {
      * @return 最大尝试总次数
      */
     public int resolveMaxAttempts() {
+        return effectiveMaxAttempts(resolveRetryPolicy());
+    }
+
+    private int effectiveMaxAttempts(RetryPolicy resolvedPolicy) {
         if (maxAttempts != null && maxAttempts > 0) {
             return maxAttempts;
         }
-        RetryPolicy dynamicPolicy = resolveRetryPolicy();
-        if (dynamicPolicy != null) {
-            int maxRetries = dynamicPolicy.getMaxRetries();
+        if (resolvedPolicy != null) {
+            int maxRetries = resolvedPolicy.getMaxRetries();
             return maxRetries >= 0 ? maxRetries + 1 : Integer.MAX_VALUE;
         }
         return 3;
+    }
+
+    /**
+     * DynamicRetryPolicyRegistry 的静态访问器：缓存 Class/Method 查找结果，仅 invoke 逐次执行。
+     *
+     * <p>仅静默 ClassNotFoundException（team4u-retry-config 为可选依赖，缺失属预期）；
+     * 其余 Throwable 记 warn 日志后标记不可用降级。</p>
+     */
+    private static final class DynamicRegistryAccessor {
+        static final DynamicRegistryAccessor INSTANCE = new DynamicRegistryAccessor();
+
+        final boolean available;
+        final Method method;
+
+        private DynamicRegistryAccessor() {
+            Method resolved = null;
+            try {
+                Class<?> clazz = Class.forName("com.team4u.framework.retry.dynamic.DynamicRetryPolicyRegistry");
+                resolved = clazz.getMethod("getPolicy", String.class);
+            } catch (ClassNotFoundException expected) {
+                // 可选依赖 team4u-retry-config 不在 classpath：预期内的降级场景，静默处理
+                resolved = null;
+            } catch (Throwable error) {
+                LOG.warn("Failed to prepare DynamicRetryPolicyRegistry accessor, dynamic retry policies disabled", error);
+                resolved = null;
+            }
+            this.available = resolved != null;
+            this.method = resolved;
+        }
     }
 
     /**

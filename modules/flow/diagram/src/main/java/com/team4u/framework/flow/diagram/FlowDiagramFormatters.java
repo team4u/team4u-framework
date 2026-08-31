@@ -155,6 +155,9 @@ final class FlowDiagramFormatters {
                 case '`':
                     escaped.append("&#96;");
                     break;
+                case '#':
+                    escaped.append("&#35;");
+                    break;
                 case '&':
                     escaped.append("&amp;");
                     break;

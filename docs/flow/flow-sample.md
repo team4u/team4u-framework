@@ -369,11 +369,11 @@ public class OrderFlowFactory {
     // 附带重试、失败补偿与超时的完整流程
     static final Flow<OrderRequest, Receipt> ORDER_FLOW_WITH_RECOVERY =
             Flow.scope("order",
-                            FlowRetries.fixed(2, 1000).wrap(
-                                    Flow.firstApplicable(
+                            Flow.firstApplicable(
                                             Flow.step(autoChannel),
-                                            Flow.step(semiAutoChannel)),
-                                    OrderRequest::getOrderId))
+                                            Flow.step(semiAutoChannel))
+                    .persistentPolicy(
+                            FlowRetryPolicy.fixed(2, 1000), OrderRequest::getOrderId))
                     .recoverWith(Flow.step(manualFallback))
                     .timeout(java.time.Duration.ofSeconds(30));
 }

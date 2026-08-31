@@ -104,13 +104,24 @@ public class PolicyAndCapabilityTest {
                 "same", Flow.scope("same", Flow.<String>identity()));
         assertProblem("DUPLICATE_SCOPE", () -> Local.compile(duplicateScopes));
 
-        Branch<String, String> firstBranch = Branch.of("global", Flow.identity());
-        Branch<String, String> secondBranch = Branch.of("global", Flow.identity());
-        Flow<String, String> duplicateBranches = Flow.parallel(firstBranch)
-                .join(results -> results.outcome(firstBranch))
-                .then(Flow.parallel(secondBranch)
-                        .join(results -> results.outcome(secondBranch)));
-        assertProblem("DUPLICATE_BRANCH", () -> Local.compile(duplicateBranches));
+        Branch<String, String> firstBranch = Branch.of("same-name", Flow.identity());
+        Branch<String, String> secondBranch = Branch.of("same-name", Flow.identity());
+        assertProblem("DUPLICATE_BRANCH", () -> Local.compile(
+                Flow.parallel(firstBranch, secondBranch)
+                        .join(results -> results.outcome(firstBranch))));
+
+        // 两个互不相干的并行块复用相同分支名（如 left/right）是合法的：
+        // 分支名仅要求同一并行块内唯一，不要求全局唯一。
+        Branch<String, String> left = Branch.of("left", Flow.<String>identity());
+        Branch<String, String> right = Branch.of("right", Flow.<String>identity());
+        Flow<String, String> firstBlock = Flow.parallel(left, right)
+                .join(results -> results.outcome(left));
+        Branch<String, String> reusedLeft = Branch.of("left", Flow.<String>identity());
+        Branch<String, String> reusedRight = Branch.of("right", Flow.<String>identity());
+        Flow<String, String> secondBlock = Flow.parallel(reusedLeft, reusedRight)
+                .join(results -> results.outcome(reusedRight));
+        Flow<String, String> reusedNames = firstBlock.then(secondBlock);
+        assertEquals("value", Local.compile(reusedNames).run("value").requireAccepted());
 
         Flow<String, Resumed<Resumed<String, String>, String>> reusedPoint =
                 Flow.<String>identity().await(first).await(first);
@@ -158,14 +169,14 @@ public class PolicyAndCapabilityTest {
     @Test
     public void cancellationWinsOverInterruptIgnoringCallbacks() throws Exception {
         Operation<String, String> lateOperation = (context, input) -> {
-            ignoreInterrupts(Duration.ofMillis(120));
+            ignoreInterrupts(Duration.ofMillis(80));
             return Outcome.accepted("late");
         };
         assertCancelled(Flow.step(lateOperation));
 
         Policy<String> lateBefore = new Policy<String>() {
             @Override public Gate before(PolicyContext context, String key) {
-                ignoreInterrupts(Duration.ofMillis(120));
+                ignoreInterrupts(Duration.ofMillis(80));
                 return Gate.reject(Reason.of("LATE", "late"));
             }
         };
@@ -177,7 +188,7 @@ public class PolicyAndCapabilityTest {
             }
             @Override public void after(PolicyContext context, String key,
                                         Completion completion) {
-                ignoreInterrupts(Duration.ofMillis(120));
+                ignoreInterrupts(Duration.ofMillis(80));
             }
         };
         assertCancelled(Flow.<String>identity().policy(lateAfter, value -> value));
@@ -185,7 +196,7 @@ public class PolicyAndCapabilityTest {
         PersistentPolicy<String, Integer> latePersistentBefore = new PersistentPolicy<String, Integer>() {
             @Override public Integer initialState(String key) { return 0; }
             @Override public Before<Integer> before(PolicyContext context, String key, Integer state) {
-                ignoreInterrupts(Duration.ofMillis(120));
+                ignoreInterrupts(Duration.ofMillis(80));
                 return PersistentPolicy.reject(Reason.of("LATE", "late"), state);
             }
             @Override public After<Integer> after(PolicyContext context, String key, Integer state,
@@ -203,7 +214,7 @@ public class PolicyAndCapabilityTest {
             }
             @Override public After<Integer> after(PolicyContext context, String key, Integer state,
                                          Completion completion) {
-                ignoreInterrupts(Duration.ofMillis(120));
+                ignoreInterrupts(Duration.ofMillis(80));
                 return PersistentPolicy.returning(state);
             }
         };
@@ -212,7 +223,7 @@ public class PolicyAndCapabilityTest {
 
         Branch<String, String> branch = Branch.of("late-join", Flow.identity());
         assertCancelled(Flow.parallel(branch).join(results -> {
-            ignoreInterrupts(Duration.ofMillis(120));
+            ignoreInterrupts(Duration.ofMillis(80));
             return results.outcome(branch);
         }));
     }

@@ -88,10 +88,20 @@ public final class Cancellation {
     /**
      * 检查当前令牌或其任意祖先是否已被取消。
      *
+     * <p>实现为沿父链迭代的显式循环（而非递归），避免任意深度的链式子令牌
+     * 在取消检查时触发栈溢出。</p>
+     *
      * @return 若已触发取消则返回 true，否则返回 false
      */
     public boolean isCancelled() {
-        return cancelled.get() || (parent != null && parent.isCancelled());
+        Cancellation current = this;
+        while (current != null) {
+            if (current.cancelled.get()) {
+                return true;
+            }
+            current = current.parent;
+        }
+        return false;
     }
 
     /**

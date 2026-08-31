@@ -9,6 +9,7 @@ import java.util.ArrayList;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
@@ -71,19 +72,36 @@ public class DurableHygieneRegressionTest {
                     }
                 }, s -> s)
                 .timeout(Duration.ofSeconds(2));
-        InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableExecutable<String, String> executable =
-                DurableRuntime.builder(store).build().compile(flow, "wake", 1);
-        DurableResult<String> result = executable.start("e", "in");
-        assertTrue(result.getClass().getSimpleName(), result instanceof DurableResult.Active);
-        DurableResult.Active<String> active = (DurableResult.Active<String>) result;
-        assertTrue("wakeAt 必须存在", active.wakeAt().isPresent());
-        Instant wakeAt = active.wakeAt().get();
-        Instant now = Instant.now();
-        // deadline=now+2s：wakeAt 应接近 deadline（远小于 30s 的 retry backoff）
-        assertTrue("wakeAt 必须反映 TIMEOUT deadline 而非远期 backoff wake: " + wakeAt,
-                Duration.between(now, wakeAt).compareTo(Duration.ofSeconds(5)) < 0);
-        assertTrue("wakeAt 不得早于当前时间", !wakeAt.isBefore(now.minusSeconds(1)));
+        // 行为变更：含 TIMEOUT 的定义在无 executor 时编译期 fail-fast
+        try {
+            DurableRuntime.builder(new InMemoryDurableStore()).build().compile(flow, "wake", 1);
+            fail("含 TIMEOUT 而无 executor 必须 INVALID_CONFIGURATION");
+        } catch (DurableException error) {
+            assertEquals(DurableException.Error.INVALID_CONFIGURATION, error.error());
+        }
+        java.util.concurrent.ExecutorService executor =
+                java.util.concurrent.Executors.newSingleThreadExecutor();
+        try {
+            InMemoryDurableStore store = new InMemoryDurableStore();
+            DurableExecutable<String, String> executable =
+                    DurableRuntime.builder(store).executor(executor).build()
+                            .compile(flow, "wake", 1);
+            DurableResult<String> result = executable.start("e", "in");
+            assertTrue(result.getClass().getSimpleName(), result instanceof DurableResult.Active);
+            DurableResult.Active<String> active = (DurableResult.Active<String>) result;
+            assertTrue("wakeAt 必须存在", active.wakeAt().isPresent());
+            Instant wakeAt = active.wakeAt().get();
+            Instant now = Instant.now();
+            // deadline=now+2s：wakeAt 应接近 deadline（远小于 30s 的 retry backoff）
+            assertTrue("wakeAt 必须反映 TIMEOUT deadline 而非远期 backoff wake: " + wakeAt,
+                    Duration.between(now, wakeAt).compareTo(Duration.ofSeconds(5)) < 0);
+            assertTrue("wakeAt 不得早于当前时间", !wakeAt.isBefore(now.minusSeconds(1)));
+            // 快照信封的 firstWakeAt 冗余字段与驱动结果一致
+            DurableSnapshot snapshot = store.load("e").get();
+            assertEquals(wakeAt, snapshot.firstWakeAt());
+        } finally {
+            executor.shutdownNow();
+        }
     }
 
     // ------------------------------------------------------------------
@@ -114,9 +132,10 @@ public class DurableHygieneRegressionTest {
                 state, DefaultStateMapper.INSTANCE, definition.slotRoles());
         DurableSnapshot snapshot = new DurableSnapshot("e", "edge", 1,
                 DurableSnapshot.CURRENT_FORMAT_ID, DurableSnapshot.CURRENT_FORMAT_VERSION,
-                1L, DurableLifecycle.ACTIVE, payload.metadata(), payload.slots(),
+                0L, DurableLifecycle.ACTIVE, payload.metadata(), payload.slots(),
                 null, false);
-        store.insertForTest("e", snapshot);  // 手工构造快照直接落库
+        assertTrue("手工构造快照以 create 模式落库",
+                store.compareAndSet("e", -1, snapshot));
         try {
             executable.recover("e");
             return null;
@@ -165,5 +184,79 @@ public class DurableHygieneRegressionTest {
         // 驱动行为不在本用例范围（phase=2 无子帧属异常形态，由机器防御终止）。
         DurableException error = restoreRouteFrameWith(2, 0, "case:0");
         assertEquals("合法 case 游标应放行", null, error);
+    }
+
+    // ------------------------------------------------------------------
+    // 注册表冻结防护
+    // ------------------------------------------------------------------
+
+    @Test
+    public void globalRegistriesAreFrozenAndRejectWrites() {
+        // 三个全局注册表在静态初始化后已冻结：写入操作必须被拒绝，读取不受影响
+        com.team4u.framework.flow.durable.engine.DurableControlKindRegistry control =
+                com.team4u.framework.flow.durable.engine.DurableControlKindRegistry.global();
+        com.team4u.framework.flow.durable.engine.DurableNodeExecutionHandlerRegistry nodes =
+                com.team4u.framework.flow.durable.engine.DurableNodeExecutionHandlerRegistry.global();
+        com.team4u.framework.flow.durable.engine.DurableFrameReducePolicyRegistry reducers =
+                com.team4u.framework.flow.durable.engine.DurableFrameReducePolicyRegistry.global();
+
+        assertTrue(control.isFrozen());
+        assertTrue(nodes.isFrozen());
+        assertTrue(reducers.isFrozen());
+
+        try {
+            control.unregisterAll();
+            fail("冻结注册表写入必须被拒绝");
+        } catch (UnsupportedOperationException expected) {
+            // 冻结防护
+        }
+        try {
+            nodes.unregisterAll();
+            fail("冻结注册表写入必须被拒绝");
+        } catch (UnsupportedOperationException expected) {
+            // 冻结防护
+        }
+        try {
+            reducers.unregisterAll();
+            fail("冻结注册表写入必须被拒绝");
+        } catch (UnsupportedOperationException expected) {
+            // 冻结防护
+        }
+
+        // 读取不受影响：内置策略仍可路由
+        assertTrue(control.get(com.team4u.framework.flow.spi.ControlKind.PERSISTENT_POLICY)
+                .isPresent());
+        assertTrue(nodes.get(com.team4u.framework.flow.durable.engine.DurablePlanNode.Invoke.class)
+                .isPresent());
+        assertTrue(reducers.get(
+                        com.team4u.framework.flow.durable.engine.DurablePlanNode.Sequence.class)
+                .isPresent());
+
+        // 本地（非 global）实例不受冻结限制：可正常注册
+        com.team4u.framework.flow.durable.engine.DurableControlKindRegistry local =
+                new com.team4u.framework.flow.durable.engine.DurableControlKindRegistry();
+        assertFalse(local.isFrozen());
+        local.register(new com.team4u.framework.flow.durable.engine.DurableControlKindHandler() {
+            @Override
+            public com.team4u.framework.flow.spi.ControlKind key() {
+                return com.team4u.framework.flow.spi.ControlKind.TIMEOUT;
+            }
+
+            @Override
+            public void enter(com.team4u.framework.flow.durable.engine.DurablePlanNode.Control control,
+                              DurableState.RuntimeFrame frame,
+                              DurableMachine machine) {
+                // 测试替身：不推进
+            }
+
+            @Override
+            public DurableState.MachineOutcome reduce(
+                    com.team4u.framework.flow.durable.engine.DurablePlanNode.Control control,
+                    DurableState.RuntimeFrame frame,
+                    DurableState.MachineOutcome child, DurableMachine machine) {
+                return child;
+            }
+        });
+        assertTrue(local.get(com.team4u.framework.flow.spi.ControlKind.TIMEOUT).isPresent());
     }
 }

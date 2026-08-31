@@ -76,21 +76,24 @@ classDiagram
         +code() String
         +message() String
         +details() Map~String, String~
-        +withDetail(key, value) Reason
+        +of(code, message) Reason
     }
 
     class Failure {
         -String code
         -String message
-        -Throwable cause
         -Map~String, String~ details
         +code() String
         +message() String
-        +cause() Throwable
         +details() Map~String, String~
-        +withDetail(key, value) Failure
+        +of(code, message) Failure
     }
 ```
+
+> [!NOTE]
+> `Reason` 与 `Failure` 均为不可变值对象，仅提供 `code()`、`message()` 与 `details()` 三个只读访问器，
+> 不提供链式修改方法；需要携带扩展明细时，通过三参构造器（`new Reason(code, message, details)` /
+> `new Failure(code, message, details)`）一次性传入不可变键值对字典。
 
 ### `Reason`：领域业务原因（用于 `Rejected` 与 `Skipped`）
 
@@ -102,19 +105,21 @@ import com.team4u.framework.flow.model.Reason;
 // 1. 基础构建：指定稳定错误码与可读描述
 Reason r1 = Reason.of("INSUFFICIENT_BALANCE", "账户余额不足");
 
-// 2. 链式追加诊断详情键值对（生成新不可变实例）
-Reason r2 = Reason.of("DAILY_LIMIT_EXCEEDED", "超出单日转账限额")
-        .withDetail("currentLimit", "50000")
-        .withDetail("requestedAmount", "80000");
+// 2. 携带结构化诊断详情（不可变键值对字典，保持插入顺序）
+Map<String, String> details = new LinkedHashMap<>();
+details.put("currentLimit", "50000");
+details.put("requestedAmount", "80000");
+Reason r2 = new Reason("DAILY_LIMIT_EXCEEDED", "超出单日转账限额", details);
 
 String code = r2.code();                    // "DAILY_LIMIT_EXCEEDED"
 String message = r2.message();              // "超出单日转账限额"
-Map<String, String> details = r2.details(); // {"currentLimit": "50000", ...}
+Map<String, String> detailMap = r2.details(); // {currentLimit=50000, requestedAmount=80000}
 ```
 
 ### `Failure`：系统故障诊断（用于 `Failed`）
 
-`Failure` 代表技术故障与系统异常，支持绑定底层根因异常 `Throwable`：
+`Failure` 代表技术故障与系统异常。框架刻意不持有 `Throwable` 引用，而是将异常类名与消息
+收敛进 `message`，将堆栈等结构化上下文放入 `details`，保证诊断信息可序列化、可跨进程传输：
 
 ```java
 import com.team4u.framework.flow.model.Failure;
@@ -122,17 +127,23 @@ import com.team4u.framework.flow.model.Failure;
 // 1. 基础构建
 Failure f1 = Failure.of("RPC_TIMEOUT", "支付网关响应超时");
 
-// 2. 绑定底层根因异常与网络元数据
+// 2. 携带底层异常信息与网络元数据
 try {
     invokeRemoteService();
 } catch (Exception e) {
-    Failure f2 = Failure.of("INVOCATION_ERROR", e.getMessage(), e)
-            .withDetail("remoteIp", "10.0.12.34")
-            .withDetail("timeoutMs", "3000");
-    
-    Throwable cause = f2.cause(); // 获取原始异常
+    Map<String, String> details = new LinkedHashMap<>();
+    details.put("exceptionClass", e.getClass().getName());
+    details.put("remoteIp", "10.0.12.34");
+    details.put("timeoutMs", "3000");
+    Failure f2 = new Failure("INVOCATION_ERROR", e.getMessage(), details);
+
+    String exceptionClass = f2.details().get("exceptionClass"); // 原始异常类名
 }
 ```
+
+> [!TIP]
+> 当 `Operation` 抛出未捕获异常时，框架会自动收敛为
+> `Failure.of("OPERATION_EXCEPTION", 异常类名 + ": " + 异常消息)`，无需手工包装。
 
 ---
 
@@ -180,7 +191,7 @@ switch (outcome.kind()) {
         break;
     case FAILED:
         Failure failure = ((Outcome.Failed<Receipt>) outcome).failure();
-        log.error("系统故障: [{}] {}", failure.code(), failure.message(), failure.cause());
+        log.error("系统故障: [{}] {}", failure.code(), failure.message());
         break;
 }
 ```
@@ -259,14 +270,20 @@ Receipt receipt = result.requireAccepted();
 
 ### 解包失败异常映射表
 
-| 当前结果状态 | `requireAccepted()` 抛出的异常消息示例 |
+`requireAccepted()` 在所有非 “Completed 且 Accepted” 状态下统一抛出 `IllegalStateException`
+（`FlowResult` 与 `DurableResult` 各自的消息前缀不同）：
+
+| 当前结果状态 | 抛出行为 |
 | :--- | :--- |
-| `Completed(Rejected)` | `IllegalStateException: Flow completed with Rejected: INVALID_AMOUNT - 金额必须为正` |
-| `Completed(Skipped)` | `IllegalStateException: Flow completed with Skipped: NO_ROUTE - 未匹配到路由` |
-| `Completed(Failed)` | `IllegalStateException: Flow completed with Failed: RPC_TIMEOUT - 支付网关超时` |
-| `Suspended` | `IllegalStateException: Flow is suspended at point: managerApproval` |
-| `Cancelled` | `IllegalStateException: Flow execution was cancelled: exec-1001` |
-| `Active (Durable)` | `IllegalStateException: Flow is active and waiting for backoff wake` |
+| `Completed(Rejected)` | 抛出 `IllegalStateException`，需自行从 `outcome()` 提取 `Reason` |
+| `Completed(Skipped)` | 抛出 `IllegalStateException`，需自行从 `outcome()` 提取 `Reason` |
+| `Completed(Failed)` | 抛出 `IllegalStateException`，需自行从 `outcome()` 提取 `Failure` |
+| `Suspended` / `Cancelled`（FlowResult） | 抛出 `IllegalStateException: Flow did not complete with Accepted` |
+| `Suspended` / `Active` / `Cancelled`（DurableResult） | 抛出 `IllegalStateException: Durable execution did not complete with Accepted` |
+
+> [!IMPORTANT]
+> `requireAccepted()` 的异常消息**不携带**具体的拒绝码或失败码；若需要区分失败原因，
+> 请先做 `instanceof` 分类处理，再从 `Reason` / `Failure` 中读取诊断码。
 
 > [!TIP]
 > - 在单元测试与确定性成功的链路上，使用 `requireAccepted()` 可以大幅简化代码；

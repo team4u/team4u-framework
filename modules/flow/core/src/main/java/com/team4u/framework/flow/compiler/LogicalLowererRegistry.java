@@ -1,13 +1,15 @@
 package com.team4u.framework.flow.compiler;
 
-import com.team4u.framework.policy.core.KeyedPolicyRegistry;
-
 /**
  * 逻辑 AST 降级编译策略注册表。
  *
+ * <p>静态初始化注册完毕后自动冻结（只读），写入操作抛出
+ * {@link UnsupportedOperationException}；自定义扩展点请在冻结前通过自建实例注册，
+ * 全局实例仅提供读取。</p>
+ *
  * @author jay.wu
  */
-public final class LogicalLowererRegistry extends KeyedPolicyRegistry<Class<? extends Logical>, LogicalLowerer<?>> {
+public final class LogicalLowererRegistry extends FrozenKeyedPolicyRegistry<Class<? extends Logical>, LogicalLowerer<?>> {
 
     private static final LogicalLowererRegistry GLOBAL = new LogicalLowererRegistry();
 
@@ -20,6 +22,7 @@ public final class LogicalLowererRegistry extends KeyedPolicyRegistry<Class<? ex
         GLOBAL.register(new LogicalLowerers.AwaitLowerer());
         GLOBAL.register(new LogicalLowerers.ControlLowerer());
         GLOBAL.register(new LogicalLowerers.CompleteLowerer());
+        GLOBAL.freeze();
     }
 
     /**

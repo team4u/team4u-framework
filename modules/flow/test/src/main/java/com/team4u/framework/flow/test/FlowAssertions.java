@@ -40,9 +40,8 @@ public final class FlowAssertions {
         return ((FlowResult.Completed<O>) result).outcome();
     }
 
-    /** 断言 Local 结果为 Completed/Accepted 且值相等，返回 Accepted 值。 */
+    /** 断言 Local 结果为 Completed/Accepted 且值相等（expected 允许为 null，用于断言 Accepted 值为 null），返回 Accepted 值。 */
     public static <O> O assertAccepted(FlowResult<O> result, O expected) {
-        Objects.requireNonNull(expected, "expected value must not be null");
         Outcome<O> outcome = assertCompleted(result);
         Assert.assertTrue("expected Completed outcome to be Accepted but was <"
                 + outcome + ">", outcome instanceof Outcome.Accepted);
@@ -115,9 +114,8 @@ public final class FlowAssertions {
         return ((DurableResult.Completed<O>) result).outcome();
     }
 
-    /** 断言 Durable 结果为 Completed/Accepted 且值相等，返回 Accepted 值。 */
+    /** 断言 Durable 结果为 Completed/Accepted 且值相等（expected 允许为 null，用于断言 Accepted 值为 null），返回 Accepted 值。 */
     public static <O> O assertAccepted(DurableResult<O> result, O expected) {
-        Objects.requireNonNull(expected, "expected value must not be null");
         Outcome<O> outcome = assertCompleted(result);
         Assert.assertTrue("expected Completed durable outcome to be Accepted but was <"
                 + outcome + ">", outcome instanceof Outcome.Accepted);

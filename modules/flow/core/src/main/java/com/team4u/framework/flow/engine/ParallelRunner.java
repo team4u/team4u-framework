@@ -28,6 +28,7 @@ import com.team4u.framework.flow.api.Branch;
 import com.team4u.framework.flow.api.FlowObserver;
 import com.team4u.framework.flow.api.JoinStrategy;
 import com.team4u.framework.flow.api.Metadata;
+import com.team4u.framework.flow.api.ObserverSafeEmitter;
 import com.team4u.framework.flow.compiler.PlanNode;
 import com.team4u.framework.flow.model.Cancellation;
 import com.team4u.framework.flow.model.Failure;
@@ -140,9 +141,11 @@ public final class ParallelRunner {
      * 任一分支抛出 Error 会立即取消其余分支并抛出；取消与超时会向未完成分支传播并等待所有工作线程安全退出。
      */
     Outcome<?> run(final PlanNode.Parallel node, final Object input, Instant deadline) {
-        Map<String, String> startAttrs = new LinkedHashMap<String, String>();
-        startAttrs.put("branches", Integer.toString(node.branches().size()));
-        event(FlowObserver.Type.PARALLEL_STARTED, node.descriptor(), startAttrs);
+        if (!observer.isNoop()) {
+            Map<String, String> startAttrs = new LinkedHashMap<String, String>();
+            startAttrs.put("branches", Integer.toString(node.branches().size()));
+            event(FlowObserver.Type.PARALLEL_STARTED, node.descriptor(), startAttrs);
+        }
 
         final List<Task> tasks = new ArrayList<Task>();
         final BlockingQueue<Task> completionQueue = new LinkedBlockingQueue<Task>();
@@ -173,14 +176,10 @@ public final class ParallelRunner {
                 executor.execute(futureTask);
             }
         } catch (Throwable submitError) {
-            cancel(tasks);
-            waitAllExited(tasks);
-            unlink(tasks);
+            abortAll(tasks, node, reported, submitError instanceof Error ? "EXECUTOR_ERROR" : "EXECUTOR_REJECTED");
             if (submitError instanceof Error) {
-                reportUnfinished(node, reported, "EXECUTOR_ERROR");
                 throw (Error) submitError;
             }
-            reportUnfinished(node, reported, "EXECUTOR_REJECTED");
             return Outcome.failed(Failure.of("EXECUTOR_REJECTED",
                     submitError.getMessage() == null ? "Task execution rejected" : submitError.getMessage()));
         }
@@ -188,7 +187,6 @@ public final class ParallelRunner {
         final Map<PlanNode.ParallelBranch, Outcome<?>> branchOutcomes =
                 new IdentityHashMap<PlanNode.ParallelBranch, Outcome<?>>();
 
-        Error fatal = null;
         int completedCount = 0;
         int totalBranches = tasks.size();
 
@@ -200,32 +198,23 @@ public final class ParallelRunner {
                 } else {
                     Duration remaining = Duration.between(Instant.now(), deadline);
                     if (remaining.isNegative() || remaining.isZero()) {
-                        cancel(tasks);
-                        waitAllExited(tasks);
-                        unlink(tasks);
-                        reportUnfinished(node, reported, "TIMEOUT");
+                        abortAll(tasks, node, reported, "TIMEOUT");
                         return Outcome.failed(Failure.of("TIMEOUT", "Flow scope deadline elapsed"));
                     }
                     completedTask = ManagedBlockers.poll(completionQueue, remaining);
                     if (completedTask == null) {
                         // 超时未就绪
-                        cancel(tasks);
-                        waitAllExited(tasks);
-                        unlink(tasks);
-                        reportUnfinished(node, reported, "TIMEOUT");
+                        abortAll(tasks, node, reported, "TIMEOUT");
                         return Outcome.failed(Failure.of("TIMEOUT", "Flow scope deadline elapsed"));
                     }
                 }
             } catch (InterruptedException interrupted) {
-                cancel(tasks);
-                waitAllExited(tasks);
-                unlink(tasks);
                 if (cancellation.isCancelled()) {
-                    reportUnfinished(node, reported, "CANCELLED");
+                    abortAll(tasks, node, reported, "CANCELLED");
                     Thread.interrupted();
                     throw new CancellationException("flow execution was cancelled");
                 }
-                reportUnfinished(node, reported, "PARALLEL_INTERRUPTED");
+                abortAll(tasks, node, reported, "PARALLEL_INTERRUPTED");
                 Thread.currentThread().interrupt();
                 return Outcome.failed(Failure.of("PARALLEL_INTERRUPTED", "Parallel wait was interrupted"));
             }
@@ -233,40 +222,18 @@ public final class ParallelRunner {
             completedCount++;
             Throwable failure = completedTask.failureRef().get();
             if (failure instanceof Error) {
-                fatal = (Error) failure;
-                cancel(tasks);
-                waitAllExited(tasks);
-                unlink(tasks);
-                reportUnfinished(node, reported, "FATAL_ERROR");
-                throw fatal;
+                abortAll(tasks, node, reported, "FATAL_ERROR");
+                throw (Error) failure;
             }
 
-            Outcome<?> branchOutcome;
-            if (failure != null) {
-                branchOutcome = Outcome.failed(Failure.of("PARALLEL_EXCEPTION",
-                        failure.getMessage() == null ? failure.toString() : failure.getMessage()));
-            } else {
-                MachineResult result = completedTask.resultRef().get();
-                if (result == null || result.lifecycle() == MachineState.Lifecycle.CANCELLED) {
-                    if (cancellation.isCancelled()) {
-                        cancel(tasks);
-                        waitAllExited(tasks);
-                        unlink(tasks);
-                        reportUnfinished(node, reported, "CANCELLED");
-                        throw new CancellationException("flow execution was cancelled");
-                    }
-                    branchOutcome = Outcome.failed(Failure.of(
-                            "PARALLEL_BRANCH_CANCELLED", "Parallel branch was cancelled"));
-                } else {
-                    branchOutcome = result.outcome();
-                }
-            }
-
+            Outcome<?> branchOutcome = judgeBranchOutcome(tasks, node, reported, completedTask, failure);
             branchOutcomes.put(completedTask.branch(), branchOutcome);
-            Map<String, String> branchAttrs = new LinkedHashMap<String, String>();
-            branchAttrs.put("branch", completedTask.branch().token().name());
-            branchAttrs.put("outcome", branchOutcome.kind().name());
-            event(FlowObserver.Type.PARALLEL_BRANCH_COMPLETED, node.descriptor(), branchAttrs);
+            if (!observer.isNoop()) {
+                Map<String, String> branchAttrs = new LinkedHashMap<String, String>();
+                branchAttrs.put("branch", completedTask.branch().token().name());
+                branchAttrs.put("outcome", branchOutcome.kind().name());
+                event(FlowObserver.Type.PARALLEL_BRANCH_COMPLETED, node.descriptor(), branchAttrs);
+            }
             reported.add(completedTask.branch());
         }
 
@@ -314,8 +281,55 @@ public final class ParallelRunner {
         return joined;
     }
 
+    /**
+     * 统一中止出口：级联取消所有任务、true wait-all 等待退出、解除取消链并上报未完成分支。
+     *
+     * @param tasks    全部任务
+     * @param node     并行节点
+     * @param reported 已上报分支集合
+     * @param code     上报诊断码
+     */
+    private void abortAll(List<Task> tasks, PlanNode.Parallel node,
+                          Set<PlanNode.ParallelBranch> reported, String code) {
+        cancel(tasks);
+        waitAllExited(tasks);
+        unlink(tasks);
+        reportUnfinished(node, reported, code);
+    }
+
+    /**
+     * 裁决单个已完成任务的分支结果：异常转 PARALLEL_EXCEPTION，取消且父令牌已取消则
+     * 中止全部并抛取消异常，分支自身取消转 PARALLEL_BRANCH_CANCELLED，否则透传结果。
+     *
+     * @param tasks         全部任务（取消传播用）
+     * @param node          并行节点
+     * @param reported      已上报分支集合
+     * @param completedTask 已完成的任务
+     * @param failure       任务执行异常（可为 null）
+     * @return 分支四态结果
+     */
+    private Outcome<?> judgeBranchOutcome(List<Task> tasks, PlanNode.Parallel node,
+                                          Set<PlanNode.ParallelBranch> reported,
+                                          Task completedTask, Throwable failure) {
+        if (failure != null) {
+            return Outcome.failed(Failure.of("PARALLEL_EXCEPTION",
+                    failure.getMessage() == null ? failure.toString() : failure.getMessage()));
+        }
+        MachineResult result = completedTask.resultRef().get();
+        if (result != null && result.lifecycle() != MachineState.Lifecycle.CANCELLED) {
+            return result.outcome();
+        }
+        if (cancellation.isCancelled()) {
+            abortAll(tasks, node, reported, "CANCELLED");
+            throw new CancellationException("flow execution was cancelled");
+        }
+        return Outcome.failed(Failure.of(
+                "PARALLEL_BRANCH_CANCELLED", "Parallel branch was cancelled"));
+    }
+
     private void reportUnfinished(PlanNode.Parallel node,
                                   Set<PlanNode.ParallelBranch> reported, String code) {
+        if (observer.isNoop()) return;
         for (PlanNode.ParallelBranch branch : node.branches()) {
             if (reported.contains(branch)) continue;
             reported.add(branch);
@@ -365,13 +379,10 @@ public final class ParallelRunner {
 
     private void event(FlowObserver.Type type, NodeDescriptor descriptor,
                        Map<String, String> attributes) {
+        if (observer.isNoop()) return;
         Metadata metadata = new Metadata(flowId, flowVersion, executionId,
                 descriptor.path(), descriptor.label());
-        try {
-            observer.onEvent(new FlowObserver.Event(type, Instant.now(), metadata,
-                    descriptor, attributes));
-        } catch (RuntimeException ignored) {
-            // Observers cannot alter execution.
-        }
+        ObserverSafeEmitter.emit(observer, new FlowObserver.Event(type, Instant.now(),
+                metadata, descriptor, attributes));
     }
 }

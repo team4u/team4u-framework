@@ -53,7 +53,22 @@ public interface LoweringContext {
     Set<String> scopeNames();
 
     /**
-     * 已注册的 Parallel 分支名称集合。
+     * 开启一个新的并行块分支名校验作用域。
+     *
+     * <p>分支名称（Token）仅在同一个并行块内必须唯一；不同并行块（包括嵌套并行块）
+     * 允许复用相同名称。开启新作用域后，{@link #branchNames()} 返回当前块内已注册的名称集合，
+     * {@link #endParallelBlock()} 恢复外层作用域。</p>
+     */
+    void beginParallelBlock();
+
+    /**
+     * 结束当前并行块分支名校验作用域（与 {@link #beginParallelBlock()} 严格配对调用）。
+     */
+    void endParallelBlock();
+
+    /**
+     * 当前并行块作用域内已注册的分支名称集合（仅在 {@link #beginParallelBlock()} 与
+     * {@link #endParallelBlock()} 之间调用有效）。
      */
     Set<String> branchNames();
 

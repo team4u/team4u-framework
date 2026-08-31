@@ -1,11 +1,14 @@
 package com.team4u.framework.flow.durable.kv;
 
+import com.team4u.framework.flow.durable.DurableException;
 import com.team4u.framework.flow.durable.DurableLifecycle;
 import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
 import com.team4u.framework.flow.durable.snapshot.StoredValue;
 import lombok.Data;
 import lombok.NoArgsConstructor;
 
+import java.time.Instant;
+import java.time.format.DateTimeParseException;
 import java.util.Base64;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -13,7 +16,9 @@ import java.util.Map;
 /**
  * 流程快照序列化 DTO（Durable Snapshot DTO）。
  *
- * <p>提供 {@link DurableSnapshot} 与 JSON 结构之间的无损映射，包括二进制字节数组的 Base64 编解码。</p>
+ * <p>提供 {@link DurableSnapshot} 与 JSON 结构之间的无损映射，包括二进制字节数组的 Base64 编解码。
+ * 反序列化遇到损坏数据（非法枚举名、非法 Base64、非法时间戳）时抛出
+ * {@link DurableException.Error#FORMAT_MISMATCH}，而非裸运行时异常，便于调用方按格式错误归类处理。</p>
  *
  * @author jay.wu
  */
@@ -31,6 +36,8 @@ public class DurableSnapshotDto {
     private Map<String, StoredValueDto> slots;
     private String awaitingPoint;
     private boolean pendingResume;
+    /** 最早的定时唤醒时刻（ISO-8601，可空；仅 ACTIVE 快照非空，与快照信封 firstWakeAt 冗余字段对应）。 */
+    private String firstWakeAt;
 
     public static DurableSnapshotDto fromSnapshot(DurableSnapshot snapshot) {
         if (snapshot == null) {
@@ -57,14 +64,18 @@ public class DurableSnapshotDto {
         dto.setSlots(slotMap);
         dto.setAwaitingPoint(snapshot.awaitingPoint());
         dto.setPendingResume(snapshot.pendingResume());
+        dto.setFirstWakeAt(snapshot.firstWakeAt() != null
+                ? snapshot.firstWakeAt().toString() : null);
         return dto;
     }
 
     public DurableSnapshot toSnapshot() {
-        DurableLifecycle lc = DurableLifecycle.valueOf(this.lifecycle);
+        DurableLifecycle lc = parseLifecycle(this.lifecycle);
         byte[] meta = this.frameMetadata != null
-                ? Base64.getDecoder().decode(this.frameMetadata)
+                ? decodeBase64(this.frameMetadata, "frameMetadata")
                 : new byte[0];
+        Instant firstWakeAt = this.firstWakeAt != null
+                ? parseInstant(this.firstWakeAt) : null;
         Map<String, StoredValue> slotMap = new LinkedHashMap<>();
         if (this.slots != null) {
             for (Map.Entry<String, StoredValueDto> entry : this.slots.entrySet()) {
@@ -84,8 +95,44 @@ public class DurableSnapshotDto {
                 meta,
                 slotMap,
                 this.awaitingPoint,
-                this.pendingResume
+                this.pendingResume,
+                firstWakeAt
         );
+    }
+
+    private static DurableLifecycle parseLifecycle(String name) {
+        if (name == null) {
+            throw formatMismatch("snapshot lifecycle is missing");
+        }
+        try {
+            return DurableLifecycle.valueOf(name);
+        } catch (IllegalArgumentException error) {
+            throw formatMismatch("Unknown snapshot lifecycle: " + name, error);
+        }
+    }
+
+    private static Instant parseInstant(String value) {
+        try {
+            return Instant.parse(value);
+        } catch (DateTimeParseException error) {
+            throw formatMismatch("Invalid firstWakeAt timestamp: " + value, error);
+        }
+    }
+
+    private static byte[] decodeBase64(String value, String field) {
+        try {
+            return Base64.getDecoder().decode(value);
+        } catch (IllegalArgumentException error) {
+            throw formatMismatch("Invalid Base64 payload in field " + field, error);
+        }
+    }
+
+    private static DurableException formatMismatch(String message) {
+        return new DurableException(DurableException.Error.FORMAT_MISMATCH, message);
+    }
+
+    private static DurableException formatMismatch(String message, Throwable cause) {
+        return new DurableException(DurableException.Error.FORMAT_MISMATCH, message, cause);
     }
 
     /**
@@ -113,7 +160,7 @@ public class DurableSnapshotDto {
 
         public StoredValue toStoredValue() {
             byte[] bytes = this.payload != null
-                    ? Base64.getDecoder().decode(this.payload)
+                    ? decodeBase64(this.payload, "slot payload")
                     : new byte[0];
             return new StoredValue(this.codecId, this.codecVersion, bytes);
         }

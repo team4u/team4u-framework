@@ -192,7 +192,8 @@ public final class Compiler implements LoweringContext {
     private final LinkedHashMap<String, PlanNode> byPath = new LinkedHashMap<String, PlanNode>();
     private final LinkedHashMap<String, ResumePoint<?>> resumePoints = new LinkedHashMap<String, ResumePoint<?>>();
     private final Set<String> scopeNames = new HashSet<String>();
-    private final Set<String> branchNames = new HashSet<String>();
+    /** 并行块分支名作用域栈：每个并行块独立校验块内唯一，不同块允许同名。 */
+    private final ArrayDeque<Set<String>> parallelBranchScopes = new ArrayDeque<Set<String>>();
 
     private Compiler(OperationResolver resolver) {
         this.resolver = Objects.requireNonNull(resolver, "resolver must not be null");
@@ -216,7 +217,7 @@ public final class Compiler implements LoweringContext {
      */
     private PlanNode lower(Logical root) {
         ArrayDeque<Work> work = new ArrayDeque<Work>();
-        work.addLast(new Work(root, "$", null, false, false));
+        work.addLast(new Work(root, FlowPaths.root(), null, false, false));
         while (!work.isEmpty()) {
             Work current = work.removeLast();
             if (current.build()) {
@@ -234,7 +235,7 @@ public final class Compiler implements LoweringContext {
                         child.parallel(), false));
             }
         }
-        return byPath.get("$");
+        return byPath.get(FlowPaths.root());
     }
 
     /** 展平 Logical.Named 包装；重复 label 记为 Problem。 */
@@ -373,8 +374,25 @@ public final class Compiler implements LoweringContext {
     }
 
     @Override
+    public void beginParallelBlock() {
+        parallelBranchScopes.push(new HashSet<String>());
+    }
+
+    @Override
+    public void endParallelBlock() {
+        if (parallelBranchScopes.isEmpty()) {
+            throw new IllegalStateException("Parallel branch scope stack is empty");
+        }
+        parallelBranchScopes.pop();
+    }
+
+    @Override
     public Set<String> branchNames() {
-        return branchNames;
+        if (parallelBranchScopes.isEmpty()) {
+            throw new IllegalStateException(
+                    "branchNames() must be called between beginParallelBlock()/endParallelBlock()");
+        }
+        return parallelBranchScopes.peek();
     }
 
     @Override

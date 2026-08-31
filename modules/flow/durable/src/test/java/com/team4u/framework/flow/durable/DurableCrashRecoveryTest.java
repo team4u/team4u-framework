@@ -188,8 +188,7 @@ public class DurableCrashRecoveryTest {
     @Test
     public void repeatedCrashesAllRecover() {
         RecordingOp a = new RecordingOp("a");
-        RecordingOp b = new RecordingOp("b").crashOnCall(1).crashOnCall(2);
-        // crashOnCall 只支持一次，改用手动计数崩溃
+        // 手动计数崩溃：前两次调用抛 Error，第三次成功
         final java.util.concurrent.atomic.AtomicInteger crashes = new java.util.concurrent.atomic.AtomicInteger();
         com.team4u.framework.flow.api.Operation<String, String> flaky =
                 new com.team4u.framework.flow.api.Operation<String, String>() {

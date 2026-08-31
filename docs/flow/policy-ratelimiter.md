@@ -50,25 +50,25 @@ graph TD
 
 ### 基础用法（默认 FAIL 模式）
 
-通过 `RateLimitPolicies.of` 绑定限流检查点，默认使用 `FAIL` 模式（每次扣减 1 个令牌）：
+通过 `RateLimitPolicy.of` 绑定限流检查点，默认使用 `FAIL` 模式（每次扣减 1 个令牌）：
 
 ```java
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.ratelimiter.RateLimitPolicies;
+import com.team4u.framework.flow.ratelimiter.RateLimitPolicy;
 
 // 绑定用户维度的扣款限流检查点：限流时返回 Gate.fail
 Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
-        .policy(RateLimitPolicies.of("order.charge", OrderRequest::getUserId));
+        .policy(RateLimitPolicy.of("order.charge", OrderRequest::getUserId));
 ```
 
 ### 拒绝模式（快速短路，绝不重试）
 
-当需要对高频恶意流量或超出容量的非关键请求实施即时拒绝时，使用 `RateLimitPolicies.reject`：
+当需要对高频恶意流量或超出容量的非关键请求实施即时拒绝时，使用 `RateLimitPolicy.reject`：
 
 ```java
 // 超过限流阈值时直接返回 Rejected(Reason)，不执行后续业务，亦不触发重试
 Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
-        .policy(RateLimitPolicies.reject("order.charge", OrderRequest::getUserId));
+        .policy(RateLimitPolicy.reject("order.charge", OrderRequest::getUserId));
 ```
 
 ---
@@ -88,6 +88,9 @@ import com.team4u.framework.flow.ratelimiter.RateLimitPolicy;
 import com.team4u.framework.flow.ratelimiter.RateLimitAction;
 import com.team4u.framework.flow.model.Failure;
 
+import java.util.LinkedHashMap;
+import java.util.Map;
+
 RateLimitPolicy<BatchOrderRequest> customPolicy = RateLimitPolicy.<BatchOrderRequest>builder()
         // 1. 指定限流检查点名称（对应配置中心中的规则 Key）
         .point("order.batch")
@@ -101,13 +104,17 @@ RateLimitPolicy<BatchOrderRequest> customPolicy = RateLimitPolicy.<BatchOrderReq
         // 4. 设定决策动作：FAIL（可触发重试）或 REJECT（业务短路）
         .action(RateLimitAction.FAIL)
         
-        // 5. 自定义失败诊断工厂：提取建议重试时间与业务上下文
-        .failureFactory((result, req) -> Failure.of("RATE_LIMIT_EXCEEDED", 
-                "下单过于频繁，建议在 " + result.getRetryAfterMillis() + "ms 后重试")
-                .withDetail("tenantId", req.getTenantId())
-                .withDetail("ruleId", result.getRuleId())
-                .withDetail("requestedPermits", String.valueOf(req.getItemCount()))
-                .withDetail("retryAfterMillis", String.valueOf(result.getRetryAfterMillis())))
+        // 5. 自定义失败诊断工厂：提取建议重试时间与业务上下文（一次构造携带全部 details）
+        .failureFactory((result, req) -> {
+            Map<String, String> details = new LinkedHashMap<String, String>();
+            details.put("tenantId", req.getTenantId());
+            details.put("ruleId", result.getRuleId());
+            details.put("requestedPermits", String.valueOf(req.getItemCount()));
+            details.put("retryAfterMillis", String.valueOf(result.getRetryAfterMillis()));
+            return new Failure("RATE_LIMIT_EXCEEDED",
+                    "下单过于频繁，建议在 " + result.getRetryAfterMillis() + "ms 后重试",
+                    details);
+        })
         .build();
 
 // 将策略挂载到 Flow 步骤上（req -> req 表示策略路由键直接使用 BatchOrderRequest 对象）
@@ -147,7 +154,7 @@ graph TD
 
     subgraph "场景 2: 正常放行 (未超限)"
         ACQ2["RateLimiters.acquire 放行"] --> PROCEED["Gate.proceed() 继续执行业务步骤"]
-        PROCEED --> CHK["在业务 Operation 内部调用 RateLimiters.check(point, ctx) 只读查询剩余配额"]
+        PROCEED --> CHK["在业务 Operation 内调用 RateLimiters.tryAcquire 只读探测余量是否可用"]
     end
 ```
 
@@ -168,10 +175,11 @@ RateLimitPolicy<OrderRequest> customPolicy = RateLimitPolicy.<OrderRequest>build
             String ruleId = result.getRuleId();             // 命中的规则 ID
             Long remaining = result.getRemaining();         // 剩余配额
 
-            return Failure.of("RATE_LIMIT_EXCEEDED", "请求过于频繁")
-                    .withDetail("retryAfterMillis", String.valueOf(retryAfter))
-                    .withDetail("ruleId", ruleId)
-                    .withDetail("remaining", String.valueOf(remaining));
+            Map<String, String> details = new LinkedHashMap<String, String>();
+            details.put("retryAfterMillis", String.valueOf(retryAfter));
+            details.put("ruleId", ruleId);
+            details.put("remaining", String.valueOf(remaining));
+            return new Failure("RATE_LIMIT_EXCEEDED", "请求过于频繁", details);
         })
         .build();
 ```
@@ -236,7 +244,7 @@ Flow<OrderRequest, Receipt> resilientFlow = Flow.step(chargeOperation)
 
 当请求成功通过限流放行后，如果后续的业务 `Operation` 需要感知当前剩余多少配额（如将剩余可用次数展示给用户）：
 
-`team4u-ratelimiter` 提供了只读查询方法 `RateLimiters.check(...)`，**它只查询当前配额状态而绝不重复扣减令牌**：
+`team4u-ratelimiter` 的 `RateLimiters` 门面提供了 `tryAcquire(point, context)` 轻量探测方法，**不消耗令牌、仅探测当前是否可获取**，适合做只读的状态感知：
 
 ```java
 @Component
@@ -244,19 +252,25 @@ public class ChargeOperation implements Operation<OrderRequest, Receipt> {
 
     @Override
     public Outcome<Receipt> execute(OperationContext context, OrderRequest req) {
-        // 只读查询当前检查点的限流配额状态（零副作用，不消耗令牌）
-        RateLimitResult status = RateLimiters.check("order.charge", req.getUserId());
+        // 只读探测当前检查点是否仍可获取令牌（零副作用，不消耗令牌）
+        boolean stillAllowed = RateLimiters.tryAcquire("order.charge", req.getUserId());
         
-        Long remaining = status.getRemaining(); // 当前窗口剩余可用调用次数
-        log.info("用户 [{}] 当前还剩 [{}] 次扣款配额", req.getUserId(), remaining);
+        log.info("用户 [{}] 当前扣款检查点可获取令牌: {}", req.getUserId(), stillAllowed);
 
         // 执行核心业务扣款并返回带有配额信息的收据...
         Receipt receipt = new Receipt(req.getOrderId(), "PAID");
-        receipt.setRemainingQuota(remaining);
+        receipt.setQuotaAvailable(stillAllowed);
         return Outcome.accepted(receipt);
     }
 }
 ```
+
+> [!NOTE]
+> `RateLimiters` 门面的完整方法集为 `init(ConfigManager, KvStore)`、`acquire(point, context)`、
+> `acquire(point, context, permits)`、`tryAcquire(point, context)` 与 `destroy()`；
+> 并不存在名为 `check(point, context)` 的只读查询方法。若需要携带 `remaining`、`retryAfterMillis`
+> 等详细裁决信息，应在策略的 `failureFactory` / `reasonFactory` 中捕获超限时的 `RateLimitResult`，
+> 或直接集成 `team4u-ratelimiter` 的 `RateLimitEngine` 自行探测。
 
 ---
 
@@ -279,13 +293,13 @@ public class ChargeOperation implements Operation<OrderRequest, Receipt> {
 
 ```java
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.retry.FlowRetries;
-import com.team4u.framework.flow.ratelimiter.RateLimitPolicies;
+import com.team4u.framework.flow.retry.FlowRetryPolicy;
+import com.team4u.framework.flow.ratelimiter.RateLimitPolicy;
 
 // 链式组合：内层限流（每次重试均重新获取令牌），外层挂载 3 次指数退避重试
 Flow<OrderRequest, Receipt> protectedFlow = Flow.step(chargeOperation)
-        .policy(RateLimitPolicies.of("order.charge", OrderRequest::getUserId))
-        .persistentPolicy(FlowRetries.exponential(3, 100, 2.0, 1000), OrderRequest::getUserId);
+        .policy(RateLimitPolicy.of("order.charge", OrderRequest::getUserId))
+        .persistentPolicy(FlowRetryPolicy.exponential(3, 100, 2.0, 1000), OrderRequest::getUserId);
 ```
 
 ```text

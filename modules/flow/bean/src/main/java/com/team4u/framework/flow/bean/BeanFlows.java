@@ -4,8 +4,6 @@ import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.Local;
 import com.team4u.framework.flow.LocalExecutable;
-import com.team4u.framework.flow.api.Operation;
-import com.team4u.framework.flow.api.Policy;
 
 /**
  * Spring / Bean 容器流编译门面工具类（Bean-Backed Flow Compilation Facade）。
@@ -18,10 +16,10 @@ public final class BeanFlows {
     private BeanFlows() { }
 
     /**
-     * 创建基于默认 {@link BeanManager#getInstance()} 的 Operation 解析器。
+     * 创建基于默认 {@link BeanManager#getInstance()} 的 Operation 解析器（等价于 {@link BeanOperationResolver#global()}）。
      */
     public static BeanOperationResolver resolver() {
-        return new BeanOperationResolver(BeanManager.getInstance());
+        return BeanOperationResolver.global();
     }
 
     /**

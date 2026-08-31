@@ -87,7 +87,7 @@ public final class NodeExecutionHandlers {
         public MachineResult execute(PlanNode.Parallel parallel, RuntimeFrame frame, SerialMachine machine) {
             Outcome<?> outcome;
             try {
-                outcome = new ParallelRunner(machine.flowId(), machine.flowVersion(), machine.state().executionId,
+                outcome = new ParallelRunner(machine.flowId(), machine.flowVersion(), machine.state().executionId(),
                         machine.cancellation(), machine.observer(), machine.executor()).run(parallel, frame.entry, machine.deadline());
             } catch (CancellationException cancelled) {
                 machine.cancel();

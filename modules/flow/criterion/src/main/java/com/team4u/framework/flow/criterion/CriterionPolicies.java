@@ -1,6 +1,5 @@
 package com.team4u.framework.flow.criterion;
 
-import com.team4u.framework.criterion.Criteria;
 import com.team4u.framework.flow.model.Failure;
 import com.team4u.framework.flow.model.Reason;
 
@@ -93,15 +92,5 @@ public final class CriterionPolicies {
                 .mode(CriterionPolicy.Mode.FAIL_IF)
                 .failureFactory((ctx, key) -> Failure.of(failureCode, failureMessage))
                 .build();
-    }
-
-    /**
-     * 获取 {@link CriterionPolicy} 的通用流式建造者。
-     *
-     * @param <K> 路由键类型
-     * @return {@link CriterionPolicy.CriterionPolicyBuilder} 实例
-     */
-    public static <K> CriterionPolicy.CriterionPolicyBuilder<K> builder() {
-        return CriterionPolicy.builder();
     }
 }

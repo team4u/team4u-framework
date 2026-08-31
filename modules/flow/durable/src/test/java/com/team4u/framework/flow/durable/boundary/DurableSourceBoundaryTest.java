@@ -59,7 +59,7 @@ public class DurableSourceBoundaryTest {
                 return FileVisitResult.CONTINUE;
             }
         });
-        // 21 个生产文件都必须被扫描
+        // 生产源码文件数下界校验（当前 33 个，防止误删或漏扫）
         assertTrue("生产源码文件数异常: " + javaFiles.size(), javaFiles.size() >= 21);
         for (Path file : javaFiles) {
             String source = new String(Files.readAllBytes(file), StandardCharsets.UTF_8);

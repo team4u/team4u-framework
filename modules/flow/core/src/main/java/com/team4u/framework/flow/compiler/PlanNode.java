@@ -8,6 +8,7 @@ import lombok.experimental.Accessors;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 import com.team4u.framework.flow.api.Branch;
@@ -35,13 +36,20 @@ public interface PlanNode {
     /** 编译期解析绑定的实际目标组件信息。 */
     @Getter
     @Accessors(fluent = true)
-    @AllArgsConstructor
     @EqualsAndHashCode
     public static final class BoundTarget {
         private final Object instance;
         private final Class<?> contract;
         private final Class<?> implementation;
         private final String qualifier;
+
+        /** 构造绑定目标（包内可见，由 Compiler 解析产生）。 */
+        BoundTarget(Object instance, Class<?> contract, Class<?> implementation, String qualifier) {
+            this.instance = Objects.requireNonNull(instance, "instance must not be null");
+            this.contract = Objects.requireNonNull(contract, "contract must not be null");
+            this.implementation = Objects.requireNonNull(implementation, "implementation must not be null");
+            this.qualifier = qualifier;
+        }
     }
 
     /** 原子业务操作（Operation）执行计划节点。 */
@@ -178,11 +186,28 @@ public interface PlanNode {
     /** 常量或恒等透传终态执行计划节点。 */
     @Getter
     @Accessors(fluent = true)
-    @AllArgsConstructor
     public static final class Complete implements PlanNode {
         private final NodeDescriptor descriptor;
         private final Outcome<?> outcome;
         private final boolean identity;
+
+        /**
+         * 构造终态节点（包内可见）。
+         *
+         * @param descriptor 节点描述符
+         * @param outcome    常量输出（identity 为 false 时必须非 null）
+         * @param identity   是否恒等透传
+         * @throws IllegalArgumentException 当 outcome 为 null 且 identity 为 false 时抛出
+         */
+        Complete(NodeDescriptor descriptor, Outcome<?> outcome, boolean identity) {
+            this.descriptor = Objects.requireNonNull(descriptor, "descriptor must not be null");
+            if (outcome == null && !identity) {
+                throw new IllegalArgumentException(
+                        "Complete requires a non-null outcome unless it is an identity node");
+            }
+            this.outcome = outcome;
+            this.identity = identity;
+        }
     }
 }
 

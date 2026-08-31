@@ -14,6 +14,9 @@ import java.util.Objects;
  *
  * <p>基于 {@link FlowDescription} 静态拓扑描述模型，按先序遍历逐行输出紧凑、结构化的纯文本节点与属性信息，便于日志打印、断言比对与纯命令行环境排查。</p>
  *
+ * <p><b>共享子图（DAG 复用）策略：</b>当描述树中同一子树实例被多处复用时，本渲染器按先序遍历对共享子树<b>重复输出</b>（每次出现均打印一行），
+ * 而 {@link MermaidFlowDiagramRenderer} 折叠共享节点（仅声明一次）。两者策略差异属预期行为。</p>
+ *
  * @author jay.wu
  */
 final class TextFlowDiagramRenderer implements FlowDiagramRenderer {

@@ -16,6 +16,7 @@ import java.util.concurrent.TimeoutException;
 import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.api.FlowObserver;
 import com.team4u.framework.flow.api.Metadata;
+import com.team4u.framework.flow.api.ObserverSafeEmitter;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.OperationContext;
 import com.team4u.framework.flow.compiler.PlanNode;
@@ -74,7 +75,7 @@ public final class InvocationRunner {
             if (remaining.isNegative() || remaining.isZero()) outcome = timeout();
             else outcome = timed(node, entry, remaining);
         }
-        if (!cancellation.isCancelled()) {
+        if (!cancellation.isCancelled() && !observer.isNoop()) {
             Map<String, String> attrs = new LinkedHashMap<String, String>();
             attrs.put("outcome", outcome.kind().name());
             attrs.put("durationNanos", Long.toString(System.nanoTime() - started));
@@ -201,14 +202,11 @@ public final class InvocationRunner {
 
     private void event(FlowObserver.Type type, NodeDescriptor descriptor,
                        Map<String, String> attributes) {
+        if (observer.isNoop()) return;
         Metadata metadata = new Metadata(flowId, flowVersion, executionId,
                 descriptor.path(), descriptor.label());
-        try {
-            observer.onEvent(new FlowObserver.Event(type, Instant.now(), metadata,
-                    descriptor, attributes));
-        } catch (RuntimeException ignored) {
-            // Observers cannot alter execution.
-        }
+        ObserverSafeEmitter.emit(observer, new FlowObserver.Event(type, Instant.now(),
+                metadata, descriptor, attributes));
     }
 
     /**

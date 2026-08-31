@@ -12,8 +12,6 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutorService;
-import com.team4u.framework.flow.api.Metadata;
-import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.durable.engine.CheckpointReasons;
 import com.team4u.framework.flow.durable.engine.Checkpoints;
 import com.team4u.framework.flow.durable.engine.DurablePlanCompiler;
@@ -23,7 +21,6 @@ import com.team4u.framework.flow.durable.snapshot.SnapshotCodec;
 import com.team4u.framework.flow.durable.snapshot.StateMapper;
 import com.team4u.framework.flow.durable.snapshot.StoredValue;
 import com.team4u.framework.flow.durable.store.DurableStore;
-import com.team4u.framework.flow.model.Reason;
 import com.team4u.framework.flow.api.FlowObserver;
 import com.team4u.framework.flow.model.Outcome;
 
@@ -89,7 +86,6 @@ public final class DurableExecutable<I, O> {
      * @throws DurableException 当 executionId 已存在或底层存储失败时抛出
      */
     public DurableResult<O> start(String executionId, I input) {
-
         text(executionId, "executionId");
         Objects.requireNonNull(input, "input must not be null");
         if (store.load(executionId).isPresent()) {
@@ -101,7 +97,17 @@ public final class DurableExecutable<I, O> {
                 DurableState.SlotRole.user("input"));
         Checkpoints checkpoints = Checkpoints.create(store, executionId, flowId, flowVersion,
                 stateMapper, durableObserver, definition, state, -1L);
-        checkpoints.commit(CheckpointReasons.initial());
+        try {
+            checkpoints.commit(CheckpointReasons.initial());
+        } catch (DurableException error) {
+            if (error.error() == DurableException.Error.REVISION_CONFLICT
+                    && store.load(executionId).isPresent()) {
+                // create 模式 CAS 失败且记录已存在：并发 start 竞争，明确 EXECUTION_EXISTS
+                throw new DurableException(DurableException.Error.EXECUTION_EXISTS,
+                        "Execution already started concurrently: " + executionId);
+            }
+            throw error;
+        }
         return drive(state, checkpoints);
     }
 
@@ -128,12 +134,6 @@ public final class DurableExecutable<I, O> {
      * @throws DurableException 若状态不为 SUSPENDED、挂起点不匹配或信号发生冲突时抛出
      */
     public <R> DurableResult<O> resume(String executionId, String pointName, R signal) {
-        return resume(executionId, pointName, signal, true);
-    }
-
-    @SuppressWarnings("unchecked")
-    <R> DurableResult<O> resume(String executionId, String pointName, R signal,
-                                boolean requirePendingAbsent) {
         text(executionId, "executionId");
         text(pointName, "resume point");
         Objects.requireNonNull(signal, "signal must not be null");
@@ -157,20 +157,20 @@ public final class DurableExecutable<I, O> {
                     "Execution is awaiting [" + snapshot.awaitingPoint()
                             + "], not [" + pointName + "]");
         }
-        ResumeDecoder decoded = decodeSnapshot(snapshot);
-        DurableState.MachineState state = decoded.state;
-        Checkpoints checkpoints = decoded.checkpoints;
         if (snapshot.pendingResume()) {
-            // 信号已落库（崩溃在落库后、消费前）：不同值冲突，同值幂等重驱动
+            // 信号已落库（崩溃在落库后、消费前）：仅此路径需要预解码比对信号；
+            // 不同值冲突，同值幂等重驱动。
+            ResumeDecoder decoded = decodeSnapshot(snapshot);
             StoredValue persistedSlot = snapshot.slots().get(
                     DurablePlanCompiler.resumeRole(pointName));
             if (persistedSlot != null && !sameSignal(persistedSlot, signal)) {
                 throw new DurableException(DurableException.Error.RESUME_SIGNAL_CONFLICT,
                         "Resume point [" + pointName + "] already has a different signal");
             }
-            return driveContinuation(state, checkpoints);
+            return driveContinuation(decoded.state, decoded.checkpoints);
         }
-        // 第一步：把信号写入 resume:<name> 槽，CAS 为 ACTIVE+pendingResume（独立提交）
+        // 第一步：把信号写入 resume:<name> 槽，CAS 为 ACTIVE+pendingResume（独立提交）。
+        // 解码延迟到 CAS 成功后：CAS 前无需重建帧栈，减少一次全量反序列化。
         Map<String, StoredValue> slots = new LinkedHashMap<String, StoredValue>(
                 snapshot.slots());
         StoredValue encoded;
@@ -195,7 +195,7 @@ public final class DurableExecutable<I, O> {
             throw Checkpoints.storeFailure(error);
         }
         durableSignalEvent(signaled, pointName);
-        // 重新加载并解码：pendingSignal 由信封重建，与崩溃后恢复路径完全一致
+        // 第二步：重新加载并解码：pendingSignal 由信封重建，与崩溃后恢复路径完全一致
         Loaded reloaded = load(executionId);
         ResumeDecoder resumeState = decodeSnapshot(reloaded.snapshot);
         return driveContinuation(resumeState.state, resumeState.checkpoints);
@@ -208,14 +208,23 @@ public final class DurableExecutable<I, O> {
         return drive(state, checkpoints);
     }
 
+    /**
+     * 比较已持久化信号与新信号是否相同：确定性编码后逐字节比对。
+     *
+     * @throws DurableException 当新信号编码失败时抛 CODEC_FAILURE（而非伪装成信号冲突）
+     */
     private boolean sameSignal(StoredValue persisted, Object signal) {
+        StoredValue encoded;
         try {
-            StoredValue encoded = SnapshotCodec.encodeUser(stateMapper,
+            encoded = SnapshotCodec.encodeUser(stateMapper,
                     DurablePlanCompiler.resumeRole("compare"), signal);
-            return persisted.equals(encoded);
+        } catch (DurableException error) {
+            throw error;
         } catch (Exception error) {
-            return false;
+            throw new DurableException(DurableException.Error.CODEC_FAILURE,
+                    "Cannot encode resume signal for idempotent comparison", error);
         }
+        return persisted.equals(encoded);
     }
     private void durableSignalEvent(DurableSnapshot snapshot, String pointName) {
         try {
@@ -286,6 +295,12 @@ public final class DurableExecutable<I, O> {
                 snapshot.frameMetadata(), snapshot.slots(), null, false);
         try {
             if (!store.compareAndSet(executionId, snapshot.revision(), cancelled)) {
+                // 冲突后回读：若已被并发取消，报明确的 LIFECYCLE_MISMATCH 而非笼统冲突
+                Optional<DurableSnapshot> current = store.load(executionId);
+                if (current.isPresent()
+                        && current.get().lifecycle() == DurableLifecycle.CANCELLED) {
+                    throw lifecycle("Cannot cancel CANCELLED execution");
+                }
                 throw Checkpoints.conflict(executionId);
             }
         } catch (DurableException error) {

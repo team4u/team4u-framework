@@ -13,7 +13,6 @@ import com.team4u.framework.flow.spi.OperationResolver;
 import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.model.Reason;
 import com.team4u.framework.flow.api.ResumePoint;
-import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.model.Resumed;
 import com.team4u.framework.flow.model.Suspension;
 import com.team4u.framework.flow.durable.DurableLifecycle;
@@ -82,7 +81,7 @@ public class TestkitSmokeTest {
     public void retryingStubKeepsStableInvocationIdAcrossAttempts() {
         OperationStub<String, String> failing =
                 OperationStub.failing(Failure.of("UNSTABLE", "unstable"));
-        Flow<String, String> flow = Flow.step(failing).persistentPolicy(retryStub(3, Duration.ZERO), s -> s);
+        Flow<String, String> flow = Flow.step(failing).persistentPolicy(PersistentPolicyStub.<String>counting(3, Duration.ZERO), s -> s);
         FlowResult<String> result = LocalFixture.compile(flow).run("in");
 
         FlowAssertions.assertFailed(result, "UNSTABLE");
@@ -307,7 +306,7 @@ public class TestkitSmokeTest {
         OperationStub<String, String> failing =
                 OperationStub.failing(Failure.of("BOOM", "boom"));
         Flow<String, String> flow = Flow.step(failing)
-                .persistentPolicy(retryStub(2, Duration.ofHours(1)), s -> s);
+                .persistentPolicy(PersistentPolicyStub.<String>counting(2, Duration.ofHours(1)), s -> s);
         DurableFixture<String, String> fixture = DurableFixture.compile(flow, "smoke-retry", 1);
 
         DurableResult.Active<String> active =
@@ -376,6 +375,48 @@ public class TestkitSmokeTest {
     }
 
     // ------------------------------------------------------------------
+    // PersistentPolicyStub
+    // ------------------------------------------------------------------
+
+    @Test
+    public void persistentPolicyStubRetriesFailedUntilAttemptsExhausted() {
+        OperationStub<String, String> failing =
+                OperationStub.failing(Failure.of("STUB_FAIL", "stub failure"));
+        Flow<String, String> flow = Flow.step(failing)
+                .persistentPolicy(PersistentPolicyStub.<String>counting(3, Duration.ZERO), s -> s);
+        FlowAssertions.assertFailed(LocalFixture.compile(flow).run("in"), "STUB_FAIL");
+        assertEquals(3, failing.callCount());
+
+        // 成功路径：首轮即通过，不重试
+        OperationStub<String, String> ok = OperationStub.accepting(x -> x + "!");
+        Flow<String, String> okFlow = Flow.step(ok)
+                .persistentPolicy(PersistentPolicyStub.<String>counting(3, Duration.ofHours(1)), s -> s);
+        FlowAssertions.assertAccepted(LocalFixture.compile(okFlow).run("in"), "in!");
+        assertEquals(1, ok.callCount());
+
+        try {
+            PersistentPolicyStub.counting(0, Duration.ZERO);
+            fail("maxAttempts=0 must be rejected");
+        } catch (IllegalArgumentException expected) {
+            assertMessageContains(new AssertionError(expected.getMessage()), "greater than 0");
+        }
+    }
+
+    @Test
+    public void assertAcceptedSupportsNullExpectation() {
+        // 非 Accepted 结果 + null 期望：应产出可读的 AssertionError（而非 requireNonNull 抛出的 NPE）
+        Reason reason = Reason.of("R1", "rejected");
+        FlowResult<String> rejected =
+                LocalFixture.compile(Flow.<String, String>rejected(reason)).run("in");
+        try {
+            FlowAssertions.assertAccepted(rejected, null);
+            fail("expected AssertionError for non-Accepted outcome");
+        } catch (AssertionError error) {
+            assertMessageContains(error, "expected Completed outcome to be Accepted");
+        }
+    }
+
+    // ------------------------------------------------------------------
     // helpers
     // ------------------------------------------------------------------
 
@@ -411,18 +452,4 @@ public class TestkitSmokeTest {
         }
     }
 
-    private static PersistentPolicy<String, Integer> retryStub(final int maxAttempts, final Duration backoff) {
-        return new PersistentPolicy<String, Integer>() {
-            @Override public Integer initialState(String key) { return 1; }
-            @Override public Before<Integer> before(com.team4u.framework.flow.api.PolicyContext ctx, String key, Integer state) {
-                return PersistentPolicy.proceed(state);
-            }
-            @Override public After<Integer> after(com.team4u.framework.flow.api.PolicyContext ctx, String key, Integer state, com.team4u.framework.flow.model.Completion completion) {
-                if (completion != null && completion.kind() == Outcome.Kind.FAILED && state < maxAttempts) {
-                    return PersistentPolicy.retryAt(java.time.Instant.now().plus(backoff), state + 1);
-                }
-                return PersistentPolicy.returning(state);
-            }
-        };
-    }
 }

@@ -53,13 +53,6 @@ public class DurableCancelAsyncTest {
     }
 
     private static DurableExecutable<String, String> compileAwaitFlow(DurableStore store) {
-        Flow<String, Resumed<String, String>> flow =
-                Flow.<String, String>step(new Operation<String, String>() {
-                    @Override
-                    public Outcome<String> execute(OperationContext context, String input) {
-                        return Outcome.accepted(input);
-                    }
-                }).await(GATE);
         return DurableRuntime.builder(store).build()
                 .compile(Flow.<String, String>step(
                                 new Operation<String, String>() {
@@ -278,5 +271,44 @@ public class DurableCancelAsyncTest {
         assertTrue(executor.executions.get() >= 1);
         assertEquals("运行时绝不能关闭调用方 executor", 0, executor.shutdownCalls.get());
         assertFalse(executor.isShutdown());
+    }
+
+    @Test
+    public void resumeAsyncCompletesSuspendedExecution() throws Exception {
+        // resumeAsync 成功路径：借用 executor 派发两段式恢复并落定 COMPLETED
+        RecordingExecutor executor = new RecordingExecutor();
+        InMemoryDurableStore store = new InMemoryDurableStore();
+        DurableExecutable<String, String> executable = DurableRuntime.builder(store)
+                .executor(executor)
+                .build()
+                .compile(compileAwaitFlowFlow(), "cancel", 1);
+        executable.start("e", "in");
+        assertEquals(DurableLifecycle.SUSPENDED, store.load("e").get().lifecycle());
+        CompletionStage<DurableResult<String>> stage =
+                executable.resumeAsync("e", "gate", "GO");
+        DurableResult<String> result = stage.toCompletableFuture().get(5, TimeUnit.SECONDS);
+        assertTrue(result.getClass().getSimpleName(), result instanceof DurableResult.Completed);
+        assertEquals("GO", ((Outcome.Accepted<String>)
+                ((DurableResult.Completed<String>) result).outcome()).value());
+        assertEquals(DurableLifecycle.COMPLETED, store.load("e").get().lifecycle());
+        assertEquals("运行时绝不能关闭调用方 executor", 0, executor.shutdownCalls.get());
+        assertFalse(executor.isShutdown());
+    }
+
+    private static Flow<String, String> compileAwaitFlowFlow() {
+        return Flow.<String, String>step(
+                        new Operation<String, String>() {
+                            @Override
+                            public Outcome<String> execute(OperationContext ctx, String in) {
+                                return Outcome.accepted(in);
+                            }
+                        }).<String>await(GATE)
+                .then(new Operation<Resumed<String, String>, String>() {
+                    @Override
+                    public Outcome<String> execute(OperationContext ctx,
+                                                   Resumed<String, String> resumed) {
+                        return Outcome.accepted(resumed.signal());
+                    }
+                });
     }
 }

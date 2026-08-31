@@ -2,6 +2,7 @@ package com.team4u.framework.flow.engine;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
@@ -44,6 +45,15 @@ public final class SerialMachine {
     private final MachineObserver events;
     private final MachineCancellationCoordinator cancellationCoordinator;
     private final ExecutorService executor;
+    /** 节点类型→执行策略的本机缓存：避免热路径上反复的全局注册表查表与 Optional 分配。 */
+    private final Map<Class<?>, NodeExecutionHandler<?>> handlerCache =
+            new HashMap<Class<?>, NodeExecutionHandler<?>>();
+    /** 帧归约策略本机缓存。 */
+    private final Map<Class<?>, FrameReducePolicy<?>> reducerCache =
+            new HashMap<Class<?>, FrameReducePolicy<?>>();
+    /** 控制类型策略本机缓存。 */
+    private final Map<PlanNode.Control.Kind, ControlKindHandler> controlHandlerCache =
+            new HashMap<PlanNode.Control.Kind, ControlKindHandler>();
 
     public SerialMachine(PlanNode root, String flowId, int flowVersion, MachineState state,
                   Cancellation cancellation, FlowObserver observer, ExecutorService executor) {
@@ -53,7 +63,7 @@ public final class SerialMachine {
         this.cancellation = Objects.requireNonNull(cancellation, "cancellation must not be null");
         this.observer = Objects.requireNonNull(observer, "observer must not be null");
         this.executor = executor;
-        invocations = new InvocationRunner(flowId, flowVersion, state.executionId,
+        invocations = new InvocationRunner(flowId, flowVersion, state.executionId(),
                 cancellation, observer, executor);
         callbacks = new CallbackRunner(cancellation, executor);
         events = new MachineObserver(flowId, flowVersion, state, observer);
@@ -67,14 +77,14 @@ public final class SerialMachine {
      */
     @SuppressWarnings("unchecked")
     public MachineResult drive() {
-        if (state.lifecycle != MachineState.Lifecycle.ACTIVE)
+        if (state.lifecycle() != MachineState.Lifecycle.ACTIVE)
             return MachineResult.from(state, wakeAt());
         Thread thread = Thread.currentThread();
         // 记录进入时的中断状态
         boolean interrupted = thread.isInterrupted();
         cancellation.attach(thread);
         try {
-            while (state.lifecycle == MachineState.Lifecycle.ACTIVE) {
+            while (state.lifecycle() == MachineState.Lifecycle.ACTIVE) {
                 // 每帧优先检查取消与截止时间，保证取消/超时及时生效
                 if (cancellation.isCancelled()) {
                     cancel();
@@ -84,13 +94,11 @@ public final class SerialMachine {
                     timeoutNearestScope();
                     continue;
                 }
-                RuntimeFrame frame = state.frames.get(state.frames.size() - 1);
+                RuntimeFrame frame = state.frames().get(state.frames().size() - 1);
                 PlanNode node = frame.node;
                 events.nodeStarted(frame);
 
-                NodeExecutionHandler<PlanNode> handler = (NodeExecutionHandler<PlanNode>) NodeExecutionHandlerRegistry.global()
-                        .get(node.getClass())
-                        .orElseThrow(() -> new IllegalStateException("Unknown plan node: " + node.getClass()));
+                NodeExecutionHandler<PlanNode> handler = executionHandler(node);
                 MachineResult result = handler.execute(node, frame, this);
                 if (result != null) return result;
             }
@@ -154,27 +162,84 @@ public final class SerialMachine {
     void finish(Outcome<?> outcome) {
         Objects.requireNonNull(outcome, "outcome must not be null");
         if (cancellationWins()) return;
-        RuntimeFrame completedFrame = state.frames.get(state.frames.size() - 1);
+        RuntimeFrame completedFrame = state.popFrame();
         events.nodeCompleted(completedFrame, outcome);
-        state.frames.remove(state.frames.size() - 1);
-        while (!state.frames.isEmpty()) {
-            RuntimeFrame parent = state.frames.get(state.frames.size() - 1);
+        while (!state.frames().isEmpty()) {
+            RuntimeFrame parent = state.frames().get(state.frames().size() - 1);
             Outcome<?> completed = consume(parent, outcome);
             if (cancellationWins()) return;
             if (completed == null) return;
             events.nodeCompleted(parent, completed);
-            state.frames.remove(state.frames.size() - 1);
+            state.popFrame();
             outcome = completed;
         }
         if (cancellationWins()) return;
-        state.outcome = outcome;
-        state.awaitingPoint = null;
-        state.pendingSignal = null;
-        state.lifecycle = MachineState.Lifecycle.COMPLETED;
+        state.outcome(outcome);
+        state.awaitingPoint(null);
+        state.pendingSignal(null);
+        state.lifecycle(MachineState.Lifecycle.COMPLETED);
     }
 
     private Outcome<?> consume(RuntimeFrame frame, Outcome<?> child) {
         return FrameReducer.consume(this, frame, child);
+    }
+
+    /**
+     * 查找节点执行策略（带本机按类型缓存，单线程独占访问）。
+     *
+     * @param node 目标物理节点
+     * @return 对应的执行策略
+     * @throws IllegalStateException 当节点类型未注册时抛出
+     */
+    @SuppressWarnings("unchecked")
+    NodeExecutionHandler<PlanNode> executionHandler(PlanNode node) {
+        NodeExecutionHandler<?> handler = handlerCache.get(node.getClass());
+        if (handler == null) {
+            handler = NodeExecutionHandlerRegistry.global()
+                    .get(node.getClass())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Unknown plan node: " + node.getClass()));
+            handlerCache.put(node.getClass(), handler);
+        }
+        return (NodeExecutionHandler<PlanNode>) handler;
+    }
+
+    /**
+     * 查找帧归约策略（带本机按类型缓存，单线程独占访问）。
+     *
+     * @param node 父帧物理节点
+     * @return 对应的归约策略
+     * @throws IllegalStateException 当节点类型为叶子节点或未注册时抛出
+     */
+    @SuppressWarnings("unchecked")
+    FrameReducePolicy<PlanNode> frameReducePolicy(PlanNode node) {
+        FrameReducePolicy<?> policy = reducerCache.get(node.getClass());
+        if (policy == null) {
+            policy = FrameReducePolicyRegistry.global()
+                    .get(node.getClass())
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Leaf node cannot consume child outcome: " + node.getClass()));
+            reducerCache.put(node.getClass(), policy);
+        }
+        return (FrameReducePolicy<PlanNode>) policy;
+    }
+
+    /**
+     * 查找控制类型策略（带本机按 Kind 缓存，单线程独占访问）。
+     *
+     * @param kind 控制种类
+     * @return 对应的控制类型策略
+     * @throws IllegalStateException 当控制种类未注册时抛出
+     */
+    ControlKindHandler controlKindHandler(PlanNode.Control.Kind kind) {
+        ControlKindHandler handler = controlHandlerCache.get(kind);
+        if (handler == null) {
+            handler = ControlKindRegistry.global().get(kind)
+                    .orElseThrow(() -> new IllegalStateException(
+                            "Unknown control kind: " + kind));
+            controlHandlerCache.put(kind, handler);
+        }
+        return handler;
     }
 
     /**
@@ -183,8 +248,8 @@ public final class SerialMachine {
      */
     private void timeoutNearestScope() {
         int timeoutIndex = -1;
-        for (int index = state.frames.size() - 1; index >= 0; index--) {
-            RuntimeFrame frame = state.frames.get(index);
+        for (int index = state.frames().size() - 1; index >= 0; index--) {
+            RuntimeFrame frame = state.frames().get(index);
             if (frame.node instanceof PlanNode.Control) {
                 PlanNode.Control control = (PlanNode.Control) frame.node;
                 if (control.kind() == PlanNode.Control.Kind.TIMEOUT
@@ -195,8 +260,8 @@ public final class SerialMachine {
             }
         }
         if (timeoutIndex < 0) return;
-        while (state.frames.size() > timeoutIndex + 1) {
-            state.frames.remove(state.frames.size() - 1);
+        while (state.frames().size() > timeoutIndex + 1) {
+            state.popFrame();
         }
         finish(Outcome.failed(Failure.of("TIMEOUT", "Flow scope deadline elapsed")));
     }
@@ -206,21 +271,16 @@ public final class SerialMachine {
         return deadline != null && !Instant.now().isBefore(deadline);
     }
 
-    /** 计算当前帧栈中最紧迫的 deadline（TIMEOUT 作用域边界），无则返回 null。 */
+    /** 计算当前帧栈中最紧迫的 deadline（TIMEOUT 作用域边界），无则返回 null（O(1) 均摊缓存）。 */
     Instant deadline() {
-        Instant result = null;
-        for (RuntimeFrame frame : state.frames) {
-            if (frame.deadline != null && (result == null || frame.deadline.isBefore(result)))
-                result = frame.deadline;
-        }
-        return result;
+        return state.earliestDeadline();
     }
 
     /** 非 ACTIVE 态返回 null；否则返回帧栈中最早的 wake 或 deadline，用于唤醒时机。 */
     private Instant wakeAt() {
-        if (state.lifecycle != MachineState.Lifecycle.ACTIVE) return null;
+        if (state.lifecycle() != MachineState.Lifecycle.ACTIVE) return null;
         Instant result = null;
-        for (RuntimeFrame frame : state.frames) {
+        for (RuntimeFrame frame : state.frames()) {
             if (frame.wake != null && (result == null || frame.wake.isBefore(result)))
                 result = frame.wake;
             if (frame.deadline != null
@@ -231,7 +291,7 @@ public final class SerialMachine {
     }
 
     void push(PlanNode node, Object input) {
-        state.frames.add(new RuntimeFrame(node,
+        state.pushFrame(new RuntimeFrame(node,
                 Objects.requireNonNull(input, "node input must not be null")));
     }
 
@@ -247,7 +307,7 @@ public final class SerialMachine {
                           final Cancellation callbackCancellation) {
         return new PolicyContext() {
             @Override public Metadata metadata() {
-                return new Metadata(flowId, flowVersion, state.executionId,
+                return new Metadata(flowId, flowVersion, state.executionId(),
                         control.descriptor().path(), control.descriptor().label());
             }
 
@@ -272,6 +332,7 @@ public final class SerialMachine {
     }
 
     void waitingEvent(PlanNode.Control control, RuntimeFrame frame) {
+        if (observer.isNoop()) return;
         Map<String, String> attrs = new LinkedHashMap<String, String>();
         attrs.put("attempt", Integer.toString(frame.attempt));
         attrs.put("wake", frame.wake.toString());
@@ -284,7 +345,7 @@ public final class SerialMachine {
     }
 
     boolean active() {
-        return state.lifecycle == MachineState.Lifecycle.ACTIVE;
+        return state.lifecycle() == MachineState.Lifecycle.ACTIVE;
     }
 
     MachineResult result() {

@@ -79,19 +79,19 @@ public final class FrameEntrant {
      */
     static MachineResult await(SerialMachine machine, MachineState state,
                                RuntimeFrame frame, PlanNode.Await await) {
-        if (state.pendingSignal != null) {
-            if (!await.point().name().equals(state.awaitingPoint))
+        if (state.pendingSignal() != null) {
+            if (!await.point().name().equals(state.awaitingPoint()))
                 throw new IllegalStateException(
                         "Pending resume point does not match Await frame");
-            Object signal = state.pendingSignal;
-            state.pendingSignal = null;
-            state.awaitingPoint = null;
+            Object signal = state.pendingSignal();
+            state.pendingSignal(null);
+            state.awaitingPoint(null);
             Resumed<Object, Object> resumed = new Resumed<Object, Object>(frame.entry, signal);
             machine.finish(Outcome.accepted(resumed));
             return null;
         }
-        state.lifecycle = MachineState.Lifecycle.SUSPENDED;
-        state.awaitingPoint = await.point().name();
+        state.lifecycle(MachineState.Lifecycle.SUSPENDED);
+        state.awaitingPoint(await.point().name());
         machine.event(FlowObserver.Type.FLOW_SUSPENDED, await.descriptor(),
                 Collections.singletonMap("resumePoint", await.point().name()));
         // 发完 FLOW_SUSPENDED 后补检取消：observer 回调或并发线程可能在此窗口触发取消

@@ -7,12 +7,14 @@ import java.util.ArrayList;
 import java.util.List;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
 import com.team4u.framework.flow.api.FlowObserver;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.model.Failure;
 import com.team4u.framework.flow.model.Outcome;
 
@@ -113,5 +115,61 @@ public class DurableObserverEventTest {
         }
         assertEquals(3, observer.byType(FlowObserver.Type.NODE_STARTED).size());
         assertEquals(3, observer.byType(FlowObserver.Type.NODE_COMPLETED).size());
+    }
+
+    @Test
+    public void recoverEmitsCheckpointRestoredWithRevision() {
+        // recover 必须发布 CHECKPOINT_RESTORED，携带恢复时的快照版本号与 lifecycle
+        DurableTestOps.RecordingDurableObserver durableObserver =
+                new DurableTestOps.RecordingDurableObserver();
+        InMemoryDurableStore store = new InMemoryDurableStore();
+        Operation<String, String> flaky = new Operation<String, String>() {
+            @Override
+            public Outcome<String> execute(OperationContext context, String input) {
+                return Outcome.failed(Failure.of("X", "x"));
+            }
+        };
+        Flow<String, String> flow = Flow.<String, String>step(flaky)
+                .persistentPolicy(new PersistentPolicy<String, Integer>() {
+                    @Override
+                    public Integer initialState(String key) {
+                        return 1;
+                    }
+
+                    @Override
+                    public PersistentPolicy.Before<Integer> before(
+                            com.team4u.framework.flow.api.PolicyContext ctx, String key,
+                            Integer state) {
+                        return PersistentPolicy.proceed(state);
+                    }
+
+                    @Override
+                    public PersistentPolicy.After<Integer> after(
+                            com.team4u.framework.flow.api.PolicyContext ctx, String key,
+                            Integer state, com.team4u.framework.flow.model.Completion completion) {
+                        return PersistentPolicy.retryAt(
+                                java.time.Instant.now().plusMillis(60_000), state + 1);
+                    }
+                }, s -> s);
+        DurableExecutable<String, String> executable = DurableRuntime.builder(store)
+                .durableObserver(durableObserver)
+                .build()
+                .compile(flow, "obs", 1);
+        executable.start("e", "in");
+        long parkedRevision = store.load("e").get().revision();
+        List<DurableObserver.Event> before = durableObserver.byType(
+                DurableObserver.Type.CHECKPOINT_RESTORED);
+        assertTrue("start 不应发布 CHECKPOINT_RESTORED", before.isEmpty());
+
+        DurableResult<String> recovered = executable.recover("e");
+        assertTrue(recovered.getClass().getSimpleName(), recovered instanceof DurableResult.Active);
+        List<DurableObserver.Event> restored = durableObserver.byType(
+                DurableObserver.Type.CHECKPOINT_RESTORED);
+        assertEquals("recover 必须发布恰好一条 CHECKPOINT_RESTORED", 1, restored.size());
+        DurableObserver.Event event = restored.get(0);
+        assertEquals("事件必须携带恢复时的快照版本号",
+                parkedRevision, event.revision());
+        assertEquals(DurableLifecycle.ACTIVE, event.lifecycle());
+        assertEquals("e", event.metadata().executionId());
     }
 }

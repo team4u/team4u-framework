@@ -1,6 +1,7 @@
 package com.team4u.framework.flow;
 
 import java.time.Duration;
+import java.time.Instant;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.Collections;
@@ -17,6 +18,7 @@ import com.team4u.framework.flow.api.Policy;
 import com.team4u.framework.flow.api.ResumePoint;
 import com.team4u.framework.flow.compiler.Compiler;
 import com.team4u.framework.flow.compiler.ExecutableProjector;
+import com.team4u.framework.flow.compiler.FlowPaths;
 import com.team4u.framework.flow.compiler.Logical;
 import com.team4u.framework.flow.desc.FlowDescription;
 import com.team4u.framework.flow.desc.FlowDescriptionBuilder;
@@ -520,12 +522,20 @@ public final class Flow<I, O> {
      * @param duration 超时时长，必须为正数
      * @return 附加超时控制后的新 {@link Flow} 实例
      * @throws NullPointerException     当 {@code duration} 为 null 时抛出
-     * @throws IllegalArgumentException 当 {@code duration} 为 0 或负数时抛出
+     * @throws IllegalArgumentException 当 {@code duration} 为 0、负数或超出时间线可表示范围
+     *                                  （如近乎 {@link Long#MAX_VALUE} 纳秒的极值导致
+     *                                  {@code Instant.now().plus(duration)} 溢出）时抛出
      */
     public Flow<I, O> timeout(Duration duration) {
         Objects.requireNonNull(duration, "duration must not be null");
         if (duration.isZero() || duration.isNegative()) {
             throw new IllegalArgumentException("duration must be positive");
+        }
+        try {
+            Instant.now().plus(duration);
+        } catch (RuntimeException overflow) {
+            throw new IllegalArgumentException(
+                    "duration is too large to represent a deadline: " + duration, overflow);
         }
         return control(Logical.Control.Kind.TIMEOUT, null, Function.identity(), duration);
     }
@@ -537,7 +547,7 @@ public final class Flow<I, O> {
      * @return 恒等 {@link Flow} 实例
      */
     public static <T> Flow<T, T> identity() {
-        return new Flow<T, T>(new Logical.Complete(null, true));
+        return new Flow<T, T>(Logical.Complete.identityNode());
     }
 
     /**
@@ -640,8 +650,8 @@ public final class Flow<I, O> {
     }
 
     private static <I, O> Flow<I, O> complete(Outcome<O> outcome) {
-        return new Flow<I, O>(new Logical.Complete(
-                Objects.requireNonNull(outcome, "outcome must not be null"), false));
+        return new Flow<I, O>(Logical.Complete.constant(
+                Objects.requireNonNull(outcome, "outcome must not be null")));
     }
 
     /**
@@ -759,6 +769,11 @@ public final class Flow<I, O> {
     /**
      * 路由分支集合构建器，支持链式追加 {@link #caseOf} 并以 {@link #otherwise} 或 {@link #withoutOtherwise} 终结。
      *
+     * <p><b>键相等语义</b>：分支匹配与重复键检测均基于 {@code key.equals(Object)} 判等。
+     * 因此路由键应选用正确实现 equals/hashCode 的类型（如 String、Integer、枚举、record 等）；
+     * 数组类型（如 {@code byte[]}、{@code Object[]}）的 equals 为引用相等，既无法可靠去重，
+     * 也无法在运行时命中，传入数组键将在构建期直接拒绝并报告 {@code ARRAY_ROUTE_KEY} 问题。</p>
+     *
      * @param <I> 输入数据类型
      * @param <K> 路由判别键类型
      * @param <O> 分支输出结果类型
@@ -775,14 +790,22 @@ public final class Flow<I, O> {
         /**
          * 追加一条匹配分支。
          *
+         * <p>键相等语义与数组键限制参见类级文档；重复键检测基于 equals。</p>
+         *
          * @param key    分支匹配键，不能与已有分支重复，不能为 null
          * @param branch 命中后执行的子流程，不能为 null
          * @return 更新后的分支构建器 {@link RouteCases}
-         * @throws FlowBuildException 当存在重复匹配键时抛出
+         * @throws FlowBuildException 当存在重复匹配键或传入数组键时抛出
          */
         public RouteCases<I, K, O> caseOf(K key, Flow<I, O> branch) {
             Objects.requireNonNull(key, "case key must not be null");
             Objects.requireNonNull(branch, "branch must not be null");
+            if (key.getClass().isArray()) {
+                throw new FlowBuildException(Collections.singletonList(new FlowBuildException.Problem(
+                        "ARRAY_ROUTE_KEY", "$",
+                        "Route case key must not be an array (equals is reference-based): "
+                                + key.getClass().getComponentType().getName())));
+            }
             for (Logical.Route.Case candidate : cases) {
                 if (candidate.key().equals(key)) {
                     throw new FlowBuildException(Collections.singletonList(new FlowBuildException.Problem(
@@ -816,7 +839,8 @@ public final class Flow<I, O> {
     }
 
     /**
-     * 结构化并行构建器：校验分支唯一性并结合 {@link JoinStrategy} 合成并行流程节点。
+     * 结构化并行构建器：校验分支唯一性（同一并行块内分支名唯一，不同并行块允许复用同名）
+     * 并结合 {@link JoinStrategy} 合成并行流程节点。
      *
      * @param <I> 输入数据类型
      */
@@ -871,7 +895,7 @@ public final class Flow<I, O> {
      * @return 流程结构描述模型 {@link FlowDescription}
      */
     public FlowDescription describe(String flowId) {
-        return new FlowDescription(flowId, FlowDescriptionBuilder.describe(root, "$"));
+        return new FlowDescription(flowId, FlowDescriptionBuilder.describe(root, FlowPaths.root()));
     }
 
     /**

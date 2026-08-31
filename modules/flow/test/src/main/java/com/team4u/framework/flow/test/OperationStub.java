@@ -4,7 +4,6 @@ import com.team4u.framework.flow.model.Failure;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.OperationContext;
 import com.team4u.framework.flow.model.Outcome;
-import com.team4u.framework.flow.api.PolicyContext;
 import com.team4u.framework.flow.model.Reason;
 
 import java.util.ArrayList;
@@ -115,16 +114,8 @@ public final class OperationStub<I, O> implements Operation<I, O> {
     @Override
     public Outcome<O> execute(OperationContext context, I input) throws Exception {
         Objects.requireNonNull(context, "context must not be null");
-        calls.add(new Call<I>(input, context.invocationId(), attemptOf(context)));
+        calls.add(new Call<I>(input, context.invocationId(), 0));
         return Objects.requireNonNull(answer.answer(context, input), "stub answer must not be null");
-    }
-
-    /** OperationContext 无 attempt 时记 0；上下文若同时实现 PolicyContext 则记录其 attempt。 */
-    private static int attemptOf(OperationContext context) {
-        if (context instanceof PolicyContext) {
-            return ((PolicyContext) context).attempt();
-        }
-        return 0;
     }
 
     /** 返回按到达顺序的调用记录快照（不可变）。 */

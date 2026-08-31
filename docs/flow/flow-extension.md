@@ -55,7 +55,7 @@ public interface Policy<K> {
 ```
 
 - `Gate` 决策闭集：`Gate.proceed()`（放行）、`Gate.reject(Reason)`（业务拒绝）、`Gate.fail(Failure)`（技术故障）；
-- `after` 回调接收四态完成摘要 `Completion`（包含四态 `kind` 与耗时 `durationMs`），用于监控指标统计或资源清理；
+- `after` 回调接收四态完成摘要 `Completion`（包含四态 `kind` 及对应的 `Reason` / `Failure`），用于监控指标统计或资源清理；
 - 通过 `flow.policy(policy, keyFunction)` 将输入对象映射为策略键 $K$。
 
 ### 有状态持久化策略：`PersistentPolicy<K, S>`
@@ -85,15 +85,15 @@ public interface JoinStrategy<O> {
 }
 ```
 
-接收全部并行分支的执行结果并合并为单个 `Outcome`。`ParallelResults` 提供按 Token 检索的 `results.get(branch)` 与内置策略（`allAccepted`、`firstAccepted`、`quorum` 等）：
+接收全部并行分支的执行结果并合并为单个 `Outcome`。`ParallelResults` 提供按令牌检索的 `results.outcome(branch)` 与内置策略（`allAccepted`、`firstAccepted`、`quorum` 等）：
 
 ```java
 JoinStrategy<String> customStrategy = results -> {
-    Outcome<RiskReport> risk = results.get(riskBranch);
+    Outcome<RiskReport> risk = results.outcome(riskBranch);
     if (!(risk instanceof Outcome.Accepted)) {
         return Outcome.skipped(Reason.of("RISK_UNAVAILABLE", "风控结果不可用"));
     }
-    return results.get(stockBranch).map(stock ->
+    return results.outcome(stockBranch).map(stock ->
             ((Outcome.Accepted<RiskReport>) risk).value().summary() + "/" + stock.summary());
 };
 ```
@@ -141,16 +141,21 @@ public class JacksonStateMapper implements StateMapper {
     @Override
     public StoredValue encode(Object value) throws Exception {
         byte[] payload = objectMapper.writeValueAsBytes(value);
-        return new StoredValue(value.getClass().getName(), CODEC, VERSION, payload);
+        return new StoredValue(CODEC, VERSION, payload);
     }
 
     @Override
     public Object decode(StoredValue storedValue) throws Exception {
-        Class<?> targetClass = Class.forName(storedValue.typeName());
-        return objectMapper.readValue(storedValue.payload(), targetClass);
+        return objectMapper.readValue(storedValue.payload(), Object.class);
     }
 }
 ```
+
+> [!NOTE]
+> `StoredValue` 由三个字段构成：`codecId`（编码器标识，如 `"json:jackson"`）、
+> `codecVersion`（编码器版本号，正整数）与 `payload`（业务载荷字节数组）。
+> 解码方通常依据 `codecId` / `codecVersion` 自行路由反序列化逻辑，因此业务类型信息
+> 需编码进 payload（如 JSON 自描述）或由固定的槽位类型约定承载。
 
 ---
 
@@ -202,6 +207,21 @@ public class LoggingFlowObserver implements FlowObserver {
     }
 }
 ```
+
+### 观察者契约要点
+
+- **异常隔离**：观察者回调中抛出的任何运行时异常都会被框架捕获并记录日志（首次 warn、后续按实例限流 debug），绝不影响主流程执行结果；`Error` 不被拦截，原样传播；
+- **无操作短路（`isNoop()`）**：`FlowObserver` 提供 `default boolean isNoop()`（默认 `false`），
+  引擎在热路径上据此短路事件对象与属性字典的构造分配；`FlowObserver.noop()` 返回的实例
+  覆写返回 `true`，自定义空观察者若可安全跳过全部事件，建议覆写本方法返回 `true` 以获得更佳性能；
+- **组合广播**：`FlowObserver.composite(observers...)` 可将多个观察者按顺序广播（单个观察者异常不会中断其余观察者；仅当全部成员均为 noop 时复合观察者才报告 noop）；
+- **线程模型契约**：实现必须线程安全；在包含并行分支的流程中，`PARALLEL_STARTED` /
+  `PARALLEL_BRANCH_COMPLETED` 等并行分支事件可能从多个工作线程**并发到达**，
+  仅保证单分支内事件有序，跨分支之间无全序保证；实现内部若维护可变状态（计数器、缓冲队列等）
+  必须使用并发安全容器；
+- **事件配对性**：`NODE_STARTED` / `NODE_COMPLETED` 与 `POLICY_BEFORE` / `POLICY_AFTER` 事件
+  在非取消、非超时、非重试轮次的正常路径上成对出现；当执行因取消、超时或
+  `PersistentPolicy` 声明重试轮次（RetryAt）而中断或循环时，事件可能不成对。
 
 ---
 
