@@ -19,10 +19,10 @@ import java.util.Map;
 import java.util.Objects;
 
 /**
- * 业务友好型确定性 Mermaid 流程图渲染器（纯文本极简风格）。
+ * 业务友好型确定性 Mermaid 流程图渲染器（纯净默认主题风格）。
  *
  * <p>将 {@link FlowDescription} 静态拓扑描述模型渲染为直观、清晰、规范的 Mermaid 流程图（{@code flowchart TD}）。
- * 采用显式工作栈消除 JVM 递归开销，自动折叠底层 AST 胶水节点，将超时/策略控制作为标准化属性标签附着在节点上。</p>
+ * 采用显式工作栈消除 JVM 递归开销，自动折叠底层 AST 胶水节点，采用 Mermaid 默认原生主题渲染。</p>
  *
  * @author jay.wu
  */
@@ -63,14 +63,6 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         private final StringBuilder edges = new StringBuilder();
         private int sequence;
 
-        private final List<String> startEndNodes = new ArrayList<String>();
-        private final List<String> actionNodes = new ArrayList<String>();
-        private final List<String> routeNodes = new ArrayList<String>();
-        private final List<String> parallelNodes = new ArrayList<String>();
-        private final List<String> awaitNodes = new ArrayList<String>();
-        private final List<String> successNodes = new ArrayList<String>();
-        private final List<String> dangerNodes = new ArrayList<String>();
-
         private String nextId() {
             sequence++;
             return "n" + sequence;
@@ -103,14 +95,6 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
             subgraphs.append("    end\n");
         }
 
-        private void addStartEndNode(String id) { startEndNodes.add(id); }
-        private void addActionNode(String id) { actionNodes.add(id); }
-        private void addRouteNode(String id) { routeNodes.add(id); }
-        private void addParallelNode(String id) { parallelNodes.add(id); }
-        private void addAwaitNode(String id) { awaitNodes.add(id); }
-        private void addSuccessNode(String id) { successNodes.add(id); }
-        private void addDangerNode(String id) { dangerNodes.add(id); }
-
         private String build() {
             StringBuilder full = new StringBuilder();
             full.append("flowchart TD\n");
@@ -121,33 +105,7 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
             if (edges.length() > 0) {
                 full.append("\n").append(edges);
             }
-            full.append("\n");
-            appendStyles(full);
             return full.toString();
-        }
-
-        private void appendStyles(StringBuilder sb) {
-            sb.append("    classDef startEnd fill:#e2e8f0,stroke:#334155,stroke-width:2px,color:#0f172a;\n")
-                    .append("    classDef actionNode fill:#ffffff,stroke:#1d4ed8,stroke-width:2px,color:#0f172a;\n")
-                    .append("    classDef routeNode fill:#fef3c7,stroke:#b45309,stroke-width:2px,color:#78350f;\n")
-                    .append("    classDef parallelNode fill:#f3e8ff,stroke:#6b21a8,stroke-width:2px,color:#581c87;\n")
-                    .append("    classDef awaitNode fill:#e0f2fe,stroke:#0369a1,stroke-width:2px,color:#0c4a6e;\n")
-                    .append("    classDef successNode fill:#dcfce7,stroke:#15803d,stroke-width:2px,color:#14532d;\n")
-                    .append("    classDef dangerNode fill:#fee2e2,stroke:#b91c1c,stroke-width:2px,color:#7f1d1d;\n");
-
-            applyClass(sb, startEndNodes, "startEnd");
-            applyClass(sb, actionNodes, "actionNode");
-            applyClass(sb, routeNodes, "routeNode");
-            applyClass(sb, parallelNodes, "parallelNode");
-            applyClass(sb, awaitNodes, "awaitNode");
-            applyClass(sb, successNodes, "successNode");
-            applyClass(sb, dangerNodes, "dangerNode");
-        }
-
-        private void applyClass(StringBuilder sb, List<String> ids, String className) {
-            if (!ids.isEmpty()) {
-                sb.append("    class ").append(String.join(",", ids)).append(" ").append(className).append(";\n");
-            }
         }
     }
 
@@ -160,7 +118,6 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         String flowName = description.flowId() != null
                 ? FlowGraphFormatters.escapeMermaid(description.flowId()) : "Flow";
         state.emitNode(startId, "([", "])", "开始: " + flowName);
-        state.addStartEndNode(startId);
 
         // 1. 显式栈自底向上构建 Block
         Map<NodeDescription, NodeMeta> nodeMetas = new IdentityHashMap<NodeDescription, NodeMeta>();
@@ -233,7 +190,6 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
             if (!rootBlock.normalExitIds.isEmpty()) {
                 String endId = "flow_end";
                 state.emitNode(endId, "([", "])", "结束 (ACCEPTED)");
-                state.addStartEndNode(endId);
                 for (String exitId : rootBlock.normalExitIds) {
                     state.emitEdge(exitId, endId, null, false);
                 }
@@ -371,7 +327,6 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
 
         String content = subtitle.isEmpty() ? title : title + "<br/>" + subtitle;
         state.emitNode(id, "[", "]", content);
-        state.addActionNode(id);
         return new Block(id, Collections.singletonList(id), Collections.singletonList(id));
     }
 
@@ -404,7 +359,6 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
 
         String content = subtitle.isEmpty() ? title : title + "<br/>" + subtitle;
         state.emitNode(id, "[", "]", content);
-        state.addAwaitNode(id);
         return new Block(id, Collections.singletonList(id), Collections.singletonList(id));
     }
 
@@ -418,13 +372,11 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
                     ? FlowGraphFormatters.escapeMermaid(effectiveLabel) + badgeText + " (透传)"
                     : "透传" + badgeText + " (Identity)";
             state.emitNode(id, "([", "])", label);
-            state.addSuccessNode(id);
             return new Block(id, Collections.singletonList(id), Collections.singletonList(id));
         }
         Outcome<?> outcome = node.outcome();
         if (outcome == null) {
             state.emitNode(id, "([", "])", "COMPLETE" + badgeText);
-            state.addActionNode(id);
             return new Block(id, Collections.singletonList(id), Collections.singletonList(id));
         }
         Outcome.Kind kind = outcome.kind();
@@ -434,31 +386,26 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
             case ACCEPTED: {
                 String title = (customLabel != null ? customLabel : "[ACCEPTED]") + badgeText;
                 state.emitNode(id, "([", "])", title);
-                state.addSuccessNode(id);
                 return new Block(id, Collections.singletonList(id), Collections.singletonList(id));
             }
             case REJECTED: {
                 String title = (customLabel != null ? customLabel : "[REJECTED]") + badgeText;
                 state.emitNode(id, "([", "])", title);
-                state.addDangerNode(id);
                 return new Block(id, Collections.emptyList(), Collections.singletonList(id));
             }
             case SKIPPED: {
                 String title = (customLabel != null ? customLabel : "[SKIPPED]") + badgeText;
                 state.emitNode(id, "([", "])", title);
-                state.addDangerNode(id);
                 return new Block(id, Collections.emptyList(), Collections.singletonList(id));
             }
             case FAILED: {
                 String title = (customLabel != null ? customLabel : "[FAILED]") + badgeText;
                 state.emitNode(id, "([", "])", title);
-                state.addDangerNode(id);
                 return new Block(id, Collections.emptyList(), Collections.singletonList(id));
             }
             default: {
                 String title = (customLabel != null ? customLabel : kind.name()) + badgeText;
                 state.emitNode(id, "([", "])", title);
-                state.addActionNode(id);
                 return new Block(id, Collections.singletonList(id), Collections.singletonList(id));
             }
         }
@@ -497,7 +444,6 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
 
         String content = subtitle.isEmpty() ? title : title + "<br/>" + subtitle;
         state.emitNode(id, "{", "}", content);
-        state.addRouteNode(id);
 
         List<String> normalExits = new ArrayList<String>();
         List<String> allNodes = new ArrayList<String>();
@@ -523,7 +469,6 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         } else {
             String noMatchId = state.nextId();
             state.emitNode(noMatchId, "([", "])", "未匹配 (SKIPPED)");
-            state.addDangerNode(noMatchId);
             state.emitEdge(id, noMatchId, "no match", true);
             allNodes.add(noMatchId);
         }
@@ -542,7 +487,6 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         String title = effectiveLabel != null && !effectiveLabel.isEmpty()
                 ? FlowGraphFormatters.escapeMermaid(effectiveLabel) : "并行分发";
         state.emitNode(forkId, "{{", "}}", "并行: " + title + badgeText);
-        state.addParallelNode(forkId);
 
         List<String> branchExits = new ArrayList<String>();
         List<String> allNodes = new ArrayList<String>();
@@ -560,7 +504,6 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
 
         String joinId = state.nextId();
         state.emitNode(joinId, "[", "]", "合并 (Join)");
-        state.addActionNode(joinId);
         allNodes.add(joinId);
 
         for (String exitId : branchExits) {
@@ -664,7 +607,6 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         String id = state.nextId();
         String badge = formatControlBadge(node);
         state.emitNode(id, "[", "]", badge.isEmpty() ? "CONTROL" : badge);
-        state.addActionNode(id);
         return new Block(id, Collections.singletonList(id), Collections.singletonList(id));
     }
 }

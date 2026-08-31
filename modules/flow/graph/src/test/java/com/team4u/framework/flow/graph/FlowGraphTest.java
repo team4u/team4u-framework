@@ -133,16 +133,13 @@ public class FlowGraphTest {
     }
 
     @Test
-    public void mermaidRendersCleanFlowAndStyles() {
+    public void mermaidRendersCleanFlow() {
         String graph = FlowGraphs.mermaid().render(Flow.<String, String>step(Echo.class)
                 .describe("channels"));
 
         Assert.assertTrue(graph.contains("flowchart TD"));
         Assert.assertTrue(graph.contains("flow_start([\"开始: channels\"])"));
         Assert.assertTrue(graph.contains("flow_end([\"结束 (ACCEPTED)\"])"));
-        Assert.assertTrue(graph.contains("classDef startEnd"));
-        Assert.assertTrue(graph.contains("classDef actionNode"));
-        Assert.assertTrue(graph.contains("class flow_start,flow_end startEnd"));
     }
 
     @Test
@@ -211,7 +208,6 @@ public class FlowGraphTest {
                 .describe("await"));
 
         Assert.assertTrue(graph.contains("挂起等待: manual-review"));
-        Assert.assertTrue(graph.contains("awaitNode"));
     }
 
     @Test

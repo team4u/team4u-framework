@@ -217,21 +217,6 @@ flowchart TD
     n14 --> n15
     flow_start --> n1
     n15 --> flow_end
-
-    classDef startEnd fill:#e2e8f0,stroke:#334155,stroke-width:2px,color:#0f172a;
-    classDef actionNode fill:#ffffff,stroke:#1d4ed8,stroke-width:2px,color:#0f172a;
-    classDef routeNode fill:#fef3c7,stroke:#b45309,stroke-width:2px,color:#78350f;
-    classDef parallelNode fill:#f3e8ff,stroke:#6b21a8,stroke-width:2px,color:#581c87;
-    classDef awaitNode fill:#e0f2fe,stroke:#0369a1,stroke-width:2px,color:#0c4a6e;
-    classDef successNode fill:#dcfce7,stroke:#15803d,stroke-width:2px,color:#14532d;
-    classDef dangerNode fill:#fee2e2,stroke:#b91c1c,stroke-width:2px,color:#7f1d1d;
-    class flow_start,flow_end startEnd;
-    class n1,n5,n9,n10,n12,n13,n14,n15 actionNode;
-    class n8 routeNode;
-    class n11 parallelNode;
-    class n4 awaitNode;
-    class n2,n3 successNode;
-    class n7 dangerNode;
 ```
 
 ### 3. 真实效果：紧凑文本树 (Text Tree)
