@@ -264,10 +264,19 @@ FlowResult<String> result = Local.compile(flow).run(input, cancellation);
 
 Operation、selector、JoinStrategy、Policy 回调中抛出的异常不会逃逸到调用方，而是被转换为携带稳定失败码的 `Failed` Outcome，随四态规则正常传播（可被 retry / recoverWith 消费）：
 
-| 来源 | 稳定失败码 |
+| 来源 | 稳定失败码（`FlowDiagnosticCodes`） |
 | :--- | :--- |
-| Operation / selector / join / policy 回调抛出异常 | `OPERATION_EXCEPTION`（details 携带异常类名等信息） |
-| timeout 截止时间到期 | `TIMEOUT`（"Flow scope deadline elapsed"） |
+| 操作执行抛出未受检异常 | `FlowDiagnosticCodes.OPERATION_EXCEPTION` |
+| 操作执行线程被中断 | `FlowDiagnosticCodes.OPERATION_INTERRUPTED` |
+| 操作被显式取消 | `FlowDiagnosticCodes.OPERATION_CANCELLED` |
+| 作用域截止时间到期 | `FlowDiagnosticCodes.TIMEOUT` |
+| 线程池拒绝执行任务 | `FlowDiagnosticCodes.EXECUTOR_REJECTED` |
+| 路由条件未匹配且无 default 分支 | `FlowDiagnosticCodes.NO_ROUTE` |
+| 策略退避等待时被中断 | `FlowDiagnosticCodes.WAIT_INTERRUPTED` |
+| 策略回调执行抛出异常 | `FlowDiagnosticCodes.POLICY_EXCEPTION` |
+| 并行分支合并（Join）异常 | `FlowDiagnosticCodes.JOIN_EXCEPTION` |
+
+框架在 [`FlowDiagnosticCodes`](file:///root/code/team4u-framework/modules/flow/core/src/main/java/com/team4u/framework/flow/FlowDiagnosticCodes.java) 中提供了标准常量定义，业务与监控告警建议统一引用该常量类进行断言与分流处理。
 
 这意味着：
 
@@ -279,7 +288,7 @@ Operation、selector、JoinStrategy、Policy 回调中抛出的异常不会逃�
 OperationStub<String, String> broken = OperationStub.throwing(
         () -> new java.io.IOException("gateway down"));
 FlowResult<String> result = Local.compile(Flow.step(broken)).run("in");
-// result 为 Completed[Failed[Failure[code=OPERATION_EXCEPTION, ...]]]
+// result 为 Completed[Failed[Failure[code=FlowDiagnosticCodes.OPERATION_EXCEPTION, ...]]]
 ```
 
 ---

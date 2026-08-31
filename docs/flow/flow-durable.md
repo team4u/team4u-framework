@@ -86,9 +86,27 @@ public interface StateMapper {
 
 **确定性契约**：同一状态值多次 `encode` 必须产生 `equals` 相等的 `StoredValue`（相同 codec 标识与字节序列）。
 
-- resume 信号的幂等比较依赖该契约：同值信号重驱动判定幂等，异值信号报 `RESUME_SIGNAL_CONFLICT`。
-- 不确定编码（payload 含随机标识、时间戳、哈希迭代序）会破坏幂等语义，禁止使用。
-- 默认实现 `DefaultStateMapper.INSTANCE` 仅支持标量（String/Integer/Long/Boolean/Double/Float/Short/Byte/Character）、`byte[]` 与 `Instant`；**业务对象必须自定义 mapper**（如 Jackson JSON，见 [扩展文档](flow-extension.md)）。自定义 mapper 必须同时保证编码确定性与解码往返一致。
+- 默认实现 `DefaultStateMapper.INSTANCE` 支持基础标量（String/Integer/Long/Boolean/Double/Float/Short/Byte/Character）、`byte[]` 与 `Instant`。
+- **复杂领域对象与 DTO 序列化**：
+  - `SerializerStateMapper`：基于函数式接口桥接外部序列化器（如 Jackson、Fastjson、Protobuf 等），完全保持核心引擎的零多余依赖边界；
+  - `CompositeStateMapper`：组合模式链式映射器，支持原生标量优先走 `DefaultStateMapper`，复杂实体自动回退到 `SerializerStateMapper`。
+
+```java
+// 结合 Jackson 构造复合状态映射器（优先标量，复杂实体走 Jackson）
+ObjectMapper objectMapper = new ObjectMapper();
+SerializerStateMapper jacksonMapper = new SerializerStateMapper(
+        "json:jackson", 1,
+        obj -> objectMapper.writeValueAsBytes(obj),
+        bytes -> objectMapper.readValue(bytes, Object.class)
+);
+
+// 复合映射器：标量走 DefaultStateMapper，DTO 走 Jackson
+StateMapper compositeMapper = CompositeStateMapper.withDefault(jacksonMapper);
+
+DurableRuntime runtime = DurableRuntime.builder(store)
+        .stateMapper(compositeMapper)
+        .build();
+```
 
 ---
 

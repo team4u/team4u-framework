@@ -17,7 +17,7 @@
 | `OperationResolver` | `Object resolve(Class<?> contract, String qualifier)` | 按契约+限定符解析绑定（容器集成） | `Local.compile(flow, resolver)`、`DurableRuntime.builder(...).operationResolver(...)` |
 | `FlowObserver` | `void onEvent(Event)` | 同步执行事件观测（Local/Durable 通用） | `Local.compile(flow, resolver, observer)` 等 |
 | `DurableObserver` | `void onEvent(Event)` | 检查点提交/恢复/信号落库事件 | `DurableRuntime.builder(...).durableObserver(...)` |
-| `StateMapper` | `StoredValue encode(Object)` / `Object decode(StoredValue)` | 应用状态编解码（须满足确定性契约） | `DurableRuntime.builder(...).stateMapper(...)` |
+| `StateMapper` | `StoredValue encode(Object)` / `Object decode(StoredValue)` | 应用状态编解码（`DefaultStateMapper` / `SerializerStateMapper` / `CompositeStateMapper`） | `DurableRuntime.builder(...).stateMapper(...)` |
 | `DurableStore` | `Optional<DurableSnapshot> load(String)` / `boolean compareAndSet(String, long, DurableSnapshot)` | 快照存储（JDBC/Redis/内存） | `DurableRuntime.builder(store)` |
 
 ## 1.1 Operation
