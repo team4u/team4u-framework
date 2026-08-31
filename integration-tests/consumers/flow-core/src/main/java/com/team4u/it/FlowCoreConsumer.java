@@ -1,198 +1,249 @@
 package com.team4u.it;
 
-import com.team4u.framework.flow.*;
+import com.team4u.framework.flow.Branch;
+import com.team4u.framework.flow.Failure;
+import com.team4u.framework.flow.Flow;
+import com.team4u.framework.flow.FlowDescription;
+import com.team4u.framework.flow.FlowResult;
+import com.team4u.framework.flow.Local;
+import com.team4u.framework.flow.LocalExecutable;
+import com.team4u.framework.flow.Operation;
+import com.team4u.framework.flow.OperationContext;
+import com.team4u.framework.flow.OperationResolver;
+import com.team4u.framework.flow.Outcome;
+import com.team4u.framework.flow.Reason;
+import com.team4u.framework.flow.ResumePoint;
+import com.team4u.framework.flow.Recovery;
+import com.team4u.framework.flow.Resumed;
+import com.team4u.framework.flow.Retry;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
-import java.util.Map;
-import java.util.function.Function;
+import java.util.concurrent.atomic.AtomicInteger;
 
 /**
- * 外部消费者工程验证：确保普通应用只引入 team4u-flow 即可在 Java 8 下编译并执行各种 Flow 能力。
+ * 外部消费者工程验证：确保普通应用只引入 team4u-flow 即可在 Java 8 下编译并执行
+ * 新版类型化 Flow 的核心能力（四态 Outcome、then/route/firstApplicable/recoverWith、
+ * parallel/join、await/resume、retry/timeout、取消与描述投影）。
  */
 public class FlowCoreConsumer {
 
+    private static String acceptedValue(FlowResult<String> result) {
+        Outcome<String> outcome = ((FlowResult.Completed<String>) result).outcome();
+        if (!(outcome instanceof Outcome.Accepted)) {
+            throw new AssertionError("Expected Accepted, got: " + outcome);
+        }
+        return ((Outcome.Accepted<String>) outcome).value();
+    }
+
     public static void main(String[] args) throws Exception {
-        testLambdaAndContextualSteps();
-        testDirectInstanceStep();
-        testSharedContextAndTypeTransformation();
-        testProjectionConsumer();
-        testNestedSubflowAndChooseConsumer();
+        testThenChainAndFourOutcomeKinds();
+        testRouteSelection();
+        testFirstApplicableAndRecoverWith();
+        testParallelJoin();
+        testAwaitSuspendAndResume();
+        testRetryAndTimeout();
+        testDescribeProjection();
+        testCancellation();
         System.out.println("FlowCoreConsumer executed successfully!");
     }
 
-    private static void testNestedSubflowAndChooseConsumer() {
-        final List<String> execIds = new ArrayList<>();
-        final List<String> invocIds = new ArrayList<>();
-
-        Flow<String, String> child = Flows.<String>begin("sub-consumer")
-                .step("sub-s1", (ctx, in) -> {
-                    execIds.add(ctx.executionId());
-                    invocIds.add(ctx.invocationId());
-                    return in + "-sub";
-                })
-                .build();
-
-        Flow<String, String> branch = Flows.<String>begin("branch-consumer")
-                .step("b-s1", (ctx, in) -> {
-                    execIds.add(ctx.executionId());
-                    invocIds.add(ctx.invocationId());
-                    return in + "-branch";
-                })
-                .build();
-
-        Flow<String, String> main = Flows.<String>begin("main-consumer")
-                .step("p1", (ctx, in) -> {
-                    execIds.add(ctx.executionId());
-                    invocIds.add(ctx.invocationId());
-                    return in + "-p1";
-                })
-                .then(child)
-                .choose("ch", in -> "A")
-                .when("A", branch)
-                .end()
-                .build();
-
-        FlowExecution<String> exec = main.run("hello");
-        if (!"hello-p1-sub-branch".equals(exec.result().value())) {
-            throw new AssertionError("Unexpected result: " + exec.result().value());
-        }
-        if (execIds.size() != 3) {
-            throw new AssertionError("Expected 3 execution IDs, got: " + execIds.size());
-        }
-        String rootExecId = exec.executionId();
-        for (String id : execIds) {
-            if (!rootExecId.equals(id)) {
-                throw new AssertionError("Execution ID mismatch: " + id + " vs " + rootExecId);
-            }
-        }
-        if (invocIds.size() != 3 || invocIds.get(0).equals(invocIds.get(1)) || invocIds.get(1).equals(invocIds.get(2))) {
-            throw new AssertionError("Invocation IDs should be unique: " + invocIds);
-        }
-    }
-
-    private static void testLambdaAndContextualSteps() {
-        Flow<String, String> flow = Flows.<String>begin("test-lambda")
-                .step("step-lambda", in -> in + "-processed")
-                .step("step-contextual", (ctx, in) -> {
-                    if (ctx.invocationId() == null || ctx.invocationId().isEmpty()) {
-                        throw new IllegalStateException("invocationId must not be empty");
-                    }
-                    return in + "-contextual";
-                })
-                .build();
-
-        String result = flow.call("hello");
-        if (!"hello-processed-contextual".equals(result)) {
-            throw new AssertionError("Unexpected result: " + result);
-        }
-    }
-
-    private static void testDirectInstanceStep() {
-        Step<Integer, Integer> doubler = new Step<Integer, Integer>() {
+    private static void testThenChainAndFourOutcomeKinds() {
+        final List<String> invocationIds = new ArrayList<String>();
+        Operation<String, String> upper = new Operation<String, String>() {
             @Override
-            public Integer apply(Integer input) {
-                return input * 2;
+            public Outcome<String> execute(OperationContext context, String input) {
+                invocationIds.add(context.invocationId());
+                return Outcome.accepted(input.toUpperCase());
             }
         };
-
-        Flow<Integer, Integer> flow = Flows.<Integer>begin("test-direct")
-                .step("double", doubler)
-                .build();
-
-        Integer result = flow.call(21);
-        if (result != 42) {
+        Flow<String, String> flow = Flow.<String, String>step(upper)
+                .then(new Operation<String, String>() {
+                    @Override
+                    public Outcome<String> execute(OperationContext context, String input) {
+                        return Outcome.accepted(input + "!");
+                    }
+                });
+        FlowResult<String> result = Local.compile(flow).run("hello");
+        if (!"HELLO!".equals(acceptedValue(result))) {
             throw new AssertionError("Unexpected result: " + result);
         }
-    }
-
-    private static void testSharedContextAndTypeTransformation() {
-        class OrderContext {
-            final String orderId;
-            boolean reserved;
-            OrderContext(String orderId) { this.orderId = orderId; }
+        if (invocationIds.size() != 1 || invocationIds.get(0).isEmpty()) {
+            throw new AssertionError("invocationId must be stable: " + invocationIds);
         }
 
-        class Receipt {
-            final String orderId;
-            final boolean success;
-            Receipt(String orderId, boolean success) { this.orderId = orderId; this.success = success; }
-        }
-
-        Flow<OrderContext, Receipt> flow = Flows.<OrderContext>begin("checkout")
-                .tap("reserve", (ctx, order) -> order.reserved = true)
-                .step("create-receipt", order -> new Receipt(order.orderId, order.reserved))
-                .build();
-
-        OrderContext ctx = new OrderContext("order-100");
-        Receipt receipt = flow.call(ctx);
-        if (!receipt.success || !"order-100".equals(receipt.orderId)) {
-            throw new AssertionError("Unexpected receipt");
+        Flow<String, String> rejected = Flow.<String, String>step(
+                new Operation<String, String>() {
+                    @Override
+                    public Outcome<String> execute(OperationContext context, String input) {
+                        return Outcome.rejected(Reason.of("POLICY", "not allowed"));
+                    }
+                });
+        FlowResult<String> rejectedResult = Local.compile(rejected).run("x");
+        Outcome<String> outcome = ((FlowResult.Completed<String>) rejectedResult).outcome();
+        if (outcome.kind() != Outcome.Kind.REJECTED) {
+            throw new AssertionError("Expected REJECTED, got: " + outcome.kind());
         }
     }
 
-    private static void testProjectionConsumer() {
-        Flow<String, String> flow = Flows.<String>begin("test-proj")
-                .step("s1", in -> in + "-1")
-                .step("s2", in -> in + "-2")
-                .build();
-
-        List<String> nodeNames = flow.project(new Flow.Projection<List<String>>() {
+    private static void testRouteSelection() {
+        Operation<String, String> selector = new Operation<String, String>() {
             @Override
-            public List<String> projectSequence(Flow.SequenceInfo info, List<List<String>> children) {
-                List<String> all = new ArrayList<>();
-                for (List<String> child : children) {
-                    all.addAll(child);
+            public Outcome<String> execute(OperationContext context, String input) {
+                return Outcome.accepted(input);
+            }
+        };
+        Flow<String, String> flow = Flow.<String, String>route(selector)
+                .caseOf("A", Flow.<String, String>accepted("branch-a"))
+                .otherwise(Flow.<String, String>rejected(Reason.of("UNKNOWN", "unknown")));
+        FlowResult<String> result = Local.compile(flow).run("A");
+        if (!"branch-a".equals(acceptedValue(result))) {
+            throw new AssertionError("Route failed: " + result);
+        }
+        FlowResult<String> noMatch = Local.compile(
+                Flow.<String, String>route(selector)
+                        .caseOf("A", Flow.<String, String>accepted("a"))
+                        .withoutOtherwise())
+                .run("B");
+        Outcome<String> skipped = ((FlowResult.Completed<String>) noMatch).outcome();
+        if (skipped.kind() != Outcome.Kind.SKIPPED) {
+            throw new AssertionError("Expected SKIPPED no-match, got: " + skipped.kind());
+        }
+    }
+
+    private static void testFirstApplicableAndRecoverWith() {
+        Flow<String, String> applicable = Flow.firstApplicable(
+                Flow.<String, String>skipped(Reason.of("NA", "first")),
+                Flow.<String, String>accepted("second"));
+        FlowResult<String> result = Local.compile(applicable).run("x");
+        if (!"second".equals(acceptedValue(result))) {
+            throw new AssertionError("firstApplicable failed: " + result);
+        }
+
+        final AtomicInteger recoverCalls = new AtomicInteger();
+        Flow<String, String> recover = Flow.<String, String>failed(
+                Failure.of("BOOM", "boom"))
+                .recoverWith(Flow.<Recovery<String>, String>step(new Operation<Recovery<String>, String>() {
+                    @Override
+                    public Outcome<String> execute(OperationContext context, Recovery<String> input) {
+                        recoverCalls.incrementAndGet();
+                        return Outcome.accepted("recovered:" + input.failure().code());
+                    }
+                }));
+        FlowResult<String> recovered = Local.compile(recover).run("x");
+        if (!"recovered:BOOM".equals(acceptedValue(recovered))
+                || recoverCalls.get() != 1) {
+            throw new AssertionError("recoverWith failed: " + recovered);
+        }
+    }
+
+    private static void testParallelJoin() {
+        Flow<String, String> parallel = Flow.<String>parallel(
+                Branch.of("left", Flow.<String, String>accepted("L")),
+                Branch.of("right", Flow.<String, String>accepted("R")))
+                .join(results -> Outcome.accepted(
+                        results.branches().get(0).name() + "+"
+                                + results.branches().get(1).name()));
+        FlowResult<String> result = Local.compile(parallel).run("x");
+        if (!"left+right".equals(acceptedValue(result))) {
+            throw new AssertionError("parallel join failed: " + result);
+        }
+    }
+
+    private static void testAwaitSuspendAndResume() {
+        ResumePoint<String> approval = ResumePoint.named("approval");
+        Flow<String, Resumed<String, String>> flow =
+                Flow.<String, String>step(new Operation<String, String>() {
+                    @Override
+                    public Outcome<String> execute(OperationContext context, String input) {
+                        return Outcome.accepted(input + "-pre");
+                    }
+                }).await(approval);
+        LocalExecutable<String, Resumed<String, String>> executable = Local.compile(flow);
+        FlowResult<Resumed<String, String>> suspended = executable.run("x");
+        if (!(suspended instanceof FlowResult.Suspended)) {
+            throw new AssertionError("Expected Suspended, got: " + suspended);
+        }
+        FlowResult.Suspended<Resumed<String, String>> suspension =
+                (FlowResult.Suspended<Resumed<String, String>>) suspended;
+        FlowResult<Resumed<String, String>> resumed = executable.resume(
+                suspension.suspension(), approval, "approved");
+        Outcome<Resumed<String, String>> resumedOutcome =
+                ((FlowResult.Completed<Resumed<String, String>>) resumed).outcome();
+        Resumed<String, String> value = ((Outcome.Accepted<Resumed<String, String>>) resumedOutcome).value();
+        if (!"x-pre".equals(value.state()) || !"approved".equals(value.signal())) {
+            throw new AssertionError("Resume failed: " + value.state() + "/" + value.signal());
+        }
+    }
+
+    private static void testRetryAndTimeout() {
+        final AtomicInteger attempts = new AtomicInteger();
+        Flow<String, String> retryFlow = Flow.<String, String>step(new Operation<String, String>() {
+            @Override
+            public Outcome<String> execute(OperationContext context, String input) {
+                if (attempts.incrementAndGet() < 3) {
+                    return Outcome.failed(Failure.of("FLAKY", "try again"));
                 }
-                return all;
+                return Outcome.accepted("ok@" + attempts.get());
             }
+        }).retry(Retry.maxAttempts(3));
+        FlowResult<String> retried = Local.compile(retryFlow).run("x");
+        if (!"ok@3".equals(acceptedValue(retried))) {
+            throw new AssertionError("retry failed: " + retried);
+        }
 
+        Flow<String, String> timedOut = Flow.<String, String>step(
+                new Operation<String, String>() {
+                    @Override
+                    public Outcome<String> execute(OperationContext context, String input) {
+                        try {
+                            Thread.sleep(2000);
+                        } catch (InterruptedException ignored) {
+                        }
+                        return Outcome.accepted("late");
+                    }
+                }).timeout(Duration.ofMillis(100));
+        FlowResult<String> timedOutResult = Local.compile(timedOut).run("x");
+        Outcome<String> timedOutcome =
+                ((FlowResult.Completed<String>) timedOutResult).outcome();
+        if (timedOutcome.kind() != Outcome.Kind.FAILED
+                || !"TIMEOUT".equals(((Outcome.Failed<String>) timedOutcome).failure().code())) {
+            throw new AssertionError("timeout failed: " + timedOutcome);
+        }
+    }
+
+    private static void testDescribeProjection() {
+        Flow<String, String> flow = Flow.<String, String>step(new Operation<String, String>() {
             @Override
-            public <T, R1> List<String> projectStep(Flow.StepInfo info, Step<T, R1> step, Step.Contextual<T, R1> contextualStep, List<StepInterceptor> interceptors) {
-                List<String> list = new ArrayList<>();
-                list.add(info.id());
-                return list;
+            public Outcome<String> execute(OperationContext context, String input) {
+                return Outcome.accepted(input);
             }
+        }).then(Flow.<String, String>accepted("done"));
+        FlowDescription description = flow.describe();
+        if (description.root().kind() != com.team4u.framework.flow.NodeDescriptor.Kind.SEQUENCE) {
+            throw new AssertionError("Expected SEQUENCE root: " + description.root().kind());
+        }
+        if (description.root().children().size() != 2) {
+            throw new AssertionError("Expected 2 children: "
+                    + description.root().children().size());
+        }
+    }
 
+    private static void testCancellation() {
+        Flow<String, String> flow = Flow.<String, String>step(new Operation<String, String>() {
             @Override
-            public <T> List<String> projectTap(Flow.TapInfo info, Action<T> action, Action.Contextual<T> contextualAction, List<StepInterceptor> interceptors) {
-                List<String> list = new ArrayList<>();
-                list.add(info.id());
-                return list;
-            }
-
-            @Override
-            public <T> List<String> projectGuard(Flow.GuardInfo info, Condition<T> condition, Function<T, StopReason> reasonFactory) {
-                List<String> list = new ArrayList<>();
-                list.add(info.id());
-                return list;
-            }
-
-            @Override
-            public <T, K, R1> List<String> projectChoose(Flow.ChooseInfo<K> info, Function<T, K> selector, Map<K, List<String>> branches, List<String> otherwiseBranch, Function<T, StopReason> otherwiseStopReason) {
-                List<String> list = new ArrayList<>();
-                list.add(info.id());
-                return list;
-            }
-
-            @Override
-            public <T, R1> List<String> projectSubflow(Flow.SubflowInfo info, Flow<T, R1> subflow, List<String> subflowProjection) {
-                return subflowProjection;
-            }
-
-            @Override
-            public <T, R1> List<String> projectRecover(Flow.RecoverInfo info, List<String> body, Recovery<T, R1> recovery, Recovery.Contextual<T, R1> contextualRecovery) {
-                return body;
-            }
-
-            @Override
-            public <T, R1> List<String> projectEnsure(Flow.EnsureInfo info, List<String> body, CompletionAction<T, R1> completionAction, CompletionAction.Contextual<T, R1> contextualCompletionAction) {
-                return body;
+            public Outcome<String> execute(OperationContext context, String input) {
+                context.cancellation().throwIfCancelled();
+                return Outcome.accepted(input);
             }
         });
-
-        if (nodeNames.size() != 2 || !"s1".equals(nodeNames.get(0)) || !"s2".equals(nodeNames.get(1))) {
-            throw new AssertionError("Unexpected projection result: " + nodeNames);
+        com.team4u.framework.flow.Cancellation cancellation = com.team4u.framework.flow.Cancellation.create();
+        cancellation.cancel();
+        LocalExecutable<String, String> executable = Local.compile(flow);
+        FlowResult<String> result = executable.run("x", cancellation);
+        if (!(result instanceof FlowResult.Cancelled)) {
+            throw new AssertionError("Expected Cancelled, got: " + result);
         }
     }
 }

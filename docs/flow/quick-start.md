@@ -1,12 +1,12 @@
 # 快速开始
 
-本章将通过实际示例展示如何使用 `team4u-flow` 编排业务流程。
+本章从依赖引入开始，用最短路径走完"类型化链 -> 四态 -> route/parallel/await -> Local vs Durable -> 图渲染 -> 测试"。
 
 ---
 
-## 1. 引入依赖
+# 1. 引入依赖
 
-通过统一 BOM 引入核心流程组件：
+通过统一 BOM 引入（示例版本请对齐仓库发布版本）：
 
 ```xml
 <dependencyManagement>
@@ -22,178 +22,252 @@
 </dependencyManagement>
 
 <dependencies>
-    <!-- 核心流程组件（零第三方运行时依赖） -->
+    <!-- 核心：类型化 Flow，零第三方运行时依赖 -->
     <dependency>
         <groupId>com.team4u</groupId>
         <artifactId>team4u-flow</artifactId>
     </dependency>
 
-    <!-- 可选：持久化执行器 -->
+    <!-- 可选：持久化执行器（依赖 team4u-flow） -->
     <dependency>
         <groupId>com.team4u</groupId>
         <artifactId>team4u-flow-durable</artifactId>
     </dependency>
-
-    <!-- 可选：测试支持 -->
-    <dependency>
-        <groupId>com.team4u</groupId>
-        <artifactId>team4u-flow-test</artifactId>
-        <scope>test</scope>
-    </dependency>
 </dependencies>
 ```
 
----
-
-## 2. 基础示例：类型化转换流水线
-
-前后步骤的类型由编译器严格推导，`A -> B -> C` 类型不匹配将在编译期报错：
-
-```java
-Flow<Integer, String> flow = Flows.<Integer>begin("math-pipeline")
-        .step("double", in -> in * 2)               // Integer -> Integer
-        .step("add-one", in -> in + 1)              // Integer -> Integer
-        .step("format", in -> "Result: " + in)      // Integer -> String
-        .build();
-
-// 同步调用
-String result = flow.call(5); // "Result: 11"
-```
+其他可选模块：`team4u-flow-graph`（渲染）、`team4u-flow-bean`（容器绑定）、`team4u-flow-test`（测试，scope=test）。
 
 ---
 
-## 3. 典型业务示例：电商下单履约
+# 2. 第一个 then 链
 
-在复杂的电商下单场景中，通常包含：上下文维护、守卫校验、幂等外部扣减、支付分支选择与终态清理。
-
-### 3.1 业务模型与上下文
+业务步骤实现 `Operation<I, O>`，返回四态 `Outcome`；用 `Flow.step(...).then(...)` 组合成类型化流水线：
 
 ```java
-public class OrderContext implements Serializable {
-    private final String orderId;
-    private final long amount;
-    private final String paymentChannel;
-    private boolean stockReserved;
-    private String receiptId;
+import com.team4u.framework.flow.*;
 
-    // 构造器、getter/setter 省略
-}
+public class QuickStart {
 
-public class Receipt implements Serializable {
-    private final String orderId;
-    private final String receiptId;
-    private final long amount;
+    static Operation<String, Integer> length = (context, value) ->
+            Outcome.accepted(value.length());
 
-    // 构造器、getter/setter 省略
-}
-```
+    static Operation<Integer, String> label = (context, value) ->
+            Outcome.accepted("len=" + value);
 
-### 3.2 流程定义
+    public static void main(String[] args) {
+        // Flow<I, O> 只描述结构，本身不可执行
+        Flow<String, String> flow = Flow.step(length).then(label);
 
-```java
-// 1. 定义子流程（卡支付 / 钱包支付）
-Flow<OrderContext, OrderContext> cardPayFlow = Flows.<OrderContext>begin("card-pay")
-        .tap("call-card-gateway", ctx -> ctx.setReceiptId("RCP-CARD-" + ctx.getOrderId()))
-        .build();
+        // 编译为 Local 可执行并同步运行
+        LocalExecutable<String, String> executable = Local.compile(flow);
+        FlowResult<String> result = executable.run("team4u");
 
-Flow<OrderContext, OrderContext> walletPayFlow = Flows.<OrderContext>begin("wallet-pay")
-        .tap("call-wallet-gateway", ctx -> ctx.setReceiptId("RCP-WALLET-" + ctx.getOrderId()))
-        .build();
-
-// 2. 编排主流程
-Flow<OrderContext, Receipt> checkoutFlow = Flows.<OrderContext>begin("checkout")
-        // 守卫校验：条件不满足时安全停止
-        .guard("validate-order",
-                order -> order.getAmount() > 0,
-                order -> StopReason.of("INVALID_AMOUNT", "订单金额必须大于0"))
-        
-        // 副作用动作：利用 StepContext.invocationId() 进行外部幂等调用
-        .tap("reserve-stock", (stepContext, order) -> {
-            inventoryService.reserve(stepContext.invocationId(), order.getOrderId());
-            order.setStockReserved(true);
-        })
-        
-        // 条件分支路由
-        .choose("choose-channel", OrderContext::getPaymentChannel)
-            .when("CARD", cardPayFlow)
-            .when("WALLET", walletPayFlow)
-            .otherwiseStop(order -> StopReason.of("UNSUPPORTED_CHANNEL", order.getPaymentChannel()))
-        .end()
-        
-        // 类型转换：转换为最终收据
-        .step("build-receipt", order -> new Receipt(order.getOrderId(), order.getReceiptId(), order.getAmount()))
-        
-        // 技术失败兜底恢复
-        .recover("fallback", (order, failure) -> {
-            log.error("下单失败，进入降级: {}", failure.cause().getMessage());
-            return FlowResult.succeeded(new Receipt(order.getOrderId(), "FALLBACK", order.getAmount()));
-        })
-        
-        // 无论成功、停止或失败均执行的终态清理
-        .ensure("cleanup-metrics", (order, completion) -> {
-            metricsService.recordCheckout(completion.kind());
-        })
-        .build();
-```
-
----
-
-## 4. 执行模式
-
-### 4.1 本地同步直接调用 (`call`)
-
-适合常规同步接口，执行成功直接返回值，发生业务 STOPPED 或技术 FAILED 时抛出 `FlowRunException`：
-
-```java
-OrderContext order = new OrderContext("ORD-1001", 8800L, "CARD");
-try {
-    Receipt receipt = checkoutFlow.call(order);
-    System.out.println("下单成功: " + receipt.getReceiptId());
-} catch (FlowRunException e) {
-    if (e.result().isStopped()) {
-        System.out.println("业务终止: " + e.stopReason().message());
-    } else {
-        System.out.println("技术异常: " + e.getCause().getMessage());
+        // FlowResult.requireAccepted(): Completed/Accepted 时返回输出
+        System.out.println(result.requireAccepted()); // len=7
     }
 }
 ```
 
-### 4.2 本地诊断执行 (`run`)
+要点：
 
-适合需要追踪各节点执行状态、耗时和执行树的场景：
+- `then` 前后类型严格推导：`Flow<String, Integer>.then(Operation<Integer, String>)` 得到 `Flow<String, String>`，不匹配直接编译错误。
+- 所有组合方法返回新的 `Flow` 实例，定义不可变、线程安全。
+- 需要调用外部服务又不想丢失主上下文时用 `use`：
 
 ```java
-FlowExecution<Receipt> execution = checkoutFlow.run(order, RunOptions.builder()
-        .executionId("exec-001")
-        .trace(true)
-        .build());
+Flow<State, State> enriched = Flow.<State>identity().use(
+        riskClient,                       // Operation<RiskReq, RiskScore>
+        State::toRiskRequest,             // project: 从当前输出派生入参
+        (state, score) -> state.withScore(score)); // merge: 合并原输出与新结果
+```
 
-FlowResult<Receipt> result = execution.result();
-if (result.isSucceeded()) {
-    System.out.println("产物: " + result.value());
+---
+
+# 3. 四态 Outcome
+
+`Outcome<T>` 是业务结果的四态闭集，仅 `Accepted` 携带输出：
+
+```java
+Operation<OrderRequest, Receipt> checkout = (context, order) -> {
+    if (order.getAmount() <= 0) {
+        return Outcome.rejected(Reason.of("INVALID_AMOUNT", "金额必须为正"));
+    }
+    if (!inventoryClient.tryReserve(order.getInvocationKey())) {
+        return Outcome.skipped(Reason.of("OUT_OF_STOCK", "库存不足，暂不处理"));
+    }
+    Receipt receipt = paymentClient.charge(order);
+    if (receipt == null) {
+        return Outcome.failed(Failure.of("PAYMENT_ERROR", "支付渠道异常"));
+    }
+    return Outcome.accepted(receipt);
+};
+```
+
+按状态消费结果：
+
+```java
+FlowResult<Receipt> result = Local.compile(Flow.step(checkout)).run(order);
+if (result instanceof FlowResult.Completed) {
+    Outcome<Receipt> outcome = ((FlowResult.Completed<Receipt>) result).outcome();
+    if (outcome instanceof Outcome.Accepted) {
+        handleSuccess(((Outcome.Accepted<Receipt>) outcome).value());
+    } else if (outcome instanceof Outcome.Rejected) {
+        handleReject(((Outcome.Rejected<Receipt>) outcome).reason());
+    } else if (outcome instanceof Outcome.Skipped) {
+        handleSkip(((Outcome.Skipped<Receipt>) outcome).reason());
+    } else {
+        handleFailure(((Outcome.Failed<Receipt>) outcome).failure());
+    }
 }
-
-// 打印执行轨迹
-execution.trace().entries().forEach(entry -> {
-    System.out.println(entry.nodeId() + " -> " + entry.status() + " (" + entry.elapsedNanos() / 1_000_000 + "ms)");
-});
 ```
 
-### 4.3 持久化可恢复执行 (`DurableFlow`)
+传播要点：`then` 仅 Accepted 推进；Rejected 终止透传；Skipped 可被 `firstApplicable` 消费；Failed 触发 `recoverWith`/`retry`（详见[核心语义](flow-semantics.md)）。测试时用 testkit 的 `FlowAssertions.assertAccepted/assertRejected/...` 一行断言。
 
-无需修改流程定义，直接注册到 `DurableRuntime` 即可获得崩溃恢复与 CAS 检查点能力：
+---
+
+# 4. route / parallel / await
+
+## 4.1 route：条件路由
 
 ```java
-// 1. 初始化运行时
-DurableStore store = new InMemoryDurableStore(); // 或接入数据库 / Redis 存储
-DurableRuntime runtime = DurableRuntime.builder(store).build();
-
-// 2. 注册为持久化流程（指定版本）
-DurableFlow<OrderContext, Receipt> durableFlow = runtime.register(checkoutFlow, 1);
-
-// 3. 启动执行（每一步自动落 CAS 快照）
-DurableResult<Receipt> res = durableFlow.start("ORD-1001", order);
-
-// 4. 若节点中途发生网络超时/宕机，重启后可无缝恢复：
-DurableResult<Receipt> recovered = durableFlow.recover("ORD-1001");
+Flow<OrderRequest, Receipt> routed = Flow
+        .route((Operation<OrderRequest, String>) (context, order) ->
+                Outcome.accepted(order.getChannel()))
+        .caseOf("ALIPAY", alipayFlow)
+        .caseOf("WECHAT", wechatFlow)
+        .otherwise(manualFlow);          // 或 .withoutOtherwise()：未匹配整体 Skipped
 ```
+
+路由键精确 `equals` 匹配；`caseOf` 接受任意类型键（opaque key）。
+
+## 4.2 firstApplicable：降级链
+
+```java
+Flow<OrderRequest, Receipt> degraded = Flow.firstApplicable(
+        primeChannelFlow,        // 不适用时返回 Skipped
+        backupChannelFlow,       // 不适用时返回 Skipped
+        manualChannelFlow);      // 兜底
+// 首个非 Skipped 的分支即整体结果；全部 Skipped 则整体 Skipped
+```
+
+## 4.3 parallel：显式 join 的并行
+
+```java
+Branch<OrderRequest, RiskReport> risk = Branch.of("risk", riskFlow);
+Branch<OrderRequest, StockReport> stock = Branch.of("stock", stockFlow);
+
+Flow<OrderRequest, String> fanOut = Flow.<OrderRequest>parallel(risk, stock)
+        .join(results -> results.allAccepted()
+                .map(values -> values.get(risk).summary()
+                        + "/" + values.get(stock).summary()));
+```
+
+- wait-all：全部分支完成后才进入 join；分支名唯一；分支内不能 await / PersistentPolicy。
+- 内置策略：`allAccepted()` / `firstAccepted()` / `quorum(n)` / `homogeneousCollect()`。
+- Local 下分支真并发（worker 线程池）；Durable 下按声明顺序串行驱动（语义一致）。
+
+## 4.4 await：挂起与恢复
+
+```java
+ResumePoint<Approval> approval = ResumePoint.named("manager-approval");
+
+Flow<PaymentRequest, String> flow = Flow.<PaymentRequest>identity()
+        .then(freezeOperation)
+        .await(approval)                                    // 挂起
+        .then((context, resumed) -> settle(
+                resumed.state(), resumed.signal()));        // resumed.state/signal
+
+LocalExecutable<PaymentRequest, String> executable = Local.compile(flow);
+FlowResult<String> first = executable.run(payment);
+
+if (first instanceof FlowResult.Suspended) {
+    Suspension<String> suspension =
+            ((FlowResult.Suspended<String>) first).suspension();
+    // 业务侧拿到审批结果后注入信号（Suspension 单次消费）
+    FlowResult<String> second = executable.resume(
+            suspension, approval, new Approval(true));
+    System.out.println(second.requireAccepted());
+}
+```
+
+---
+
+# 5. Local vs Durable
+
+| 维度 | Local (`Local.compile`) | Durable (`DurableRuntime.compile`) |
+| :--- | :--- | :--- |
+| 结果类型 | `FlowResult`：Completed / Suspended / Cancelled | `DurableResult`：Completed / Suspended / **Active(wakeAt)** / Cancelled |
+| 挂起句柄 | 内存 `Suspension`（不透明、单次消费） | 快照 `awaitingPoint` + `resume(executionId, pointName, signal)` |
+| 崩溃恢复 | 无（进程内） | `recover(executionId)` 从最后提交快照续跑 |
+| 检查点 | 无 | 节点边界 CAS（revision 乐观锁） |
+| 并行分支 | worker 线程池真并发 | 按声明顺序串行驱动 |
+| 退避等待 | 进程内等待 | ACTIVE+wakeAt 快照，外部调度 recover 唤醒 |
+| 典型用途 | 同步编排、单机流水线、测试 | 长事务、人工审批、跨进程长时任务 |
+
+同一份定义切换到 Durable：
+
+```java
+DurableRuntime runtime = DurableRuntime.builder(new InMemoryDurableStore()).build();
+DurableExecutable<PaymentRequest, String> durable =
+        runtime.compile(flow, "payment-settle", 1);
+
+DurableResult<String> started = durable.start("pay-20240101-0001", payment);
+// started 为 Suspended(resumePoint=manager-approval)
+
+DurableResult<String> resumed = durable.resume(
+        "pay-20240101-0001", "manager-approval", new Approval(true));
+// resumed 为 Completed[Accepted[...]]
+```
+
+Durable 要点：`invocationId = flowId:flowVersion:executionId:path` 作为外部副作用幂等键；resume 信号先落库（两段 CAS）；`(flowId, flowVersion)` 变更必须递增版本号，不做旧快照迁移（详见 [Durable 文档](flow-durable.md)）。
+
+---
+
+# 6. graph：渲染流程结构
+
+```java
+import com.team4u.framework.flow.graph.FlowGraphs;
+
+String mermaid = FlowGraphs.mermaid().render(flow.describe("payment-settle"));
+System.out.println(mermaid);   // 粘贴到 Mermaid 渲染器即可看到六通道结构图
+
+String tree = FlowGraphs.text().render(flow.describe("payment-settle"));
+System.out.println(tree);      // 紧凑文本树，适合日志与评审
+```
+
+渲染只依赖 `FlowDescription`（纯只读描述模型，不含回调实例与业务值）；路由键等不可稳定呈现的值渲染为 opaque 占位符（详见 [可视化文档](flow-graph.md)）。
+
+---
+
+# 7. testkit：写第一个测试
+
+```java
+import com.team4u.framework.flow.test.*;
+
+public class CheckoutFlowTest {
+
+    @org.junit.Test
+    public void rejectsInvalidAmount() {
+        OperationStub<OrderRequest, Receipt> checkout =
+                OperationStub.rejecting(Reason.of("INVALID_AMOUNT", "金额必须为正"));
+
+        FlowResult<Receipt> result =
+                LocalFixture.compile(Flow.step(checkout)).run(new OrderRequest(-1));
+
+        FlowAssertions.assertRejected(result, "INVALID_AMOUNT");
+        org.junit.Assert.assertEquals(1, checkout.callCount());
+        org.junit.Assert.assertNotNull(checkout.lastInput());
+    }
+}
+```
+
+testkit 提供 `OperationStub`/`PolicyStub` 桩、`TraceCollector` 轨迹、`FlowAssertions` 四态断言、`LocalFixture`/`DurableFixture` 夹具与 `ParallelBarrier` 并行屏障，完整 API 见[测试文档](flow-test.md)。
+
+---
+
+# 8. 下一步
+
+- [核心语义与机制](flow-semantics.md)：四态传播、八节点、Policy/Retry/Timeout、取消合同。
+- [Durable 持久化执行](flow-durable.md)：检查点、恢复、resume 两段 CAS。
+- [实战案例](flow-sample.md)：订单风控路由与支付审批恢复的完整示例。
