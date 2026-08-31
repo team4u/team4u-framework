@@ -36,7 +36,7 @@
 | :--- | :--- |
 | `team4u-flow-bean`（配合 `team4u-bean-spring`） | Spring / Bean 容器声明式绑定编排 |
 | `team4u-flow-durable` | 节点边界 CAS 检查点与跨进程崩溃恢复 |
-| `team4u-flow-graph` | 流程结构 Mermaid 图与文本树渲染 |
+| `team4u-flow-diagram` | 流程结构 Mermaid 图与文本树渲染 |
 | `team4u-flow-test`（`scope=test`） | 业务桩、Trace 收集器与单元测试断言 |
 
 ---
@@ -330,16 +330,16 @@ DurableResult<Receipt> recovered = durable.recover("order-0001");
 
 ## 结构可视化与测试支持
 
-### 流程图与文本树渲染 (team4u-flow-graph)
+### 流程图与文本树渲染 (team4u-flow-diagram)
 
 ```java
-import com.team4u.framework.flow.graph.FlowGraphs;
+import com.team4u.framework.flow.diagram.FlowDiagrams;
 
 // 导出只读描述并渲染为 Mermaid 流程图
-String mermaid = FlowGraphs.mermaid().render(flow.describe("order-flow"));
+String mermaid = FlowDiagrams.mermaid().render(flow.describe("order-flow"));
 
 // 渲染为紧凑文本树
-String tree = FlowGraphs.text().render(flow.describe("order-flow"));
+String tree = FlowDiagrams.text().render(flow.describe("order-flow"));
 ```
 
 ### 单元测试与断言 (team4u-flow-test)
@@ -378,7 +378,7 @@ public class FlowTest {
 - 掌握 Spring 容器绑定与切面代理：[Bean 容器集成与 Spring 治理](flow-bean.md)
 - 深入 CAS 检查点与崩溃恢复：[Durable 状态机与 CAS 检查点机制](flow-durable-core.md)
 - 深入快照槽位与 StateMapper 编解码：[快照存储结构与 StateMapper 编解码](flow-durable-snapshot.md)
-- 了解 Mermaid 流程图与紧凑文本树：[可视化图表渲染与双投影架构](flow-graph.md)
+- 了解 Mermaid 流程图与紧凑文本树：[可视化图表渲染与双投影架构](flow-diagram.md)
 - 查阅单元测试断言库与测试夹具：[测试支持与测试套件](flow-test.md)
 - 查阅全链路诊断码与故障排查手册：[诊断码体系与故障排查手册](flow-diagnostics.md)
 - 学习综合电商履约与风控实战：[实战案例库与生产模式](flow-sample.md)

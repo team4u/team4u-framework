@@ -1,6 +1,6 @@
 # 可视化图表渲染与双投影架构
 
-`team4u-flow-graph` 负责将流程结构渲染为直观的 Mermaid 流程图与紧凑文本树，适用于架构评审、开发文档自动化生成与日志排障。
+`team4u-flow-diagram` 负责将流程结构渲染为直观的 Mermaid 流程图与紧凑文本树，适用于架构评审、开发文档自动化生成与日志排障。
 
 渲染器仅消费由 `flow.describe(flowId)` 导出的只读结构模型 **`FlowDescription`**，不触及任何业务回调实例或执行状态，因此可在任何环境下安全调用而绝无副作用。
 
@@ -11,7 +11,7 @@
 ```xml
 <dependency>
     <groupId>com.team4u</groupId>
-    <artifactId>team4u-flow-graph</artifactId>
+    <artifactId>team4u-flow-diagram</artifactId>
 </dependency>
 ```
 
@@ -27,8 +27,8 @@ graph TD
     
     subgraph "结构描述通道 (Description Projection)"
         F -->|"flow.describe(flowId)"| FD["FlowDescription<br/>冻结只读数据模型（无回调实例、零执行副作用）"]
-        FD --> MM["MermaidFlowGraphRenderer<br/>渲染直观清晰的 Mermaid 业务流程图"]
-        FD --> TX["TextFlowGraphRenderer<br/>渲染先序遍历紧凑文本树"]
+        FD --> MM["MermaidFlowDiagramRenderer<br/>渲染直观清晰的 Mermaid 业务流程图"]
+        FD --> TX["TextFlowDiagramRenderer<br/>渲染先序遍历紧凑文本树"]
     end
 
     subgraph "可执行计划通道 (Executable Projection)"
@@ -44,23 +44,23 @@ graph TD
 
 ```java
 import com.team4u.framework.flow.desc.FlowDescription;
-import com.team4u.framework.flow.graph.FlowGraphs;
+import com.team4u.framework.flow.diagram.FlowDiagrams;
 
 // 1. 导出只读描述模型
 FlowDescription description = orderFlow.describe("order-fulfillment-flow");
 
 // 2. 渲染为 Mermaid 流程图脚本
-String mermaidScript = FlowGraphs.mermaid().render(description);
+String mermaidScript = FlowDiagrams.mermaid().render(description);
 
 // 3. 渲染为紧凑文本树
-String textTree = FlowGraphs.text().render(description);
+String textTree = FlowDiagrams.text().render(description);
 ```
 
 ---
 
 ## 端到端实战：电商订单履约流程的可视化呈现
 
-为了直观展示 `team4u-flow-graph` 的渲染效果，下面以一个包含 **前置拦截、动态路由、人工审批挂起、并行资源锁定、超时治理与失败降级** 的典型复杂业务流程为例，演示从 DSL 编排到实际渲染输出的全过程。
+为了直观展示 `team4u-flow-diagram` 的渲染效果，下面以一个包含 **前置拦截、动态路由、人工审批挂起、并行资源锁定、超时治理与失败降级** 的典型复杂业务流程为例，演示从 DSL 编排到实际渲染输出的全过程。
 
 ### 1. 业务流程编排定义 (Java DSL)
 
@@ -72,7 +72,7 @@ import com.team4u.framework.flow.api.Branch;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.ResumePoint;
 import com.team4u.framework.flow.desc.FlowDescription;
-import com.team4u.framework.flow.graph.FlowGraphs;
+import com.team4u.framework.flow.diagram.FlowDiagrams;
 import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.model.Reason;
 import com.team4u.framework.flow.model.Recovery;
@@ -142,11 +142,11 @@ public class OrderFulfillmentExample {
         FlowDescription desc = orderFlow.describe("order-fulfillment-flow");
 
         // 渲染为 Mermaid 流程图脚本
-        String mermaidDsl = FlowGraphs.mermaid().render(desc);
+        String mermaidDsl = FlowDiagrams.mermaid().render(desc);
         System.out.println(mermaidDsl);
 
         // 渲染为紧凑文本树
-        String textTree = FlowGraphs.text().render(desc);
+        String textTree = FlowDiagrams.text().render(desc);
         System.out.println(textTree);
     }
 }
@@ -155,7 +155,7 @@ public class OrderFulfillmentExample {
 ### 2. 真实效果：Mermaid 流程图 (Live Graph)
 
 > [!TIP]
-> 下图由 `FlowGraphs.mermaid().render(desc)` 生成的标准 Mermaid 脚本直接渲染呈现。
+> 下图由 `FlowDiagrams.mermaid().render(desc)` 生成的标准 Mermaid 脚本直接渲染呈现。
 > 流程图直观展示了**主干推进、风控分支决策、人工审核挂起与唤醒、并行分叉与合并 Join、超时控制徽章与降级容错**，层次分明，一目了然。
 
 ```mermaid
@@ -221,7 +221,7 @@ flowchart TD
 
 ### 3. 真实效果：紧凑文本树 (Text Tree)
 
-`FlowGraphs.text().render(desc)` 生成的先序遍历文本树，每一行代表 AST 中的一个只读节点。非常适合输出在生产环境控制台日志、排障工具或 CI/CD 自动化测试断言中：
+`FlowDiagrams.text().render(desc)` 生成的先序遍历文本树，每一行代表 AST 中的一个只读节点。非常适合输出在生产环境控制台日志、排障工具或 CI/CD 自动化测试断言中：
 
 ```text
 flow id="order-fulfillment-flow"
@@ -256,7 +256,7 @@ path="$/0/4" kind=INVOKE label="生成出货单据" binding=OPERATION contract=c
 ```java
 @RestController
 @RequestMapping("/admin/flows")
-public class FlowGraphVisualizerController {
+public class FlowDiagramVisualizerController {
 
     @Autowired
     private Flow<OrderRequest, Receipt> orderFlow;
@@ -267,7 +267,7 @@ public class FlowGraphVisualizerController {
     @GetMapping(value = "/order/mermaid", produces = MediaType.TEXT_PLAIN_VALUE)
     public String getOrderFlowMermaid() {
         FlowDescription desc = orderFlow.describe("order-fulfillment-flow");
-        return FlowGraphs.mermaid().render(desc);
+        return FlowDiagrams.mermaid().render(desc);
     }
 
     /**
@@ -276,7 +276,7 @@ public class FlowGraphVisualizerController {
     @GetMapping(value = "/order/view", produces = MediaType.TEXT_HTML_VALUE)
     public String viewOrderFlowHtml() {
         FlowDescription desc = orderFlow.describe("order-fulfillment-flow");
-        String mermaidDsl = FlowGraphs.mermaid().render(desc);
+        String mermaidDsl = FlowDiagrams.mermaid().render(desc);
 
         return "<!DOCTYPE html>\n" +
                 "<html>\n" +
@@ -325,7 +325,7 @@ public class FlowGraphVisualizerController {
 
 ## 紧凑文本树渲染规范
 
-`FlowGraphs.text()` 采用先序遍历生成单行文本树，每行包含节点的唯一路径、种类、标签与关键属性：
+`FlowDiagrams.text()` 采用先序遍历生成单行文本树，每行包含节点的唯一路径、种类、标签与关键属性：
 
 ```text
 path="$/0/1" kind=ROUTE label=<none> routes=2 otherwise=branch

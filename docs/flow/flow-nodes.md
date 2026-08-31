@@ -43,7 +43,7 @@ graph TD
 > [!IMPORTANT]
 > **运行时节点封闭原则（Closed PlanNode Set）**：
 > 框架的运行时节点类型（`NodeDescriptor.Kind`）是严格封闭的闭集（仅 8 种），**绝不开放自定义节点类型**。
-> 所有高级业务编排语义均通过这八种基础节点进行正交组合。封闭性使得执行器内核（`SerialMachine`）、持久化状态机（`DurableMachine`）、Mermaid 渲染器（`FlowGraphs`）与调试工具具备了 100% 的确定性与可靠性。
+> 所有高级业务编排语义均通过这八种基础节点进行正交组合。封闭性使得执行器内核（`SerialMachine`）、持久化状态机（`DurableMachine`）、Mermaid 渲染器（`FlowDiagrams`）与调试工具具备了 100% 的确定性与可靠性。
 
 ---
 

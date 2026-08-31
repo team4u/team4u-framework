@@ -51,7 +51,7 @@
         <module>modules/flow/bean</module>
         <module>modules/flow/durable</module>
         <module>modules/flow/durable-kv</module>
-        <module>modules/flow/graph</module>
+        <module>modules/flow/diagram</module>
         <module>modules/flow/ratelimiter</module>
         <module>modules/flow/retry</module>
         <module>modules/flow/criterion</module>
@@ -156,7 +156,7 @@
             </dependency>
             <dependency>
                 <groupId>com.team4u</groupId>
-                <artifactId>team4u-flow-graph</artifactId>
+                <artifactId>team4u-flow-diagram</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

@@ -1,4 +1,4 @@
-package com.team4u.framework.flow.graph;
+package com.team4u.framework.flow.diagram;
 
 import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.api.Branch;
@@ -36,9 +36,9 @@ import java.util.regex.Matcher;
 import java.util.regex.Pattern;
 
 /**
- * 流程图渲染器单元测试。
+ * 流程图表渲染器单元测试。
  */
-public class FlowGraphTest {
+public class FlowDiagramTest {
 
     public static final class Echo implements Operation<String, String> {
         @Override
@@ -121,7 +121,7 @@ public class FlowGraphTest {
                 .await(ResumePoint.<String>named("approval"))
                 .named("all-kinds");
 
-        String text = FlowGraphs.text().render(flow.describe("all-eight"));
+        String text = FlowDiagrams.text().render(flow.describe("all-eight"));
         for (String kind : new String[] {"INVOKE", "SEQUENCE", "ROUTE", "FALLBACK",
                 "PARALLEL", "AWAIT", "CONTROL", "COMPLETE"}) {
             Assert.assertTrue("Missing " + kind + "\n" + text, text.contains("kind=" + kind));
@@ -134,7 +134,7 @@ public class FlowGraphTest {
 
     @Test
     public void mermaidRendersCleanFlow() {
-        String graph = FlowGraphs.mermaid().render(Flow.<String, String>step(Echo.class)
+        String graph = FlowDiagrams.mermaid().render(Flow.<String, String>step(Echo.class)
                 .describe("channels"));
 
         Assert.assertTrue(graph.contains("flowchart TD"));
@@ -144,7 +144,7 @@ public class FlowGraphTest {
 
     @Test
     public void sequenceAdvancesThroughSteps() {
-        String graph = FlowGraphs.mermaid().render(Flow.<String, String>step(Echo.class).named("Step1")
+        String graph = FlowDiagrams.mermaid().render(Flow.<String, String>step(Echo.class).named("Step1")
                 .then(Flow.<String, String>step(Echo.class).named("Step2"))
                 .describe("sequence"));
 
@@ -157,12 +157,12 @@ public class FlowGraphTest {
 
     @Test
     public void fallbackRoutesOnlyItsConfiguredTrigger() {
-        String firstApplicable = FlowGraphs.mermaid().render(Flow.firstApplicable(
+        String firstApplicable = FlowDiagrams.mermaid().render(Flow.firstApplicable(
                 Flow.<String, String>skipped(reason("FIRST")), Flow.accepted("second"))
                 .describe("first-applicable"));
         Assert.assertTrue(firstApplicable.contains("SKIPPED 备用"));
 
-        String recover = FlowGraphs.mermaid().render(Flow.<String, String>failed(
+        String recover = FlowDiagrams.mermaid().render(Flow.<String, String>failed(
                 Failure.of("BROKEN", "broken")).recoverWith(Flow.accepted("fixed"))
                 .describe("recover"));
         Assert.assertTrue(recover.contains("FAILED 降级"));
@@ -173,7 +173,7 @@ public class FlowGraphTest {
         Flow<String, String> withOtherwise = Flow.route(Select.class)
                 .caseOf("A|B", Flow.accepted("case"))
                 .otherwise(Flow.rejected(reason("DEFAULT")));
-        String otherwise = FlowGraphs.mermaid().render(withOtherwise.describe("otherwise"));
+        String otherwise = FlowDiagrams.mermaid().render(withOtherwise.describe("otherwise"));
         Assert.assertTrue(otherwise.contains("|A&#124;B|"));
         Assert.assertTrue(otherwise.contains("|otherwise|"));
         Assert.assertFalse(otherwise.contains("未匹配"));
@@ -181,7 +181,7 @@ public class FlowGraphTest {
         Flow<String, String> withoutOtherwise = Flow.route(Select.class)
                 .caseOf("A", Flow.accepted("case"))
                 .withoutOtherwise();
-        String noMatch = FlowGraphs.mermaid().render(withoutOtherwise.describe("no-match"));
+        String noMatch = FlowDiagrams.mermaid().render(withoutOtherwise.describe("no-match"));
         Assert.assertTrue(noMatch.contains("|A|"));
         Assert.assertTrue(noMatch.contains("未匹配 (SKIPPED)"));
         Assert.assertTrue(noMatch.contains("|no match|"));
@@ -193,7 +193,7 @@ public class FlowGraphTest {
                 Branch.of("left|token", Flow.<String, String>accepted("left")),
                 Branch.of("right", Flow.<String, String>failed(Failure.of("R", "right"))))
                 .join(results -> Outcome.accepted("joined"));
-        String graph = FlowGraphs.mermaid().render(flow.describe("parallel"));
+        String graph = FlowDiagrams.mermaid().render(flow.describe("parallel"));
 
         Assert.assertTrue(graph.contains("并行: 并行分发"));
         Assert.assertTrue(graph.contains("|left&#124;token|"));
@@ -203,7 +203,7 @@ public class FlowGraphTest {
 
     @Test
     public void awaitShowsSuspendedAndSignal() {
-        String graph = FlowGraphs.mermaid().render(Flow.<String>identity()
+        String graph = FlowDiagrams.mermaid().render(Flow.<String>identity()
                 .await(ResumePoint.<String>named("manual-review"))
                 .describe("await"));
 
@@ -224,26 +224,26 @@ public class FlowGraphTest {
         FlowDescription multiControl = Flow.<String, String>step(Echo.class).timeout(Duration.ofSeconds(3))
                 .policy(TestPolicy.class, "sec[tenant]", value -> value).describe("multi-control");
 
-        String text = FlowGraphs.text().render(timeout)
-                + FlowGraphs.text().render(policy)
-                + FlowGraphs.text().render(persistent);
+        String text = FlowDiagrams.text().render(timeout)
+                + FlowDiagrams.text().render(policy)
+                + FlowDiagrams.text().render(persistent);
         Assert.assertTrue(text.contains("control=TIMEOUT config=timeout=29s0ns"));
         Assert.assertTrue(text.contains("control=POLICY config=<none>"));
         Assert.assertTrue(text.contains("control=PERSISTENT_POLICY config=<none>"));
 
-        String timeoutGraph = FlowGraphs.mermaid().render(timeout);
+        String timeoutGraph = FlowDiagrams.mermaid().render(timeout);
         Assert.assertTrue(timeoutGraph.contains("[timeout: 29s]"));
 
-        String policyGraph = FlowGraphs.mermaid().render(policy);
+        String policyGraph = FlowDiagrams.mermaid().render(policy);
         Assert.assertTrue(policyGraph.contains("[policy: policy-q]"));
 
-        String persistentGraph = FlowGraphs.mermaid().render(persistent);
+        String persistentGraph = FlowDiagrams.mermaid().render(persistent);
         Assert.assertTrue(persistentGraph.contains("[persistent: persistent-q]"));
 
-        String persistentNoQGraph = FlowGraphs.mermaid().render(persistentNoQualifier);
+        String persistentNoQGraph = FlowDiagrams.mermaid().render(persistentNoQualifier);
         Assert.assertTrue(persistentNoQGraph.contains("[persistent: TestPersistentPolicy]"));
 
-        String multiControlGraph = FlowGraphs.mermaid().render(multiControl);
+        String multiControlGraph = FlowDiagrams.mermaid().render(multiControl);
         Assert.assertTrue(multiControlGraph.contains("[timeout: 3s]"));
         Assert.assertTrue(multiControlGraph.contains("[policy: sec&#91;tenant&#93;]"));
     }
@@ -260,7 +260,7 @@ public class FlowGraphTest {
         };
         StringBuilder text = new StringBuilder();
         for (FlowDescription description : descriptions) {
-            text.append(FlowGraphs.text().render(description));
+            text.append(FlowDiagrams.text().render(description));
         }
         for (String completion : new String[] {"IDENTITY", "ACCEPTED", "REJECTED", "SKIPPED", "FAILED"}) {
             Assert.assertTrue(text.toString().contains("complete=" + completion));
@@ -275,8 +275,8 @@ public class FlowGraphTest {
                 .caseOf(hostile, Flow.<String, String>accepted("hidden"))
                 .withoutOtherwise()
                 .named(hostile);
-        String graph = FlowGraphs.mermaid().render(flow.describe(hostile));
-        String text = FlowGraphs.text().render(flow.describe(hostile));
+        String graph = FlowDiagrams.mermaid().render(flow.describe(hostile));
+        String text = FlowDiagrams.text().render(flow.describe(hostile));
 
         Assert.assertTrue(graph.contains("&quot;"));
         Assert.assertTrue(graph.contains("&#92;"));
@@ -297,8 +297,8 @@ public class FlowGraphTest {
                 .then(Flow.<String, String>step(Echo.class).named("same"))
                 .then(Flow.<String, String>step(Echo.class).named("same"));
         FlowDescription description = repeated.describe("deterministic");
-        String first = FlowGraphs.mermaid().render(description);
-        String second = FlowGraphs.mermaid().render(description);
+        String first = FlowDiagrams.mermaid().render(description);
+        String second = FlowDiagrams.mermaid().render(description);
         Assert.assertEquals(first, second);
         Assert.assertFalse(first.contains("Lambda"));
         Assert.assertFalse(first.matches("(?s).*@[0-9a-fA-F]{4,}.*"));
@@ -321,7 +321,7 @@ public class FlowGraphTest {
         Flow<String, String> flow = Flow.route(Select.class, "route-q")
                 .caseOf("SECRET_CASE_VALUE", Flow.<String, String>accepted("SECRET_OUTPUT"))
                 .withoutOtherwise();
-        String text = FlowGraphs.text().render(flow.describe("compact"));
+        String text = FlowDiagrams.text().render(flow.describe("compact"));
 
         Assert.assertTrue(text.contains("path=\"$\" kind=ROUTE label=<none> routes=1"));
         Assert.assertTrue(text.contains("path=\"$/selector\" kind=INVOKE"));
@@ -342,12 +342,12 @@ public class FlowGraphTest {
         }
         FlowDescription description = current.describe("deep");
 
-        String text = FlowGraphs.text().render(description);
+        String text = FlowDiagrams.text().render(description);
         Assert.assertEquals(5000, occurrences(text, " kind=SEQUENCE "));
         Assert.assertTrue(text.contains(" kind=INVOKE "));
         text = null;
 
-        String graph = FlowGraphs.mermaid().render(description);
+        String graph = FlowDiagrams.mermaid().render(description);
         Assert.assertTrue(graph.contains("flowchart TD"));
         Assert.assertTrue(graph.contains("Echo"));
     }
@@ -355,11 +355,11 @@ public class FlowGraphTest {
     @Test
     public void productionDependsOnlyOnStaticDescriptionSurface() throws IOException {
         Path sourceRoot = Paths.get(System.getProperty("basedir"), "src", "main", "java",
-                "com", "team4u", "framework", "flow", "graph");
+                "com", "team4u", "framework", "flow", "diagram");
         Assert.assertTrue("Missing production source root: " + sourceRoot, Files.isDirectory(sourceRoot));
         StringBuilder sources = new StringBuilder();
-        for (String file : new String[] {"FlowGraphRenderer.java", "FlowGraphs.java",
-                "MermaidFlowGraphRenderer.java", "TextFlowGraphRenderer.java"}) {
+        for (String file : new String[] {"FlowDiagramRenderer.java", "FlowDiagrams.java",
+                "MermaidFlowDiagramRenderer.java", "TextFlowDiagramRenderer.java"}) {
             sources.append(new String(Files.readAllBytes(sourceRoot.resolve(file)),
                     StandardCharsets.UTF_8));
         }
@@ -398,7 +398,7 @@ public class FlowGraphTest {
                 .caseOf((Object) exact, Flow.<String, String>accepted("big"))
                 .caseOf((Object) counting, Flow.<String, String>accepted("counted"))
                 .withoutOtherwise();
-        String graph = FlowGraphs.mermaid().render(flow.describe("route-keys"));
+        String graph = FlowDiagrams.mermaid().render(flow.describe("route-keys"));
 
         Assert.assertTrue("BigInteger exact value missing\n" + graph,
                 graph.contains("|" + exact + "|"));
@@ -417,7 +417,7 @@ public class FlowGraphTest {
         Flow<String, Object> flow = Flow.<String, Object>route(ObjectSelect.class)
                 .caseOf((Object) lambda, Flow.<String, Object>accepted("hidden"))
                 .withoutOtherwise();
-        String graph = FlowGraphs.mermaid().render(flow.describe("lambda-key"));
+        String graph = FlowDiagrams.mermaid().render(flow.describe("lambda-key"));
 
         Assert.assertTrue(graph.contains("|&lt;opaque&gt;|"));
         Assert.assertFalse("Lambda class name leaked\n" + graph, graph.contains("Lambda"));
@@ -432,10 +432,10 @@ public class FlowGraphTest {
         }
         FlowDescription description = current.describe("deep-timeouts");
 
-        String text = FlowGraphs.text().render(description);
+        String text = FlowDiagrams.text().render(description);
         Assert.assertEquals(5000, occurrences(text, "control=TIMEOUT"));
 
-        String graph = FlowGraphs.mermaid().render(description);
+        String graph = FlowDiagrams.mermaid().render(description);
         Assert.assertTrue(graph.contains("flowchart TD"));
         Assert.assertTrue(graph.contains("Echo"));
     }
@@ -445,9 +445,9 @@ public class FlowGraphTest {
         FlowDescription timeout = Flow.<String>identity().timeout(
                 Duration.ofSeconds(29).plusNanos(25)).describe("timeout-summary");
 
-        Assert.assertTrue(FlowGraphs.text().render(timeout)
+        Assert.assertTrue(FlowDiagrams.text().render(timeout)
                 .contains("control=TIMEOUT config=timeout=29s25ns"));
-        Assert.assertTrue(FlowGraphs.mermaid().render(timeout).contains("[timeout: 29s25ns]"));
+        Assert.assertTrue(FlowDiagrams.mermaid().render(timeout).contains("[timeout: 29s25ns]"));
     }
 
     private static Reason reason(String code) {
@@ -512,8 +512,8 @@ public class FlowGraphTest {
         ).named("order-fulfillment-flow");
 
         FlowDescription desc = orderFlow.describe("order-fulfillment-flow");
-        String mermaid = FlowGraphs.mermaid().render(desc);
-        String text = FlowGraphs.text().render(desc);
+        String mermaid = FlowDiagrams.mermaid().render(desc);
+        String text = FlowDiagrams.text().render(desc);
 
         Assert.assertNotNull(mermaid);
         Assert.assertNotNull(text);

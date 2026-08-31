@@ -18,7 +18,7 @@
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
 | [**路由组件**](router/README.md) | `team4u-router` / `team4u-router-proxy` | 插件化业务路由框架。router 支持 Map、Expression、Weight 与 Composite 路由、Trace 与拦截器；`team4u-router-proxy` 提供 `@Routed` 声明式接口代理与 Bean 定位。 | [概览](router/README.md) · [快速开始](router/quick-start.md) · [声明式路由](router/router-declarative.md) |
-| [**流程编排组件**](flow/README.md) | `team4u-flow` / `team4u-flow-durable` / `team4u-flow-durable-kv` / `team4u-flow-graph` / `team4u-flow-bean` / `team4u-flow-test` | 轻量化强类型流程编排组件。不可变拓扑定义经双投影编译为 Local 内存同步执行器或 Durable 持久化恢复执行器，支持四态 Outcome、挂起恢复、细粒度重试、Mermaid 渲染与 `KvDurableStore` / Spring Bean 原生绑定。 | [概览](flow/README.md) · [快速开始](flow/quick-start.md) |
+| [**流程编排组件**](flow/README.md) | `team4u-flow` / `team4u-flow-durable` / `team4u-flow-durable-kv` / `team4u-flow-diagram` / `team4u-flow-bean` / `team4u-flow-test` | 轻量化强类型流程编排组件。不可变拓扑定义经双投影编译为 Local 内存同步执行器或 Durable 持久化恢复执行器，支持四态 Outcome、挂起恢复、细粒度重试、Mermaid 渲染与 `KvDurableStore` / Spring Bean 原生绑定。 | [概览](flow/README.md) · [快速开始](flow/quick-start.md) |
 | [**Criterion 表达式组件**](criterion/README.md) | `team4u-criterion` | 低开销业务规则 DSL 表达式引擎。支持类 SQL 自然语法、JIT 闭包直出、低分配数值宽容比较、白盒 Trace 执行树与外部属性延迟加载 (`LazyAttributeResolver`)。 | [概览](criterion/README.md) · [快速开始](criterion/quick-start.md) · [基准](../benchmarks/README.md) |
 | [**状态机组件**](fsm/README.md) | `team4u-fsm` | 强类型有限状态机。纯 Java 8 零依赖，不可变迁移定义、守卫与动作、精确/单边通配/全局兜底三层确定性匹配、语义化执行结果与 Mermaid 状态图渲染，状态持久化由调用方持有。 | [概览](fsm/README.md) · [快速开始](fsm/quick-start.md) · [语义手册](fsm/fsm-semantics.md) |
 | [**契约翻译组件**](translator/README.md) | `team4u-translator` | 统一契约与响应翻译框架。将上游/底层原始响应 (`RawResponse`) 经由路由规则映射并渲染为统一对外契约 (`TranslatedResponse`)，内置模板变量插值与多级降级策略。 | [概览](translator/README.md) · [快速开始](translator/quick-start.md) |

@@ -161,7 +161,7 @@ graph TD
 - [Durable 两段式恢复协议与 PersistentPolicy](flow-durable-resume.md)
 - [快照存储结构与 StateMapper 编解码](flow-durable-snapshot.md)
 - [DurableStore 存储 SPI 与 KV 适配](flow-durable-kv.md)
-- [可视化图表渲染与双投影架构](flow-graph.md)
+- [可视化图表渲染与双投影架构](flow-diagram.md)
 - [测试支持与测试套件](flow-test.md)
 - [诊断码体系与故障排查手册](flow-diagnostics.md)
 - [扩展机制与 SPI 开发指南](flow-extension.md)

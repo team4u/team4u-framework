@@ -11,8 +11,8 @@
         <relativePath>../../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>team4u-flow-graph</artifactId>
-    <description>Flow 图形渲染库：Mermaid 与文本结构渲染</description>
+    <artifactId>team4u-flow-diagram</artifactId>
+    <description>Flow 图表渲染库：Mermaid 与文本结构渲染</description>
 
     <dependencies>
         <dependency>
@@ -36,7 +36,7 @@
                 <groupId>org.apache.maven.plugins</groupId>
                 <artifactId>maven-surefire-plugin</artifactId>
                 <configuration>
-                    <!-- 限制堆上限，保证深层嵌套渲染的 fragment 状态保持线性。 -->
+                    <!-- 限制堆上限，保证深层嵌套渲染保持线性内存。 -->
                     <argLine>-Xmx256m</argLine>
                 </configuration>
             </plugin>
@@ -45,7 +45,7 @@
                 <artifactId>maven-enforcer-plugin</artifactId>
                 <executions>
                     <execution>
-                        <id>enforce-flow-graph-boundary</id>
+                        <id>enforce-flow-diagram-boundary</id>
                         <goals>
                             <goal>enforce</goal>
                         </goals>
@@ -60,7 +60,7 @@
                                         <exclude>net.bytebuddy:*:*:*:compile</exclude>
                                         <exclude>net.bytebuddy:*:*:*:runtime</exclude>
                                     </excludes>
-                                    <message>Flow graph module must stay free of Spring, Jackson, and ByteBuddy production dependencies.</message>
+                                    <message>Flow diagram module must stay free of Spring, Jackson, and ByteBuddy production dependencies.</message>
                                 </bannedDependencies>
                             </rules>
                         </configuration>

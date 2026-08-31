@@ -1,4 +1,4 @@
-package com.team4u.framework.flow.graph;
+package com.team4u.framework.flow.diagram;
 
 import com.team4u.framework.flow.desc.FlowDescription;
 import com.team4u.framework.flow.desc.NodeDescription;
@@ -26,9 +26,9 @@ import java.util.Objects;
  *
  * @author jay.wu
  */
-final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
+final class MermaidFlowDiagramRenderer implements FlowDiagramRenderer {
 
-    static final MermaidFlowGraphRenderer INSTANCE = new MermaidFlowGraphRenderer();
+    static final MermaidFlowDiagramRenderer INSTANCE = new MermaidFlowDiagramRenderer();
 
     private static final class Block {
         final String entryNodeId;
@@ -81,7 +81,7 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
                 edges.append(" -->");
             }
             if (label != null && !label.isEmpty()) {
-                edges.append("|").append(FlowGraphFormatters.escapeMermaid(label)).append("|");
+                edges.append("|").append(FlowDiagramFormatters.escapeMermaid(label)).append("|");
             }
             edges.append(" ").append(target).append("\n");
         }
@@ -116,7 +116,7 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         RenderState state = new RenderState();
         String startId = "flow_start";
         String flowName = description.flowId() != null
-                ? FlowGraphFormatters.escapeMermaid(description.flowId()) : "Flow";
+                ? FlowDiagramFormatters.escapeMermaid(description.flowId()) : "Flow";
         state.emitNode(startId, "([", "])", "开始: " + flowName);
 
         // 1. 显式栈自底向上构建 Block
@@ -260,32 +260,32 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         String kind = controlNode.controlKind();
         if ("TIMEOUT".equalsIgnoreCase(kind)) {
             if (controlNode.configuration() instanceof Duration) {
-                return "[timeout: " + FlowGraphFormatters.escapeMermaid(FlowGraphFormatters.durationFriendly((Duration) controlNode.configuration())) + "]";
+                return "[timeout: " + FlowDiagramFormatters.escapeMermaid(FlowDiagramFormatters.durationFriendly((Duration) controlNode.configuration())) + "]";
             }
             return "[timeout]";
         }
         if ("POLICY".equalsIgnoreCase(kind)) {
             if (controlNode.binding().isPresent() && controlNode.binding().get().qualifier().isPresent()) {
-                return "[policy: " + FlowGraphFormatters.escapeMermaid(controlNode.binding().get().qualifier().get()) + "]";
+                return "[policy: " + FlowDiagramFormatters.escapeMermaid(controlNode.binding().get().qualifier().get()) + "]";
             }
             if (controlNode.binding().isPresent() && controlNode.binding().get().contractClass().isPresent()) {
-                return "[policy: " + FlowGraphFormatters.escapeMermaid(FlowGraphFormatters.simpleClassName(controlNode.binding().get().contractClass().get())) + "]";
+                return "[policy: " + FlowDiagramFormatters.escapeMermaid(FlowDiagramFormatters.simpleClassName(controlNode.binding().get().contractClass().get())) + "]";
             }
             return "[policy]";
         }
         if ("PERSISTENT_POLICY".equalsIgnoreCase(kind)) {
             if (controlNode.binding().isPresent() && controlNode.binding().get().qualifier().isPresent()) {
-                return "[persistent: " + FlowGraphFormatters.escapeMermaid(controlNode.binding().get().qualifier().get()) + "]";
+                return "[persistent: " + FlowDiagramFormatters.escapeMermaid(controlNode.binding().get().qualifier().get()) + "]";
             }
             if (controlNode.binding().isPresent() && controlNode.binding().get().contractClass().isPresent()) {
-                return "[persistent: " + FlowGraphFormatters.escapeMermaid(FlowGraphFormatters.simpleClassName(controlNode.binding().get().contractClass().get())) + "]";
+                return "[persistent: " + FlowDiagramFormatters.escapeMermaid(FlowDiagramFormatters.simpleClassName(controlNode.binding().get().contractClass().get())) + "]";
             }
             return "[persistent-policy]";
         }
         if ("RETRY".equalsIgnoreCase(kind)) {
             return "[retry]";
         }
-        return kind != null ? "[" + FlowGraphFormatters.escapeMermaid(kind.toLowerCase()) + "]" : "";
+        return kind != null ? "[" + FlowDiagramFormatters.escapeMermaid(kind.toLowerCase()) + "]" : "";
     }
 
     private static String resolveEffectiveLabel(NodeDescription node, String inheritedLabel) {
@@ -303,7 +303,7 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         String title;
         String subtitle = "";
         if (effectiveLabel != null && !effectiveLabel.isEmpty()) {
-            title = FlowGraphFormatters.escapeMermaid(effectiveLabel) + badgeText;
+            title = FlowDiagramFormatters.escapeMermaid(effectiveLabel) + badgeText;
             if (node.binding().isPresent()) {
                 subtitle = formatBindingSubtitle(node.binding().get());
             }
@@ -311,12 +311,12 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
             if (node.binding().isPresent()) {
                 BindingDescriptor binding = node.binding().get();
                 if (binding.contractClass().isPresent()) {
-                    title = FlowGraphFormatters.escapeMermaid(FlowGraphFormatters.simpleClassName(binding.contractClass().get())) + badgeText;
+                    title = FlowDiagramFormatters.escapeMermaid(FlowDiagramFormatters.simpleClassName(binding.contractClass().get())) + badgeText;
                     if (binding.qualifier().isPresent()) {
-                        subtitle = "(" + FlowGraphFormatters.escapeMermaid(binding.qualifier().get()) + ")";
+                        subtitle = "(" + FlowDiagramFormatters.escapeMermaid(binding.qualifier().get()) + ")";
                     }
                 } else if (binding.qualifier().isPresent()) {
-                    title = FlowGraphFormatters.escapeMermaid(binding.qualifier().get()) + badgeText;
+                    title = FlowDiagramFormatters.escapeMermaid(binding.qualifier().get()) + badgeText;
                 } else {
                     title = "Node" + badgeText;
                 }
@@ -333,11 +333,11 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
     private static String formatBindingSubtitle(BindingDescriptor binding) {
         StringBuilder sb = new StringBuilder();
         if (binding.contractClass().isPresent()) {
-            sb.append(FlowGraphFormatters.escapeMermaid(FlowGraphFormatters.simpleClassName(binding.contractClass().get())));
+            sb.append(FlowDiagramFormatters.escapeMermaid(FlowDiagramFormatters.simpleClassName(binding.contractClass().get())));
         }
         if (binding.qualifier().isPresent()) {
             if (sb.length() > 0) sb.append(" ");
-            sb.append("(").append(FlowGraphFormatters.escapeMermaid(binding.qualifier().get())).append(")");
+            sb.append("(").append(FlowDiagramFormatters.escapeMermaid(binding.qualifier().get())).append(")");
         }
         return sb.toString();
     }
@@ -345,16 +345,16 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
     private static Block renderAwait(NodeDescription node, List<String> badges, String inheritedLabel, RenderState state) {
         String id = state.nextId();
         String badgeText = badges.isEmpty() ? "" : " " + String.join(" ", badges);
-        String resumePoint = node.resumePoint() != null ? FlowGraphFormatters.display(node.resumePoint()) : "signal";
+        String resumePoint = node.resumePoint() != null ? FlowDiagramFormatters.display(node.resumePoint()) : "signal";
 
         String effectiveLabel = resolveEffectiveLabel(node, inheritedLabel);
         String title;
         String subtitle = "";
         if (effectiveLabel != null && !effectiveLabel.isEmpty()) {
-            title = FlowGraphFormatters.escapeMermaid(effectiveLabel) + badgeText;
-            subtitle = "await: " + FlowGraphFormatters.escapeMermaid(resumePoint);
+            title = FlowDiagramFormatters.escapeMermaid(effectiveLabel) + badgeText;
+            subtitle = "await: " + FlowDiagramFormatters.escapeMermaid(resumePoint);
         } else {
-            title = "挂起等待: " + FlowGraphFormatters.escapeMermaid(resumePoint) + badgeText;
+            title = "挂起等待: " + FlowDiagramFormatters.escapeMermaid(resumePoint) + badgeText;
         }
 
         String content = subtitle.isEmpty() ? title : title + "<br/>" + subtitle;
@@ -369,7 +369,7 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
 
         if (node.identity()) {
             String label = effectiveLabel != null && !effectiveLabel.isEmpty()
-                    ? FlowGraphFormatters.escapeMermaid(effectiveLabel) + badgeText + " (透传)"
+                    ? FlowDiagramFormatters.escapeMermaid(effectiveLabel) + badgeText + " (透传)"
                     : "透传" + badgeText + " (Identity)";
             state.emitNode(id, "([", "])", label);
             return new Block(id, Collections.singletonList(id), Collections.singletonList(id));
@@ -381,7 +381,7 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         }
         Outcome.Kind kind = outcome.kind();
         String customLabel = effectiveLabel != null && !effectiveLabel.isEmpty()
-                ? FlowGraphFormatters.escapeMermaid(effectiveLabel) : null;
+                ? FlowDiagramFormatters.escapeMermaid(effectiveLabel) : null;
         switch (kind) {
             case ACCEPTED: {
                 String title = (customLabel != null ? customLabel : "[ACCEPTED]") + badgeText;
@@ -424,19 +424,19 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         String title;
         String subtitle = "";
         if (effectiveLabel != null && !effectiveLabel.isEmpty()) {
-            title = FlowGraphFormatters.escapeMermaid(effectiveLabel) + badgeText;
+            title = FlowDiagramFormatters.escapeMermaid(effectiveLabel) + badgeText;
             if (selector != null && selector.binding().isPresent()) {
                 subtitle = formatBindingSubtitle(selector.binding().get());
             }
         } else if (selector != null && selector.label().isPresent()) {
-            title = FlowGraphFormatters.escapeMermaid(selector.label().get()) + badgeText;
+            title = FlowDiagramFormatters.escapeMermaid(selector.label().get()) + badgeText;
             if (selector.binding().isPresent()) {
                 subtitle = formatBindingSubtitle(selector.binding().get());
             }
         } else if (selector != null && selector.binding().isPresent() && selector.binding().get().contractClass().isPresent()) {
-            title = FlowGraphFormatters.escapeMermaid(FlowGraphFormatters.simpleClassName(selector.binding().get().contractClass().get())) + badgeText;
+            title = FlowDiagramFormatters.escapeMermaid(FlowDiagramFormatters.simpleClassName(selector.binding().get().contractClass().get())) + badgeText;
             if (selector.binding().get().qualifier().isPresent()) {
-                subtitle = "(" + FlowGraphFormatters.escapeMermaid(selector.binding().get().qualifier().get()) + ")";
+                subtitle = "(" + FlowDiagramFormatters.escapeMermaid(selector.binding().get().qualifier().get()) + ")";
             }
         } else {
             title = "分支路由" + badgeText;
@@ -450,7 +450,7 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         allNodes.add(id);
 
         for (RouteCaseDescription c : node.routeCases()) {
-            String caseKey = FlowGraphFormatters.stableConstant(c.key());
+            String caseKey = FlowDiagramFormatters.stableConstant(c.key());
             Block branchBlock = blocks.get(c.branch());
             if (branchBlock != null) {
                 state.emitEdge(id, branchBlock.entryNodeId, caseKey, false);
@@ -485,7 +485,7 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
         String badgeText = badges.isEmpty() ? "" : " " + String.join(" ", badges);
         String effectiveLabel = resolveEffectiveLabel(node, inheritedLabel);
         String title = effectiveLabel != null && !effectiveLabel.isEmpty()
-                ? FlowGraphFormatters.escapeMermaid(effectiveLabel) : "并行分发";
+                ? FlowDiagramFormatters.escapeMermaid(effectiveLabel) : "并行分发";
         state.emitNode(forkId, "{{", "}}", "并行: " + title + badgeText);
 
         List<String> branchExits = new ArrayList<String>();
@@ -582,9 +582,9 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
             String scopeId = "sg_" + state.nextId();
             String scopeTitle;
             if (node.scopeName() != null && !node.scopeName().isEmpty()) {
-                scopeTitle = "作用域: " + FlowGraphFormatters.escapeMermaid(node.scopeName());
+                scopeTitle = "作用域: " + FlowDiagramFormatters.escapeMermaid(node.scopeName());
             } else {
-                scopeTitle = FlowGraphFormatters.escapeMermaid(effectiveLabel);
+                scopeTitle = FlowDiagramFormatters.escapeMermaid(effectiveLabel);
             }
             if (!badges.isEmpty()) {
                 scopeTitle += " " + String.join(" ", badges);
