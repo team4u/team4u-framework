@@ -523,99 +523,26 @@ final class MermaidFlowGraphRenderer implements FlowGraphRenderer {
     }
 
     private static String metadata(NodeDescription node) {
-        return node.kind().name() + " | path=" + display(node.path())
-                + " | label=" + (node.label().isPresent()
-                ? display(node.label().get()) : "<none>");
+        return FlowGraphFormatters.metadata(node);
     }
 
     private static String binding(NodeDescription node) {
-        if (!node.binding().isPresent()) {
-            return "";
-        }
-        BindingDescriptor binding = node.binding().get();
-        String contract = binding.contractClass().isPresent()
-                ? binding.contractClass().get().getName() : "<unresolved>";
-        String qualifier = binding.qualifier().isPresent()
-                ? display(binding.qualifier().get()) : "<none>";
-        return " | binding=" + display(binding.kind()) + " contract=" + contract
-                + " qualifier=" + qualifier;
+        return FlowGraphFormatters.bindingSummary(node);
     }
 
-    /**
-     * 稳定配置摘要：只读取 final 配置类（Retry / Duration）的字段，
-     * 绝不调用任意 configuration 的 toString。
-     */
     private static String configurationSummary(Object configuration) {
-        if (configuration instanceof Retry) {
-            Retry retry = (Retry) configuration;
-            return "maxAttempts=" + retry.maxAttempts()
-                    + ",backoff=" + durationSummary(retry.backoff());
-        }
-        if (configuration instanceof Duration) {
-            return "timeout=" + durationSummary((Duration) configuration);
-        }
-        return "<none>";
+        return FlowGraphFormatters.configurationSummary(configuration);
     }
 
-    private static String durationSummary(Duration duration) {
-        return duration.getSeconds() + "s" + duration.getNano() + "ns";
-    }
-
-    /**
-     * 稳定路由键渲染：仅对不可子类化且 toString 确定的精确类型输出值，
-     * 其余一律输出固定占位符，不暴露任何类名（含 lambda/synthetic 类名）。
-     */
     private static String stableConstant(Object value) {
-        Class<?> type = value.getClass();
-        if (type == String.class) {
-            return display((String) value);
-        }
-        if (type == Integer.class || type == Long.class || type == Short.class
-                || type == Byte.class || type == Character.class || type == Boolean.class
-                || type == Float.class || type == Double.class) {
-            return String.valueOf(value);
-        }
-        if (type == BigInteger.class || type == BigDecimal.class) {
-            return value.toString();
-        }
-        if (value instanceof Enum<?>) {
-            Enum<?> enumValue = (Enum<?>) value;
-            return enumValue.getDeclaringClass().getName() + "." + enumValue.name();
-        }
-        if (type == Class.class) {
-            Class<?> classValue = (Class<?>) value;
-            return classValue.isSynthetic() ? "<opaque>" : classValue.getName();
-        }
-        return "<opaque>";
+        return FlowGraphFormatters.stableConstant(value);
     }
 
     private static String display(String value) {
-        return value == null ? "<unnamed>" : value;
+        return FlowGraphFormatters.display(value);
     }
 
     private static String escape(String value) {
-        StringBuilder escaped = new StringBuilder(value.length());
-        for (int index = 0; index < value.length(); index++) {
-            char character = value.charAt(index);
-            switch (character) {
-                case '\\': escaped.append("&#92;"); break;
-                case '"': escaped.append("&quot;"); break;
-                case '\n': escaped.append("<br/>"); break;
-                case '\r': break;
-                case '|': escaped.append("&#124;"); break;
-                case '&': escaped.append("&amp;"); break;
-                case '<': escaped.append("&lt;"); break;
-                case '>': escaped.append("&gt;"); break;
-                case '[': escaped.append("&#91;"); break;
-                case ']': escaped.append("&#93;"); break;
-                case '{': escaped.append("&#123;"); break;
-                case '}': escaped.append("&#125;"); break;
-                case '(': escaped.append("&#40;"); break;
-                case ')': escaped.append("&#41;"); break;
-                case '`': escaped.append("&#96;"); break;
-                default: escaped.append(character);
-            }
-        }
-        return escaped.toString();
+        return FlowGraphFormatters.escapeMermaid(value);
     }
 }
