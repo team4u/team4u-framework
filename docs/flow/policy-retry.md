@@ -234,14 +234,120 @@ graph TD
 
 ---
 
-## Local 与 Durable 双引擎行为差异
+## Local 与 Durable 双引擎重试机制深度对比
 
-`team4u-flow-retry` 基于 `PersistentPolicy` 契约，在两种执行引擎下表现出针对各自运行时优化的执行语义：
+同一个重试策略 `FlowRetries`，在 Local 内存引擎与 Durable 持久化引擎中有着根本性的调度机制差异：
 
-| 引擎类型 | 重试退避实现机制 | 线程占用情况 | 崩溃自愈与恢复能力 |
-| :--- | :--- | :--- | :--- |
-| **Local 内存引擎** | 在当前工作线程内基于 `SerialMachine.awaitWake()` 进行高精度休眠等待。 | 占用当前线程（支持工作窃取与补偿）。 | 仅支持进程内生命周期，支持响应 `Cancellation` 中断安全唤醒退出。 |
-| **Durable 持久化引擎** | 执行到达退避点时，**将当前 `FlowRetryState` 写入存储并标记 `ACTIVE`（附带 `wakeAt` 绝对时间戳）**，随后立即释放工作线程退出（Parked）。 | **零线程占用**。在长退避（如 10 分钟后重试）期间完全不消耗 CPU 与线程资源。 | 即使机器崩溃或重启，后台调度器扫描到 `wakeAt` 到期后调用 `recover(executionId)`，自动从失败节点原位断点续跑。 |
+| 维度 | Local 内存执行器 (`team4u-flow`) | Durable 持久化执行器 (`team4u-flow-durable`) |
+| :--- | :--- | :--- |
+| **退避等待机制** | 在当前 Java 线程内调用 `Thread.sleep` 式的同步休眠（`awaitWake`）。 | **将状态写入数据库快照并设定 `wakeAt` 时间戳，随后当前 Java 线程立即返回退出（Parked）！** |
+| **线程占用情况** | 整个退避期间**持续占用 1 个工作线程**。 | **零线程占用（0 CPU / 0 Thread）**。即使等待 10 天也不占任何线程资源。 |
+| **宕机与重启自愈** | 若在等待期间机器重启或服务发版，**内存线程销毁，重试任务永久丢失**。 | **绝对可靠**。快照已落库，任何节点重启后，定时任务扫描到 `wakeAt` 到期自动拉起原位断点续跑。 |
+| **适用场景** | 毫秒级/秒级的短延迟重试（如网络偶发抖动重试 100ms）。 | 分钟级/小时级/长周期的业务重试（如 5 分钟后重试、等待外部对账）。 |
+
+---
+
+## Durable 模式下的定时延时重试与后台唤醒机制详解
+
+很多初次接触 Durable 的开发者对 **“将 FlowRetryState 写入存储标记 ACTIVE 附带 wakeAt，随后立即释放工作线程退出”** 这句话感到困惑。下面通过全流程图解、快照结构与后台调度器代码彻底讲透其底层机制。
+
+### 1. 全流程执行时序图
+
+```mermaid
+sequenceDiagram
+    autonumber
+    participant Worker as 业务工作线程
+    participant Engine as Durable 状态机
+    participant DB as MySQL / Redis 快照库
+    participant Sched as 后台定时任务 (Quartz / ShedLock)
+
+    Note over Worker, DB: 阶段 1：首次执行失败，触发退避
+    Worker->>Engine: start("order-001", req)
+    Engine->>Engine: 业务节点扣款失败 (Failed)
+    Engine->>Engine: Retry 策略计算：需在 5 分钟后 (14:42:04) 重试
+    
+    Note over Worker, DB: 阶段 2：落库快照并释放工作线程
+    Engine->>DB: 保存快照 (attempt=2, wake_at=14:42:04, lifecycle=ACTIVE)
+    Engine-->>Worker: 返回 DurableResult.Active(wakeAt=14:42:04)
+    Note over Worker: 工作线程立即结束并归还线程池！(零线程开销)
+
+    Note over Worker, Sched: ... 5 分钟平稳过去 (期间就算集群重启、发版部署也不受影响) ...
+
+    Note over DB, Sched: 阶段 3：定时扫描并自动拉起续跑
+    Sched->>DB: 轮询: SELECT execution_id WHERE lifecycle='ACTIVE' AND wake_at <= NOW()
+    DB-->>Sched: 查出 "order-001" 到期就绪！
+    Sched->>Engine: executable.recover("order-001")
+    Engine->>DB: 加载快照 (自动恢复 attempt=2 与执行栈)
+    Engine->>Engine: 原位重新执行扣款节点 (第 2 次重试成功!)
+    Engine->>DB: 更新快照状态为 COMPLETED
+```
+
+---
+
+### 2. 数据库快照表状态直观展示
+
+在 5 分钟的退避等待期间，数据库（如 MySQL 快照表 `flow_durable_snapshot`）中的记录如下：
+
+| `execution_id` | `lifecycle` | `wake_at` | `revision` | `slots` (业务槽位字典) |
+| :--- | :--- | :--- | :--- | :--- |
+| `ORD_20260831_001` | **`ACTIVE`** | **`2026-08-31 14:42:04`** | `2` | `policy:$/0` -> `{"attempt":2}`<br/>`input` -> `{"orderId":"1001", "amount":500}` |
+
+- **`lifecycle = 'ACTIVE'`**：表示该流程仍然处于生命周期进行中，并未终结；
+- **`wake_at`**：记录了绝对的计划唤醒时刻；
+- **`slots['policy:$/0']`**：记录了当前策略的状态是 `attempt = 2`，因此下次唤醒时框架知道是第 2 次尝试，绝不会重新从第 1 次算起。
+
+---
+
+### 3. 后台定时唤醒调度器实战代码
+
+在生产环境中，只需要配置一个轻量级的 Spring 定时任务（建议结合 ShedLock 保证分布式单实例执行），每隔数秒扫描并调用 `recover` 即可：
+
+```java
+import com.team4u.framework.flow.durable.DurableExecutable;
+import com.team4u.framework.flow.durable.DurableResult;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.scheduling.annotation.Scheduled;
+import org.springframework.stereotype.Component;
+
+import java.time.Instant;
+import java.util.List;
+
+@Slf4j
+@Component
+public class DurableWakeScheduler {
+
+    @Autowired
+    private DurableSnapshotRepository snapshotRepository;
+
+    @Autowired
+    private DurableExecutable<OrderRequest, Receipt> orderExecutable;
+
+    /**
+     * 每 5 秒轮询一次到达唤醒时刻的持久化实例
+     */
+    @Scheduled(fixedRate = 5000)
+    public void pollAndWakeReadyExecutions() {
+        Instant now = Instant.now();
+        
+        // 1. 扫描 lifecycle = 'ACTIVE' 且 wake_at <= 当前时间 的所有 executionId
+        List<String> readyExecutionIds = snapshotRepository.findReadyToWake(now);
+
+        for (String executionId : readyExecutionIds) {
+            try {
+                log.info("触发到期重试唤醒: executionId={}", executionId);
+                
+                // 2. 核心：调用 recover 从快照恢复执行栈与 attempt=2，原位继续重试
+                DurableResult<Receipt> result = orderExecutable.recover(executionId);
+                
+                log.info("唤醒执行结果: executionId={}, status={}", executionId, result.getClass().getSimpleName());
+            } catch (Exception e) {
+                log.error("唤醒执行异常: executionId={}", executionId, e);
+            }
+        }
+    }
+}
+```
 
 ---
 
