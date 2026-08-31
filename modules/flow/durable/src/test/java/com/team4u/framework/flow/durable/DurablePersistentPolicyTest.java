@@ -1,14 +1,6 @@
 package com.team4u.framework.flow.durable;
 
-import com.team4u.framework.flow.Completion;
-import com.team4u.framework.flow.Failure;
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.PersistentPolicy;
-import com.team4u.framework.flow.PolicyContext;
-import com.team4u.framework.flow.Reason;
 import org.junit.Test;
 
 import java.time.Instant;
@@ -21,6 +13,17 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
+import com.team4u.framework.flow.durable.store.DurableStore;
+import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.api.PersistentPolicy;
+import com.team4u.framework.flow.api.PolicyContext;
+import com.team4u.framework.flow.model.Completion;
+import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Reason;
 
 /** 组5：PersistentPolicy 跨恢复 — key/state/attempt 持久化、绝对 wake、RetryAt 重试。 */
 public class DurablePersistentPolicyTest {

@@ -8,6 +8,18 @@ import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
+import com.team4u.framework.flow.api.FlowObserver;
+import com.team4u.framework.flow.api.Metadata;
+import com.team4u.framework.flow.api.ResumePoint;
+import com.team4u.framework.flow.compiler.Compiler;
+import com.team4u.framework.flow.engine.MachineResult;
+import com.team4u.framework.flow.engine.MachineState;
+import com.team4u.framework.flow.engine.SerialMachine;
+import com.team4u.framework.flow.model.Cancellation;
+import com.team4u.framework.flow.model.FlowResult;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Suspension;
+import com.team4u.framework.flow.spi.NodeDescriptor;
 
 /**
  * 逻辑 Flow 在 Local 内存模式下的编译后可执行句柄。

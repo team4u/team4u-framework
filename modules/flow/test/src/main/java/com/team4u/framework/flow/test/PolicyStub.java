@@ -1,15 +1,16 @@
 package com.team4u.framework.flow.test;
 
-import com.team4u.framework.flow.Completion;
-import com.team4u.framework.flow.Gate;
-import com.team4u.framework.flow.Policy;
-import com.team4u.framework.flow.PolicyContext;
 
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import java.util.Objects;
 import java.util.concurrent.CopyOnWriteArrayList;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.api.Gate;
+import com.team4u.framework.flow.api.Policy;
+import com.team4u.framework.flow.api.PolicyContext;
+import com.team4u.framework.flow.model.Completion;
 
 /**
  * 线程安全的可编程控制策略测试桩（Programmable Policy Test Stub）。

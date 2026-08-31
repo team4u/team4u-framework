@@ -1,16 +1,6 @@
 package com.team4u.framework.flow.durable;
 
-import com.team4u.framework.flow.Completion;
-import com.team4u.framework.flow.Failure;
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.Gate;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.Policy;
-import com.team4u.framework.flow.PolicyContext;
-import com.team4u.framework.flow.Reason;
-import com.team4u.framework.flow.Retry;
 import org.junit.Test;
 
 import java.time.Duration;
@@ -24,6 +14,19 @@ import static com.team4u.framework.flow.durable.DurableTestOps.acceptedValue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.team4u.framework.flow.api.PersistentPolicy;
+import com.team4u.framework.flow.durable.store.DurableStore;
+import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
+import com.team4u.framework.flow.api.Gate;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.api.Policy;
+import com.team4u.framework.flow.api.PolicyContext;
+import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.model.Completion;
+import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Reason;
 
 /** 组7：timeout/retry/Policy — 到期转 TIMEOUT、未到期通过、RETRY 上限与 backoff、Policy 顺序与异常。 */
 public class DurableControlTest {

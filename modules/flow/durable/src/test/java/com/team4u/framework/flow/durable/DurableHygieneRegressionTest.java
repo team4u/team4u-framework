@@ -1,10 +1,6 @@
 package com.team4u.framework.flow.durable;
 
-import com.team4u.framework.flow.Failure;
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.Outcome;
 import org.junit.Test;
 
 import java.time.Duration;
@@ -16,6 +12,18 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.durable.engine.DurablePlanCompiler;
+import com.team4u.framework.flow.durable.engine.DurableState;
+import com.team4u.framework.flow.durable.snapshot.DefaultStateMapper;
+import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
+import com.team4u.framework.flow.durable.snapshot.SnapshotCodec;
+import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
+import com.team4u.framework.flow.spi.OperationResolver;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.Outcome;
 
 /**
  * 组13：卫生修复回归 — result().wakeAt 含 TIMEOUT deadline（与 Core 对齐）、
@@ -46,11 +54,11 @@ public class DurableHygieneRegressionTest {
             public Outcome<String> execute(OperationContext context, String input) {
                 calls.incrementAndGet();
                 return Outcome.failed(
-                        com.team4u.framework.flow.Failure.of("BAD", "always"));
+                        com.team4u.framework.flow.model.Failure.of("BAD", "always"));
             }
         };
         Flow<String, String> flow = Flow.<String, String>step(flaky)
-                .retry(new com.team4u.framework.flow.Retry(3, Duration.ofSeconds(30)))
+                .retry(new com.team4u.framework.flow.api.Retry(3, Duration.ofSeconds(30)))
                 .timeout(Duration.ofSeconds(2));
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable =
@@ -81,7 +89,7 @@ public class DurableHygieneRegressionTest {
         DurableRuntime runtime = DurableRuntime.builder(store).build();
         DurableExecutable<String, String> executable = runtime.compile(flow, "edge", 1);
         DurablePlanCompiler.Definition definition =
-                DurablePlanCompiler.compile(flow, com.team4u.framework.flow.OperationResolver.rejecting());
+                DurablePlanCompiler.compile(flow, com.team4u.framework.flow.spi.OperationResolver.rejecting());
         // 手工构造帧栈：单帧 Route(phase, index)
         DurableState.RuntimeFrame frame = new DurableState.RuntimeFrame(
                 definition.root(), "in", DurableState.SlotRole.user("input"));

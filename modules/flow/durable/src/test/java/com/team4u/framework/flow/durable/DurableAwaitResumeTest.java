@@ -1,11 +1,6 @@
 package com.team4u.framework.flow.durable;
 
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.Resumed;
-import com.team4u.framework.flow.ResumePoint;
 import org.junit.Test;
 
 import static com.team4u.framework.flow.durable.DurableTestOps.RecordingOp;
@@ -16,6 +11,16 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.team4u.framework.flow.durable.snapshot.DefaultStateMapper;
+import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
+import com.team4u.framework.flow.durable.snapshot.StoredValue;
+import com.team4u.framework.flow.durable.store.DurableStore;
+import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.api.ResumePoint;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Resumed;
 
 /** 组4：await/resume 全矩阵 — 挂起、错点、幂等、冲突、信号落库后崩溃恢复、resume 后完成。 */
 public class DurableAwaitResumeTest {
@@ -30,7 +35,7 @@ public class DurableAwaitResumeTest {
     private static Flow<String, String> awaitThenPostFlow() {
         return Flow.<String, String>step(new RecordingOp("pre"))
                 .await(APPROVAL)
-                .then(new com.team4u.framework.flow.Operation<Resumed<String, String>, String>() {
+                .then(new com.team4u.framework.flow.api.Operation<Resumed<String, String>, String>() {
                     @Override
                     public Outcome<String> execute(OperationContext context,
                                                    Resumed<String, String> input) {
@@ -109,8 +114,8 @@ public class DurableAwaitResumeTest {
         InMemoryDurableStore store = new InMemoryDurableStore();
         final java.util.concurrent.atomic.AtomicInteger calls =
                 new java.util.concurrent.atomic.AtomicInteger();
-        com.team4u.framework.flow.Operation<Resumed<String, String>, String> post =
-                new com.team4u.framework.flow.Operation<Resumed<String, String>, String>() {
+        com.team4u.framework.flow.api.Operation<Resumed<String, String>, String> post =
+                new com.team4u.framework.flow.api.Operation<Resumed<String, String>, String>() {
                     @Override
                     public Outcome<String> execute(OperationContext context,
                                                    Resumed<String, String> input) {
@@ -147,8 +152,8 @@ public class DurableAwaitResumeTest {
         InMemoryDurableStore store = new InMemoryDurableStore();
         final java.util.concurrent.atomic.AtomicInteger calls =
                 new java.util.concurrent.atomic.AtomicInteger();
-        com.team4u.framework.flow.Operation<Resumed<String, String>, String> post =
-                new com.team4u.framework.flow.Operation<Resumed<String, String>, String>() {
+        com.team4u.framework.flow.api.Operation<Resumed<String, String>, String> post =
+                new com.team4u.framework.flow.api.Operation<Resumed<String, String>, String>() {
                     @Override
                     public Outcome<String> execute(OperationContext context,
                                                    Resumed<String, String> input) {
@@ -205,7 +210,7 @@ public class DurableAwaitResumeTest {
         InMemoryDurableStore store = new InMemoryDurableStore();
         Flow<String, String> flow = Flow.<String, String>step(new RecordingOp("pre"))
                 .await(APPROVAL)
-                .then(new com.team4u.framework.flow.Operation<Resumed<String, String>, String>() {
+                .then(new com.team4u.framework.flow.api.Operation<Resumed<String, String>, String>() {
                     @Override
                     public Outcome<String> execute(OperationContext context,
                                                    Resumed<String, String> input) {
@@ -213,7 +218,7 @@ public class DurableAwaitResumeTest {
                     }
                 })
                 .await(SECOND)
-                .then(new com.team4u.framework.flow.Operation<Resumed<String, String>, String>() {
+                .then(new com.team4u.framework.flow.api.Operation<Resumed<String, String>, String>() {
                     @Override
                     public Outcome<String> execute(OperationContext context,
                                                    Resumed<String, String> input) {

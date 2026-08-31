@@ -1,17 +1,19 @@
 package com.team4u.framework.flow.durable;
 
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.ResumePoint;
-import com.team4u.framework.flow.Resumed;
 import org.junit.Test;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
+import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.api.ResumePoint;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Resumed;
 
 public class DurableRecoverSmokeTest {
 
@@ -56,7 +58,7 @@ public class DurableRecoverSmokeTest {
         assertTrue(recovered.getClass().getSimpleName(),
                 recovered instanceof DurableResult.Completed);
         assertEquals(2, b.calls.get());
-        assertEquals("x+$/0+$/1+$/2", ((com.team4u.framework.flow.Outcome.Accepted<String>) ((DurableResult.Completed<String>) recovered).outcome()).value());
+        assertEquals("x+$/0+$/1+$/2", ((com.team4u.framework.flow.model.Outcome.Accepted<String>) ((DurableResult.Completed<String>) recovered).outcome()).value());
     }
 
     @Test
@@ -83,7 +85,7 @@ public class DurableRecoverSmokeTest {
                 executable.resume("e2", "approval", "GO");
         assertTrue(resumed.getClass().getSimpleName(),
                 resumed instanceof DurableResult.Completed);
-        Resumed<String, String> value = ((com.team4u.framework.flow.Outcome.Accepted<Resumed<String, String>>) ((DurableResult.Completed<Resumed<String, String>>) resumed)
+        Resumed<String, String> value = ((com.team4u.framework.flow.model.Outcome.Accepted<Resumed<String, String>>) ((DurableResult.Completed<Resumed<String, String>>) resumed)
                 .outcome()).value();
         assertEquals("x-pre", value.state());
         assertEquals("GO", value.signal());
@@ -113,6 +115,6 @@ public class DurableRecoverSmokeTest {
         assertTrue(suspended instanceof DurableResult.Suspended);
         DurableResult<String> resumed = executable.resume("e3", "wait", "sig");
         assertTrue(resumed.getClass().getName(), resumed instanceof DurableResult.Completed);
-        assertEquals("s-in:sig", ((com.team4u.framework.flow.Outcome.Accepted<String>) ((DurableResult.Completed<String>) resumed).outcome()).value());
+        assertEquals("s-in:sig", ((com.team4u.framework.flow.model.Outcome.Accepted<String>) ((DurableResult.Completed<String>) resumed).outcome()).value());
     }
 }

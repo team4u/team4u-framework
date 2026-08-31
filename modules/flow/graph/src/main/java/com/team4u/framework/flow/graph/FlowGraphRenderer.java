@@ -1,6 +1,6 @@
 package com.team4u.framework.flow.graph;
 
-import com.team4u.framework.flow.FlowDescription;
+import com.team4u.framework.flow.desc.FlowDescription;
 
 /**
  * 流程图渲染器接口。

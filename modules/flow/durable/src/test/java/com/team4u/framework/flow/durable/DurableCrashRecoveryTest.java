@@ -1,9 +1,6 @@
 package com.team4u.framework.flow.durable;
 
-import com.team4u.framework.flow.Failure;
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.Reason;
 import org.junit.Test;
 
 import static com.team4u.framework.flow.durable.DurableTestOps.RecordingOp;
@@ -13,6 +10,15 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.durable.store.DurableStore;
+import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
+import com.team4u.framework.flow.model.Recovery;
+import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Reason;
 
 /** 组3：crash/recover — 已 checkpoint 的 invoke 不重放、未 checkpoint 重放且 invocationId 稳定、深嵌套恢复。 */
 public class DurableCrashRecoveryTest {
@@ -109,19 +115,19 @@ public class DurableCrashRecoveryTest {
                 Outcome.failed(Failure.of("ERR", "err")));
         final java.util.concurrent.atomic.AtomicInteger recCalls =
                 new java.util.concurrent.atomic.AtomicInteger();
-        com.team4u.framework.flow.Operation<com.team4u.framework.flow.Recovery<String>, String>
-                recoverOp = new com.team4u.framework.flow.Operation<com.team4u.framework.flow.Recovery<String>, String>() {
+        com.team4u.framework.flow.api.Operation<com.team4u.framework.flow.model.Recovery<String>, String>
+                recoverOp = new com.team4u.framework.flow.api.Operation<com.team4u.framework.flow.model.Recovery<String>, String>() {
             @Override
             public Outcome<String> execute(
-                    com.team4u.framework.flow.OperationContext ctx,
-                    com.team4u.framework.flow.Recovery<String> recovery) {
+                    com.team4u.framework.flow.api.OperationContext ctx,
+                    com.team4u.framework.flow.model.Recovery<String> recovery) {
                 if (recCalls.incrementAndGet() == 1) {
                     throw new SimulatedCrash("crash in fallback");
                 }
                 return Outcome.accepted(recovery.input() + ">rec");
             }
         };
-        Flow<com.team4u.framework.flow.Recovery<String>, String> recover =
+        Flow<com.team4u.framework.flow.model.Recovery<String>, String> recover =
                 Flow.step(recoverOp);
         Flow<String, String> flow = Flow.<String, String>step(body).recoverWith(recover);
         InMemoryDurableStore store = new InMemoryDurableStore();
@@ -142,16 +148,16 @@ public class DurableCrashRecoveryTest {
         // 嵌套 ≥ 20 帧：scope(sequence) > route(case) > fallback > retry > invoke 链
         RecordingOp deep = new RecordingOp("deep").crashOnCall(1);
         Flow<String, String> leaf = Flow.<String, String>step(deep)
-                .retry(new com.team4u.framework.flow.Retry(2,
+                .retry(new com.team4u.framework.flow.api.Retry(2,
                         java.time.Duration.ofMillis(1)));
         Flow<String, String> branch = Flow.firstApplicable(
                 Flow.<String, String>skipped(Reason.of("NA", "na")),
                 leaf);
         Flow<String, String> routed = Flow.<String, String>route(
-                new com.team4u.framework.flow.Operation<String, String>() {
+                new com.team4u.framework.flow.api.Operation<String, String>() {
                     @Override
                     public Outcome<String> execute(
-                            com.team4u.framework.flow.OperationContext ctx, String input) {
+                            com.team4u.framework.flow.api.OperationContext ctx, String input) {
                         return Outcome.accepted("go");
                     }
                 }).caseOf("go", branch).otherwise(Flow.<String>identity());
@@ -175,11 +181,11 @@ public class DurableCrashRecoveryTest {
         RecordingOp b = new RecordingOp("b").crashOnCall(1).crashOnCall(2);
         // crashOnCall 只支持一次，改用手动计数崩溃
         final java.util.concurrent.atomic.AtomicInteger crashes = new java.util.concurrent.atomic.AtomicInteger();
-        com.team4u.framework.flow.Operation<String, String> flaky =
-                new com.team4u.framework.flow.Operation<String, String>() {
+        com.team4u.framework.flow.api.Operation<String, String> flaky =
+                new com.team4u.framework.flow.api.Operation<String, String>() {
                     @Override
                     public Outcome<String> execute(
-                            com.team4u.framework.flow.OperationContext ctx, String input) {
+                            com.team4u.framework.flow.api.OperationContext ctx, String input) {
                         if (crashes.incrementAndGet() <= 2) {
                             throw new SimulatedCrash("crash #" + crashes.get());
                         }
@@ -229,11 +235,11 @@ public class DurableCrashRecoveryTest {
         // 使执行在 $/1 前崩溃：路径 $/1 处第一个计划是 invoke，第二个计划是 route
         final java.util.concurrent.atomic.AtomicInteger calls =
                 new java.util.concurrent.atomic.AtomicInteger();
-        com.team4u.framework.flow.Operation<String, String> crashAfterA =
-                new com.team4u.framework.flow.Operation<String, String>() {
+        com.team4u.framework.flow.api.Operation<String, String> crashAfterA =
+                new com.team4u.framework.flow.api.Operation<String, String>() {
                     @Override
                     public Outcome<String> execute(
-                            com.team4u.framework.flow.OperationContext ctx, String input) {
+                            com.team4u.framework.flow.api.OperationContext ctx, String input) {
                         if (calls.incrementAndGet() == 1) {
                             throw new SimulatedCrash("die before checkpoint");
                         }
@@ -252,10 +258,10 @@ public class DurableCrashRecoveryTest {
         DurableExecutable<String, String> planB = runtime.compile(
                 Flow.<String, String>step(a).then(
                         Flow.<String, String>route(
-                                new com.team4u.framework.flow.Operation<String, String>() {
+                                new com.team4u.framework.flow.api.Operation<String, String>() {
                                     @Override
                                     public Outcome<String> execute(
-                                            com.team4u.framework.flow.OperationContext ctx,
+                                            com.team4u.framework.flow.api.OperationContext ctx,
                                             String input) {
                                         return Outcome.accepted("x");
                                     }

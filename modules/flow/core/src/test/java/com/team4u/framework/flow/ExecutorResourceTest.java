@@ -22,6 +22,16 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.team4u.framework.flow.api.Branch;
+import com.team4u.framework.flow.api.FlowObserver;
+import com.team4u.framework.flow.api.Gate;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.Policy;
+import com.team4u.framework.flow.engine.SerialMachine;
+import com.team4u.framework.flow.model.Cancellation;
+import com.team4u.framework.flow.model.FlowResult;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.spi.OperationResolver;
 
 /**
  * 验证 Java 8 线程模型下，用户传入的 ExecutorService 用于 runAsync、超时回调与并行分支执行，

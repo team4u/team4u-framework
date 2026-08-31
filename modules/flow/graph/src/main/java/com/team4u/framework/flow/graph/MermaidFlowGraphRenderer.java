@@ -1,9 +1,5 @@
 package com.team4u.framework.flow.graph;
 
-import com.team4u.framework.flow.BindingDescriptor;
-import com.team4u.framework.flow.FlowDescription;
-import com.team4u.framework.flow.NodeDescription;
-import com.team4u.framework.flow.Retry;
 
 import java.math.BigDecimal;
 import java.math.BigInteger;
@@ -14,6 +10,10 @@ import java.util.Deque;
 import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Objects;
+import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.desc.FlowDescription;
+import com.team4u.framework.flow.desc.NodeDescription;
+import com.team4u.framework.flow.spi.BindingDescriptor;
 
 /**
  * 确定性 Mermaid 流程图渲染器（Deterministic Mermaid Flow Graph Renderer）。

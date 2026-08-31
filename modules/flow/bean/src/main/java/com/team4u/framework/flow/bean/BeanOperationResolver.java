@@ -2,9 +2,10 @@ package com.team4u.framework.flow.bean;
 
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.bean.exception.NoSuchBeanDefinitionException;
-import com.team4u.framework.flow.OperationResolver;
 
 import java.util.Objects;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.spi.OperationResolver;
 
 /**
  * 基于 {@link BeanManager} 的组件依赖查找解析器（Bean-Backed Operation Resolver）。

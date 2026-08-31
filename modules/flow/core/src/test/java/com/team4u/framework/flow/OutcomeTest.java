@@ -8,6 +8,9 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Reason;
 
 /**
  * 契约：仅 Accepted 携带输出值，Rejected/Skipped 携带 Reason，Failed 携带 Failure；

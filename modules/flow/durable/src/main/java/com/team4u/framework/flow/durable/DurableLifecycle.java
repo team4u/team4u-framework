@@ -1,9 +1,10 @@
 package com.team4u.framework.flow.durable;
+import com.team4u.framework.flow.model.Outcome;
 
 /**
  * 耐久化流执行生命周期状态枚举（Durable Execution Lifecycle）。
  *
- * <p>表示流程实例在持久化存储中的调度状态，独立于具体的业务四态结果（{@link com.team4u.framework.flow.Outcome}）：
+ * <p>表示流程实例在持久化存储中的调度状态，独立于具体的业务四态结果（{@link com.team4u.framework.flow.model.Outcome}）：
  * <ul>
  *   <li>{@link #ACTIVE}：处于活跃运行或计划退避重试中；</li>
  *   <li>{@link #SUSPENDED}：在挂起点等待外部恢复信号注入；</li>

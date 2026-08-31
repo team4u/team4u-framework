@@ -1,7 +1,5 @@
 package com.team4u.framework.flow.durable;
 
-import com.team4u.framework.flow.FlowObserver;
-import com.team4u.framework.flow.Outcome;
 
 import lombok.Getter;
 import lombok.experimental.Accessors;
@@ -14,6 +12,20 @@ import java.util.Optional;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.CompletionStage;
 import java.util.concurrent.ExecutorService;
+import com.team4u.framework.flow.api.Metadata;
+import com.team4u.framework.flow.api.PersistentPolicy;
+import com.team4u.framework.flow.durable.engine.CheckpointReasons;
+import com.team4u.framework.flow.durable.engine.Checkpoints;
+import com.team4u.framework.flow.durable.engine.DurablePlanCompiler;
+import com.team4u.framework.flow.durable.engine.DurableState;
+import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
+import com.team4u.framework.flow.durable.snapshot.SnapshotCodec;
+import com.team4u.framework.flow.durable.snapshot.StateMapper;
+import com.team4u.framework.flow.durable.snapshot.StoredValue;
+import com.team4u.framework.flow.durable.store.DurableStore;
+import com.team4u.framework.flow.model.Reason;
+import com.team4u.framework.flow.api.FlowObserver;
+import com.team4u.framework.flow.model.Outcome;
 
 /**
  * 绑定特定 flowId 与 flowVersion 的可持久化流程执行句柄（Durable Executable Handle）。
@@ -211,7 +223,7 @@ public final class DurableExecutable<I, O> {
             attributes.put("resumePoint", pointName);
             durableObserver.onEvent(new DurableObserver.Event(
                     DurableObserver.Type.RESUME_SIGNAL_PERSISTED, Instant.now(),
-                    new com.team4u.framework.flow.Metadata(flowId, flowVersion,
+                    new com.team4u.framework.flow.api.Metadata(flowId, flowVersion,
                             snapshot.executionId(), "$",
                             java.util.Optional.<String>empty()),
                     snapshot.revision(), snapshot.lifecycle(), attributes));
@@ -481,7 +493,7 @@ public final class DurableExecutable<I, O> {
             attributes.put("revision", Long.toString(snapshot.revision()));
             durableObserver.onEvent(new DurableObserver.Event(
                     DurableObserver.Type.CHECKPOINT_RESTORED, Instant.now(),
-                    new com.team4u.framework.flow.Metadata(flowId, flowVersion,
+                    new com.team4u.framework.flow.api.Metadata(flowId, flowVersion,
                             snapshot.executionId(), "$",
                             java.util.Optional.<String>empty()),
                     snapshot.revision(), snapshot.lifecycle(), attributes));
@@ -497,7 +509,7 @@ public final class DurableExecutable<I, O> {
             attributes.put("path", reason.path());
             durableObserver.onEvent(new DurableObserver.Event(
                     DurableObserver.Type.CHECKPOINT_COMMITTED, Instant.now(),
-                    new com.team4u.framework.flow.Metadata(flowId, flowVersion,
+                    new com.team4u.framework.flow.api.Metadata(flowId, flowVersion,
                             snapshot.executionId(), reason.path(),
                             java.util.Optional.<String>empty()),
                     snapshot.revision(), snapshot.lifecycle(), attributes));

@@ -11,6 +11,11 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertSame;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.team4u.framework.flow.api.Branch;
+import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.ParallelResults;
+import com.team4u.framework.flow.model.Reason;
 
 /**
  * ParallelResults 类型签名守护：firstAccepted()/homogeneousCollect() 收紧为通配符返回类型后，

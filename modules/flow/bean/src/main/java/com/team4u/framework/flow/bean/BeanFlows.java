@@ -4,6 +4,8 @@ import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.Local;
 import com.team4u.framework.flow.LocalExecutable;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.Policy;
 
 /**
  * Spring / Bean 容器流编译门面工具类（Bean-Backed Flow Compilation Facade）。

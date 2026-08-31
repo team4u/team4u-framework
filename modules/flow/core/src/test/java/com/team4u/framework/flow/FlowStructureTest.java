@@ -9,6 +9,16 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import com.team4u.framework.flow.api.Branch;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.ResumePoint;
+import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.desc.FlowDescription;
+import com.team4u.framework.flow.desc.FlowVisitor;
+import com.team4u.framework.flow.desc.NodeDescription;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Reason;
+import com.team4u.framework.flow.spi.NodeDescriptor;
 
 /**
  * 结构化只读描述模型与 Visitor SPI 的单元测试，验证 Invoke, Sequence, Route, Fallback, Parallel, Await, Control, Complete

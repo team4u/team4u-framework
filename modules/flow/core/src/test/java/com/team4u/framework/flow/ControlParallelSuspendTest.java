@@ -16,6 +16,22 @@ import java.util.concurrent.atomic.AtomicReference;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.team4u.framework.flow.api.Branch;
+import com.team4u.framework.flow.api.FlowObserver;
+import com.team4u.framework.flow.api.Gate;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.PersistentPolicy;
+import com.team4u.framework.flow.api.Policy;
+import com.team4u.framework.flow.api.PolicyContext;
+import com.team4u.framework.flow.api.ResumePoint;
+import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.model.Cancellation;
+import com.team4u.framework.flow.model.Completion;
+import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.FlowResult;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Suspension;
+import com.team4u.framework.flow.spi.OperationResolver;
 
 /**
  * Control/Parallel/Suspend 交互综合测试：挂起的类型化与一次性、retry 的稳定 invocation id、

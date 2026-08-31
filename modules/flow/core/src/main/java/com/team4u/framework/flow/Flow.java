@@ -9,6 +9,26 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import com.team4u.framework.flow.api.Branch;
+import com.team4u.framework.flow.api.JoinStrategy;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.PersistentPolicy;
+import com.team4u.framework.flow.api.Policy;
+import com.team4u.framework.flow.api.ResumePoint;
+import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.compiler.Compiler;
+import com.team4u.framework.flow.compiler.ExecutableProjector;
+import com.team4u.framework.flow.compiler.Logical;
+import com.team4u.framework.flow.desc.FlowDescription;
+import com.team4u.framework.flow.desc.FlowDescriptionBuilder;
+import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.FlowBuildException;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Reason;
+import com.team4u.framework.flow.model.Recovery;
+import com.team4u.framework.flow.model.Resumed;
+import com.team4u.framework.flow.spi.ExecutableFlowVisitor;
+import com.team4u.framework.flow.spi.OperationResolver;
 
 /**
  * 不可变的强类型流程编排 DSL 核心入口类。
@@ -527,7 +547,7 @@ public final class Flow<I, O> {
      *
      * @return 逻辑根节点
      */
-    Logical root() {
+    public Logical root() {
         return root;
     }
 

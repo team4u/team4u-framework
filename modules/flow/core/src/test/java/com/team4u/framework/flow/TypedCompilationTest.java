@@ -12,6 +12,12 @@ import java.nio.file.Path;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotEquals;
+import com.team4u.framework.flow.api.Gate;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.api.PersistentPolicy;
+import com.team4u.framework.flow.model.FlowResult;
+import com.team4u.framework.flow.model.Outcome;
 
 /**
  * 编译期类型安全与闭集防护验证：通过内联调用 javac，确认类型化 Flow 链在类型匹配时编译通过、
@@ -23,6 +29,8 @@ public class TypedCompilationTest {
     public void javacAcceptsTypedChainAndRejectsWrongConnection() throws Exception {
         // 合法链：A: String→Integer 与 B: Integer→Long 类型匹配
         String valid = "import com.team4u.framework.flow.*;\n"
+                + "import com.team4u.framework.flow.api.*;\n"
+                + "import com.team4u.framework.flow.model.*;\n"
                 + "class ValidFlow {\n"
                 + "  static final class A implements Operation<String,Integer> {\n"
                 + "    public Outcome<Integer> execute(OperationContext c, String i) {\n"
@@ -45,6 +53,8 @@ public class TypedCompilationTest {
 
         // 可复用子流：then 引用独立定义的 Flow<Integer,Long>
         String subflowValid = "import com.team4u.framework.flow.*;\n"
+                + "import com.team4u.framework.flow.api.*;\n"
+                + "import com.team4u.framework.flow.model.*;\n"
                 + "class ValidSubflow {\n"
                 + "  static final Flow<Integer,Long> reusable = Flow.step(\n"
                 + "    (Operation<Integer,Long>) (c, i) -> Outcome.accepted(i.longValue()));\n"
@@ -59,25 +69,25 @@ public class TypedCompilationTest {
 
         // 闭集守护 1：外部类不得直接继承 Outcome
         String extendOutcome = "package custom.external;\n"
-                + "import com.team4u.framework.flow.Outcome;\n"
+                + "import com.team4u.framework.flow.model.Outcome;\n"
                 + "class CustomOutcome<T> extends Outcome<T> {\n"
                 + "}\n";
 
         // 闭集守护 2：外部类不得直接继承 FlowResult
         String extendFlowResult = "package custom.external;\n"
-                + "import com.team4u.framework.flow.FlowResult;\n"
+                + "import com.team4u.framework.flow.model.FlowResult;\n"
                 + "class CustomFlowResult<T> extends FlowResult<T> {\n"
                 + "}\n";
 
         // 闭集守护 3：外部类不得直接继承 Gate
         String extendGate = "package custom.external;\n"
-                + "import com.team4u.framework.flow.Gate;\n"
+                + "import com.team4u.framework.flow.api.Gate;\n"
                 + "class CustomGate extends Gate {\n"
                 + "}\n";
 
         // 闭集守护 4：外部类不得直接继承 PersistentPolicy.Before
         String extendPolicyBefore = "package custom.external;\n"
-                + "import com.team4u.framework.flow.PersistentPolicy;\n"
+                + "import com.team4u.framework.flow.api.PersistentPolicy;\n"
                 + "class CustomBefore<S> extends PersistentPolicy.Before<S> {\n"
                 + "}\n";
 

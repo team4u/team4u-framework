@@ -2,6 +2,7 @@ package com.team4u.framework.flow.test;
 
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.TimeUnit;
+import com.team4u.framework.flow.Flow;
 
 /**
  * 并行并发同步屏障测试工具（Parallel Execution Sync Barrier）。

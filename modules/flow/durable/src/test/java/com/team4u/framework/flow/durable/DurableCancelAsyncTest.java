@@ -1,11 +1,6 @@
 package com.team4u.framework.flow.durable;
 
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.ResumePoint;
-import com.team4u.framework.flow.Resumed;
 import org.junit.Test;
 
 import java.util.List;
@@ -19,6 +14,16 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
+import com.team4u.framework.flow.durable.store.DurableStore;
+import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
+import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.api.ResumePoint;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Resumed;
 
 /** 组8：取消矩阵与异步边界 — 终态/挂起取消、终态命令拒绝、无 executor 异步拒绝、executor 借用不关闭。 */
 public class DurableCancelAsyncTest {
@@ -30,12 +35,12 @@ public class DurableCancelAsyncTest {
         Operation<String, String> flaky = new Operation<String, String>() {
             @Override
             public Outcome<String> execute(OperationContext context, String input) {
-                return com.team4u.framework.flow.Outcome.failed(
-                        com.team4u.framework.flow.Failure.of("X", "x"));
+                return com.team4u.framework.flow.model.Outcome.failed(
+                        com.team4u.framework.flow.model.Failure.of("X", "x"));
             }
         };
         Flow<String, String> flow = Flow.<String, String>step(flaky)
-                .retry(new com.team4u.framework.flow.Retry(5,
+                .retry(new com.team4u.framework.flow.api.Retry(5,
                         java.time.Duration.ofMillis(60_000)));
         return DurableRuntime.builder(store).build().compile(flow, "cancel", 1);
     }

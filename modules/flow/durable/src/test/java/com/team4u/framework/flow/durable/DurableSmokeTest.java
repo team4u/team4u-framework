@@ -1,17 +1,18 @@
 package com.team4u.framework.flow.durable;
 
-import com.team4u.framework.flow.Failure;
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.Reason;
 import org.junit.Test;
 
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.Outcome;
 
 public class DurableSmokeTest {
 
@@ -70,7 +71,7 @@ public class DurableSmokeTest {
             }
         };
         Flow<String, String> flow = Flow.<String, String>step(flaky)
-                .retry(new com.team4u.framework.flow.Retry(3, java.time.Duration.ZERO));
+                .retry(new com.team4u.framework.flow.api.Retry(3, java.time.Duration.ZERO));
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable = DurableRuntime.builder(store)
                 .build()

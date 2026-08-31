@@ -15,6 +15,19 @@ import java.util.Set;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import com.team4u.framework.flow.api.Branch;
+import com.team4u.framework.flow.api.FlowObserver;
+import com.team4u.framework.flow.api.Gate;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.Policy;
+import com.team4u.framework.flow.api.PolicyContext;
+import com.team4u.framework.flow.api.ResumePoint;
+import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.model.FlowResult;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Reason;
+import com.team4u.framework.flow.spi.NodeDescriptor;
+import com.team4u.framework.flow.spi.OperationResolver;
 
 /**
  * FlowObserver 契约验证：八种运行时节点类型在 resume 前后均成对发出 STARTED/COMPLETED 事件，

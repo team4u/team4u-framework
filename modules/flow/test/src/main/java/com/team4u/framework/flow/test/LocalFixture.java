@@ -1,13 +1,13 @@
 package com.team4u.framework.flow.test;
 
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.FlowObserver;
-import com.team4u.framework.flow.FlowResult;
+import com.team4u.framework.flow.api.FlowObserver;
+import com.team4u.framework.flow.model.FlowResult;
 import com.team4u.framework.flow.Local;
 import com.team4u.framework.flow.LocalExecutable;
-import com.team4u.framework.flow.OperationResolver;
-import com.team4u.framework.flow.ResumePoint;
-import com.team4u.framework.flow.Suspension;
+import com.team4u.framework.flow.spi.OperationResolver;
+import com.team4u.framework.flow.api.ResumePoint;
+import com.team4u.framework.flow.model.Suspension;
 
 import lombok.Getter;
 import lombok.experimental.Accessors;

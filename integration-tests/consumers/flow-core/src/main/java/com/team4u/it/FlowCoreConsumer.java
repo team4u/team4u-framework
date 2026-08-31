@@ -1,26 +1,27 @@
 package com.team4u.it;
 
-import com.team4u.framework.flow.Branch;
-import com.team4u.framework.flow.Failure;
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.FlowDescription;
-import com.team4u.framework.flow.FlowResult;
 import com.team4u.framework.flow.Local;
 import com.team4u.framework.flow.LocalExecutable;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.OperationResolver;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.Reason;
-import com.team4u.framework.flow.ResumePoint;
-import com.team4u.framework.flow.Recovery;
-import com.team4u.framework.flow.Resumed;
-import com.team4u.framework.flow.Retry;
 
 import java.time.Duration;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.atomic.AtomicInteger;
+import com.team4u.framework.flow.model.Cancellation;
+import com.team4u.framework.flow.spi.NodeDescriptor;
+import com.team4u.framework.flow.api.Branch;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.api.ResumePoint;
+import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.desc.FlowDescription;
+import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.FlowResult;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Reason;
+import com.team4u.framework.flow.model.Recovery;
+import com.team4u.framework.flow.model.Resumed;
 
 /**
  * 外部消费者工程验证：确保普通应用只引入 team4u-flow 即可在 Java 8 下编译并执行
@@ -221,7 +222,7 @@ public class FlowCoreConsumer {
             }
         }).then(Flow.<String, String>accepted("done"));
         FlowDescription description = flow.describe();
-        if (description.root().kind() != com.team4u.framework.flow.NodeDescriptor.Kind.SEQUENCE) {
+        if (description.root().kind() != com.team4u.framework.flow.spi.NodeDescriptor.Kind.SEQUENCE) {
             throw new AssertionError("Expected SEQUENCE root: " + description.root().kind());
         }
         if (description.root().children().size() != 2) {
@@ -238,7 +239,7 @@ public class FlowCoreConsumer {
                 return Outcome.accepted(input);
             }
         });
-        com.team4u.framework.flow.Cancellation cancellation = com.team4u.framework.flow.Cancellation.create();
+        com.team4u.framework.flow.model.Cancellation cancellation = com.team4u.framework.flow.model.Cancellation.create();
         cancellation.cancel();
         LocalExecutable<String, String> executable = Local.compile(flow);
         FlowResult<String> result = executable.run("x", cancellation);

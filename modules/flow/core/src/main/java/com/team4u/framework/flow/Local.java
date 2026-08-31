@@ -2,6 +2,10 @@ package com.team4u.framework.flow;
 
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.ForkJoinPool;
+import com.team4u.framework.flow.api.FlowObserver;
+import com.team4u.framework.flow.compiler.Compiler;
+import com.team4u.framework.flow.model.FlowBuildException;
+import com.team4u.framework.flow.spi.OperationResolver;
 
 /**
  * Local 内存执行器编译工厂门面。

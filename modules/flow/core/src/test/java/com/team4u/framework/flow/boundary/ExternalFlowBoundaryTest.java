@@ -1,29 +1,29 @@
 package com.team4u.framework.flow.boundary;
 
-import com.team4u.framework.flow.Branch;
-import com.team4u.framework.flow.Completion;
-import com.team4u.framework.flow.ControlKind;
-import com.team4u.framework.flow.ExecutableBinding;
-import com.team4u.framework.flow.ExecutableFlowVisitor;
-import com.team4u.framework.flow.ExecutableParallelBranch;
-import com.team4u.framework.flow.ExecutableRouteCase;
-import com.team4u.framework.flow.FallbackTrigger;
+import com.team4u.framework.flow.api.Branch;
+import com.team4u.framework.flow.model.Completion;
+import com.team4u.framework.flow.spi.ControlKind;
+import com.team4u.framework.flow.spi.ExecutableBinding;
+import com.team4u.framework.flow.spi.ExecutableFlowVisitor;
+import com.team4u.framework.flow.spi.ExecutableParallelBranch;
+import com.team4u.framework.flow.spi.ExecutableRouteCase;
+import com.team4u.framework.flow.spi.FallbackTrigger;
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.Gate;
-import com.team4u.framework.flow.JoinStrategy;
-import com.team4u.framework.flow.NodeDescriptor;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.OperationResolver;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.ParallelResults;
-import com.team4u.framework.flow.PersistentPolicy;
-import com.team4u.framework.flow.Policy;
-import com.team4u.framework.flow.PolicyContext;
-import com.team4u.framework.flow.Reason;
-import com.team4u.framework.flow.ResumePoint;
-import com.team4u.framework.flow.Resumed;
-import com.team4u.framework.flow.Retry;
+import com.team4u.framework.flow.api.Gate;
+import com.team4u.framework.flow.api.JoinStrategy;
+import com.team4u.framework.flow.spi.NodeDescriptor;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.spi.OperationResolver;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.ParallelResults;
+import com.team4u.framework.flow.api.PersistentPolicy;
+import com.team4u.framework.flow.api.Policy;
+import com.team4u.framework.flow.api.PolicyContext;
+import com.team4u.framework.flow.model.Reason;
+import com.team4u.framework.flow.api.ResumePoint;
+import com.team4u.framework.flow.model.Resumed;
+import com.team4u.framework.flow.api.Retry;
 import org.junit.Test;
 
 import java.time.Duration;
@@ -138,7 +138,7 @@ public class ExternalFlowBoundaryTest {
         Branch<String, String> branch2 = Branch.of("b2", Flow.accepted("b2-val"));
         Flow<String, String> parallel = Flow.parallel(branch1, branch2).join(new JoinStrategy<String>() {
             @Override
-            public Outcome<String> join(com.team4u.framework.flow.ParallelResults results) {
+            public Outcome<String> join(ParallelResults results) {
                 return Outcome.accepted("joined");
             }
         });

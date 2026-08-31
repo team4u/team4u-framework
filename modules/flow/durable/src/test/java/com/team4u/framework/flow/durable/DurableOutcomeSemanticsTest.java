@@ -1,9 +1,6 @@
 package com.team4u.framework.flow.durable;
 
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.FallbackTrigger;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.Recovery;
 import org.junit.Test;
 
 import static com.team4u.framework.flow.durable.DurableTestOps.RecordingOp;
@@ -13,6 +10,14 @@ import static com.team4u.framework.flow.durable.DurableTestOps.rejected;
 import static com.team4u.framework.flow.durable.DurableTestOps.skipped;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import com.team4u.framework.flow.Local;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.durable.store.DurableStore;
+import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Recovery;
+import com.team4u.framework.flow.spi.FallbackTrigger;
 
 /** 组1：四态传播与 fallback/route/complete 语义（与 Core Local 严格一致）。 */
 public class DurableOutcomeSemanticsTest {
@@ -107,10 +112,10 @@ public class DurableOutcomeSemanticsTest {
     public void recoverWithFeedsRecoveryToNextBranchOnFailed() {
         RecordingOp body = new RecordingOp("body").returns(failed("ERR"));
         Flow<Recovery<String>, String> recover = Flow.<Recovery<String>, String>step(
-                new com.team4u.framework.flow.Operation<Recovery<String>, String>() {
+                new com.team4u.framework.flow.api.Operation<Recovery<String>, String>() {
                     @Override
                     public Outcome<String> execute(
-                            com.team4u.framework.flow.OperationContext context,
+                            com.team4u.framework.flow.api.OperationContext context,
                             Recovery<String> recovery) {
                         return Outcome.accepted(
                                 recovery.input() + "|" + recovery.failure().code());
@@ -126,10 +131,10 @@ public class DurableOutcomeSemanticsTest {
     public void recoverWithDoesNotTriggerOnAccepted() {
         RecordingOp body = new RecordingOp("body");
         Flow<Recovery<String>, String> recover = Flow.<Recovery<String>, String>step(
-                new com.team4u.framework.flow.Operation<Recovery<String>, String>() {
+                new com.team4u.framework.flow.api.Operation<Recovery<String>, String>() {
                     @Override
                     public Outcome<String> execute(
-                            com.team4u.framework.flow.OperationContext ctx,
+                            com.team4u.framework.flow.api.OperationContext ctx,
                             Recovery<String> recovery) {
                         return Outcome.accepted("recovered");
                     }
@@ -143,10 +148,10 @@ public class DurableOutcomeSemanticsTest {
     @Test
     public void routeSelectsMatchingCase() {
         Flow<String, String> flow = Flow.<String, String>route(
-                new com.team4u.framework.flow.Operation<String, String>() {
+                new com.team4u.framework.flow.api.Operation<String, String>() {
                     @Override
                     public Outcome<String> execute(
-                            com.team4u.framework.flow.OperationContext context, String input) {
+                            com.team4u.framework.flow.api.OperationContext context, String input) {
                         return Outcome.accepted(input.startsWith("a") ? "A" : "B");
                     }
                 })
@@ -163,10 +168,10 @@ public class DurableOutcomeSemanticsTest {
     @Test
     public void routeOtherwiseWhenNoCaseMatches() {
         Flow<String, String> flow = Flow.<String, String>route(
-                new com.team4u.framework.flow.Operation<String, String>() {
+                new com.team4u.framework.flow.api.Operation<String, String>() {
                     @Override
                     public Outcome<String> execute(
-                            com.team4u.framework.flow.OperationContext context, String input) {
+                            com.team4u.framework.flow.api.OperationContext context, String input) {
                         return Outcome.accepted("Z");
                     }
                 })
@@ -180,10 +185,10 @@ public class DurableOutcomeSemanticsTest {
     @Test
     public void routeWithoutOtherwiseYieldsSkipped() {
         Flow<String, String> flow = Flow.<String, String>route(
-                new com.team4u.framework.flow.Operation<String, String>() {
+                new com.team4u.framework.flow.api.Operation<String, String>() {
                     @Override
                     public Outcome<String> execute(
-                            com.team4u.framework.flow.OperationContext context, String input) {
+                            com.team4u.framework.flow.api.OperationContext context, String input) {
                         return Outcome.accepted("Z");
                     }
                 })
@@ -218,11 +223,11 @@ public class DurableOutcomeSemanticsTest {
 
     @Test
     public void operationExceptionBecomesStableFailedOutcome() {
-        com.team4u.framework.flow.Operation<String, String> boom =
-                new com.team4u.framework.flow.Operation<String, String>() {
+        com.team4u.framework.flow.api.Operation<String, String> boom =
+                new com.team4u.framework.flow.api.Operation<String, String>() {
             @Override
             public Outcome<String> execute(
-                    com.team4u.framework.flow.OperationContext context, String input) {
+                    com.team4u.framework.flow.api.OperationContext context, String input) {
                 throw new IllegalStateException("kaboom");
             }
         };

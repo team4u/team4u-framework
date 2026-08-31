@@ -1,6 +1,6 @@
 package com.team4u.framework.flow.durable;
 
-import com.team4u.framework.flow.Metadata;
+import com.team4u.framework.flow.api.Metadata;
 
 import java.time.Instant;
 import java.util.Collections;

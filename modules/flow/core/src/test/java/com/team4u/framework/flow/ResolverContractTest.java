@@ -5,6 +5,12 @@ import org.junit.Test;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.compiler.Compiler;
+import com.team4u.framework.flow.model.FlowBuildException;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.spi.OperationResolver;
 
 /**
  * 守护 Compiler.resolve 对 resolver 返回对象的具体 contract 校验：

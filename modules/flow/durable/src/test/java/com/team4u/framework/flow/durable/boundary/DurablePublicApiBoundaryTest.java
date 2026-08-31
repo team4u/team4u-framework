@@ -1,18 +1,20 @@
 package com.team4u.framework.flow.durable.boundary;
 
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.Outcome;
 import com.team4u.framework.flow.durable.DurableExecutable;
 import com.team4u.framework.flow.durable.DurableLifecycle;
 import com.team4u.framework.flow.durable.DurableResult;
 import com.team4u.framework.flow.durable.DurableRuntime;
-import com.team4u.framework.flow.durable.InMemoryDurableStore;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import com.team4u.framework.flow.compiler.Logical;
+import com.team4u.framework.flow.compiler.PlanNode;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
+import com.team4u.framework.flow.model.Outcome;
 
 /**
  * 组9（编译边界）：本测试位于独立子包，只 import Core 公开 API 与 Durable 公开 API。

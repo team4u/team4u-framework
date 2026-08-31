@@ -2,16 +2,16 @@ package com.team4u.framework.flow.bean;
 
 import com.team4u.framework.bean.BeanManager;
 import com.team4u.framework.bean.exception.NoSuchBeanDefinitionException;
-import com.team4u.framework.flow.Completion;
+import com.team4u.framework.flow.model.Completion;
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.Gate;
+import com.team4u.framework.flow.api.Gate;
 import com.team4u.framework.flow.Local;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.PersistentPolicy;
-import com.team4u.framework.flow.Policy;
-import com.team4u.framework.flow.PolicyContext;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.api.PersistentPolicy;
+import com.team4u.framework.flow.api.Policy;
+import com.team4u.framework.flow.api.PolicyContext;
 import org.junit.Test;
 
 import java.lang.reflect.InvocationHandler;

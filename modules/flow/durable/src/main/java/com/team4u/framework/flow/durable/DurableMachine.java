@@ -1,19 +1,5 @@
 package com.team4u.framework.flow.durable;
 
-import com.team4u.framework.flow.Cancellation;
-import com.team4u.framework.flow.Failure;
-import com.team4u.framework.flow.FlowDiagnosticCodes;
-import com.team4u.framework.flow.FlowObserver;
-import com.team4u.framework.flow.JoinStrategy;
-import com.team4u.framework.flow.Metadata;
-import com.team4u.framework.flow.NodeDescriptor;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.ParallelResults;
-import com.team4u.framework.flow.PolicyContext;
-import com.team4u.framework.flow.Recovery;
-import com.team4u.framework.flow.Resumed;
 
 import java.time.Duration;
 import java.time.Instant;
@@ -30,6 +16,35 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.FutureTask;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.TimeoutException;
+import com.team4u.framework.flow.Flow;
+import com.team4u.framework.flow.api.Branch;
+import com.team4u.framework.flow.api.PersistentPolicy;
+import com.team4u.framework.flow.api.Policy;
+import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.durable.engine.CheckpointReasons;
+import com.team4u.framework.flow.durable.engine.Checkpoints;
+import com.team4u.framework.flow.durable.engine.DurableFrameReducePolicy;
+import com.team4u.framework.flow.durable.engine.DurableFrameReducePolicyRegistry;
+import com.team4u.framework.flow.durable.engine.DurableNodeExecutionHandler;
+import com.team4u.framework.flow.durable.engine.DurableNodeExecutionHandlerRegistry;
+import com.team4u.framework.flow.durable.engine.DurablePlanCompiler;
+import com.team4u.framework.flow.durable.engine.DurablePlanNode;
+import com.team4u.framework.flow.durable.engine.DurableState;
+import com.team4u.framework.flow.model.Reason;
+import com.team4u.framework.flow.spi.ControlKind;
+import com.team4u.framework.flow.api.FlowObserver;
+import com.team4u.framework.flow.api.JoinStrategy;
+import com.team4u.framework.flow.api.Metadata;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.api.PolicyContext;
+import com.team4u.framework.flow.model.Cancellation;
+import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.FlowDiagnosticCodes;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.ParallelResults;
+import com.team4u.framework.flow.model.Resumed;
+import com.team4u.framework.flow.spi.NodeDescriptor;
 
 /**
  * 耐久化流程状态机执行内核（Durable Execution State Machine）。
@@ -45,7 +60,7 @@ import java.util.concurrent.TimeoutException;
  *
  * @author jay.wu
  */
-final class DurableMachine {
+public final class DurableMachine {
     private final DurablePlanCompiler.Definition definition;
     private final String flowId;
     private final int flowVersion;
@@ -56,7 +71,7 @@ final class DurableMachine {
     private final boolean branchMode;
     private boolean parked;
 
-    DurableMachine(DurablePlanCompiler.Definition definition, String flowId, int flowVersion,
+    public DurableMachine(DurablePlanCompiler.Definition definition, String flowId, int flowVersion,
                    DurableState.MachineState state, Checkpoints checkpoints,
                    FlowObserver observer, ExecutorService executor, boolean branchMode) {
         this.definition = Objects.requireNonNull(definition, "definition must not be null");
@@ -75,7 +90,7 @@ final class DurableMachine {
      * @return 状态机推进结果 {@link DurableState.MachineResult}
      */
     @SuppressWarnings("unchecked")
-    DurableState.MachineResult drive() {
+    public DurableState.MachineResult drive() {
         while (state.lifecycle == DurableLifecycle.ACTIVE && !parked) {
             checkTimeout();
             if (state.lifecycle != DurableLifecycle.ACTIVE || parked) {
@@ -96,8 +111,7 @@ final class DurableMachine {
     // ------------------------------------------------------------------
     // Invoke / Complete 执行支持
     // ------------------------------------------------------------------
-
-    void invoke(DurableState.RuntimeFrame frame, DurablePlanNode.Invoke node) {
+    public void invoke(DurableState.RuntimeFrame frame, DurablePlanNode.Invoke node) {
         long started = System.nanoTime();
         Outcome<?> outcome = invokeOperation(node, frame.entry, deadline());
         invokeCompleted(node, outcome, System.nanoTime() - started);
@@ -200,7 +214,7 @@ final class DurableMachine {
                 DurablePlanCompiler.nodeRole(node.descriptor().path())));
     }
 
-    void complete(DurableState.RuntimeFrame frame, DurablePlanNode.Complete node) {
+    public void complete(DurableState.RuntimeFrame frame, DurablePlanNode.Complete node) {
         DurableState.MachineOutcome outcome;
         if (node.identity()) {
             outcome = DurableState.MachineOutcome.accepted(frame.entry, frame.entryRole);
@@ -221,8 +235,7 @@ final class DurableMachine {
     // ------------------------------------------------------------------
     // Sequence / Route / Fallback / Await 调度支持
     // ------------------------------------------------------------------
-
-    void enterSequence(DurableState.RuntimeFrame frame, DurablePlanNode.Sequence node) {
+    public void enterSequence(DurableState.RuntimeFrame frame, DurablePlanNode.Sequence node) {
         if (frame.phase != 0) {
             throw new IllegalStateException(
                     "Sequence child frame missing at " + node.descriptor().path());
@@ -237,8 +250,7 @@ final class DurableMachine {
         frame.index = 0;
         push(node.children().get(0), frame.current, frame.currentRole);
     }
-
-    void enterRoute(DurableState.RuntimeFrame frame, DurablePlanNode.Route node) {
+    public void enterRoute(DurableState.RuntimeFrame frame, DurablePlanNode.Route node) {
         if (frame.phase != 0) {
             throw new IllegalStateException(
                     "Route child frame missing at " + node.descriptor().path());
@@ -246,8 +258,7 @@ final class DurableMachine {
         frame.phase = 1;
         push(node.selector(), frame.entry, frame.entryRole);
     }
-
-    void enterFallback(DurableState.RuntimeFrame frame, DurablePlanNode.Fallback node) {
+    public void enterFallback(DurableState.RuntimeFrame frame, DurablePlanNode.Fallback node) {
         if (frame.phase != 0) {
             throw new IllegalStateException(
                     "Fallback child frame missing at " + node.descriptor().path());
@@ -256,8 +267,7 @@ final class DurableMachine {
         frame.index = 0;
         push(node.branches().get(0), frame.entry, frame.entryRole);
     }
-
-    void enterAwait(DurableState.RuntimeFrame frame, DurablePlanNode.Await node) {
+    public void enterAwait(DurableState.RuntimeFrame frame, DurablePlanNode.Await node) {
         if (state.pendingSignal != null) {
             if (!node.point().name().equals(state.awaitingPoint)) {
                 throw new IllegalStateException(
@@ -283,8 +293,7 @@ final class DurableMachine {
     // ------------------------------------------------------------------
     // Parallel 调度支持
     // ------------------------------------------------------------------
-
-    void runParallel(DurableState.RuntimeFrame frame, DurablePlanNode.Parallel node) {
+    public void runParallel(DurableState.RuntimeFrame frame, DurablePlanNode.Parallel node) {
         if (frame.phase == 0) {
             frame.phase = 1;
             event(FlowObserver.Type.PARALLEL_STARTED, node.descriptor(),
@@ -324,8 +333,8 @@ final class DurableMachine {
     }
 
     private void joinParallel(DurableState.RuntimeFrame frame, DurablePlanNode.Parallel node) {
-        List<com.team4u.framework.flow.Branch<?, ?>> tokens =
-                new ArrayList<com.team4u.framework.flow.Branch<?, ?>>();
+        List<com.team4u.framework.flow.api.Branch<?, ?>> tokens =
+                new ArrayList<com.team4u.framework.flow.api.Branch<?, ?>>();
         List<Outcome<?>> outcomes = new ArrayList<Outcome<?>>();
         for (int index = 0; index < node.branches().size(); index++) {
             tokens.add(node.branches().get(index).token());
@@ -357,12 +366,10 @@ final class DurableMachine {
     // ------------------------------------------------------------------
     // Frame 堆栈与归约协调
     // ------------------------------------------------------------------
-
-    void push(DurablePlanNode node, Object input, DurableState.SlotRole role) {
+    public void push(DurablePlanNode node, Object input, DurableState.SlotRole role) {
         state.frames.add(new DurableState.RuntimeFrame(node, input, role));
     }
-
-    void finish(DurableState.MachineOutcome outcome, CheckpointReasons.Reason reason) {
+    public void finish(DurableState.MachineOutcome outcome, CheckpointReasons.Reason reason) {
         Objects.requireNonNull(outcome, "outcome must not be null");
         DurableState.RuntimeFrame completedFrame =
                 state.frames.get(state.frames.size() - 1);
@@ -402,7 +409,7 @@ final class DurableMachine {
             DurableState.RuntimeFrame frame = state.frames.get(index);
             if (frame.node instanceof DurablePlanNode.Control) {
                 DurablePlanNode.Control control = (DurablePlanNode.Control) frame.node;
-                if (control.kind() == com.team4u.framework.flow.ControlKind.TIMEOUT
+                if (control.kind() == com.team4u.framework.flow.spi.ControlKind.TIMEOUT
                         && frame.deadline != null
                         && !Instant.now().isBefore(frame.deadline)) {
                     timeoutIndex = index;
@@ -457,8 +464,7 @@ final class DurableMachine {
         return new DurableState.MachineResult(state.lifecycle, state.outcome,
                 state.awaitingPoint, wakeAt);
     }
-
-    void waitOrPark(DurableState.RuntimeFrame frame, DurablePlanNode.Control node) {
+    public void waitOrPark(DurableState.RuntimeFrame frame, DurablePlanNode.Control node) {
         if (!branchMode) {
             parked = true;
             return;
@@ -479,12 +485,10 @@ final class DurableMachine {
         }
         frame.wake = null;
     }
-
-    void commitCheckpoint(CheckpointReasons.Reason reason) {
+    public void commitCheckpoint(CheckpointReasons.Reason reason) {
         checkpoints.commit(reason);
     }
-
-    PolicyContext policyContext(final DurablePlanNode.Control node,
+    public PolicyContext policyContext(final DurablePlanNode.Control node,
                                 final DurableState.RuntimeFrame frame) {
         return new PolicyContext() {
             @Override public Metadata metadata() {
@@ -501,15 +505,13 @@ final class DurableMachine {
             }
         };
     }
-
-    void waitingEvent(DurablePlanNode.Control node, DurableState.RuntimeFrame frame) {
+    public void waitingEvent(DurablePlanNode.Control node, DurableState.RuntimeFrame frame) {
         Map<String, String> attrs = new LinkedHashMap<String, String>();
         attrs.put("attempt", Integer.toString(frame.attempt));
         attrs.put("wake", frame.wake.toString());
         event(FlowObserver.Type.POLICY_WAITING, node.descriptor(), attrs);
     }
-
-    Map<String, String> policyAfterAttrs(DurableState.RuntimeFrame frame,
+    public Map<String, String> policyAfterAttrs(DurableState.RuntimeFrame frame,
                                          DurableState.MachineOutcome child) {
         Map<String, String> attrs = new LinkedHashMap<String, String>();
         attrs.put("attempt", Integer.toString(frame.attempt));
@@ -517,7 +519,7 @@ final class DurableMachine {
         return Collections.unmodifiableMap(attrs);
     }
 
-    private void nodeStarted(DurableState.RuntimeFrame frame) {
+    public void nodeStarted(DurableState.RuntimeFrame frame) {
         if (frame.observerStarted) {
             return;
         }
@@ -534,7 +536,7 @@ final class DurableMachine {
                 attributes(frame, outcome));
     }
 
-    void event(FlowObserver.Type type, NodeDescriptor descriptor,
+    public void event(FlowObserver.Type type, NodeDescriptor descriptor,
                Map<String, String> attributes) {
         try {
             observer.onEvent(new FlowObserver.Event(type, Instant.now(),
@@ -591,7 +593,7 @@ final class DurableMachine {
         return "";
     }
 
-    Outcome<?> timeoutFailure() {
+    public Outcome<?> timeoutFailure() {
         return failed(FlowDiagnosticCodes.TIMEOUT, "Flow scope deadline elapsed");
     }
 
@@ -599,7 +601,7 @@ final class DurableMachine {
         return Outcome.failed(Failure.of(code, message));
     }
 
-    static Outcome<?> policyFailure(Throwable error) {
+    public static Outcome<?> policyFailure(Throwable error) {
         return failed(FlowDiagnosticCodes.POLICY_EXCEPTION, describe(error));
     }
 

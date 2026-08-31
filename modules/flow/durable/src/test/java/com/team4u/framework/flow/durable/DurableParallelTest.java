@@ -1,14 +1,6 @@
 package com.team4u.framework.flow.durable;
 
-import com.team4u.framework.flow.Branch;
-import com.team4u.framework.flow.Failure;
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.JoinStrategy;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.ParallelResults;
-import com.team4u.framework.flow.Reason;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -24,6 +16,17 @@ import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.team4u.framework.flow.Local;
+import com.team4u.framework.flow.durable.store.DurableStore;
+import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
+import com.team4u.framework.flow.api.Branch;
+import com.team4u.framework.flow.api.JoinStrategy;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.ParallelResults;
+import com.team4u.framework.flow.model.Reason;
 
 /** 组6：parallel — 声明顺序 join、四种业务 Outcome、崩溃恢复只跑剩余分支、join 异常、全失败/全跳过。 */
 public class DurableParallelTest {

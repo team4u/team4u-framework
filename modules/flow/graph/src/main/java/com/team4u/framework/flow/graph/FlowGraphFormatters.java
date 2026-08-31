@@ -1,6 +1,6 @@
 package com.team4u.framework.flow.graph;
 
-import com.team4u.framework.flow.Retry;
+import com.team4u.framework.flow.api.Retry;
 
 import java.time.Duration;
 

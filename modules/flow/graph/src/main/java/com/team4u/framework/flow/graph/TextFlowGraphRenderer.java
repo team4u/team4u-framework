@@ -1,13 +1,13 @@
 package com.team4u.framework.flow.graph;
 
-import com.team4u.framework.flow.BindingDescriptor;
-import com.team4u.framework.flow.FlowDescription;
-import com.team4u.framework.flow.NodeDescription;
 
 import java.util.ArrayDeque;
 import java.util.Deque;
 import java.util.List;
 import java.util.Objects;
+import com.team4u.framework.flow.desc.FlowDescription;
+import com.team4u.framework.flow.desc.NodeDescription;
+import com.team4u.framework.flow.spi.BindingDescriptor;
 
 /**
  * 紧凑型确定性文本树流程图渲染器（Compact Deterministic Text Flow Graph Renderer）。

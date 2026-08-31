@@ -1,12 +1,13 @@
 package com.team4u.framework.flow.durable;
 
-import com.team4u.framework.flow.Outcome;
 import lombok.Getter;
 import lombok.experimental.Accessors;
 
 import java.time.Instant;
 import java.util.Objects;
 import java.util.Optional;
+import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
+import com.team4u.framework.flow.model.Outcome;
 
 /**
  * 耐久化执行命令执行结果封闭代数类型（Durable Execution Result Family）。

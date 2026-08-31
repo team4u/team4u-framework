@@ -1,20 +1,6 @@
 package com.team4u.framework.flow.graph;
 
-import com.team4u.framework.flow.Branch;
-import com.team4u.framework.flow.Completion;
-import com.team4u.framework.flow.Failure;
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.FlowDescription;
-import com.team4u.framework.flow.Gate;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.PersistentPolicy;
-import com.team4u.framework.flow.Policy;
-import com.team4u.framework.flow.PolicyContext;
-import com.team4u.framework.flow.Reason;
-import com.team4u.framework.flow.ResumePoint;
-import com.team4u.framework.flow.Retry;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -33,6 +19,23 @@ import java.util.Map;
 import java.util.Set;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import com.team4u.framework.flow.desc.NodeDescription;
+import com.team4u.framework.flow.spi.BindingDescriptor;
+import com.team4u.framework.flow.spi.ExecutableFlowVisitor;
+import com.team4u.framework.flow.api.Branch;
+import com.team4u.framework.flow.api.Gate;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.api.PersistentPolicy;
+import com.team4u.framework.flow.api.Policy;
+import com.team4u.framework.flow.api.PolicyContext;
+import com.team4u.framework.flow.api.ResumePoint;
+import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.desc.FlowDescription;
+import com.team4u.framework.flow.model.Completion;
+import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Reason;
 
 /** Tests for rendering the frozen Core static description model. */
 public class FlowGraphTest {
@@ -390,7 +393,7 @@ public class FlowGraphTest {
         Assert.assertFalse(code.contains("Recover"));
         Assert.assertFalse(code.contains("Ensure"));
         Assert.assertFalse(code.contains("STOPPED"));
-        Matcher imports = Pattern.compile("import com\\.team4u\\.framework\\.flow\\.([^;]+);")
+        Matcher imports = Pattern.compile("import com\\.team4u\\.framework\\.flow\\.(?:[a-z0-9_]+\\.)?([^;]+);")
                 .matcher(code);
         while (imports.find()) {
             String imported = imports.group(1);

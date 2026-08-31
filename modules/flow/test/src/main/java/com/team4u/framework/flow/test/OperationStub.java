@@ -1,11 +1,11 @@
 package com.team4u.framework.flow.test;
 
-import com.team4u.framework.flow.Failure;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.PolicyContext;
-import com.team4u.framework.flow.Reason;
+import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.api.PolicyContext;
+import com.team4u.framework.flow.model.Reason;
 
 import java.util.ArrayList;
 import java.util.Collections;

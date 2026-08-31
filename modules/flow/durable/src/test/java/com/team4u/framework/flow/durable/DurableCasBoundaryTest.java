@@ -14,6 +14,13 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
+import com.team4u.framework.flow.durable.snapshot.StoredValue;
+import com.team4u.framework.flow.durable.store.DurableStore;
+import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
+import com.team4u.framework.flow.model.Outcome;
 
 /** 组2：CAS 边界 — revision 单调、load 无副作用、重复 start、store 异常、冲突、错误 executionId。 */
 public class DurableCasBoundaryTest {
@@ -204,13 +211,13 @@ public class DurableCasBoundaryTest {
     public void initialSnapshotIsCreatedBeforeFirstCallback() {
         // start 必须先落初始 ACTIVE 快照（revision=1）再执行首个 Operation
         final AtomicInteger observeAtFirstCall = new AtomicInteger(-1);
-        com.team4u.framework.flow.Operation<String, String> probe =
-                new com.team4u.framework.flow.Operation<String, String>() {
+        com.team4u.framework.flow.api.Operation<String, String> probe =
+                new com.team4u.framework.flow.api.Operation<String, String>() {
                     @Override
-                    public com.team4u.framework.flow.Outcome<String> execute(
-                            com.team4u.framework.flow.OperationContext context, String input) {
+                    public com.team4u.framework.flow.model.Outcome<String> execute(
+                            com.team4u.framework.flow.api.OperationContext context, String input) {
                         observeAtFirstCall.set((int) context.metadata().flowVersion());
-                        return com.team4u.framework.flow.Outcome.accepted(input);
+                        return com.team4u.framework.flow.model.Outcome.accepted(input);
                     }
                 };
         FaultyStore store = new FaultyStore(new InMemoryDurableStore());

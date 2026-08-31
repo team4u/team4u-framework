@@ -1,11 +1,6 @@
 package com.team4u.framework.flow.durable;
 
-import com.team4u.framework.flow.Failure;
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.FlowObserver;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.Outcome;
 import org.junit.Test;
 
 import java.util.ArrayList;
@@ -14,6 +9,12 @@ import java.util.List;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertTrue;
+import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
+import com.team4u.framework.flow.api.FlowObserver;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.Outcome;
 
 /**
  * 组12：观察者契约 — Invoke 节点的 NODE_STARTED 与 NODE_COMPLETED 成对发布，

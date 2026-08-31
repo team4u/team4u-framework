@@ -7,6 +7,12 @@ import java.util.List;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
+import com.team4u.framework.flow.api.FlowObserver;
+import com.team4u.framework.flow.api.ResumePoint;
+import com.team4u.framework.flow.model.Cancellation;
+import com.team4u.framework.flow.model.FlowResult;
+import com.team4u.framework.flow.model.Resumed;
+import com.team4u.framework.flow.spi.OperationResolver;
 
 /**
  * 挂起点取消竞态守护：FLOW_SUSPENDED 事件窗口内触发的取消必须落定 CANCELLED，

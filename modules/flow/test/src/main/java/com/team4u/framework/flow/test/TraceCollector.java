@@ -1,6 +1,6 @@
 package com.team4u.framework.flow.test;
 
-import com.team4u.framework.flow.FlowObserver;
+import com.team4u.framework.flow.api.FlowObserver;
 
 import java.util.ArrayList;
 import java.util.Collections;

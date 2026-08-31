@@ -1,12 +1,6 @@
 package com.team4u.framework.flow.durable;
 
-import com.team4u.framework.flow.Branch;
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.JoinStrategy;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.Reason;
 import org.junit.Test;
 
 import java.util.concurrent.atomic.AtomicInteger;
@@ -16,6 +10,14 @@ import static com.team4u.framework.flow.durable.DurableTestOps.acceptedValue;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
+import com.team4u.framework.flow.model.ParallelResults;
+import com.team4u.framework.flow.api.Branch;
+import com.team4u.framework.flow.api.JoinStrategy;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Reason;
 
 /**
  * 组11：phase=0 结构帧恢复 — start() 先提交根帧 phase=0 初始快照；sequence 归约
@@ -59,7 +61,7 @@ public class DurableStructuralRecoveryTest {
         return new JoinStrategy<String>() {
             @Override
             public Outcome<String> join(
-                    com.team4u.framework.flow.ParallelResults results) {
+                    com.team4u.framework.flow.model.ParallelResults results) {
                 StringBuilder joined = new StringBuilder();
                 for (Branch<?, ?> branch : results.branches()) {
                     joined.append(branch.name()).append(";");

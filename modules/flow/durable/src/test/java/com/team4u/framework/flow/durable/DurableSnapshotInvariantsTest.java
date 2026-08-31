@@ -1,12 +1,6 @@
 package com.team4u.framework.flow.durable;
 
-import com.team4u.framework.flow.Branch;
-import com.team4u.framework.flow.Failure;
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.Operation;
-import com.team4u.framework.flow.OperationContext;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.Reason;
 import org.junit.Test;
 
 import java.util.LinkedHashMap;
@@ -18,6 +12,15 @@ import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertNotEquals;
 import static org.junit.Assert.assertTrue;
 import static org.junit.Assert.fail;
+import com.team4u.framework.flow.api.JoinStrategy;
+import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
+import com.team4u.framework.flow.durable.snapshot.StoredValue;
+import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
+import com.team4u.framework.flow.model.ParallelResults;
+import com.team4u.framework.flow.api.Branch;
+import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.model.Outcome;
 
 /** 组10：快照不变量 — 防御拷贝、构造校验、5000 层嵌套 scope 编解码不栈溢出。 */
 public class DurableSnapshotInvariantsTest {
@@ -272,15 +275,15 @@ public class DurableSnapshotInvariantsTest {
                 return Outcome.accepted(input + ">R");
             }
         };
-        com.team4u.framework.flow.Branch<String, String> leftToken =
-                com.team4u.framework.flow.Branch.of("left", left);
-        com.team4u.framework.flow.Branch<String, String> rightToken =
-                com.team4u.framework.flow.Branch.of("right", right);
+        com.team4u.framework.flow.api.Branch<String, String> leftToken =
+                com.team4u.framework.flow.api.Branch.of("left", left);
+        com.team4u.framework.flow.api.Branch<String, String> rightToken =
+                com.team4u.framework.flow.api.Branch.of("right", right);
         Flow<String, String> flow = Flow.<String>parallel(leftToken, rightToken)
-                .join(new com.team4u.framework.flow.JoinStrategy<String>() {
+                .join(new com.team4u.framework.flow.api.JoinStrategy<String>() {
                     @Override
                     public Outcome<String> join(
-                            com.team4u.framework.flow.ParallelResults results) {
+                            com.team4u.framework.flow.model.ParallelResults results) {
                         StringBuilder joined = new StringBuilder();
                         for (Branch<?, ?> branch : results.branches()) {
                             try {

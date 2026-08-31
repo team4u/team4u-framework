@@ -1,16 +1,20 @@
 package com.team4u.framework.flow.test;
 
-import com.team4u.framework.flow.Failure;
-import com.team4u.framework.flow.FlowResult;
-import com.team4u.framework.flow.Outcome;
-import com.team4u.framework.flow.Reason;
-import com.team4u.framework.flow.ResumePoint;
-import com.team4u.framework.flow.Suspension;
 import com.team4u.framework.flow.durable.DurableResult;
-import com.team4u.framework.flow.durable.DurableSnapshot;
 import org.junit.Assert;
 
 import java.util.Objects;
+import com.team4u.framework.flow.Flow;
+import com.team4u.framework.flow.Local;
+import com.team4u.framework.flow.api.PersistentPolicy;
+import com.team4u.framework.flow.api.Retry;
+import com.team4u.framework.flow.api.ResumePoint;
+import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
+import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.FlowResult;
+import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Reason;
+import com.team4u.framework.flow.model.Suspension;
 
 /**
  * 流程测试断言工具集（Flow Testkit Assertions）。

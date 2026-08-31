@@ -1,14 +1,14 @@
 package com.team4u.framework.flow.test;
 
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.OperationResolver;
-import com.team4u.framework.flow.ResumePoint;
+import com.team4u.framework.flow.spi.OperationResolver;
+import com.team4u.framework.flow.api.ResumePoint;
 import com.team4u.framework.flow.durable.DurableExecutable;
 import com.team4u.framework.flow.durable.DurableResult;
 import com.team4u.framework.flow.durable.DurableRuntime;
-import com.team4u.framework.flow.durable.DurableSnapshot;
-import com.team4u.framework.flow.durable.DurableStore;
-import com.team4u.framework.flow.durable.InMemoryDurableStore;
+import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
+import com.team4u.framework.flow.durable.store.DurableStore;
+import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
 
 import lombok.Getter;
 import lombok.experimental.Accessors;
