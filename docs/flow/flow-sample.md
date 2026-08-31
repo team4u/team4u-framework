@@ -1,6 +1,6 @@
 # 实战案例
 
-本章给出三个完整可运行风格的示例：订单风控路由 + firstApplicable 降级，支付审批 await/resume + Durable 恢复，以及基于 Spring Bean 一等公民的企业级电商履约流。
+本章给出三个完整可运行风格的示例：订单风控路由与降级、支付审批与持久化恢复，以及基于 Bean 容器集成的电商履约流。
 
 ---
 
@@ -471,16 +471,16 @@ public class PaymentApprovalTest {
 
 ---
 
-# 案例三：基于 Spring Bean 一等公民的企业级电商履约流
+# 案例三：基于 Bean 容器的电商履约流
 
 ## 业务场景与架构
 
 在典型的企业级 Spring Boot 应用中，业务步骤通常需要依赖容器中的组件（如数据库 DAO、RPC Client、缓存 Client、监控埋点等），并要求支持 Spring 声明式事务（`@Transactional`）与 AOP 代理。
 
 本案例演示：
-1. **Bean 是一等公民**：所有步骤（`Operation`）与准入策略（`Policy`）均作为 Spring `@Component` 注入依赖；
-2. **声明式 Class + Qualifier 编排**：流程 DSL 直接通过 `Class` 与限定符（Bean 名称）编排，不直接持有物理实例；
-3. **多渠道策略路由**：通过 Spring 中注入的不同 Qualifier 实现仓储策略路由（如云仓 `cloudWarehouseOperation` vs 门店前置仓 `localStoreOperation`）；
+1. **容器托管组件**：所有步骤（`Operation`）与准入策略（`Policy`）均作为 Spring `@Component` 注入依赖；
+2. **声明式类型编排**：流程 DSL 直接通过契约类型与限定符（Bean 名称）编排，不直接持有物理实例；
+3. **多渠道策略路由**：通过 Spring 中注入的不同限定符实现仓储策略路由（如云仓 `cloudWarehouseOperation` vs 门店前置仓 `localStoreOperation`）；
 4. **事务与代理透明生效**：Spring 的 `@Transactional` 事务切面在执行期无缝生效；
 5. **编译期一次性装配**：在 Spring `@Configuration` 中通过 `BeanFlows.compile(flow)` 编译为单例 `LocalExecutable`。
 

@@ -23,7 +23,7 @@
 
 `team4u-flow` 是一个专为 Java 业务流编排设计的轻量级、强类型流程组件，采用**新版四态类型化 Flow**方案回应上述痛点：
 
-- **Bean 是一等公民**：Flow DSL 原生支持以 `Class` 与 `qualifier`（Spring Bean 名称）进行声明式编排；在编译期一次性解析绑定容器单例，运行期零反射损耗，Spring AOP 代理与事务切面原样保留。
+- **Bean 是一等公民**：Flow DSL 原生支持以 `Class` 与限定符（Bean 名称）进行声明式编排；在编译期一次性解析绑定容器单例，运行期零反射损耗，Spring 动态代理与事务切面原样保留。
 - **一个不可变定义，两种执行器**：逻辑 `Flow<I, O>` 只描述结构、本身不可执行；同一份定义既可投影为 `Local` 同步执行器，也可投影为 `Durable` 持久化执行器，无需改写业务代码。
 - **四态 Outcome 类型化结果**：`Accepted`（携值成功）、`Rejected`（业务拒绝）、`Skipped`（弃权/跳过）、`Failed`（执行失败）严格闭集，仅 `Accepted` 携带输出，分支语义不再依赖布尔与异常约定。
 - **零 Lambda 序列化**：Durable 快照只保存框架元数据与编码后的 `StoredValue` 槽位，绝不序列化 Java 代码、Operation 实例或 Lambda 表达式。
@@ -69,8 +69,8 @@ graph TD
 
 ## 核心设计特色
 
-- **Bean 是一等公民与 Spring 无缝集成**：
-  - 编排节点原生支持以 `Class<? extends Operation>` 与可选限定符（Spring Bean 名称）声明；编译期一次性解析绑定，运行期零反射查找开销；Spring `@Transactional`、AOP 代理拦截完整保留。
+- **Bean 是一等公民与容器无缝集成**：
+  - 编排节点原生支持以 `Class<? extends Operation>` 与可选限定符（Bean 名称）声明；编译期一次性解析绑定，运行期零反射查找开销；Spring 声明式事务与切面代理拦截完整保留。
 - **一个定义，两种执行器**：
   - Local 极速执行：`Local.compile(flow).run(input)` 同步驱动，零序列化、零持久化开销；挂起、取消、并行、超时全部可用。
   - Durable 崩溃恢复：`DurableExecutable.start(executionId, input)` 在节点边界 CAS 落检查点，进程重启后 `recover` 从最后提交的快照续跑。
@@ -91,7 +91,7 @@ graph TD
 | 概念 | 说明 |
 | :--- | :--- |
 | `Flow<I, O>` | 不可变逻辑流程定义；只描述结构，需经 `Local` / `DurableRuntime` / `BeanFlows` 编译后才可执行 |
-| `Bean 绑定` | 以 `Class` 与 `qualifier` 声明节点，编译期由 `OperationResolver` 从 Spring/Bean 容器一次性解析为单例 Bean |
+| `Bean 绑定` | 以类型与限定符声明节点，编译期由 `OperationResolver` 从容器一次性解析为单例 Bean |
 | `BeanFlows` | `team4u-flow-bean` 提供的门面工具，一行代码完成基于 `BeanManager` 的流编译 (`BeanFlows.compile(flow)`) |
 | `Operation<I, O>` | 业务步骤扩展点：`(OperationContext, I) -> Outcome<O>`，同步、可复用、线程安全 |
 | `Outcome<T>` | 业务四态闭集：`Accepted(value)` / `Rejected(Reason)` / `Skipped(Reason)` / `Failed(Failure)`，仅 Accepted 携带输出 |
@@ -182,11 +182,11 @@ modules/flow
 
 # 文档导航
 
-- [快速开始](quick-start.md)：从纯 Java 到 Spring/Bean 绑定、route/parallel/await 与 Durable 恢复的最短路径。
+- [快速开始](quick-start.md)：从纯 Java 到容器绑定、route/parallel/await 与 Durable 恢复的最短路径。
 - [核心语义与机制](flow-semantics.md)：四态语义与传播规则、八节点语义、Policy/重试/超时、取消合同、异常转稳定 Failed。
-- [Spring / Bean 容器集成](flow-bean.md)：Bean 是一等公民、Spring `@Transactional` 与 AOP 代理保留、编译期解析与诊断。
+- [Bean 容器集成](flow-bean.md)：Bean 声明式绑定、事务与切面代理保留、编译期解析与诊断。
 - [Durable 持久化执行](flow-durable.md)：快照边界、CAS 检查点、resume 两段提交、PersistentPolicy 状态持久化与版本兼容。
 - [可视化与图表渲染](flow-graph.md)：FlowDescription 投影、六通道、取消不进 join、opaque 路由键与配置摘要。
 - [测试支持与断言](flow-test.md)：testkit 全 API 示例。
 - [扩展机制与 SPI](flow-extension.md)：扩展点清单与双投影 SPI（可执行合同 vs 纯描述）。
-- [实战案例](flow-sample.md)：订单风控路由降级、支付审批挂起恢复与 Spring Bean 一等公民履约实战。
+- [实战案例](flow-sample.md)：订单风控路由降级、支付审批挂起恢复与电商履约实战。

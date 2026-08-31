@@ -261,9 +261,9 @@ public class RateWindowPolicy implements PersistentPolicy<String, long[]> {
 
 ---
 
-# 6. Bean 容器集成与一等公民支持（team4u-flow-bean）
+# 6. Bean 容器集成（team4u-flow-bean）
 
-在 `team4u-flow` 中，**Bean 是一等公民**。流程 DSL 在构建期无需持有具体对象实例，可直接通过 `Class<? extends Operation>`、`Class<? extends Policy>` 与可选限定符（Spring Bean 名称）进行声明式编排。
+流程 DSL 在构建期无需持有具体对象实例，可直接通过 `Class<? extends Operation>`、`Class<? extends Policy>` 与可选限定符（Bean 名称）进行声明式编排。
 
 `BeanOperationResolver` 通过 `BeanManager` 门面从 Spring 容器或本地容器中解析绑定，解析结果原样绑定至执行计划（AOP 拦截器与 `@Transactional` 代理完整保留）：
 
@@ -289,5 +289,5 @@ DurableRuntime runtime = DurableRuntime.builder(store)
 ```
 
 - **解析规则**：`qualifier == null` 时调用 `beanManager.getRequiredBean(contract)`；非 null 时调用 `beanManager.getBean(qualifier)` 并严格校验 `contract.isInstance(bean)`。
-- **性能优势**：在 `compile` 期完成一次性解析并缓存单例引用，运行期（`run`）为原生直接调用，零反射损耗。
-- **深入指南**：完整 Spring 配置、动态代理拦截机制与常见排错详见 [Spring / Bean 容器集成](flow-bean.md)。
+- **性能优势**：在 `compile` 期完成一次性解析并缓存单例引用，运行期为直接方法调用，零反射损耗。
+- **深入指南**：完整 Spring 配置、动态代理拦截机制与常见排错详见 [Bean 容器集成](flow-bean.md)。

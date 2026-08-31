@@ -28,7 +28,7 @@
         <artifactId>team4u-flow</artifactId>
     </dependency>
 
-    <!-- 容器绑定（Bean 是一等公民）：支持从 Spring/BeanManager 解析 Class 与限定符 -->
+    <!-- 容器绑定：支持从 Spring 或本地容器解析类型与限定符 -->
     <dependency>
         <groupId>com.team4u</groupId>
         <artifactId>team4u-flow-bean</artifactId>
@@ -52,11 +52,11 @@
 
 ---
 
-# 2. 快速上手：从纯 Java 到 Spring Bean
+# 2. 快速上手
 
-`team4u-flow` 同时支持**纯 Java 静态函数/Lambda**与 **Spring / Bean 容器一等公民**两种开发范式。
+`team4u-flow` 支持**纯 Java 函数**与 **Bean 容器绑定**两种使用方式。
 
-## 2.1 纯 Java / Lambda 模式
+## 2.1 纯 Java 模式
 
 业务步骤实现 `Operation<I, O>`，返回四态 `Outcome`；用 `Flow.step(...).then(...)` 组合成类型化流水线：
 
@@ -85,9 +85,9 @@ public class QuickStart {
 }
 ```
 
-## 2.2 Spring / Bean 一等公民模式（推荐生产使用）
+## 2.2 容器绑定模式（推荐）
 
-在真实业务开发中，`Operation` 往往需要注入 Spring 托管的 DAO、RPC 客户端或带有 `@Transactional` 事务注解。`team4u-flow` 将 Bean 视作一等公民：
+在真实业务开发中，`Operation` 往往需要注入 Spring 托管的 DAO、RPC 客户端或带有 `@Transactional` 事务注解：
 
 ### 1. 编写 Spring 托管的 Operation
 
@@ -353,6 +353,6 @@ testkit 提供 `OperationStub`/`PolicyStub` 桩、`TraceCollector` 轨迹、`Flo
 # 8. 下一步
 
 - [核心语义与机制](flow-semantics.md)：四态传播、八节点、Policy/Retry/Timeout、取消合同。
-- [Spring / Bean 容器集成](flow-bean.md)：Bean 是一等公民、Spring `@Transactional` 与 AOP 代理保留、编译期解析与诊断。
+- [Bean 容器集成](flow-bean.md)：Bean 声明式绑定、事务与切面代理保留、编译期解析与诊断。
 - [Durable 持久化执行](flow-durable.md)：检查点、恢复、resume 两段 CAS。
 - [实战案例](flow-sample.md)：订单风控路由与支付审批恢复的完整示例。
