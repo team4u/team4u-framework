@@ -50,7 +50,7 @@ graph TD
 
 ### 1. 基础用法（默认 FAIL 模式）
 
-通过 `RateLimitPolicies.of` 绑定限流检查点，默认使用 `FAIL` 模式：
+通过 `RateLimitPolicies.of` 绑定限流检查点，默认使用 `FAIL` 模式（每次扣减 1 个令牌）：
 
 ```java
 import com.team4u.framework.flow.Flow;
@@ -71,9 +71,16 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
         .policy(RateLimitPolicies.reject("order.charge", OrderRequest::getUserId));
 ```
 
-### 3. 高级定制（动态 Permits + 自定义失败诊断）
+---
 
-通过 `RateLimitPolicy.builder()` 支持复杂业务参数提取、动态扣减令牌数与自定义失败信息：
+## 高级定制：`RateLimitPolicy.builder()` 详解
+
+在实际复杂的企业级业务中，简单的“每次扣减 1 个令牌并返回固定错误码”往往无法满足需求。例如：
+- **批量操作**：批量订单处理需要根据订单条数动态扣减 $N$ 个令牌；
+- **多租户隔离**：需要根据租户 ID、渠道标识动态提取限流上下文；
+- **智能诊断与重试提示**：需要提取底层限流算法计算出的建议等待时间（`retryAfterMillis`），并注入 HTTP 响应头或失败详情中。
+
+通过 `RateLimitPolicy.builder()` 可以对限流策略的每个维度进行细粒度定制：
 
 ```java
 import com.team4u.framework.flow.Flow;
@@ -82,21 +89,60 @@ import com.team4u.framework.flow.ratelimiter.RateLimitAction;
 import com.team4u.framework.flow.model.Failure;
 
 RateLimitPolicy<BatchOrderRequest> customPolicy = RateLimitPolicy.<BatchOrderRequest>builder()
+        // 1. 指定限流检查点名称（对应配置中心中的规则 Key）
         .point("order.batch")
-        .contextExtractor(BatchOrderRequest::getTenantId) // 租户维度路由
-        .permitsExtractor(BatchOrderRequest::getItemCount) // 依据批量大小动态扣减令牌
+        
+        // 2. 提取限流路由上下文（用于匹配规则里的 ${tenantId} 等占位符）
+        .contextExtractor(BatchOrderRequest::getTenantId)
+        
+        // 3. 动态计算本次请求消耗的令牌数（按批量包含的条目数扣减）
+        .permitsExtractor(BatchOrderRequest::getItemCount)
+        
+        // 4. 设定决策动作：FAIL（可触发重试）或 REJECT（业务短路）
         .action(RateLimitAction.FAIL)
+        
+        // 5. 自定义失败诊断工厂：提取建议重试时间与业务上下文
         .failureFactory((result, req) -> Failure.of("RATE_LIMIT_EXCEEDED", 
                 "下单过于频繁，建议在 " + result.getRetryAfterMillis() + "ms 后重试")
                 .withDetail("tenantId", req.getTenantId())
-                .withDetail("requestedPermits", String.valueOf(req.getItemCount())))
+                .withDetail("ruleId", result.getRuleId())
+                .withDetail("requestedPermits", String.valueOf(req.getItemCount()))
+                .withDetail("retryAfterMillis", String.valueOf(result.getRetryAfterMillis())))
         .build();
 
+// 将策略挂载到 Flow 步骤上（req -> req 表示策略路由键直接使用 BatchOrderRequest 对象）
 Flow<BatchOrderRequest, BatchReceipt> flow = Flow.step(batchChargeOperation)
         .policy(customPolicy, req -> req);
 ```
 
-### 4. 限流与重试联动（削峰填谷排队模式）
+### Builder 各配置方法核心作用与原理解析
+
+| Builder 配置方法 | 参数类型 | 默认行为 | 核心作用与业务场景 |
+| :--- | :--- | :--- | :--- |
+| **`point(String)`** | `String` | **必填**（无默认值） | **限流检查点唯一标识**。<br/>限流引擎会根据此 `point` 在配置中心（`team4u-config`）或本地规则注册表中检索对应的限流规则（如令牌桶容量、填充速率等）。 |
+| **`contextExtractor(...)`** | `Function<K, ?>` | `k -> k`（原样透传 `key`） | **限流路由上下文提取器**。<br/>限流规则通常按维度（如 `${userId}`、`${tenantId}`、`${clientIp}`）隔离计数。通过此函数从请求对象中提取对应的隔离维度对象，供限流引擎解析表达式。 |
+| **`permits(int)`** | `Integer` | `1` | **静态许可数**。<br/>适用于固定消耗场景。每次请求固定扣减指定数量的令牌。 |
+| **`permitsExtractor(...)`** | `Function<K, Integer>` | `k -> 1`（或由 `permits` 决定） | **动态许可数提取器（核心高级特性）**。<br/>在批量导入、批量转账或大模型 Token 预估扣减等场景下，单次请求消耗的系统资源不同。此函数根据入参动态计算需扣减的令牌数。若当前桶内余量不足，请求将被精准限流拦截。 |
+| **`action(RateLimitAction)`** | `RateLimitAction` | `RateLimitAction.FAIL` | **限流裁决动作**：<br/>• `FAIL`：步骤返回 `Outcome.Failed`，可联动外层 `FlowRetryPolicy` 进行自动退避排队；<br/>• `REJECT`：步骤返回 `Outcome.Rejected`，直接业务短路，绝不触发重试。 |
+| **`failureFactory(...)`** | `BiFunction<RateLimitResult, K, Failure>` | 默认生成标准失败诊断 | **自定义 Failure 诊断工厂（仅在 FAIL 模式生效）**。<br/>允许开发者访问限流引擎的底层裁决结果 `RateLimitResult` 与业务请求 `K`，将算法计算出的 `retryAfterMillis`、命中的 `ruleId` 等封装进 `Failure`，供排障或重试策略使用。 |
+| **`reasonFactory(...)`** | `BiFunction<RateLimitResult, K, Reason>` | 默认生成标准拒绝原因 | **自定义 Reason 业务原因工厂（仅在 REJECT 模式生效）**。<br/>在业务拒绝模式下，根据 `RateLimitResult` 定制具体的业务错误码与多语言提示信息。 |
+| **`engine(RateLimitEngine)`** | `RateLimitEngine` | `RateLimiters.acquire`（全局默认单例） | **自定义限流引擎实例**。<br/>如果系统内针对不同业务划分了独立的限流引擎（如极速本地缓存引擎 vs 全局 Redis 分布式引擎），可通过此方法注入专属实例。 |
+
+---
+
+### `RateLimitResult` 裁决对象字段说明
+
+在 `failureFactory` 与 `reasonFactory` 中，限流引擎会传入只读的裁决对象 `RateLimitResult`，其主要属性如下：
+
+- **`result.isAllowed()`**：`boolean`，本次请求是否成功获取到令牌；
+- **`result.getRuleId()`**：`String`，触发限流的具体规则 ID（多规则配置时方便定位是哪条规则拦截了请求）；
+- **`result.getRetryAfterMillis()`**：`Long`，算法（如令牌桶、漏桶）计算出的**建议重试等待毫秒数**（若算法无法精确估算则为 `null`）；
+- **`result.getRemaining()`**：`Long`，当前窗口内剩余的可用配额；
+- **`result.getDecisionTimeMillis()`**：`long`，限流裁决发生的时间戳（epoch 毫秒）。
+
+---
+
+## 限流与重试联动（削峰填谷排队模式）
 
 将限流策略（`Policy`）作为内层拦截，重试策略（`FlowRetryPolicy`）作为外层控制器。当限流返回 `FAIL` 时，外层重试策略会自动在退避延迟后重新尝试获取令牌：
 

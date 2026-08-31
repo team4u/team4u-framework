@@ -78,31 +78,55 @@ Flow<OrderRequest, Receipt> flow2 = Flow.step(chargeOperation)
         .persistentPolicy(FlowRetries.jitter(4, 50, 2.0, 1000), OrderRequest::getUserId);
 ```
 
-### 2. 条件重试判定与快速短路（Fast-Fail）
+---
 
-在实际业务中，只有部分瞬态故障（如 `TIMEOUT`、`NETWORK_ERROR`）才应重试；而业务参数错误（如 `INVALID_ACCOUNT`、`BALANCE_NOT_ENOUGH`）若盲目重试不仅无意义，还会白白消耗线程与资源：
+## 高级定制：`FlowRetryPolicy.builder()` 详解
+
+在实际生产场景中，并非所有失败都适合重试。盲目重试非瞬态错误（如“参数错误”、“账户不存在”）只会白白浪费系统线程与连接池。
+
+通过 `FlowRetryPolicy.builder()` 可以对重试最大次数、退避算法、条件白名单/黑名单以及动态命名策略进行细粒度控制：
 
 ```java
 import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.retry.FlowRetryPolicy;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 
-FlowRetryPolicy<OrderRequest> conditionalPolicy = FlowRetryPolicy.<OrderRequest>builder()
+FlowRetryPolicy<OrderRequest> customPolicy = FlowRetryPolicy.<OrderRequest>builder()
+        // 1. 设置最大尝试总次数（包含初次执行，必须 >= 1）
         .maxAttempts(3)
+        
+        // 2. 绑定退避算法（如带抖动的指数退避：初始 100ms，2.0 倍增长，上限 1000ms）
         .backoff(Backoffs.exponentialJitter(100, 2.0, 1000))
-        // 方式 A：精准白名单（仅当错误码为 TIMEOUT 或 RPC_ERROR 时重试）
+        
+        // 3. 错误码精准白名单：仅在遇到 TIMEOUT 或 RPC_ERROR 时才触发重试
         .retryOnCodes("TIMEOUT", "RPC_ERROR")
-        // 方式 B：精准黑名单（命中 AUTH_FAILED 或 PARAM_ERROR 时绝不重试）
-        // .abortOnCodes("AUTH_FAILED", "PARAM_ERROR")
-        // 方式 C：自定义谓词函数
-        // .retryPredicate(failure -> failure.message().contains("Connection reset"))
+        
+        // 4. 或：错误码精准黑名单（遇到以下错误码绝不重试，直接快速失败）
+        // .abortOnCodes("INVALID_PARAM", "AUTH_FAILED", "BALANCE_NOT_ENOUGH")
+        
+        // 5. 或：自定义高级谓词判定（可检查异常信息、根因类型等）
+        // .retryOn(failure -> failure.cause() instanceof java.net.SocketTimeoutException)
         .build();
 
 Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
-        .persistentPolicy(conditionalPolicy, OrderRequest::getUserId);
+        .persistentPolicy(customPolicy, OrderRequest::getUserId);
 ```
 
-### 3. 动态配置规则与热重载
+### Builder 各配置方法核心作用与原理解析
+
+| Builder 配置方法 | 参数类型 | 默认行为 | 核心作用与业务场景 |
+| :--- | :--- | :--- | :--- |
+| **`maxAttempts(int)`** | `Integer` | `3`（或由动态策略决定） | **最大尝试总次数（含首次执行）**。<br/>若设为 3，代表“1 次初试 + 最多 2 次重试”。超过此轮次后步骤以最终的 `Outcome.Failed` 退出。 |
+| **`backoff(Backoff)`** | `Backoff` | `Backoffs.fixed(1000)` | **退避算法实例**。<br/>指定每次重试之间的等待延迟计算器。支持 `fixed`（固定）、`exponential`（指数）、`exponentialJitter`（抖动）及 `increment`（等差）。 |
+| **`retryOnCodes(String...)`** | `String...` | 无限制（所有 Failed 均重试） | **错误码白名单匹配（推荐）**。<br/>仅当 `Failure.code()` 在指定清单中时才触发重试；遇到其他未列出的错误码直接快速失败短路（Fast-Fail）。 |
+| **`abortOnCodes(String...)`** | `String...` | 无限制 | **错误码黑名单匹配**。<br/>当命中业务参数错误、鉴权失败等确定性错误码时立即终止重试，向外透传失败。 |
+| **`retryOn(...)` / `retryPredicate(...)`** | `Predicate<Failure>` | `failure -> true` | **自定义条件谓词**。<br/>支持根据 `Failure` 中的根因异常 `cause()`、详细键值对 `details()` 或错误描述信息进行深度定制判定。 |
+| **`policyName(String)`** | `String` | `null` | **动态策略规则标识**。<br/>指定策略名称后，框架会尝试从配置中心（`DynamicRetryPolicyRegistry`）或命名注册表动态拉取规则，实现线上免重启热更新。 |
+| **`namedRegistry(...)`** | `NamedRetryPolicyRegistry` | 全局单例注册表 | **自定义命名注册表**。<br/>用于多租户或隔离场景下查找指定名称的重试规则模板。 |
+
+---
+
+## 动态配置规则与热重载
 
 支持从内存注册表（`NamedRetryPolicyRegistry`）或配置中心（`DynamicRetryPolicyRegistry`）按名称动态加载重试参数，修改配置即刻热生效：
 
