@@ -27,7 +27,7 @@ public interface JacksonModuleContributor {
 
 ## 扩展与注册步骤
 
-### 1. 编写贡献者实现类
+### 编写贡献者实现类
 
 例如注册 Java 8 时间模块 `JavaTimeModule`：
 
@@ -47,7 +47,7 @@ public class JavaTimeModuleContributor implements JacksonModuleContributor {
 }
 ```
 
-### 2. 在 SPI 描述文件中声明
+### 在 SPI 描述文件中声明
 
 在 `src/main/resources/META-INF/services/com.team4u.framework.serializer.json.jackson.JacksonModuleContributor` 文件中添加实现类的全限定名：
 

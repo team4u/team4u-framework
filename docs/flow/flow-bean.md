@@ -55,7 +55,7 @@
 
 ## Spring 环境接入实践
 
-### 1. 声明 Spring Bean 业务组件
+### 声明 Spring Bean 业务组件
 
 业务操作直接使用 `@Component` 或 `@Service` 声明，支持 `@Autowired` 依赖注入与 `@Transactional` 事务注解：
 
@@ -106,7 +106,7 @@ public class PaymentOperation implements Operation<OrderRequest, Receipt> {
 }
 ```
 
-### 2. 装配与编译 Flow
+### 装配与编译 Flow
 
 通过 `@Import(Team4uBeanConfiguration.class)` 桥接 Spring 容器至 `BeanManager`，并在 `@Configuration` 中完成 Flow 定义与编译：
 
@@ -139,7 +139,7 @@ public class OrderFlowConfiguration {
 }
 ```
 
-### 3. 业务 Service 调用
+### 业务 Service 调用
 
 ```java
 @Service

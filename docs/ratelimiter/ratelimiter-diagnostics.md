@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 结果模型：`RateLimitResult`
+## 结果模型：`RateLimitResult`
 
 每次调用限流引擎时，返回 `RateLimitResult`：
 
@@ -29,7 +29,7 @@ public final class RateLimitResult {
 
 ---
 
-## 2. 异常类型体系
+## 异常类型体系
 
 ```mermaid
 graph TD

@@ -2,7 +2,7 @@
 
 三个常见场景：短时网络抖动、支付后异步补偿、Spring 代理里的不可序列化上下文。
 
-## 1. 验证码短信：INLINE
+## 验证码短信：INLINE
 
 用户注册时必须当场知道验证码是否发送成功，所以选 INLINE。这里只重试网络超时，不重试参数错误。
 
@@ -39,7 +39,7 @@ public class SmsService {
 
 如果第一次超时、第二次成功，用户这次注册请求会成功，总共调用短信客户端两次。参数错误会立即抛出，不会浪费短信额度。
 
-## 2. 支付成功 Webhook：MANAGED
+## 支付成功 Webhook：MANAGED
 
 支付完成后要通知商户。用户请求不能一直等商户服务恢复，且服务重启后也必须继续补发，所以选 MANAGED。
 
@@ -132,7 +132,7 @@ public final class MerchantWebhookRecoveryHandler implements StringRecoveryHandl
 
 商户服务收到的通知可能会重复。例如 Worker 调用成功但结果写回前进程崩溃，任务会被再次接管。商户侧应按 `orderId` 或通知流水号判重；重复通知时直接确认，不要重复扣款或重复改库存。
 
-## 3. Spring 声明式代理：忽略请求上下文
+## Spring 声明式代理：忽略请求上下文
 
 银行打款方法中携带 `HttpServletRequest`。HTTP 请求对象不能跨进程恢复，所以用 `@RetryIgnore` 排除：
 

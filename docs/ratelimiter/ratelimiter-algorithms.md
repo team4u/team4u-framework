@@ -17,7 +17,7 @@
 
 ---
 
-## 1. 令牌桶算法 (`TokenBucketAlgorithm`)
+## 令牌桶算法 (`TokenBucketAlgorithm`)
 
 ```mermaid
 graph TD
@@ -46,7 +46,7 @@ RateLimitRule rule = RateLimitRule.builder()
 
 ---
 
-## 2. 滑动窗口算法 (`SlidingWindowAlgorithm`)
+## 滑动窗口算法 (`SlidingWindowAlgorithm`)
 
 固定窗口在窗口交界处（如 00:59 和 01:00）可能允许 2 倍于限流阈值的突发请求（临界突刺问题）。滑动窗口通过细分子时间格（Sub-buckets），动态计算当前滑动区间内的请求总和：
 
@@ -70,7 +70,7 @@ RateLimitRule rule = RateLimitRule.builder()
 
 ---
 
-## 3. 历史路径窗口算法 (`HistoryWindowAlgorithm`)
+## 历史路径窗口算法 (`HistoryWindowAlgorithm`)
 
 在复杂的安全风控体系中，攻击者往往针对某一特定子路径发起攻击。历史路径算法结合层级路径（如 `/api/order/create`）与衰减权重，支持父子路径联动限流：
 

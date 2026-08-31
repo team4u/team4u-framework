@@ -16,7 +16,7 @@ graph TD
 
 ---
 
-## 1. 监听 Bean 初始化事件：`BeanInitializedEvent`
+## 监听 Bean 初始化事件：`BeanInitializedEvent`
 
 当一个 Bean 被成功加载至 `BeanManager` 时，会触发 `BeanInitializedEvent`：
 
@@ -39,7 +39,7 @@ EventDispatcher.getInstance().registerListener(BeanInitializedEvent.class, event
 
 ---
 
-## 2. 自定义业务事件分发
+## 自定义业务事件分发
 
 `EventDispatcher` 也可作为轻量级应用内事件总线使用：
 

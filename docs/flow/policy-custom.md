@@ -8,7 +8,7 @@
 
 ---
 
-## 1. 无状态策略契约：`Policy<K>`
+## 无状态策略契约：`Policy<K>`
 
 ### 接口契约与调用时序
 
@@ -103,7 +103,7 @@ public class UserAuthPolicy implements Policy<String> {
 
 ---
 
-## 2. 有状态持久化策略契约：`PersistentPolicy<K, S>`
+## 有状态持久化策略契约：`PersistentPolicy<K, S>`
 
 当策略需要在多轮尝试之间**维护不可变状态（State）、计算唤醒时刻（`wakeAt`）、支持 Durable 检查点存储**时，实现 `PersistentPolicy<K, S>`。
 
@@ -201,7 +201,7 @@ public class CustomBackoffPolicy implements PersistentPolicy<String, CustomBacko
 
 ---
 
-## 3. Spring 容器集成与依赖注入
+## Spring 容器集成与依赖注入
 
 若自定义策略需要注入 Spring Bean（如 DAO、RedisTemplate、RPC 客户端等），可配合 [`team4u-flow-bean`](flow-bean.md) 在编译期自动完成依赖注入与 AOP 代理保留：
 

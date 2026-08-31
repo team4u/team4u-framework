@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 动态上下文提取：`ContextProperties`
+## 动态上下文提取：`ContextProperties`
 
 `ContextProperties` 允许从当前业务线程、RPC 请求头、HTTP Header 或 Spring Security 上下文中提取多维特征：
 
@@ -24,7 +24,7 @@ String compositeKey = props.resolveKey("tenant:${tenantId}:user:${userId}");
 
 ---
 
-## 2. 分层路径限流：`HistoryPaths`
+## 分层路径限流：`HistoryPaths`
 
 `HistoryPaths` 支持树形分层路径的限流统计与继承：
 

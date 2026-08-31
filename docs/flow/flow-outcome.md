@@ -92,7 +92,7 @@ classDiagram
     }
 ```
 
-### 1. `Reason`：领域业务原因（用于 `Rejected` 与 `Skipped`）
+### `Reason`：领域业务原因（用于 `Rejected` 与 `Skipped`）
 
 `Reason` 代表业务预期的判定理由，不包含技术异常堆栈：
 
@@ -112,7 +112,7 @@ String message = r2.message();              // "超出单日转账限额"
 Map<String, String> details = r2.details(); // {"currentLimit": "50000", ...}
 ```
 
-### 2. `Failure`：系统故障诊断（用于 `Failed`）
+### `Failure`：系统故障诊断（用于 `Failed`）
 
 `Failure` 代表技术故障与系统异常，支持绑定底层根因异常 `Throwable`：
 
@@ -140,7 +140,7 @@ try {
 
 `Outcome<T>` 具备严格的函子（Functor）代数性质，支持安全类型转换与函数映射。
 
-### 1. `map` 函子变换
+### `map` 函子变换
 
 `map` 函数仅对 `Accepted` 状态应用转换器 `Function<? super T, ? extends R>`；若当前状态为 `Rejected`、`Skipped` 或 `Failed`，则安全转换泛型签名并**原样透传其内部的诊断对象**：
 
@@ -157,7 +157,7 @@ Outcome<String> rejected = Outcome.rejected(Reason.of("ERR", "业务拒绝"));
 Outcome<Integer> mappedReject = rejected.map(String::length);  // Rejected(ERR, "业务拒绝")
 ```
 
-### 2. 模式匹配与状态消费
+### 模式匹配与状态消费
 
 框架提供了 `kind()` 枚举方法以及传统的 `instanceof` 类型守卫，支持安全且完备的模式匹配：
 
@@ -189,7 +189,7 @@ switch (outcome.kind()) {
 
 ## 执行生命周期模型
 
-### 1. Local 执行生命周期：`FlowResult<O>`
+### Local 执行生命周期：`FlowResult<O>`
 
 Local 同步执行器产出 `FlowResult<O>`，它是一个三态闭集：
 
@@ -212,7 +212,7 @@ public abstract class FlowResult<O> {
 }
 ```
 
-### 2. Durable 持久化生命周期：`DurableResult<O>`
+### Durable 持久化生命周期：`DurableResult<O>`
 
 Durable 执行器产出 `DurableResult<O>`，它是一个四态闭集：
 

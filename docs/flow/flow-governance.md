@@ -117,7 +117,7 @@ modules/flow/
 └── criterion/      # team4u-flow-criterion (基于类 SQL 表达式的动态规则门控)
 ```
 
-### 1. 限流治理：`team4u-flow-ratelimiter`
+### 限流治理：`team4u-flow-ratelimiter`
 基于 [`team4u-ratelimiter`](../ratelimiter/README.md) 分布式限流组件：
 - **`RateLimitAction.FAIL`**：超限产出 `Gate.fail`，联动外层重试策略进行削峰排队；
 - **`RateLimitAction.REJECT`**：超限产出 `Gate.reject`，快速短路，不触发重试。
@@ -126,7 +126,7 @@ modules/flow/
 
 ---
 
-### 2. 重试与退避治理：`team4u-flow-retry`
+### 重试与退避治理：`team4u-flow-retry`
 基于 [`team4u-retry`](../retry/README.md) 退避算法引擎：
 - **多算法退避**：固定延迟（Fixed）、指数退避（Exponential）、随机抖动（Jitter，防重试风暴）、等差递增（Increment）；
 - **条件快速短路**：支持按白名单错误码（`retryOnCodes`）、黑名单（`abortOnCodes`）或自定义谓词快速失败；
@@ -136,7 +136,7 @@ modules/flow/
 
 ---
 
-### 3. 表达式规则门控：`team4u-flow-criterion`
+### 表达式规则门控：`team4u-flow-criterion`
 基于 [`team4u-criterion`](../criterion/README.md) 规则引擎：
 - **`CriterionPolicy`**：类 SQL 表达式准入拦截（`permitIf` / `rejectIf` / `failIf`）；
 - **`CriterionPredicate`**：在条件路由与分支中复用动态表达式谓词。
@@ -145,7 +145,7 @@ modules/flow/
 
 ---
 
-### 4. 自定义策略开发
+### 自定义策略开发
 开发者可通过实现 `Policy<K>` 或 `PersistentPolicy<K, S>` 轻松扩展专属业务治理逻辑，并支持 Spring 容器依赖注入。
 
 [查看专章详解：自定义治理策略开发指南](policy-custom.md)

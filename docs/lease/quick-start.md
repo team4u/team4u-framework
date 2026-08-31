@@ -2,7 +2,7 @@
 
 这条路径只需要 5 分钟：引入依赖，用 Memory 后端跑通第一个任务。生产使用的 JDBC 放在最后一节，第一次学习时可以先跳过。
 
-## 1. 引入依赖
+## 引入依赖
 
 ```xml
 <dependency>
@@ -14,7 +14,7 @@
 
 `team4u-lease-memory` 会传递引入 `team4u-lease`。Memory 后端把任务存在当前 JVM 里，进程退出后任务丢失，适合学习、开发和测试。
 
-## 2. 创建队列
+## 创建队列
 
 ```java
 InMemoryLeaseBackend backend = new InMemoryLeaseBackend();
@@ -23,7 +23,7 @@ TaskQueue orders = Leases.queue(backend, "orders");
 
 `orders` 是队列名。队列名会隔离任务、查询和管理操作；同一个后端可以创建多个不同队列。
 
-## 3. 提交任务
+## 提交任务
 
 ```java
 Submission submission = orders.submit(
@@ -38,7 +38,7 @@ System.out.println(submission.getTask().getStatus());
 - `type` 是任务类型，Worker 按它找到对应 handler；
 - `payload` 是字符串，通常放 JSON；组件不解析内容，你自己决定编码方式。
 
-## 4. 注册 handler 并启动 Worker
+## 注册 handler 并启动 Worker
 
 ```java
 TaskWorker worker = orders.worker()
@@ -58,7 +58,7 @@ TaskWorker worker = orders.worker()
 return TaskResult.retryAfter(Duration.ofSeconds(30));
 ```
 
-## 5. 观察任务状态
+## 观察任务状态
 
 ```java
 TaskSnapshot task = orders.get(submission.getTaskId())
@@ -82,7 +82,7 @@ for (int i = 0; i < 250; i++) {
 }
 ```
 
-## 6. 关闭 Worker
+## 关闭 Worker
 
 服务退出时调用：
 

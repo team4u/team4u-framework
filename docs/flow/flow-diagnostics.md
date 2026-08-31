@@ -44,7 +44,7 @@ graph TD
 
 ---
 
-## 1. 编译期静态校验诊断码 (`FlowBuildException`)
+## 编译期静态校验诊断码 (`FlowBuildException`)
 
 当调用 `Local.compile(flow)`、`BeanFlows.compile(flow)` 或 `DurableRuntime.compile(flow, ...)` 时，框架对拓扑结构与 Bean 契约进行严格静态扫描。若存在违规项，将聚合所有违规路径并抛出 `FlowBuildException`：
 
@@ -63,7 +63,7 @@ graph TD
 
 ---
 
-## 2. 运行时 Failed 失败诊断码 (`Failure.code()`)
+## 运行时 Failed 失败诊断码 (`Failure.code()`)
 
 当流程执行产生 `Outcome.Failed` 时，可通过 `failure.code()` 获取标准失败码：
 
@@ -83,7 +83,7 @@ graph TD
 
 ---
 
-## 3. 运行时 Skipped 弃权诊断码 (`Reason.code()`)
+## 运行时 Skipped 弃权诊断码 (`Reason.code()`)
 
 | 弃权码 | 触发场景 | 业务含义与处理建议 |
 | :--- | :--- | :--- |
@@ -92,7 +92,7 @@ graph TD
 
 ---
 
-## 4. Durable 持久化异常 (`DurableException.Error`)
+## Durable 持久化异常 (`DurableException.Error`)
 
 | 错误码 | 严重级别 | 根本原因 | 运维处理指引 |
 | :--- | :--- | :--- | :--- |

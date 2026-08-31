@@ -4,7 +4,7 @@
 
 ---
 
-## 1. 覆盖的核心热路径
+## 覆盖的核心热路径
 
 - `CriterionMatchBenchmark`：测试两条路径：针对复用 Map `MatchContext` 的预编译逻辑/属性表达式（`age >= 18 && status == 'ACTIVE'`），以及针对复用数值 `MatchContext` 的预编译主体数值表达式（`it > 18`）。测试方法仅执行 `MatchPredicate.test`。
 - `RouterRouteBenchmark`：基于预构建 `MatchContext` 进行预构建 `ExpressionRouter` / `RoutePolicy` 路由决策；被测方法中不执行策略解析。
@@ -15,7 +15,7 @@
 
 ---
 
-## 2. 复现方法
+## 复现方法
 
 在安装当前 Reactor 构件后，从仓库根目录打包，然后在 `benchmarks/` 目录下运行：
 
@@ -35,7 +35,7 @@ java -jar target/benchmarks.jar ProxyDelegateBenchmark -prof gc -f 1 -wi 3 -i 5 
 
 ---
 
-## 3. 实测结果记录
+## 实测结果记录
 
 于 2026-08-29 在完整合并候选分支上记录：工作区 `.worktrees/framework-convergence`（分支 `refactor/framework-convergence`），测试环境与命令与基准线保持一致（参见 `results/environment.txt`）。
 

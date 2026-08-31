@@ -22,7 +22,7 @@ graph TD
 
 ---
 
-## 1. `DurableStore` SPI 接口契约
+## `DurableStore` SPI 接口契约
 
 `DurableStore` 仅包含两个核心方法：
 
@@ -55,7 +55,7 @@ public interface DurableStore {
 
 ---
 
-## 2. 内存存储实现：`InMemoryDurableStore`
+## 内存存储实现：`InMemoryDurableStore`
 
 位于 `team4u-flow-durable` 核心包内，基于 `ConcurrentHashMap` 实现，适合单元测试、集成验证与本地快速原型开发：
 
@@ -70,7 +70,7 @@ DurableRuntime runtime = DurableRuntime.builder(memoryStore)
 
 ---
 
-## 3. 生产级适配：`KvDurableStore` (`team4u-flow-durable-kv`)
+## 生产级适配：`KvDurableStore` (`team4u-flow-durable-kv`)
 
 在生产环境中，流程快照需要持久化至外部存储（如 Redis、MySQL、PostgreSQL 等），并在分布式多实例部署时支持集群协同。
 
@@ -153,7 +153,7 @@ public class DurableFlowAutoConfiguration {
 
 ---
 
-## 4. 常见后端存储方案选型与表结构设计
+## 常见后端存储方案选型与表结构设计
 
 | 后端方案 | 适用场景 | 架构优势 | 运维注意事项 |
 | :--- | :--- | :--- | :--- |

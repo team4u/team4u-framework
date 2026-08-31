@@ -69,7 +69,7 @@ graph TD
 
 ## 编排使用指南与代码示例
 
-### 1. 基础用法：指数与随机抖动退避
+### 基础用法：指数与随机抖动退避
 
 ```java
 import com.team4u.framework.flow.Flow;
@@ -136,7 +136,7 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
 
 在生产环境中，硬编码重试参数会导致遇到下游故障变更时必须重新打包发布代码。`team4u-flow-retry` 支持通过**策略名称（`policyName`）**从配置中心或内存注册表动态拉取重试规则，并在后台自动监听配置变更，实现**免重启秒级热生效**。
 
-### 1. 流程中声明绑定策略名称
+### 流程中声明绑定策略名称
 
 ```java
 import com.team4u.framework.flow.Flow;
@@ -149,7 +149,7 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
 
 ---
 
-### 2. 配置中心下发规则配置
+### 配置中心下发规则配置
 
 框架基于 [`team4u-config`](../config/README.md) 配置中心组件动态解析规则。
 
@@ -197,7 +197,7 @@ $$\text{Key} = \text{retry.policy.} + \text{policyName}$$
 
 ---
 
-### 3. 本地代码内存注册静态兜底（可选）
+### 本地代码内存注册静态兜底（可选）
 
 如果应用在某些环境（如本地测试）未连接配置中心，可以通过 `NamedRetryPolicyRegistry` 注册静态默认策略：
 
@@ -217,7 +217,7 @@ NamedRetryPolicyRegistry.global().register("order-charge-retry", () ->
 
 ---
 
-### 4. 运行期多级查找与降级优先级
+### 运行期多级查找与降级优先级
 
 当流程节点执行失败准备重试时，`FlowRetryPolicy` 按以下优先级解析生效参数：
 
@@ -251,7 +251,7 @@ graph TD
 
 很多初次接触 Durable 的开发者对 **“将 FlowRetryState 写入存储标记 ACTIVE 附带 wakeAt，随后立即释放工作线程退出”** 这句话感到困惑。下面通过全流程图解、快照结构与后台调度器代码彻底讲透其底层机制。
 
-### 1. 全流程执行时序图
+### 全流程执行时序图
 
 ```mermaid
 sequenceDiagram
@@ -284,7 +284,7 @@ sequenceDiagram
 
 ---
 
-### 2. 数据库快照表状态直观展示
+### 数据库快照表状态直观展示
 
 在 5 分钟的退避等待期间，数据库（如 MySQL 快照表 `flow_durable_snapshot`）中的记录如下：
 
@@ -298,7 +298,7 @@ sequenceDiagram
 
 ---
 
-### 3. 后台定时唤醒调度器实战代码（结合 `team4u-kv-lock` 分布式锁）
+### 后台定时唤醒调度器实战代码（结合 `team4u-kv-lock` 分布式锁）
 
 在分布式多实例部署环境下，为了防止多个节点同时执行定时扫描产生重复唤醒，推荐使用框架原生的分布式锁组件 [`team4u-kv-lock`](../kv/kv-lock.md)（基于 `KvLockManager`）确保单实例调度：
 
@@ -370,11 +370,11 @@ public class DurableWakeScheduler {
 
 ## 关键语义与幂等保证
 
-### 1. 仅对 `Failed` 状态重试
+### 仅对 `Failed` 状态重试
 - 若步骤返回 `Accepted`（成功）、`Rejected`（业务拒绝）或 `Skipped`（弃权跳过），框架均视为确定性的业务结论，**绝对不触发重试**；
 - 避免了将业务层面的正常拦截误判为系统异常。
 
-### 2. 稳定的幂等键 (`invocationId`)
+### 稳定的幂等键 (`invocationId`)
 节点在初次执行以及后续的所有重试轮次中，`context.invocationId()` 格式严格保持恒定：
 $$\text{invocationId} = \text{flowId} : \text{flowVersion} : \text{executionId} : \text{nodePath}$$
 

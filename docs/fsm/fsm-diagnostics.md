@@ -42,20 +42,20 @@ graph TD
     E_BASE --> E_EXE
 ```
 
-### 1. 构建期定义异常：`StateMachineDefinitionException`
+### 构建期定义异常：`StateMachineDefinitionException`
 
 在调用 `.build()` 阶段抛出，用于拦截非法的状态机拓扑：
 - **未完成迁移**：声明了 `from(...).on(...)` 但未指定目标状态 `to(...)`；
 - **空规则集合**：状态机未包含任何迁移规则；
 - **同桶不可达规则**：在无条件规则后声明了后续死规则。
 
-### 2. 运行时拒绝异常：`TransitionRejectedException`
+### 运行时拒绝异常：`TransitionRejectedException`
 
 当使用严格模式调用 `machine.fireOrThrow(...)` 且迁移被拒绝时抛出：
 - 包含来源状态 `sourceState`、触发事件 `event` 与机器标识 `machineId`；
 - 表示业务非法操作（例如尝试对已取消的订单发起发货）。
 
-### 3. 运行时执行异常：`TransitionExecutionException`
+### 运行时执行异常：`TransitionExecutionException`
 
 当 Guard 评估或 Action 执行过程中发生代码抛错时抛出：
 - 封装了底层真实的 `cause` 根因异常；

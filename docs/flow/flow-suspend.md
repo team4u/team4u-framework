@@ -32,7 +32,7 @@ sequenceDiagram
 
 ---
 
-## 1. 声明挂起点与续接数据模型
+## 声明挂起点与续接数据模型
 
 ### 声明强类型挂起点：`ResumePoint<R>`
 
@@ -69,7 +69,7 @@ Flow<OrderRequest, OrderReceipt> approvalFlow = Flow.<OrderRequest>identity()
 
 ---
 
-## 2. Local 挂起句柄：`Suspension<O>`
+## Local 挂起句柄：`Suspension<O>`
 
 当 Local 执行器遇到 `AWAIT` 节点时，执行器立即释放当前线程，并返回一个 `FlowResult.Suspended` 实例：
 
@@ -94,7 +94,7 @@ if (result instanceof FlowResult.Suspended) {
 
 ---
 
-## 3. Spring 控制层 Webhook 异步回调完整实战
+## Spring 控制层 Webhook 异步回调完整实战
 
 以下是在生产 Spring Boot 应用中，如何优雅地将 Local 流程与外部 Webhook 回调打通的完整代码：
 
@@ -175,7 +175,7 @@ public class OrderApprovalController {
 
 ---
 
-## 4. 恢复执行 API 契约
+## 恢复执行 API 契约
 
 Local 执行器提供同步与异步两种恢复方式：
 
@@ -186,7 +186,7 @@ Local 执行器提供同步与异步两种恢复方式：
 
 ---
 
-## 5. 协作式取消令牌：`Cancellation`
+## 协作式取消令牌：`Cancellation`
 
 `Cancellation` 是 `team4u-flow` 的轻量级协作式取消令牌，用于跨线程、跨层级安全取消正在运行的流程。
 
@@ -231,7 +231,7 @@ if (result instanceof FlowResult.Cancelled) {
 
 ---
 
-## 6. 挂起与取消的时序竞态防御
+## 挂起与取消的时序竞态防御
 
 在并发高压环境下，可能出现“调用方刚刚触发 `cancel()`，而执行器正好在进入 `await()` 挂起节点”的极端时序竞态。
 

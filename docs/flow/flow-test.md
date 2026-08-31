@@ -16,7 +16,7 @@
 
 ---
 
-## 1. 业务操作打桩 (`OperationStub`)
+## 业务操作打桩 (`OperationStub`)
 
 ### 桩对象工厂方法
 
@@ -81,7 +81,7 @@ for (OperationStub.Call<String> call : flaky.calls()) {
 
 ---
 
-## 2. 控制策略打桩 (`PolicyStub`)
+## 控制策略打桩 (`PolicyStub`)
 
 ```java
 import com.team4u.framework.flow.test.PolicyStub;
@@ -102,7 +102,7 @@ System.out.println(proceeding.afterCount());  // 1
 
 ---
 
-## 3. 事件轨迹收集 (`TraceCollector`)
+## 事件轨迹收集 (`TraceCollector`)
 
 `TraceCollector` 是线程安全的 `FlowObserver` 实现，用于捕获流程执行轨迹并在单测中进行顺序断言：
 
@@ -129,7 +129,7 @@ List<String> paths = collector.nodePaths(FlowObserver.Type.NODE_STARTED);
 
 ---
 
-## 4. 流程断言库 (`FlowAssertions`)
+## 流程断言库 (`FlowAssertions`)
 
 ### Local 执行结果断言 (`FlowResult`)
 
@@ -161,7 +161,7 @@ FlowAssertions.assertCancelled(durableResult);
 
 ---
 
-## 5. 本地执行夹具 (`LocalFixture`)
+## 本地执行夹具 (`LocalFixture`)
 
 ```java
 import com.team4u.framework.flow.test.LocalFixture;
@@ -184,7 +184,7 @@ FlowAssertions.assertAccepted(finalResult, "approved");
 
 ---
 
-## 6. 持久化执行夹具 (`DurableFixture`)
+## 持久化执行夹具 (`DurableFixture`)
 
 ```java
 import com.team4u.framework.flow.test.DurableFixture;
@@ -216,7 +216,7 @@ FlowAssertions.assertCompleted(recovered);
 
 ---
 
-## 7. 并行重叠验证屏障 (`ParallelBarrier`)
+## 并行重叠验证屏障 (`ParallelBarrier`)
 
 `ParallelBarrier` 基于并发计数器与等待屏障，用于严格验证 Local 并行分支是否真正实现了**多线程并发执行（而非串行推进）**：
 

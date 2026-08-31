@@ -66,7 +66,7 @@ $$\text{invocationId} = \text{flowId} : \text{flowVersion} : \text{executionId} 
 
 ---
 
-## 1. INVOKE 节点（业务调用）
+## INVOKE 节点（业务调用）
 
 `INVOKE` 节点是业务逻辑执行的最小原子单元，负责调用绑定的 `Operation`。
 
@@ -111,7 +111,7 @@ Flow<OrderState, OrderState> flow = Flow.<OrderState>identity().use(
 
 ---
 
-## 2. SEQUENCE 节点（顺序流水线）
+## SEQUENCE 节点（顺序流水线）
 
 `SEQUENCE` 节点按声明顺序串联子节点列表。
 
@@ -140,7 +140,7 @@ Flow<Order, Order> scopedFlow = Flow.scope("inventory-scope",
 
 ---
 
-## 3. ROUTE 节点（条件路由）
+## ROUTE 节点（条件路由）
 
 `ROUTE` 节点通过路由选择器计算路由键，按精确 `equals` 匹配分支。
 
@@ -162,7 +162,7 @@ Flow<OrderRequest, Receipt> routedFlow = Flow
 
 ---
 
-## 4. FALLBACK 节点（降级与恢复）
+## FALLBACK 节点（降级与恢复）
 
 `FALLBACK` 节点按触发条件在候选分支序列中切换，包含两种底层触发器：
 
@@ -180,18 +180,18 @@ graph TD
     end
 ```
 
-### 1. SKIPPED 触发器（`firstApplicable` 与 `thenOptional`）
+### SKIPPED 触发器（`firstApplicable` 与 `thenOptional`）
 - 依次执行候选分支；
 - 遇到 `Skipped` 时，消费弃权信号并尝试下一个候选分支；
 - 遇到 `Accepted`、`Rejected` 或 `Failed` 时立即胜出作为最终结果。
 
-### 2. FAILED 触发器（`recoverWith`）
+### FAILED 触发器（`recoverWith`）
 - 主流程正常完成（`Accepted` / `Rejected` / `Skipped`）时原样透传；
 - 主流程返回 `Failed` 时，将原始输入与 `Failure` 封装为 `Recovery<I>`，交由恢复分支执行补偿。
 
 ---
 
-## 5. PARALLEL 节点（并行分支）
+## PARALLEL 节点（并行分支）
 
 `PARALLEL` 节点支持同时分发多个独立分支，并在全部完成后由 `JoinStrategy` 进行汇合。
 
@@ -214,7 +214,7 @@ Flow<Order, CheckoutResult> parallelFlow = Flow.<Order>parallel(riskBranch, stoc
 
 ---
 
-## 6. AWAIT 节点（挂起等待）
+## AWAIT 节点（挂起等待）
 
 `AWAIT` 节点显式将当前执行挂起，等待外部系统注入恢复信号（Signal）。
 
@@ -238,7 +238,7 @@ Flow<ExpenseRequest, ExpenseReport> flow = Flow.<ExpenseRequest>identity()
 
 ---
 
-## 7. CONTROL 节点（治理控制）
+## CONTROL 节点（治理控制）
 
 `CONTROL` 节点包裹在业务子流程外部，提供洋葱圈式的横切治理能力。包含三种纯粹控制形态（`ControlKind`）：
 
@@ -250,7 +250,7 @@ Flow<ExpenseRequest, ExpenseReport> flow = Flow.<ExpenseRequest>identity()
 
 ---
 
-## 8. COMPLETE 节点（常数终态）
+## COMPLETE 节点（常数终态）
 
 `COMPLETE` 节点用于快速构建静态常量结果或恒等透传节点，无需编写单独的 `Operation`：
 

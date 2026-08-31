@@ -20,7 +20,7 @@ graph TD
 
 ---
 
-## 1. 基础构建 API
+## 基础构建 API
 
 ### 声明构建器
 
@@ -38,7 +38,7 @@ StateMachine<OrderState, OrderEvent, OrderContext> machine = StateMachine
 
 ---
 
-## 2. 状态与事件配置方法
+## 状态与事件配置方法
 
 ### 来源状态配置
 
@@ -63,7 +63,7 @@ StateMachine<OrderState, OrderEvent, OrderContext> machine = StateMachine
 
 ---
 
-## 3. 四层匹配优先级机制（Layered Matching Priority）
+## 四层匹配优先级机制（Layered Matching Priority）
 
 当一个事件发生时，状态机按照严格的**四层优先级从高到低**进行规则查找：
 
@@ -87,7 +87,7 @@ graph TD
 
 ---
 
-## 4. 构建期静态校验与防呆规则
+## 构建期静态校验与防呆规则
 
 调用 `.build()` 时，构建器执行严格的拓扑完整性校验：
 

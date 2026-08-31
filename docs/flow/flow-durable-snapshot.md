@@ -142,15 +142,15 @@ graph TD
     CSM -->|"复杂业务 DTO / POJO"| SSM["SerializerStateMapper (JSON / 外部序列化桥接)"]
 ```
 
-### 1. `DefaultStateMapper`
+### `DefaultStateMapper`
 - 处理常见标量：`String`、`Integer`、`Long`、`Double`、`Boolean`、`byte[]`、`Instant`；
 - 零第三方依赖，极速原生二进制转换，严格保证确定性。
 
-### 2. `SerializerStateMapper`
+### `SerializerStateMapper`
 - 桥接外部序列化引擎（如 Jackson、Fastjson 等）；
 - 支持类型注册与安全反序列化。
 
-### 3. 生产级确定性 Jackson 复合映射器配置
+### 生产级确定性 Jackson 复合映射器配置
 
 在 Spring / 生产环境中，通常将开启了键排序的 Jackson 与 Default 组合为复合映射器：
 

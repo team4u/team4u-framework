@@ -48,7 +48,7 @@ graph TD
 
 ## 编排使用指南与代码示例
 
-### 1. 基础用法（默认 FAIL 模式）
+### 基础用法（默认 FAIL 模式）
 
 通过 `RateLimitPolicies.of` 绑定限流检查点，默认使用 `FAIL` 模式（每次扣减 1 个令牌）：
 
@@ -61,7 +61,7 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
         .policy(RateLimitPolicies.of("order.charge", OrderRequest::getUserId));
 ```
 
-### 2. 拒绝模式（快速短路，绝不重试）
+### 拒绝模式（快速短路，绝不重试）
 
 当需要对高频恶意流量或超出容量的非关键请求实施即时拒绝时，使用 `RateLimitPolicies.reject`：
 
@@ -153,7 +153,7 @@ graph TD
 
 ---
 
-### 1. 超限拦截场景：写入诊断并在流程外/流程内提取
+### 超限拦截场景：写入诊断并在流程外/流程内提取
 
 #### 第一步：在策略工厂中捕获并封装进 `Failure`
 
@@ -232,7 +232,7 @@ Flow<OrderRequest, Receipt> resilientFlow = Flow.step(chargeOperation)
 
 ---
 
-### 2. 正常放行场景：在业务步骤中只读查询当前配额
+### 正常放行场景：在业务步骤中只读查询当前配额
 
 当请求成功通过限流放行后，如果后续的业务 `Operation` 需要感知当前剩余多少配额（如将剩余可用次数展示给用户）：
 
@@ -305,7 +305,7 @@ Flow<OrderRequest, Receipt> protectedFlow = Flow.step(chargeOperation)
 
 限流引擎支持通过配置中心（[`team4u-config`](../config/README.md)）动态下发限流算法与阈值配置。当配置中心的规则发生变更时，引擎在后台自动监听并热重载规则，**无需重启服务即可秒级生效**。
 
-### 1. 配置键（Key）命名约定
+### 配置键（Key）命名约定
 
 一个限流检查点（`point`）对应配置中心的一个配置键：
 $$\text{Key} = \text{team4u.ratelimiter.} + \text{point}$$
@@ -314,7 +314,7 @@ $$\text{Key} = \text{team4u.ratelimiter.} + \text{point}$$
 
 ---
 
-### 2. 配置值（Value）JSON 规则数组定义
+### 配置值（Value）JSON 规则数组定义
 
 配置中心的值为该检查点对应的 **JSON 规则数组**（支持配置多条规则分层拦截）：
 

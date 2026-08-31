@@ -21,7 +21,7 @@
 
 ---
 
-## 1. `then` 顺序流转与短路机制
+## `then` 顺序流转与短路机制
 
 顺序流水线（`Sequence`）采用**“仅 Accepted 推进”**的严格规则：
 
@@ -50,7 +50,7 @@ Flow<OrderRequest, Receipt> pipeline = Flow.step(validateOrderOp)   // 若 Rejec
 
 ---
 
-## 2. `Skipped` 弃权的三大消费机制
+## `Skipped` 弃权的三大消费机制
 
 `Skipped` 表示“当前节点或分支不适用于当前输入”。它是四态中**唯一可以在框架内部被算子捕获并消费**的状态。框架定义了三个标准的消费边界：
 
@@ -141,7 +141,7 @@ Flow<Order, String> routed = Flow.route(Order::getCategory)
 
 ---
 
-## 3. `Failed` 失败与 `recoverWith` 补偿机制
+## `Failed` 失败与 `recoverWith` 补偿机制
 
 当节点发生技术故障、RPC 超时或未受检异常时，节点返回 `Outcome.failed(Failure)`。通过 `recoverWith` 可以在 Failed 边界实施补偿、回滚或降级恢复：
 
@@ -196,7 +196,7 @@ Flow<OrderRequest, Receipt> paymentWithCompensation = Flow.step(chargePaymentOp)
 
 ---
 
-## 4. 异常安全收敛网
+## 异常安全收敛网
 
 在 `team4u-flow` 中，业务 `Operation` 内部允许自由抛出任何受检或未受检异常：
 

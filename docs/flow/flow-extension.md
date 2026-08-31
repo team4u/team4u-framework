@@ -23,7 +23,7 @@
 
 ---
 
-## 1. 业务操作扩展 (`Operation`)
+## 业务操作扩展 (`Operation`)
 
 `Operation` 是承载业务逻辑的核心扩展点：
 
@@ -41,7 +41,7 @@ public interface Operation<I, O> {
 
 ---
 
-## 2. 治理控制扩展 (`Policy` 与 `PersistentPolicy`)
+## 治理控制扩展 (`Policy` 与 `PersistentPolicy`)
 
 ### 无状态策略：`Policy<K>`
 
@@ -76,7 +76,7 @@ public interface PersistentPolicy<K, S> {
 
 ---
 
-## 3. 并行汇聚扩展 (`JoinStrategy`)
+## 并行汇聚扩展 (`JoinStrategy`)
 
 ```java
 @FunctionalInterface
@@ -100,7 +100,7 @@ JoinStrategy<String> customStrategy = results -> {
 
 ---
 
-## 4. 容器解析扩展 (`OperationResolver`)
+## 容器解析扩展 (`OperationResolver`)
 
 ```java
 public interface OperationResolver {
@@ -115,7 +115,7 @@ public interface OperationResolver {
 
 ---
 
-## 5. 状态编解码扩展 (`StateMapper`)
+## 状态编解码扩展 (`StateMapper`)
 
 在 Durable 持久化模式下，`StateMapper` 负责业务对象与字节载荷之间的确定性编解码：
 
@@ -154,7 +154,7 @@ public class JacksonStateMapper implements StateMapper {
 
 ---
 
-## 6. 快照存储扩展 (`DurableStore`)
+## 快照存储扩展 (`DurableStore`)
 
 若不使用 `team4u-flow-durable-kv`，可直接实现 `DurableStore` 适配原生数据库：
 
@@ -185,7 +185,7 @@ public class JdbcDurableStore implements DurableStore {
 
 ---
 
-## 7. 全链路观察者扩展 (`FlowObserver` 与 `DurableObserver`)
+## 全链路观察者扩展 (`FlowObserver` 与 `DurableObserver`)
 
 ```java
 import com.team4u.framework.flow.api.FlowObserver;
@@ -205,7 +205,7 @@ public class LoggingFlowObserver implements FlowObserver {
 
 ---
 
-## 8. 双投影 SPI：可执行合同与结构描述
+## 双投影 SPI：可执行合同与结构描述
 
 `Flow<I, O>` 对外提供两条职责严格隔离的投影通道：
 

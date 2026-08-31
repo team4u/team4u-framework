@@ -62,7 +62,7 @@ String textTree = FlowDiagrams.text().render(description);
 
 为了直观展示 `team4u-flow-diagram` 的渲染效果，下面以一个包含 **前置拦截、动态路由、人工审批挂起、并行资源锁定、超时治理与失败降级** 的典型复杂业务流程为例，演示从 DSL 编排到实际渲染输出的全过程。
 
-### 1. 业务流程编排定义 (Java DSL)
+### 业务流程编排定义 (Java DSL)
 
 ```java
 package com.example.order;
@@ -152,7 +152,7 @@ public class OrderFulfillmentExample {
 }
 ```
 
-### 2. 真实效果：Mermaid 流程图 (Live Graph)
+### 真实效果：Mermaid 流程图 (Live Graph)
 
 > [!TIP]
 > 下图由 `FlowDiagrams.mermaid().render(desc)` 生成的标准 Mermaid 脚本直接渲染呈现。
@@ -219,7 +219,7 @@ flowchart TD
     n15 --> flow_end
 ```
 
-### 3. 真实效果：紧凑文本树 (Text Tree)
+### 真实效果：紧凑文本树 (Text Tree)
 
 `FlowDiagrams.text().render(desc)` 生成的先序遍历文本树，每一行代表 AST 中的一个只读节点。非常适合输出在生产环境控制台日志、排障工具或 CI/CD 自动化测试断言中：
 

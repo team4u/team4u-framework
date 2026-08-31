@@ -44,7 +44,7 @@ graph TD
 
 ## 执行 API 契约与线程绑定
 
-### 1. 同步执行：`run`
+### 同步执行：`run`
 
 ```java
 LocalExecutable<OrderRequest, Receipt> executable = Local.compile(flow);
@@ -53,7 +53,7 @@ LocalExecutable<OrderRequest, Receipt> executable = Local.compile(flow);
 FlowResult<Receipt> result = executable.run(orderRequest);
 ```
 
-### 2. 异步执行：`runAsync`
+### 异步执行：`runAsync`
 
 ```java
 // 异步提交执行，返回 Java 标准 CompletionStage
@@ -64,7 +64,7 @@ CompletableFuture<FlowResult<Receipt>> future = executable
 future.thenAccept(res -> log.info("Async result: {}", res.requireAccepted()));
 ```
 
-### 3. 自定义 Worker 线程池绑定：`withExecutor`
+### 自定义 Worker 线程池绑定：`withExecutor`
 
 如果流程需要使用专用的业务 Worker 线程池，可通过 `withExecutor` 派生句柄：
 

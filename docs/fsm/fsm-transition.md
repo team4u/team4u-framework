@@ -33,7 +33,7 @@ sequenceDiagram
 
 ---
 
-## 1. 条件守卫：`TransitionGuard`
+## 条件守卫：`TransitionGuard`
 
 `TransitionGuard` 是纯函数式的断言接口，用于评估当前上下文是否满足迁移条件：
 
@@ -69,7 +69,7 @@ builder.from(OrderState.PAID).on(OrderEvent.DELIVER)
 
 ---
 
-## 2. 状态动作：`TransitionAction`
+## 状态动作：`TransitionAction`
 
 `TransitionAction` 用于在状态流转确认发生时执行副作用（如数据库更新、通知发送、审计日志记录）：
 
@@ -101,7 +101,7 @@ builder.from(OrderState.CREATED).on(OrderEvent.PAY).to(OrderState.PAID)
 
 ---
 
-## 3. 流转上下文：`TransitionContext`
+## 流转上下文：`TransitionContext`
 
 `TransitionContext` 是传递给 Guard 与 Action 的只读上下文聚合载体：
 

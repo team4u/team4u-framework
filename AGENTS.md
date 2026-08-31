@@ -6,7 +6,7 @@
 
 ## 常用命令与并行构建规范
 
-### 1. 全工程并行构建与测试（强烈推荐）
+### 全工程并行构建与测试（强烈推荐）
 
 由于本工程包含 **59 个 Maven 模块**，使用单线程构建耗时较长（约 85 秒）。**必须使用 Maven 提供的 `-T` 多线程并行构建参数**，利用多核 CPU 按模块依赖拓扑并行编译与运行测试：
 
@@ -24,7 +24,7 @@ mvn test -T 4
 > [!TIP]
 > `-T 1C` 表示每个 CPU 核心分配 1 个并发构建线程（1 Thread per Core），可在保证构建稳定性的同时最大化利用本地硬件资源。
 
-### 2. 单模块测试
+### 单模块测试
 
 针对正在开发的单一子模块，使用 `-pl`（project list）参数定向运行单测，避免全量构建：
 
@@ -39,7 +39,7 @@ mvn test -pl modules/flow/diagram
 mvn test -pl modules/config/db,modules/config/core,modules/flow/diagram
 ```
 
-### 3. 架构依赖边界校验 (Maven Enforcer)
+### 架构依赖边界校验 (Maven Enforcer)
 
 工程严格通过 `maven-enforcer-plugin` 约束各核心模块的零依赖边界。验证依赖合规性：
 

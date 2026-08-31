@@ -47,7 +47,7 @@ graph TD
 
 用于在节点或子流程执行前进行**准入校验、风控拦截与黑白名单过滤**。
 
-### 1. 基础门控模式速查
+### 基础门控模式速查
 
 | 模式枚举 | 便捷工厂方法 | 行为语义 | 典型应用场景 |
 | :--- | :--- | :--- | :--- |
@@ -70,7 +70,7 @@ Flow<UserRequest, Receipt> flow2 = Flow.step(chargeOperation)
 
 ---
 
-### 2. 高级定制：`CriterionPolicy.builder()` 详解
+### 高级定制：`CriterionPolicy.builder()` 详解
 
 当表达式需要针对复杂嵌套对象、Map 结构进行求值，或者需要在拦截时携带动态诊断上下文（如当前重试轮次 `context.attempt()`、节点路径等）时，使用 Builder 进行定制：
 
@@ -147,33 +147,33 @@ Flow<Order, Receipt> flow = Flow.step((ctx, order) ->
 
 `team4u-criterion` 针对 Flow 上下文中的 JavaBean、Map 与集合对象提供开箱即用的高阶语法支持：
 
-### 1. 数值与关系比较
+### 数值与关系比较
 ```text
 amount >= 100 && score < 60 && status != 'CANCELLED'
 ```
 
-### 2. 集合与容器包含
+### 集合与容器包含
 ```text
 tags contains 'VIP' && roles contains all ['AUDITOR', 'MANAGER']
 grade in ['A', 'B', 'A+']
 ```
 
-### 3. 区间范围判断
+### 区间范围判断
 ```text
 age between [18, 60] && score between (60, 100]
 ```
 
-### 4. 空值与存在性检查
+### 空值与存在性检查
 ```text
 address is not null && items is not empty
 ```
 
-### 5. 正则与通配符
+### 正则与通配符
 ```text
 email =~ '.*@team4u\\.com$' && username like 'admin_*'
 ```
 
-### 6. 概率与哈希灰度分流
+### 概率与哈希灰度分流
 ```text
 userId hash 0.2 // 按用户 ID 稳定 Hash 圈选 20% 流量
 ```
