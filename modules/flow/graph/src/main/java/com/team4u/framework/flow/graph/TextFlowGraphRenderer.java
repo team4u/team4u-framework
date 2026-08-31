@@ -1,16 +1,19 @@
 package com.team4u.framework.flow.graph;
 
+import com.team4u.framework.flow.BindingDescriptor;
 import com.team4u.framework.flow.FlowDescription;
 import com.team4u.framework.flow.NodeDescription;
+import com.team4u.framework.flow.Retry;
 
+import java.time.Duration;
+
+import java.util.ArrayDeque;
+import java.util.Deque;
 import java.util.List;
-import java.util.Map;
 import java.util.Objects;
 
 /**
- * 文本树形格式流程图渲染器。
- *
- * @author jay.wu
+ * Compact, deterministic text renderer for the static flow description model.
  */
 final class TextFlowGraphRenderer implements FlowGraphRenderer {
 
@@ -20,57 +23,142 @@ final class TextFlowGraphRenderer implements FlowGraphRenderer {
     public String render(FlowDescription description) {
         Objects.requireNonNull(description, "FlowDescription must not be null");
 
-        StringBuilder sb = new StringBuilder();
-        sb.append("Flow: ").append(description.flowId()).append("\n");
-        renderNodes(sb, description.nodes(), "");
-        return sb.toString();
+        StringBuilder output = new StringBuilder();
+        output.append("flow id=\"").append(escape(display(description.flowId())))
+                .append("\"\n");
+        Deque<NodeDescription> pending = new ArrayDeque<NodeDescription>();
+        pending.addLast(description.root());
+        while (!pending.isEmpty()) {
+            NodeDescription node = pending.removeLast();
+            appendNode(output, node);
+            List<NodeDescription> children = node.children();
+            for (int index = children.size() - 1; index >= 0; index--) {
+                pending.addLast(children.get(index));
+            }
+        }
+        return output.toString();
     }
 
-    private void renderNodes(StringBuilder sb, List<NodeDescription> nodes, String prefix) {
-        if (nodes == null || nodes.isEmpty()) {
-            return;
+    private static void appendNode(StringBuilder output, NodeDescription node) {
+        output.append("path=\"").append(escape(node.path())).append("\"")
+                .append(" kind=").append(node.kind().name())
+                .append(" label=");
+        if (node.label().isPresent()) {
+            output.append("\"").append(escape(node.label().get())).append("\"");
+        } else {
+            output.append("<none>");
         }
-        for (int i = 0; i < nodes.size(); i++) {
-            boolean isLast = (i == nodes.size() - 1);
-            NodeDescription node = nodes.get(i);
-            String branchConnector = isLast ? "└── " : "├── ";
-            String childPrefix = prefix + (isLast ? "    " : "│   ");
 
-            sb.append(prefix).append(branchConnector).append(node.kind()).append(": ").append(node.id()).append("\n");
-
-            boolean hasBranches = node.branches() != null && !node.branches().isEmpty();
-            boolean hasOtherwiseBranch = node.otherwiseBranch() != null;
-            boolean hasOtherwiseStop = node.hasOtherwiseStop();
-
-            if (hasBranches || hasOtherwiseBranch || hasOtherwiseStop) {
-                int bTotal = (node.branches() != null ? node.branches().size() : 0) + (hasOtherwiseBranch || hasOtherwiseStop ? 1 : 0);
-                int bIndex = 0;
-                if (hasBranches) {
-                    for (Map.Entry<String, FlowDescription> entry : node.branches().entrySet()) {
-                        boolean bLast = (++bIndex == bTotal);
-                        String bConn = bLast ? "└── " : "├── ";
-                        String bChildPrefix = childPrefix + (bLast ? "    " : "│   ");
-                        sb.append(childPrefix).append(bConn).append("[").append(entry.getKey()).append("]\n");
-                        if (entry.getValue() != null) {
-                            renderNodes(sb, entry.getValue().nodes(), bChildPrefix);
-                        }
-                    }
+        if (node.binding().isPresent()) {
+            appendBinding(output, node.binding().get());
+        }
+        switch (node.kind()) {
+            case SEQUENCE:
+                output.append(" scope=");
+                quotedOrNone(output, node.scopeName());
+                output.append(" children=").append(node.children().size());
+                break;
+            case ROUTE:
+                output.append(" routes=").append(node.routeCases().size())
+                        .append(" otherwise=")
+                        .append(node.otherwise() == null ? "no-match:SKIPPED" : "branch");
+                break;
+            case FALLBACK:
+                output.append(" trigger=").append(display(node.trigger()))
+                        .append(" branches=").append(node.children().size());
+                break;
+            case PARALLEL:
+                output.append(" branches=").append(node.parallelBranches().size())
+                        .append(" tokens=[");
+                for (int index = 0; index < node.parallelBranches().size(); index++) {
+                    if (index > 0) output.append(',');
+                    output.append('"').append(escape(node.parallelBranches().get(index).name()))
+                            .append('"');
                 }
-                if (hasOtherwiseBranch) {
-                    sb.append(childPrefix).append("└── [otherwise]\n");
-                    renderNodes(sb, node.otherwiseBranch().nodes(), childPrefix + "    ");
-                } else if (hasOtherwiseStop) {
-                    sb.append(childPrefix).append("└── [otherwise -> STOPPED]\n");
-                }
-            }
+                output.append("] join=static");
+                break;
+            case AWAIT:
+                output.append(" resume=\"").append(escape(display(node.resumePoint())))
+                        .append('"');
+                break;
+            case CONTROL:
+                output.append(" control=").append(display(node.controlKind()))
+                        .append(" config=").append(configurationSummary(node.configuration()));
+                break;
+            case COMPLETE:
+                output.append(" complete=").append(node.identity()
+                        ? "IDENTITY" : node.outcome().kind().name());
+                break;
+            case INVOKE:
+                break;
+            default:
+                throw new IllegalStateException("Unknown node kind: " + node.kind());
+        }
+        output.append('\n');
+    }
 
-            if (node.subflow() != null) {
-                renderNodes(sb, node.subflow().nodes(), childPrefix);
-            }
+    private static void appendBinding(StringBuilder output, BindingDescriptor binding) {
+        output.append(" binding=").append(escape(binding.kind()))
+                .append(" contract=");
+        if (binding.contractClass().isPresent()) {
+            output.append(escape(binding.contractClass().get().getName()));
+        } else {
+            output.append("<unresolved>");
+        }
+        output.append(" qualifier=");
+        if (binding.qualifier().isPresent()) {
+            output.append('"').append(escape(binding.qualifier().get())).append('"');
+        } else {
+            output.append("<none>");
+        }
+    }
 
-            if (node.children() != null && !node.children().isEmpty()) {
-                renderNodes(sb, node.children(), childPrefix);
+    private static void quotedOrNone(StringBuilder output, String value) {
+        if (value == null) {
+            output.append("<none>");
+        } else {
+            output.append('"').append(escape(value)).append('"');
+        }
+    }
+
+    /**
+     * 稳定配置摘要：只读取 final 配置类（Retry / Duration）的字段，
+     * 绝不调用任意 configuration 的 toString。
+     */
+    private static String configurationSummary(Object configuration) {
+        if (configuration instanceof Retry) {
+            Retry retry = (Retry) configuration;
+            return "maxAttempts=" + retry.maxAttempts()
+                    + ",backoff=" + durationSummary(retry.backoff());
+        }
+        if (configuration instanceof Duration) {
+            return "timeout=" + durationSummary((Duration) configuration);
+        }
+        return "<none>";
+    }
+
+    private static String durationSummary(Duration duration) {
+        return duration.getSeconds() + "s" + duration.getNano() + "ns";
+    }
+
+    private static String display(String value) {
+        return value == null ? "<unnamed>" : value;
+    }
+
+    private static String escape(String value) {
+        StringBuilder escaped = new StringBuilder(value.length());
+        for (int index = 0; index < value.length(); index++) {
+            char character = value.charAt(index);
+            switch (character) {
+                case '\\': escaped.append("\\\\"); break;
+                case '"': escaped.append("\\\""); break;
+                case '\n': escaped.append("\\n"); break;
+                case '\r': escaped.append("\\r"); break;
+                case '\t': escaped.append("\\t"); break;
+                case '|': escaped.append("\\|"); break;
+                default: escaped.append(character);
             }
         }
+        return escaped.toString();
     }
 }
