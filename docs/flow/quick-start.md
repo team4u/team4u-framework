@@ -54,7 +54,33 @@
 
 # 2. 快速上手
 
-`team4u-flow` 支持**纯 Java 函数**与 **Bean 容器绑定**两种使用方式。
+## 2.0 新人心智模型（Mental Model）
+
+在上手写代码前，只需理解 `team4u-flow` 的三层心智模型：
+
+```text
+┌────────────────────────────────────────────────────────┐
+│ 1. 声明期 (Definition): Flow<I, O>                      │
+│    纯不可变抽象语法树（AST），描述拓扑结构，本身不可直接执行        │
+└──────────────────────────┬─────────────────────────────┘
+                           │ 编译 (Compile / Project)
+                           ▼
+┌────────────────────────────────────────────────────────┐
+│ 2. 编译期 (Compilation): Compiler & Resolver           │
+│    静态校验拓扑、解析容器 Bean 引用、生成强类型运行时计划          │
+└──────────────┬──────────────────────────┬──────────────┘
+               ▼                          ▼
+┌──────────────────────────────┐ ┌──────────────────────────────┐
+│ 3a. Local 执行器 (内存极速)    │ │ 3b. Durable 执行器 (崩溃恢复) │
+│     LocalExecutable          │ │     DurableExecutable        │
+│     同步 run / 异步 runAsync │ │     CAS 节点检查点 / recover │
+└──────────────────────────────┘ └──────────────────────────────┘
+```
+
+- **不可变定义**：所有组合方法（`then`、`policy` 等）均返回新的 `Flow` 实例，原实例不变，天然线程安全。
+- **四态业务结果**：业务步骤返回 `Accepted`（携值成功）、`Rejected`（业务拒绝）、`Skipped`（弃权跳过）、`Failed`（技术失败），仅 `Accepted` 携带输出推进后续节点。
+
+---
 
 ## 2.1 纯 Java 模式
 
@@ -62,6 +88,7 @@
 
 ```java
 import com.team4u.framework.flow.*;
+import java.util.concurrent.CompletionStage;
 
 public class QuickStart {
 
@@ -71,16 +98,20 @@ public class QuickStart {
     static Operation<Integer, String> label = (context, value) ->
             Outcome.accepted("len=" + value);
 
-    public static void main(String[] args) {
-        // Flow<I, O> 只描述结构，本身不可执行
+    public static void main(String[] args) throws Exception {
+        // 1. Flow<I, O> 只描述结构，本身不可执行
         Flow<String, String> flow = Flow.step(length).then(label);
 
-        // 编译为 Local 可执行并同步运行
+        // 2. 编译为 Local 可执行句柄
         LocalExecutable<String, String> executable = Local.compile(flow);
-        FlowResult<String> result = executable.run("team4u");
 
-        // FlowResult.requireAccepted(): Completed/Accepted 时返回输出
-        System.out.println(result.requireAccepted()); // len=7
+        // 3a. 同步执行
+        FlowResult<String> syncResult = executable.run("team4u");
+        System.out.println(syncResult.requireAccepted()); // len=6
+
+        // 3b. 异步执行（返回 Java 标准 CompletionStage）
+        CompletionStage<FlowResult<String>> asyncStage = executable.runAsync("framework");
+        asyncStage.thenAccept(res -> System.out.println("Async: " + res.requireAccepted()));
     }
 }
 ```
@@ -396,9 +427,33 @@ testkit 提供 `OperationStub`/`PolicyStub` 桩、`TraceCollector` 轨迹、`Flo
 
 ---
 
-# 8. 下一步
+# 8. 新手避坑与核心规则 FAQ
 
-- [核心语义与机制](flow-semantics.md)：四态传播、八节点、Policy/Retry/Timeout、取消合同。
+### Q1: 为什么 `Flow<I, O>` 不能直接 `.run()`，必须先 `Local.compile(flow)`？
+> **答**：`Flow` 是纯逻辑拓扑定义（不可变 AST），只描述“流程由哪些步骤组成”。调用 `Local.compile` 或 `BeanFlows.compile` 阶段会完成静态结构校验、从 Spring 容器解析单例 Bean 绑定并优化执行帧栈。编译产物 `LocalExecutable` 是线程安全的高性能单例，生产中应以 Spring `@Bean` 单例托管并在 Service 中重复调用。
+
+### Q2: `then`、`thenOptional` 与 `firstApplicable` 该怎么选？
+> **答**：
+> - **`then(op)`**：标准串行步骤。**仅由 Accepted 推进**；若返回 `Skipped`、`Rejected` 或 `Failed`，流水线立即短路终止。
+> - **`thenOptional(op)`**：可选步骤（仅限 `O -> O`）。节点返回 `Skipped` 时**保留进入步骤前的原值继续执行后续流水线**（`Rejected`/`Failed` 仍短路）。
+> - **`firstApplicable(flowA, flowB)`**：候选降级链。依次尝试候选分支，遇到 `Skipped` 尝试下一个分支，以**首个非 Skipped 结果**作为整体输出。
+
+### Q3: 为什么 Parallel 并行分支内严禁 `await` 与 `PersistentPolicy`？
+> **答**：`Parallel` 采用严密的 wait-all 汇合合同。若分支内部允许挂起或持有跨重启的独立持久化状态，会导致多分支并发提交检查点时的 CAS 版本风暴与帧栈状态不一致。因此框架在静态编译期就会以 `PARALLEL_AWAIT` / `PARALLEL_PERSISTENT_POLICY` 快速失败拒绝。
+
+### Q4: 业务代码抛出未捕获异常（如 NPE / RPC 异常）会怎样？
+> **答**：引擎绝不会让异常直接逃逸。所有未受检异常会被底层自动捕获并转换为携带标准错误码（如 `OPERATION_EXCEPTION`）的 `Outcome.Failed`。该失败可以被外层的 `.retry(...)` 自动重试，或被 `.recoverWith(...)` 捕获进行补偿降级。
+
+### Q5: 自定义线程池时有哪些关键约束？
+> **答**：当流程包含 `parallel` 并行或 `timeout` 超时控制时，**严禁将同一个单线程池（`newSingleThreadExecutor`）或有界线程池同时用于 `runAsync` 的 dispatcher 和底层 worker**。否则会触发线程饥饿导致自我死锁。框架内置了死锁防御检测，违规配置时会立即抛出 `IllegalArgumentException` 快速失败。
+
+---
+
+# 9. 下一步
+
+- [核心语义与机制](flow-semantics.md)：四态传播、八节点、Policy/Retry/Timeout、取消合同、线程池死锁防御。
 - [Bean 容器集成](flow-bean.md)：Bean 声明式绑定、事务与切面代理保留、编译期解析与诊断。
-- [Durable 持久化执行](flow-durable.md)：检查点、恢复、resume 两段 CAS。
-- [实战案例](flow-sample.md)：订单风控路由与支付审批恢复的完整示例。
+- [Durable 持久化执行](flow-durable.md)：检查点、恢复、resume 两段 CAS、DurableObserver。
+- [可视化与图表渲染](flow-graph.md)：FlowDescription 投影、六通道 Mermaid 图与紧凑文本树。
+- [测试支持与断言](flow-test.md)：testkit 全套桩对象、断言工具与并行屏障。
+- [实战案例](flow-sample.md)：订单风控路由降级、支付审批挂起恢复与电商履约实战。

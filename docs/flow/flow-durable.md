@@ -180,7 +180,21 @@ PersistentPolicy 不能用于 Parallel 分支（构建期拒绝）。
 
 ---
 
-# 9. DurableStore SPI
+# 9. Durable 观测与事件体系 (DurableObserver)
+
+除了标准的 `FlowObserver` 事件外，持久化执行器还提供了专用的 [`DurableObserver`](file:///root/code/team4u-framework/modules/flow/durable/src/main/java/com/team4u/framework/flow/durable/DurableObserver.java) 接口，用于监听快照存储与状态机恢复全流程：
+
+| 事件类型（`DurableObserver.Type`） | 触发时机 | 关键扩展属性（`attributes`） |
+| :--- | :--- | :--- |
+| `CHECKPOINT_COMMITTED` | 节点边界快照成功通过 CAS 提交入库 | `kind`（检查点类别）、`path`（节点路径） |
+| `CHECKPOINT_RESTORED` | 调用 `recover` 从底层存储成功恢复快照并重建内存状态机 | `revision`（恢复时快照版本号） |
+| `RESUME_SIGNAL_PERSISTED` | 调用 `resume` 第一步完成，恢复信号成功落库为 `resume:<name>` 槽 | `resumePoint`（目标挂起点名称） |
+
+`DurableObserver.Event` 对象包含：`type`（事件类型）、`at`（时间戳）、`metadata`（flowId/version/executionId/nodePath）、`revision`（快照乐观锁版本）、`lifecycle`（当前生命周期状态）与 `attributes`（键值扩展属性）。
+
+---
+
+# 10. DurableStore SPI 与异常体系
 
 ```java
 public interface DurableStore {
@@ -193,4 +207,21 @@ public interface DurableStore {
 - `compareAndSet` 返回 false 表示 revision 冲突（并发写）；存储层异常由调用方包装，框架以 `STORE_FAILURE` 边界抛出 `DurableException`。
 - 实现须无副作用 load（仅读取）。内置 `InMemoryDurableStore` 用于测试与演示；生产环境自建 JDBC/Redis 等实现（一张表、一列字节即可承载快照信封）。
 
-错误码闭集（`DurableException.Error`）：`EXECUTION_EXISTS`、`EXECUTION_NOT_FOUND`、`FLOW_MISMATCH`、`FORMAT_MISMATCH`、`FRAME_MISMATCH`、`CODEC_FAILURE`、`STORE_FAILURE`、`REVISION_CONFLICT`、`LIFECYCLE_MISMATCH`、`RESUME_POINT_MISMATCH`、`RESUME_SIGNAL_CONFLICT`、`ASYNC_EXECUTOR_MISSING` 等，便于调用方做稳定分支处理。
+## 10.1 DurableException 错误码闭集与处理指引
+
+当持久化操作发生冲突、版本不匹配或存储故障时，框架统一抛出 [`DurableException`](file:///root/code/team4u-framework/modules/flow/durable/src/main/java/com/team4u/framework/flow/durable/DurableException.java)，其内部包含强类型错误枚举 [`DurableException.Error`](file:///root/code/team4u-framework/modules/flow/durable/src/main/java/com/team4u/framework/flow/durable/DurableException.java)：
+
+| 错误码（`DurableException.Error`） | 触发原因 | 推荐处理策略 |
+| :--- | :--- | :--- |
+| `EXECUTION_EXISTS` | `start` 时指定的 `executionId` 在存储中已存在 | 检查业务幂等流水号生成逻辑，避免重复启动同名执行 |
+| `EXECUTION_NOT_FOUND` | `resume`/`recover`/`cancel` 时指定的 `executionId` 不存在 | 确认执行 ID 是否正确，或检查底层存储是否有丢失/过期清理 |
+| `FLOW_MISMATCH` | 快照所属的 `flowId` 或 `flowVersion` 与当前可执行不一致 | 确保使用与快照完全一致的 Flow 版本进行编译与恢复，不可跨版本混用 |
+| `FORMAT_MISMATCH` | 快照的 `formatId` 或 `formatVersion` 与当前运行时格式不兼容 | 检查框架版本兼容性，旧版本快照需使用对应版本运行时恢复 |
+| `FRAME_MISMATCH` | 快照内部的执行帧栈元数据损坏或不符合预期结构 | 数据完整性校验失败，需排查底层存储是否损坏 |
+| `CODEC_FAILURE` | 使用 `StateMapper` 编码或解码状态插槽（`StoredValue`）时失败 | 检查业务 DTO 是否变更导致无法反序列化，或补充注册缺失的类型编解码器 |
+| `STORE_FAILURE` | 底层 `DurableStore` 在执行 `load` 或 `compareAndSet` 时抛出数据库/IO 异常 | 检查数据库连通性、网络抖动或事务超时，由调用方做重试拦截 |
+| `REVISION_CONFLICT` | 并发操作同一 `executionId` 时 CAS 乐观锁版本冲突 | 多实例并发写竞争，调用方可稍后重试读取最新快照 |
+| `LIFECYCLE_MISMATCH` | 在非法的生命周期状态下调用命令（如 resume 已完成的执行，或 recover 非 ACTIVE 执行） | 检查流程调用时序，避免对终态（COMPLETED/CANCELLED）执行重复发起驱动 |
+| `RESUME_POINT_MISMATCH` | `resume` 时传入的挂起点名称与快照中实际等待的 `awaitingPoint` 不一致 | 核对外部回调系统通知的挂起点标识是否准确 |
+| `RESUME_SIGNAL_CONFLICT` | 恢复信号落库后、消费前发生崩溃，再次 resume 时传入了不同内容的信号 | 确保同一挂起点在重放时注入相同信号内容（基于 StateMapper 确定性编码） |
+| `ASYNC_EXECUTOR_MISSING` | 调用 `startAsync` / `resumeAsync` 但在构建 `DurableRuntime` 时未配置 `executor` | 在 `DurableRuntime.builder(store).executor(...)` 中显式配置线程池 |

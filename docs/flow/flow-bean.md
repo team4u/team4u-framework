@@ -90,6 +90,7 @@ graph TD
 | **可选步骤** | `flow.thenOptional(Class<Op>)` | `flow.thenOptional(Class<Op>, "beanName")` | 同类型 Bean 返回 Skipped 时透传步骤入口值继续执行 |
 | **上下文调用** | `flow.use(Class<Op>, proj, merge)` | `flow.use(Class<Op>, "beanName", proj, merge)` | 调用 Bean 但保留主流程上下文 |
 | **条件路由** | `Flow.route(Class<Op>)` | `Flow.route(Class<Op>, "beanName")` | 使用 Bean 计算路由选择键 |
+| **并行分支** | `Branch.of(name, Class<Op>)` | `Branch.of(name, Class<Op>, "beanName")` | 声明由容器托管的并行子分支 |
 | **无状态网关** | `flow.policy(Class<Policy>, keyFn)` | `flow.policy(Class<Policy>, "beanName", keyFn)` | 挂载 Bean 网关策略（限流/熔断等） |
 | **持久化策略** | `flow.persistentPolicy(Class<PPolicy>, keyFn)` | `flow.persistentPolicy(Class<PPolicy>, "beanName", keyFn)` | 挂载持久化状态策略（跨重启控制） |
 

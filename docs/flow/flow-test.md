@@ -290,7 +290,7 @@ Branch<String, String> right = Branch.of("right", (context, input) -> {
 });
 
 Flow<String, String> flow = Flow.<String>parallel(left, right)
-        .join(results -> results.homogeneousCollect().map(String::valueOf);
+        .join(results -> results.homogeneousCollect().map(String::valueOf));
 
 FlowResult<String> result = Local.compile(flow).run("in");
 

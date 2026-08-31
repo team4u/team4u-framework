@@ -174,6 +174,7 @@ Flow<String, String> flow = Flow.<String>parallel(length, upper)
 - 恢复：`executable.resume(suspension, point, signal)`，信号类型由 `ResumePoint<R>` 静态约束；恢复后输出 `Resumed<S, R>`（`state()` 挂起前 scope entry + `signal()` 注入信号）。
 - `ResumePoint` 的 name 在同一 Flow 内唯一（构建期拒绝重复）；resume 时 name 不匹配会以 `RESUME_POINT_MISMATCH` 类错误拒绝。
 - Suspension 二次消费抛 `IllegalStateException`。
+- `FlowResult.Suspended` 提供 `awaiting(ResumePoint<?> point)` 方法，支持在恢复前断言当前等待的挂起点是否匹配。
 
 ```java
 ResumePoint<String> approval = ResumePoint.named("approval");
@@ -183,11 +184,16 @@ Flow<Integer, String> flow = Flow.<Integer>identity()
                 resumed.state() + ":" + resumed.signal()));
 
 LocalExecutable<Integer, String> executable = Local.compile(flow);
-FlowResult.Suspended<String> suspended =
-        (FlowResult.Suspended<String>) executable.run(42);
-String output = executable
-        .resume(suspended.suspension(), approval, "yes")
-        .requireAccepted(); // "42:yes"
+FlowResult<String> result = executable.run(42);
+
+if (result instanceof FlowResult.Suspended) {
+    FlowResult.Suspended<String> suspended = (FlowResult.Suspended<String>) result;
+    if (suspended.awaiting(approval)) {
+        String output = executable
+                .resume(suspended.suspension(), approval, "yes")
+                .requireAccepted(); // "42:yes"
+    }
+}
 ```
 
 ## 2.7 CONTROL（控制）
@@ -212,7 +218,7 @@ public interface Operation<I, O> {
 
 - 同步、可复用、线程安全；实现应避免持有跨调用可变状态。
 - `OperationContext` 只暴露 `metadata()`、稳定幂等键 `invocationId()`、`cancellation()` 取消信号，以及把 `CompletionStage` 同步阻塞为值的 `await(stage)`（取消时抛 `CancellationException`）。
-- 返回 null 会被严格拒绝；抛出的异常统一转稳定 Failed（第 6 节）。
+- 返回 null 会被严格拒绝；抛出的异常统一转稳定 Failed（第 7 节）。
 
 ## 3.2 Policy（无状态网关）
 
@@ -280,7 +286,7 @@ Flow<String, String> backed = Flow.step(riskyOperation)
         .retry(new Retry(3, Duration.ofSeconds(2)));         // 固定 2s backoff
 ```
 
-- `maxAttempts` 含首次执行；Failed 时按 backoff 间隔重新执行 body。
+- `maxAttempts` 含首次执行（`Retry.maxAttempts(n)` 或 `new Retry(n, backoff)`，支持 `withBackoff(d)` 派生）；Failed 时按 backoff 间隔重新执行 body。
 - 重试沿用同一 scope entry 且 `invocationId` 保持稳定（`flowId:flowVersion:executionId:path` 不变），外部副作用可据此幂等。
 - Local 中 backoff 大于零时执行挂起为等待态（受超时与取消约束）；Durable 中落 ACTIVE+wakeAt 快照，返回 `DurableResult.Active`，由外部调度在 wakeAt 后 `recover` 唤醒。
 
@@ -291,7 +297,7 @@ Flow<String, String> guarded = flow.timeout(Duration.ofSeconds(5));
 ```
 
 - 为当前作用域设置截止时间；超时产生 `TIMEOUT` 稳定 Failed 并终止最近的作用域（scope）。
-- Duration 必须为正，否则构建期 `IllegalArgumentException`。
+- Duration 必须为正，否则构建期抛出 `IllegalArgumentException`。
 - 作用于 `Flow.scope(name, body)` 边界或最近的组合作用域。
 
 ## 4.3 policy / persistentPolicy 挂载顺序
@@ -300,7 +306,54 @@ Flow<String, String> guarded = flow.timeout(Duration.ofSeconds(5));
 
 ---
 
-# 5. 取消合同：true wait-all
+# 5. Local 执行驱动模型与死锁防御治理
+
+`LocalExecutable` 是编译后的本地内存执行句柄，支持同步、异步驱动与线程池治理：
+
+## 5.1 执行入口全景
+
+| 方法 | 签名要点 | 语义说明 |
+| :--- | :--- | :--- |
+| **同步运行** | `run(I input)` / `run(I input, Cancellation cancellation)` | 在当前调用方线程同步驱动 `SerialMachine`，返回 `FlowResult<O>` |
+| **异步运行** | `runAsync(I input)`<br/>`runAsync(I input, Cancellation c)`<br/>`runAsync(I input, ExecutorService dispatcher)`<br/>`runAsync(I input, Cancellation c, ExecutorService dispatcher)` | 提交到 `dispatcher` 线程池异步执行，返回 `CompletionStage<FlowResult<O>>`；未指定时默认使用 `ForkJoinPool.commonPool()` |
+| **同步恢复** | `resume(Suspension s, ResumePoint point, R signal)`<br/>`resume(Suspension s, ResumePoint point, R signal, Cancellation c)` | 在当前线程恢复挂起执行，单次消费句柄 |
+| **异步恢复** | `resumeAsync(Suspension s, ResumePoint point, R signal, ...)` | 在 `dispatcher` 线程池中异步恢复执行，返回 `CompletionStage<FlowResult<O>>` |
+| **重配置线程池** | `withExecutor(ExecutorService workerExecutor)` | 派生一个绑定新 Worker 线程池的 `LocalExecutable` 实例 |
+
+```java
+LocalExecutable<OrderReq, Receipt> executable = Local.compile(orderFlow);
+
+// 1. 同步执行
+FlowResult<Receipt> syncResult = executable.run(request);
+
+// 2. 异步执行并流式处理
+executable.runAsync(request)
+        .thenAccept(result -> {
+            if (result instanceof FlowResult.Completed) {
+                System.out.println("成功: " + result.requireAccepted());
+            }
+        });
+```
+
+## 5.2 线程模型：Dispatcher vs Worker
+
+引擎内部将线程职责严格解耦为两类：
+- **Dispatcher（调度线程池）**：用于 `runAsync` / `resumeAsync` 的顶层发起调度；
+- **Worker Executor（工作线程池）**：用于 `Parallel` 分支并发执行、异步 Stage 转换与超时监控。
+
+## 5.3 线程池饥饿与死锁防御规则（Deadlock Defense）
+
+在基于阻塞等待（如 `Parallel` wait-all、`timeout`）的流水线编排中，错误的线程池复用会导致严重的**嵌套任务饥饿死锁（Thread Starvation Deadlock）**。框架在底层提供了两级静态与动态安全防线：
+
+1. **Dispatcher 与 Worker 隔离校验**（`validateDispatcherNotStarvingWorker`）：
+   - 当 Flow 包含并行分支或超时控制时，**严禁将同一个非 ForkJoinPool 的有界/单线程池**（如 `Executors.newSingleThreadExecutor()` 或 `FixedThreadPool`）同时作为 `dispatcher` 与 `workerExecutor`。
+   - 触发时框架会立即以 `IllegalArgumentException` 快速失败，明确提示配置风险，防止线上请求在单线程池中自我死锁阻塞。
+2. **嵌套并行线程补偿机制**（`validateWorkerExecutor`）：
+   - 当 Flow 包含嵌套并行分支或分支级超时控制时，Worker 线程池必须是支持线程协同补偿的 `ForkJoinPool`（或默认 `ForkJoinPool.commonPool()`），确保在子任务阻塞等待时自动扩容补偿工作线程。
+
+---
+
+# 6. 取消合同：true wait-all
 
 `Cancellation` 是协作式取消令牌：`cancel()` CAS 置位、中断当前绑定的运行线程，并向子令牌级联传播（Parallel 各分支持父子链接令牌）。
 
@@ -320,40 +373,59 @@ FlowResult<String> result = Local.compile(flow).run(input, cancellation);
 
 ---
 
-# 6. 异常转稳定 Failed
+# 7. 异常收敛与完整诊断体系
 
-Operation、selector、JoinStrategy、Policy 回调中抛出的异常不会逃逸到调用方，而是被转换为携带稳定失败码的 `Failed` Outcome，随四态规则正常传播（可被 retry / recoverWith 消费）：
+框架在 [`FlowDiagnosticCodes`](file:///root/code/team4u-framework/modules/flow/core/src/main/java/com/team4u/framework/flow/model/FlowDiagnosticCodes.java) 中规范了完整的标准诊断码集合，分为**运行时失败码**与**编译期静态校验码**两大闭集：
 
-| 来源 | 稳定失败码（`FlowDiagnosticCodes`） |
-| :--- | :--- |
-| 操作执行抛出未受检异常 | `FlowDiagnosticCodes.OPERATION_EXCEPTION` |
-| 操作执行线程被中断 | `FlowDiagnosticCodes.OPERATION_INTERRUPTED` |
-| 操作被显式取消 | `FlowDiagnosticCodes.OPERATION_CANCELLED` |
-| 作用域截止时间到期 | `FlowDiagnosticCodes.TIMEOUT` |
-| 线程池拒绝执行任务 | `FlowDiagnosticCodes.EXECUTOR_REJECTED` |
-| 路由条件未匹配且无 default 分支 | `FlowDiagnosticCodes.NO_ROUTE` |
-| 策略退避等待时被中断 | `FlowDiagnosticCodes.WAIT_INTERRUPTED` |
-| 策略回调执行抛出异常 | `FlowDiagnosticCodes.POLICY_EXCEPTION` |
-| 并行分支合并（Join）异常 | `FlowDiagnosticCodes.JOIN_EXCEPTION` |
+## 7.1 运行时失败码（转换为 Failed Outcome）
 
-框架在 [`FlowDiagnosticCodes`](file:///root/code/team4u-framework/modules/flow/core/src/main/java/com/team4u/framework/flow/FlowDiagnosticCodes.java) 中提供了标准常量定义，业务与监控告警建议统一引用该常量类进行断言与分流处理。
+Operation、selector、JoinStrategy、Policy 回调中抛出的异常不会逃逸为未捕获异常，而是被转换为携带稳定失败码的 `Failed` Outcome，随四态规则正常传播：
 
-这意味着：
+| 来源分类 | 稳定失败码（`FlowDiagnosticCodes`） | 触发场景说明 |
+| :--- | :--- | :--- |
+| **执行异常** | `OPERATION_EXCEPTION` | 操作（`Operation`）执行中抛出未受检异常或业务异常 |
+| **线程中断** | `OPERATION_INTERRUPTED` | 操作执行线程被外部物理中断（`Thread.currentThread().interrupt()`） |
+| **协作取消** | `OPERATION_CANCELLED` | 操作在执行中检测到 `Cancellation` 取消信号生效 |
+| **超时阻断** | `TIMEOUT` | 作用域执行耗时超过了 `flow.timeout(Duration)` 时限 |
+| **线程拒绝** | `EXECUTOR_REJECTED` | 并行分支或异步调度被底层线程池拒绝（`RejectedExecutionException`） |
+| **路由未决** | `NO_ROUTE` | 动态条件路由未命中任何 `caseOf` 且未配置默认分支 |
+| **策略中断** | `WAIT_INTERRUPTED` | 持久化/控制策略在延时退避等待时被中断 |
+| **策略异常** | `POLICY_EXCEPTION` | `Policy.before/after` 或 `PersistentPolicy` 回调执行抛出异常 |
+| **汇聚异常** | `JOIN_EXCEPTION` | 并行汇聚策略（`JoinStrategy`）执行合并逻辑时抛出异常 |
 
-- 调用方拿到的 `FlowResult` 永远是三态闭集之一，不会是裸异常栈；
-- 告警与幂等去重可以基于稳定失败码而非异常类名字符串；
-- Java `Error` 不做业务转换，按 JVM 语义向上传播。
+## 7.2 编译期静态校验码（FlowBuildException）
+
+在 `Local.compile` / `BeanFlows.compile` / `DurableRuntime.compile` 阶段，`Compiler` 会静态校验拓扑合法性与组件依赖。若发现结构缺陷，框架将聚合所有违规项，封装为 [`FlowBuildException`](file:///root/code/team4u-framework/modules/flow/core/src/main/java/com/team4u/framework/flow/model/FlowBuildException.java) 一次性抛出：
+
+| 诊断码（`FlowDiagnosticCodes`） | 校验类型 | 违规原因与排查建议 |
+| :--- | :--- | :--- |
+| `DUPLICATE_LABEL` | 节点标识 | 流程中存在重复的节点显示标签（`named`） |
+| `DUPLICATE_SCOPE` | 作用域 | 流程中存在同名的具名作用域（`scope`） |
+| `DUPLICATE_BRANCH` | 并行分支 | `Flow.parallel` 内部存在重复的分支名称（`Branch.name`） |
+| `DUPLICATE_RESUME_POINT` | 挂起点 | 流程中存在相同名称的挂起点（`ResumePoint.named`） |
+| `DUPLICATE_PATH` | 拓扑路径 | 内部 AST 路径发生冲突 |
+| `PARALLEL_AWAIT` | 非法挂起 | 严禁在 `parallel` 并行分支内部使用 `await` 挂起点 |
+| `PARALLEL_PERSISTENT_POLICY` | 非法策略 | 严禁在 `parallel` 并行分支内部使用有状态持久化策略 `persistentPolicy` |
+| `INVALID_BINDING` | 契约违规 | 绑定的类未实现预期的扩展点接口（如 Operation/Policy） |
+| `MISSING_BINDING` | 依赖缺失 | 容器中未找到声明的 Bean（Class 或 Qualifier 不匹配） |
+| `BINDING_TYPE` | 类型不匹配 | 容器解析出的 Bean 实例类型与 Flow 声明的契约类型不一致 |
+| `IMPLEMENTATION_CLASS` | 反射诊断 | 无法从代理对象中提取底层的真实实现类信息 |
 
 ```java
-OperationStub<String, String> broken = OperationStub.throwing(
-        () -> new java.io.IOException("gateway down"));
-FlowResult<String> result = Local.compile(Flow.step(broken)).run("in");
-// result 为 Completed[Failed[Failure[code=FlowDiagnosticCodes.OPERATION_EXCEPTION, ...]]]
+// 检查 FlowBuildException 聚合问题示例
+try {
+    Local.compile(invalidFlow);
+} catch (FlowBuildException e) {
+    for (FlowBuildException.Problem problem : e.problems()) {
+        System.err.printf("错误码: %s, 路径: %s, 详情: %s%n",
+                problem.code(), problem.path(), problem.message());
+    }
+}
 ```
 
 ---
 
-# 7. 观测
+# 8. 观测
 
 `FlowObserver` 在 Local 与 Durable 执行中通用，事件类型覆盖流程生命周期（`FLOW_STARTED/COMPLETED/SUSPENDED/CANCELLED`）、节点（`NODE_STARTED/COMPLETED`）、路由与降级选择、Policy 评估、并行汇合等；回调抛出的运行时异常被框架隔离，不影响执行。`FlowObserver.composite(...)` 顺序广播，单观察者异常被吞掉。
 
