@@ -29,14 +29,14 @@ graph TD
     subgraph "team4u-flow-criterion 双模态架构"
         subgraph "模式 A: 前置门控切面 (CriterionPolicy)"
             P_IN["输入 Key"] --> CP_EVAL{"表达式规则判定<br/>(age >= 18 && risk < 60)"}
-            CP_EVAL -->|匹配| CP_OK["Gate.proceed() 放行"]
-            CP_EVAL -->|不匹配| CP_REJ["Gate.reject(Reason) 业务短路"]
+            CP_EVAL -->|"匹配"| CP_OK["Gate.proceed() 放行"]
+            CP_EVAL -->|"不匹配"| CP_REJ["Gate.reject(Reason) 业务短路"]
         end
         
         subgraph "模式 B: 条件分支谓词 (CriterionPredicate)"
             PR_IN["流程数据 Context"] --> PR_EVAL{"表达式匹配<br/>(vip == true && amount > 500)"}
-            PR_EVAL -->|true| BR_A["执行优惠折扣子流程"]
-            PR_EVAL -->|false| BR_B["执行普通结算子流程"]
+            PR_EVAL -->|"true"| BR_A["执行优惠折扣子流程"]
+            PR_EVAL -->|"false"| BR_B["执行普通结算子流程"]
         end
     end
 ```

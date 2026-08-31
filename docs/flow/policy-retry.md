@@ -31,16 +31,16 @@ graph TD
     
     OP --> EVAL{"评估结果 Completion"}
     
-    EVAL -->|Accepted 成功 / Rejected 拒绝 / Skipped 弃权| RET["PersistentPolicy.returning(state)<br/>正常输出业务结果，不重试"]
+    EVAL -->|"Accepted 成功 / Rejected 拒绝 / Skipped 弃权"| RET["PersistentPolicy.returning(state)<br/>正常输出业务结果，不重试"]
     
-    EVAL -->|Failed 故障| CHK{"是否满足可重试条件？<br/>(predicate && attempt < maxAttempts)"}
+    EVAL -->|"Failed 故障"| CHK{"是否满足可重试条件？<br/>(predicate && attempt < maxAttempts)"}
     
-    CHK -->|可重试| CALC["Backoff.calculateMillis(attempt)<br/>计算退避延迟"]
+    CHK -->|"可重试"| CALC["Backoff.calculateMillis(attempt)<br/>计算退避延迟"]
     CALC --> WAKE["PersistentPolicy.retryAt(wakeInstant, nextState)<br/>触发重试调度"]
     
-    WAKE -->|Local 引擎: 当前线程协作休眠等待<br/>Durable 引擎: 落库检查点，释放线程待唤醒| OP
+    WAKE -->|"Local 引擎: 当前线程协作休眠等待<br/>Durable 引擎: 落库检查点，释放线程待唤醒"| OP
     
-    CHK -->|不可重试 / 达到上限| RET_FAIL["PersistentPolicy.returning(state)<br/>快速短路，输出最终 Failed"]
+    CHK -->|"不可重试 / 达到上限"| RET_FAIL["PersistentPolicy.returning(state)<br/>快速短路，输出最终 Failed"]
 ```
 
 ---

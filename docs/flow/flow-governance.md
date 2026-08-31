@@ -22,10 +22,10 @@ graph TD
         T_SCOPE --> OP["4. 核心业务 Operation.execute"]
         OP --> T_SCOPE
         
-        T_SCOPE -->|返回 Failed 且可重试| R_BACKOFF["退避等待 (Local 休眠 / Durable 落库唤醒)"]
+        T_SCOPE -->|"返回 Failed 且可重试"| R_BACKOFF["退避等待 (Local 休眠 / Durable 落库唤醒)"]
         R_BACKOFF --> OP
         
-        T_SCOPE -->|最终完成 Completion| P_AFTER["5. Policy.after (后置统计与审计)"]
+        T_SCOPE -->|"最终完成 Completion"| P_AFTER["5. Policy.after (后置统计与审计)"]
         P_AFTER --> RES["最终输出 Outcome"]
     end
 ```

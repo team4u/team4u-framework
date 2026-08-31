@@ -74,10 +74,10 @@ Mermaid 渲染器通过**六个全局终结通道**刻画一次执行的所有�
 ```mermaid
 graph LR
     subgraph "推进与短路分离机制"
-        Step1["Step 1"] -->|ACCEPTED| Step2["Step 2"]
-        Step1 -.->|REJECTED| R_TERM["terminal_rejected"]
-        Step1 -.->|FAILED| F_TERM["terminal_failed"]
-        Step2 -->|ACCEPTED| A_TERM["terminal_accepted"]
+        Step1["Step 1"] -->|"ACCEPTED"| Step2["Step 2"]
+        Step1 -.->|"REJECTED"| R_TERM["terminal_rejected"]
+        Step1 -.->|"FAILED"| F_TERM["terminal_failed"]
+        Step2 -->|"ACCEPTED"| A_TERM["terminal_accepted"]
     end
 ```
 

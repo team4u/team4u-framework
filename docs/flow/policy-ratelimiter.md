@@ -29,10 +29,10 @@ graph TD
     IN["流程输入 Input"] --> EXTR["提取策略路由键 Key 与上下文"]
     EXTR --> ACQ{"RateLimiters.acquire<br/>尝试获取令牌"}
     
-    ACQ -->|放行 (Acquired)| PROCEED["Gate.proceed()<br/>继续执行目标业务步骤"]
+    ACQ -->|"放行 (Acquired)"| PROCEED["Gate.proceed()<br/>继续执行目标业务步骤"]
     
-    ACQ -->|超限 & FAIL 动作| GATE_FAIL["Gate.fail(Failure)<br/>步骤输出 Failed，联动外层重试策略削峰排队"]
-    ACQ -->|超限 & REJECT 动作| GATE_REJ["Gate.reject(Reason)<br/>步骤输出 Rejected，业务快速短路，绝不重试"]
+    ACQ -->|"超限 & FAIL 动作"| GATE_FAIL["Gate.fail(Failure)<br/>步骤输出 Failed，联动外层重试策略削峰排队"]
+    ACQ -->|"超限 & REJECT 动作"| GATE_REJ["Gate.reject(Reason)<br/>步骤输出 Rejected，业务快速短路，绝不重试"]
     
     PROCEED --> OP["目标业务 Operation"]
 ```

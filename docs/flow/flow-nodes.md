@@ -169,14 +169,14 @@ Flow<OrderRequest, Receipt> routedFlow = Flow
 ```mermaid
 graph TD
     subgraph "SKIPPED 触发器 (firstApplicable / thenOptional)"
-        F1["分支 1"] -->|Skipped| F2["分支 2"]
-        F2 -->|Skipped| F3["分支 3"]
-        F1 & F2 & F3 -->|Accepted / Rejected / Failed| OUT_WIN["立即胜出作为整体结果"]
+        F1["分支 1"] -->|"Skipped"| F2["分支 2"]
+        F2 -->|"Skipped"| F3["分支 3"]
+        F1 & F2 & F3 -->|"Accepted / Rejected / Failed"| OUT_WIN["立即胜出作为整体结果"]
     end
 
     subgraph "FAILED 触发器 (recoverWith)"
-        M1["主流程"] -->|Failed| REC["注入 Recovery&lt;I&gt; 进入补偿分支"]
-        M1 -->|Accepted / Rejected / Skipped| OUT_PASS["原样透传"]
+        M1["主流程"] -->|"Failed"| REC["注入 Recovery&lt;I&gt; 进入补偿分支"]
+        M1 -->|"Accepted / Rejected / Skipped"| OUT_PASS["原样透传"]
     end
 ```
 

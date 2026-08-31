@@ -31,9 +31,9 @@ graph LR
     Step2 -->|"Accepted(v2)"| Step3["Step 3 (INVOKE)"]
     Step3 -->|"Accepted(v3)"| Out["最终 Accepted(v3)"]
     
-    Step1 -.->|Rejected / Skipped / Failed| ShortCircuit["短路退出 (终止后续执行)"]
-    Step2 -.->|Rejected / Skipped / Failed| ShortCircuit
-    Step3 -.->|Rejected / Skipped / Failed| ShortCircuit
+    Step1 -.->|"Rejected / Skipped / Failed"| ShortCircuit["短路退出 (终止后续执行)"]
+    Step2 -.->|"Rejected / Skipped / Failed"| ShortCircuit
+    Step3 -.->|"Rejected / Skipped / Failed"| ShortCircuit
 ```
 
 ```java
@@ -108,14 +108,14 @@ Flow<PayRequest, PayResponse> smartPay = Flow.firstApplicable(
 ```mermaid
 graph TD
     IN["输入 PayRequest"] --> B1["分支 1: wechatPayFlow"]
-    B1 -->|Skipped| B2["分支 2: alipayFlow"]
-    B1 -->|Accepted / Rejected / Failed| OUT1["直接胜出 (终局)"]
+    B1 -->|"Skipped"| B2["分支 2: alipayFlow"]
+    B1 -->|"Accepted / Rejected / Failed"| OUT1["直接胜出 (终局)"]
     
-    B2 -->|Skipped| B3["分支 3: unionPayFlow"]
-    B2 -->|Accepted / Rejected / Failed| OUT2["直接胜出 (终局)"]
+    B2 -->|"Skipped"| B3["分支 3: unionPayFlow"]
+    B2 -->|"Accepted / Rejected / Failed"| OUT2["直接胜出 (终局)"]
     
-    B3 -->|Skipped| OUT_SKIP["整体返回 Skipped(NO_APPLICABLE)"]
-    B3 -->|Accepted / Rejected / Failed| OUT3["直接胜出 (终局)"]
+    B3 -->|"Skipped"| OUT_SKIP["整体返回 Skipped(NO_APPLICABLE)"]
+    B3 -->|"Accepted / Rejected / Failed"| OUT3["直接胜出 (终局)"]
 ```
 
 #### 流转语义契约
@@ -148,7 +148,7 @@ Flow<Order, String> routed = Flow.route(Order::getCategory)
 ```mermaid
 graph LR
     Main["主业务流水线"] -->|"Failed(failure)"| Rec["recoverWith 边界"]
-    Main -->|Accepted / Rejected / Skipped| Out["原样透传结果"]
+    Main -->|"Accepted / Rejected / Skipped"| Out["原样透传结果"]
     Rec -->|"注入 Recovery&lt;I&gt; (原始输入 + Failure)"| Comp["补偿 / 降级流程"]
     Comp --> Final["补偿后产生新的 Outcome"]
 ```
