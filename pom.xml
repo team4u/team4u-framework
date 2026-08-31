@@ -54,6 +54,7 @@
         <module>modules/flow/graph</module>
         <module>modules/flow/ratelimiter</module>
         <module>modules/flow/retry</module>
+        <module>modules/flow/criterion</module>
         <module>modules/flow/test</module>
         <module>modules/fsm/core</module>
         <module>modules/id/core</module>
@@ -176,6 +177,11 @@
             <dependency>
                 <groupId>com.team4u</groupId>
                 <artifactId>team4u-flow-retry</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-flow-criterion</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

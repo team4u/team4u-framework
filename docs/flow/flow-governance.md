@@ -149,6 +149,59 @@ Flow<OrderRequest, Receipt> flow3 = FlowRetries.fixed(3, 200)
 
 ---
 
+### 开箱即用表达式规则门控：`team4u-flow-criterion`
+
+为了支持动态文本表达式驱动的分支判定与前置准入校验，**`team4u-flow-criterion`** 模块将 Flow 的 `Policy<K>` / `Predicate<T>` 契约与框架的规则引擎 [`team4u-criterion`](../criterion/README.md) 无缝结合。
+
+#### 1. 引入依赖
+
+```xml
+<dependency>
+    <groupId>com.team4u</groupId>
+    <artifactId>team4u-flow-criterion</artifactId>
+</dependency>
+```
+
+#### 2. 门控策略：`CriterionPolicy<K>` 与 `CriterionPolicies`
+
+基于文本表达式（如 `"age >= 18 && verified == true"` 或 `"blacklisted == true || riskScore > 80"`）实现前置门控拦截：
+
+- **`CriterionPolicies.permitIf(expression)`**：满足表达式则放行，不满足则以 `Reason` 业务拒绝短路；
+- **`CriterionPolicies.rejectIf(expression)`**：满足表达式则以 `Reason` 业务拒绝短路，不满足则放行；
+- **`CriterionPolicies.failIf(expression, code, message)`**：满足表达式则以 `Failure` 系统故障抛出（可触发重试），不满足则放行。
+
+```java
+import com.team4u.framework.flow.criterion.CriterionPolicies;
+import com.team4u.framework.flow.criterion.CriterionPolicy;
+
+// 1. 准入放行：仅允许 18 岁以上用户进入
+Flow<UserRequest, Receipt> flow1 = Flow.step(chargeOp)
+        .policy(CriterionPolicies.permitIf("age >= 18", "UNDERAGE", "用户未满 18 岁"), req -> req);
+
+// 2. 风险拦截：命中黑名单或风控分过高直接短路拒绝
+Flow<UserRequest, Receipt> flow2 = Flow.step(chargeOp)
+        .policy(CriterionPolicies.rejectIf("blacklisted == true || riskScore > 80", "RISK_BLOCKED", "风控拦截"), req -> req);
+```
+
+#### 3. 条件分支谓词：`CriterionPredicates`
+
+在条件判断、`firstApplicable`、`route` 或步骤内部无缝作为 `Predicate<T>` 使用：
+
+```java
+import com.team4u.framework.flow.criterion.CriterionPredicates;
+
+// 动态判断是否满足 VIP 折扣规则
+CriterionPredicate<Order> vipCheck = CriterionPredicates.of("vip == true && amount >= 200");
+
+Flow<Order, Receipt> flow = Flow.step((ctx, order) -> 
+        vipCheck.test(order) 
+                ? Outcome.accepted(applyDiscount(order)) 
+                : Outcome.skipped(Reason.of("NOT_ELIGIBLE", "不满足优惠条件"))
+);
+```
+
+---
+
 ## 2. 重试治理：`PersistentPolicy` 与 `team4u-flow-retry`
 
 在 team4u-flow 的纯净化对称治理架构中，核心框架不硬编码任何特化的 Retry 原语，而是通过 **`PersistentPolicy<K, S>`（有状态持久化策略）** 统一承载所有具备状态变迁与定时退避唤醒能力的治理模型。所有重试治理能力完整收敛于 **`team4u-flow-retry`** 模块中。
@@ -157,7 +210,7 @@ Flow<OrderRequest, Receipt> flow3 = FlowRetries.fixed(3, 200)
 
 | 治理类型 | 核心契约 | 典型模块 | 适用场景 |
 | :--- | :--- | :--- | :--- |
-| **无状态治理** | `Policy<K>` | `team4u-flow-ratelimiter` | 纯内存/分布式准入放行、限流、鉴权、黑白名单 |
+| **无状态治理** | `Policy<K>` | `team4u-flow-ratelimiter`<br>`team4u-flow-criterion` | 纯内存/分布式准入放行、限流、动态规则门控、黑白名单 |
 | **有状态治理** | `PersistentPolicy<K, S>` | `team4u-flow-retry` | 故障退避重试、状态变迁、Durable 崩溃恢复与断点恢复 |
 | **时效控制** | `Timeout` | `team4u-flow` (核心) | 节点与作用域最大执行时限 |
 

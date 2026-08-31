@@ -75,6 +75,7 @@ graph TD
 | `team4u-flow-durable-kv` | KV 存储适配模块：基于 `KvStore` 与 CAS 乐观锁的持久化快照存储实现 (`KvDurableStore`) | 依赖 `team4u-flow-durable`、`team4u-kv`、`team4u-serializer-json` |
 | `team4u-flow-ratelimiter` | 限流治理适配模块：基于 `team4u-ratelimiter` 的开箱即用限流策略（`RateLimitPolicy`） | 依赖 `team4u-flow`、`team4u-ratelimiter` |
 | `team4u-flow-retry` | 重试治理适配模块：基于 `team4u-retry` 的多算法退避、条件重试与动态规则适配器（`FlowRetryPolicy`） | 依赖 `team4u-flow`、`team4u-retry` |
+| `team4u-flow-criterion` | 表达式规则治理适配模块：基于 `team4u-criterion` 的动态条件谓词与门控策略（`CriterionPolicy`） | 依赖 `team4u-flow`、`team4u-criterion` |
 | `team4u-flow-graph` | 可视化模块：Mermaid 流程图与紧凑文本树渲染器 | 依赖 `team4u-flow`（仅描述面） |
 | `team4u-flow-bean` | 容器集成模块：BeanManager 容器绑定解析器，保留 AOP 与代理 | 依赖 `team4u-flow`、`team4u-bean` |
 | `team4u-flow-test` | 测试支持模块：桩对象、Trace 收集器、断言库与测试夹具 | 依赖 `team4u-flow`、JUnit |

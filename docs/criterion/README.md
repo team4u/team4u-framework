@@ -114,6 +114,7 @@ com.team4u.framework.criterion
 
 ## 与其他组件联动
 
+- [**流程编排组件**](../flow/README.md)：通过 [`team4u-flow-criterion`](../flow/flow-governance.md) 将规则表达式无缝嵌入 Flow 的 `Policy<K>` 前置门控（`CriterionPolicy`）与条件分支（`CriterionPredicate`）。
 - [**路由组件**](../router/README.md)：`team4u-router` 内置的 `ExpressionRouter` 直接基于 Criterion 运行。
 - [**配置组件**](../config/README.md)：DSL 规则文本可下发至统一配置中心，配合变更监听实现运行时热生效。
 - [**日志治理组件**](../log/README.md)：`team4u-log-governance` 的动态染色规则基于 Criterion DSL 进行条件过滤；`team4u-log` 不依赖 Criterion。
