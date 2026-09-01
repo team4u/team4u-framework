@@ -353,4 +353,33 @@ public class MapReader {
         }
         return new MapReader(Collections.emptyMap());
     }
+
+    /**
+     * 将当前字典转换为指定类型的 Bean 对象（使用默认宽松复制策略）。
+     * <p>
+     * 默认忽略大小写、忽略下划线与中划线差异，并忽略转换过程中的错误。
+     * </p>
+     *
+     * @param beanClass 目标 Bean 的 Class 类型
+     * @param <T>       目标 Bean 泛型
+     * @return 转换后的 Bean 实例，若字典为空或 beanClass 为 null 则返回 null
+     */
+    public <T> T toBean(Class<T> beanClass) {
+        return toBean(beanClass, CopyOptions.create().ignoreCase().ignoreError());
+    }
+
+    /**
+     * 将当前字典按指定的拷贝选项转换为 Bean 对象。
+     *
+     * @param beanClass 目标 Bean 的 Class 类型
+     * @param options   拷贝选项
+     * @param <T>       目标 Bean 泛型
+     * @return 转换后的 Bean 实例，若字典为空或 beanClass 为 null 则返回 null
+     */
+    public <T> T toBean(Class<T> beanClass, CopyOptions options) {
+        if (map == null || map.isEmpty() || beanClass == null) {
+            return null;
+        }
+        return BeanUtil.toBean(map, beanClass, options != null ? options : CopyOptions.create());
+    }
 }

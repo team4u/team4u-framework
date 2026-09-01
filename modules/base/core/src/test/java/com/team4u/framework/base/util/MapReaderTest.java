@@ -172,4 +172,127 @@ public class MapReaderTest {
         Assert.assertNotNull(nameReader);
         Assert.assertTrue(nameReader.isEmpty());
     }
+
+    @Test
+    public void testToBeanBasicTypesAndNamingConventions() {
+        Map<String, Object> subMap = new HashMap<>();
+        subMap.put("host", "127.0.0.1");
+        subMap.put("port", 6379);
+
+        Map<String, Object> map = new HashMap<>();
+        map.put("server-name", "demoServer");
+        map.put("server_port", 8080);
+        map.put("MAX-ATTEMPTS", "5");
+        map.put("enable_ssl", "true");
+        map.put("action", "reject");
+        map.put("timeout", "10s");
+        map.put("sub", subMap);
+
+        MapReader reader = MapReader.of(map);
+        TestServerConfig config = reader.toBean(TestServerConfig.class);
+
+        Assert.assertNotNull(config);
+        Assert.assertEquals("demoServer", config.getServerName());
+        Assert.assertEquals(8080, config.getServerPort());
+        Assert.assertEquals(Long.valueOf(5L), config.getMaxAttempts());
+        Assert.assertTrue(config.getEnableSsl());
+        Assert.assertEquals(Action.REJECT, config.getAction());
+        Assert.assertEquals(Duration.ofSeconds(10), config.getTimeout());
+        Assert.assertNotNull(config.getSub());
+        Assert.assertEquals("127.0.0.1", config.getSub().getHost());
+        Assert.assertEquals(6379, config.getSub().getPort());
+    }
+
+    @Test
+    public void testToBeanChainedNavigation() {
+        Map<String, Object> subMap = new HashMap<>();
+        subMap.put("host", "192.168.1.100");
+        subMap.put("port", 3306);
+
+        Map<String, Object> rootMap = new HashMap<>();
+        rootMap.put("db", subMap);
+
+        MapReader rootReader = MapReader.of(rootMap);
+        TestSubConfig dbConfig = rootReader.getReader("db").toBean(TestSubConfig.class);
+
+        Assert.assertNotNull(dbConfig);
+        Assert.assertEquals("192.168.1.100", dbConfig.getHost());
+        Assert.assertEquals(3306, dbConfig.getPort());
+    }
+
+    @Test
+    public void testToBeanNullSafetyAndFaultTolerance() {
+        Map<String, Object> map = new HashMap<>();
+        map.put("host", "localhost");
+        map.put("port", 80);
+
+        MapReader reader = MapReader.of(map);
+
+        // 1. null map
+        Assert.assertNull(MapReader.of(null).toBean(TestSubConfig.class));
+        Assert.assertNull(MapReader.of(null).toBean(TestSubConfig.class, CopyOptions.create()));
+
+        // 2. empty map
+        Assert.assertNull(MapReader.of(new HashMap<>()).toBean(TestSubConfig.class));
+        Assert.assertNull(MapReader.of(new HashMap<>()).toBean(TestSubConfig.class, CopyOptions.create()));
+
+        // 3. null class
+        Assert.assertNull(reader.toBean(null));
+        Assert.assertNull(reader.toBean(null, CopyOptions.create()));
+
+        // 4. null options fallback to default options
+        TestSubConfig beanWithNullOptions = reader.toBean(TestSubConfig.class, null);
+        Assert.assertNotNull(beanWithNullOptions);
+        Assert.assertEquals("localhost", beanWithNullOptions.getHost());
+
+        // 5. non-existent sub reader
+        Assert.assertNull(reader.getReader("nonExistent").toBean(TestSubConfig.class));
+    }
+
+    @Test
+    public void testToBeanCustomCopyOptions() {
+        Map<String, Object> map = new HashMap<>();
+        map.put("server-name", "demoServer");
+        map.put("serverPort", "invalid_number");
+
+        MapReader reader = MapReader.of(map);
+
+        // 1. Strict mode (case sensitive): "server-name" does not match "serverName"
+        CopyOptions strictCaseOptions = CopyOptions.create().ignoreError();
+        TestServerConfig strictCaseBean = reader.toBean(TestServerConfig.class, strictCaseOptions);
+        Assert.assertNotNull(strictCaseBean);
+        Assert.assertNull(strictCaseBean.getServerName());
+
+        // 2. Strict error mode: parsing "invalid_number" into primitive int should throw exception when ignoreError is false
+        CopyOptions strictErrorOptions = CopyOptions.create().ignoreCase();
+        try {
+            reader.toBean(TestServerConfig.class, strictErrorOptions);
+            Assert.fail("Expected RuntimeException when ignoreError is false");
+        } catch (RuntimeException e) {
+            Assert.assertTrue(e.getMessage().contains("Set field error"));
+        }
+
+        // 3. Default loose mode ignores the error safely
+        TestServerConfig looseBean = reader.toBean(TestServerConfig.class);
+        Assert.assertNotNull(looseBean);
+        Assert.assertEquals("demoServer", looseBean.getServerName());
+        Assert.assertEquals(0, looseBean.getServerPort());
+    }
+
+    @lombok.Data
+    public static class TestServerConfig {
+        private String serverName;
+        private int serverPort;
+        private Long maxAttempts;
+        private Boolean enableSsl;
+        private Action action;
+        private Duration timeout;
+        private TestSubConfig sub;
+    }
+
+    @lombok.Data
+    public static class TestSubConfig {
+        private String host;
+        private int port;
+    }
 }

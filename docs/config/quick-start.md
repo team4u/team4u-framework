@@ -110,6 +110,9 @@ public class ReaderQuickStart {
         String dbUrl = dbReader.requireString("url", "数据库连接地址缺失");
         String username = dbReader.getString("username", "root");
 
+        // 直接将前缀子树转换为纯 POJO 对象（自动兼容命名风格与类型转换）
+        DbProperties dbConfig = manager.asReader("server.db").toBean(DbProperties.class);
+
         // 根视图流式提取
         MapReader rootReader = manager.asReader();
         int redisPort = rootReader.getReader("spring").getReader("redis").getInt("port", 6379);

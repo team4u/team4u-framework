@@ -37,6 +37,9 @@ public class BeanUtil {
         if (map == null || clazz == null) {
             return null;
         }
+        if (options == null) {
+            options = CopyOptions.create();
+        }
 
         T bean = ReflectUtil.newInstance(clazz);
         if (bean == null) {

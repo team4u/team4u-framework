@@ -57,4 +57,40 @@ public class ConfigManagerFacadeTest {
             ((com.team4u.framework.config.core.internal.DefaultConfigManager) manager).destroy();
         }
     }
+
+    @Test
+    public void testAsReaderToBeanWithGlobalManager() {
+        ConfigBootstrap.global().resetForTests();
+        try {
+            InMemoryConfigSource source = new InMemoryConfigSource("global-db-source", 1);
+            source.put("db.url", "jdbc:mysql://localhost:3306/demo");
+            source.put("db.username", "root");
+            source.put("db.pool-size", "20");
+            source.put("db.connect-timeout", "5s");
+            source.put("db.read-only", "false");
+
+            ConfigBootstrap.global()
+                    .addSource(source)
+                    .lock();
+
+            DbProperties dbProperties = ConfigManager.global().asReader("db").toBean(DbProperties.class);
+            Assert.assertNotNull(dbProperties);
+            Assert.assertEquals("jdbc:mysql://localhost:3306/demo", dbProperties.getUrl());
+            Assert.assertEquals("root", dbProperties.getUsername());
+            Assert.assertEquals(20, dbProperties.getPoolSize());
+            Assert.assertEquals(Duration.ofSeconds(5), dbProperties.getConnectTimeout());
+            Assert.assertFalse(dbProperties.isReadOnly());
+        } finally {
+            ConfigBootstrap.global().resetForTests();
+        }
+    }
+
+    @lombok.Data
+    public static class DbProperties {
+        private String url;
+        private String username;
+        private int poolSize;
+        private Duration connectTimeout;
+        private boolean readOnly;
+    }
 }

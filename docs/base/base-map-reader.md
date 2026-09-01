@@ -15,6 +15,7 @@
 
 - **多 Key 别名回退（Alias Fallback）**：支持传入多个候选 Key（如 `maxAttempts`, `max-attempts`, `max_attempts`），按顺序查找首个非 null 值；
 - **全类型安全提取**：内置 `getString`, `getInt`, `getLong`, `getDouble`, `getBoolean`, `getDuration`, `getEnum`, `get(Class<T>)` 等常用类型读取；
+- **POJO 对象转换 (toBean)**：内置支持将 MapReader 转换为任意强类型 JavaBean，默认自动兼容 kebab-case、snake_case 等命名风格并忽略转换错误，亦支持自定义 CopyOptions；
 - **时长原生解析**：支持文本格式时长（`100ms`, `5s`, `10m`, `1h`, `2d`）、纯数字毫秒数及 ISO-8601 格式（`PT10S`）；
 - **必填项严格断言**：提供 `require` 与 `requireString`，缺失时自动抛出清晰的 `IllegalArgumentException`；
 - **Null 安全与优雅默认值**：所有方法均支持传入默认值，当 Map 为 null 或未匹配时安全回退。
@@ -49,6 +50,8 @@ MapReader reader = MapUtil.reader(map);
 | `Duration getDuration(String key, [Duration defaultValue], String... aliases)` | 读取时长参数（支持 100ms/5s/10m/1h/2d/PT10S） |
 | `<E extends Enum<E>> E getEnum(Class<E> enumClass, String key, [E defaultValue], String... aliases)` | 读取枚举参数（大小写不敏感匹配） |
 | `<T> T get(Class<T> type, String key, [T defaultValue], String... aliases)` | 通用类型安全转换读取 |
+| `<T> T toBean(Class<T> beanClass)` | 将字典转换为指定类型的 Bean 对象（默认忽略大小写/下划线/中划线与错误） |
+| `<T> T toBean(Class<T> beanClass, CopyOptions options)` | 按指定的拷贝选项将字典转换为 Bean 对象（字典为空或 Class 为 null 返回 null） |
 | `MapReader getReader(String key, String... aliases)` | 读取嵌套子字典读取器（永不为 null） |
 | `Map<?, ?> toMap()` | 获取底层原始字典对象（永不为 null） |
 | `boolean isEmpty()` | 判断底层字典是否为空 |
@@ -108,6 +111,38 @@ MapReader root = MapReader.of(nestedMap);
 int redisPort = root.getReader("spring")
                     .getReader("redis")
                     .getInt("port", 6379);
+```
+
+### 字典转换为 POJO 对象 (toBean)
+
+支持一键将当前 `MapReader` 或嵌套子读取器转换为强类型 JavaBean，自动兼容 `kebab-case`、`snake_case` 等命名风格：
+
+```java
+public class ServerProperties {
+    private String serverName;
+    private int serverPort;
+    private Duration timeout;
+    private SubProperties sub;
+
+    // getters and setters
+}
+
+public class SubProperties {
+    private String host;
+    private int port;
+
+    // getters and setters
+}
+
+// 1. 默认宽松安全转换（自动映射 server-name -> serverName, timeout: "10s" -> Duration）
+ServerProperties server = reader.toBean(ServerProperties.class);
+
+// 2. 链式导航转换子对象
+SubProperties sub = reader.getReader("sub").toBean(SubProperties.class);
+
+// 3. 自定义严格拷贝策略（区分大小写与抛出转换异常）
+CopyOptions strictOptions = CopyOptions.create();
+ServerProperties strictServer = reader.toBean(ServerProperties.class, strictOptions);
 ```
 
 ### 配置中心原生整合

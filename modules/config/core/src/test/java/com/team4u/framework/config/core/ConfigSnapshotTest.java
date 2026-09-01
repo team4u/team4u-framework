@@ -216,4 +216,34 @@ public class ConfigSnapshotTest {
         Assert.assertNotNull(leafReader);
         Assert.assertTrue(leafReader.isEmpty());
     }
+
+    @Test
+    public void testAsReaderToBean() {
+        Map<String, ConfigEntry> entries = new HashMap<>();
+        long now = System.currentTimeMillis();
+        entries.put("db.url", new ConfigEntry("db.url", "jdbc:mysql://localhost:3306/demo", "src", now));
+        entries.put("db.user-name", new ConfigEntry("db.user-name", "root", "src", now));
+        entries.put("db.max-connections", new ConfigEntry("db.max-connections", "50", "src", now));
+        entries.put("db.connect-timeout", new ConfigEntry("db.connect-timeout", "3s", "src", now));
+        entries.put("db.auto-commit", new ConfigEntry("db.auto-commit", "true", "src", now));
+
+        ConfigSnapshot snapshot = new ConfigSnapshot(1L, entries);
+        DbProperties db = snapshot.asReader("db").toBean(DbProperties.class);
+
+        Assert.assertNotNull(db);
+        Assert.assertEquals("jdbc:mysql://localhost:3306/demo", db.getUrl());
+        Assert.assertEquals("root", db.getUserName());
+        Assert.assertEquals(50, db.getMaxConnections());
+        Assert.assertEquals(Duration.ofSeconds(3), db.getConnectTimeout());
+        Assert.assertTrue(db.isAutoCommit());
+    }
+
+    @lombok.Data
+    public static class DbProperties {
+        private String url;
+        private String userName;
+        private int maxConnections;
+        private Duration connectTimeout;
+        private boolean autoCommit;
+    }
 }
