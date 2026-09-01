@@ -42,8 +42,19 @@ public class FlowLoggingObserver implements FlowObserver {
     private final boolean printStepLogs;
     private final boolean printTreeSummary;
 
-    private final ConcurrentHashMap<String, TraceNode> nodeMap = new ConcurrentHashMap<String, TraceNode>();
-    private volatile TraceNode rootTraceNode;
+    private static final class ExecutionTrace {
+        private final TraceNode rootTraceNode;
+        private final ConcurrentHashMap<String, TraceNode> nodeMap = new ConcurrentHashMap<String, TraceNode>();
+        private final long startTime;
+
+        ExecutionTrace(TraceNode rootTraceNode) {
+            this.rootTraceNode = rootTraceNode;
+            this.startTime = System.currentTimeMillis();
+        }
+    }
+
+    private final ConcurrentHashMap<String, ExecutionTrace> activeTraces = new ConcurrentHashMap<String, ExecutionTrace>();
+    private volatile TraceNode lastCompletedRootNode;
 
     public FlowLoggingObserver() {
         this(builder());
@@ -57,6 +68,26 @@ public class FlowLoggingObserver implements FlowObserver {
         this.contextSupplier = builder.contextSupplier != null ? builder.contextSupplier : FlowContextHolder::get;
         this.printStepLogs = builder.printStepLogs;
         this.printTreeSummary = builder.printTreeSummary;
+    }
+
+    /**
+     * 获取最近一次已完成执行的根追踪节点（主要用于单测与断言验证）。
+     *
+     * @return 根追踪节点，未完成则为 null
+     */
+    public TraceNode rootTraceNode() {
+        return lastCompletedRootNode;
+    }
+
+    /**
+     * 获取指定执行 ID 正在进行或已缓存的根追踪节点。
+     *
+     * @param executionId 执行唯一标识
+     * @return 根追踪节点
+     */
+    public TraceNode rootTraceNode(String executionId) {
+        ExecutionTrace trace = activeTraces.get(executionId);
+        return trace != null ? trace.rootTraceNode : null;
     }
 
     public static Builder builder() {
@@ -116,9 +147,11 @@ public class FlowLoggingObserver implements FlowObserver {
 
         switch (event.type()) {
             case FLOW_STARTED:
-                rootTraceNode = new TraceNode(path, "flow: " + meta.flowId());
-                rootTraceNode.setStartTime(System.currentTimeMillis());
-                nodeMap.put(path, rootTraceNode);
+                TraceNode root = new TraceNode(path, "flow: " + meta.flowId());
+                root.setStartTime(System.currentTimeMillis());
+                ExecutionTrace newTrace = new ExecutionTrace(root);
+                newTrace.nodeMap.put(path, root);
+                activeTraces.put(meta.executionId(), newTrace);
 
                 if (printStepLogs) {
                     Loggers.of(loggerName)
@@ -133,10 +166,17 @@ public class FlowLoggingObserver implements FlowObserver {
 
             case NODE_STARTED:
             case PARALLEL_STARTED:
+                ExecutionTrace currentTrace = activeTraces.computeIfAbsent(meta.executionId(), k -> {
+                    TraceNode r = new TraceNode("$", "flow: " + meta.flowId());
+                    r.setStartTime(System.currentTimeMillis());
+                    ExecutionTrace t = new ExecutionTrace(r);
+                    t.nodeMap.put("$", r);
+                    return t;
+                });
                 TraceNode startNode = new TraceNode(path, label);
                 startNode.setStartTime(System.currentTimeMillis());
-                nodeMap.put(path, startNode);
-                linkParent(path, startNode);
+                currentTrace.nodeMap.put(path, startNode);
+                linkParent(currentTrace, path, startNode);
 
                 if (printStepLogs) {
                     Loggers.of(loggerName)
@@ -152,7 +192,8 @@ public class FlowLoggingObserver implements FlowObserver {
                 break;
 
             case NODE_COMPLETED:
-                TraceNode completedNode = nodeMap.get(path);
+                ExecutionTrace completedTrace = activeTraces.get(meta.executionId());
+                TraceNode completedNode = completedTrace != null ? completedTrace.nodeMap.get(path) : null;
                 long duration = completedNode != null ? System.currentTimeMillis() - completedNode.getStartTime() : 0;
                 String outcome = event.attributes().getOrDefault("outcome", "ACCEPTED");
 
@@ -186,14 +227,16 @@ public class FlowLoggingObserver implements FlowObserver {
                 break;
 
             case ROUTE_SELECTED:
-                TraceNode routeNode = nodeMap.get(path);
+                ExecutionTrace routeTrace = activeTraces.get(meta.executionId());
+                TraceNode routeNode = routeTrace != null ? routeTrace.nodeMap.get(path) : null;
                 if (routeNode != null) {
                     routeNode.setExtra("selected=" + event.attributes().getOrDefault("branch", "unknown"));
                 }
                 break;
 
             case FALLBACK_SELECTED:
-                TraceNode fallbackNode = nodeMap.get(path);
+                ExecutionTrace fallbackTrace = activeTraces.get(meta.executionId());
+                TraceNode fallbackNode = fallbackTrace != null ? fallbackTrace.nodeMap.get(path) : null;
                 if (fallbackNode != null) {
                     fallbackNode.setExtra("fallback=" + event.attributes().getOrDefault("trigger", "unknown"));
                 }
@@ -211,17 +254,19 @@ public class FlowLoggingObserver implements FlowObserver {
     }
 
     private void handleFlowFinished(Metadata meta, Event event) {
-        if (rootTraceNode == null) {
+        ExecutionTrace trace = activeTraces.remove(meta.executionId());
+        if (trace == null || trace.rootTraceNode == null) {
             return;
         }
 
-        long totalDuration = System.currentTimeMillis() - rootTraceNode.getStartTime();
-        rootTraceNode.setDurationMs(totalDuration);
+        long totalDuration = System.currentTimeMillis() - trace.startTime;
+        trace.rootTraceNode.setDurationMs(totalDuration);
         String finalOutcome = event.attributes().getOrDefault("outcome", event.type().name());
-        rootTraceNode.setOutcome(finalOutcome);
+        trace.rootTraceNode.setOutcome(finalOutcome);
+        this.lastCompletedRootNode = trace.rootTraceNode;
 
         if (printTreeSummary) {
-            String treeStr = TraceTreeFormatter.formatTree(rootTraceNode);
+            String treeStr = TraceTreeFormatter.formatTree(trace.rootTraceNode);
             Object finalContext = contextSupplier != null ? contextSupplier.get() : null;
             String maskedFinalContext = contextFormatter.format(finalContext);
 
@@ -230,18 +275,18 @@ public class FlowLoggingObserver implements FlowObserver {
         }
     }
 
-    private void linkParent(String path, TraceNode child) {
+    private void linkParent(ExecutionTrace trace, String path, TraceNode child) {
         int lastSlash = path.lastIndexOf('/');
         if (lastSlash > 0) {
             String parentPath = path.substring(0, lastSlash);
-            TraceNode parent = nodeMap.get(parentPath);
+            TraceNode parent = trace.nodeMap.get(parentPath);
             if (parent != null) {
                 parent.addChild(child);
                 return;
             }
         }
-        if (rootTraceNode != null && !path.equals(rootTraceNode.getPath())) {
-            rootTraceNode.addChild(child);
+        if (trace.rootTraceNode != null && !path.equals(trace.rootTraceNode.getPath())) {
+            trace.rootTraceNode.addChild(child);
         }
     }
 
