@@ -49,6 +49,10 @@ MapReader reader = MapUtil.reader(map);
 | `Duration getDuration(String key, [Duration defaultValue], String... aliases)` | 读取时长参数（支持 100ms/5s/10m/1h/2d/PT10S） |
 | `<E extends Enum<E>> E getEnum(Class<E> enumClass, String key, [E defaultValue], String... aliases)` | 读取枚举参数（大小写不敏感匹配） |
 | `<T> T get(Class<T> type, String key, [T defaultValue], String... aliases)` | 通用类型安全转换读取 |
+| `MapReader getReader(String key, String... aliases)` | 读取嵌套子字典读取器（永不为 null） |
+| `Map<?, ?> toMap()` | 获取底层原始字典对象（永不为 null） |
+| `boolean isEmpty()` | 判断底层字典是否为空 |
+| `int size()` | 获取底层字典条目数 |
 
 ---
 
@@ -93,6 +97,29 @@ public class ConfigReaderExample {
         DEBUG, INFO, WARN, ERROR
     }
 }
+```
+
+### 嵌套子字典流式导航
+
+```java
+MapReader root = MapReader.of(nestedMap);
+
+// 链式导航进入子字典并提取强类型参数
+int redisPort = root.getReader("spring")
+                    .getReader("redis")
+                    .getInt("port", 6379);
+```
+
+### 配置中心原生整合
+
+`team4u-config` 中的 `ConfigManager` 与 `ConfigSnapshot` 原生整合 `MapReader`，支持按前缀直接进行流式强类型读取：
+
+```java
+// 直接提取特定前缀的强类型子树读取器
+MapReader redis = ConfigManager.global().asReader("spring.redis");
+String host = redis.getString("host", "127.0.0.1");
+int port = redis.getInt("port", 6379);
+Duration timeout = redis.getDuration("timeout", Duration.ofSeconds(3));
 ```
 
 ---
