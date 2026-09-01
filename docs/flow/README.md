@@ -71,6 +71,8 @@ graph TD
 | Maven 坐标 (`com.team4u`) | 定位 | 依赖说明 |
 | :--- | :--- | :--- |
 | `team4u-flow` | 核心模块：Flow DSL、四态 Outcome、Local 执行器、并行与挂起机制 | 仅依赖 JDK |
+| `team4u-flow-definition` | 外部配置与符号注册模块：纯数据 AST 模型、符号注册表、静态类型推导与校验系统、不可变发布器 | 依赖 `team4u-flow` |
+| `team4u-flow-dsl` | 文本 DSL 模块：人类可读文本 DSL 词法分析、语法解析与统一门面 (`FlowDsl`) | 依赖 `team4u-flow-definition` |
 | `team4u-flow-durable` | 持久化模块：Durable 执行器、快照信封、StateMapper、CAS 检查点与恢复 | 依赖 `team4u-flow` |
 | `team4u-flow-durable-kv` | KV 存储适配模块：基于 `KvStore` 与 CAS 乐观锁的持久化快照存储实现 (`KvDurableStore`) | 依赖 `team4u-flow-durable`、`team4u-kv`、`team4u-serializer-json` |
 | `team4u-flow-ratelimiter` | 限流治理适配模块：基于 `team4u-ratelimiter` 的开箱即用限流策略（`RateLimitPolicy`） | 依赖 `team4u-flow`、`team4u-ratelimiter` |
@@ -89,6 +91,10 @@ graph TD
 
 ### 入门与概览
 - [快速开始 (Quick Start)](quick-start.md)：5 分钟体验流水线编排、条件路由、挂起恢复与持久化断点续跑。
+
+### 外部定义与文本 DSL
+- [外部流程定义与符号注册 (team4u-flow-definition)](flow-definition.md)：纯数据 AST 模型全景、符号注册表、静态类型检查、`FlowBinder` 绑定与 `SourceMap` 错误映射、`FlowPublisher` 不可变发布器。
+- [文本 DSL 语法与统一门面 (team4u-flow-dsl)](flow-dsl.md)：DSL 语法原语规范、洋葱圈修饰器、词法与语法解析架构、`FlowDsl` 门面与生产级端到端实战。
 
 ### 核心语义与模型
 - [四态业务结果与生命周期模型](flow-outcome.md)：深入剖析 `Outcome<T>` 四态闭集、`Reason` / `Failure` 诊断值对象、`Outcome.map` 映射与 `FlowResult` / `DurableResult` 执行生命周期。

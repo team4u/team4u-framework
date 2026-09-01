@@ -11,67 +11,23 @@
         <relativePath>../../../pom.xml</relativePath>
     </parent>
 
-    <artifactId>team4u-flow-ratelimiter</artifactId>
-    <description>Flow 限流治理策略适配层：基于 team4u-ratelimiter 与 Policy 契约的限流拦截器</description>
+    <artifactId>team4u-flow-dsl</artifactId>
+    <description>Flow 文本 DSL 词法分析、语法解析与集成编译组件</description>
 
     <dependencies>
         <dependency>
             <groupId>com.team4u</groupId>
-            <artifactId>team4u-flow</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <dependency>
-            <groupId>com.team4u</groupId>
-            <artifactId>team4u-ratelimiter</artifactId>
-            <version>${project.version}</version>
-        </dependency>
-        <!-- 可选生产依赖：FlowDefinitionExtension 与 PolicyProvider 适配 -->
-        <dependency>
-            <groupId>com.team4u</groupId>
             <artifactId>team4u-flow-definition</artifactId>
             <version>${project.version}</version>
-            <optional>true</optional>
         </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
         </dependency>
-
         <dependency>
             <groupId>org.projectlombok</groupId>
             <artifactId>lombok</artifactId>
             <optional>true</optional>
-        </dependency>
-
-        <dependency>
-            <groupId>com.team4u</groupId>
-            <artifactId>team4u-flow-test</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.team4u</groupId>
-            <artifactId>team4u-config</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.team4u</groupId>
-            <artifactId>team4u-config-test</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.team4u</groupId>
-            <artifactId>team4u-kv-test</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
-        </dependency>
-        <dependency>
-            <groupId>com.team4u</groupId>
-            <artifactId>team4u-serializer-jackson</artifactId>
-            <version>${project.version}</version>
-            <scope>test</scope>
         </dependency>
         <dependency>
             <groupId>junit</groupId>
@@ -83,6 +39,18 @@
             <artifactId>slf4j-simple</artifactId>
             <scope>test</scope>
         </dependency>
+        <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-flow-retry</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-flow-ratelimiter</artifactId>
+            <version>${project.version}</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -92,7 +60,7 @@
                 <artifactId>maven-enforcer-plugin</artifactId>
                 <executions>
                     <execution>
-                        <id>enforce-flow-ratelimiter-boundary</id>
+                        <id>enforce-flow-dsl-boundary</id>
                         <goals>
                             <goal>enforce</goal>
                         </goals>
@@ -106,7 +74,6 @@
                                         <exclude>com.fasterxml.jackson*:*:*:*:compile</exclude>
                                         <exclude>com.fasterxml.jackson*:*:*:*:runtime</exclude>
                                     </excludes>
-                                    <message>team4u-flow-ratelimiter production code may depend only on team4u-flow and team4u-ratelimiter; Spring and Jackson are forbidden as direct production dependencies.</message>
                                 </bannedDependencies>
                             </rules>
                         </configuration>

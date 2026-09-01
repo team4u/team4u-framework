@@ -1,6 +1,10 @@
 * [组件概览](README.md)
 * [快速开始](quick-start.md)
 
+* **外部定义与文本 DSL**
+  * [外部流程定义与符号注册 (team4u-flow-definition)](flow-definition.md)
+  * [文本 DSL 语法与统一门面 (team4u-flow-dsl)](flow-dsl.md)
+
 * **核心语义与模型**
   * [四态业务结果与生命周期模型](flow-outcome.md)
   * [四态传播规则与消费机制](flow-propagation.md)

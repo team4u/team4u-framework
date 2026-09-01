@@ -39,6 +39,13 @@
             <version>${project.version}</version>
             <optional>true</optional>
         </dependency>
+        <!-- 可选生产依赖：FlowDefinitionExtension 与 PolicyProvider 适配 -->
+        <dependency>
+            <groupId>com.team4u</groupId>
+            <artifactId>team4u-flow-definition</artifactId>
+            <version>${project.version}</version>
+            <optional>true</optional>
+        </dependency>
         <dependency>
             <groupId>org.slf4j</groupId>
             <artifactId>slf4j-api</artifactId>
