@@ -195,10 +195,12 @@ public class FlowLoggingObserver implements FlowObserver {
         String path = meta.nodePath();
         ExecutionTrace trace = getOrCreateTrace(meta);
 
-        TraceNode startNode = new TraceNode(path, label);
-        startNode.setStartTime(System.currentTimeMillis());
-        trace.nodeMap.put(path, startNode);
-        linkParent(trace, path, startNode);
+        if (!path.equals("$") && (trace.rootTraceNode == null || !path.equals(trace.rootTraceNode.getPath()))) {
+            TraceNode startNode = new TraceNode(path, label);
+            startNode.setStartTime(System.currentTimeMillis());
+            trace.nodeMap.put(path, startNode);
+            linkParent(trace, path, startNode);
+        }
 
         if (printStepLogs) {
             Loggers.of(loggerName)

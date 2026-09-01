@@ -4,8 +4,10 @@ import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.Local;
 import com.team4u.framework.flow.LocalExecutable;
 import com.team4u.framework.flow.api.Branch;
+import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.model.FlowResult;
 import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Reason;
 import com.team4u.framework.log.support.TestLogHelper;
 import com.team4u.framework.mask.Mask;
 import com.team4u.framework.mask.MaskType;
@@ -13,7 +15,9 @@ import lombok.Data;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.List;
 import java.util.Map;
+import java.util.stream.Collectors;
 
 public class FlowLoggingObserverTest {
 
@@ -44,10 +48,10 @@ public class FlowLoggingObserverTest {
                 req.setStatus("VALIDATED");
                 return Outcome.accepted(req);
             }).named("Step 1: Validate")
-            .then((ctx, req) -> {
+            .then(Flow.step((Operation<TestOrderContext, TestOrderContext>) (ctx, req) -> {
                 req.setStatus("PAID");
                 return Outcome.accepted(req);
-            }).named("Step 2: Pay");
+            }).named("Step 2: Pay"));
 
             // 2. 构造日志观察者
             FlowLoggingObserver observer = FlowLoggingObserver.builder()
@@ -86,6 +90,23 @@ public class FlowLoggingObserverTest {
             });
             Assert.assertTrue("@TraceIgnore 标记的字段不应出现在日志中", hasNoSecret);
 
+            // 5. 深度校验 rootTraceNode 结构与指标
+            TraceNode root = observer.rootTraceNode();
+            Assert.assertNotNull("流程结束后 rootTraceNode 应当非空", root);
+            Assert.assertEquals("$", root.getPath());
+            Assert.assertEquals("flow: order-test-flow", root.getLabel());
+            Assert.assertEquals("ACCEPTED", root.getOutcome());
+            Assert.assertTrue(root.getDurationMs() >= 0);
+            Assert.assertEquals(2, root.getChildren().size());
+
+            TraceNode step1 = root.getChildren().get(0);
+            Assert.assertEquals("Step 1: Validate", step1.getLabel());
+            Assert.assertEquals("ACCEPTED", step1.getOutcome());
+
+            TraceNode step2 = root.getChildren().get(1);
+            Assert.assertEquals("Step 2: Pay", step2.getLabel());
+            Assert.assertEquals("ACCEPTED", step2.getOutcome());
+
         } catch (Exception e) {
             throw new RuntimeException(e);
         } finally {
@@ -95,8 +116,12 @@ public class FlowLoggingObserverTest {
 
     @Test
     public void testParallelFlowExecution() throws Exception {
-        Branch<TestOrderContext, TestOrderContext> b1 = Branch.of("BranchA", (ctx, req) -> Outcome.accepted(req));
-        Branch<TestOrderContext, TestOrderContext> b2 = Branch.of("BranchB", (ctx, req) -> Outcome.accepted(req));
+        Branch<TestOrderContext, TestOrderContext> b1 = Branch.of(
+                "BranchA", Flow.step((Operation<TestOrderContext, TestOrderContext>) (ctx, req) -> Outcome.accepted(req)).named("BranchA")
+        );
+        Branch<TestOrderContext, TestOrderContext> b2 = Branch.of(
+                "BranchB", Flow.step((Operation<TestOrderContext, TestOrderContext>) (ctx, req) -> Outcome.accepted(req)).named("BranchB")
+        );
         Flow<TestOrderContext, TestOrderContext> flow = Flow.parallel(b1, b2).join(results -> results.outcome(b1));
 
         FlowLoggingObserver observer = new FlowLoggingObserver();
@@ -108,6 +133,132 @@ public class FlowLoggingObserverTest {
         FlowResult<TestOrderContext> result = FlowContextHolder.runWith(context, () -> executable.run(context));
 
         Assert.assertTrue(result instanceof FlowResult.Completed);
-        Assert.assertNotNull(observer.rootTraceNode());
+        TraceNode root = observer.rootTraceNode();
+        Assert.assertNotNull(root);
+        Assert.assertEquals("ACCEPTED", root.getOutcome());
+        Assert.assertEquals(2, root.getChildren().size());
+        List<String> childLabels = root.getChildren().stream().map(TraceNode::getLabel).collect(Collectors.toList());
+        Assert.assertTrue(childLabels.contains("BranchA"));
+        Assert.assertTrue(childLabels.contains("BranchB"));
+        Assert.assertTrue(root.getChildren().stream().allMatch(c -> "ACCEPTED".equals(c.getOutcome())));
+    }
+
+    @Test
+    public void testRouteAndFallbackExecutionTree() throws Exception {
+        Flow<TestOrderContext, TestOrderContext> flow = Flow.route(
+                        (Operation<TestOrderContext, String>) (ctx, req) -> Outcome.accepted(req.getStatus())
+                )
+                .caseOf("INITIAL", Flow.step((Operation<TestOrderContext, TestOrderContext>) (ctx, req) -> {
+                    req.setStatus("ROUTED");
+                    return Outcome.accepted(req);
+                }).named("Initial Branch"))
+                .otherwise(Flow.step((Operation<TestOrderContext, TestOrderContext>) (ctx, req) -> Outcome.accepted(req)));
+
+        FlowLoggingObserver observer = FlowLoggingObserver.builder()
+                .printStepLogs(true)
+                .printTreeSummary(true)
+                .build();
+
+        LocalExecutable<TestOrderContext, TestOrderContext> executable = Local.compile(
+                flow, "route-test-flow", 1, com.team4u.framework.flow.spi.OperationResolver.rejecting(), observer, null
+        );
+
+        TestOrderContext context = new TestOrderContext();
+        FlowResult<TestOrderContext> result = FlowContextHolder.runWith(context, () -> executable.run(context));
+
+        Assert.assertTrue(result instanceof FlowResult.Completed);
+        TraceNode root = observer.rootTraceNode();
+        Assert.assertNotNull(root);
+        Assert.assertTrue(root.getExtra().contains("selected=case:0"));
+        Assert.assertEquals(2, root.getChildren().size());
+        TraceNode branchChild = root.getChildren().get(1);
+        Assert.assertEquals("Initial Branch", branchChild.getLabel());
+    }
+
+    @Test
+    public void testNonAcceptedOutcomesLogging() throws Exception {
+        TestLogHelper logHelper = TestLogHelper.start();
+        try {
+            Flow<TestOrderContext, TestOrderContext> rejectedFlow = Flow.step(
+                    (Operation<TestOrderContext, TestOrderContext>) (ctx, req) -> Outcome.rejected(Reason.of("INSUFFICIENT_FUNDS", "balance too low"))
+            );
+
+            FlowLoggingObserver observer = new FlowLoggingObserver();
+            LocalExecutable<TestOrderContext, TestOrderContext> executable = Local.compile(
+                    rejectedFlow, "rejected-flow", 1, com.team4u.framework.flow.spi.OperationResolver.rejecting(), observer, null
+            );
+
+            TestOrderContext context = new TestOrderContext();
+            FlowResult<TestOrderContext> result = FlowContextHolder.runWith(context, () -> executable.run(context));
+
+            Assert.assertTrue(result instanceof FlowResult.Completed);
+            TraceNode root = observer.rootTraceNode();
+            Assert.assertNotNull(root);
+            Assert.assertEquals("REJECTED", root.getOutcome());
+            Assert.assertTrue(root.getChildren().isEmpty());
+
+        } finally {
+            logHelper.stop();
+        }
+    }
+
+    @Test
+    public void testCustomProjectorAndBuilderOptions() throws Exception {
+        TestLogHelper logHelper = TestLogHelper.start();
+        try {
+            FlowLoggingObserver observer = FlowLoggingObserver.builder()
+                    .loggerNamePrefix("custom.prefix")
+                    .contextProjector(ContextProjector.fields("orderId", "amount"))
+                    .printStepLogs(true)
+                    .printTreeSummary(false)
+                    .build();
+
+            Flow<TestOrderContext, TestOrderContext> flow = Flow.<TestOrderContext, TestOrderContext>step(
+                    (ctx, req) -> Outcome.accepted(req)
+            ).named("Single Step");
+            LocalExecutable<TestOrderContext, TestOrderContext> executable = Local.compile(
+                    flow, "custom-projector-flow", 1, com.team4u.framework.flow.spi.OperationResolver.rejecting(), observer, null
+            );
+
+            TestOrderContext context = new TestOrderContext();
+            FlowResult<TestOrderContext> result = FlowContextHolder.runWith(context, () -> executable.run(context));
+
+            Assert.assertTrue(result instanceof FlowResult.Completed);
+            Assert.assertNotNull(observer.rootTraceNode());
+            Assert.assertNull(observer.rootTraceNode("non-existent-id"));
+
+            boolean hasOrderIdOnly = logHelper.allEvents().stream().anyMatch(e -> {
+                Object ctx = e.get("context");
+                return ctx != null && ctx.toString().contains("ORD-8888") && !ctx.toString().contains("mobile");
+            });
+            Assert.assertTrue("应当仅包含投影白名单字段", hasOrderIdOnly);
+
+        } finally {
+            logHelper.stop();
+        }
+    }
+
+    @Test
+    public void testTraceNodeModelDirect() {
+        TraceNode node = new TraceNode("$/0", "TestNode");
+        node.setStartTime(100L);
+        node.setDurationMs(50L);
+        node.setOutcome("ACCEPTED");
+        node.setExtra("attempt=1");
+
+        Assert.assertEquals("$/0", node.getPath());
+        Assert.assertEquals("TestNode", node.getLabel());
+        Assert.assertEquals(100L, node.getStartTime());
+        Assert.assertEquals(50L, node.getDurationMs());
+        Assert.assertEquals("ACCEPTED", node.getOutcome());
+        Assert.assertEquals("attempt=1", node.getExtra());
+
+        node.addChild(null);
+        Assert.assertEquals(0, node.getChildren().size());
+
+        TraceNode child = new TraceNode("$/0/0", "ChildNode");
+        node.addChild(child);
+        Assert.assertEquals(1, node.snapshotChildren().size());
+        Assert.assertEquals("ChildNode", node.snapshotChildren().get(0).getLabel());
     }
 }

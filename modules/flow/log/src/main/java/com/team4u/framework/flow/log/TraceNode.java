@@ -17,7 +17,7 @@ import java.util.List;
 public class TraceNode {
 
     private final String path;
-    private final String label;
+    private String label;
     private long startTime;
     private long durationMs;
     private String outcome = "UNKNOWN";
