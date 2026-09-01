@@ -3,8 +3,17 @@ package com.team4u.framework.flow.bean;
 import com.team4u.framework.bean.spring.Team4uBeanConfiguration;
 import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.Local;
+import com.team4u.framework.flow.LocalExecutable;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.definition.binding.BoundFlow;
+import com.team4u.framework.flow.definition.binding.FlowBinder;
+import com.team4u.framework.flow.definition.model.FlowDefinition;
+import com.team4u.framework.flow.definition.model.SourceSpan;
+import com.team4u.framework.flow.definition.model.StepSpec;
+import com.team4u.framework.flow.definition.model.SymbolRef;
+import com.team4u.framework.flow.definition.registry.FlowDefinitionRegistry;
+import com.team4u.framework.flow.model.FlowResult;
 import com.team4u.framework.flow.model.Outcome;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.junit.After;
@@ -15,8 +24,10 @@ import org.springframework.context.annotation.AnnotationConfigApplicationContext
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
+import org.springframework.stereotype.Component;
 
 import java.lang.reflect.Proxy;
+import java.util.Collections;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.Assert.assertEquals;
@@ -84,6 +95,25 @@ public class BeanOperationResolverSpringTest {
         assertEquals(1, ADVICE_CALLS.get());
     }
 
+    @Test
+    public void flowConventionAutoDiscoversSpringComponentWithoutRegistryRegistration() {
+        context = new AnnotationConfigApplicationContext(SpringConfiguration.class);
+
+        // 未向 Registry 显式注册 order.validate，通过 Convention 自动发现并执行
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.empty();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "order.flow", "1",
+                new StepSpec(SymbolRef.of("order.validate"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN),
+                "order.flow", SourceSpan.UNKNOWN
+        );
+
+        BoundFlow bound = FlowBinder.bind(def, registry);
+        LocalExecutable<String, String> exec = bound.compileLocal();
+        FlowResult<String> result = exec.run("order-100");
+        assertEquals("order-100:validated", result.requireAccepted());
+    }
+
     public interface SpringOperation extends Operation<String, String> { }
 
     public static final class SpringOperationTarget implements SpringOperation {
@@ -97,6 +127,14 @@ public class BeanOperationResolverSpringTest {
         @Override
         public Outcome<String> execute(OperationContext context, String input) {
             return Outcome.accepted(input + ":class-proxy");
+        }
+    }
+
+    @Component("order.validate")
+    public static class OrderValidateComponent implements Operation<String, String> {
+        @Override
+        public Outcome<String> execute(OperationContext context, String input) {
+            return Outcome.accepted(input + ":validated");
         }
     }
 
@@ -123,6 +161,11 @@ public class BeanOperationResolverSpringTest {
                 return invocation.proceed();
             });
             return (ClassProxyOperation) factory.getProxy();
+        }
+
+        @Bean(name = "order.validate")
+        public OrderValidateComponent orderValidateComponent() {
+            return new OrderValidateComponent();
         }
     }
 }

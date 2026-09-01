@@ -48,6 +48,17 @@ public class BeanOperationResolverTest {
             "flowBeanResolverTest.missing.2b0cfb55";
 
     @Test
+    public void resolvesBeanByIdentifier() {
+        ClassOperation op = new ClassOperation();
+        register("flowBeanResolverTest.direct.id", op);
+
+        BeanOperationResolver resolver = BeanOperationResolver.global();
+        assertSame(op, resolver.resolve("flowBeanResolverTest.direct.id"));
+        org.junit.Assert.assertNull(resolver.resolve("non.existent.id"));
+        org.junit.Assert.assertNull(resolver.resolve((String) null));
+    }
+
+    @Test
     public void localCompileResolvesOperationClassAndQualifierBindingsViaSpi() {
         ClassOperation classOperation = new ClassOperation();
         QualifiedOperation qualifiedOperation = new QualifiedOperationImpl();

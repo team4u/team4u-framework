@@ -34,6 +34,16 @@ public interface OperationResolver {
     Object resolve(Class<?> contract, String qualifier);
 
     /**
+     * 根据全局唯一标识符或 Bean 名称解析目标组件实例（约定优于配置自动发现）。
+     *
+     * @param identifier 标识符或 Bean 名称，可为 null
+     * @return 解析得到的组件实例；若不存在或不支持则返回 null
+     */
+    default Object resolve(String identifier) {
+        return null;
+    }
+
+    /**
      * 提取已解析实例的真实实现类型 Class（支持智能解包 JDK 动态代理）。
      *
      * @param resolved 已解析的组件实例，不能为 null

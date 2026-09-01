@@ -140,20 +140,26 @@ FlowDefinition definition = new FlowDefinition(
 
 ### 在符号表中登记真实的 Java 组件 (FlowDefinitionRegistry)
 
-将上述蓝图中引用的字符串标识（`order.validate` 等），映射到具体的 Java 实例、方法引用或 Spring Bean 契约上：
+将上述蓝图中引用的字符串标识（`order.validate` 等），映射到具体的 Java 实例、方法引用或 Spring Bean 契约上。
+
+框架内置了**泛型反射自动推导机制**，只要传入具体的组件实现类或实例，框架将自动分析接口签名提取入参和出参类型，**无需手动重复声明 `Class<I>, Class<O>`**：
 
 ```java
 FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
-        // 注册参数校验步骤（入参为 OrderContext，出参为 OrderContext）
-        .operation("order.validate", new ValidateOrderOp(), OrderContext.class, OrderContext.class)
+        // 自动反射推导 ValidateOrderOp 的入参 OrderContext 与出参 OrderContext
+        .operation("order.validate", new ValidateOrderOp())
         
-        // 注册库存锁定步骤（使用接口契约 Class + 限定符，运行时从 Spring 容器解析）
-        .operation("inventory.reserve", InventoryService.class, "defaultInventory", OrderContext.class, OrderContext.class)
+        // 自动反射推导 Spring 契约接口的泛型类型，并在运行时从 Spring 容器解析
+        .operation("inventory.reserve", InventoryService.class, "defaultInventory")
         
-        // 注册支付扣减步骤
-        .operation("payment.charge", new ChargePaymentOp(), OrderContext.class, OrderResult.class)
+        // 自动反射推导契约 Class
+        .operation("payment.charge", ChargePaymentOp.class)
         .build();
 ```
+
+> [!TIP]
+> **约定优于配置（Convention Fallback）**：
+> 如果 Spring 容器中已经存在与 DSL 符号同名的 Bean（如 `@Component("order.validate")`），`FlowDefinitionRegistry` 默认会通过 `BeanOperationResolver` 进行回退查找并自动推导其泛型类型。这意味着在标准 Spring Boot 项目中，**即使不在 Registry 中显式登记该符号，也能直接零代码解析并执行**！
 
 > [!TIP]
 > **SPI 自动发现**：
@@ -162,7 +168,7 @@ FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
 ### 静态类型检查与符号绑定 (FlowBinder)
 
 使用 `FlowBinder` 进行一键编译绑定。绑定器会自动完成：
-1. 校验流程中引用的每个符号是否存在；
+1. 校验流程中引用的每个符号是否存在（先查显式注册表，未命中则自动回退到 Spring 容器）；
 2. 静态推导上游步骤的输出类型是否满足下游步骤的输入要求；
 3. 将纯数据 AST 转换为强类型 `Flow<I, O>` 并生成行列号坐标映射（`SourceMap`）。
 

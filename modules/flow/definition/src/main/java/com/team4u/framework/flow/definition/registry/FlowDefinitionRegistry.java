@@ -5,9 +5,11 @@ import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.Policy;
 import com.team4u.framework.flow.definition.type.ClassTypeRef;
+import com.team4u.framework.flow.definition.type.GenericTypeResolver;
 import com.team4u.framework.flow.definition.type.TypeCodec;
 import com.team4u.framework.flow.definition.type.TypeCodecs;
 import com.team4u.framework.flow.definition.type.TypeRef;
+import com.team4u.framework.flow.spi.OperationResolver;
 import lombok.Getter;
 import lombok.experimental.Accessors;
 
@@ -17,6 +19,8 @@ import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.Objects;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.ConcurrentMap;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -41,6 +45,12 @@ public final class FlowDefinitionRegistry {
     private final Map<String, JoinDescriptor> joins;
     private final Map<String, ResumeDescriptor> resumePoints;
     private final Map<TypeRef, TypeCodec<?>> typeCodecs;
+    private final OperationResolver fallbackResolver;
+
+    private final ConcurrentMap<String, OperationDescriptor> dynamicOperations =
+            new ConcurrentHashMap<String, OperationDescriptor>();
+    private final ConcurrentMap<String, PolicyDescriptor> dynamicPolicies =
+            new ConcurrentHashMap<String, PolicyDescriptor>();
 
     private FlowDefinitionRegistry(Builder builder) {
         this.operations = Collections.unmodifiableMap(new LinkedHashMap<String, OperationDescriptor>(builder.operations));
@@ -52,6 +62,7 @@ public final class FlowDefinitionRegistry {
         this.joins = Collections.unmodifiableMap(new LinkedHashMap<String, JoinDescriptor>(builder.joins));
         this.resumePoints = Collections.unmodifiableMap(new LinkedHashMap<String, ResumeDescriptor>(builder.resumePoints));
         this.typeCodecs = Collections.unmodifiableMap(new LinkedHashMap<TypeRef, TypeCodec<?>>(builder.typeCodecs));
+        this.fallbackResolver = builder.fallbackResolver;
     }
 
     public static Builder builder() {
@@ -66,11 +77,52 @@ public final class FlowDefinitionRegistry {
         return new Builder().build();
     }
 
+    @SuppressWarnings("unchecked")
     public OperationDescriptor operation(String id) {
-        return operations.get(id);
+        if (id == null) {
+            return null;
+        }
+        OperationDescriptor descriptor = operations.get(id);
+        if (descriptor != null) {
+            return descriptor;
+        }
+        if (fallbackResolver != null) {
+            OperationDescriptor dynamic = dynamicOperations.get(id);
+            if (dynamic != null) {
+                return dynamic;
+            }
+            try {
+                Object resolved = fallbackResolver.resolve(id);
+                if (resolved instanceof Operation) {
+                    Operation<?, ?> instance = (Operation<?, ?>) resolved;
+                    Class<?> implClass = fallbackResolver.implementationClass(resolved);
+                    TypeRef[] types = GenericTypeResolver.resolveOperationTypes(implClass);
+                    if (types[0] == TypeRef.ANY && types[1] == TypeRef.ANY && implClass != resolved.getClass()) {
+                        types = GenericTypeResolver.resolveOperationTypes(resolved.getClass());
+                    }
+                    Class<? extends Operation<?, ?>> contractClass = (Class<? extends Operation<?, ?>>)
+                            (Operation.class.isAssignableFrom(implClass) ? implClass : resolved.getClass());
+                    OperationDescriptor fallbackDesc = OperationDescriptor.builder()
+                            .id(id)
+                            .contract(contractClass)
+                            .instance(instance)
+                            .inputType(types[0])
+                            .outputType(types[1])
+                            .build();
+                    dynamicOperations.putIfAbsent(id, fallbackDesc);
+                    return dynamicOperations.get(id);
+                }
+            } catch (Exception ignored) {
+                // 回退解析失败则忽略异常并返回 null
+            }
+        }
+        return null;
     }
 
     public PolicyDescriptor policy(String id) {
+        if (id == null) {
+            return null;
+        }
         PolicyDescriptor descriptor = policies.get(id);
         if (descriptor != null) {
             return descriptor;
@@ -78,6 +130,52 @@ public final class FlowDefinitionRegistry {
         PolicyProvider provider = policyProviders.get(id);
         if (provider != null) {
             return provider.descriptor();
+        }
+        if (fallbackResolver != null) {
+            PolicyDescriptor dynamic = dynamicPolicies.get(id);
+            if (dynamic != null) {
+                return dynamic;
+            }
+            try {
+                Object resolved = fallbackResolver.resolve(id);
+                if (resolved instanceof PersistentPolicy) {
+                    PersistentPolicy<?, ?> instance = (PersistentPolicy<?, ?>) resolved;
+                    Class<?> implClass = fallbackResolver.implementationClass(resolved);
+                    TypeRef[] types = GenericTypeResolver.resolvePersistentPolicyTypes(implClass);
+                    if (types[0] == TypeRef.ANY && types[1] == TypeRef.ANY && implClass != resolved.getClass()) {
+                        types = GenericTypeResolver.resolvePersistentPolicyTypes(resolved.getClass());
+                    }
+                    Class<?> contractClass = PersistentPolicy.class.isAssignableFrom(implClass) ? implClass : resolved.getClass();
+                    PolicyDescriptor fallbackDesc = PolicyDescriptor.builder()
+                            .id(id)
+                            .contract(contractClass)
+                            .instance(instance)
+                            .keyType(types[0])
+                            .persistent(true)
+                            .build();
+                    dynamicPolicies.putIfAbsent(id, fallbackDesc);
+                    return dynamicPolicies.get(id);
+                } else if (resolved instanceof Policy) {
+                    Policy<?> instance = (Policy<?>) resolved;
+                    Class<?> implClass = fallbackResolver.implementationClass(resolved);
+                    TypeRef keyType = GenericTypeResolver.resolvePolicyKeyType(implClass);
+                    if (keyType == TypeRef.ANY && implClass != resolved.getClass()) {
+                        keyType = GenericTypeResolver.resolvePolicyKeyType(resolved.getClass());
+                    }
+                    Class<?> contractClass = Policy.class.isAssignableFrom(implClass) ? implClass : resolved.getClass();
+                    PolicyDescriptor fallbackDesc = PolicyDescriptor.builder()
+                            .id(id)
+                            .contract(contractClass)
+                            .instance(instance)
+                            .keyType(keyType)
+                            .persistent(false)
+                            .build();
+                    dynamicPolicies.putIfAbsent(id, fallbackDesc);
+                    return dynamicPolicies.get(id);
+                }
+            } catch (Exception ignored) {
+                // 回退解析失败则忽略异常并返回 null
+            }
         }
         return null;
     }
@@ -130,6 +228,12 @@ public final class FlowDefinitionRegistry {
         private final Map<String, JoinDescriptor> joins = new LinkedHashMap<String, JoinDescriptor>();
         private final Map<String, ResumeDescriptor> resumePoints = new LinkedHashMap<String, ResumeDescriptor>();
         private final Map<TypeRef, TypeCodec<?>> typeCodecs = new LinkedHashMap<TypeRef, TypeCodec<?>>();
+        private OperationResolver fallbackResolver = OperationResolver.defaultResolver();
+
+        public Builder fallbackResolver(OperationResolver fallbackResolver) {
+            this.fallbackResolver = fallbackResolver;
+            return this;
+        }
 
         public Builder operation(OperationDescriptor descriptor) {
             Objects.requireNonNull(descriptor, "operation descriptor must not be null");
@@ -147,9 +251,29 @@ public final class FlowDefinitionRegistry {
         }
 
         public <I, O> Builder operation(String id, Operation<I, O> instance) {
+            Objects.requireNonNull(instance, "operation instance must not be null");
+            TypeRef[] types = GenericTypeResolver.resolveOperationTypes(instance.getClass());
             return operation(OperationDescriptor.builder()
                     .id(id)
                     .instance(instance)
+                    .inputType(types[0])
+                    .outputType(types[1])
+                    .build());
+        }
+
+        public Builder operation(String id, Class<? extends Operation<?, ?>> contract) {
+            return operation(id, contract, (String) null);
+        }
+
+        public Builder operation(String id, Class<? extends Operation<?, ?>> contract, String qualifier) {
+            Objects.requireNonNull(contract, "operation contract must not be null");
+            TypeRef[] types = GenericTypeResolver.resolveOperationTypes(contract);
+            return operation(OperationDescriptor.builder()
+                    .id(id)
+                    .contract(contract)
+                    .qualifier(qualifier)
+                    .inputType(types[0])
+                    .outputType(types[1])
                     .build());
         }
 
@@ -192,9 +316,28 @@ public final class FlowDefinitionRegistry {
         }
 
         public <K> Builder policy(String id, Policy<K> instance) {
+            Objects.requireNonNull(instance, "policy instance must not be null");
+            TypeRef keyType = GenericTypeResolver.resolvePolicyKeyType(instance.getClass());
             return policy(PolicyDescriptor.builder()
                     .id(id)
                     .instance(instance)
+                    .keyType(keyType)
+                    .persistent(false)
+                    .build());
+        }
+
+        public Builder policy(String id, Class<? extends Policy<?>> contract) {
+            return policy(id, contract, (String) null);
+        }
+
+        public Builder policy(String id, Class<? extends Policy<?>> contract, String qualifier) {
+            Objects.requireNonNull(contract, "policy contract must not be null");
+            TypeRef keyType = GenericTypeResolver.resolvePolicyKeyType(contract);
+            return policy(PolicyDescriptor.builder()
+                    .id(id)
+                    .contract(contract)
+                    .qualifier(qualifier)
+                    .keyType(keyType)
                     .persistent(false)
                     .build());
         }
@@ -227,9 +370,31 @@ public final class FlowDefinitionRegistry {
         }
 
         public <K, S> Builder persistentPolicy(String id, PersistentPolicy<K, S> instance) {
+            Objects.requireNonNull(instance, "persistent policy instance must not be null");
+            TypeRef[] types = GenericTypeResolver.resolvePersistentPolicyTypes(instance.getClass());
             return policy(PolicyDescriptor.builder()
                     .id(id)
                     .instance(instance)
+                    .keyType(types[0])
+                    .persistent(true)
+                    .build());
+        }
+
+        public Builder persistentPolicy(String id, Class<? extends PersistentPolicy<?, ?>> contract) {
+            return persistentPolicy(id, contract, (String) null);
+        }
+
+        public Builder persistentPolicy(
+                String id,
+                Class<? extends PersistentPolicy<?, ?>> contract,
+                String qualifier) {
+            Objects.requireNonNull(contract, "persistent policy contract must not be null");
+            TypeRef[] types = GenericTypeResolver.resolvePersistentPolicyTypes(contract);
+            return policy(PolicyDescriptor.builder()
+                    .id(id)
+                    .contract(contract)
+                    .qualifier(qualifier)
+                    .keyType(types[0])
                     .persistent(true)
                     .build());
         }

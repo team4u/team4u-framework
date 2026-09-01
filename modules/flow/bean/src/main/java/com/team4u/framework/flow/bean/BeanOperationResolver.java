@@ -44,6 +44,14 @@ public final class BeanOperationResolver implements OperationResolver {
     }
 
     @Override
+    public Object resolve(String identifier) {
+        if (identifier == null) {
+            return null;
+        }
+        return beanManager.getBean(identifier);
+    }
+
+    @Override
     public Object resolve(Class<?> contract, String qualifier) {
         Objects.requireNonNull(contract, "contract must not be null");
         if (qualifier == null) {
