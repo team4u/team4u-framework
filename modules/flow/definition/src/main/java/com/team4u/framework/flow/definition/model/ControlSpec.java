@@ -6,6 +6,9 @@ import lombok.ToString;
 import lombok.experimental.Accessors;
 
 import java.time.Duration;
+import java.util.Collections;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.Objects;
 
 /**
@@ -46,7 +49,11 @@ public final class ControlSpec implements FlowSpec {
         this.kind = Objects.requireNonNull(kind, "control kind must not be null");
         this.symbol = symbol;
         this.key = key;
-        this.configuration = configuration;
+        if (configuration instanceof Map) {
+            this.configuration = Collections.unmodifiableMap(new LinkedHashMap<Object, Object>((Map<?, ?>) configuration));
+        } else {
+            this.configuration = configuration;
+        }
         this.body = Objects.requireNonNull(body, "body must not be null");
         this.span = span != null ? span : SourceSpan.UNKNOWN;
     }

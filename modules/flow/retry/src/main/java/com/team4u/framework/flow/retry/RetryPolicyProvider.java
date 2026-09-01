@@ -3,7 +3,7 @@ package com.team4u.framework.flow.retry;
 import com.team4u.framework.flow.definition.registry.PolicyBinding;
 import com.team4u.framework.flow.definition.registry.PolicyDescriptor;
 import com.team4u.framework.flow.definition.registry.PolicyProvider;
-import com.team4u.framework.flow.definition.type.TypeCodecs;
+import com.team4u.framework.flow.definition.util.ConfigMapReader;
 import com.team4u.framework.retry.common.backoff.Backoff;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 
@@ -40,31 +40,10 @@ public class RetryPolicyProvider implements PolicyProvider {
 
     @Override
     public PolicyBinding create(Map<String, Object> configuration) {
-        Integer maxAttempts = null;
-        Object attemptsVal = configuration.get("maxAttempts");
-        if (attemptsVal == null) {
-            attemptsVal = configuration.get("max-attempts");
-        }
-        if (attemptsVal instanceof Number) {
-            maxAttempts = ((Number) attemptsVal).intValue();
-        } else if (attemptsVal instanceof String) {
-            try {
-                maxAttempts = Integer.parseInt((String) attemptsVal);
-            } catch (NumberFormatException ignored) { }
-        }
-
-        Backoff backoff = null;
-        Object backoffVal = configuration.get("backoff");
-        if (backoffVal instanceof Duration) {
-            backoff = Backoffs.fixed(((Duration) backoffVal).toMillis());
-        } else if (backoffVal instanceof String) {
-            try {
-                Duration dur = TypeCodecs.parseDuration((String) backoffVal);
-                backoff = Backoffs.fixed(dur.toMillis());
-            } catch (Exception ignored) { }
-        } else if (backoffVal instanceof Number) {
-            backoff = Backoffs.fixed(((Number) backoffVal).longValue());
-        }
+        ConfigMapReader reader = ConfigMapReader.of(configuration);
+        Integer maxAttempts = reader.getInt("maxAttempts", null, "max-attempts");
+        Duration backoffDuration = reader.getDuration("backoff");
+        Backoff backoff = backoffDuration != null ? Backoffs.fixed(backoffDuration.toMillis()) : null;
 
         FlowRetryPolicy<Object> policy = FlowRetryPolicy.<Object>builder()
                 .maxAttempts(maxAttempts)

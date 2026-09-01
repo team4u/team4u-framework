@@ -169,16 +169,8 @@ public final class FlowDslParser {
                 } else if (match(TokenType.POLICY)) {
                     Token policyToken = consumeIdentifier("Expected policy ID after 'policy'");
                     SymbolRef policyRef = SymbolRef.of(policyToken.text(), policyToken.span());
-                    SymbolRef keyRef = null;
-                    Map<String, Object> config = new LinkedHashMap<String, Object>();
-                    if (match(TokenType.KEY)) {
-                        Token keyToken = consumeIdentifier("Expected key ID after 'key'");
-                        keyRef = SymbolRef.of(keyToken.text(), keyToken.span());
-                    }
-                    if (match(TokenType.LBRACE)) {
-                        config = parseConfigBody();
-                        consume(TokenType.RBRACE, "Expected '}' after policy configuration");
-                    }
+                    SymbolRef keyRef = parseOptionalKey();
+                    Map<String, Object> config = parseOptionalConfigBlock("Expected '}' after policy configuration");
                     if (keyRef == null && config.containsKey("key")) {
                         Object keyVal = config.get("key");
                         keyRef = SymbolRef.of(String.valueOf(keyVal));
@@ -187,11 +179,7 @@ public final class FlowDslParser {
                 } else if (match(TokenType.RETRY)) {
                     Token retryToken = consumeIdentifier("Expected retry policy ID after 'retry'");
                     SymbolRef retryRef = SymbolRef.of(retryToken.text(), retryToken.span());
-                    Map<String, Object> config = new LinkedHashMap<String, Object>();
-                    if (match(TokenType.LBRACE)) {
-                        config = parseConfigBody();
-                        consume(TokenType.RBRACE, "Expected '}' after retry configuration");
-                    }
+                    Map<String, Object> config = parseOptionalConfigBlock("Expected '}' after retry configuration");
                     modifiers.add(new RetryModifierSpec(retryRef, config, span(modStart, previous())));
                 } else {
                     throw error(modStart, "Unexpected step modifier: " + modStart.text());
@@ -219,16 +207,10 @@ public final class FlowDslParser {
                         && keyToken.type() != TokenType.NUMBER) {
                     throw error(keyToken, "Expected case key literal (identifier, string, or number)");
                 }
-                consume(TokenType.LBRACE, "Expected '{' to start case branch");
-                List<FlowSpec> branchStmts = parseStatements();
-                Token caseEnd = consume(TokenType.RBRACE, "Expected '}' to close case branch");
-                FlowSpec branch = toSequenceOrSingle(branchStmts, span(caseStart, caseEnd));
-                cases.add(new CaseSpec(keyToken.text(), branch, span(caseStart, caseEnd)));
+                FlowSpec branch = parseBracedBody(caseStart, "Expected '{' to start case branch", "Expected '}' to close case branch");
+                cases.add(new CaseSpec(keyToken.text(), branch, span(caseStart, previous())));
             } else if (match(TokenType.OTHERWISE)) {
-                consume(TokenType.LBRACE, "Expected '{' to start otherwise branch");
-                List<FlowSpec> otherStmts = parseStatements();
-                Token otherEnd = consume(TokenType.RBRACE, "Expected '}' to close otherwise branch");
-                otherwise = toSequenceOrSingle(otherStmts, span(caseStart, otherEnd));
+                otherwise = parseBracedBody(caseStart, "Expected '{' to start otherwise branch", "Expected '}' to close otherwise branch");
             } else {
                 throw error(caseStart, "Expected 'case' or 'otherwise' in route block");
             }
@@ -260,16 +242,10 @@ public final class FlowDslParser {
     private FlowSpec parseRecover(Token startToken) {
         consume(TokenType.LBRACE, "Expected '{' after 'recover'");
         consume(TokenType.BODY, "Expected 'body' block in recover");
-        consume(TokenType.LBRACE, "Expected '{' after 'body'");
-        List<FlowSpec> bodyStmts = parseStatements();
-        Token bodyEnd = consume(TokenType.RBRACE, "Expected '}' to close body block");
-        FlowSpec body = toSequenceOrSingle(bodyStmts, span(startToken, bodyEnd));
+        FlowSpec body = parseBracedBody(startToken, "Expected '{' after 'body'", "Expected '}' to close body block");
 
         consume(TokenType.ON_FAILURE, "Expected 'onFailure' block in recover");
-        consume(TokenType.LBRACE, "Expected '{' after 'onFailure'");
-        List<FlowSpec> failureStmts = parseStatements();
-        Token failureEnd = consume(TokenType.RBRACE, "Expected '}' to close onFailure block");
-        FlowSpec onFailure = toSequenceOrSingle(failureStmts, span(bodyEnd, failureEnd));
+        FlowSpec onFailure = parseBracedBody(previous(), "Expected '{' after 'onFailure'", "Expected '}' to close onFailure block");
 
         Token endToken = consume(TokenType.RBRACE, "Expected '}' after recover block");
         return new RecoverSpec(body, onFailure, span(startToken, endToken));
@@ -284,11 +260,8 @@ public final class FlowDslParser {
             Token token = peek();
             if (match(TokenType.BRANCH)) {
                 Token nameToken = consumeIdentifier("Expected branch name after 'branch'");
-                consume(TokenType.LBRACE, "Expected '{' after branch name");
-                List<FlowSpec> branchStmts = parseStatements();
-                Token branchEnd = consume(TokenType.RBRACE, "Expected '}' to close branch");
-                FlowSpec flow = toSequenceOrSingle(branchStmts, span(token, branchEnd));
-                branches.add(new BranchSpec(nameToken.text(), flow, span(token, branchEnd)));
+                FlowSpec flow = parseBracedBody(token, "Expected '{' after branch name", "Expected '}' to close branch");
+                branches.add(new BranchSpec(nameToken.text(), flow, span(token, previous())));
             } else if (match(TokenType.JOIN)) {
                 Token joinToken = consumeIdentifier("Expected join strategy ID after 'join'");
                 join = SymbolRef.of(joinToken.text(), joinToken.span());
@@ -312,59 +285,35 @@ public final class FlowDslParser {
 
     private FlowSpec parseScope(Token startToken) {
         Token nameToken = consume(TokenType.STRING, "Expected string name after 'scope'");
-        consume(TokenType.LBRACE, "Expected '{' after scope name");
-        List<FlowSpec> stmts = parseStatements();
-        Token endToken = consume(TokenType.RBRACE, "Expected '}' to close scope block");
-        FlowSpec body = toSequenceOrSingle(stmts, span(startToken, endToken));
-        return ControlSpec.scope(nameToken.text(), body, span(startToken, endToken));
+        FlowSpec body = parseBracedBody(startToken, "Expected '{' after scope name", "Expected '}' to close scope block");
+        return ControlSpec.scope(nameToken.text(), body, span(startToken, previous()));
     }
 
     private FlowSpec parseTimeoutScope(Token startToken) {
         Token durToken = consume(TokenType.DURATION, "Expected duration literal after 'timeout'");
-        consume(TokenType.LBRACE, "Expected '{' after timeout duration");
-        List<FlowSpec> stmts = parseStatements();
-        Token endToken = consume(TokenType.RBRACE, "Expected '}' to close timeout block");
-        FlowSpec body = toSequenceOrSingle(stmts, span(startToken, endToken));
-        return ControlSpec.timeout((Duration) durToken.value(), body, span(startToken, endToken));
+        FlowSpec body = parseBracedBody(startToken, "Expected '{' after timeout duration", "Expected '}' to close timeout block");
+        return ControlSpec.timeout((Duration) durToken.value(), body, span(startToken, previous()));
     }
 
     private FlowSpec parsePolicyScope(Token startToken) {
         Token policyToken = consumeIdentifier("Expected policy ID after 'policy'");
         SymbolRef policyRef = SymbolRef.of(policyToken.text(), policyToken.span());
-        SymbolRef keyRef = null;
-        if (match(TokenType.KEY)) {
-            Token keyToken = consumeIdentifier("Expected key ID after 'key'");
-            keyRef = SymbolRef.of(keyToken.text(), keyToken.span());
-        }
-
-        Map<String, Object> config = new LinkedHashMap<String, Object>();
-        consume(TokenType.LBRACE, "Expected '{' after policy declaration");
-
-        // 区分配置块与流程执行体
-        List<FlowSpec> stmts = parseStatements();
-        Token endToken = consume(TokenType.RBRACE, "Expected '}' to close policy block");
-        FlowSpec body = toSequenceOrSingle(stmts, span(startToken, endToken));
-        return new ControlSpec(ControlSpec.ControlKind.POLICY, policyRef, keyRef, config, body, span(startToken, endToken));
+        SymbolRef keyRef = parseOptionalKey();
+        FlowSpec body = parseBracedBody(startToken, "Expected '{' after policy declaration", "Expected '}' to close policy block");
+        return new ControlSpec(ControlSpec.ControlKind.POLICY, policyRef, keyRef, Collections.<String, Object>emptyMap(), body, span(startToken, previous()));
     }
 
     private FlowSpec parseRetryScope(Token startToken) {
         Token retryToken = consumeIdentifier("Expected retry policy ID after 'retry'");
         SymbolRef retryRef = SymbolRef.of(retryToken.text(), retryToken.span());
-        Map<String, Object> config = new LinkedHashMap<String, Object>();
-        consume(TokenType.LBRACE, "Expected '{' after retry declaration");
-        List<FlowSpec> stmts = parseStatements();
-        Token endToken = consume(TokenType.RBRACE, "Expected '}' to close retry block");
-        FlowSpec body = toSequenceOrSingle(stmts, span(startToken, endToken));
-        return new ControlSpec(ControlSpec.ControlKind.RETRY, retryRef, null, config, body, span(startToken, endToken));
+        FlowSpec body = parseBracedBody(startToken, "Expected '{' after retry declaration", "Expected '}' to close retry block");
+        return new ControlSpec(ControlSpec.ControlKind.RETRY, retryRef, null, Collections.<String, Object>emptyMap(), body, span(startToken, previous()));
     }
 
     private FlowSpec parseNamedScope(Token startToken) {
         Token nameToken = consume(TokenType.STRING, "Expected string label after 'named'");
-        consume(TokenType.LBRACE, "Expected '{' after named label");
-        List<FlowSpec> stmts = parseStatements();
-        Token endToken = consume(TokenType.RBRACE, "Expected '}' to close named block");
-        FlowSpec body = toSequenceOrSingle(stmts, span(startToken, endToken));
-        return ControlSpec.named(nameToken.text(), body, span(startToken, endToken));
+        FlowSpec body = parseBracedBody(startToken, "Expected '{' after named label", "Expected '}' to close named block");
+        return ControlSpec.named(nameToken.text(), body, span(startToken, previous()));
     }
 
     private FlowSpec parseComplete(Token startToken, CompleteSpec.CompleteKind kind) {
@@ -376,6 +325,30 @@ public final class FlowDslParser {
             endToken = valToken;
         }
         return new CompleteSpec(kind, literal, span(startToken, endToken));
+    }
+
+    private FlowSpec parseBracedBody(Token startToken, String openMsg, String closeMsg) {
+        consume(TokenType.LBRACE, openMsg);
+        List<FlowSpec> stmts = parseStatements();
+        Token endToken = consume(TokenType.RBRACE, closeMsg);
+        return toSequenceOrSingle(stmts, span(startToken, endToken));
+    }
+
+    private SymbolRef parseOptionalKey() {
+        if (match(TokenType.KEY)) {
+            Token keyToken = consumeIdentifier("Expected key ID after 'key'");
+            return SymbolRef.of(keyToken.text(), keyToken.span());
+        }
+        return null;
+    }
+
+    private Map<String, Object> parseOptionalConfigBlock(String closeMsg) {
+        if (match(TokenType.LBRACE)) {
+            Map<String, Object> config = parseConfigBody();
+            consume(TokenType.RBRACE, closeMsg);
+            return config;
+        }
+        return Collections.emptyMap();
     }
 
     private Map<String, Object> parseConfigBody() {

@@ -245,7 +245,11 @@ graph LR
 
 ### 语法解析器 (FlowDslParser)
 
-[`FlowDslParser`](file:///root/code/team4u-framework/modules/flow/dsl/src/main/java/com/team4u/framework/flow/dsl/parser/FlowDslParser.java) 采用直观高效的递归下降算法，将 Token 流解析为 [`FlowDefinition`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FlowDefinition.java) 纯数据语法树。当遇到非预期记号或格式错误时，即时生成带有精确源码文件、行号与列号的 [`Diagnostic`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/diagnostic/Diagnostic.java) 诊断信息。
+[`FlowDslParser`](file:///root/code/team4u-framework/modules/flow/dsl/src/main/java/com/team4u/framework/flow/dsl/parser/FlowDslParser.java) 采用递归下降算法，将 Token 流解析为 [`FlowDefinition`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FlowDefinition.java) 纯数据语法树。
+
+- **模板化块解析**：花括号块作用域（如 `case`、`otherwise`、`branch`、`scope`）统一由结构化块解析器调度，自动处理作用域定界与空块安全退化；
+- **配置参数字典解析**：`policy` 与 `retry` 等治理修饰器内部的参数键值对（如 `maxAttempts: 3`、`backoff: 100ms`）解析为结构化 Map，并在后续绑定期通过 [`ConfigMapReader`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/util/ConfigMapReader.java) 进行多别名推导与强类型转换；
+- **精确诊断定位**：当遇到非预期记号或格式错误时，即时生成带有精确源码文件、行号与列号的 [`Diagnostic`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/diagnostic/Diagnostic.java) 诊断信息。
 
 ---
 

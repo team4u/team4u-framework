@@ -1,6 +1,6 @@
 # 外部流程定义与符号注册 (team4u-flow-definition)
 
-`team4u-flow-definition` 提供了面向外部配置（文本 DSL、JSON、YAML、低代码可视化引擎等）的纯数据流程定义模型（FlowSpec AST）、解耦符号注册表（FlowDefinitionRegistry）、静态类型推导与校验系统（TypeChecker）、源码坐标映射（SourceMap）以及不可变流程发布器（FlowPublisher）。
+`team4u-flow-definition` 提供了面向外部配置（文本 DSL、JSON、YAML、低代码可视化引擎等）的纯数据流程定义模型（FlowSpec AST）、解耦符号注册表（FlowDefinitionRegistry）、静态类型推导与校验系统（TypeChecker）、源码坐标映射（SourceMap）、配置字典安全提取器（ConfigMapReader）以及不可变流程发布器（FlowPublisher）。
 
 ---
 
@@ -26,7 +26,7 @@ graph TD
     end
 
     subgraph "逻辑编译层 (Logical Compilation IR)"
-        FB["FlowBinder 符号绑定与类型检查"]
+        FB["FlowBinder 符号绑定与类型检查 (SpecBinderRegistry)"]
         LOG["Flow&lt;I, O&gt; / Logical AST<br/>强类型不可变 Fluent 编排树<br/>持有 Operation / Policy / JoinStrategy 实例或契约引用"]
         FS --> FB --> LOG
     end
@@ -47,7 +47,7 @@ graph TD
 
 | 层次 | 核心模型 | 状态与依赖特征 | 核心作用与职责 |
 | :--- | :--- | :--- | :--- |
-| **外部配置 IR** | [`FlowDefinition`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FlowDefinition.java), [`FlowSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FlowSpec.java) | 纯数据、无代码/Lambda、可跨进程序列化 | 承载 DSL 语法树、JSON/YAML 配置及可视化建模输出，精确记录源码行列坐标 |
+| **外部配置 IR** | [`FlowDefinition`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FlowDefinition.java), [`FlowSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FlowSpec.java) | 纯数据、无代码/Lambda、强不可变集合包装 | 承载 DSL 语法树、JSON/YAML 配置及可视化建模输出，精确记录源码行列坐标 |
 | **逻辑编译 IR** | [`Flow`](file:///root/code/team4u-framework/modules/flow/core/src/main/java/com/team4u/framework/flow/Flow.java), [`Logical`](file:///root/code/team4u-framework/modules/flow/core/src/main/java/com/team4u/framework/flow/compiler/Logical.java) | 强类型、不可变、绑定具体 Operation 与策略契约 | 负责步骤输入输出类型推导、组合语义校验与双投影描述 |
 | **运行时执行 IR** | [`PlanNode`](file:///root/code/team4u-framework/modules/flow/core/src/main/java/com/team4u/framework/flow/compiler/PlanNode.java) | 封闭 8 种节点、编译优化、扁平化拓扑 | 驱动内存栈虚拟机（Local）与持久化状态机（Durable）稳定执行 |
 
@@ -55,7 +55,7 @@ graph TD
 
 ## 纯数据 AST 模型全景 (FlowSpec AST)
 
-所有外部配置模型均实现 [`FlowSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FlowSpec.java) 接口，且严格为不可变的纯数据载体，不包含任何 Java Class、Function、Operation 实例或运行时执行状态。
+所有外部配置模型均实现 [`FlowSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FlowSpec.java) 接口，且严格为不可变的纯数据载体。构造函数内部全部实施防御性拷贝与 `Collections.unmodifiableList` / `Collections.unmodifiableMap` 包装。
 
 ```mermaid
 classDiagram
@@ -79,6 +79,11 @@ classDiagram
         +project() SymbolRef
         +merge() SymbolRef
         +modifiers() List~ModifierSpec~
+        +isOptional() boolean
+        +timeout() Duration
+        +named() String
+        +policies() List~PolicyModifierSpec~
+        +retries() List~RetryModifierSpec~
     }
 
     class SequenceSpec {
@@ -132,21 +137,17 @@ classDiagram
     FlowSpec <|.. AwaitSpec
     FlowSpec <|.. CompleteSpec
     FlowSpec <|.. ControlSpec
-    FlowDefinition o-- FlowSpec
 ```
 
-### 根模型与节点规范
+### 核心语法节点说明
 
-- [`FlowDefinition`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FlowDefinition.java)：流程定义顶层根对象，聚合了 DSL 语法版本（`schema`）、流程标识（`id`）、流程定义版本（`version`）、根节点规范（`root`）、源码标识（`source`）与文本位置区间（`span`）。
-- [`StepSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/StepSpec.java)：业务原子步骤规范。持有操作符号引用 [`SymbolRef`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/SymbolRef.java)、入参投影符号、结果合并符号以及修饰器列表（`modifiers`）。
-- [`SequenceSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/SequenceSpec.java)：顺序流水线规范。持有有序子节点列表 `elements` 与可选的具名作用域标识 `scopeName`。
-- [`RouteSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/RouteSpec.java)：条件路由规范。由路由选择器符号 `selector`、条件分支列表 [`List<CaseSpec>`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/CaseSpec.java) 与兜底分支 `otherwise` 构成。
-- [`CaseSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/CaseSpec.java)：路由匹配分支规范，持有文本字面量分支匹配键 `literalKey` 与对应的目标分支 `branch`。
-- [`FirstApplicableSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FirstApplicableSpec.java)：首选适用多路尝试规范。持有若干候选分支 `branches`，按顺序尝试直至某个分支返回 `Accepted`。
-- [`RecoverSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/RecoverSpec.java)：失败降级补偿规范。包含主体业务流程 `body` 与在发生业务拒绝或技术故障时执行的补偿分支 `onFailure`（入参为包装后的 `Recovery<I>`）。
-- [`ParallelSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/ParallelSpec.java)：结构化并行规范。包含一组具名并发分支 [`List<BranchSpec>`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/BranchSpec.java) 与汇聚策略符号引用 `join`。
-- [`BranchSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/BranchSpec.java)：并行分支定义，包含分支名 `name` 与分支流程 `flow`。
-- [`AwaitSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/AwaitSpec.java)：异步挂起等待规范。持有挂起点符号引用 `resumePoint`。
+- [`StepSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/StepSpec.java)：业务步骤规范，持有 operation 符号以及附带的修饰器列表，内聚提供 `project()`、`merge()`、`isOptional()`、`timeout()`、`named()`、`policies()`、`retries()` 等只读解析方法。
+- [`SequenceSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/SequenceSpec.java)：顺序执行流水线规范，保持严格不可变列表 `elements`。
+- [`RouteSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/RouteSpec.java)：多路条件路由规范，包含选择器 `selector`、条件分支列表 `cases` 与缺省分支 `otherwise`。
+- [`FirstApplicableSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FirstApplicableSpec.java)：首选候选分支规范，按序尝试各分支直至出现首个非 `Skipped` 结果。
+- [`RecoverSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/RecoverSpec.java)：失败补偿规范，包裹主执行体 `body` 与故障发生时的补偿分支 `onFailure`。
+- [`ParallelSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/ParallelSpec.java)：结构化并发规范，包含多命名分支 `branches` 与结果汇聚策略 `join` 符号。
+- [`AwaitSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/AwaitSpec.java)：异步外部挂起规范，持有挂起点符号 `resumePoint`。
 - [`CompleteSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/CompleteSpec.java)：终态常数结果规范。种类（`CompleteKind`）覆盖 `ACCEPTED`、`REJECTED`、`SKIPPED`、`FAILED`，附带字面量或错误码 `literal`。
 - [`ControlSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/ControlSpec.java)：作用域级治理控制规范。类型（`ControlKind`）覆盖 `POLICY`、`RETRY`、`TIMEOUT`、`NAMED`、`SCOPE`，并包裹被治理的目标 `body`。
 
@@ -233,7 +234,7 @@ FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
         .build();
 ```
 
-### SPI 扩展机制 (FlowDefinitionExtension)
+### SPI 扩展与自动装配机制 (FlowDefinitionExtension)
 
 为了支持各功能子模块（如 `team4u-flow-retry`、`team4u-flow-ratelimiter`）向注册表贡献其特有的策略 Provider 与描述符，框架定义了 [`FlowDefinitionExtension`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/registry/FlowDefinitionExtension.java) SPI：
 
@@ -243,18 +244,50 @@ public interface FlowDefinitionExtension {
 }
 ```
 
-各扩展模块通过实现此接口并在 Registry 构建时通过 `builder.apply(extension)` 注入，实现主体核心与扩展策略的零依赖解耦。
+在调用 `FlowDefinitionRegistry.builder()` 时，底层自动通过 `ServiceLoaderUtil.loadAvailableList(FlowDefinitionExtension.class)` 扫描 classpath 并自动注入扩展；若需要完全空白且不加载 SPI 的纯净注册表，可使用 `FlowDefinitionRegistry.empty()`。
+
+---
+
+## 强类型配置读取器 (ConfigMapReader)
+
+[`ConfigMapReader`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/util/ConfigMapReader.java) 封装了 DSL 声明的弱类型参数 Map，基于 `team4u-base` 的 `ConvertUtil` 提供安全防御与类型推导能力：
+
+- **多别名支持**：`reader.getInt("maxAttempts", "max-attempts")` 自动兼容驼峰与中划线命名；
+- **自适应类型转换**：自动完成 `String`、`Number`、`Duration`（如 `200ms`, `5s`）、`Enum`（大小写兼容）的安全转换；
+- **优雅默认值**：支持 `reader.getDuration("backoff", Duration.ofMillis(100))` 缺省回退与 `require(...)` 强制校验。
+
+在自定义策略提供器（`PolicyProvider`）中使用示例：
+
+```java
+public class CustomPolicyProvider implements PolicyProvider {
+    @Override
+    public PolicyBinding create(Map<String, Object> configuration) {
+        ConfigMapReader reader = ConfigMapReader.of(configuration);
+        int permits = reader.getInt(1, "permits", "limit");
+        Duration timeout = reader.getDuration("timeout", Duration.ofSeconds(1));
+        Action action = reader.getEnum(Action.class, Action.FAIL, "action");
+        
+        return PolicyBinding.builder()
+                .instance(new CustomPolicy(permits, timeout, action))
+                .persistent(false)
+                .build();
+    }
+}
+```
 
 ---
 
 ## 静态类型检查系统 (Type Checking System)
 
-[`TypeChecker`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/type/TypeChecker.java) 负责在编译前深度遍历 `FlowSpec` AST，执行端到端的静态类型推导与契约校验，并在发现类型不匹配或符号缺失时生成结构化诊断信息。
+[`TypeChecker`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/type/TypeChecker.java) 负责在编译前深度遍历 `FlowSpec` AST，执行端到端的静态类型推导与契约校验。
+
+底层采用策略注册表 [`SpecTypeCheckerRegistry`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/type/SpecTypeCheckerRegistry.java) 进行分发，每类 AST 节点由专用的 [`SpecTypeChecker`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/type/SpecTypeChecker.java) 负责类型推导，保持高度模块化与开闭原则。
 
 ```mermaid
 graph TD
     AST["FlowSpec AST 语法树"] --> TC["TypeChecker.check(definition, registry)"]
     REG["FlowDefinitionRegistry"] --> TC
+    REG_STRAT["SpecTypeCheckerRegistry (KeyedPolicyRegistry)"] --> TC
 
     TC --> V1["1. 符号存在性校验 (UNKNOWN_OPERATION, UNKNOWN_POLICY, ...)"]
     TC --> V2["2. 流水线输入输出类型流转推导与兼容性校验 (TYPE_MISMATCH)"]
@@ -285,9 +318,11 @@ graph TD
 
 ---
 
-## 符号绑定与错误映射 (FlowBinder & SourceMap)
+## 符号绑定与错误映射 (FlowBinder & SourceMapBuilder)
 
-[`FlowBinder`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/binding/FlowBinder.java) 是将外部纯数据 AST 转换为强类型 [`Flow`](file:///root/code/team4u-framework/modules/flow/core/src/main/java/com/team4u/framework/flow/Flow.java) 逻辑树的核心桥梁，并在此过程中建立 Compiler Path 到源码 [`SourceSpan`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/SourceSpan.java) 的精准映射表（`sourceMap`）。
+[`FlowBinder`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/binding/FlowBinder.java) 是将外部纯数据 AST 转换为强类型 [`Flow`](file:///root/code/team4u-framework/modules/flow/core/src/main/java/com/team4u/framework/flow/Flow.java) 逻辑树的核心桥梁。
+
+内部采用策略注册表 [`SpecBinderRegistry`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/binding/SpecBinderRegistry.java) 驱动各类节点的实例化绑定，并由独立组件 [`SourceMapBuilder`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/binding/SourceMapBuilder.java) 建立 Compiler Path 到源码 [`SourceSpan`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/SourceSpan.java) 的精准映射表与前缀回退查找能力。
 
 ```mermaid
 sequenceDiagram
@@ -295,6 +330,7 @@ sequenceDiagram
     participant App as 业务调用方
     participant Binder as FlowBinder
     participant Checker as TypeChecker
+    participant SM as SourceMapBuilder
     participant Compiler as Flow Compiler
     
     App->>Binder: bind(FlowDefinition, registry, resolver)
@@ -304,13 +340,13 @@ sequenceDiagram
         Binder-->>App: 抛出 FlowDiagnosticException (携带源码行列号)
     end
     
-    Binder->>Binder: 递归构造强类型 Flow 逻辑 AST
-    Binder->>Binder: 建立 AST Path -> SourceSpan 坐标映射 (SourceMap)
+    Binder->>Binder: SpecBinderRegistry 递归构造强类型 Flow 逻辑 AST
+    Binder->>SM: build(flow.root(), rootSpec) 建立节点路径坐标映射
     
     Binder->>Compiler: Compiler.compile(flow, resolver)
     alt 拓扑/绑定校验失败 (FlowBuildException)
         Compiler-->>Binder: FlowBuildException.Problem (带节点 path)
-        Binder->>Binder: SourceMap 查找精确 SourceSpan 坐标
+        Binder->>SM: find(path) 查找精确 SourceSpan 坐标（支持前缀回退）
         Binder-->>App: 抛出 FlowDiagnosticException (将编译器错误精准映射回 DSL 源码行)
     end
     

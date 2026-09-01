@@ -11,6 +11,8 @@ import com.team4u.framework.flow.definition.type.TypeRef;
 import lombok.Getter;
 import lombok.experimental.Accessors;
 
+import com.team4u.framework.base.util.ServiceLoaderUtil;
+
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -53,11 +55,15 @@ public final class FlowDefinitionRegistry {
     }
 
     public static Builder builder() {
-        return new Builder();
+        Builder builder = new Builder();
+        for (FlowDefinitionExtension extension : ServiceLoaderUtil.loadAvailableList(FlowDefinitionExtension.class)) {
+            builder.apply(extension);
+        }
+        return builder;
     }
 
     public static FlowDefinitionRegistry empty() {
-        return builder().build();
+        return new Builder().build();
     }
 
     public OperationDescriptor operation(String id) {

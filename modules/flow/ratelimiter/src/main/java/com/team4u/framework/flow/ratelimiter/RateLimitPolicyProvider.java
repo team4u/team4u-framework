@@ -3,6 +3,7 @@ package com.team4u.framework.flow.ratelimiter;
 import com.team4u.framework.flow.definition.registry.PolicyBinding;
 import com.team4u.framework.flow.definition.registry.PolicyDescriptor;
 import com.team4u.framework.flow.definition.registry.PolicyProvider;
+import com.team4u.framework.flow.definition.util.ConfigMapReader;
 
 import java.util.Map;
 
@@ -36,32 +37,10 @@ public class RateLimitPolicyProvider implements PolicyProvider {
 
     @Override
     public PolicyBinding create(Map<String, Object> configuration) {
-        String point = descriptor.id();
-        Object pointVal = configuration.get("point");
-        if (pointVal instanceof String) {
-            point = (String) pointVal;
-        }
-
-        Integer permits = 1;
-        Object permitsVal = configuration.get("permits");
-        if (permitsVal instanceof Number) {
-            permits = ((Number) permitsVal).intValue();
-        } else if (permitsVal instanceof String) {
-            try {
-                permits = Integer.parseInt((String) permitsVal);
-            } catch (NumberFormatException ignored) { }
-        }
-
-        RateLimitAction action = RateLimitAction.FAIL;
-        Object actionVal = configuration.get("action");
-        if (actionVal instanceof String) {
-            String actStr = ((String) actionVal).toUpperCase();
-            if ("REJECT".equals(actStr)) {
-                action = RateLimitAction.REJECT;
-            } else if ("FAIL".equals(actStr)) {
-                action = RateLimitAction.FAIL;
-            }
-        }
+        ConfigMapReader reader = ConfigMapReader.of(configuration);
+        String point = reader.getString("point", descriptor.id());
+        Integer permits = reader.getInt("permits", 1);
+        RateLimitAction action = reader.getEnum(RateLimitAction.class, "action", RateLimitAction.FAIL);
 
         RateLimitPolicy<Object> policy = RateLimitPolicy.<Object>builder()
                 .point(point)
