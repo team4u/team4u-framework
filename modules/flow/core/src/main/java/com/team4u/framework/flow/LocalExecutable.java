@@ -120,7 +120,7 @@ public final class LocalExecutable<I, O> {
         String executionId = UUID.randomUUID().toString();
         MachineState state = new MachineState(compiled.root(), executionId, input);
         event(FlowObserver.Type.FLOW_STARTED, executionId,
-                compiled.root().descriptor(), Collections.emptyMap());
+                compiled.root().descriptor(), Collections.emptyMap(), input);
         return drive(state, cancellation, executionId);
     }
 
@@ -328,9 +328,12 @@ public final class LocalExecutable<I, O> {
         MachineResult result = machine.drive();
         switch (result.lifecycle()) {
             case COMPLETED:
+                Object flowPayload = (result.outcome() instanceof Outcome.Accepted)
+                        ? ((Outcome.Accepted<?>) result.outcome()).value()
+                        : result.outcome();
                 event(FlowObserver.Type.FLOW_COMPLETED, executionId,
                         compiled.root().descriptor(), Collections.singletonMap(
-                                "outcome", result.outcome().kind().name()));
+                                "outcome", result.outcome().kind().name()), flowPayload);
                 return FlowResult.completed((Outcome<O>) result.outcome());
             case SUSPENDED:
                 return FlowResult.suspended(new Suspension<O>(identity, state,
@@ -348,10 +351,15 @@ public final class LocalExecutable<I, O> {
 
     private void event(FlowObserver.Type type, String executionId,
                        NodeDescriptor descriptor, java.util.Map<String, String> attributes) {
+        event(type, executionId, descriptor, attributes, null);
+    }
+
+    private void event(FlowObserver.Type type, String executionId,
+                       NodeDescriptor descriptor, java.util.Map<String, String> attributes, Object payload) {
         if (observer.isNoop()) return;
         ObserverSafeEmitter.emit(observer, new FlowObserver.Event(type, Instant.now(),
                 new Metadata(flowId, flowVersion, executionId, descriptor.path(), descriptor.label()),
-                descriptor, attributes));
+                descriptor, attributes, payload));
     }
 
     /** 在执行器上运行 supplier，以 CompletableFuture 暴露结果，异常会传播到 future。 */

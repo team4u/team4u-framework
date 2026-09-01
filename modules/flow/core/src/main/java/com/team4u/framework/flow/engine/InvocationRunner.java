@@ -83,7 +83,8 @@ public final class InvocationRunner {
             if (!code.isEmpty()) {
                 attrs.put("code", code);
             }
-            event(FlowObserver.Type.NODE_COMPLETED, node.descriptor(), attrs);
+            Object payload = (outcome instanceof Outcome.Accepted) ? ((Outcome.Accepted<?>) outcome).value() : outcome;
+            event(FlowObserver.Type.NODE_COMPLETED, node.descriptor(), attrs, payload);
         }
         return outcome;
     }
@@ -202,11 +203,16 @@ public final class InvocationRunner {
 
     private void event(FlowObserver.Type type, NodeDescriptor descriptor,
                        Map<String, String> attributes) {
+        event(type, descriptor, attributes, null);
+    }
+
+    private void event(FlowObserver.Type type, NodeDescriptor descriptor,
+                       Map<String, String> attributes, Object payload) {
         if (observer.isNoop()) return;
         Metadata metadata = new Metadata(flowId, flowVersion, executionId,
                 descriptor.path(), descriptor.label());
         ObserverSafeEmitter.emit(observer, new FlowObserver.Event(type, Instant.now(),
-                metadata, descriptor, attributes));
+                metadata, descriptor, attributes, payload));
     }
 
     /**

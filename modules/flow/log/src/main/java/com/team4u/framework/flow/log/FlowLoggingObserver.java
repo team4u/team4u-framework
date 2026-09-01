@@ -142,7 +142,9 @@ public class FlowLoggingObserver implements FlowObserver {
         Metadata meta = event.metadata();
         String loggerName = loggerNamePrefix + "." + meta.flowId();
         String label = resolveNodeDisplayLabel(event);
-        Object currentContext = contextSupplier != null ? contextSupplier.get() : null;
+        Object currentContext = event.payload() != null
+                ? event.payload()
+                : (contextSupplier != null ? contextSupplier.get() : null);
 
         switch (event.type()) {
             case FLOW_STARTED:
@@ -290,7 +292,9 @@ public class FlowLoggingObserver implements FlowObserver {
 
         if (printTreeSummary) {
             String treeStr = TraceTreeFormatter.formatTree(trace.rootTraceNode);
-            Object finalContext = contextSupplier != null ? contextSupplier.get() : null;
+            Object finalContext = event.payload() != null
+                    ? event.payload()
+                    : (contextSupplier != null ? contextSupplier.get() : null);
             String maskedFinalContext = contextFormatter.format(finalContext);
 
             log.info("Flow Execution Summary [flowId={} | execId={} | total={}ms | outcome={}]\n{}\nFinal Context:\n{}",

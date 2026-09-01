@@ -18,13 +18,12 @@
 ```mermaid
 graph TD
     subgraph "Flow 执行引擎"
-        ENG["LocalExecutable / DurableMachine"] --> EVT["FlowObserver.Event<br/>(STARTED, COMPLETED, ROUTE, POLICY...)"]
+        ENG["LocalExecutable / SerialMachine"] --> EVT["FlowObserver.Event<br/>(含原生 payload: 当前步真实入参 / 出参)"]
     end
 
     subgraph "team4u-flow-log 核心管道"
         EVT --> FLO["FlowLoggingObserver"]
-        FLO --> HOLDER["FlowContextHolder<br/>(线程上下文安全提取)"]
-        HOLDER --> PROJ["ContextProjector<br/>@TraceContext 全选 / @TraceIgnore 排除"]
+        FLO --> PROJ["ContextProjector<br/>(TypeRouting / Annotated / Fields / Lambda)"]
         PROJ --> MASK["MaskedJson<br/>@Mask 自动掩码序列化"]
         MASK --> FMT["ContextFormatter (统一格式化管道)"]
         FMT --> STEP["单步实时日志 (Loggers 结构化输出)"]
@@ -145,9 +144,9 @@ LocalExecutable<OrderContext, OrderContext> executable = Local.from(orderFlow)
         .observer(observer)
         .compile();
 
-// 3. 在绑定的上下文内安全执行
+// 3. 执行流程（引擎原生将入参和每一步出参通过 Event 传递给观察者，无需任何 ThreadLocal）
 OrderContext context = new OrderContext();
-FlowResult<OrderContext> result = FlowContextHolder.runWith(context, () -> executable.run(context));
+FlowResult<OrderContext> result = executable.run(context);
 ```
 
 ---

@@ -38,23 +38,29 @@ public final class MachineObserver {
         if (observer.isNoop() || frame.observerStarted) return;
         frame.observerStarted = true;
         event(FlowObserver.Type.NODE_STARTED, frame.node.descriptor(),
-                attributes(frame, null));
+                attributes(frame, null), frame.entry);
     }
 
     void nodeCompleted(RuntimeFrame frame, Outcome<?> outcome) {
         if (observer.isNoop()) return;
         if (frame.node instanceof PlanNode.Invoke) return;
+        Object payload = (outcome instanceof Outcome.Accepted) ? ((Outcome.Accepted<?>) outcome).value() : outcome;
         event(FlowObserver.Type.NODE_COMPLETED, frame.node.descriptor(),
-                attributes(frame, outcome));
+                attributes(frame, outcome), payload);
     }
 
     void event(FlowObserver.Type type, NodeDescriptor descriptor,
                Map<String, String> attributes) {
+        event(type, descriptor, attributes, null);
+    }
+
+    void event(FlowObserver.Type type, NodeDescriptor descriptor,
+               Map<String, String> attributes, Object payload) {
         if (observer.isNoop()) return;
         Metadata metadata = new Metadata(flowId, flowVersion, state.executionId(),
                 descriptor.path(), descriptor.label());
         ObserverSafeEmitter.emit(observer, new FlowObserver.Event(type, Instant.now(),
-                metadata, descriptor, attributes));
+                metadata, descriptor, attributes, payload));
     }
 
     private static Map<String, String> attributes(RuntimeFrame frame,

@@ -11,10 +11,13 @@ import com.team4u.framework.flow.model.Reason;
 import com.team4u.framework.log.support.TestLogHelper;
 import com.team4u.framework.mask.Mask;
 import com.team4u.framework.mask.MaskType;
+import lombok.AllArgsConstructor;
 import lombok.Data;
+import lombok.NoArgsConstructor;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.util.Collections;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -265,5 +268,75 @@ public class FlowLoggingObserverTest {
         node.addChild(child);
         Assert.assertEquals(1, node.snapshotChildren().size());
         Assert.assertEquals("ChildNode", node.snapshotChildren().get(0).getLabel());
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    static class UserVerifyReq {
+        private String userId;
+        private String realName;
+    }
+
+    @Data
+    @AllArgsConstructor
+    @NoArgsConstructor
+    static class PaymentResult {
+        private String orderId;
+        private Double amount;
+    }
+
+    @Test
+    public void testHeterogeneousPipelineWithoutThreadLocal() {
+        TestLogHelper logHelper = TestLogHelper.start();
+        try {
+            // 配置按类型路由投影器
+            ContextProjector projector = ContextProjector.byType()
+                    .bind(UserVerifyReq.class, (UserVerifyReq req) -> Collections.singletonMap("uid", req.getUserId()))
+                    .bindFields(PaymentResult.class, "orderId", "amount")
+                    .build();
+
+            FlowLoggingObserver observer = FlowLoggingObserver.builder()
+                    .contextProjector(projector)
+                    .printStepLogs(true)
+                    .printTreeSummary(true)
+                    .build();
+
+            // 构造异构流水线 Flow: UserVerifyReq -> PaymentResult
+            Flow<UserVerifyReq, PaymentResult> pipelineFlow = Flow.<UserVerifyReq, PaymentResult>step(
+                    (ctx, req) -> Outcome.accepted(new PaymentResult("ORD-PAY-123", 500.0))
+            ).named("Payment Step");
+
+            LocalExecutable<UserVerifyReq, PaymentResult> executable = Local.from(pipelineFlow)
+                    .flowId("heterogeneous-flow")
+                    .flowVersion(1)
+                    .observer(observer)
+                    .compile();
+
+            // 直接调用 run，完全无需 FlowContextHolder.runWith
+            UserVerifyReq inputReq = new UserVerifyReq("USER-777", "张三");
+            FlowResult<PaymentResult> result = executable.run(inputReq);
+
+            Assert.assertTrue(result instanceof FlowResult.Completed);
+            PaymentResult finalPay = result.requireAccepted();
+            Assert.assertEquals("ORD-PAY-123", finalPay.getOrderId());
+
+            // 验证日志中自动捕获了第一步入参 UserVerifyReq (uid=USER-777)
+            boolean foundUserReqLog = logHelper.allEvents().stream().anyMatch(e -> {
+                Object ctx = e.get("context");
+                return ctx != null && ctx.toString().contains("USER-777");
+            });
+            Assert.assertTrue("单步日志应当自动捕获并投影 UserVerifyReq", foundUserReqLog);
+
+            // 验证日志中自动捕获了步骤产出的 PaymentResult (ORD-PAY-123, 500.0)
+            boolean foundPayResultLog = logHelper.allEvents().stream().anyMatch(e -> {
+                Object ctx = e.get("context");
+                return ctx != null && ctx.toString().contains("ORD-PAY-123") && ctx.toString().contains("500.0");
+            });
+            Assert.assertTrue("单步完成日志应当自动捕获并投影 PaymentResult", foundPayResultLog);
+
+        } finally {
+            logHelper.stop();
+        }
     }
 }

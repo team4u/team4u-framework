@@ -84,9 +84,33 @@ public interface FlowObserver {
         private final NodeDescriptor descriptor;
         /** 结构化键值属性字典（不可变集合）。 */
         private final Map<String, String> attributes;
+        /** 运行时业务数据载荷（如节点入参、出参或上下文对象，可为 null）。 */
+        private final Object payload;
 
         /**
-         * 构造流程事件对象。
+         * 构造流程事件对象（含运行时业务数据载荷）。
+         *
+         * @param type       事件类型，不能为 null
+         * @param at         发生时间，不能为 null
+         * @param metadata   元数据，不能为 null
+         * @param descriptor 节点描述符，不能为 null
+         * @param attributes 扩展属性，不能为 null
+         * @param payload    运行时业务数据载荷（可为 null）
+         * @throws NullPointerException 当任何必要入参为 null 时抛出
+         */
+        public Event(Type type, Instant at, Metadata metadata,
+                     NodeDescriptor descriptor, Map<String, String> attributes, Object payload) {
+            this.type = Objects.requireNonNull(type, "type must not be null");
+            this.at = Objects.requireNonNull(at, "at must not be null");
+            this.metadata = Objects.requireNonNull(metadata, "metadata must not be null");
+            this.descriptor = Objects.requireNonNull(descriptor, "descriptor must not be null");
+            Objects.requireNonNull(attributes, "attributes must not be null");
+            this.attributes = Collections.unmodifiableMap(new LinkedHashMap<String, String>(attributes));
+            this.payload = payload;
+        }
+
+        /**
+         * 构造流程事件对象（不含载荷）。
          *
          * @param type       事件类型，不能为 null
          * @param at         发生时间，不能为 null
@@ -97,12 +121,7 @@ public interface FlowObserver {
          */
         public Event(Type type, Instant at, Metadata metadata,
                      NodeDescriptor descriptor, Map<String, String> attributes) {
-            this.type = Objects.requireNonNull(type, "type must not be null");
-            this.at = Objects.requireNonNull(at, "at must not be null");
-            this.metadata = Objects.requireNonNull(metadata, "metadata must not be null");
-            this.descriptor = Objects.requireNonNull(descriptor, "descriptor must not be null");
-            Objects.requireNonNull(attributes, "attributes must not be null");
-            this.attributes = Collections.unmodifiableMap(new LinkedHashMap<String, String>(attributes));
+            this(type, at, metadata, descriptor, attributes, null);
         }
     }
 
