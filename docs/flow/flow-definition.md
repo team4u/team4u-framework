@@ -267,20 +267,20 @@ graph TD
 
 ---
 
-## 强类型配置读取器 (ConfigMapReader)
+## 强类型配置读取器 (MapReader)
 
-在编写自定义策略提供者（[`PolicyProvider`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/registry/PolicyProvider.java)）时，外部传入的配置通常是弱类型的 `Map<String, Object>`。[`ConfigMapReader`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/util/ConfigMapReader.java) 提供了统一的安全读取工具：
+在编写自定义策略提供者（[`PolicyProvider`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/registry/PolicyProvider.java)）时，外部传入的配置通常是弱类型的 `Map<String, Object>`。[`MapReader`](file:///root/code/team4u-framework/modules/base/core/src/main/java/com/team4u/framework/base/util/MapReader.java) 提供了统一的安全读取工具：
 
 ```java
 public class MyRateLimitProvider implements PolicyProvider {
     @Override
     public PolicyBinding create(Map<String, Object> configuration) {
-        ConfigMapReader reader = ConfigMapReader.of(configuration);
+        MapReader reader = MapReader.of(configuration);
 
         // 支持多别名容错（自动兼容 camelCase 与 kebab-case 命名）
-        int permits = reader.getInt(1, "permits", "limit-count");
+        int permits = reader.getInt("permits", 1, "limit-count");
         Duration timeout = reader.getDuration("timeout", Duration.ofSeconds(1));
-        Action action = reader.getEnum(Action.class, Action.REJECT, "action");
+        Action action = reader.getEnum(Action.class, "action", Action.REJECT);
 
         return PolicyBinding.builder()
                 .instance(new RateLimitPolicy(permits, timeout, action))

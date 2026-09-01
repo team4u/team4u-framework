@@ -383,7 +383,7 @@ step payment.charge {
 }
 ```
 
-底层由 [`RetryPolicyProvider`](file:///root/code/team4u-framework/modules/flow/retry/src/main/java/com/team4u/framework/flow/retry/RetryPolicyProvider.java) 与 `ConfigMapReader` 自动解析参数，支持 `maxAttempts`（或 `max-attempts`）、`backoff`（如 `100ms`, `1s`）等参数，无缝转化为 `FlowRetryPolicy`。
+底层由 [`RetryPolicyProvider`](file:///root/code/team4u-framework/modules/flow/retry/src/main/java/com/team4u/framework/flow/retry/RetryPolicyProvider.java) 与 [`MapReader`](file:///root/code/team4u-framework/modules/base/core/src/main/java/com/team4u/framework/base/util/MapReader.java) 自动解析参数，支持 `maxAttempts`（或 `max-attempts`）、`backoff`（如 `100ms`, `1s`）等参数，无缝转化为 `FlowRetryPolicy`。
 
 ---
 

@@ -9,6 +9,7 @@ import org.junit.Test;
 import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -110,6 +111,51 @@ public class ConvertUtilTest {
 
         Instant instant = ConvertUtil.convert(Instant.class, "1700000000000");
         Assert.assertEquals(1700000000000L, instant.toEpochMilli());
+
+        Assert.assertEquals(Duration.ofSeconds(5), ConvertUtil.convert(Duration.class, "5s"));
+        Assert.assertEquals(Duration.ofMillis(500), ConvertUtil.convert(Duration.class, 500L));
+        Assert.assertEquals(Duration.ofSeconds(10), ConvertUtil.convert(Duration.class, Duration.ofSeconds(10)));
+        Assert.assertNull(ConvertUtil.convert(Duration.class, null));
+        Assert.assertEquals(Duration.ofSeconds(1), ConvertUtil.convert(Duration.class, "invalid", Duration.ofSeconds(1)));
+    }
+
+    @Test
+    public void testToDuration() {
+        Assert.assertNull(ConvertUtil.toDuration(null));
+        Assert.assertEquals(Duration.ofSeconds(5), ConvertUtil.toDuration(null, Duration.ofSeconds(5)));
+        Assert.assertEquals(Duration.ofSeconds(3), ConvertUtil.toDuration(Duration.ofSeconds(3)));
+
+        // Number
+        Assert.assertEquals(Duration.ofMillis(500), ConvertUtil.toDuration(500));
+        Assert.assertEquals(Duration.ofMillis(1000), ConvertUtil.toDuration(1000L));
+        Assert.assertEquals(Duration.ofMillis(2500), ConvertUtil.toDuration(2500.0));
+
+        // String units
+        Assert.assertEquals(Duration.ofNanos(100), ConvertUtil.toDuration("100ns"));
+        Assert.assertEquals(Duration.ofNanos(100_000), ConvertUtil.toDuration("100us"));
+        Assert.assertEquals(Duration.ofNanos(100_000), ConvertUtil.toDuration("100µs"));
+        Assert.assertEquals(Duration.ofMillis(100), ConvertUtil.toDuration("100ms"));
+        Assert.assertEquals(Duration.ofMillis(100), ConvertUtil.toDuration(" 100MS "));
+        Assert.assertEquals(Duration.ofSeconds(5), ConvertUtil.toDuration("5s"));
+        Assert.assertEquals(Duration.ofSeconds(5), ConvertUtil.toDuration(" 5S "));
+        Assert.assertEquals(Duration.ofMinutes(10), ConvertUtil.toDuration("10m"));
+        Assert.assertEquals(Duration.ofHours(1), ConvertUtil.toDuration("1h"));
+        Assert.assertEquals(Duration.ofDays(2), ConvertUtil.toDuration("2d"));
+
+        // Pure numeric string
+        Assert.assertEquals(Duration.ofMillis(500), ConvertUtil.toDuration("500"));
+        Assert.assertEquals(Duration.ofMillis(500), ConvertUtil.toDuration(" 500 "));
+
+        // ISO-8601
+        Assert.assertEquals(Duration.ofSeconds(10), ConvertUtil.toDuration("PT10S"));
+        Assert.assertEquals(Duration.ofSeconds(10), ConvertUtil.toDuration("\"PT10S\""));
+        Assert.assertEquals(Duration.ofSeconds(10), ConvertUtil.toDuration("pt10s"));
+        Assert.assertEquals(Duration.ofDays(1), ConvertUtil.toDuration("P1D"));
+
+        // Fallback / invalid
+        Assert.assertNull(ConvertUtil.toDuration("invalid"));
+        Assert.assertEquals(Duration.ofSeconds(1), ConvertUtil.toDuration("invalid", Duration.ofSeconds(1)));
+        Assert.assertNull(ConvertUtil.toDuration(""));
     }
 
     @Test

@@ -1,9 +1,9 @@
 package com.team4u.framework.flow.ratelimiter;
 
+import com.team4u.framework.base.util.MapReader;
 import com.team4u.framework.flow.definition.registry.PolicyBinding;
 import com.team4u.framework.flow.definition.registry.PolicyDescriptor;
 import com.team4u.framework.flow.definition.registry.PolicyProvider;
-import com.team4u.framework.flow.definition.util.ConfigMapReader;
 
 import java.util.Map;
 
@@ -37,7 +37,7 @@ public class RateLimitPolicyProvider implements PolicyProvider {
 
     @Override
     public PolicyBinding create(Map<String, Object> configuration) {
-        ConfigMapReader reader = ConfigMapReader.of(configuration);
+        MapReader reader = MapReader.of(configuration);
         String point = reader.getString("point", descriptor.id());
         Integer permits = reader.getInt("permits", 1);
         RateLimitAction action = reader.getEnum(RateLimitAction.class, "action", RateLimitAction.FAIL);

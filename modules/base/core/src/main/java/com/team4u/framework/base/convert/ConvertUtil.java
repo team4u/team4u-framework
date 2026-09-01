@@ -4,10 +4,13 @@ import java.lang.reflect.Array;
 import java.lang.reflect.Type;
 import java.math.BigDecimal;
 import java.math.BigInteger;
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
 import java.util.List;
+import java.util.regex.Matcher;
+import java.util.regex.Pattern;
 
 /**
  * 通用类型转换工具类
@@ -17,6 +20,9 @@ import java.util.List;
  * @author jay.wu
  */
 public class ConvertUtil {
+
+    private static final Pattern DURATION_PATTERN = Pattern.compile(
+            "^([+-]?\\d+(?:\\.\\d+)?)\\s*(ns|us|µs|ms|s|m|h|d)$", Pattern.CASE_INSENSITIVE);
 
     private static final TypeConverterRegistry REGISTRY = new TypeConverterRegistry();
 
@@ -483,6 +489,102 @@ public class ConvertUtil {
         if ("false".equals(valueStr) || "0".equals(valueStr) || "no".equals(valueStr)
                 || "off".equals(valueStr) || "n".equals(valueStr)) {
             return false;
+        }
+        return defaultValue;
+    }
+
+    /**
+     * 转换为 Duration 时长类型
+     *
+     * @param source 原始值，支持 Duration 实例、数值毫秒数、时间单位字符串（如 100ms, 5s, 10m, 1h, 2d）及 ISO-8601 格式（如 PT10S）
+     * @return Duration 结果，转换失败返回 null
+     */
+    public static Duration toDuration(Object source) {
+        return toDuration(source, null);
+    }
+
+    /**
+     * 转换为 Duration 时长类型，支持默认值
+     *
+     * @param source       原始值，支持 Duration 实例、数值毫秒数、时间单位字符串（如 100ms, 5s, 10m, 1h, 2d）及 ISO-8601 格式（如 PT10S）
+     * @param defaultValue 转换失败或为空时的默认值
+     * @return Duration 结果
+     */
+    public static Duration toDuration(Object source, Duration defaultValue) {
+        if (source == null) {
+            return defaultValue;
+        }
+        if (source instanceof Duration) {
+            return (Duration) source;
+        }
+        if (source instanceof Number) {
+            return Duration.ofMillis(((Number) source).longValue());
+        }
+        String str = source.toString().trim();
+        if (str.isEmpty()) {
+            return defaultValue;
+        }
+        if (str.length() >= 2 && str.startsWith("\"") && str.endsWith("\"")) {
+            str = str.substring(1, str.length() - 1).trim();
+            if (str.isEmpty()) {
+                return defaultValue;
+            }
+        }
+        // 支持 ISO-8601 格式（如 PT10S, P1D）
+        if (str.startsWith("P") || str.startsWith("p") || str.startsWith("-P") || str.startsWith("-p") || str.startsWith("+P") || str.startsWith("+p")) {
+            try {
+                return Duration.parse(str);
+            } catch (Exception e) {
+                try {
+                    return Duration.parse(str.toUpperCase());
+                } catch (Exception ignored) {
+                    return defaultValue;
+                }
+            }
+        }
+        // 支持纯数字字符串（按毫秒解析）
+        if (str.matches("^[+-]?\\d+$")) {
+            try {
+                return Duration.ofMillis(Long.parseLong(str));
+            } catch (Exception e) {
+                return defaultValue;
+            }
+        }
+        if (str.matches("^[+-]?\\d+\\.\\d+$")) {
+            try {
+                return Duration.ofMillis((long) Double.parseDouble(str));
+            } catch (Exception e) {
+                return defaultValue;
+            }
+        }
+        // 支持带时间单位后缀的字符串（100ms, 5s, 10m, 1h, 2d 等，大小写不敏感）
+        Matcher matcher = DURATION_PATTERN.matcher(str);
+        if (matcher.matches()) {
+            try {
+                double amount = Double.parseDouble(matcher.group(1));
+                String unit = matcher.group(2).toLowerCase();
+                switch (unit) {
+                    case "ns":
+                        return Duration.ofNanos((long) amount);
+                    case "us":
+                    case "µs":
+                        return Duration.ofNanos((long) (amount * 1_000));
+                    case "ms":
+                        return Duration.ofMillis((long) amount);
+                    case "s":
+                        return Duration.ofMillis((long) (amount * 1_000));
+                    case "m":
+                        return Duration.ofMillis((long) (amount * 60_000));
+                    case "h":
+                        return Duration.ofMillis((long) (amount * 3_600_000));
+                    case "d":
+                        return Duration.ofMillis((long) (amount * 86_400_000));
+                    default:
+                        return defaultValue;
+                }
+            } catch (Exception e) {
+                return defaultValue;
+            }
         }
         return defaultValue;
     }

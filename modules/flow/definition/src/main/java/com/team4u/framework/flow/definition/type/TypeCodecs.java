@@ -1,11 +1,11 @@
 package com.team4u.framework.flow.definition.type;
 
+import com.team4u.framework.base.convert.ConvertUtil;
+
 import java.time.Duration;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.regex.Matcher;
-import java.util.regex.Pattern;
 
 /**
  * 内置标准类型编解码器工厂（Type Codecs）。
@@ -13,9 +13,6 @@ import java.util.regex.Pattern;
  * @author jay.wu
  */
 public final class TypeCodecs {
-
-    private static final Pattern DURATION_PATTERN = Pattern.compile(
-            "^([+-]?\\d+(?:\\.\\d+)?)\\s*(ns|us|µs|ms|s|m|h|d)$", Pattern.CASE_INSENSITIVE);
 
     public static final TypeCodec<String> STRING = new TypeCodec<String>() {
         @Override
@@ -254,34 +251,10 @@ public final class TypeCodecs {
         if (text == null) {
             throw new IllegalArgumentException("duration string must not be null");
         }
-        String clean = text.trim();
-        if (clean.startsWith("\"") && clean.endsWith("\"") && clean.length() >= 2) {
-            clean = clean.substring(1, clean.length() - 1).trim();
-        }
-        if (clean.startsWith("P") || clean.startsWith("-P") || clean.startsWith("+P")) {
-            return Duration.parse(clean);
-        }
-        Matcher matcher = DURATION_PATTERN.matcher(clean);
-        if (!matcher.matches()) {
+        Duration duration = ConvertUtil.toDuration(text);
+        if (duration == null) {
             throw new IllegalArgumentException("Invalid duration literal: " + text);
         }
-        double amount = Double.parseDouble(matcher.group(1));
-        String unit = matcher.group(2).toLowerCase();
-        if ("ns".equals(unit)) {
-            return Duration.ofNanos((long) amount);
-        } else if ("us".equals(unit) || "µs".equals(unit)) {
-            return Duration.ofNanos((long) (amount * 1_000));
-        } else if ("ms".equals(unit)) {
-            return Duration.ofMillis((long) amount);
-        } else if ("s".equals(unit)) {
-            return Duration.ofMillis((long) (amount * 1_000));
-        } else if ("m".equals(unit)) {
-            return Duration.ofSeconds((long) (amount * 60));
-        } else if ("h".equals(unit)) {
-            return Duration.ofHours((long) amount);
-        } else if ("d".equals(unit)) {
-            return Duration.ofDays((long) amount);
-        }
-        throw new IllegalArgumentException("Unknown duration unit: " + unit);
+        return duration;
     }
 }

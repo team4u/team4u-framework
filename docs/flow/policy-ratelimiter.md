@@ -395,7 +395,7 @@ step payment.charge {
 }
 ```
 
-底层通过 [`RateLimitPolicyProvider`](file:///root/code/team4u-framework/modules/flow/ratelimiter/src/main/java/com/team4u/framework/flow/ratelimiter/RateLimitPolicyProvider.java) 与 `ConfigMapReader` 自动解析参数，支持 `permits`（每次消耗令牌数）、`action`（`REJECT`、`FAIL` 或 `PROCEED`）与 `point`（自定义限流检查点标识），无缝构建强类型 `RateLimitPolicy`。
+底层通过 [`RateLimitPolicyProvider`](file:///root/code/team4u-framework/modules/flow/ratelimiter/src/main/java/com/team4u/framework/flow/ratelimiter/RateLimitPolicyProvider.java) 与 [`MapReader`](file:///root/code/team4u-framework/modules/base/core/src/main/java/com/team4u/framework/base/util/MapReader.java) 自动解析参数，支持 `permits`（每次消耗令牌数）、`action`（`REJECT`、`FAIL` 或 `PROCEED`）与 `point`（自定义限流检查点标识），无缝构建强类型 `RateLimitPolicy`。
 
 ---
 

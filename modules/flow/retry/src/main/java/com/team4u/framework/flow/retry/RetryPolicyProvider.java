@@ -1,9 +1,9 @@
 package com.team4u.framework.flow.retry;
 
+import com.team4u.framework.base.util.MapReader;
 import com.team4u.framework.flow.definition.registry.PolicyBinding;
 import com.team4u.framework.flow.definition.registry.PolicyDescriptor;
 import com.team4u.framework.flow.definition.registry.PolicyProvider;
-import com.team4u.framework.flow.definition.util.ConfigMapReader;
 import com.team4u.framework.retry.common.backoff.Backoff;
 import com.team4u.framework.retry.common.backoff.Backoffs;
 
@@ -40,7 +40,7 @@ public class RetryPolicyProvider implements PolicyProvider {
 
     @Override
     public PolicyBinding create(Map<String, Object> configuration) {
-        ConfigMapReader reader = ConfigMapReader.of(configuration);
+        MapReader reader = MapReader.of(configuration);
         Integer maxAttempts = reader.getInt("maxAttempts", null, "max-attempts");
         Duration backoffDuration = reader.getDuration("backoff");
         Backoff backoff = backoffDuration != null ? Backoffs.fixed(backoffDuration.toMillis()) : null;

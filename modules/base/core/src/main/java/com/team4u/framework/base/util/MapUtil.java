@@ -66,4 +66,14 @@ public class MapUtil {
 
         return ConvertUtil.convert(type, result);
     }
+
+    /**
+     * 创建 MapReader 读取器实例
+     *
+     * @param map 待读取的 Map（允许为 null）
+     * @return {@link MapReader} 实例
+     */
+    public static MapReader reader(Map<?, ?> map) {
+        return MapReader.of(map);
+    }
 }

@@ -1,36 +1,40 @@
-package com.team4u.framework.flow.definition.util;
+package com.team4u.framework.base.util;
 
 import com.team4u.framework.base.convert.ConvertUtil;
-import com.team4u.framework.flow.definition.type.TypeCodecs;
 
 import java.time.Duration;
 import java.util.Collections;
 import java.util.Map;
 
 /**
- * 流程配置字典强类型读取器（Config Map Reader）。
- *
- * <p>基于 {@link ConvertUtil} 与 {@link TypeCodecs} 提供强类型安全的参数提取能力，
- * 统一支持 Key 别名解析（如 camelCase 与 kebab-case 兼容）和安全默认值回退，消除弱类型 Map 手工校验与类型转换样板代码。</p>
+ * 字典强类型读取器（Map Reader）。
+ * <p>
+ * 基于 {@link ConvertUtil} 提供强类型安全的参数提取能力，
+ * 统一支持 Key 别名解析（如 camelCase 与 kebab-case 兼容）和安全默认值回退，消除弱类型 Map 手工校验与类型转换样板代码。
  *
  * @author jay.wu
  */
-public class ConfigMapReader {
+public class MapReader {
 
-    private final Map<String, ?> config;
+    private final Map<?, ?> map;
 
-    public ConfigMapReader(Map<String, ?> config) {
-        this.config = config != null ? config : Collections.emptyMap();
+    /**
+     * 构造 MapReader 实例。
+     *
+     * @param map 原始字典（允许为 null）
+     */
+    public MapReader(Map<?, ?> map) {
+        this.map = map != null ? map : Collections.emptyMap();
     }
 
     /**
-     * 静态工厂方法构造 Reader 实例。
+     * 静态工厂方法构造 MapReader 实例。
      *
-     * @param config 配置字典（允许为 null）
-     * @return ConfigMapReader 实例
+     * @param map 原始字典（允许为 null）
+     * @return MapReader 实例
      */
-    public static ConfigMapReader of(Map<String, ?> config) {
-        return new ConfigMapReader(config);
+    public static MapReader of(Map<?, ?> map) {
+        return new MapReader(map);
     }
 
     /**
@@ -41,14 +45,14 @@ public class ConfigMapReader {
      * @return 首个非 null 值，若均未找到则返回 null
      */
     public Object getRaw(String key, String... aliases) {
-        Object val = config.get(key);
+        Object val = map.get(key);
         if (val != null) {
             return val;
         }
         if (aliases != null) {
             for (String alias : aliases) {
                 if (alias != null) {
-                    val = config.get(alias);
+                    val = map.get(alias);
                     if (val != null) {
                         return val;
                     }
@@ -87,19 +91,19 @@ public class ConfigMapReader {
     }
 
     /**
-     * 检查配置中是否包含指定主键或任一别名。
+     * 检查字典中是否包含指定主键或任一别名。
      *
      * @param key     主键
      * @param aliases 可选别名
      * @return 若包含则返回 true，否则返回 false
      */
     public boolean containsKey(String key, String... aliases) {
-        if (config.containsKey(key)) {
+        if (map.containsKey(key)) {
             return true;
         }
         if (aliases != null) {
             for (String alias : aliases) {
-                if (alias != null && config.containsKey(alias)) {
+                if (alias != null && map.containsKey(alias)) {
                     return true;
                 }
             }
@@ -232,23 +236,7 @@ public class ConfigMapReader {
      */
     public Duration getDuration(String key, Duration defaultValue, String... aliases) {
         Object val = getRaw(key, aliases);
-        if (val == null) {
-            return defaultValue;
-        }
-        if (val instanceof Duration) {
-            return (Duration) val;
-        }
-        if (val instanceof Number) {
-            return Duration.ofMillis(((Number) val).longValue());
-        }
-        if (val instanceof String) {
-            try {
-                return TypeCodecs.parseDuration((String) val);
-            } catch (Exception ignored) {
-                return defaultValue;
-            }
-        }
-        return defaultValue;
+        return val != null ? ConvertUtil.toDuration(val, defaultValue) : defaultValue;
     }
 
     /**
@@ -276,18 +264,7 @@ public class ConfigMapReader {
         if (val == null) {
             return defaultValue;
         }
-        if (enumClass.isInstance(val)) {
-            return enumClass.cast(val);
-        }
-        if (val instanceof String) {
-            String str = ((String) val).trim();
-            for (E constant : enumClass.getEnumConstants()) {
-                if (constant.name().equalsIgnoreCase(str)) {
-                    return constant;
-                }
-            }
-        }
-        return defaultValue;
+        return ConvertUtil.convert(enumClass, val, defaultValue);
     }
 
     /**
@@ -318,5 +295,17 @@ public class ConfigMapReader {
             return defaultValue;
         }
         return ConvertUtil.convert(type, val, defaultValue);
+    }
+
+    /**
+     * 通用强类型参数转换读取。
+     *
+     * @param type 目标 Class 类型
+     * @param key  主键
+     * @param <T>  目标泛型
+     * @return 转换后的值（若未找到返回 null）
+     */
+    public <T> T get(Class<T> type, String key) {
+        return get(type, key, null);
     }
 }

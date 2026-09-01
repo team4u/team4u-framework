@@ -293,8 +293,8 @@ public class MyFlowDefinitionExtension implements FlowDefinitionExtension {
 
             @Override
             public PolicyBinding create(Map<String, Object> configuration) {
-                ConfigMapReader reader = ConfigMapReader.of(configuration);
-                String role = reader.getString("ANONYMOUS", "role", "required-role");
+                MapReader reader = MapReader.of(configuration);
+                String role = reader.getString("role", "ANONYMOUS", "required-role");
                 return PolicyBinding.builder()
                         .instance(new SecurityAuthPolicy(role))
                         .persistent(false)

@@ -3,6 +3,7 @@ package com.team4u.framework.base.convert;
 import com.team4u.framework.base.util.DateUtil;
 
 import java.lang.reflect.Type;
+import java.time.Duration;
 import java.time.Instant;
 import java.time.LocalDate;
 import java.time.LocalDateTime;
@@ -13,7 +14,7 @@ import java.util.Date;
 /**
  * 时间类型转换器
  * <p>
- * 支持 Date、LocalDate、LocalDateTime、Instant 以及时间戳字符串的相互转换。
+ * 支持 Date、LocalDate、LocalDateTime、Instant、Duration 以及时间戳字符串的相互转换。
  *
  * @author jay.wu
  */
@@ -28,7 +29,8 @@ final class TemporalTypeConverter extends AbstractTypeConverter {
         return type == Date.class
                 || type == LocalDate.class
                 || type == LocalDateTime.class
-                || type == Instant.class;
+                || type == Instant.class
+                || type == Duration.class;
     }
 
     @Override
@@ -45,6 +47,9 @@ final class TemporalTypeConverter extends AbstractTypeConverter {
         }
         if (type == Instant.class) {
             return toInstant(source);
+        }
+        if (type == Duration.class) {
+            return ConvertUtil.toDuration(source);
         }
         return null;
     }
