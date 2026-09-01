@@ -26,11 +26,11 @@ public class FlowPublisher {
 
     public FlowPublisher(FlowDefinitionRegistry registry, OperationResolver resolver) {
         this.registry = Objects.requireNonNull(registry, "registry must not be null");
-        this.resolver = resolver != null ? resolver : OperationResolver.rejecting();
+        this.resolver = resolver != null ? resolver : OperationResolver.defaultResolver();
     }
 
     public FlowPublisher(FlowDefinitionRegistry registry) {
-        this(registry, OperationResolver.rejecting());
+        this(registry, OperationResolver.defaultResolver());
     }
 
     /**

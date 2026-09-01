@@ -168,11 +168,15 @@ FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
 
 ```java
 // 执行绑定（如果类型不匹配或符号不存在，会即时抛出 FlowDiagnosticException）
-BoundFlow boundFlow = FlowBinder.bind(definition, registry, springBeanResolver);
+BoundFlow boundFlow = FlowBinder.bind(definition, registry);
 
 System.out.println("输入类型: " + boundFlow.inputType().typeName());
 System.out.println("输出类型: " + boundFlow.outputType().typeName());
 ```
+
+> [!TIP]
+> **Spring Bean 自动解析**：
+> 只要项目中引入了 `team4u-flow-bean`（配合 `team4u-bean-spring`），`FlowBinder` 默认会通过 SPI 自动加载 [`BeanOperationResolver`](file:///root/code/team4u-framework/modules/flow/bean/src/main/java/com/team4u/framework/flow/bean/BeanOperationResolver.java)，自动完成 Spring 单例 Bean 与限定符的依赖注入，无需在代码中手动传递任何 resolver 参数。
 
 若配置中存在类型不兼容（例如上游输出 `OrderContext`，下游步骤却需要 `PaymentRequest`），编译器将在启动时立即报错并精确指出问题节点：
 
@@ -185,7 +189,7 @@ System.out.println("输出类型: " + boundFlow.outputType().typeName());
 通过 `FlowPublisher` 进行版本发布。发布器保障同一个 `(flowId, version)` 一旦发布即全局不可变，并支持随时获取已编译好的极速执行器：
 
 ```java
-FlowPublisher publisher = new FlowPublisher(registry, springBeanResolver);
+FlowPublisher publisher = new FlowPublisher(registry);
 
 // 发布 1.0 版本
 publisher.publish(definition);

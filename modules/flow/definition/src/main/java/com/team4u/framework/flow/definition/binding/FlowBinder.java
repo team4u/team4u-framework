@@ -39,7 +39,7 @@ public final class FlowBinder implements BindingContext {
 
     public FlowBinder(FlowDefinitionRegistry registry, OperationResolver resolver, SpecBinderRegistry binderRegistry) {
         this.registry = Objects.requireNonNull(registry, "registry must not be null");
-        this.resolver = resolver != null ? resolver : OperationResolver.rejecting();
+        this.resolver = resolver != null ? resolver : OperationResolver.defaultResolver();
         this.binderRegistry = binderRegistry != null ? binderRegistry : SpecBinderRegistry.global();
     }
 
@@ -48,7 +48,7 @@ public final class FlowBinder implements BindingContext {
     }
 
     public FlowBinder(FlowDefinitionRegistry registry) {
-        this(registry, OperationResolver.rejecting());
+        this(registry, OperationResolver.defaultResolver());
     }
 
     /**
