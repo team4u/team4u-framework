@@ -183,10 +183,10 @@ public class FlowLoggingObserver implements FlowObserver {
         if (printStepLogs) {
             Loggers.of(loggerName)
                     .action("FLOW_STARTED")
-                    .put("execId", meta.executionId())
-                    .put("context", contextFormatter.format(context))
                     .status("start")
                     .atInfo()
+                    .put("execId", meta.executionId())
+                    .put("context", contextFormatter.format(context))
                     .log();
         }
     }
@@ -205,12 +205,12 @@ public class FlowLoggingObserver implements FlowObserver {
         if (printStepLogs) {
             Loggers.of(loggerName)
                     .action(event.type().name())
+                    .status("start")
+                    .atInfo()
                     .put("execId", meta.executionId())
                     .put("path", path)
                     .put("label", label)
                     .put("context", contextFormatter.format(context))
-                    .status("start")
-                    .atInfo()
                     .log();
         }
     }
@@ -243,16 +243,17 @@ public class FlowLoggingObserver implements FlowObserver {
                 .put("path", path)
                 .put("label", label)
                 .put("duration", duration + "ms")
-                .put("outcome", outcome)
-                .put("context", contextFormatter.format(context));
+                .put("outcome", outcome);
 
         if ("ACCEPTED".equalsIgnoreCase(outcome)) {
-            stepLogger.success().log();
+            stepLogger.success();
         } else if ("REJECTED".equalsIgnoreCase(outcome) || "SKIPPED".equalsIgnoreCase(outcome)) {
-            stepLogger.status(outcome.toLowerCase()).atInfo().log();
+            stepLogger.status(outcome.toLowerCase()).atInfo();
         } else {
-            stepLogger.status("failed").atError().log();
+            stepLogger.status("failed").atError();
         }
+
+        stepLogger.put("context", contextFormatter.format(context)).log();
     }
 
     private void onRouteSelected(Event event, Metadata meta) {
