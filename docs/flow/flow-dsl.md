@@ -1,6 +1,6 @@
 # 文本 DSL 语法与统一门面 (team4u-flow-dsl)
 
-`team4u-flow-dsl` 提供了基于文本的人类可读领域特定语言（Flow DSL）解析与执行绑定能力。通过纯声明式语法，开发者或运维配置人员可以直观地描述复杂的顺序流水线、多路路由、首选候选、失败补偿、结构化并行、异步挂起与切面治理策略，并在编译期无缝映射为强类型执行流。
+`team4u-flow-dsl` 提供了人类可读的流程声明式文本领域特定语言（Flow DSL）。通过极简、直观的类自然语言语法，开发者、业务人员与架构师可以轻松编排复杂的顺序流水线、条件路由、并行并发、超时限流、重试补偿与异步挂起流程，并由统一门面 `FlowDsl` 一键编译为强类型执行器。
 
 ---
 
@@ -15,65 +15,132 @@
 
 ---
 
-## DSL 设计理念与规范
+## 10 秒极简速览 (Quick Taste)
 
-`team4u-flow-dsl` 遵循四大核心设计准则：
+一份典型的 `.flow` 文件如下所示：
 
-- **单执行模型 (Single Execution Model)**：同一份 DSL 文本既可直接绑定编译为极速内存同步执行器（`Local`），也可投影绑定为支持节点边界 CAS 检查点与断点续跑的持久化执行器（`Durable`）。
-- **解耦身份 (Decoupled Identity)**：DSL 语法树中严格只包含字符串标识符（如 `order.validate`、`payment.rate-limit`），不硬编码任何 Java 类名、包路径或代码逻辑；物理组件的解析与绑定由 [`FlowDefinitionRegistry`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/registry/FlowDefinitionRegistry.java) 统一负责。
-- **编译期零反射绑定 (Zero Reflection at Runtime)**：所有符号解析、类型推导、Spring Bean 依赖注入均在 `FlowDsl.bind` 编译期一次性完成；运行时直接执行编译好的强类型操作委托，无任何反射开销。
-- **纯声明式语法 (Pure Declarative Syntax)**：无死循环、无隐式副作用，语义正交清晰，天然支持精确的行号列号诊断定位与图表逆向可视化。
+```dsl
+schema 1
+
+flow order.fulfillment version 1 {
+    # 1. 基础校验
+    step order.validate
+    
+    # 2. 锁定库存（带 1 秒超时与可选弃权保护）
+    step inventory.reserve {
+        project order.items
+        merge order.withReservation
+        timeout 1s
+    }
+
+    # 3. 扣减支付（自动重试 3 次，每次退避 100ms）
+    step payment.charge {
+        retry payment.standard {
+            maxAttempts: 3,
+            backoff: 100ms
+        }
+    }
+
+    # 4. 根据支付结果多路分流
+    route order.paymentStatus {
+        case PAID {
+            step order.fulfill
+            step invoice.issue
+        }
+        case UNPAID {
+            step order.close
+            rejected "PAYMENT_FAILED"
+        }
+    }
+}
+```
+
+在 Java 代码中只需一行即可编译并运行：
+
+```java
+// 结合符号表完成解析、类型检查并编译为极速执行器
+BoundFlow bound = FlowDsl.bind(dslText, "order.flow", registry);
+LocalExecutable<OrderContext, OrderContext> executable = bound.compileLocal();
+
+// 执行业务流程
+FlowResult<OrderContext> result = executable.run(new OrderContext("ORD-1001"));
+```
 
 ---
 
-## 完整语法原语规范与示例
+## 核心设计理念
 
-### 流程声明与版本
+- **纯声明式与无隐式副作用**：无死循环、无全局可变变量，所有数据流转由入参出参严格驱动；
+- **解耦符号身份**：DSL 文本中严格只使用业务字符串标识（如 `order.validate`、`payment.standard`），不暴露任何 Java 类名、包路径，彻底隔离配置层与实现层；
+- **单模型多执行引擎 (Single Execution Model)**：同一份 DSL 既可编译为极速内存同步执行器（`Local`），也可直接驱动支持 CAS 检查点与断点续跑的持久化执行器（`Durable`）；
+- **编译期零反射与精准报错**：在 `FlowDsl.bind` 时一次性完成静态类型推导与符号注入，运行时执行原生委托，零反射开销；语法错误精确提示到源码行号与列号。
 
-每个 DSL 文本以可选的 `schema` 头部规范版本开头，随后使用 `flow <flowId> [version <versionId>]` 声明流程根块：
+---
+
+## 语法速查卡片 (Syntax Cheat Sheet)
+
+| 业务诉求 | DSL 语法表达 | 简要说明 |
+| :--- | :--- | :--- |
+| **声明流程** | `flow <flowId> [version <ver>] { ... }` | 声明一个具有全局唯一标识与版本号的流程 |
+| **单步执行** | `step <operation-id>` | 执行一个业务原子操作 |
+| **数据投影与合并** | `step op { project p; merge m; }` | 步骤入参提取（$I \to P$）与结果合并（$(I, R) \to O$） |
+| **单步超时** | `step op { timeout 1s; }` | 限制步骤最长执行时间（支持 `ms`, `s`, `m`, `h`） |
+| **策略治理切面** | `step op { policy p key k { ... } }` | 附加限流、鉴权等治理策略 |
+| **重试与退避** | `step op { retry r { maxAttempts: 3 } }` | 附加失败重试策略与动态参数 |
+| **可选步骤** | `step op { optional; }` | 步骤返回 `Skipped` 弃权时自动透传原值向下执行 |
+| **条件路由** | `route selector { case A { ... } otherwise { ... } }` | 根据选择器返回值多路分流 |
+| **优先级候选** | `firstApplicable { step c1; step c2; }` | 遇到 `Skipped` 自动尝试下一个，首个成功即采纳 |
+| **失败补偿** | `recover { body { ... } onFailure { ... } }` | 主流程发生失败时的逆向补偿流水线 |
+| **结构化并行** | `parallel { branch b1 { ... } join j; }` | 多分支并发执行与汇聚治理 |
+| **异步挂起** | `await resumePoint` | 流程在此暂停并释放计算线程，等待外部信号唤醒 |
+| **显式结果** | `accepted` / `rejected` / `skipped` / `failed` | 显式返回四态结果并终止当前分支 |
+| **全局作用域** | `timeout 10s { ... }` / `scope "name" { ... }` | 对一组连续语句应用全局时限或划分逻辑边界 |
+
+---
+
+## 完整语法原语详解
+
+### 流程声明与版本 (Flow Declaration)
+
+每个 DSL 文本以可选的 `schema` 头部开头，随后使用 `flow` 声明根流程块：
 
 ```dsl
-# DSL 语法规范版本（当前为 schema 1）
+# 语法版本标识（当前为 schema 1）
 schema 1
 
-# 流程标识与版本号声明
-flow order.fulfillment version 1 {
+flow order.fulfillment version 1.0 {
     # 流程正文语句
 }
 ```
 
 ### 步骤与修饰符 (Step & Modifiers)
 
-原子业务步骤使用 `step <operation-id>` 声明，支持通过大括号附加修饰符：
+原子业务步骤使用 `step <operation-id>` 声明，支持附加各类修饰器：
 
 ```dsl
-# 简单单步
-step order.validate
-
-# 带修饰符的高级步骤
 step inventory.reserve {
-    # 入参提取投影：从上游复合状态中提取所需入参 (I -> P)
+    # 1. 入参提取：从大对象中提取当前步骤所需的入参 (I -> P)
     project order.items
     
-    # 结果合并：将步骤返回值合并回主状态流水线 ((I, R) -> O)
+    # 2. 结果合并：将步骤返回值合并回主状态 ((I, R) -> O)
     merge order.withReservation
     
-    # 可选步骤：当节点弃权返回 Skipped 时，自动透传步骤入口原值继续执行
+    # 3. 可选跳过：步骤若弃权返回 Skipped，自动使用步骤入口原值继续执行
     optional
     
-    # 业务展示标签（用于监控、结构化日志与 Mermaid 图表渲染）
-    named "锁定库存"
+    # 4. 中文展示标签：用于日志与流程图渲染
+    named "锁定商品库存"
     
-    # 单步超时控制
-    timeout 1s
+    # 5. 单步超时
+    timeout 2s
     
-    # 治理策略切面（支持指定键提取器与动态参数配置）
-    policy inventory.rate-limit key order.userId {
+    # 6. 限流治理：指定限流 Key 提取器与配置字典
+    policy inventory.rateLimit key order.userId {
         permits: 1,
         action: "REJECT"
     }
     
-    # 重试策略（支持动态配置最大尝试次数与退避时长）
+    # 7. 重试策略
     retry payment.standard {
         maxAttempts: 3,
         backoff: 100ms
@@ -82,12 +149,12 @@ step inventory.reserve {
 ```
 
 > [!NOTE]
-> **洋葱圈嵌套修饰规则 (Onion Skin Modifiers)**：
-> 在单个 `step` 内部声明多个修饰器时，框架严格遵循洋葱圈由外向内包裹规则：`named -> timeout -> policy / retry -> optional -> merge/project(operation)`。
+> **洋葱圈嵌套规则 (Onion-Skin Model)**：
+> 在单个 `step` 内声明多个修饰器时，框架严格由外向内包裹执行：`named -> timeout -> policy / retry -> optional -> merge/project(operation)`。
 
 ### 条件路由 (Route)
 
-使用 `route <selector-id>` 根据选择器操作返回的键值进行多路分支匹配分发：
+使用 `route <selector-id>` 根据选择器操作返回的键值进行多路分支匹配：
 
 ```dsl
 route order.paymentStatus {
@@ -108,19 +175,19 @@ route order.paymentStatus {
 ```
 
 - `selector`：返回枚举、字符串、数字或布尔值的判决操作符；
-- `case <literal>`：匹配特定分支（支持枚举常量名、带引号字符串或数字）；
-- `otherwise`：当所有 `case` 均未匹配时的兜底流程（若未显式声明且未匹配，将默认以 `NO_ROUTE` 弃权短路）。
+- `case <literal>`：匹配特定分支（支持枚举名称、带引号字符串或数字）；
+- `otherwise`：当所有 `case` 均未命中时的兜底流程（若未显式声明且未命中，默认以 `NO_ROUTE` 弃权短路）。
 
 ### 首选候选分支 (FirstApplicable)
 
-使用 `firstApplicable` 表达按优先级尝试多个候选方案的语义。只要某个分支成功返回 `Accepted` 即采纳并结束候选尝试；若分支返回 `Skipped` 则自动尝试下一个分支：
+表达按优先级尝试多个备选方案的语义。按顺序尝试各分支，只要遇到首个 `Accepted` 成功即采纳并结束；若返回 `Skipped` 弃权则自动尝试下一个备选：
 
 ```dsl
 firstApplicable {
-    # 候选 1：优先从本地高速缓存查找
+    # 候选 1：优先从本地高速缓存获取
     step cache.find
     
-    # 候选 2：从分布式缓存集群查找
+    # 候选 2：从分布式缓存集群获取
     step redis.find
     
     # 候选 3：回源数据库全量查询
@@ -130,7 +197,7 @@ firstApplicable {
 
 ### 失败恢复与补偿 (Recover)
 
-使用 `recover` 声明针对业务拒绝（`Rejected`）或技术故障（`Failed`）的补偿流程：
+声明针对业务拒绝（`Rejected`）或技术故障（`Failed`）的补偿流程：
 
 ```dsl
 recover {
@@ -148,7 +215,7 @@ recover {
 
 ### 结构化并行 (Parallel & Join)
 
-使用 `parallel` 声明结构化并发分支，并通过 `join <join-id>` 指定结果汇合策略：
+使用 `parallel` 声明多分支并发执行，并通过 `join <join-id>` 指定结果汇合策略：
 
 ```dsl
 parallel {
@@ -167,37 +234,30 @@ parallel {
 
 ### 异步挂起等待 (Await)
 
-使用 `await <resume-point-id>` 声明流程在此处暂停执行并让出当前计算线程。流程状态在恢复时将转变为复合类型 `Resumed<V, S>`（原值与唤醒信号载荷）：
+使用 `await <resume-point-id>` 声明流程在此处暂停执行并让出当前计算线程。流程状态在唤醒时将转变为复合类型 `Resumed<V, S>`（原值与唤醒信号载荷）：
 
 ```dsl
 # 挂起等待外部支付网关异步回调通知
 await payment.callback
 
-# 续接步骤（入参类型自动推导为 Resumed<OrderContext, PaymentCallbackSignal>）
+# 唤醒续接步骤（入参类型自动推导为 Resumed<OrderContext, PaymentCallbackSignal>）
 step payment.processCallback
 ```
 
 ### 显式终态结果 (Complete)
 
-使用终态原语显式构造四态业务结果并终止当前分支或整个流程：
+显式构造四态业务结果并终止当前分支或整个流程：
 
 ```dsl
-# 显式成功完成，附带输出字面量
-accepted "ORDER_SUCCESS"
-
-# 显式业务拒绝，附带拒绝码
-rejected "USER_BLACKLISTED"
-
-# 显式弃权
-skipped "CONDITION_NOT_MET"
-
-# 显式技术失败，附带错误码
-failed "THIRD_PARTY_TIMEOUT"
+accepted "ORDER_SUCCESS"      # 显式成功完成，附带输出字面量
+rejected "USER_BLACKLISTED"   # 显式业务拒绝，附带拒绝码
+skipped "CONDITION_NOT_MET"   # 显式弃权
+failed "THIRD_PARTY_TIMEOUT"  # 显式技术失败，附带错误码
 ```
 
 ### 作用域治理控制 (Scope Controls)
 
-支持对一组顺序语句应用全局切面治理：
+支持对一组连续语句应用全局切面治理：
 
 ```dsl
 # 全局时限作用域
@@ -206,13 +266,13 @@ timeout 10s {
     step step2
 }
 
-# 治理策略作用域
+# 全局治理策略作用域
 policy system.globalLimit key user.id {
     step step3
     step step4
 }
 
-# 具名逻辑作用域（为局部子流水线划分独立作用域边界）
+# 具名逻辑作用域（划分独立作用域边界）
 scope "settlementPhase" {
     step account.freeze
     step ledger.record
@@ -221,87 +281,63 @@ scope "settlementPhase" {
 
 ---
 
-## 词法扫描与语法解析架构
-
-DSL 模块包含完整的词法分析器与语法解析器实现，保障对源码行列号坐标（[`SourceSpan`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/SourceSpan.java)）的 100% 精确保留。
-
-```mermaid
-graph LR
-    SRC["DSL 源码文本<br/>(order.flow)"] --> LEX["FlowLexer 词法分析器"]
-    LEX --> TOK["Token 序列<br/>(TokenType, text, SourceSpan)"]
-    TOK --> PAR["FlowDslParser 语法解析器<br/>(递归下降算法)"]
-    PAR --> DEF["FlowDefinition AST<br/>(纯数据模型)"]
-```
-
-### 词法分析器 (FlowLexer)
-
-[`FlowLexer`](file:///root/code/team4u-framework/modules/flow/dsl/src/main/java/com/team4u/framework/flow/dsl/lexer/FlowLexer.java) 将输入字符串逐字符扫描为带有行号、列号坐标的 [`Token`](file:///root/code/team4u-framework/modules/flow/dsl/src/main/java/com/team4u/framework/flow/dsl/lexer/Token.java) 列表：
-
-- **关键字识别**：精准匹配 [`TokenType`](file:///root/code/team4u-framework/modules/flow/dsl/src/main/java/com/team4u/framework/flow/dsl/lexer/TokenType.java) 枚举中定义的保留字（`flow`, `step`, `route`, `parallel`, `await` 等）；
-- **标识符与点分符号**：支持包含 `.` 与 `-` 的复合标识符（如 `inventory.reserve`、`rate-limit`）；
-- **字符串与转义**：支持双引号与单引号包裹的文本，完整处理 `\n`、`\t`、`\"` 等转义字符；
-- **时间长度解析**：原生识别带单位的时间字面量（`ns`, `us`, `ms`, `s`, `m`, `h`, `d`）并自动解码为 `java.time.Duration`；
-- **注释过滤**：支持 `#` 单行注释、`//` 单行注释以及 `/* ... */` 跨行块注释。
-
-### 语法解析器 (FlowDslParser)
-
-[`FlowDslParser`](file:///root/code/team4u-framework/modules/flow/dsl/src/main/java/com/team4u/framework/flow/dsl/parser/FlowDslParser.java) 采用递归下降算法，将 Token 流解析为 [`FlowDefinition`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FlowDefinition.java) 纯数据语法树。
-
-- **模板化块解析**：花括号块作用域（如 `case`、`otherwise`、`branch`、`scope`）统一由结构化块解析器调度，自动处理作用域定界与空块安全退化；
-- **配置参数字典解析**：`policy` 与 `retry` 等治理修饰器内部的参数键值对（如 `maxAttempts: 3`、`backoff: 100ms`）解析为结构化 Map，并在后续绑定期通过 [`ConfigMapReader`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/util/ConfigMapReader.java) 进行多别名推导与强类型转换；
-- **精确诊断定位**：当遇到非预期记号或格式错误时，即时生成带有精确源码文件、行号与列号的 [`Diagnostic`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/diagnostic/Diagnostic.java) 诊断信息。
-
----
-
 ## 统一门面 API (FlowDsl)
 
-[`FlowDsl`](file:///root/code/team4u-framework/modules/flow/dsl/src/main/java/com/team4u/framework/flow/dsl/FlowDsl.java) 提供了面向业务使用者的静态统一门面入口：
+[`FlowDsl`](file:///root/code/team4u-framework/modules/flow/dsl/src/main/java/com/team4u/framework/flow/dsl/FlowDsl.java) 是面向业务调用方的统一静态入口：
 
 ```mermaid
 graph TD
-    DSL["DSL 文本"] -->|"FlowDsl.parse(dsl, sourceName)"| FD["FlowDefinition (纯数据 AST)"]
-    FD -->|"FlowDsl.bind(def, registry, resolver)"| BF["BoundFlow (绑定产物)"]
-    DSL -->|"FlowDsl.bind(dsl, registry, resolver)"| BF
+    DSL["DSL 文本 (String / File)"] -->|"FlowDsl.parse"| FD["FlowDefinition (纯数据 AST)"]
+    FD -->|"FlowDsl.bind"| BF["BoundFlow (绑定产物)"]
+    DSL -->|"FlowDsl.bind"| BF
     BF -->|"compileLocal(resolver)"| LE["LocalExecutable (内存极速执行器)"]
-    BF -->|"describe()"| DESC["FlowDescription (图表与元数据)"]
+    BF -->|"describe()"| DESC["FlowDescription (Mermaid 图表渲染)"]
 ```
 
-### 门面方法速查
+### 常用门面方法速查
 
 ```java
-public final class FlowDsl {
-    // 仅执行语法解析，返回纯数据 AST
-    public static FlowDefinition parse(String dsl);
-    public static FlowDefinition parse(String dsl, String sourceName);
+// 1. 纯语法解析：仅检查语法结构，返回纯数据 AST
+FlowDefinition def = FlowDsl.parse(dslText, "order.flow");
 
-    // 解析并执行静态类型检查与符号绑定，返回 BoundFlow
-    public static BoundFlow bind(String dsl, FlowDefinitionRegistry registry);
-    public static BoundFlow bind(String dsl, String sourceName, FlowDefinitionRegistry registry);
-    
-    // 带容器 OperationResolver 的完整绑定
-    public static BoundFlow bind(String dsl, FlowDefinitionRegistry registry, OperationResolver resolver);
-    public static BoundFlow bind(String dsl, String sourceName, FlowDefinitionRegistry registry, OperationResolver resolver);
-    
-    // 对已存在的 FlowDefinition AST 执行绑定
-    public static BoundFlow bind(FlowDefinition definition, FlowDefinitionRegistry registry);
-    public static BoundFlow bind(FlowDefinition definition, FlowDefinitionRegistry registry, OperationResolver resolver);
-}
+// 2. 语法解析 + 类型检查 + 符号绑定：返回强类型 BoundFlow
+BoundFlow boundFlow = FlowDsl.bind(dslText, "order.flow", registry);
+
+// 3. 结合 Spring / 自定义 Bean 容器的完整绑定
+BoundFlow boundFlow = FlowDsl.bind(dslText, "order.flow", registry, springBeanResolver);
+
+// 4. 对已存在的 FlowDefinition AST 执行绑定
+BoundFlow boundFlow = FlowDsl.bind(def, registry, springBeanResolver);
 ```
 
 ---
 
-## 生产级业务流程 DSL 实战全景
+## 错误诊断体验 (Diagnostics & Error Reporting)
 
-以下示例展示了一个包含**参数投影提取、治理修饰器、条件多路路由、结构化并行汇聚与测试驱动验证**的端到端生产级订单履约流程。
+当 DSL 文本存在语法拼写错误、括号未闭合或类型不兼容时，`FlowDsl` 会抛出结构化异常 [`FlowDiagnosticException`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/diagnostic/FlowDiagnosticException.java)，精准打印源文件名、行号与列号：
 
-### 业务流程 DSL 描述 (order-fulfillment.flow)
+```
+order.flow:18:9: [TYPE_MISMATCH] ($/1/0) Operation 'payment.charge' expects input PaymentRequest but received OrderContext
+```
+
+```
+order.flow:24:5: [DSL_SYNTAX_ERROR] Expected '}' to close route block but found 'step'
+```
+
+---
+
+## 端到端生产级实战示例
+
+以下示例演示了一个包含**参数提取投影、动态限流重试、多路路由、并行汇聚与单元测试断言**的完整电商订单履约实战。
+
+### 1. 业务流程 DSL 文本 (order-fulfillment.flow)
 
 ```dsl
 schema 1
 
-flow order.fulfillment version 1 {
+flow order.fulfillment version 1.0 {
 
-    # 1. 基础参数与黑名单校验
+    # 1. 参数合规校验
     step order.validate {
         named "入参合规校验"
         timeout 500ms
@@ -355,19 +391,18 @@ flow order.fulfillment version 1 {
 }
 ```
 
-### Java 符号注册与测试执行代码
+### 2. Java 符号绑定与执行测试
 
 ```java
-public class OrderFulfillmentDslTest {
+public class OrderFulfillmentTest {
 
-    // 业务上下文模型
     static class OrderContext {
         private String orderId;
         private String userId;
         private List<String> items;
         private String reservationId;
         private boolean paid;
-        private List<String> executionLogs = new ArrayList<>();
+        private List<String> logs = new ArrayList<>();
 
         public OrderContext(String orderId, String userId, List<String> items, boolean paid) {
             this.orderId = orderId;
@@ -379,72 +414,65 @@ public class OrderFulfillmentDslTest {
         public String getUserId() { return userId; }
         public List<String> getItems() { return items; }
         public void setReservationId(String reservationId) { this.reservationId = reservationId; }
-        public List<String> getExecutionLogs() { return executionLogs; }
+        public List<String> getLogs() { return logs; }
     }
 
-    enum PaymentState {
-        PAID,
-        UNPAID
-    }
+    enum PaymentState { PAID, UNPAID }
 
     @Test
-    public void testCompleteOrderFulfillment() {
-        String dsl = "..."; // 上述 DSL 文本内容
+    public void testOrderFulfillmentFlow() {
+        String dsl = "..."; // 加载上述 DSL 文本
 
-        // 1. 构建符号注册表
+        // 1. 注册业务组件符号
         FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
-                // 注册步骤 Operation
-                .operation("order.validate", (OperationContext ctx, OrderContext in) -> {
-                    in.getExecutionLogs().add("validated");
+                .operation("order.validate", (ctx, in) -> {
+                    in.getLogs().add("validated");
                     return Outcome.accepted(in);
                 }, OrderContext.class, OrderContext.class)
 
-                .operation("inventory.reserve", (OperationContext ctx, List<String> items) -> {
+                .operation("inventory.reserve", (ctx, items) -> {
                     return Outcome.accepted("RES_" + items.size());
                 }, (Class) List.class, String.class)
 
-                .operation("payment.charge", (OperationContext ctx, OrderContext in) -> {
-                    in.getExecutionLogs().add("charged");
+                .operation("payment.charge", (ctx, in) -> {
+                    in.getLogs().add("charged");
                     return Outcome.accepted(in);
                 }, OrderContext.class, OrderContext.class)
 
-                .operation("order.paymentStatus", (OperationContext ctx, OrderContext in) -> {
+                .operation("order.paymentStatus", (ctx, in) -> {
                     return Outcome.accepted(in.paid ? PaymentState.PAID : PaymentState.UNPAID);
                 }, OrderContext.class, PaymentState.class)
 
-                .operation("risk.audit", (OperationContext ctx, OrderContext in) -> {
-                    in.getExecutionLogs().add("risk_ok");
+                .operation("risk.audit", (ctx, in) -> {
+                    in.getLogs().add("risk_passed");
                     return Outcome.accepted(in);
                 }, OrderContext.class, OrderContext.class)
 
-                .operation("notify.sendSms", (OperationContext ctx, OrderContext in) -> {
-                    in.getExecutionLogs().add("sms_sent");
+                .operation("notify.sendSms", (ctx, in) -> {
+                    in.getLogs().add("sms_sent");
                     return Outcome.accepted(in);
                 }, OrderContext.class, OrderContext.class)
 
-                .operation("order.finish", (OperationContext ctx, OrderContext in) -> {
-                    in.getExecutionLogs().add("finished");
+                .operation("order.finish", (ctx, in) -> {
+                    in.getLogs().add("finished");
                     return Outcome.accepted(in);
                 }, OrderContext.class, OrderContext.class)
 
-                // 注册 Projector 与 Merger 函数
+                // 注册数据投影与结果合并
                 .projector("order.items", OrderContext.class, (Class) List.class, OrderContext::getItems)
                 .merger("order.withReservation", OrderContext.class, String.class, OrderContext.class, (ctx, res) -> {
                     ctx.setReservationId(res);
-                    ctx.getExecutionLogs().add("reserved:" + res);
+                    ctx.getLogs().add("reserved:" + res);
                     return ctx;
                 })
 
-                // 注册 Key 提取函数
+                // 注册 Key 提取器与治理策略
                 .keyProjection("order.userId", OrderContext.class, String.class, OrderContext::getUserId)
-
-                // 注册治理策略
                 .policy("payment.rateLimit", RateLimitPolicy.<String>builder()
                         .point("payment.charge")
                         .permits(10)
                         .action(RateLimitAction.REJECT)
                         .build(), String.class)
-
                 .policy("payment.retryPolicy", FlowRetryPolicy.<Object>builder()
                         .maxAttempts(3)
                         .backoff(Backoffs.fixed(100))
@@ -452,7 +480,6 @@ public class OrderFulfillmentDslTest {
 
                 // 注册并行汇聚策略
                 .join("order.parallelPassed", (JoinResults<OrderContext> results) -> {
-                    // 取首个分支输出继续向下流转
                     return Outcome.accepted(results.branches().get(0).requireAccepted());
                 }, OrderContext.class)
                 .build();
@@ -461,18 +488,18 @@ public class OrderFulfillmentDslTest {
         BoundFlow boundFlow = FlowDsl.bind(dsl, "order-fulfillment.flow", registry);
         LocalExecutable<OrderContext, OrderContext> executable = boundFlow.compileLocal();
 
-        // 3. 执行测试
-        OrderContext context = new OrderContext("ORD_8888", "USER_101", Arrays.asList("item1", "item2"), true);
-        FlowResult<OrderContext> result = executable.run(context);
+        // 3. 执行业务流程
+        OrderContext input = new OrderContext("ORD-9999", "USER-88", Arrays.asList("apple", "banana"), true);
+        FlowResult<OrderContext> result = executable.run(input);
 
-        // 4. 断言验证
-        Assert.assertTrue(result instanceof FlowResult.Completed);
-        OrderContext out = result.requireAccepted();
-        Assert.assertEquals("RES_2", out.reservationId);
-        Assert.assertTrue(out.getExecutionLogs().contains("validated"));
-        Assert.assertTrue(out.getExecutionLogs().contains("reserved:RES_2"));
-        Assert.assertTrue(out.getExecutionLogs().contains("charged"));
-        Assert.assertTrue(out.getExecutionLogs().contains("finished"));
+        // 4. 验证断言
+        Assert.assertTrue(result.isAccepted());
+        OrderContext output = result.requireAccepted();
+        Assert.assertEquals("RES_2", output.reservationId);
+        Assert.assertTrue(output.getLogs().contains("validated"));
+        Assert.assertTrue(output.getLogs().contains("reserved:RES_2"));
+        Assert.assertTrue(output.getLogs().contains("charged"));
+        Assert.assertTrue(output.getLogs().contains("finished"));
     }
 }
 ```
