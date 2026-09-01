@@ -1,5 +1,7 @@
 package com.team4u.framework.flow.log;
 
+import com.team4u.framework.base.util.ReflectUtil;
+
 import java.lang.reflect.Field;
 import java.util.*;
 import java.util.function.Function;
@@ -74,11 +76,12 @@ public interface ContextProjector {
                 return filtered;
             }
             Map<String, Object> result = new LinkedHashMap<String, Object>();
-            for (Field field : AnnotatedContextProjector.getAllFields(context.getClass())) {
-                if (whitelist.contains(field.getName())) {
+            Map<String, Field> fieldMap = ReflectUtil.getFieldMap(context.getClass());
+            for (String name : whitelist) {
+                Field field = fieldMap.get(name);
+                if (field != null) {
                     try {
-                        field.setAccessible(true);
-                        result.put(field.getName(), field.get(context));
+                        result.put(name, field.get(context));
                     } catch (Exception ignored) {
                     }
                 }

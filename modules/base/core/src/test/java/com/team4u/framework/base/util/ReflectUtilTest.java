@@ -49,6 +49,29 @@ public class ReflectUtilTest {
     }
 
     @Test
+    public void testGetFieldsAndFieldMap() {
+        java.util.Map<String, Field> fieldMap = ReflectUtil.getFieldMap(TestChildClass.class);
+        Assert.assertNotNull(fieldMap);
+        Assert.assertTrue(fieldMap.containsKey("childField"));
+        Assert.assertTrue(fieldMap.containsKey("parentField"));
+
+        java.util.List<Field> fields = ReflectUtil.getFields(TestChildClass.class);
+        Assert.assertTrue(fields.size() >= 2);
+
+        // 空入参边界测试
+        Assert.assertTrue(ReflectUtil.getFieldMap(null).isEmpty());
+        Assert.assertTrue(ReflectUtil.getFields(null).isEmpty());
+    }
+
+    @Test
+    public void testIsInstanceField() throws NoSuchFieldException {
+        Field childField = TestChildClass.class.getDeclaredField("childField");
+        Assert.assertTrue(ReflectUtil.isInstanceField(childField));
+
+        Assert.assertFalse(ReflectUtil.isInstanceField(null));
+    }
+
+    @Test
     public void testGetFieldValue() {
         TestChildClass obj = new TestChildClass();
 

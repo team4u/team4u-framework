@@ -41,4 +41,38 @@ public class AnnotationUtil {
     public static boolean hasAnnotation(AnnotatedElement element, Class<? extends Annotation> annotationClass) {
         return getAnnotation(element, annotationClass) != null;
     }
+
+    /**
+     * 沿着类继承体系向上递归查找指定类型的注解
+     *
+     * @param clazz           目标类
+     * @param annotationClass 目标注解类类型
+     * @param <A>             目标注解泛型类型
+     * @return 匹配的注解实例，若不存在返回 null
+     */
+    public static <A extends Annotation> A findAnnotation(Class<?> clazz, Class<A> annotationClass) {
+        if (clazz == null || annotationClass == null) {
+            return null;
+        }
+        Class<?> current = clazz;
+        while (current != null && current != Object.class) {
+            A annotation = current.getAnnotation(annotationClass);
+            if (annotation != null) {
+                return annotation;
+            }
+            current = current.getSuperclass();
+        }
+        return null;
+    }
+
+    /**
+     * 判断类及其父类继承链上是否存在指定类型的注解
+     *
+     * @param clazz           目标类
+     * @param annotationClass 待检查的注解类类型
+     * @return 如果存在则返回 true，否则返回 false
+     */
+    public static boolean hasAnnotationOnHierarchy(Class<?> clazz, Class<? extends Annotation> annotationClass) {
+        return findAnnotation(clazz, annotationClass) != null;
+    }
 }

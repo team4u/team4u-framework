@@ -1,11 +1,12 @@
 package com.team4u.framework.flow.log;
 
+import com.team4u.framework.base.util.AnnotationUtil;
+import com.team4u.framework.base.util.ReflectUtil;
 import com.team4u.framework.mask.FastMasker;
 import com.team4u.framework.mask.Mask;
 import com.team4u.framework.mask.MaskType;
 
 import java.lang.reflect.Field;
-import java.lang.reflect.Modifier;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
@@ -14,7 +15,7 @@ import java.util.concurrent.ConcurrentHashMap;
  *
  * <p>特性与契约：
  * <ul>
- *   <li><b>类级别声明</b>：若类上标注了 {@link TraceContext}，默认提取该类及其所有父类的非 static、非 transient 字段；若字段标注了 {@link TraceIgnore} 则排除；</li>
+ *   <li><b>类级别声明</b>：若类上标注了 {@link TraceContext}，默认提取该类及其所有父类的实例字段；若字段标注了 {@link TraceIgnore} 则排除；</li>
  *   <li><b>字段级别声明</b>：若类上未标注 {@link TraceContext}，仅提取显式标注了 {@link TraceContext} 的字段（白名单模式）；</li>
  *   <li><b>别名映射</b>：字段注解的 {@link TraceContext#value()} 支持重命名输出属性键；</li>
  *   <li><b>自动掩码脱敏</b>：若字段标注了 {@link Mask}，自动应用 {@link FastMasker} 进行脱敏；</li>
@@ -40,7 +41,6 @@ public class AnnotatedContextProjector implements ContextProjector {
             this.field = field;
             this.outputName = outputName;
             this.maskType = maskType;
-            this.field.setAccessible(true);
         }
     }
 
@@ -56,11 +56,7 @@ public class AnnotatedContextProjector implements ContextProjector {
 
     @Override
     public Object project(Object context) {
-        if (context == null) {
-            return null;
-        }
-
-        if (context instanceof Map<?, ?>) {
+        if (context == null || context instanceof Map<?, ?>) {
             return context;
         }
 
@@ -84,21 +80,17 @@ public class AnnotatedContextProjector implements ContextProjector {
     }
 
     private static ClassMetadata resolveMetadata(Class<?> clazz) {
-        boolean classAnnotated = isClassAnnotated(clazz);
-        List<Field> allFields = getAllFields(clazz);
+        boolean classAnnotated = AnnotationUtil.hasAnnotationOnHierarchy(clazz, TraceContext.class);
+        List<Field> allFields = ReflectUtil.getFields(clazz);
         List<FieldMeta> matched = new ArrayList<FieldMeta>();
         boolean hasAnyFieldAnnotated = false;
 
         for (Field field : allFields) {
-            if (Modifier.isStatic(field.getModifiers()) || Modifier.isTransient(field.getModifiers()) || field.isSynthetic()) {
+            if (!ReflectUtil.isInstanceField(field) || AnnotationUtil.hasAnnotation(field, TraceIgnore.class)) {
                 continue;
             }
 
-            if (field.isAnnotationPresent(TraceIgnore.class)) {
-                continue;
-            }
-
-            TraceContext fieldAnn = field.getAnnotation(TraceContext.class);
+            TraceContext fieldAnn = AnnotationUtil.getAnnotation(field, TraceContext.class);
             if (fieldAnn != null) {
                 hasAnyFieldAnnotated = true;
             }
@@ -107,7 +99,7 @@ public class AnnotatedContextProjector implements ContextProjector {
                 String name = (fieldAnn != null && !fieldAnn.value().trim().isEmpty())
                         ? fieldAnn.value().trim()
                         : field.getName();
-                Mask maskAnn = field.getAnnotation(Mask.class);
+                Mask maskAnn = AnnotationUtil.getAnnotation(field, Mask.class);
                 MaskType maskType = maskAnn != null ? maskAnn.value() : null;
                 matched.add(new FieldMeta(field, name, maskType));
             }
@@ -115,29 +107,5 @@ public class AnnotatedContextProjector implements ContextProjector {
 
         boolean active = classAnnotated || hasAnyFieldAnnotated;
         return new ClassMetadata(active, matched);
-    }
-
-    private static boolean isClassAnnotated(Class<?> clazz) {
-        Class<?> current = clazz;
-        while (current != null && current != Object.class) {
-            if (current.isAnnotationPresent(TraceContext.class)) {
-                return true;
-            }
-            current = current.getSuperclass();
-        }
-        return false;
-    }
-
-    static List<Field> getAllFields(Class<?> clazz) {
-        List<Field> fields = new ArrayList<Field>();
-        Class<?> current = clazz;
-        while (current != null && current != Object.class) {
-            Field[] declared = current.getDeclaredFields();
-            for (Field f : declared) {
-                fields.add(f);
-            }
-            current = current.getSuperclass();
-        }
-        return fields;
     }
 }

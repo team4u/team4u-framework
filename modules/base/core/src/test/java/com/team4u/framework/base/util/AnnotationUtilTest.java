@@ -68,6 +68,18 @@ public class AnnotationUtilTest {
         Assert.assertFalse("元素为 null 时应返回 false", AnnotationUtil.hasAnnotation(null, TestAnnotation.class));
     }
 
+    @Test
+    public void findAnnotationOnHierarchy() {
+        // 测试子类继承父类上的注解
+        TestAnnotation annotation = AnnotationUtil.findAnnotation(ChildClass.class, TestAnnotation.class);
+        Assert.assertNotNull("沿着继承链应能找到父类注解", annotation);
+        Assert.assertEquals("test", annotation.value());
+
+        Assert.assertTrue("应判断子类在继承链上拥有注解", AnnotationUtil.hasAnnotationOnHierarchy(ChildClass.class, TestAnnotation.class));
+        Assert.assertFalse("不应找到不存在的注解", AnnotationUtil.hasAnnotationOnHierarchy(ChildClass.class, Override.class));
+        Assert.assertNull("入参为 null 应返回 null", AnnotationUtil.findAnnotation(null, TestAnnotation.class));
+    }
+
     @Retention(RetentionPolicy.RUNTIME)
     @Target({ElementType.TYPE, ElementType.METHOD, ElementType.FIELD})
     @interface TestAnnotation {
@@ -83,5 +95,8 @@ public class AnnotationUtilTest {
         @TestAnnotation("method")
         public void annotatedMethod() {
         }
+    }
+
+    static class ChildClass extends AnnotatedClass {
     }
 }

@@ -101,22 +101,20 @@ public class ReflectUtil {
     }
 
     /**
-     * 查找类中的指定字段
+     * 获取类及其所有父类中定义的所有字段映射（字段名 -> Field 对象）
      * <p>
-     * 查找范围包括私有字段，并会向上递归查找父类，直到找到为止。
+     * 子类同名字段优先，自动前置设置字段为可访问状态，结果带内存缓存。
      *
-     * @param clazz     目标类
-     * @param fieldName 字段名称
-     * @return 字段对象，如果未查找到则返回 null
+     * @param clazz 目标类
+     * @return 字段映射 Map
      */
-    public static Field getField(Class<?> clazz, String fieldName) {
-        if (clazz == null || StringUtil.isEmpty(fieldName)) {
-            return null;
+    public static Map<String, Field> getFieldMap(Class<?> clazz) {
+        if (clazz == null) {
+            return java.util.Collections.emptyMap();
         }
 
-        // 从缓存中获取类的所有字段，如果不存在则进行初始化解析
-        Map<String, Field> fieldMap = FIELD_CACHE.computeIfAbsent(clazz, c -> {
-            Map<String, Field> map = new HashMap<>();
+        return FIELD_CACHE.computeIfAbsent(clazz, c -> {
+            Map<String, Field> map = new java.util.LinkedHashMap<>();
             Class<?> searchType = c;
             while (searchType != null && searchType != Object.class) {
                 for (Field field : searchType.getDeclaredFields()) {
@@ -129,8 +127,51 @@ public class ReflectUtil {
             }
             return map;
         });
+    }
 
-        return fieldMap.get(fieldName);
+    /**
+     * 获取类及其所有父类中定义的所有字段列表
+     * <p>
+     * 自动前置设置字段为可访问状态，结果带内存缓存。
+     *
+     * @param clazz 目标类
+     * @return 字段列表
+     */
+    public static java.util.List<Field> getFields(Class<?> clazz) {
+        if (clazz == null) {
+            return java.util.Collections.emptyList();
+        }
+        return new java.util.ArrayList<>(getFieldMap(clazz).values());
+    }
+
+    /**
+     * 查找类中的指定字段
+     * <p>
+     * 查找范围包括私有字段，并会向上递归查找父类，直到找到为止。
+     *
+     * @param clazz     目标类
+     * @param fieldName 字段名称
+     * @return 字段对象，如果未查找到则返回 null
+     */
+    public static Field getField(Class<?> clazz, String fieldName) {
+        if (clazz == null || StringUtil.isEmpty(fieldName)) {
+            return null;
+        }
+        return getFieldMap(clazz).get(fieldName);
+    }
+
+    /**
+     * 判断字段是否为普通的实例字段（非 static、非 transient、非 synthetic）
+     *
+     * @param field 待判断的字段
+     * @return 如果是有效实例字段则返回 true
+     */
+    public static boolean isInstanceField(Field field) {
+        if (field == null) {
+            return false;
+        }
+        int modifiers = field.getModifiers();
+        return !Modifier.isStatic(modifiers) && !Modifier.isTransient(modifiers) && !field.isSynthetic();
     }
 
     /**
