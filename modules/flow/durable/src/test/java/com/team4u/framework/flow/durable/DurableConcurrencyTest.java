@@ -15,13 +15,16 @@ import org.junit.After;
 import org.junit.Before;
 import org.junit.Test;
 
+import java.util.Optional;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import java.util.concurrent.atomic.AtomicReference;
+import com.team4u.framework.flow.durable.store.DurableStore;
 
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertNotNull;
@@ -175,7 +178,7 @@ public class DurableConcurrencyTest {
 
     /** 构造一个可推进的退避等待执行：首次失败后 RetryAt(afterMillis)，后续失败 RetryAt(60s)。 */
     private static DurableExecutable<String, String> retryBackoffExecutable(
-            InMemoryDurableStore store, final long firstBackoffMillis,
+            DurableStore store, final long firstBackoffMillis,
             final AtomicInteger bodyCalls) {
         Operation<String, String> flaky = new Operation<String, String>() {
             @Override
@@ -210,8 +213,35 @@ public class DurableConcurrencyTest {
 
     @Test
     public void concurrentRecoverAllowsOnlyOneDriver() throws Exception {
-        final InMemoryDurableStore store = new InMemoryDurableStore();
+        final InMemoryDurableStore realStore = new InMemoryDurableStore();
         final AtomicInteger bodyCalls = new AtomicInteger();
+        final CountDownLatch bothLoaded = new CountDownLatch(2);
+        final AtomicLong expectedRaceRevision = new AtomicLong(-1);
+        final DurableStore store = new DurableStore() {
+            @Override
+            public Optional<DurableSnapshot> load(String executionId) {
+                Optional<DurableSnapshot> result = realStore.load(executionId);
+                if ("e-recover".equals(executionId) && result.isPresent()
+                        && result.get().revision() == expectedRaceRevision.get()) {
+                    bothLoaded.countDown();
+                }
+                return result;
+            }
+
+            @Override
+            public boolean compareAndSet(String executionId, long expectedRevision,
+                                         DurableSnapshot update) {
+                if ("e-recover".equals(executionId) && expectedRevision == expectedRaceRevision.get()) {
+                    try {
+                        bothLoaded.await(5, TimeUnit.SECONDS);
+                    } catch (InterruptedException e) {
+                        Thread.currentThread().interrupt();
+                    }
+                }
+                return realStore.compareAndSet(executionId, expectedRevision, update);
+            }
+        };
+
         // 首次退避 30ms：等待其过去后 recover 会真实驱动并提交新检查点
         final DurableExecutable<String, String> executable =
                 retryBackoffExecutable(store, 30L, bodyCalls);
@@ -226,7 +256,8 @@ public class DurableConcurrencyTest {
             Thread.sleep(5);
         }
         assertTrue("首退避必须在 5 秒内过去", java.time.Instant.now().isAfter(firstWake));
-        final long revisionBeforeRace = store.load("e-recover").get().revision();
+        final long revisionBeforeRace = realStore.load("e-recover").get().revision();
+        expectedRaceRevision.set(revisionBeforeRace);
 
         Outcome2 raced = race(new Command() {
             @Override
@@ -250,7 +281,7 @@ public class DurableConcurrencyTest {
         assertEquals("body 重放次数必须为 1（仅胜者）", 2, bodyCalls.get());
         // revision 单调推进且无跳变：胜者单个 recover 经过三个检查点边界
         // （Proceed 进入 + finish 交接 + RetryAt 退避），每次恰好 +1，无中间态丢失
-        long revisionAfter = store.load("e-recover").get().revision();
+        long revisionAfter = realStore.load("e-recover").get().revision();
         assertEquals("revision 必须恰好推进三版（单个 recover 的三个检查点）",
                 revisionBeforeRace + 3, revisionAfter);
     }
