@@ -117,15 +117,14 @@ public class OrderContext {
 
 # 核心 API 与使用方式
 
-### 流程执行与上下文绑定
+### 流程执行与观察者装配
 
-通过 `FlowContextHolder.runWith(...)` 将上下文对象绑定至当前线程执行生命周期，执行完毕后自动清理，杜绝内存泄漏：
+流程引擎在执行过程中通过事件机制将每一步的运行时数据载荷传递给观察者，自动完成结构化日志记录与拓扑树追踪：
 
 ```java
 import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.Local;
 import com.team4u.framework.flow.LocalExecutable;
-import com.team4u.framework.flow.log.FlowContextHolder;
 import com.team4u.framework.flow.log.FlowLoggingObserver;
 import com.team4u.framework.flow.model.FlowResult;
 
@@ -144,7 +143,7 @@ LocalExecutable<OrderContext, OrderContext> executable = Local.from(orderFlow)
         .observer(observer)
         .compile();
 
-// 3. 执行流程（引擎原生将入参和每一步出参通过 Event 传递给观察者，无需任何 ThreadLocal）
+// 3. 执行流程
 OrderContext context = new OrderContext();
 FlowResult<OrderContext> result = executable.run(context);
 ```
