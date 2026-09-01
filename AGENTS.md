@@ -6,25 +6,27 @@
 
 ## 常用命令与并行构建规范
 
-### 全工程并行构建与测试（强烈推荐）
+### 全工程并行构建与测试
 
-由于本工程包含 **59 个 Maven 模块**，使用单线程构建耗时较长（约 85 秒）。**必须使用 Maven 提供的 `-T` 多线程并行构建参数**，利用多核 CPU 按模块依赖拓扑并行编译与运行测试：
+本工程包含 **60 个 Maven 模块**。推荐使用 Maven 提供的 `-T` 多线程并行构建参数，按依赖拓扑并行编译与测试：
 
 ```bash
-# 全工程并行运行全量单测（耗时仅需 ~19 秒，提速 75%+）
-mvn test -T 1C
+# 全工程并行运行全量单测（推荐使用 2 线程，稳定且高效）
+mvn test -T 2
 
-# 全工程清理并并行运行单测
-mvn clean test -T 1C
-
-# 指定线程数并行构建（例如 4 线程）
-mvn test -T 4
+# 若需清理后测试，必须先单独 clean 再并行 test（严禁组合在一条命令中带 -T clean）
+mvn clean && mvn test -T 2
 ```
 
-> [!TIP]
-> `-T 1C` 表示每个 CPU 核心分配 1 个并发构建线程（1 Thread per Core），可在保证构建稳定性的同时最大化利用本地硬件资源。
+> [!WARNING]
+> **严禁执行 `mvn clean test -T ...` 并发组合命令**：
+> Maven 的 `clean` 阶段在多线程并行执行时，会并发删除其他线程正在编译或测试的 `target` 目录，引发“文件不存在”或类丢失等伪构建失败。
 
-### 单模块测试
+> [!TIP]
+> **修改上游基础模块后的构建注意事项**：
+> 当修改了 `team4u-base`、`team4u-flow` 等公共底层模块的类或方法签名时，推荐使用 `mvn test -T 2` 运行全量验证，确保下游模块按拓扑顺序依赖已更新的类定义。
+
+### 单模块与关联模块测试
 
 针对正在开发的单一子模块，使用 `-pl`（project list）参数定向运行单测，避免全量构建：
 
@@ -35,8 +37,8 @@ mvn test -pl modules/flow/core
 # 运行 flow 图表可视化模块单测
 mvn test -pl modules/flow/diagram
 
-# 运行多个指定模块单测
-mvn test -pl modules/config/db,modules/config/core,modules/flow/diagram
+# 若同时修改了底层 base/core 模块，需在 -pl 中同时带上被修改的上游模块
+mvn test -pl modules/base/core,modules/flow/core,modules/flow/log
 ```
 
 ### 架构依赖边界校验 (Maven Enforcer)
