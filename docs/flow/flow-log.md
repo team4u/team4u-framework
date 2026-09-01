@@ -44,12 +44,12 @@ graph TD
 
 ### 关联组件职责矩阵
 
-| 关联组件 | 模块坐标 | 核心职责 |
-| :--- | :--- | :--- |
-| **`team4u-flow`** | `com.team4u:team4u-flow` | **流程状态机与事件广播**：在流程执行中发布包含节点路径 `path`、耗时、四态 `Outcome` 与数据载荷 `payload` 的原始事件。 |
-| **`team4u-log`** | `com.team4u:team4u-log` | **统一结构化日志**：提供 `Loggers.of(...)` 链式构建器与 `LogEvent` 标准日志模型。 |
-| **`team4u-mask`** | `com.team4u:team4u-mask` | **敏感数据安全掩码**：提供基于 Jackson 序列化修饰符的动态脱敏，以及脱敏策略规则仓库。 |
-| **`team4u-base`** | `com.team4u:team4u-base` | **通用底层工具**：提供带缓存的高性能反射 `ReflectUtil` 与注解继承查找 `AnnotationUtil`。 |
+| 关联组件 | 模块坐标 | 核心职责 | 深度参考文档 |
+| :--- | :--- | :--- | :--- |
+| **`team4u-flow`** | `com.team4u:team4u-flow` | **流程状态机与事件广播**：在流程执行中发布包含节点路径 `path`、耗时、四态 `Outcome` 与数据载荷 `payload` 的原始事件。 | [流程编排核心文档](README.md) |
+| **`team4u-log`** | `com.team4u:team4u-log` | **统一结构化日志**：提供 `Loggers.of(...)` 链式构建器与 `LogEvent` 标准日志模型。 | [结构化日志引擎文档](../log/README.md) |
+| **`team4u-mask`** | `com.team4u:team4u-mask` | **敏感数据安全掩码**：提供基于 Jackson 序列化修饰符的动态脱敏，以及脱敏策略规则仓库。 | [数据安全脱敏文档](../mask/README.md) |
+| **`team4u-base`** | `com.team4u:team4u-base` | **通用底层工具**：提供带缓存的高性能反射 `ReflectUtil` 与注解继承查找 `AnnotationUtil`。 | [基础支撑库文档](../base/README.md) |
 
 ---
 
@@ -165,7 +165,7 @@ FlowLoggingObserver observer = FlowLoggingObserver.builder()
 
 ### 模式 A：源码注解声明脱敏
 
-当拥有 DTO 源码时，直接在类与字段上标注注解：
+当拥有 DTO 源码时，直接在类与字段上标注注解（更多脱敏注解与高级选项请参阅 [注解驱动脱敏指南](../mask/mask-annotation.md) 与 [脱敏类型一览](../mask/mask-types.md)）：
 
 | 注解 | 作用目标 | 核心语义 |
 | :--- | :--- | :--- |
@@ -215,7 +215,7 @@ public class OrderContext {
 
 ### 模式 B：无源码场景动态脱敏
 
-针对第三方 SDK、外部二方 Jar 包或代码生成器产出的只读 DTO，提供以下动态脱敏途径：
+针对第三方 SDK、外部二方 Jar 包或代码生成器产出的只读 DTO，提供以下动态脱敏途径（更多配置中心对接与生命周期请参阅 [动态规则与配置驱动脱敏](../mask/mask-dynamic.md)）：
 
 #### 途径 1：函数式 Lambda 投影 + `FastMasker`
 
