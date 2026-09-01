@@ -193,7 +193,6 @@ public class DurableFlowAutoConfiguration {
 
         return DurableRuntime.builder(durableStore)
                 .stateMapper(CompositeStateMapper.withDefault(jsonMapper))
-                .operationResolver(BeanFlows.resolver()) // 自动绑定 Spring Bean 步骤
                 .build();
     }
 

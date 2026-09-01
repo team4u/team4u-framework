@@ -55,6 +55,16 @@ public interface OperationResolver {
     }
 
     /**
+     * 获取全局默认组件解析器（优先通过 SPI 自动发现，若无实现则回退为 {@link #rejecting()} 拒绝解析器）。
+     *
+     * @return 全局默认解析器实例
+     */
+    static OperationResolver defaultResolver() {
+        OperationResolver spi = com.team4u.framework.base.util.ServiceLoaderUtil.loadFirstAvailable(OperationResolver.class);
+        return spi != null ? spi : rejecting();
+    }
+
+    /**
      * 创建默认的拒绝解析器（当流程中存在未解析的 class 绑定且未配置解析器时抛出异常）。
      *
      * @return 拒绝解析器实例

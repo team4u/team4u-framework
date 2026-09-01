@@ -72,6 +72,18 @@ public class BeanOperationResolverSpringTest {
         assertEquals(1, CLASS_PROXY_ADVICE_CALLS.get());
     }
 
+    @Test
+    public void localAutoDiscoversBeanResolverViaSpi() {
+        ADVICE_CALLS.set(0);
+        context = new AnnotationConfigApplicationContext(SpringConfiguration.class);
+
+        // 无需手动注入 resolver，Local.compile 默认通过 SPI 自动发现 BeanOperationResolver
+        assertEquals("input:spring", Local.compile(
+                Flow.step(SpringOperation.class, BEAN_NAME))
+                .run("input").requireAccepted());
+        assertEquals(1, ADVICE_CALLS.get());
+    }
+
     public interface SpringOperation extends Operation<String, String> { }
 
     public static final class SpringOperationTarget implements SpringOperation {

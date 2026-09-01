@@ -133,11 +133,11 @@ public class OrderFlowConfiguration {
     @Bean
     public LocalExecutable<OrderRequest, Receipt> orderExecutable(
             Flow<OrderRequest, Receipt> orderFlowDefinition) {
-        // 编译期一次性从 Spring 容器解析所有 Bean 依赖（极简入口）
-        return BeanFlows.compile(orderFlowDefinition);
+        // 引入 team4u-flow-bean 后，Local.compile / Local.from 默认通过 SPI 自动发现 BeanOperationResolver
+        return Local.compile(orderFlowDefinition);
 
-        // 或使用 Fluent Builder 定制流程标识与观察者：
-        // return BeanFlows.from(orderFlowDefinition)
+        // 若需定制 flowId / flowVersion / 观察者：
+        // return Local.from(orderFlowDefinition)
         //         .flowId("order-checkout")
         //         .flowVersion(1)
         //         .observer(loggingObserver)
@@ -191,58 +191,49 @@ graph TD
     end
 
     subgraph "编译阶段 (Compilation)"
-        AST -->|"BeanFlows.compile(flow)"| Compiler["Compiler 静态校验与解析"]
-        Compiler -->|"resolve(contract, qualifier)"| Resolver["BeanOperationResolver"]
+        AST -->|"Local.compile / runtime.compile"| Compiler["Compiler 静态校验与解析"]
+        Compiler -->|"SPI 自动发现 / resolve"| Resolver["BeanOperationResolver"]
         Resolver --> BM["BeanManager 门面"]
         BM -->|"qualifier == null"| ByType["按类型在 Spring 容器中查找唯一 Bean"]
         BM -->|"qualifier != null"| ByName["按名称查找 Bean 并校验类型契约"]
         ByType --> ProxyBean["Spring 托管单例 / AOP 动态代理实例"]
         ByName --> ProxyBean
         ProxyBean --> Bound["PlanNode.BoundTarget<br/>（缓存已解析实例）"]
-        Bound --> Exec["LocalExecutable"]
+        Bound --> Exec["Local / Durable Executable"]
     end
 
     subgraph "执行阶段 (Execution)"
-        Input["run(input)"] --> Exec
+        Input["run(input) / start(execId, input)"] --> Exec
         Exec -->|"直接 Java 方法调用：零反射、零容器检索"| ProxyBean
     end
 ```
 
-### BeanManager 门面与容器优先级
-
-`BeanManager` 是统一对象容器管理门面，按 `getOrder()` 优先级遍历查找：
-
-| 容器类型 | 优先级 | 说明 |
-| :--- | :--- | :--- |
-| `SpringBeanContainer` | `100`（高优先级） | Spring 容器适配器，注入 `ApplicationContext` 后自动激活 |
-| `LocalBeanContainer` | `Integer.MAX_VALUE`（兜底） | 基于 `ConcurrentHashMap` 的本地单例容器 |
-| 第三方扩展 | 自定义 | 通过 Java 标准 SPI 注册的自定义 `BeanFactory` |
-
 ### 动态代理双模态处理
 
-1. **执行期透明生效**：`BeanOperationResolver` 查找到 Spring 代理对象后直接原样绑定，`@Transactional` 声明式事务、`@Cacheable` 缓存与自定义 AOP 切面完整触发；
-2. **描述期智能解包**：导出只读描述模型 `FlowDescription`（用于 Mermaid 图表渲染）时，框架自动探测并解包出实际契约接口，避免渲染出 `com.sun.proxy.$Proxy42` 或 `PaymentOperation$$EnhancerBySpringCGLIB` 这类动态代理类名。
+- **执行期透明生效**：`BeanOperationResolver` 查找到 Spring 代理对象后直接原样绑定，`@Transactional` 声明式事务、`@Cacheable` 缓存与自定义 AOP 切面完整触发；
+- **描述期智能解包**：导出只读描述模型 `FlowDescription`（用于 Mermaid 图表渲染）时，框架自动探测并解包出实际契约接口，避免渲染出 `com.sun.proxy.$Proxy42` 或 `PaymentOperation$$EnhancerBySpringCGLIB` 这类动态代理类名。
 
 ---
 
 ## Durable 长流程容器绑定
 
-Durable 持久化执行器同样原生支持 Bean 绑定：
+Durable 持久化执行器在引入 `team4u-flow-bean` 后，同样**默认通过 SPI 自动挂载 Bean 解析器**：
 
 ```java
 @Configuration
 public class DurableFlowConfiguration {
 
     @Bean
+    public DurableRuntime durableRuntime(DurableStore durableStore) {
+        // 默认自动装配 Spring BeanOperationResolver，无需手动配置 resolver
+        return DurableRuntime.builder(durableStore).build();
+    }
+
+    @Bean
     public DurableExecutable<OrderRequest, Receipt> durableOrderExecutable(
-            DurableStore durableStore,
+            DurableRuntime durableRuntime,
             Flow<OrderRequest, Receipt> orderFlowDefinition) {
-
-        DurableRuntime runtime = DurableRuntime.builder(durableStore)
-                .operationResolver(BeanFlows.resolver()) // 挂载 Bean 解析器
-                .build();
-
-        return runtime.compile(orderFlowDefinition, "order-fulfillment", 1);
+        return durableRuntime.compile(orderFlowDefinition, "order-fulfillment", 1);
     }
 }
 ```

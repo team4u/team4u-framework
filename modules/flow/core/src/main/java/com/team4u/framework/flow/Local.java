@@ -110,7 +110,7 @@ public final class Local {
         private final Flow<I, O> flow;
         private String flowId = "local";
         private int flowVersion = 0;
-        private OperationResolver resolver = OperationResolver.rejecting();
+        private OperationResolver resolver = OperationResolver.defaultResolver();
         private FlowObserver observer = FlowObserver.noop();
         private ExecutorService executor = ForkJoinPool.commonPool();
         private boolean cached = false;
@@ -147,11 +147,11 @@ public final class Local {
         /**
          * 设置组件解析器（如 Spring Bean 查找器）。
          *
-         * @param resolver 组件解析器（为 null 时回退为 rejecting 解析器）
+         * @param resolver 组件解析器（为 null 时回退为 defaultResolver）
          * @return 当前构建器
          */
         public Builder<I, O> resolver(OperationResolver resolver) {
-            this.resolver = resolver != null ? resolver : OperationResolver.rejecting();
+            this.resolver = resolver != null ? resolver : OperationResolver.defaultResolver();
             return this;
         }
 

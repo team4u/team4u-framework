@@ -47,7 +47,7 @@ graph TD
 
 ## 编译期静态校验诊断码 (`FlowBuildException`)
 
-当调用 `Local.compile(flow)`、`BeanFlows.compile(flow)` 或 `DurableRuntime.compile(flow, ...)` 时，框架对拓扑结构与 Bean 契约进行严格静态扫描。若存在违规项，将聚合所有违规路径并抛出 `FlowBuildException`（非受检异常，直接继承自 `RuntimeException`，不会被针对参数校验异常 `IllegalArgumentException` 的通用捕获逻辑误伤），可通过 `exception.problems()` 获取全部诊断明细：
+当调用 `Local.compile(flow)` 或 `DurableRuntime.compile(flow, ...)` 时，框架对拓扑结构与 Bean 契约进行严格静态扫描。若存在违规项，将聚合所有违规路径并抛出 `FlowBuildException`（非受检异常，直接继承自 `RuntimeException`，不会被针对参数校验异常 `IllegalArgumentException` 的通用捕获逻辑误伤），可通过 `exception.problems()` 获取全部诊断明细：
 
 | 诊断码 | 校验分类 | 触发原因 | 修复建议 |
 | :--- | :--- | :--- | :--- |

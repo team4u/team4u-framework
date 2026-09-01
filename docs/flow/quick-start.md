@@ -208,7 +208,8 @@ public class OrderFlowConfig {
 
     @Bean
     public LocalExecutable<OrderRequest, Receipt> orderExecutable() {
-        return BeanFlows.compile(
+        // 引入 team4u-flow-bean 后，Local.compile 自动从 Spring 容器解析 Bean 步骤
+        return Local.compile(
                 Flow.step(ValidateOrderOperation.class)
                         .then(PaymentOperation.class, "onlinePaymentOperation")
         );

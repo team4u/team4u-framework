@@ -209,8 +209,8 @@ public class FulfillmentFlowConfiguration {
     @Bean
     public LocalExecutable<OrderCommand, FulfillmentReceipt> fulfillmentExecutable(
             Flow<OrderCommand, FulfillmentReceipt> fulfillmentFlowDefinition) {
-        // 编译期一次性从 Spring 容器解析所有 Bean 依赖
-        return BeanFlows.compile(fulfillmentFlowDefinition);
+        // 引入 team4u-flow-bean 后，Local.compile 默认自动从 Spring 容器解析所有 Bean 依赖
+        return Local.compile(fulfillmentFlowDefinition);
     }
 }
 ```

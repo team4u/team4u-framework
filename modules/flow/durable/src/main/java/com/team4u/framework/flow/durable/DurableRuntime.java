@@ -97,7 +97,7 @@ public final class DurableRuntime {
     public static final class Builder {
         private final DurableStore store;
         private StateMapper stateMapper = DefaultStateMapper.INSTANCE;
-        private OperationResolver operationResolver = OperationResolver.rejecting();
+        private OperationResolver operationResolver = OperationResolver.defaultResolver();
         private FlowObserver observer = FlowObserver.noop();
         private DurableObserver durableObserver = DurableObserver.noop();
         private ExecutorService executor;
@@ -120,12 +120,13 @@ public final class DurableRuntime {
         /**
          * 设置依赖注入解析器。
          *
-         * @param operationResolver 解析器，不能为 null
+         * @param operationResolver 解析器（为 null 时回退为全局默认解析器）
          * @return 当前构建器
          */
         public Builder operationResolver(OperationResolver operationResolver) {
-            this.operationResolver = Objects.requireNonNull(
-                    operationResolver, "operationResolver must not be null");
+            this.operationResolver = operationResolver != null
+                    ? operationResolver
+                    : OperationResolver.defaultResolver();
             return this;
         }
 
