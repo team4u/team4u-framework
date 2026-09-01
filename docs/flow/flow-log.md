@@ -254,11 +254,11 @@ List<TraceNode> children = rootNode.snapshotChildren();
 ### 运行中单步实时日志（逐行流式输出）
 
 ```text
-[INFO] flow.trace.order-checkout | action=FLOW_STARTED | execId=ORD-10086 | context={"orderId":"ORD-10086","realName":"张*丰","mobile":"138*****000","idCardNo":"11010***********45","cardNo":"622202******1234","amount":299.0,"status":"INITIAL"} | status=start
-[INFO] flow.trace.order-checkout | action=NODE_STARTED | execId=ORD-10086 | path=$/0 | label=用户实名核验 | context={"orderId":"ORD-10086","realName":"张*丰","mobile":"138*****000","idCardNo":"11010***********45","cardNo":"622202******1234","amount":299.0,"status":"INITIAL"} | status=start
-[INFO] flow.trace.order-checkout | action=NODE_COMPLETED | execId=ORD-10086 | path=$/0 | label=用户实名核验 | duration=12ms | outcome=ACCEPTED | context={"orderId":"ORD-10086","realName":"张*丰","mobile":"138*****000","idCardNo":"11010***********45","cardNo":"622202******1234","amount":299.0,"status":"VERIFIED"} | status=success
-[INFO] flow.trace.order-checkout | action=NODE_STARTED | execId=ORD-10086 | path=$/1 | label=银行扣款 | context={"orderId":"ORD-10086","realName":"张*丰","mobile":"138*****000","idCardNo":"11010***********45","cardNo":"622202******1234","amount":299.0,"status":"VERIFIED"} | status=start
-[INFO] flow.trace.order-checkout | action=NODE_COMPLETED | execId=ORD-10086 | path=$/1 | label=银行扣款 | duration=85ms | outcome=ACCEPTED | attempt=2 | context={"orderId":"ORD-10086","realName":"张*丰","mobile":"138*****000","idCardNo":"11010***********45","cardNo":"622202******1234","amount":299.0,"status":"PAID"} | status=success
+[INFO] flow.trace.order-checkout | action=FLOW_STARTED | execId=ORD-10086 | status=start | context={"orderId":"ORD-10086","realName":"张*丰","mobile":"138*****000","idCardNo":"11010***********45","cardNo":"622202******1234","amount":299.0,"status":"INITIAL"}
+[INFO] flow.trace.order-checkout | action=NODE_STARTED | execId=ORD-10086 | path=$/0 | label=用户实名核验 | status=start | context={"orderId":"ORD-10086","realName":"张*丰","mobile":"138*****000","idCardNo":"11010***********45","cardNo":"622202******1234","amount":299.0,"status":"INITIAL"}
+[INFO] flow.trace.order-checkout | action=NODE_COMPLETED | execId=ORD-10086 | path=$/0 | label=用户实名核验 | duration=12ms | outcome=ACCEPTED | status=success | context={"orderId":"ORD-10086","realName":"张*丰","mobile":"138*****000","idCardNo":"11010***********45","cardNo":"622202******1234","amount":299.0,"status":"VERIFIED"}
+[INFO] flow.trace.order-checkout | action=NODE_STARTED | execId=ORD-10086 | path=$/1 | label=银行扣款 | status=start | context={"orderId":"ORD-10086","realName":"张*丰","mobile":"138*****000","idCardNo":"11010***********45","cardNo":"622202******1234","amount":299.0,"status":"VERIFIED"}
+[INFO] flow.trace.order-checkout | action=NODE_COMPLETED | execId=ORD-10086 | path=$/1 | label=银行扣款 | duration=85ms | outcome=ACCEPTED | attempt=2 | status=success | context={"orderId":"ORD-10086","realName":"张*丰","mobile":"138*****000","idCardNo":"11010***********45","cardNo":"622202******1234","amount":299.0,"status":"PAID"}
 ```
 
 ### 流程结束终态执行树与最终上下文汇总
