@@ -68,6 +68,30 @@ LocalDate date = ConvertUtil.convert(LocalDate.class, "2026-08-25");
 
 // 3. 集合转换（自动按逗号拆分）
 List<String> tags = ConvertUtil.toList("apple,banana,orange");
+
+// 4. 时长转换（支持文本后缀如 100ms, 5s, 10m, 1h, 2d）
+Duration timeout = ConvertUtil.toDuration("500ms");
+```
+
+---
+
+## 字典强类型读取器 (`MapReader`)
+
+```java
+import com.team4u.framework.base.util.MapReader;
+import java.time.Duration;
+import java.util.Map;
+
+MapReader reader = MapReader.of(configMap);
+
+// 1. 别名回退读取（优先查找 serverPort，回退查找 server-port）
+int port = reader.getInt("serverPort", 8080, "server-port");
+
+// 2. 自动时长解析（将 "3s" 转换为 Duration）
+Duration timeout = reader.getDuration("timeout", Duration.ofSeconds(1));
+
+// 3. 必填参数校验（缺失时抛出 IllegalArgumentException）
+String secretKey = reader.requireString("secretKey", "密钥不能为空", "secret-key");
 ```
 
 ---

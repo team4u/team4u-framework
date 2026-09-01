@@ -5,6 +5,7 @@
 * [通用轻量缓存体系](base-cache.md)
 * [可刷新值 (RefreshableValue)](base-refresh.md)
 * [类型转换器体系 (ConvertUtil)](base-convert.md)
+* [字典强类型读取器 (MapReader)](base-map-reader.md)
 * [极简 JDBC 构建工具 (JdbcUtil)](base-jdbc.md)
 * [时长校验与租约心跳 (DurationUtil / Expiry / ScheduledHeartbeat)](base-lease.md)
 * [实战案例](base-sample.md)

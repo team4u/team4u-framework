@@ -12,7 +12,7 @@
 | :--- | :--- | :--- |
 | `ScalarTypeConverter` | `10` | 基本类型及其包装类（`int`, `long`, `boolean`, `double`, `float`, `short`, `byte`, `char`）、`String`、`BigDecimal`、`BigInteger`、`Number` |
 | `EnumTypeConverter` | `20` | 枚举类型转换（支持按枚举名称大小写不敏感匹配） |
-| `TemporalTypeConverter` | `30` | 时间类型转换（`Date`, `LocalDate`, `LocalDateTime`, `Instant`），支持时间戳与常见日期格式化字符串 |
+| `TemporalTypeConverter` | `30` | 时间与时长类型转换（`Date`, `LocalDate`, `LocalDateTime`, `Instant`, `Duration`），支持时间戳、带单位时长字符串（`100ms`, `5s`, `10m`, `1h`, `2d`）与 ISO-8601 格式 |
 | `CollectionTypeConverter` | `40` | `List`, `Set`, `Queue`, `Collection` 转换（支持将逗号分隔的字符串自动切分为集合元素） |
 | `ArrayTypeConverter` | `50` | 各类基本类型及对象数组转换 |
 | `BeanTypeConverter` | `60` | 将 `Map` 自动通过 `BeanUtil.toBean` 转换为目标 JavaBean 对象 |
@@ -35,7 +35,7 @@
 <T> T convert(Type type, Object value, T defaultValue);
 ```
 
-### 标量便捷转换方法
+### 标量与常用便捷转换方法
 | 方法签名 | 说明 |
 | :--- | :--- |
 | `String toStr(Object value, [String defaultValue])` | 转为 String 字符串 |
@@ -49,6 +49,7 @@
 | `BigInteger toBigInteger(Object value, [BigInteger defaultValue])` | 转为大整数 BigInteger 类型 |
 | `Character toChar(Object value, [Character defaultValue])` | 转为 Character 字符 |
 | `Boolean toBool(Object value, [Boolean defaultValue])` | 转为 Boolean（支持 "true", "1", "yes", "ok", "on", "y" 识别为 `true`；"false", "0", "no", "off", "n" 识别为 `false`） |
+| `Duration toDuration(Object value, [Duration defaultValue])` | 转为 Duration 时长（支持数字毫秒、`100ms`, `5s`, `10m`, `1h`, `2d` 与 ISO-8601 `PT10S`） |
 
 ### 集合与数组转换方法
 ```java

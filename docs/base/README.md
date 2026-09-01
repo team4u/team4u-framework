@@ -38,6 +38,7 @@ graph TD
 | **轻量缓存体系** | `LRUCache`, `LFUCache`, `TimedCache`, `CacheUtil` | 纯 Java 原生实现的内存缓存，支持访问淘汰、频率淘汰与 TTL 自动过期及原子 `getOrCreate` |
 | **可刷新值** | `RefreshableValue<T>` | 单值远端影子的声明式封装：三个时间戳（软死期/硬死期/冷却）+ 单飞 + 变更回调，并发安全开箱即用 |
 | **类型转换体系** | `ConvertUtil`, `TypeConverterRegistry` | 支持标量、时间、集合、数组、枚举与 JavaBean 的全类型安全转换，支持扩展 SPI |
+| **字典强类型读取器** | `MapReader`, `MapUtil.reader` | 流式强类型安全参数提取，支持多 Key 别名回退、Duration/Enum 原生解析与必填校验 |
 | **极简 JDBC 构建器**（`team4u-base-jdbc`） | `JdbcUtil`, `SqlBuilder`, `InsertBuilder`, `UpdateBuilder` | 轻量流式 SQL 拼接与命名参数绑定，支持实体自动下划线映射与自增键返回 |
 | **时长校验与时间戳运算** | `DurationUtil`, `Expiry` | 分层语义：`DurationUtil` 在校验层拒绝非毫秒精度/溢出的 `Duration`（抛异常）；`Expiry` 在运行期对已合法的时间戳做饱和加法（上溢封顶 `NEVER` 不抛异常），两者互补不混用 |
 | **租约心跳器** | `ScheduledHeartbeat` | 纯 JDK 调度器的「持有者令牌 + 固定间隔续约」心跳器：续约失败即弃权并回调 `onLost`，异常容忍重试；统一各租约类模块的心跳线程模型 |
@@ -55,7 +56,7 @@ com.team4u.framework.base
 ├── instance                         # 实例工厂与提供者 (DynamicInstanceProvider, SingletonFactory, InstanceFactory)
 ├── lease                            # 租约心跳器 (ScheduledHeartbeat)
 ├── refresh                          # 可刷新值 (RefreshableValue)
-└── util                             # 通用工具类库 (Assert, BeanUtil, ReflectUtil, StringUtil, DateUtil, DigestUtil, IdUtil, TextTemplate, TypeReference, TypeUtil, ThreadUtil, DurationUtil, Expiry 等)
+└── util                             # 通用工具类库 (MapReader, MapUtil, Assert, BeanUtil, ReflectUtil, StringUtil, DateUtil, DigestUtil, IdUtil, TextTemplate, TypeReference, TypeUtil, ThreadUtil, DurationUtil, Expiry 等)
 ```
 
 JDBC 工具位于 `team4u-base-jdbc`，但保留 `com.team4u.framework.base.jdbc` 包名：
@@ -75,6 +76,7 @@ com.team4u.framework.base.jdbc
 - [通用轻量缓存体系](base-cache.md)：LRU、LFU 与 TimedCache 缓存特性、淘汰机制与用法
 - [可刷新值 (RefreshableValue)](base-refresh.md)：三个时间戳语义模型、单飞与并发契约、典型场景
 - [类型转换器体系 (ConvertUtil)](base-convert.md)：TypeConverter 注册表、转换优先级与复杂类型转换
+- [字典强类型读取器 (MapReader)](base-map-reader.md)：流式参数提取、多 Key 别名回退与时长/枚举安全转换
 - [极简 JDBC 构建工具 (JdbcUtil)](base-jdbc.md)：SqlBuilder、InsertBuilder、UpdateBuilder 与极简 CRUD
 - [时长与时间戳工具 (DurationUtil / Expiry)](base-lease.md)：校验层拖异常与运行期饱和的分工、ScheduledHeartbeat 租约心跳器
 - [实战案例](base-sample.md)：动态插件加载器、高性能路由 Key 生成与轻量数据访问实战
