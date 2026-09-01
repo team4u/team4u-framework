@@ -24,6 +24,11 @@ public class Loggers {
         this.event = new LogEvent().setLoggerName(clazz.getName());
     }
 
+    private Loggers(String name) {
+        this.slf4jLogger = LoggerFactory.getLogger(name);
+        this.event = new LogEvent().setLoggerName(name);
+    }
+
     private Loggers(Logger slf4jLogger, LogEvent event) {
         this.slf4jLogger = slf4jLogger;
         this.event = event;
@@ -37,6 +42,16 @@ public class Loggers {
      */
     public static Loggers of(Class<?> clazz) {
         return new Loggers(clazz);
+    }
+
+    /**
+     * 为指定名称创建日志记录器
+     *
+     * @param name 日志记录器名称
+     * @return Loggers 实例
+     */
+    public static Loggers of(String name) {
+        return new Loggers(name);
     }
 
     /**

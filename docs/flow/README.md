@@ -77,6 +77,7 @@ graph TD
 | `team4u-flow-retry` | 重试治理适配模块：基于 `team4u-retry` 的多算法退避、条件重试与动态规则适配器（`FlowRetryPolicy`） | 依赖 `team4u-flow`、`team4u-retry` |
 | `team4u-flow-criterion` | 表达式规则治理适配模块：基于 `team4u-criterion` 的动态条件谓词与门控策略（`CriterionPolicy`） | 依赖 `team4u-flow`、`team4u-criterion` |
 | `team4u-flow-diagram` | 可视化模块：Mermaid 流程图与紧凑文本树渲染器 | 依赖 `team4u-flow`（仅描述面） |
+| `team4u-flow-log` | 结构化日志与脱敏执行树模块：单步实时日志、属性挑选、掩码脱敏与 ASCII 树汇总 | 依赖 `team4u-flow`、`team4u-log`、`team4u-mask`、`team4u-mask-jackson` |
 | `team4u-flow-bean` | 容器集成模块：BeanManager 容器绑定解析器，保留 AOP 与代理 | 依赖 `team4u-flow`、`team4u-bean` |
 | `team4u-flow-test` | 测试支持模块：桩对象、Trace 收集器、断言库与测试夹具 | 依赖 `team4u-flow`、JUnit |
 
@@ -114,6 +115,7 @@ graph TD
 - [Durable 持久化全景总览](flow-durable.md)：Durable 执行器设计与使用全景摘要。
 
 ### 运维与工程化
+- [流程结构化日志与执行树 (team4u-flow-log)](flow-log.md)：单步实时结构化日志、`@TraceContext` 与 `@TraceIgnore` 属性选择、`team4u-mask` 掩码脱敏与 ASCII 树状汇总。
 - [可视化图表渲染与双投影架构](flow-diagram.md)：双投影架构、`FlowDescription` 只读描述模型、Mermaid 流程图与紧凑文本树渲染。
 - [测试支持与测试套件](flow-test.md)：`FlowAssertions` 流畅断言库、`OperationStub`/`PolicyStub` 桩对象、`ParallelBarrier` 并发同步屏障与测试夹具。
 - [诊断码体系与故障排查手册](flow-diagnostics.md)：运行时 Failed 失败码、Skipped 弃权码、编译期校验码与 Durable 异常排查自查清单。

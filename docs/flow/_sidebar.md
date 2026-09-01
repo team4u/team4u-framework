@@ -26,6 +26,7 @@
   * [Durable 持久化全景总览](flow-durable.md)
 
 * **运维与工程化**
+  * [流程结构化日志与执行树 (team4u-flow-log)](flow-log.md)
   * [可视化图表渲染与双投影架构](flow-diagram.md)
   * [测试支持与测试套件](flow-test.md)
   * [诊断码体系与故障排查手册](flow-diagnostics.md)
