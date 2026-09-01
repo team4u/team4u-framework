@@ -258,7 +258,7 @@ public class DurableConcurrencyTest {
                 && System.nanoTime() < deadline) {
             Thread.sleep(5);
         }
-        assertTrue("首退避必须在 5 秒内过去", java.time.Instant.now().isAfter(firstWake));
+        assertTrue("首退避必须在 5 秒内过去", !java.time.Instant.now().isBefore(firstWake));
         final long revisionBeforeRace = realStore.load("e-recover").get().revision();
         expectedRaceRevision.set(revisionBeforeRace);
 
