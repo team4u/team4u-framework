@@ -72,7 +72,7 @@ FlowResult<OrderContext> result = executable.run(new OrderContext("ORD-1001"));
 
 - **纯声明式与无隐式副作用**：无死循环、无全局可变变量，所有数据流转由入参出参严格驱动；
 - **解耦符号身份**：DSL 文本中严格只使用业务字符串标识（如 `order.validate`、`payment.standard`），不暴露任何 Java 类名、包路径，彻底隔离配置层与实现层；
-- **单模型多执行引擎 (Single Execution Model)**：同一份 DSL 既可编译为极速内存同步执行器（`Local`），也可直接驱动支持 CAS 检查点与断点续跑的持久化执行器（`Durable`）；
+- **单模型多执行引擎 (Single Execution Model)** ：同一份 DSL 既可编译为极速内存同步执行器（`Local`），也可直接驱动支持 CAS 检查点与断点续跑的持久化执行器（`Durable`）；
 - **编译期零反射与精准报错**：在 `FlowDsl.bind` 时一次性完成静态类型推导与符号注入，运行时执行原生委托，零反射开销；语法错误精确提示到源码行号与列号。
 
 ---
@@ -149,7 +149,7 @@ step inventory.reserve {
 ```
 
 > [!NOTE]
-> **洋葱圈嵌套规则 (Onion-Skin Model)**：
+> **洋葱圈嵌套规则 (Onion-Skin Model)** ：
 > 在单个 `step` 内声明多个修饰器时，框架严格由外向内包裹执行：`named -> timeout -> policy / retry -> optional -> merge/project(operation)`。
 
 ### 条件路由 (Route)

@@ -123,7 +123,7 @@ graph TD
 | 诊断码 | 所属阶段 | 根本原因 | 修复指引 |
 | :--- | :--- | :--- | :--- |
 | **`DSL_SYNTAX_ERROR`** | Parser | DSL 文本语法错误、非预期记号或未闭合大括号 | 检查报错行号列号，修正 DSL 语法结构 |
-| **`DSL_UNSUPPORTED_SCHEMA`**| Parser | DSL 声明的 `schema` 版本不受支持 | 当前仅支持 `schema 1` |
+| **`DSL_UNSUPPORTED_SCHEMA`** | Parser | DSL 声明的 `schema` 版本不受支持 | 当前仅支持 `schema 1` |
 | **`UNKNOWN_OPERATION`** | Symbol | DSL 中引用的步骤符号未在 `FlowDefinitionRegistry` 中注册 | 在 Registry 中通过 `.operation(id, ...)` 进行登记 |
 | **`UNKNOWN_POLICY`** | Symbol | 引用的治理策略符号未在 Registry 中注册 | 在 Registry 中通过 `.policy(id, ...)` 或引入对应 SPI 模块 |
 | **`UNKNOWN_PROJECTOR`** | Symbol | 引用的入参提取函数 `project` 符号未注册 | 在 Registry 中通过 `.projector(id, ...)` 注册对应映射函数 |
@@ -132,7 +132,7 @@ graph TD
 | **`UNKNOWN_RESUME_POINT`** | Symbol | 挂起引用的 `await` 挂起点未注册 | 在 Registry 中通过 `.resumePoint(id, ...)` 注册挂起点 |
 | **`TYPE_MISMATCH`** | Type | 上游步骤输出类型与下游步骤输入类型不兼容 | 检查两步骤间的数据契约，必要时通过 `project`/`merge` 进行类型转换 |
 | **`INVALID_ROUTE_CASE`** | Type | 路由 Case 的字面量值无法解码为 Selector 的输出类型 | 检查 `case` 后的常量值是否符合选择器返回类型的字面量格式 |
-| **`INVALID_OPTIONAL_STEP`**| Type | 可选步骤的输入与输出类型不一致（无法在 Skipped 时透传原值） | 保证可选步骤的入参与出参类型对称 |
+| **`INVALID_OPTIONAL_STEP`** | Type | 可选步骤的输入与输出类型不一致（无法在 Skipped 时透传原值） | 保证可选步骤的入参与出参类型对称 |
 | **`INVALID_PROJECTOR`** | Type | Projector 的入参出参类型与流水线上下文或 Operation 不匹配 | 检查投影函数的入参是否兼容上游状态 |
 | **`INVALID_MERGER`** | Type | Merger 的参数类型与主状态或 Operation 返回值不匹配 | 检查合并函数的签名是否匹配 |
 

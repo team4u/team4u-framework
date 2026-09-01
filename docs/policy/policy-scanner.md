@@ -1,6 +1,6 @@
 # 策略自动扫描与 Spring 发现
 
-为了消除大量手写 `new` 策略对象的样板代码，`team4u-policy` 提供了 **反射包扫描**(Package Scan)、**Java 标准 SPI**以及**Spring 容器自动装配** 三种自动化发现机制。
+为了消除大量手写 `new` 策略对象的样板代码，`team4u-policy` 提供了 **反射包扫描**(Package Scan)、**Java 标准 SPI** 以及 **Spring 容器自动装配** 三种自动化发现机制。
 
 ---
 

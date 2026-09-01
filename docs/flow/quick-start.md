@@ -87,7 +87,7 @@ public class QuickStart {
 > [!NOTE]
 > - **严格类型推导**：`Flow<String, Integer>.then(Operation<Integer, String>)` 产出 `Flow<String, String>`，类型不匹配在编译期直接报错。
 > - **定义与执行分离**：`Flow` 是纯逻辑拓扑，天然不可变且线程安全；`LocalExecutable` 是编译后的高性能单例，建议全局复用。
-> - **编译 API 与 Fluent Builder**：`Local.compile` 支持 `compile(flow)` 与 `compile(flow, resolver)` 极简入口；对于多参数定制，使用 `Local.from(flow).flowId("order-flow").flowVersion(1).resolver(resolver).observer(observer).executor(pool).cached().compile()` 链式构建器。
+> - **编译 API 与 Fluent Builder** ：`Local.compile` 支持 `compile(flow)` 与 `compile(flow, resolver)` 极简入口；对于多参数定制，使用 `Local.from(flow).flowId("order-flow").flowVersion(1).resolver(resolver).observer(observer).executor(pool).cached().compile()` 链式构建器。
 > 显式指定 `flowId` / `flowVersion`（默认为 `"local"` / `0`）可使 `invocationId` 与事件元数据携带真实业务标识。
 > - **编译缓存**：`Local.compileCached(flow, resolver)` 或 `Local.from(flow).cached().compile()` 以 flow 实例为身份键的弱缓存复用编译产物，
 > 同一 flow 实例重复编译只解析一次组件绑定；缓存条目在 flow 不再被外部引用后可被 GC 自动回收。

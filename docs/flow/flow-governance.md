@@ -67,7 +67,7 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
 | 治理维度 | 契约接口 | 状态与生命周期 | 执行与调度特性 | 适用场景 |
 | :--- | :--- | :--- | :--- | :--- |
 | **无状态切面治理** | [`Policy<K>`](policy-custom.md#无状态策略契约policyk) | **无状态**（零内存开销） | 在前置 `before` 做出放行/拒绝/失败裁决；在后置 `after` 接收完成摘要 `Completion`。 | 准入放行、限流、鉴权、黑白名单、动态开关、审计埋点 |
-| **有状态持久化治理** | [`PersistentPolicy<K, S>`](policy-custom.md#有状态持久化策略契约persistentpolicyk-s) | **不可变状态 `S`**（框架自动持久化至快照） | 支持 `Proceed`、`WaitUntil` 延时挂起与 `RetryAt` 定时退避唤醒；跨进程重启状态原位恢复。 | 故障自适应重试、多算法退避、状态机变迁、断点唤醒 |
+| **有状态持久化治理** | [`PersistentPolicy<K, S>`](policy-custom.md#有状态持久化策略契约persistentpolicyk-s) | **不可变状态 `S`** （框架自动持久化至快照） | 支持 `Proceed`、`WaitUntil` 延时挂起与 `RetryAt` 定时退避唤醒；跨进程重启状态原位恢复。 | 故障自适应重试、多算法退避、状态机变迁、断点唤醒 |
 | **时效控制治理** | `Duration` (`flow.timeout(...)`) | **无状态**（基于绝对 Deadline 计算） | 限定子流程最大耗时；超时由执行器发送物理中断并截断栈帧产出 `TIMEOUT` 失败。 | 防止慢调用堆积、下游死锁熔断、跨服务调用防护 |
 
 ---
@@ -123,8 +123,8 @@ modules/flow/
 
 ### 限流治理：`team4u-flow-ratelimiter`
 基于 [`team4u-ratelimiter`](../ratelimiter/README.md) 分布式限流组件：
-- **`RateLimitAction.FAIL`**：超限产出 `Gate.fail`，联动外层重试策略进行削峰排队；
-- **`RateLimitAction.REJECT`**：超限产出 `Gate.reject`，快速短路，不触发重试。
+- **`RateLimitAction.FAIL`** ：超限产出 `Gate.fail`，联动外层重试策略进行削峰排队；
+- **`RateLimitAction.REJECT`** ：超限产出 `Gate.reject`，快速短路，不触发重试。
 
 [查看专章详解：限流治理策略 (team4u-flow-ratelimiter)](policy-ratelimiter.md)
 
@@ -142,8 +142,8 @@ modules/flow/
 
 ### 表达式规则门控：`team4u-flow-criterion`
 基于 [`team4u-criterion`](../criterion/README.md) 规则引擎：
-- **`CriterionPolicy`**：类 SQL 表达式准入拦截（`permitIf` / `rejectIf` / `failIf`）；
-- **`CriterionPredicate`**：在条件路由与分支中复用动态表达式谓词。
+- **`CriterionPolicy`** ：类 SQL 表达式准入拦截（`permitIf` / `rejectIf` / `failIf`）；
+- **`CriterionPredicate`** ：在条件路由与分支中复用动态表达式谓词。
 
 [查看专章详解：表达式规则门控策略 (team4u-flow-criterion)](policy-criterion.md)
 

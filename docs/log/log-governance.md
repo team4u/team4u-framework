@@ -8,7 +8,7 @@
 
 线上排查特定 VIP 客户、特定订单或偶发错误时，无需将全局日志级别调至 DEBUG。只需下发一条染色规则，符合条件的日志将自动被提权输出。
 
-- **配置 Key**：`team4u.log.dyeing`
+- **配置 Key** ：`team4u.log.dyeing`
 - **表达式引擎**：基于 `team4u-criterion` 语法
 
 ### 配置结构 (`DyeingRule`)
@@ -48,7 +48,7 @@
 
 在分布式系统中，突发流量、大报文或死循环报错极易导致日志存储成本失控。`team4u-log-governance` 提供了多维度的 FinOps 成本防线。
 
-- **配置 Key**：`team4u.log.finops`
+- **配置 Key** ：`team4u.log.finops`
 
 ### 配置结构与字段说明 (`FinOpsConfig`)
 ```json

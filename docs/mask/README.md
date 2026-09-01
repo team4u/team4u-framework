@@ -52,7 +52,7 @@ graph TD
 
 - **高性能线程安全策略路由**：复用 `team4u-policy` 的 `KeyedPolicyRegistry` 与标准 `ServiceLoader`，核心路径无正则、Jackson 或配置依赖。
 - **内置 15 种标准脱敏算法**：开箱覆盖姓名（支持中英文智能区分）、手机号、身份证、银行卡、邮箱、地址、密码、居中百分比掩码等。
-- **未知策略 fail-closed**：未注册、null、空串或空白策略标识抛出 `IllegalArgumentException`；只有显式 `NONE` 返回原文。
+- **未知策略 fail-closed** ：未注册、null、空串或空白策略标识抛出 `IllegalArgumentException`；只有显式 `NONE` 返回原文。
 - **Jackson 无侵入显式脱敏**：观测向序列化经 `MaskedJson` 门面（或向自建 mapper 注册 `JacksonMaskModule`）后，自动接管 JavaBean 与 Map 的 JSON 序列化输出，内存对象中的真实值完全不受影响；全局 `JsonUtil` 奉行无损契约，脱敏永不默认生效（`team4u-mask-jackson` 使用核心 `MaskRuleResolver`，不依赖 mask-config）。
 - **配置中心动态治理** (`team4u.mask.rules`)：添加 `team4u-mask-config` 并启动 `MaskBootstrap`；规则解析只依赖 `team4u-serializer-json` SPI（应用需显式提供 `team4u-serializer-jackson` 或自定义 `JsonSerializerPolicy`），无需修改代码即可针对特定 Class、第三方 DTO 或全局字段名动态下发脱敏规则。另注：`team4u-mask-jackson` 与 mask-config 无依赖关系，它显式 compile 依赖 provider `team4u-serializer-jackson`，不直接消费 serializer-json SPI。
 - **Unicode CodePoint 安全机制**：所有字符串长度计算与截取严格基于 Unicode CodePoint 算法，兼容 Emoji 与生僻字。

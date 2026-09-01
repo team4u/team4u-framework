@@ -2,7 +2,7 @@
 
 在深层嵌套对象导航（例如分层配置、DTO 报文或外部返回数据）中，繁琐的 `if (a != null && a.getB() != null && a.getB().getC() != null)` 容易导致业务代码充斥大量防御性判空，稍有疏忽便会抛出 `NullPointerException`。
 
-`team4u-proxy` 提供了基于空对象模式（Null Object Pattern）的防御机制，通过代理接管对象链，实现“**零判空、永不抛出 NPE**”的安全调用。
+`team4u-proxy` 提供了基于空对象模式（Null Object Pattern）的防御机制，通过代理接管对象链，实现“**零判空、永不抛出 NPE** ”的安全调用。
 
 ---
 

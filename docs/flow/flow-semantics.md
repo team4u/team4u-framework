@@ -96,14 +96,14 @@ graph TD
     COMP --> N8["COMPLETE (常数终态)"]
 ```
 
-1. **`INVOKE`**：业务原子调用。支持 `use(op, project, merge)` 上下文投影合并；业务异常统一收敛为 `OPERATION_EXCEPTION`；
-2. **`SEQUENCE`**：顺序流水线。连续匿名 `then` 步骤在编译期自动扁平化合并；`Flow.scope(name, body)` 创建具名作用域；
-3. **`ROUTE`**：条件路由分发。按精确 `equals` 匹配 case 键；未匹配且无 otherwise 时输出 `Skipped(NO_ROUTE)`；
-4. **`FALLBACK`**：降级与补偿节点。支持 SKIPPED 触发器（`firstApplicable` / `thenOptional`）与 FAILED 触发器（`recoverWith`）；
-5. **`PARALLEL`**：并行分支。True Wait-All 合同，取消绕过 Join 逻辑；内置 `allAccepted`、`firstAccepted`、`quorum`、`homogeneousCollect` 策略；
-6. **`AWAIT`**：挂起点。Local 返回 `Suspension` 句柄，Durable 快照落库等待外部注入信号；
-7. **`CONTROL`**：治理切面。提供 `POLICY`（无状态网关）、`PERSISTENT_POLICY`（有状态策略）与 `TIMEOUT`（时限控制）；
-8. **`COMPLETE`**：静态常量终点。`Flow.identity()`（原样透传）、`Flow.accepted`、`rejected`、`skipped`、`failed`。
+1. **`INVOKE`** ：业务原子调用。支持 `use(op, project, merge)` 上下文投影合并；业务异常统一收敛为 `OPERATION_EXCEPTION`；
+2. **`SEQUENCE`** ：顺序流水线。连续匿名 `then` 步骤在编译期自动扁平化合并；`Flow.scope(name, body)` 创建具名作用域；
+3. **`ROUTE`** ：条件路由分发。按精确 `equals` 匹配 case 键；未匹配且无 otherwise 时输出 `Skipped(NO_ROUTE)`；
+4. **`FALLBACK`** ：降级与补偿节点。支持 SKIPPED 触发器（`firstApplicable` / `thenOptional`）与 FAILED 触发器（`recoverWith`）；
+5. **`PARALLEL`** ：并行分支。True Wait-All 合同，取消绕过 Join 逻辑；内置 `allAccepted`、`firstAccepted`、`quorum`、`homogeneousCollect` 策略；
+6. **`AWAIT`** ：挂起点。Local 返回 `Suspension` 句柄，Durable 快照落库等待外部注入信号；
+7. **`CONTROL`** ：治理切面。提供 `POLICY`（无状态网关）、`PERSISTENT_POLICY`（有状态策略）与 `TIMEOUT`（时限控制）；
+8. **`COMPLETE`** ：静态常量终点。`Flow.identity()`（原样透传）、`Flow.accepted`、`rejected`、`skipped`、`failed`。
 
 ---
 

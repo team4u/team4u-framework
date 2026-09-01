@@ -31,7 +31,7 @@ graph TD
    底层快照绝不序列化 Java 字节码、Lambda 闭包或 Bean 实例引用；快照中仅保存框架运行元数据与由 `StateMapper` 编码的业务槽位（`StoredValue`）；
 3. **节点边界 CAS 检查点（Revision 乐观锁）**：
    每前进一步都在节点边界以 CAS 乐观锁推进 `revision`，防止多实例并发写冲突与脏写；
-4. **版本强隔离 `(flowId, flowVersion)`**：
+4. **版本强隔离 `(flowId, flowVersion)`** ：
    以流标识与版本号作为快照的命名空间，杜绝代码更新后反序列化旧版本快照导致的数据错乱。
 
 ---
@@ -102,10 +102,10 @@ sequenceDiagram
 
 $$\text{invocationId} = \text{flowId} : \text{flowVersion} : \text{executionId} : \text{path}$$
 
-- **`flowId`**：流程业务标识（如 `order-checkout`）；
-- **`flowVersion`**：流程拓扑版本号（如 `1`）；
-- **`executionId`**：本次流程执行流水号（如 `ORD20260831001`）；
-- **`path`**：当前节点在 AST 树中的拓扑路径（如 `$/0/1`）。
+- **`flowId`** ：流程业务标识（如 `order-checkout`）；
+- **`flowVersion`** ：流程拓扑版本号（如 `1`）；
+- **`executionId`** ：本次流程执行流水号（如 `ORD20260831001`）；
+- **`path`** ：当前节点在 AST 树中的拓扑路径（如 `$/0/1`）。
 
 ### 幂等公式
 $$\text{At-Least-Once 框架驱动} + \text{invocationId 外部防重} = \text{Exactly-Once 业务效果}$$

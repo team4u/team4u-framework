@@ -120,5 +120,5 @@ for (RouteTraceEvent event : trace.getEvents()) {
 
 ## 生产级最佳实践
 
-- **线上采样 Trace**：高频流量下，通过 HTTP Header（如 `X-Debug-Trace: true`）或指定灰度用户开启 `trace`，其余流量走常规 `route()` 以保持最高性能。
+- **线上采样 Trace** ：高频流量下，通过 HTTP Header（如 `X-Debug-Trace: true`）或指定灰度用户开启 `trace`，其余流量走常规 `route()` 以保持最高性能。
 - **结合日志与监控**：在拦截器中将 `trace.getCostMs()` 与未命中报警联动输出，辅助排查规则下发异常。

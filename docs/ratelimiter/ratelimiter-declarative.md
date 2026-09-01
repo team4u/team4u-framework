@@ -1,6 +1,6 @@
 # 声明式注解与代理降级
 
-在 Spring / 企业开发中，侵入式地编写限流代码会污染核心业务逻辑。`team4u-ratelimiter` 提供了强大的声明式注解 **`@RateLimit`**、动态代理拦截器与 **`@RateLimitReject` 降级兜底机制**。
+在 Spring / 企业开发中，侵入式地编写限流代码会污染核心业务逻辑。`team4u-ratelimiter` 提供了强大的声明式注解 **`@RateLimit`** 、动态代理拦截器与 **`@RateLimitReject` 降级兜底机制**。
 
 ---
 

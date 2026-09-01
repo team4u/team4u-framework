@@ -78,7 +78,7 @@ public class ApplicationConfiguration {
 ### 核心特性
 - **默认 0 延迟同步重载**：内置 `debounceWindow(0)`，写入配置后当前线程立即完成重载，彻底消除 `Thread.sleep` 等待。
 - **内存完全隔离**：独立构建 `InMemoryConfigSource`，不污染全局单例。
-- **完备的动态操作 API**：`put`、`delete`（Tombstone 失效）、`remove`（物理清除）。
+- **完备的动态操作 API** ：`put`、`delete`（Tombstone 失效）、`remove`（物理清除）。
 - **自动启用代理能力**：`team4u-config-test` 引入 `team4u-config-proxy`，`TestConfigContext.createProxy` 使用其 ServiceLoader 实现。
 
 ### 单元测试代码示例

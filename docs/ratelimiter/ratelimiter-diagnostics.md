@@ -37,8 +37,8 @@ graph TD
     E_BASE --> RLCE["RateLimitConfigException (规则配置非法异常)"]
 ```
 
-- **`RateLimitException`**：当未配置 fallback 降级方法且请求触发限流时抛出。包含 `key` 与 `result` 详情；
-- **`RateLimitConfigException`**：当规则容量、周期配置为非正数或算法名称不存在时在启动期抛出。
+- **`RateLimitException`** ：当未配置 fallback 降级方法且请求触发限流时抛出。包含 `key` 与 `result` 详情；
+- **`RateLimitConfigException`** ：当规则容量、周期配置为非正数或算法名称不存在时在启动期抛出。
 
 ---
 

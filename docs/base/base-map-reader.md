@@ -15,7 +15,7 @@
 
 - **多 Key 别名回退（Alias Fallback）**：支持传入多个候选 Key（如 `maxAttempts`, `max-attempts`, `max_attempts`），按顺序查找首个非 null 值；
 - **全类型安全提取**：内置 `getString`, `getInt`, `getLong`, `getDouble`, `getBoolean`, `getDuration`, `getEnum`, `get(Class<T>)` 等常用类型读取；
-- **POJO 对象转换 (toBean)**：内置支持将 MapReader 转换为任意强类型 JavaBean，默认自动兼容 kebab-case、snake_case 等命名风格并忽略转换错误，亦支持自定义 CopyOptions；
+- **POJO 对象转换 (toBean)** ：内置支持将 MapReader 转换为任意强类型 JavaBean，默认自动兼容 kebab-case、snake_case 等命名风格并忽略转换错误，亦支持自定义 CopyOptions；
 - **时长原生解析**：支持文本格式时长（`100ms`, `5s`, `10m`, `1h`, `2d`）、纯数字毫秒数及 ISO-8601 格式（`PT10S`）；
 - **必填项严格断言**：提供 `require` 与 `requireString`，缺失时自动抛出清晰的 `IllegalArgumentException`；
 - **Null 安全与优雅默认值**：所有方法均支持传入默认值，当 Map 为 null 或未匹配时安全回退。

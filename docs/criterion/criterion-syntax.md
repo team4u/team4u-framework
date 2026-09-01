@@ -65,10 +65,10 @@ age >= 18 && (userLevel in ['VIP', 'SVIP'] || totalAmount > 5000)
 - `contains`：判断集合是否包含指定元素，或字符串是否包含子串
   - `roles contains 'ADMIN'` (roles 为 List/Set)
   - `description contains 'error'` (字符串包含)
-- **`containsAny` / `contains_any` / `contains any`**：交集检查，实际集合中是否包含预期集合中的任一元素
+- **`containsAny` / `contains_any` / `contains any`** ：交集检查，实际集合中是否包含预期集合中的任一元素
   - `tags containsAny ['VIP', 'KOL']`
   - `roles contains any ['ADMIN', 'MANAGER']`
-- **`containsAll` / `contains_all` / `contains all`**：全集包含，实际集合是否完全包含预期集合的所有元素
+- **`containsAll` / `contains_all` / `contains all`** ：全集包含，实际集合是否完全包含预期集合的所有元素
   - `userTags containsAll ['NEW_USER', 'PHONE_VERIFIED']`
   - `permissions contains all ['READ', 'WRITE']`
 
@@ -88,7 +88,7 @@ age >= 18 && (userLevel in ['VIP', 'SVIP'] || totalAmount > 5000)
 
 ## 正则匹配与通配符 (Regex / Like)
 
-- **正则匹配 (`=~` 或 `regex`)**：
+- **正则匹配 (`=~` 或 `regex`)** ：
   - `email =~ '^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)+$'`
   - `phone regex '^1[3-9]\\d{9}$'`
 - **通配符匹配** (`like`)：基于 Team4u Ant 风格路径语义：`*` 匹配单个 `/` 分段内多个字符，`?` 匹配单个非 `/` 字符，只有完整的 `` 分段可跨越目录；`*` 等更长星号串仍是分段内通配符，`\` 为普通字符

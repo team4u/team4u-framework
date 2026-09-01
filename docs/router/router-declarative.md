@@ -195,7 +195,7 @@ service.pay(order);
 `RoutedBeanLocator` 内部包含完整的契约安全校验：
 
 1. **未命中规则且无兜底**：抛出 `RouteNotFoundException.ruleNotMatched(routerId)`（错误码 `RULE_NOT_MATCHED`）。
-2. **容器中未找到对应 Bean**：抛出 `RouteNotFoundException.beanNotFound(routerId, targetBeanName)`（错误码 `BEAN_NOT_FOUND`）。
+2. **容器中未找到对应 Bean** ：抛出 `RouteNotFoundException.beanNotFound(routerId, targetBeanName)`（错误码 `BEAN_NOT_FOUND`）。
 3. **Bean 类型不匹配**：若从容器中获取的 Bean 并非 `expectedType` 的实例，抛出 `RouteException.typeMismatch(...)`（错误码 `TYPE_MISMATCH`）。
 
 ---

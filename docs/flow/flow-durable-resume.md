@@ -42,7 +42,7 @@ sequenceDiagram
 | 崩溃时刻 | 快照当前状态 | 恢复与自愈行为 |
 | :--- | :--- | :--- |
 | **阶段 1 之前崩溃** | `SUSPENDED`（无信号） | 信号未落库。外部回调方稍后重试 `resume`，可正常执行阶段 1。 |
-| **阶段 1 与阶段 2 之间崩溃** | `ACTIVE`，`pendingResume = true`，槽位已有信号 | **场景 A：外部重试同一信号**<br/>框架比对已持久化的信号；载荷一致时判定为幂等重试，直接跳过阶段 1，继续执行阶段 2。<br/><br/>**场景 B：外部传入了不同信号**<br/>框架检测到信号冲突，抛出 `DurableException(RESUME_SIGNAL_CONFLICT)` 严格拒绝脏覆盖。<br/><br/>**场景 C：由后台调度器调用 `recover(executionId)`**<br/>恢复器检测到 `pendingResume = true`，自动取出已落库的信号，继续驱动阶段 2。 |
+| **阶段 1 与阶段 2 之间崩溃** | `ACTIVE`，`pendingResume = true`，槽位已有信号 | **场景 A：外部重试同一信号**<br/>框架比对已持久化的信号；载荷一致时判定为幂等重试，直接跳过阶段 1，继续执行阶段 2。<br/><br/>** 场景 B：外部传入了不同信号**<br/>框架检测到信号冲突，抛出 `DurableException(RESUME_SIGNAL_CONFLICT)` 严格拒绝脏覆盖。<br/><br/>** 场景 C：由后台调度器调用 `recover(executionId)`**<br/>恢复器检测到 `pendingResume = true`，自动取出已落库的信号，继续驱动阶段 2。 |
 | **阶段 2 执行中崩溃** | 保持阶段 1 快照或中间节点快照 | 重新调用 `recover(executionId)`，从最后成功提交的节点检查点无缝续跑。 |
 
 ---

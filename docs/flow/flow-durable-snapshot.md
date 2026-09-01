@@ -64,9 +64,9 @@ graph TD
 
 ### 插槽引用标签 (Slot Reference Tags)
 在二进制元数据中，不直接内联业务数据，而是通过标签引用 `slots` 字典中的具体槽位：
-- **Tag 1 (`User`)**：引用具体的业务槽位名（如 `input`、`node:$/0`）；
-- **Tag 2 (`Resumed`)**：引用 `Resumed<State, Signal>` 复合槽位；
-- **Tag 3 (`Recovery`)**：引用 `Recovery<Input>` 降级复合槽位。
+- **Tag 1 (`User`)** ：引用具体的业务槽位名（如 `input`、`node:$/0`）；
+- **Tag 2 (`Resumed`)** ：引用 `Resumed<State, Signal>` 复合槽位；
+- **Tag 3 (`Recovery`)** ：引用 `Recovery<Input>` 降级复合槽位。
 
 ---
 

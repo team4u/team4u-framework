@@ -39,7 +39,7 @@ public class ErrorDef {
 ---
 
 ### `TranslatedResponse` (最终统一输出)
-最终输出给调用方或前端的标准化契约对象。这是一个通过 Lombok `@Value` 修饰的 **不可变对象** (Immutable)：
+最终输出给调用方或前端的标准化契约对象。这是一个通过 Lombok `@Value` 修饰的 **不可变对象 (Immutable)** ：
 
 ```java
 @Value
@@ -102,7 +102,7 @@ sequenceDiagram
    - 将 `source` 作为 `MatchContext.actual`，将 `safeArgs` 作为 `MatchContext.attributes`。
    - 调用 `routingManager.route(routerId, matchCtx, ErrorDef.class)` 执行规则判定。
 3. **未命中安全兜底**：
-   - 未命中规则时，直接返回包含 `source.getCode()` 与 `source.getMessage()` 的响应，且**不丢失** `traceId`。
+   - 未命中规则时，直接返回包含 `source.getCode()` 与 `source.getMessage()` 的响应，且 **不丢失** `traceId`。
 4. **渲染管线推进**：
    - 初始化 `RenderContext`（初始 `finalCode = routeDef.getCode()`，`finalMessage = routeDef.getDefaultMsg()`）。
    - 按 `priority()` 顺序执行责任链中所有 `supports(context)` 返回 `true` 的 `RenderPolicy`。

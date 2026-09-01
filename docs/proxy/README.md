@@ -9,7 +9,7 @@
 - **深层链式调用的 NPE 痛点**：对于深层嵌套的配置或级联对象（如 `app.getDb().getPool().getUrl()`），若中间某一层为 `null`，极易抛出空指针异常。
 - **运行时动态切换底层目标**：在服务平滑发布、A/B 实验动态切流或故障快速降级场景中，传统的静态代理对象无法在线原子替换其背后的真实实例。
 
-`team4u-proxy` 是一个高性能、易扩展的 Java 动态代理库。它屏蔽了底层技术差异，在 **JDK Proxy**与**ByteBuddy**之间智能自适应切换，并向外提供基于**职责链模式 ** (Interceptor Chain) 的 AOP 编程模型与极简 Fluent Builder API。
+`team4u-proxy` 是一个高性能、易扩展的 Java 动态代理库。它屏蔽了底层技术差异，在 **JDK Proxy** 与 **ByteBuddy** 之间智能自适应切换，并向外提供基于**职责链模式 (Interceptor Chain)** 的 AOP 编程模型与极简 Fluent Builder API。
 
 ---
 

@@ -208,9 +208,9 @@ Flow<Order, CheckoutResult> parallelFlow = Flow.<Order>parallel(riskBranch, stoc
 
 ### 静态约束校验（Static Constraints）
 为了防止并发环境下的状态竞争与死锁，编译期实施严格校验：
-- **`PARALLEL_AWAIT`**：严禁在并行分支内部使用 `await` 挂起点；
-- **`PARALLEL_PERSISTENT_POLICY`**：严禁在并行分支内部挂载持久化策略；
-- **`DUPLICATE_BRANCH`**：同一并行块内各分支名称必须全局唯一。
+- **`PARALLEL_AWAIT`** ：严禁在并行分支内部使用 `await` 挂起点；
+- **`PARALLEL_PERSISTENT_POLICY`** ：严禁在并行分支内部挂载持久化策略；
+- **`DUPLICATE_BRANCH`** ：同一并行块内各分支名称必须全局唯一。
 
 ---
 

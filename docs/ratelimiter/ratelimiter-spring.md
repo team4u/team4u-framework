@@ -50,7 +50,7 @@ graph TD
     Interceptor --> Engine
 ```
 
-1. **`RateLimitSpringConfiguration`**：注册单例 `RateLimitEngine` 与 SpEL 解析器；
+1. **`RateLimitSpringConfiguration`** ：注册单例 `RateLimitEngine` 与 SpEL 解析器；
 2. **切点识别**：自动扫描所有标注了 `@RateLimit` 的类与方法；
 3. **参数上下文桥接**：自动将当前方法的入参与方法签名绑定至 SpEL `EvaluationContext`，支持使用 `#paramName` 或 `#root.args[0]` 提取动态限流 Key。
 

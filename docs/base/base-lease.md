@@ -83,7 +83,7 @@ try {
 
 ## 与各模块的关系
 
-- **lease**：业务 API 的 `Duration` 参数经 `DurationUtil` 换算毫秒后进入 SPI（TaskWorker 自身的心跳因生命周期与 worker 关闭联动而保留私有实现，未复用本类）；
-- **kv**：锁的心跳由 `KvLockManager` 自身管理（一个 manager 多锁共用一条心跳线程，间隔自适应收缩），续约语义见 [CasCapable.compareAndExpire](../kv/kv-store.md)；
-- **retry**：租约持久化重试（MANAGED 模式）的时长参数经 `DurationUtil` 校验换算；
-- **id / ratelimiter**：TTL 与时间戳运算复用存储侧既有饱和行为，与本工具语义一致。
+- **lease** ：业务 API 的 `Duration` 参数经 `DurationUtil` 换算毫秒后进入 SPI（TaskWorker 自身的心跳因生命周期与 worker 关闭联动而保留私有实现，未复用本类）；
+- **kv** ：锁的心跳由 `KvLockManager` 自身管理（一个 manager 多锁共用一条心跳线程，间隔自适应收缩），续约语义见 [CasCapable.compareAndExpire](../kv/kv-store.md)；
+- **retry** ：租约持久化重试（MANAGED 模式）的时长参数经 `DurationUtil` 校验换算；
+- **id / ratelimiter** ：TTL 与时间戳运算复用存储侧既有饱和行为，与本工具语义一致。

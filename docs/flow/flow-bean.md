@@ -219,7 +219,7 @@ graph TD
 
 `team4u-flow-bean` 遵循 Java 标准 SPI 契约，内置了 `OperationResolver` 的服务提供者配置：
 
-- **自动装配**：只要项目中引入了 `team4u-flow-bean` 依赖，`Local.compile(flow)`、`Local.from(flow)...compile()` 以及 `Durable.builder(store).build()` 将通过 `ServiceLoaderUtil` **自动发现并激活 `BeanOperationResolver`**；
+- **自动装配**：只要项目中引入了 `team4u-flow-bean` 依赖，`Local.compile(flow)`、`Local.from(flow)...compile()` 以及 `Durable.builder(store).build()` 将通过 `ServiceLoaderUtil` **自动发现并激活 `BeanOperationResolver`** ；
 - **零额外参数**：业务代码与 `@Configuration` 中无需手动传递或配置任何 `OperationResolver` 参数；
 - **优雅降级**：在无 IoC 容器的纯 Java 环境中（未引入 `team4u-flow-bean`），解析器自动回退为默认的 `rejecting()` 模式，遇到未绑定的 Class 步骤时在编译期精确阻断并告警；
 - **显式覆盖**：若需使用非全局的自定义 `BeanManager`，仍可通过 `.resolver(new BeanOperationResolver(customManager))` 进行显式覆盖。

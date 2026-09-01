@@ -26,7 +26,7 @@
 
 ## 设计理念
 
-Criterion 将规则生命周期拆解为三个阶段：**DSL 词法解析 (Parsing) -> 闭包函数编译 (Compiling) -> 高并发无锁判定 (Evaluation)**。
+Criterion 将规则生命周期拆解为三个阶段：**DSL 词法解析 (Parsing) -> 闭包函数编译 (Compiling) -> 高并发无锁判定 (Evaluation)** 。
 
 ```mermaid
 graph LR

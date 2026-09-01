@@ -14,7 +14,7 @@
 
 # 核心特性
 
-- **流畅的类型安全 DSL**：通过 `StateMachine.builder()` 声明式定义 `from().on().when().to().action()`，严格约束状态、事件与业务上下文泛型；
+- **流畅的类型安全 DSL** ：通过 `StateMachine.builder()` 声明式定义 `from().on().when().to().action()`，严格约束状态、事件与业务上下文泛型；
 - **四层匹配因果律**：支持精确匹配、单边通配（`fromAny()` / `onAny()`）与全局通配兜底，分层优先级清晰严密；
 - **构建期静态拓扑校验**：自动拦截未闭合迁移、空规则集合以及同桶内不可达死规则（Dead-rule Defense）；
 - **原生 Mermaid 图表导出**：通过 `StateMachineMermaid` 一键将不可变状态机实例渲染为标准 Mermaid 状态图；

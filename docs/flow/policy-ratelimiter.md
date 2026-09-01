@@ -324,7 +324,7 @@ Flow<OrderRequest, Receipt> protectedFlow = Flow.step(chargeOperation)
 一个限流检查点（`point`）对应配置中心的一个配置键：
 $$\text{Key} = \text{team4u.ratelimiter.} + \text{point}$$
 
-例如限流点为 `"order.charge"` 时，配置键为：**`team4u.ratelimiter.order.charge`**。
+例如限流点为 `"order.charge"` 时，配置键为：**`team4u.ratelimiter.order.charge`** 。
 
 ---
 
@@ -361,7 +361,7 @@ $$\text{Key} = \text{team4u.ratelimiter.} + \text{point}$$
 | **`key`** | `String` | 否 | 路由键模板，支持 `${variable}` 占位符（从请求上下文中提取）；为空表示全局共享配额。 |
 | **`capacity`** | `int` | 按算法 | 令牌桶/漏桶容量上限。 |
 | **`refillRate`** | `double` | 按算法 | 令牌桶每秒补充令牌速率。 |
-| **`windowMillis`**| `long` | 按算法 | 窗口时长（毫秒），如滑动窗口长度。 |
+| **`windowMillis`** | `long` | 按算法 | 窗口时长（毫秒），如滑动窗口长度。 |
 | **`threshold`** | `int` | 按算法 | 窗口内允许通过的最大请求数阈值。 |
 | **`priority`** | `int` | 否 | 规则优先级（**数字越小越先执行**，默认 0）。 |
 

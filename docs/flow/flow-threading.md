@@ -120,7 +120,7 @@ graph TD
 
 ### 规则 2：嵌套并行补偿校验
 
-- **规则说明**：当 `parallel` 分支内部还嵌套包含 `parallel` 或 `timeout` 时，Worker 线程池**必须是支持工作窃取（Work-Stealing）与动态线程补偿的 `ForkJoinPool`**；
+- **规则说明**：当 `parallel` 分支内部还嵌套包含 `parallel` 或 `timeout` 时，Worker 线程池**必须是支持工作窃取（Work-Stealing）与动态线程补偿的 `ForkJoinPool`** ；
 - **技术原理**：
   - `ForkJoinPool` 在工作线程遇到阻塞时，会自动从其他任务双端队列窃取就绪任务执行；
   - 框架结合 `ManagedBlocker` 机制，在工作线程阻塞时能够通知池动态拉起临时补偿线程，从而打破有限线程池中的依赖死锁循环。

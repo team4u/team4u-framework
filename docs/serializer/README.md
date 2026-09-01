@@ -14,9 +14,9 @@
 
 # 核心特性
 
-- **统一门面 API**：`JsonUtil` 提供最简洁的 `toJson`、`fromJson`、`toJsonBytes` 与 `TypeReference` 泛型反序列化；
+- **统一门面 API** ：`JsonUtil` 提供最简洁的 `toJson`、`fromJson`、`toJsonBytes` 与 `TypeReference` 泛型反序列化；
 - **SPI 引擎解耦**：通过 `JsonSerializerPolicy` SPI 抽象底层序列化实现，无缝适配 Jackson 等现代引擎；
-- **`JacksonModuleContributor` SPI**：第三方模块可通过 SPI 动态向全局 `ObjectMapper` 贡献自定义 Module；
+- **`JacksonModuleContributor` SPI** ：第三方模块可通过 SPI 动态向全局 `ObjectMapper` 贡献自定义 Module；
 - **开箱即用最佳实践**：默认预置 JSR-310 时间支持、忽略未知字段、Map 键有序输出（保证确定性散列）。
 
 ---

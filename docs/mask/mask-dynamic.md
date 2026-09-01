@@ -30,7 +30,7 @@ MaskBootstrap.global().start(configManager);
 
 在配置中心下发 JSON 格式的规则配置：
 
-- **配置 Key**：`team4u.mask.rules`
+- **配置 Key** ：`team4u.mask.rules`
 - **数据结构**：`Map<className, Map<fieldName, maskTypeKey>>`
 - **显式 null 规则**：字段规则值为 `null` 时初始化失败；热更新保留上一版有效规则。未配置的字段仍表示不脱敏。
 

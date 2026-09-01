@@ -104,7 +104,7 @@ T value = values.get(branch); // 仅 Accepted 分支存在
 ```
 
 > [!IMPORTANT]
-> **关键认知**：`results.outcome(branch)` 返回的不是原始数据 `T`，而是 **`Outcome<T>`**！
+> **关键认知**：`results.outcome(branch)` 返回的不是原始数据 `T`，而是 **`Outcome<T>`** ！
 > 因为在并发执行中，某个分支可能成功（`Accepted`）、被风控拒绝（`Rejected`）、因不适用而弃权（`Skipped`）或抛出异常（`Failed`）。
 > 若传入不属于本并行块的令牌，将抛出 `IllegalArgumentException`；若需要直接解包成功值，
 > 可在流程最终结果上调用 `FlowResult.requireAccepted()` / `DurableResult.requireAccepted()`。
@@ -180,7 +180,7 @@ sequenceDiagram
 ```
 
 1. **绝对不泄漏后台线程**：即使某个分支提前抛出异常或流程被外部 `Cancellation` 取消，框架调度器**必定等待所有已启动分支的工作线程完全执行完毕或响应中断退出后**，方才解除阻塞返回；
-2. **取消绕过 Join 逻辑**：若流程在并行执行期间被外部取消，框架直接流向 `FlowResult.Cancelled`，**绝不会调用 `JoinStrategy`**，避免在取消状态下产生脏数据。
+2. **取消绕过 Join 逻辑**：若流程在并行执行期间被外部取消，框架直接流向 `FlowResult.Cancelled`，**绝不会调用 `JoinStrategy`** ，避免在取消状态下产生脏数据。
 
 ---
 

@@ -158,7 +158,7 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
 配置中心中的配置键遵循统一前缀规则：
 $$\text{Key} = \text{retry.policy.} + \text{policyName}$$
 
-例如针对 `order-charge-retry`，配置键为：**`retry.policy.order-charge-retry`**。
+例如针对 `order-charge-retry`，配置键为：**`retry.policy.order-charge-retry`** 。
 
 #### 配置值（Value）JSON 格式定义
 
@@ -190,8 +190,8 @@ $$\text{Key} = \text{retry.policy.} + \text{policyName}$$
 | **`maxRetries`** | `int` | 是 | **最大重试次数（不含首次执行）**。若设为 4，表示最多尝试 5 次。 |
 | **`backoff.type`** | `String` | 是 | 退避算法类型标识：<br/>• `fixed`：固定延迟<br/>• `exponential`：纯指数退避<br/>• `exponentialJitter`：带随机抖动的指数退避（推荐）<br/>• `increment`：等差递增 |
 | **`backoff.params`** | `Object` | 是 | 对应退避算法的数学参数（如 `initialDelay` 初始延迟、`multiplier` 倍数、`maxDelay` 上限毫秒数）。 |
-| **`retryOnExceptions`**| `Array<String>` | 否 | 仅对指定异常类及其子类触发重试（类名需在类路径中存在）。 |
-| **`abortOnExceptions`**| `Array<String>` | 否 | 遇到指定异常立即终止重试并快速失败。 |
+| **`retryOnExceptions`** | `Array<String>` | 否 | 仅对指定异常类及其子类触发重试（类名需在类路径中存在）。 |
+| **`abortOnExceptions`** | `Array<String>` | 否 | 遇到指定异常立即终止重试并快速失败。 |
 
 > [!TIP]
 > 详细的动态重试规则 JSON 格式定义与扩展说明，请参考 [重试策略配置规范 (docs/retry/retry-strategy.md#动态配置高级)](../retry/retry-strategy.md#动态配置高级)。
@@ -293,9 +293,9 @@ sequenceDiagram
 | :--- | :--- | :--- | :--- | :--- |
 | `ORD_20260831_001` | **`ACTIVE`** | **`2026-08-31 14:42:04`** | `2` | `policy:$/0` -> `{"attempt":2}`<br/>`input` -> `{"orderId":"1001", "amount":500}` |
 
-- **`lifecycle = 'ACTIVE'`**：表示该流程仍然处于生命周期进行中，并未终结；
-- **`wake_at`**：记录了绝对的计划唤醒时刻；
-- **`slots['policy:$/0']`**：记录了当前策略的状态是 `attempt = 2`，因此下次唤醒时框架知道是第 2 次尝试，绝不会重新从第 1 次算起。
+- **`lifecycle = 'ACTIVE'`** ：表示该流程仍然处于生命周期进行中，并未终结；
+- **`wake_at`** ：记录了绝对的计划唤醒时刻；
+- **`slots['policy:$/0']`** ：记录了当前策略的状态是 `attempt = 2`，因此下次唤醒时框架知道是第 2 次尝试，绝不会重新从第 1 次算起。
 
 ---
 

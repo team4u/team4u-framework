@@ -13,7 +13,7 @@
 这些需求如果由各业务自己实现，通常会写成三种样子：
 
 - **本地锁** (`synchronized` / `ConcurrentHashMap`)：只在单个 JVM 内有效。服务部署了 8 个实例，每个实例还是各回源一次；
-- **裸写 Redis SET/DEL**：没有租约概念——进程崩了锁就死锁了；没有接管——持锁者超时后请求只能干等；也没有身份校验——旧执行者晚到一步，会把过期结果盖在新执行者头上；
+- **裸写 Redis SET/DEL** ：没有租约概念——进程崩了锁就死锁了；没有接管——持锁者超时后请求只能干等；也没有身份校验——旧执行者晚到一步，会把过期结果盖在新执行者头上；
 - **各处复制粘贴**：等待、超时、降级、异常路径的代码重复且容易写错，规则改一下就要发版。
 
 `team4u-singleflight` 做一件事：**把「同 key 唯一执行者」收敛为「一条 JSON 规则 + kv 锁协调」**。业务代码只声明一个 point 和加载函数，key 怎么取、结果缓存多久、竞争者等待还是失败还是降级，全部在规则里配置、热更新生效。
@@ -240,7 +240,7 @@ team4u-singleflight-spring         # Spring 自动装配（显式引入）
 | `team4u-policy` | core（传递） | 命名存储与命名摘要注册表使用的 `KeyedPolicyRegistry` | — |
 | `team4u-criterion` | core（传递） | `skipWhen` / `cacheWhen` 表达式 | — |
 | `team4u-serializer-json` | core（传递） | 规则与结果的 `JsonUtil` 门面（应用需显式提供 JSON 引擎，见下） | — |
-| `jackson-databind` | core（传递，直连） | **durable schema**直连边界：会话信封（SessionEnvelope）按 Jackson 树模型读写、降级转换（FallbackConverter）经 `TypeFactory` 做类型自省——均为不携带序列化配置的稳定持久化 schema；降级值的 bean 转换本身走 `JsonUtil` provider 语义（见下行），不经 provider SPI，也**不**等于传递提供 `team4u-serializer-jackson` | — |
+| `jackson-databind` | core（传递，直连） | **durable schema** 直连边界：会话信封（SessionEnvelope）按 Jackson 树模型读写、降级转换（FallbackConverter）经 `TypeFactory` 做类型自省——均为不携带序列化配置的稳定持久化 schema；降级值的 bean 转换本身走 `JsonUtil` provider 语义（见下行），不经 provider SPI，也 **不** 等于传递提供 `team4u-serializer-jackson` | — |
 | `team4u-proxy` | proxy（传递） | `@SingleFlight` 注解代理 | 使用注解时引入 `team4u-singleflight-proxy` |
 | `team4u-proxy-spring` | spring（传递） | 注解代理的 Spring 装配公共模板 | Spring 环境引入 `team4u-singleflight-spring` |
 | `spring-context` | spring（传递） | `@EnableSingleFlight` 自动代理 | 同上 |

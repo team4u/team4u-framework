@@ -50,9 +50,9 @@ return MaskUtils.mask(value, 1, 1);
 - 保留前缀 `[0, start)` + 填充 `maskLength` 个 `*` + 保留后缀 `[start + maskLength, length)`。
 
 ### 空值与边界安全
-- **入参为 `null` 或空字符串 ""**：直接原样返回，不抛出任何异常；
+- **入参为 `null` 或空字符串 ""** ：直接原样返回，不抛出任何异常；
 - **保留前缀加后缀超过字符串总长度**（如 3 字符字符串执行 `mask(val, 2, 2)`）：`MaskUtils.mask` 安全判断 `prefix + suffix >= length`，直接返回原字符串，防止产生负数星号循环或越界；
-- **未知脱敏 Key**：`FastMasker.mask(val, "UNKNOWN_KEY")` 抛出 `IllegalArgumentException`，消息为 `Unknown mask policy: UNKNOWN_KEY`；null、空串和空白策略同样拒绝。只有显式 `NONE` 返回原文。
+- **未知脱敏 Key** ：`FastMasker.mask(val, "UNKNOWN_KEY")` 抛出 `IllegalArgumentException`，消息为 `Unknown mask policy: UNKNOWN_KEY`；null、空串和空白策略同样拒绝。只有显式 `NONE` 返回原文。
 
 ---
 
