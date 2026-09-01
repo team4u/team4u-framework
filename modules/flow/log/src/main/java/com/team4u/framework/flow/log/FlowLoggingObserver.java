@@ -141,119 +141,139 @@ public class FlowLoggingObserver implements FlowObserver {
     public void onEvent(Event event) {
         Metadata meta = event.metadata();
         String loggerName = loggerNamePrefix + "." + meta.flowId();
-        String path = meta.nodePath();
         String label = resolveNodeDisplayLabel(event);
         Object currentContext = contextSupplier != null ? contextSupplier.get() : null;
 
         switch (event.type()) {
             case FLOW_STARTED:
-                TraceNode root = new TraceNode(path, "flow: " + meta.flowId());
-                root.setStartTime(System.currentTimeMillis());
-                ExecutionTrace newTrace = new ExecutionTrace(root);
-                newTrace.nodeMap.put(path, root);
-                activeTraces.put(meta.executionId(), newTrace);
-
-                if (printStepLogs) {
-                    Loggers.of(loggerName)
-                            .action("FLOW_STARTED")
-                            .put("execId", meta.executionId())
-                            .put("context", contextFormatter.format(currentContext))
-                            .status("start")
-                            .atInfo()
-                            .log();
-                }
+                onFlowStarted(meta, loggerName, currentContext);
                 break;
-
             case NODE_STARTED:
             case PARALLEL_STARTED:
-                ExecutionTrace currentTrace = activeTraces.computeIfAbsent(meta.executionId(), k -> {
-                    TraceNode r = new TraceNode("$", "flow: " + meta.flowId());
-                    r.setStartTime(System.currentTimeMillis());
-                    ExecutionTrace t = new ExecutionTrace(r);
-                    t.nodeMap.put("$", r);
-                    return t;
-                });
-                TraceNode startNode = new TraceNode(path, label);
-                startNode.setStartTime(System.currentTimeMillis());
-                currentTrace.nodeMap.put(path, startNode);
-                linkParent(currentTrace, path, startNode);
-
-                if (printStepLogs) {
-                    Loggers.of(loggerName)
-                            .action(event.type().name())
-                            .put("execId", meta.executionId())
-                            .put("path", path)
-                            .put("label", label)
-                            .put("context", contextFormatter.format(currentContext))
-                            .status("start")
-                            .atInfo()
-                            .log();
-                }
+                onNodeStarted(event, meta, loggerName, label, currentContext);
                 break;
-
             case NODE_COMPLETED:
-                ExecutionTrace completedTrace = activeTraces.get(meta.executionId());
-                TraceNode completedNode = completedTrace != null ? completedTrace.nodeMap.get(path) : null;
-                long duration = completedNode != null ? System.currentTimeMillis() - completedNode.getStartTime() : 0;
-                String outcome = event.attributes().getOrDefault("outcome", "ACCEPTED");
-
-                if (completedNode != null) {
-                    completedNode.setDurationMs(duration);
-                    completedNode.setOutcome(outcome);
-                    if (event.attributes().containsKey("attempt")) {
-                        completedNode.setExtra("attempt=" + event.attributes().get("attempt"));
-                    }
-                }
-
-                if (printStepLogs) {
-                    String maskedContext = contextFormatter.format(currentContext);
-                    Loggers stepLogger = Loggers.of(loggerName)
-                            .action("NODE_COMPLETED")
-                            .put("execId", meta.executionId())
-                            .put("path", path)
-                            .put("label", label != null ? label : "")
-                            .put("duration", duration + "ms")
-                            .put("outcome", outcome)
-                            .put("context", maskedContext);
-
-                    if ("ACCEPTED".equalsIgnoreCase(outcome)) {
-                        stepLogger.success().log();
-                    } else if ("REJECTED".equalsIgnoreCase(outcome) || "SKIPPED".equalsIgnoreCase(outcome)) {
-                        stepLogger.status(outcome.toLowerCase()).atInfo().log();
-                    } else {
-                        stepLogger.status("failed").atError().log();
-                    }
-                }
+                onNodeCompleted(event, meta, loggerName, label, currentContext);
                 break;
-
             case ROUTE_SELECTED:
-                ExecutionTrace routeTrace = activeTraces.get(meta.executionId());
-                TraceNode routeNode = routeTrace != null ? routeTrace.nodeMap.get(path) : null;
-                if (routeNode != null) {
-                    routeNode.setExtra("selected=" + event.attributes().getOrDefault("branch", "unknown"));
-                }
+                onRouteSelected(event, meta);
                 break;
-
             case FALLBACK_SELECTED:
-                ExecutionTrace fallbackTrace = activeTraces.get(meta.executionId());
-                TraceNode fallbackNode = fallbackTrace != null ? fallbackTrace.nodeMap.get(path) : null;
-                if (fallbackNode != null) {
-                    fallbackNode.setExtra("fallback=" + event.attributes().getOrDefault("trigger", "unknown"));
-                }
+                onFallbackSelected(event, meta);
                 break;
-
             case FLOW_COMPLETED:
             case FLOW_CANCELLED:
             case FLOW_SUSPENDED:
-                handleFlowFinished(meta, event);
+                onFlowFinished(event, meta);
                 break;
-
             default:
                 break;
         }
     }
 
-    private void handleFlowFinished(Metadata meta, Event event) {
+    private void onFlowStarted(Metadata meta, String loggerName, Object context) {
+        String path = meta.nodePath();
+        TraceNode root = new TraceNode(path, "flow: " + meta.flowId());
+        root.setStartTime(System.currentTimeMillis());
+
+        ExecutionTrace newTrace = new ExecutionTrace(root);
+        newTrace.nodeMap.put(path, root);
+        activeTraces.put(meta.executionId(), newTrace);
+
+        if (printStepLogs) {
+            Loggers.of(loggerName)
+                    .action("FLOW_STARTED")
+                    .put("execId", meta.executionId())
+                    .put("context", contextFormatter.format(context))
+                    .status("start")
+                    .atInfo()
+                    .log();
+        }
+    }
+
+    private void onNodeStarted(Event event, Metadata meta, String loggerName, String label, Object context) {
+        String path = meta.nodePath();
+        ExecutionTrace trace = getOrCreateTrace(meta);
+
+        TraceNode startNode = new TraceNode(path, label);
+        startNode.setStartTime(System.currentTimeMillis());
+        trace.nodeMap.put(path, startNode);
+        linkParent(trace, path, startNode);
+
+        if (printStepLogs) {
+            Loggers.of(loggerName)
+                    .action(event.type().name())
+                    .put("execId", meta.executionId())
+                    .put("path", path)
+                    .put("label", label)
+                    .put("context", contextFormatter.format(context))
+                    .status("start")
+                    .atInfo()
+                    .log();
+        }
+    }
+
+    private void onNodeCompleted(Event event, Metadata meta, String loggerName, String label, Object context) {
+        String path = meta.nodePath();
+        ExecutionTrace trace = activeTraces.get(meta.executionId());
+        TraceNode completedNode = trace != null ? trace.nodeMap.get(path) : null;
+        long duration = completedNode != null ? System.currentTimeMillis() - completedNode.getStartTime() : 0;
+        String outcome = event.attributes().getOrDefault("outcome", "ACCEPTED");
+
+        if (completedNode != null) {
+            completedNode.setDurationMs(duration);
+            completedNode.setOutcome(outcome);
+            if (event.attributes().containsKey("attempt")) {
+                completedNode.setExtra("attempt=" + event.attributes().get("attempt"));
+            }
+        }
+
+        if (printStepLogs) {
+            logStepCompletion(loggerName, meta.executionId(), path, label, duration, outcome, context);
+        }
+    }
+
+    private void logStepCompletion(String loggerName, String execId, String path, String label,
+                                   long duration, String outcome, Object context) {
+        Loggers stepLogger = Loggers.of(loggerName)
+                .action("NODE_COMPLETED")
+                .put("execId", execId)
+                .put("path", path)
+                .put("label", label)
+                .put("duration", duration + "ms")
+                .put("outcome", outcome)
+                .put("context", contextFormatter.format(context));
+
+        if ("ACCEPTED".equalsIgnoreCase(outcome)) {
+            stepLogger.success().log();
+        } else if ("REJECTED".equalsIgnoreCase(outcome) || "SKIPPED".equalsIgnoreCase(outcome)) {
+            stepLogger.status(outcome.toLowerCase()).atInfo().log();
+        } else {
+            stepLogger.status("failed").atError().log();
+        }
+    }
+
+    private void onRouteSelected(Event event, Metadata meta) {
+        ExecutionTrace trace = activeTraces.get(meta.executionId());
+        if (trace != null) {
+            TraceNode routeNode = trace.nodeMap.get(meta.nodePath());
+            if (routeNode != null) {
+                routeNode.setExtra("selected=" + event.attributes().getOrDefault("branch", "unknown"));
+            }
+        }
+    }
+
+    private void onFallbackSelected(Event event, Metadata meta) {
+        ExecutionTrace trace = activeTraces.get(meta.executionId());
+        if (trace != null) {
+            TraceNode fallbackNode = trace.nodeMap.get(meta.nodePath());
+            if (fallbackNode != null) {
+                fallbackNode.setExtra("fallback=" + event.attributes().getOrDefault("trigger", "unknown"));
+            }
+        }
+    }
+
+    private void onFlowFinished(Event event, Metadata meta) {
         ExecutionTrace trace = activeTraces.remove(meta.executionId());
         if (trace == null || trace.rootTraceNode == null) {
             return;
@@ -273,6 +293,16 @@ public class FlowLoggingObserver implements FlowObserver {
             log.info("Flow Execution Summary [flowId={} | execId={} | total={}ms | outcome={}]\n{}\nFinal Context:\n{}",
                     meta.flowId(), meta.executionId(), totalDuration, finalOutcome, treeStr, maskedFinalContext);
         }
+    }
+
+    private ExecutionTrace getOrCreateTrace(Metadata meta) {
+        return activeTraces.computeIfAbsent(meta.executionId(), k -> {
+            TraceNode r = new TraceNode("$", "flow: " + meta.flowId());
+            r.setStartTime(System.currentTimeMillis());
+            ExecutionTrace t = new ExecutionTrace(r);
+            t.nodeMap.put("$", r);
+            return t;
+        });
     }
 
     private void linkParent(ExecutionTrace trace, String path, TraceNode child) {
