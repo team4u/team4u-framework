@@ -5,6 +5,7 @@ import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.Policy;
 import com.team4u.framework.flow.compiler.Compiler;
 import com.team4u.framework.flow.definition.diagnostic.Diagnostic;
+import com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes;
 import com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException;
 import com.team4u.framework.flow.definition.model.FlowDefinition;
 import com.team4u.framework.flow.definition.model.FlowSpec;
@@ -118,6 +119,7 @@ public final class FlowBinder implements BindingContext {
                 .metadata(definition.metadata())
                 .inputType(typeCheckResult.inputType())
                 .outputType(typeCheckResult.outputType())
+                .resolver(this.resolver)
                 .build();
     }
 
@@ -136,7 +138,9 @@ public final class FlowBinder implements BindingContext {
         if (binder != null) {
             return binder.bind(spec, this);
         }
-        return Flow.identity();
+        throw new FlowDiagnosticException(
+                DiagnosticCodes.UNSUPPORTED_SPEC,
+                "No binder registered for " + spec.getClass().getName());
     }
 
     @Override
@@ -162,9 +166,12 @@ public final class FlowBinder implements BindingContext {
 
         if (provider != null) {
             PolicyBinding binding = provider.create(configuration);
-            Function<Object, Object> actualKeyFn = binding.keyProjection() != null && binding.keyProjection() != Function.identity()
+            Function<Object, Object> actualKeyFn = binding.keyProjection() != null
                     ? binding.keyProjection()
                     : keyFn;
+            if (actualKeyFn == null) {
+                actualKeyFn = Function.identity();
+            }
             if (binding.persistent()) {
                 if (binding.instance() != null) {
                     return flow.persistentPolicy((PersistentPolicy) binding.instance(), actualKeyFn);
@@ -183,7 +190,7 @@ public final class FlowBinder implements BindingContext {
         PolicyDescriptor policyDesc = registry.policy(policyId);
         if (policyDesc == null) {
             throw new FlowDiagnosticException(
-                    "UNKNOWN_POLICY", "Policy not found: " + policyId);
+                    DiagnosticCodes.UNKNOWN_POLICY, "Policy not found: " + policyId);
         }
 
         if (policyDesc.persistent()) {

@@ -228,9 +228,12 @@ public final class TypeCodecs {
     @SuppressWarnings({"unchecked", "rawtypes"})
     public static TypeCodec<?> forType(TypeRef typeRef) {
         if (typeRef == null) {
-            return STRING;
+            return null;
         }
         Class<?> raw = typeRef.rawType();
+        if (raw == null) {
+            return null;
+        }
         TypeCodec<?> codec = BUILTINS.get(raw);
         if (codec != null) {
             return codec;
@@ -238,7 +241,7 @@ public final class TypeCodecs {
         if (raw.isEnum()) {
             return forEnum((Class<? extends Enum>) raw);
         }
-        return STRING;
+        return null;
     }
 
     /**

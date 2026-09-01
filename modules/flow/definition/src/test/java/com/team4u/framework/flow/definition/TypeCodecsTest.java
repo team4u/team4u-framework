@@ -64,5 +64,9 @@ public class TypeCodecsTest {
         Assert.assertSame(TypeCodecs.STRING, TypeCodecs.forType(TypeRef.of(String.class)));
         Assert.assertSame(TypeCodecs.INTEGER, TypeCodecs.forType(TypeRef.of(Integer.class)));
         Assert.assertNotNull(TypeCodecs.forType(TypeRef.of(Status.class)));
+        Assert.assertNull(TypeCodecs.forType(TypeRef.of(Object.class)));
+        Assert.assertNull(TypeCodecs.forType(TypeRef.of(TypeCodecsTest.class)));
+        Assert.assertNull(TypeCodecs.forType(TypeRef.ANY));
+        Assert.assertNull(TypeCodecs.forType(null));
     }
 }

@@ -5,6 +5,7 @@ import com.team4u.framework.flow.api.Branch;
 import com.team4u.framework.flow.api.JoinStrategy;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.ResumePoint;
+import com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes;
 import com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException;
 import com.team4u.framework.flow.definition.model.*;
 import com.team4u.framework.flow.definition.registry.*;
@@ -41,7 +42,7 @@ public final class SpecBinders {
             OperationDescriptor op = context.registry().operation(step.operation().id());
             if (op == null) {
                 throw new FlowDiagnosticException(
-                        "UNKNOWN_OPERATION", "Operation not found: " + step.operation().id());
+                        DiagnosticCodes.UNKNOWN_OPERATION, "Operation not found: " + step.operation().id());
             }
 
             SymbolRef projectRef = step.project();
@@ -140,7 +141,7 @@ public final class SpecBinders {
             OperationDescriptor selector = context.registry().operation(route.selector().id());
             if (selector == null) {
                 throw new FlowDiagnosticException(
-                        "UNKNOWN_OPERATION", "Route selector operation not found: " + route.selector().id());
+                        DiagnosticCodes.UNKNOWN_OPERATION, "Route selector operation not found: " + route.selector().id());
             }
 
             Flow.RouteStart start;
@@ -151,6 +152,11 @@ public final class SpecBinders {
             }
 
             TypeCodec<?> codec = context.registry().typeCodec(selector.outputType());
+            if (codec == null) {
+                throw new FlowDiagnosticException(
+                        DiagnosticCodes.NO_TYPE_CODEC,
+                        "No TypeCodec found for route selector output type: " + selector.outputType().typeName());
+            }
             Flow.RouteCases cases = null;
 
             for (CaseSpec caseSpec : route.cases()) {
@@ -223,7 +229,7 @@ public final class SpecBinders {
             JoinDescriptor joinDesc = context.registry().join(parallel.join().id());
             if (joinDesc == null) {
                 throw new FlowDiagnosticException(
-                        "UNKNOWN_JOIN", "Join strategy not found: " + parallel.join().id());
+                        DiagnosticCodes.UNKNOWN_JOIN, "Join strategy not found: " + parallel.join().id());
             }
 
             List<Branch> branches = new ArrayList<Branch>();
@@ -255,7 +261,7 @@ public final class SpecBinders {
             ResumeDescriptor resumeDesc = context.registry().resumePoint(await.resumePoint().id());
             if (resumeDesc == null) {
                 throw new FlowDiagnosticException(
-                        "UNKNOWN_RESUME_POINT", "Resume point not found: " + await.resumePoint().id());
+                        DiagnosticCodes.UNKNOWN_RESUME_POINT, "Resume point not found: " + await.resumePoint().id());
             }
             return Flow.identity().await(ResumePoint.named(await.resumePoint().id()));
         }

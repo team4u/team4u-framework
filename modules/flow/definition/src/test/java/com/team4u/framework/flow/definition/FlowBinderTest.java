@@ -1,14 +1,17 @@
 package com.team4u.framework.flow.definition;
 
 import com.team4u.framework.flow.LocalExecutable;
-import com.team4u.framework.flow.api.JoinStrategy;
-import com.team4u.framework.flow.api.OperationContext;
-import com.team4u.framework.flow.api.ResumePoint;
+import com.team4u.framework.flow.api.*;
 import com.team4u.framework.flow.definition.binding.BoundFlow;
 import com.team4u.framework.flow.definition.binding.FlowBinder;
+import com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes;
 import com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException;
 import com.team4u.framework.flow.definition.model.*;
 import com.team4u.framework.flow.definition.registry.FlowDefinitionRegistry;
+import com.team4u.framework.flow.definition.registry.PolicyBinding;
+import com.team4u.framework.flow.definition.registry.PolicyDescriptor;
+import com.team4u.framework.flow.definition.registry.PolicyProvider;
+import com.team4u.framework.flow.definition.type.TypeRef;
 import com.team4u.framework.flow.model.FlowResult;
 import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.model.Resumed;
@@ -157,5 +160,123 @@ public class FlowBinderTest {
             Assert.assertFalse(ex.getDiagnostics().isEmpty());
             Assert.assertEquals("DUPLICATE_BRANCH", ex.getDiagnostics().get(0).code());
         }
+    }
+
+    @Test
+    public void testPolicyProviderUsesDslKeyWhenProviderKeyProjectionIsNull() {
+        List<Object> recordedKeys = new ArrayList<Object>();
+        Policy<String> policy = new Policy<String>() {
+            @Override
+            public Gate before(PolicyContext context, String key) {
+                recordedKeys.add(key);
+                return Gate.proceed();
+            }
+        };
+
+        PolicyProvider provider = new PolicyProvider() {
+            @Override
+            public PolicyDescriptor descriptor() {
+                return PolicyDescriptor.builder()
+                        .id("dynamic.rate.limit")
+                        .contract(Policy.class)
+                        .keyType(TypeRef.of(String.class))
+                        .persistent(false)
+                        .build();
+            }
+
+            @Override
+            public PolicyBinding create(Map<String, Object> configuration) {
+                return PolicyBinding.builder()
+                        .instance(policy)
+                        .persistent(false)
+                        // keyProjection is null -> must use DSL key
+                        .build();
+            }
+        };
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("order.validate", (OperationContext ctx, Order in) -> Outcome.accepted(in), Order.class, Order.class)
+                .policyProvider(provider)
+                .keyProjection("order.userId", Order.class, String.class, (Order order) -> order.id)
+                .build();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "order.flow", "1",
+                new StepSpec(
+                        SymbolRef.of("order.validate"),
+                        null,
+                        null,
+                        Collections.singletonList(new PolicyModifierSpec(SymbolRef.of("dynamic.rate.limit"), SymbolRef.of("order.userId"), Collections.emptyMap(), SourceSpan.UNKNOWN)),
+                        SourceSpan.UNKNOWN
+                ),
+                "order.flow", SourceSpan.UNKNOWN
+        );
+
+        BoundFlow bound = FlowBinder.bind(def, registry);
+        LocalExecutable<Order, Order> exec = bound.compileLocal();
+        exec.run(new Order("user_123", 1));
+
+        Assert.assertEquals(1, recordedKeys.size());
+        // Verify that the policy received the projected key ("user_123"), NOT the whole Order object!
+        Assert.assertEquals("user_123", recordedKeys.get(0));
+    }
+
+    @Test
+    public void testPolicyProviderKeyProjectionOverridesDslKey() {
+        List<Object> recordedKeys = new ArrayList<Object>();
+        Policy<String> policy = new Policy<String>() {
+            @Override
+            public Gate before(PolicyContext context, String key) {
+                recordedKeys.add(key);
+                return Gate.proceed();
+            }
+        };
+
+        PolicyProvider provider = new PolicyProvider() {
+            @Override
+            public PolicyDescriptor descriptor() {
+                return PolicyDescriptor.builder()
+                        .id("override.policy")
+                        .contract(Policy.class)
+                        .keyType(TypeRef.of(String.class))
+                        .persistent(false)
+                        .build();
+            }
+
+            @Override
+            public PolicyBinding create(Map<String, Object> configuration) {
+                return PolicyBinding.builder()
+                        .instance(policy)
+                        .keyProjection(in -> "provider_fixed_key")
+                        .persistent(false)
+                        .build();
+            }
+        };
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("order.validate", (OperationContext ctx, Order in) -> Outcome.accepted(in), Order.class, Order.class)
+                .policyProvider(provider)
+                .keyProjection("order.userId", Order.class, String.class, (Order order) -> order.id)
+                .build();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "order.flow", "1",
+                new StepSpec(
+                        SymbolRef.of("order.validate"),
+                        null,
+                        null,
+                        Collections.singletonList(new PolicyModifierSpec(SymbolRef.of("override.policy"), SymbolRef.of("order.userId"), Collections.emptyMap(), SourceSpan.UNKNOWN)),
+                        SourceSpan.UNKNOWN
+                ),
+                "order.flow", SourceSpan.UNKNOWN
+        );
+
+        BoundFlow bound = FlowBinder.bind(def, registry);
+        LocalExecutable<Order, Order> exec = bound.compileLocal();
+        exec.run(new Order("user_123", 1));
+
+        Assert.assertEquals(1, recordedKeys.size());
+        // Provider-specified keyProjection has priority
+        Assert.assertEquals("provider_fixed_key", recordedKeys.get(0));
     }
 }

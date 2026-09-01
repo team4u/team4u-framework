@@ -1,6 +1,7 @@
 package com.team4u.framework.flow.definition.type;
 
 import com.team4u.framework.flow.definition.diagnostic.Diagnostic;
+import com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes;
 import com.team4u.framework.flow.definition.model.*;
 import com.team4u.framework.flow.definition.registry.FlowDefinitionRegistry;
 import com.team4u.framework.flow.definition.registry.OperationDescriptor;
@@ -152,7 +153,15 @@ public final class TypeChecker {
             }
             specInputTypes.put(spec, currentType);
             SpecTypeChecker<FlowSpec> checker = (SpecTypeChecker<FlowSpec>) checkerRegistry.get(spec.getClass()).orElse(null);
-            TypeRef resultType = checker != null ? checker.check(spec, currentType, this) : currentType;
+            if (checker == null) {
+                addDiagnostic(new Diagnostic(
+                        DiagnosticCodes.UNSUPPORTED_SPEC,
+                        "No type checker registered for " + spec.getClass().getName(),
+                        spec.span()));
+                specOutputTypes.put(spec, currentType);
+                return currentType;
+            }
+            TypeRef resultType = checker.check(spec, currentType, this);
             specOutputTypes.put(spec, resultType);
             return resultType;
         }

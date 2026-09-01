@@ -38,6 +38,7 @@ graph LR
 
 - **不可变快照** (Immutable Snapshot)：每次重载生成全局不可变快照，并通过 `AtomicReference` 执行原子替换，彻底杜绝多线程读取竞争与脏读。
 - **双模代理** (Live vs Pinned)：Live 模式始终读取最新快照，实现业务无感热更新；Pinned 模式锁定请求入口时刻的版本，保障长事务与批处理强一致性。
+- **流式强类型读取器** (`MapReader`)：原生提供 `asReader()` 与 `asReader(prefix)`，支持无需声明 Bean 类或代理接口即可流式提取强类型、别名回退、Duration 解析与安全默认值。
 - **Java Bean 声明式代理**：支持普通 POJO，结合 `@ConfigPrefix`、`@ConfigKey`、`@ConfigRequired`、`@ConfigConverter`，自动将字段初始值作为缺失兜底默认值。
 - **智能松散绑定** (Relaxed Binding)：自动归一化键名，透明兼容驼峰（camelCase）、中划线（kebab-case）、下划线（snake_case）与点分隔符。
 - **占位符深度嵌套与防死锁**：支持 `${db.${env}.host:localhost}` 嵌套语法与默认值，内置递归深度限制（最大 20 层）与循环依赖检测。

@@ -1,5 +1,6 @@
 package com.team4u.framework.config.core;
 
+import com.team4u.framework.base.util.MapReader;
 import com.team4u.framework.config.core.annotation.ConfigPrefix;
 import com.team4u.framework.config.core.convert.PropertyConverter;
 import com.team4u.framework.config.core.convert.PropertyConverterRegistry;
@@ -104,6 +105,31 @@ public interface ConfigManager {
      */
     default Optional<String> getString(String key) {
         return currentSnapshot().get(key);
+    }
+
+    /**
+     * 获取基于当前配置快照根树形结构的强类型读取器
+     * <p>
+     * 允许直接进行流式强类型配置提取，无需声明 Java Bean 类或代理接口。
+     * </p>
+     *
+     * @return 根配置 MapReader 实例
+     */
+    default MapReader asReader() {
+        return currentSnapshot().asReader();
+    }
+
+    /**
+     * 获取基于当前配置快照指定前缀子树的强类型读取器
+     * <p>
+     * 允许直接针对特定子命名空间（如 {@code "spring.redis"}）进行流式强类型配置提取。
+     * </p>
+     *
+     * @param prefix 配置前缀
+     * @return 对应前缀子树的 MapReader 实例
+     */
+    default MapReader asReader(String prefix) {
+        return currentSnapshot().asReader(prefix);
     }
 
     /**

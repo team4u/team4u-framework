@@ -84,6 +84,41 @@ public class ConfigQuickStart {
 ```
 
 ---
+
+## 流式强类型读取 (MapReader)
+
+无需声明 JavaBean 类或引入代理模块，直接通过 `asReader()` 或 `asReader(prefix)` 进行流式类型安全提取，内置支持别名回退、Duration 时长解析与安全默认值：
+
+```java
+import com.team4u.framework.base.util.MapReader;
+import com.team4u.framework.config.core.ConfigManager;
+import java.time.Duration;
+
+public class ReaderQuickStart {
+
+    public static void main(String[] args) {
+        ConfigManager manager = ConfigManager.global();
+
+        // 指定前缀提取子树 Reader
+        MapReader serverReader = manager.asReader("server");
+        String name = serverReader.getString("name", "default-app");
+        int port = serverReader.getInt("port", 8080);
+        Duration connectTimeout = serverReader.getDuration("connectTimeout", Duration.ofSeconds(3), "connect-timeout");
+
+        // 嵌套子命名空间提取与必填校验
+        MapReader dbReader = manager.asReader("server.db");
+        String dbUrl = dbReader.requireString("url", "数据库连接地址缺失");
+        String username = dbReader.getString("username", "root");
+
+        // 根视图流式提取
+        MapReader rootReader = manager.asReader();
+        int redisPort = rootReader.getReader("spring").getReader("redis").getInt("port", 6379);
+    }
+}
+```
+
+---
+
 ## 固定快照显式绑定
 
 `DefaultConfigBinder` 仍保留给需要一次性固定配置对象的场景。它不创建实时代理，也不会作为 `createProxy` 的降级实现：

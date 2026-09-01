@@ -2,6 +2,7 @@ package com.team4u.framework.flow.dsl;
 
 import com.team4u.framework.flow.LocalExecutable;
 import com.team4u.framework.flow.api.JoinStrategy;
+import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.OperationContext;
 import com.team4u.framework.flow.api.ResumePoint;
 import com.team4u.framework.flow.definition.binding.BoundFlow;
@@ -163,5 +164,46 @@ public class FlowDslTest {
         FlowResult<Resumed<String, String>> result = exec.run("init_state");
         Assert.assertTrue(result instanceof FlowResult.Suspended);
         Assert.assertTrue(((FlowResult.Suspended<Resumed<String, String>>) result).awaiting(ResumePoint.named("payment.callback")));
+    }
+
+    public static class EchoOperation implements Operation<String, String> {
+        @Override
+        public Outcome<String> execute(OperationContext context, String input) {
+            return Outcome.accepted("ECHO:" + input);
+        }
+    }
+
+    @Test
+    public void testBindWithClassContractUsesRegistryFallbackResolver() {
+        String dsl = "flow echo.demo {\n" +
+                "    step echo.op\n" +
+                "}";
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("echo.op", EchoOperation.class)
+                .fallbackResolver((contract, qualifier) -> new EchoOperation())
+                .build();
+
+        // FlowDsl.bind(dsl, registry) delegates to registry.fallbackResolver()
+        BoundFlow bound = FlowDsl.bind(dsl, registry);
+        LocalExecutable<String, String> exec = bound.compileLocal();
+        FlowResult<String> result = exec.run("hello");
+        Assert.assertEquals("ECHO:hello", result.requireAccepted());
+    }
+
+    @Test
+    public void testBindWithClassContractUsesCustomResolver() {
+        String dsl = "flow echo.demo {\n" +
+                "    step echo.op\n" +
+                "}";
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("echo.op", EchoOperation.class)
+                .build();
+
+        BoundFlow bound = FlowDsl.bind(dsl, registry, (contract, qualifier) -> new EchoOperation());
+        LocalExecutable<String, String> exec = bound.compileLocal();
+        FlowResult<String> result = exec.run("world");
+        Assert.assertEquals("ECHO:world", result.requireAccepted());
     }
 }

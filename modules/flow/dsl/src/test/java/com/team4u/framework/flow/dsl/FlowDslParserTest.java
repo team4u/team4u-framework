@@ -78,7 +78,7 @@ public class FlowDslParserTest {
         Assert.assertEquals("inventory.reserve", step2.operation().id());
         Assert.assertEquals("order.items", step2.project().id());
         Assert.assertEquals("order.withReservation", step2.merge().id());
-        Assert.assertEquals(4, step2.modifiers().size());
+        Assert.assertEquals(2, step2.modifiers().size());
 
         // 3. step payment.charge with policy block, retry, timeout
         Assert.assertTrue(seq.elements().get(2) instanceof StepSpec);
@@ -173,6 +173,40 @@ public class FlowDslParserTest {
         } catch (FlowDiagnosticException ex) {
             Assert.assertFalse(ex.getDiagnostics().isEmpty());
             Assert.assertTrue(ex.getMessage().contains("bad.flow"));
+        }
+    }
+
+    @Test
+    public void testDuplicateProjectThrowsDiagnostic() {
+        String dsl = "flow test {\n" +
+                "    step op {\n" +
+                "        project p1\n" +
+                "        project p2\n" +
+                "    }\n" +
+                "}";
+        try {
+            FlowDslParser.parse(dsl, "test.flow");
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(1, ex.getDiagnostics().size());
+            Assert.assertEquals("DUPLICATE_STEP_PROJECT", ex.getDiagnostics().get(0).code());
+        }
+    }
+
+    @Test
+    public void testDuplicateMergeThrowsDiagnostic() {
+        String dsl = "flow test {\n" +
+                "    step op {\n" +
+                "        merge m1\n" +
+                "        merge m2\n" +
+                "    }\n" +
+                "}";
+        try {
+            FlowDslParser.parse(dsl, "test.flow");
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(1, ex.getDiagnostics().size());
+            Assert.assertEquals("DUPLICATE_STEP_MERGE", ex.getDiagnostics().get(0).code());
         }
     }
 }

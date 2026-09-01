@@ -34,6 +34,7 @@ public final class BoundFlow {
     private final FlowDefinitionMetadata metadata;
     private final TypeRef inputType;
     private final TypeRef outputType;
+    private final OperationResolver resolver;
 
     @Builder(toBuilder = true)
     public BoundFlow(
@@ -41,7 +42,8 @@ public final class BoundFlow {
             Map<String, SourceSpan> sourceMap,
             FlowDefinitionMetadata metadata,
             TypeRef inputType,
-            TypeRef outputType) {
+            TypeRef outputType,
+            OperationResolver resolver) {
         this.flow = Objects.requireNonNull(flow, "flow must not be null");
         this.sourceMap = sourceMap != null
                 ? Collections.unmodifiableMap(new LinkedHashMap<String, SourceSpan>(sourceMap))
@@ -49,10 +51,11 @@ public final class BoundFlow {
         this.metadata = metadata;
         this.inputType = inputType != null ? inputType : TypeRef.ANY;
         this.outputType = outputType != null ? outputType : TypeRef.ANY;
+        this.resolver = resolver;
     }
 
     /**
-     * 以默认拒绝解析器编译为本地极速执行器。
+     * 编译为本地极速执行器（优先使用绑定期解析器，若无则使用全局默认解析器）。
      *
      * @param <I> 输入类型
      * @param <O> 输出类型
@@ -60,7 +63,7 @@ public final class BoundFlow {
      */
     @SuppressWarnings("unchecked")
     public <I, O> LocalExecutable<I, O> compileLocal() {
-        return compileLocal(OperationResolver.rejecting());
+        return compileLocal(this.resolver != null ? this.resolver : OperationResolver.defaultResolver());
     }
 
     /**

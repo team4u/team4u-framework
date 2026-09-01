@@ -134,5 +134,42 @@ public class MapReaderTest {
         Assert.assertEquals(Duration.ofSeconds(1), reader.getDuration("any", Duration.ofSeconds(1)));
         Assert.assertEquals(Action.FAIL, reader.getEnum(Action.class, "any", Action.FAIL));
         Assert.assertEquals("custom", reader.get(String.class, "any", "custom"));
+        Assert.assertTrue(reader.isEmpty());
+        Assert.assertEquals(0, reader.size());
+        Assert.assertNotNull(reader.toMap());
+        Assert.assertNotNull(reader.getReader("any"));
+        Assert.assertTrue(reader.getReader("any").isEmpty());
+    }
+
+    @Test
+    public void testGetReaderAndMapHelpers() {
+        Map<String, Object> innerMap = new HashMap<>();
+        innerMap.put("host", "127.0.0.1");
+        innerMap.put("port", 6379);
+
+        Map<String, Object> rootMap = new HashMap<>();
+        rootMap.put("name", "app");
+        rootMap.put("redis", innerMap);
+
+        MapReader rootReader = MapReader.of(rootMap);
+        Assert.assertFalse(rootReader.isEmpty());
+        Assert.assertEquals(2, rootReader.size());
+        Assert.assertSame(rootMap, rootReader.toMap());
+
+        MapReader redisReader = rootReader.getReader("redis");
+        Assert.assertFalse(redisReader.isEmpty());
+        Assert.assertEquals("127.0.0.1", redisReader.getString("host"));
+        Assert.assertEquals(Integer.valueOf(6379), redisReader.getInt("port"));
+
+        // Non-existent key returns empty MapReader
+        MapReader missingReader = rootReader.getReader("missing");
+        Assert.assertNotNull(missingReader);
+        Assert.assertTrue(missingReader.isEmpty());
+        Assert.assertNull(missingReader.getString("host"));
+
+        // Non-map value returns empty MapReader
+        MapReader nameReader = rootReader.getReader("name");
+        Assert.assertNotNull(nameReader);
+        Assert.assertTrue(nameReader.isEmpty());
     }
 }

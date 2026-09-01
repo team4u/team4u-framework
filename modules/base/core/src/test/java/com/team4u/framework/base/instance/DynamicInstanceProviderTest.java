@@ -74,7 +74,7 @@ public class DynamicInstanceProviderTest {
         // 输入源为 Map
         DynamicInstanceProvider<Map<String, Object>, ConfigMock, InstanceMock> provider = new DynamicInstanceProvider<>(
                 CacheUtil.newLRUCache(100),
-                map -> new ConfigMock((String) map.get("value")),
+                map -> new ConfigMock(com.team4u.framework.base.util.MapReader.of(map).getString("value")),
                 config -> new InstanceMock(config.getValue()));
 
         Map<String, Object> input = new HashMap<>();

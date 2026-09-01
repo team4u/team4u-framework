@@ -5,6 +5,9 @@ import com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes;
 import com.team4u.framework.flow.definition.model.*;
 import com.team4u.framework.flow.definition.registry.*;
 
+import java.util.HashSet;
+import java.util.Set;
+
 /**
  * 流程规范静态类型检查器实现族。
  *
@@ -13,6 +16,119 @@ import com.team4u.framework.flow.definition.registry.*;
 public final class SpecTypeCheckers {
 
     private SpecTypeCheckers() {
+    }
+
+    /**
+     * 校验策略治理配置在当前类型下的兼容性。
+     *
+     * @param currentType  当前 Flow 输入类型
+     * @param policyRef    策略符号引用
+     * @param keyRef       键提取符号引用（可为 null）
+     * @param fallbackSpan 源码定位回退 Span
+     * @param context      类型检查上下文
+     */
+    public static void validatePolicy(
+            TypeRef currentType,
+            SymbolRef policyRef,
+            SymbolRef keyRef,
+            SourceSpan fallbackSpan,
+            TypeCheckContext context) {
+        if (policyRef == null) {
+            return;
+        }
+        PolicyDescriptor policyDesc = context.registry().policy(policyRef.id());
+        if (policyDesc == null) {
+            context.addDiagnostic(new Diagnostic(
+                    DiagnosticCodes.UNKNOWN_POLICY,
+                    "Unknown policy: " + policyRef.id(),
+                    policyRef.span() != null && policyRef.span() != SourceSpan.UNKNOWN ? policyRef.span() : fallbackSpan));
+            return;
+        }
+
+        if (keyRef != null) {
+            KeyProjectionDescriptor keyDesc = context.registry().keyProjection(keyRef.id());
+            ProjectorDescriptor projDesc = null;
+            if (keyDesc == null) {
+                projDesc = context.registry().projector(keyRef.id());
+            }
+
+            if (keyDesc == null && projDesc == null) {
+                context.addDiagnostic(new Diagnostic(
+                        DiagnosticCodes.UNKNOWN_KEY_PROJECTION,
+                        "Unknown key projection: " + keyRef.id(),
+                        keyRef.span() != null && keyRef.span() != SourceSpan.UNKNOWN ? keyRef.span() : fallbackSpan));
+                return;
+            }
+
+            TypeRef keyInputType = keyDesc != null ? keyDesc.inputType() : projDesc.inputType();
+            TypeRef keyOutputType = keyDesc != null ? keyDesc.keyType() : projDesc.outputType();
+
+            // 1. 检查 currentType -> keyProjection.inputType
+            if (currentType != TypeRef.ANY && keyInputType != TypeRef.ANY
+                    && !keyInputType.isAssignableFrom(currentType)) {
+                context.addDiagnostic(new Diagnostic(
+                        DiagnosticCodes.TYPE_MISMATCH,
+                        "Key projection '" + keyRef.id() + "' expects input " + keyInputType.typeName()
+                                + " but current type is " + currentType.typeName(),
+                        keyRef.span() != null && keyRef.span() != SourceSpan.UNKNOWN ? keyRef.span() : fallbackSpan));
+            }
+
+            // 2. 检查 keyProjection.keyType -> policy.keyType
+            if (keyOutputType != TypeRef.ANY && policyDesc.keyType() != TypeRef.ANY
+                    && !policyDesc.keyType().isAssignableFrom(keyOutputType)) {
+                context.addDiagnostic(new Diagnostic(
+                        DiagnosticCodes.TYPE_MISMATCH,
+                        "Policy '" + policyRef.id() + "' expects key type " + policyDesc.keyType().typeName()
+                                + " but key projection produces " + keyOutputType.typeName(),
+                        keyRef.span() != null && keyRef.span() != SourceSpan.UNKNOWN ? keyRef.span() : fallbackSpan));
+            }
+        } else {
+            // 无显式 key，检查 currentType -> policy.keyType
+            if (currentType != TypeRef.ANY && policyDesc.keyType() != TypeRef.ANY
+                    && !policyDesc.keyType().isAssignableFrom(currentType)) {
+                context.addDiagnostic(new Diagnostic(
+                        DiagnosticCodes.TYPE_MISMATCH,
+                        "Policy '" + policyRef.id() + "' expects key type " + policyDesc.keyType().typeName()
+                                + " but current type is " + currentType.typeName(),
+                        policyRef.span() != null && policyRef.span() != SourceSpan.UNKNOWN ? policyRef.span() : fallbackSpan));
+            }
+        }
+    }
+
+    /**
+     * 统一分支输出类型（Branch Join Unification）。
+     *
+     * @param currentOutput  已有分支累积输出类型（若为 null/ANY 则直接采纳新分支类型）
+     * @param branchOutput   新分支输出类型
+     * @param constructName  控制结构名称（用于错误提示）
+     * @param span           新分支源码定位
+     * @param context        类型检查上下文
+     * @return 兼容归一化后的输出类型
+     */
+    public static TypeRef unifyBranchOutput(
+            TypeRef currentOutput,
+            TypeRef branchOutput,
+            String constructName,
+            SourceSpan span,
+            TypeCheckContext context) {
+        if (currentOutput == null || currentOutput == TypeRef.ANY) {
+            return branchOutput != null ? branchOutput : TypeRef.ANY;
+        }
+        if (branchOutput == null || branchOutput == TypeRef.ANY) {
+            return currentOutput;
+        }
+        if (currentOutput.isAssignableFrom(branchOutput)) {
+            return currentOutput;
+        }
+        if (branchOutput.isAssignableFrom(currentOutput)) {
+            return branchOutput;
+        }
+        context.addDiagnostic(new Diagnostic(
+                DiagnosticCodes.TYPE_MISMATCH,
+                constructName + " branch output type " + branchOutput.typeName()
+                        + " is incompatible with branch output type " + currentOutput.typeName(),
+                span));
+        return currentOutput;
     }
 
     public static final class StepSpecTypeChecker implements SpecTypeChecker<StepSpec> {
@@ -114,22 +230,10 @@ public final class SpecTypeCheckers {
 
             // 校验 Policies 与 Retries
             for (PolicyModifierSpec policyMod : step.policies()) {
-                PolicyDescriptor policyDesc = context.registry().policy(policyMod.policy().id());
-                if (policyDesc == null) {
-                    context.addDiagnostic(new Diagnostic(
-                            DiagnosticCodes.UNKNOWN_POLICY,
-                            "Unknown policy: " + policyMod.policy().id(),
-                            policyMod.policy().span()));
-                }
+                validatePolicy(currentType, policyMod.policy(), policyMod.key(), policyMod.span(), context);
             }
             for (RetryModifierSpec retryMod : step.retries()) {
-                PolicyDescriptor policyDesc = context.registry().policy(retryMod.retry().id());
-                if (policyDesc == null) {
-                    context.addDiagnostic(new Diagnostic(
-                            DiagnosticCodes.UNKNOWN_POLICY,
-                            "Unknown retry policy: " + retryMod.retry().id(),
-                            retryMod.retry().span()));
-                }
+                validatePolicy(currentType, retryMod.retry(), null, retryMod.span(), context);
             }
 
             return stepOutputType;
@@ -179,13 +283,27 @@ public final class SpecTypeCheckers {
                 keyType = selector.outputType();
             }
 
-            TypeCodec<?> codec = context.registry().typeCodec(keyType);
+            TypeCodec<?> codec = keyType != TypeRef.ANY ? context.registry().typeCodec(keyType) : null;
+            if (keyType != TypeRef.ANY && codec == null) {
+                context.addDiagnostic(new Diagnostic(
+                        DiagnosticCodes.NO_TYPE_CODEC,
+                        "No TypeCodec found for route selector key type: " + keyType.typeName(),
+                        route.selector().span()));
+            }
+
+            Set<Object> seenKeys = new HashSet<Object>();
             TypeRef branchOutputType = null;
 
             for (CaseSpec caseSpec : route.cases()) {
                 if (keyType != TypeRef.ANY && codec != null) {
                     try {
-                        codec.decode(caseSpec.literalKey());
+                        Object decodedKey = codec.decode(caseSpec.literalKey());
+                        if (!seenKeys.add(decodedKey)) {
+                            context.addDiagnostic(new Diagnostic(
+                                    DiagnosticCodes.DUPLICATE_ROUTE_CASE,
+                                    "Duplicate route case key: " + caseSpec.literalKey(),
+                                    caseSpec.span()));
+                        }
                     } catch (Exception ex) {
                         context.addDiagnostic(new Diagnostic(
                                 DiagnosticCodes.INVALID_ROUTE_CASE,
@@ -195,16 +313,22 @@ public final class SpecTypeCheckers {
                     }
                 }
                 TypeRef out = context.checkSpec(caseSpec.branch(), currentType);
-                if (branchOutputType == null && out != TypeRef.ANY) {
-                    branchOutputType = out;
-                }
+                branchOutputType = unifyBranchOutput(
+                        branchOutputType,
+                        out,
+                        "Route",
+                        caseSpec.branch().span() != null && caseSpec.branch().span() != SourceSpan.UNKNOWN ? caseSpec.branch().span() : caseSpec.span(),
+                        context);
             }
 
             if (route.otherwise() != null) {
                 TypeRef out = context.checkSpec(route.otherwise(), currentType);
-                if (branchOutputType == null && out != TypeRef.ANY) {
-                    branchOutputType = out;
-                }
+                branchOutputType = unifyBranchOutput(
+                        branchOutputType,
+                        out,
+                        "Route otherwise",
+                        route.otherwise().span(),
+                        context);
             }
 
             return branchOutputType != null ? branchOutputType : currentType;
@@ -222,9 +346,7 @@ public final class SpecTypeCheckers {
             TypeRef branchOutputType = null;
             for (FlowSpec branch : spec.branches()) {
                 TypeRef out = context.checkSpec(branch, currentType);
-                if (branchOutputType == null && out != TypeRef.ANY) {
-                    branchOutputType = out;
-                }
+                branchOutputType = unifyBranchOutput(branchOutputType, out, "FirstApplicable", branch.span(), context);
             }
             return branchOutputType != null ? branchOutputType : currentType;
         }
@@ -242,14 +364,7 @@ public final class SpecTypeCheckers {
             TypeRef recoveryInput = TypeRef.recovery(currentType);
             TypeRef fallbackOut = context.checkSpec(recover.onFailure(), recoveryInput);
 
-            if (bodyOut != TypeRef.ANY && fallbackOut != TypeRef.ANY && !bodyOut.isAssignableFrom(fallbackOut)) {
-                context.addDiagnostic(new Diagnostic(
-                        DiagnosticCodes.TYPE_MISMATCH,
-                        "Recover onFailure branch output type " + fallbackOut.typeName()
-                                + " is incompatible with body output type " + bodyOut.typeName(),
-                        recover.onFailure().span()));
-            }
-            return bodyOut;
+            return unifyBranchOutput(bodyOut, fallbackOut, "Recover onFailure", recover.onFailure().span(), context);
         }
     }
 
@@ -269,7 +384,14 @@ public final class SpecTypeCheckers {
                         parallel.join().span()));
             }
 
+            Set<String> seenBranchNames = new HashSet<String>();
             for (BranchSpec branch : parallel.branches()) {
+                if (!seenBranchNames.add(branch.name())) {
+                    context.addDiagnostic(new Diagnostic(
+                            DiagnosticCodes.DUPLICATE_BRANCH,
+                            "Duplicate parallel branch name: " + branch.name(),
+                            branch.span()));
+                }
                 context.checkSpec(branch.flow(), currentType);
             }
 
@@ -308,7 +430,7 @@ public final class SpecTypeCheckers {
             if (complete.kind() == CompleteSpec.CompleteKind.ACCEPTED) {
                 return complete.literal() != null ? TypeRef.of(String.class) : currentType;
             }
-            return currentType;
+            return TypeRef.ANY;
         }
     }
 
@@ -320,13 +442,9 @@ public final class SpecTypeCheckers {
 
         @Override
         public TypeRef check(ControlSpec control, TypeRef currentType, TypeCheckContext context) {
-            if (control.symbol() != null) {
-                PolicyDescriptor policy = context.registry().policy(control.symbol().id());
-                if (policy == null) {
-                    context.addDiagnostic(new Diagnostic(
-                            DiagnosticCodes.UNKNOWN_POLICY,
-                            "Unknown policy: " + control.symbol().id(),
-                            control.symbol().span()));
+            if (control.kind() == ControlSpec.ControlKind.POLICY || control.kind() == ControlSpec.ControlKind.RETRY) {
+                if (control.symbol() != null) {
+                    validatePolicy(currentType, control.symbol(), control.key(), control.span(), context);
                 }
             }
             return context.checkSpec(control.body(), currentType);

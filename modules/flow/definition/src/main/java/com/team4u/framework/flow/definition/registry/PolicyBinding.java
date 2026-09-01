@@ -37,7 +37,7 @@ public final class PolicyBinding {
                 ? contract
                 : (instance != null ? instance.getClass() : null);
         this.qualifier = qualifier;
-        this.keyProjection = keyProjection != null ? keyProjection : Function.identity();
+        this.keyProjection = keyProjection;
         this.persistent = persistent;
     }
 }

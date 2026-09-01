@@ -13,6 +13,8 @@ public final class DiagnosticCodes {
     public static final String DSL_SYNTAX_ERROR = "DSL_SYNTAX_ERROR";
     public static final String DSL_UNEXPECTED_TOKEN = "DSL_UNEXPECTED_TOKEN";
     public static final String DSL_UNSUPPORTED_SCHEMA = "DSL_UNSUPPORTED_SCHEMA";
+    public static final String DUPLICATE_STEP_PROJECT = "DUPLICATE_STEP_PROJECT";
+    public static final String DUPLICATE_STEP_MERGE = "DUPLICATE_STEP_MERGE";
 
     // Symbol 阶段错误码
     public static final String UNKNOWN_OPERATION = "UNKNOWN_OPERATION";
@@ -30,6 +32,8 @@ public final class DiagnosticCodes {
     public static final String INVALID_MERGER = "INVALID_MERGER";
     public static final String INVALID_RECOVER_INPUT = "INVALID_RECOVER_INPUT";
     public static final String INVALID_OPTIONAL_STEP = "INVALID_OPTIONAL_STEP";
+    public static final String NO_TYPE_CODEC = "NO_TYPE_CODEC";
+    public static final String UNSUPPORTED_SPEC = "UNSUPPORTED_SPEC";
 
     // Compiler 阶段错误码
     public static final String DUPLICATE_SCOPE = "DUPLICATE_SCOPE";

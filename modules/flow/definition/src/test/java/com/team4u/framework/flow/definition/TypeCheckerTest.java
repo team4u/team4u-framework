@@ -1,6 +1,9 @@
 package com.team4u.framework.flow.definition;
 
+import com.team4u.framework.flow.api.Gate;
 import com.team4u.framework.flow.api.OperationContext;
+import com.team4u.framework.flow.api.Policy;
+import com.team4u.framework.flow.api.PolicyContext;
 import com.team4u.framework.flow.definition.diagnostic.Diagnostic;
 import com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes;
 import com.team4u.framework.flow.definition.model.*;
@@ -197,5 +200,239 @@ public class TypeCheckerTest {
         TypeCheckResult result = TypeChecker.check(def, registry, TypeRef.of(Order.class));
         Assert.assertFalse(result.success());
         Assert.assertEquals(DiagnosticCodes.INVALID_ROUTE_CASE, result.diagnostics().get(0).code());
+    }
+
+    @Test
+    public void testPolicyKeyTypeMismatchWithoutKeyProjection() {
+        Policy<String> stringPolicy = (ctx, key) -> Gate.proceed();
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("order.validate", (OperationContext ctx, Order in) -> Outcome.accepted(in), Order.class, Order.class)
+                .policy("rate.limit", stringPolicy, String.class)
+                .build();
+
+        // currentType is Order, but policy expects String as key, no key projection provided
+        FlowDefinition def = new FlowDefinition(
+                1, "order.flow", "1",
+                new StepSpec(
+                        SymbolRef.of("order.validate"),
+                        null,
+                        null,
+                        Collections.singletonList(new PolicyModifierSpec(SymbolRef.of("rate.limit"), null, Collections.emptyMap(), SourceSpan.UNKNOWN)),
+                        SourceSpan.UNKNOWN
+                ),
+                "order.flow", SourceSpan.UNKNOWN
+        );
+
+        TypeCheckResult result = TypeChecker.check(def, registry, TypeRef.of(Order.class));
+        Assert.assertFalse(result.success());
+        Assert.assertEquals(DiagnosticCodes.TYPE_MISMATCH, result.diagnostics().get(0).code());
+    }
+
+    @Test
+    public void testPolicyKeyTypeMatchWithKeyProjection() {
+        Policy<String> stringPolicy = (ctx, key) -> Gate.proceed();
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("order.validate", (OperationContext ctx, Order in) -> Outcome.accepted(in), Order.class, Order.class)
+                .policy("rate.limit", stringPolicy, String.class)
+                .keyProjection("order.userId", Order.class, String.class, (Order order) -> order.id)
+                .build();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "order.flow", "1",
+                new StepSpec(
+                        SymbolRef.of("order.validate"),
+                        null,
+                        null,
+                        Collections.singletonList(new PolicyModifierSpec(SymbolRef.of("rate.limit"), SymbolRef.of("order.userId"), Collections.emptyMap(), SourceSpan.UNKNOWN)),
+                        SourceSpan.UNKNOWN
+                ),
+                "order.flow", SourceSpan.UNKNOWN
+        );
+
+        TypeCheckResult result = TypeChecker.check(def, registry, TypeRef.of(Order.class));
+        Assert.assertTrue(result.success());
+    }
+
+    @Test
+    public void testPolicyKeyProjectionInputMismatch() {
+        Policy<String> stringPolicy = (ctx, key) -> Gate.proceed();
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("order.validate", (OperationContext ctx, Order in) -> Outcome.accepted(in), Order.class, Order.class)
+                .policy("rate.limit", stringPolicy, String.class)
+                .keyProjection("item.sku", OrderItem.class, String.class, (OrderItem item) -> item.sku)
+                .build();
+
+        // currentType is Order, but key projection expects OrderItem
+        FlowDefinition def = new FlowDefinition(
+                1, "order.flow", "1",
+                new StepSpec(
+                        SymbolRef.of("order.validate"),
+                        null,
+                        null,
+                        Collections.singletonList(new PolicyModifierSpec(SymbolRef.of("rate.limit"), SymbolRef.of("item.sku"), Collections.emptyMap(), SourceSpan.UNKNOWN)),
+                        SourceSpan.UNKNOWN
+                ),
+                "order.flow", SourceSpan.UNKNOWN
+        );
+
+        TypeCheckResult result = TypeChecker.check(def, registry, TypeRef.of(Order.class));
+        Assert.assertFalse(result.success());
+        Assert.assertEquals(DiagnosticCodes.TYPE_MISMATCH, result.diagnostics().get(0).code());
+    }
+
+    @Test
+    public void testPolicyKeyProjectionOutputMismatch() {
+        Policy<String> stringPolicy = (ctx, key) -> Gate.proceed();
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("order.validate", (OperationContext ctx, Order in) -> Outcome.accepted(in), Order.class, Order.class)
+                .policy("rate.limit", stringPolicy, String.class)
+                .keyProjection("order.amount", Order.class, Integer.class, (Order order) -> order.amount)
+                .build();
+
+        // key projection outputs Integer, but policy expects String
+        FlowDefinition def = new FlowDefinition(
+                1, "order.flow", "1",
+                new StepSpec(
+                        SymbolRef.of("order.validate"),
+                        null,
+                        null,
+                        Collections.singletonList(new PolicyModifierSpec(SymbolRef.of("rate.limit"), SymbolRef.of("order.amount"), Collections.emptyMap(), SourceSpan.UNKNOWN)),
+                        SourceSpan.UNKNOWN
+                ),
+                "order.flow", SourceSpan.UNKNOWN
+        );
+
+        TypeCheckResult result = TypeChecker.check(def, registry, TypeRef.of(Order.class));
+        Assert.assertFalse(result.success());
+        Assert.assertEquals(DiagnosticCodes.TYPE_MISMATCH, result.diagnostics().get(0).code());
+    }
+
+    @Test
+    public void testRouteBranchOutputIncompatible() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("order.status", (OperationContext ctx, Order in) -> Outcome.accepted(OrderStatus.PAID), Order.class, OrderStatus.class)
+                .operation("return.string", (OperationContext ctx, Order in) -> Outcome.accepted("STR"), Order.class, String.class)
+                .operation("return.integer", (OperationContext ctx, Order in) -> Outcome.accepted(123), Order.class, Integer.class)
+                .build();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "order.route", "1",
+                new RouteSpec(
+                        SymbolRef.of("order.status"),
+                        Arrays.asList(
+                                new CaseSpec("PAID", new StepSpec(SymbolRef.of("return.string"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN), SourceSpan.UNKNOWN),
+                                new CaseSpec("CANCELLED", new StepSpec(SymbolRef.of("return.integer"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN), SourceSpan.UNKNOWN)
+                        ),
+                        null,
+                        SourceSpan.UNKNOWN
+                ),
+                "order.flow", SourceSpan.UNKNOWN
+        );
+
+        TypeCheckResult result = TypeChecker.check(def, registry, TypeRef.of(Order.class));
+        Assert.assertFalse(result.success());
+        Assert.assertEquals(DiagnosticCodes.TYPE_MISMATCH, result.diagnostics().get(0).code());
+    }
+
+    @Test
+    public void testFirstApplicableBranchOutputIncompatible() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("return.string", (OperationContext ctx, Order in) -> Outcome.accepted("STR"), Order.class, String.class)
+                .operation("return.integer", (OperationContext ctx, Order in) -> Outcome.accepted(123), Order.class, Integer.class)
+                .build();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "fa.flow", "1",
+                new FirstApplicableSpec(
+                        Arrays.asList(
+                                new StepSpec(SymbolRef.of("return.string"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN),
+                                new StepSpec(SymbolRef.of("return.integer"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN)
+                        ),
+                        SourceSpan.UNKNOWN
+                ),
+                "fa.flow", SourceSpan.UNKNOWN
+        );
+
+        TypeCheckResult result = TypeChecker.check(def, registry, TypeRef.of(Order.class));
+        Assert.assertFalse(result.success());
+        Assert.assertEquals(DiagnosticCodes.TYPE_MISMATCH, result.diagnostics().get(0).code());
+    }
+
+    @Test
+    public void testRouteNoTypeCodecDiagnostic() {
+        // Custom value object without TypeCodec
+        class CustomKey {
+            final String code;
+            CustomKey(String code) { this.code = code; }
+        }
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("order.key", (OperationContext ctx, Order in) -> Outcome.accepted(new CustomKey("K")), Order.class, CustomKey.class)
+                .operation("order.confirm", (OperationContext ctx, Order in) -> Outcome.accepted("CONFIRMED"), Order.class, String.class)
+                .build();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "order.route", "1",
+                new RouteSpec(
+                        SymbolRef.of("order.key"),
+                        Collections.singletonList(
+                                new CaseSpec("K", new StepSpec(SymbolRef.of("order.confirm"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN), SourceSpan.UNKNOWN)
+                        ),
+                        null,
+                        SourceSpan.UNKNOWN
+                ),
+                "order.flow", SourceSpan.UNKNOWN
+        );
+
+        TypeCheckResult result = TypeChecker.check(def, registry, TypeRef.of(Order.class));
+        Assert.assertFalse(result.success());
+        Assert.assertEquals(DiagnosticCodes.NO_TYPE_CODEC, result.diagnostics().get(0).code());
+    }
+
+    @Test
+    public void testRouteDuplicateCaseKeyDiagnostic() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("order.status", (OperationContext ctx, Order in) -> Outcome.accepted(OrderStatus.PAID), Order.class, OrderStatus.class)
+                .operation("order.confirm", (OperationContext ctx, Order in) -> Outcome.accepted("CONFIRMED"), Order.class, String.class)
+                .build();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "order.route", "1",
+                new RouteSpec(
+                        SymbolRef.of("order.status"),
+                        Arrays.asList(
+                                new CaseSpec("PAID", new StepSpec(SymbolRef.of("order.confirm"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN), SourceSpan.UNKNOWN),
+                                new CaseSpec("PAID", new StepSpec(SymbolRef.of("order.confirm"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN), SourceSpan.UNKNOWN)
+                        ),
+                        null,
+                        SourceSpan.UNKNOWN
+                ),
+                "order.flow", SourceSpan.UNKNOWN
+        );
+
+        TypeCheckResult result = TypeChecker.check(def, registry, TypeRef.of(Order.class));
+        Assert.assertFalse(result.success());
+        Assert.assertEquals(DiagnosticCodes.DUPLICATE_ROUTE_CASE, result.diagnostics().get(0).code());
+    }
+
+    @Test
+    public void testUnsupportedSpecDiagnostic() {
+        class CustomUnregisteredSpec implements FlowSpec {
+            @Override
+            public SourceSpan span() {
+                return SourceSpan.UNKNOWN;
+            }
+        }
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.empty();
+        FlowDefinition def = new FlowDefinition(
+                1, "unsupported.flow", "1",
+                new CustomUnregisteredSpec(),
+                "test.flow", SourceSpan.UNKNOWN
+        );
+
+        TypeCheckResult result = TypeChecker.check(def, registry);
+        Assert.assertFalse(result.success());
+        Assert.assertEquals(DiagnosticCodes.UNSUPPORTED_SPEC, result.diagnostics().get(0).code());
     }
 }

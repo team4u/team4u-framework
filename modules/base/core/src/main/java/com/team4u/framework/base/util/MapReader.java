@@ -308,4 +308,49 @@ public class MapReader {
     public <T> T get(Class<T> type, String key) {
         return get(type, key, null);
     }
+
+    /**
+     * 获取底层原始字典对象。
+     *
+     * @return 原始 Map（永不为 null）
+     */
+    public Map<?, ?> toMap() {
+        return map;
+    }
+
+    /**
+     * 判断底层字典是否为空。
+     *
+     * @return 若为空则返回 true，否则返回 false
+     */
+    public boolean isEmpty() {
+        return map.isEmpty();
+    }
+
+    /**
+     * 获取底层字典条目数。
+     *
+     * @return 字典条目数
+     */
+    public int size() {
+        return map.size();
+    }
+
+    /**
+     * 读取嵌套子字典读取器。
+     * <p>
+     * 若指定主键或别名对应的值为 Map，则包装返回子 MapReader，否则返回空 MapReader。
+     * </p>
+     *
+     * @param key     主键
+     * @param aliases 可选别名
+     * @return 子 MapReader 实例（永不为 null）
+     */
+    public MapReader getReader(String key, String... aliases) {
+        Object val = getRaw(key, aliases);
+        if (val instanceof Map) {
+            return new MapReader((Map<?, ?>) val);
+        }
+        return new MapReader(Collections.emptyMap());
+    }
 }

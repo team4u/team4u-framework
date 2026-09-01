@@ -1,10 +1,12 @@
 package com.team4u.framework.config.core;
 
+import com.team4u.framework.base.util.MapReader;
 import com.team4u.framework.config.core.domain.ConfigEntry;
 import com.team4u.framework.config.core.domain.ConfigSnapshot;
 import org.junit.Assert;
 import org.junit.Test;
 
+import java.time.Duration;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -128,5 +130,90 @@ public class ConfigSnapshotTest {
         Assert.assertTrue("超过 10 个条目应包含省略号", str.contains("..."));
         Assert.assertTrue("输出应包含松散索引大小", str.contains("looseIndexSize="));
         Assert.assertTrue("输出应包含结构化图根节点", str.contains("unflattenedMapRoots="));
+    }
+
+    @Test
+    public void testAsReaderRoot() {
+        Map<String, ConfigEntry> entries = new HashMap<>();
+        long now = System.currentTimeMillis();
+        entries.put("app.name", new ConfigEntry("app.name", "my-service", "src", now));
+        entries.put("spring.redis.host", new ConfigEntry("spring.redis.host", "10.0.0.1", "src", now));
+        entries.put("spring.redis.port", new ConfigEntry("spring.redis.port", "6379", "src", now));
+        entries.put("spring.redis.timeout", new ConfigEntry("spring.redis.timeout", "2s", "src", now));
+
+        ConfigSnapshot snapshot = new ConfigSnapshot(1L, entries);
+        MapReader reader = snapshot.asReader();
+
+        Assert.assertNotNull(reader);
+        Assert.assertFalse(reader.isEmpty());
+
+        // 导航至子树
+        MapReader springReader = reader.getReader("spring");
+        Assert.assertNotNull(springReader);
+        Assert.assertFalse(springReader.isEmpty());
+
+        MapReader redisReader = springReader.getReader("redis");
+        Assert.assertEquals("10.0.0.1", redisReader.getString("host"));
+        Assert.assertEquals(Integer.valueOf(6379), redisReader.getInt("port"));
+        Assert.assertEquals(Duration.ofSeconds(2), redisReader.getDuration("timeout"));
+    }
+
+    @Test
+    public void testAsReaderWithPrefix() {
+        Map<String, ConfigEntry> entries = new HashMap<>();
+        long now = System.currentTimeMillis();
+        entries.put("spring.redis.host", new ConfigEntry("spring.redis.host", "127.0.0.1", "src", now));
+        entries.put("spring.redis.port", new ConfigEntry("spring.redis.port", "6379", "src", now));
+        entries.put("spring.redis.timeout", new ConfigEntry("spring.redis.timeout", "500ms", "src", now));
+        entries.put("spring.redis.max-attempts", new ConfigEntry("spring.redis.max-attempts", "3", "src", now));
+        entries.put("spring.redis.enabled", new ConfigEntry("spring.redis.enabled", "true", "src", now));
+
+        ConfigSnapshot snapshot = new ConfigSnapshot(1L, entries);
+
+        // 1. 指定前缀获取子树 Reader
+        MapReader redisReader = snapshot.asReader("spring.redis");
+        Assert.assertNotNull(redisReader);
+        Assert.assertFalse(redisReader.isEmpty());
+
+        // 2. 强类型读取与转换
+        Assert.assertEquals("127.0.0.1", redisReader.getString("host"));
+        Assert.assertEquals(Integer.valueOf(6379), redisReader.getInt("port", 3306));
+        Assert.assertEquals(Duration.ofMillis(500), redisReader.getDuration("timeout"));
+        Assert.assertTrue(redisReader.getBoolean("enabled", false));
+
+        // 3. 别名回退
+        Assert.assertEquals(Integer.valueOf(3), redisReader.getInt("maxAttempts", 1, "max-attempts"));
+
+        // 4. 默认值兜底
+        Assert.assertEquals("default-password", redisReader.getString("password", "default-password"));
+        Assert.assertEquals(Integer.valueOf(10), redisReader.getInt("database", 10));
+
+        // 5. 必填参数校验
+        Assert.assertEquals("127.0.0.1", redisReader.requireString("host", "Redis host is required"));
+        try {
+            redisReader.requireString("missingKey", "Required config is missing");
+            Assert.fail("Expected IllegalArgumentException for missing required key");
+        } catch (IllegalArgumentException e) {
+            Assert.assertTrue(e.getMessage().contains("Required config is missing"));
+        }
+
+        // 6. 支持带末尾点号的前缀
+        MapReader redisReaderWithDot = snapshot.asReader("spring.redis.");
+        Assert.assertEquals("127.0.0.1", redisReaderWithDot.getString("host"));
+
+        // 7. 空前缀回退到根视图
+        MapReader rootReader = snapshot.asReader("");
+        Assert.assertTrue(rootReader.getReader("spring").containsKey("redis"));
+
+        // 8. 不存在的子树返回空 Reader
+        MapReader nonExistentReader = snapshot.asReader("non.existent");
+        Assert.assertNotNull(nonExistentReader);
+        Assert.assertTrue(nonExistentReader.isEmpty());
+        Assert.assertEquals(Integer.valueOf(6379), nonExistentReader.getInt("port", 6379));
+
+        // 9. 叶子节点非 Map 前缀返回空 Reader
+        MapReader leafReader = snapshot.asReader("spring.redis.port");
+        Assert.assertNotNull(leafReader);
+        Assert.assertTrue(leafReader.isEmpty());
     }
 }

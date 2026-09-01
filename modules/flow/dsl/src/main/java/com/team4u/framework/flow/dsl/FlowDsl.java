@@ -49,7 +49,7 @@ public final class FlowDsl {
      * @return 绑定后的 BoundFlow
      */
     public static BoundFlow bind(String dsl, FlowDefinitionRegistry registry) {
-        return bind(dsl, null, registry, OperationResolver.rejecting());
+        return bind(dsl, null, registry, null);
     }
 
     /**
@@ -61,7 +61,7 @@ public final class FlowDsl {
      * @return 绑定后的 BoundFlow
      */
     public static BoundFlow bind(String dsl, String sourceName, FlowDefinitionRegistry registry) {
-        return bind(dsl, sourceName, registry, OperationResolver.rejecting());
+        return bind(dsl, sourceName, registry, null);
     }
 
     /**
@@ -105,7 +105,7 @@ public final class FlowDsl {
      * @return 绑定后的 BoundFlow
      */
     public static BoundFlow bind(FlowDefinition definition, FlowDefinitionRegistry registry) {
-        return FlowBinder.bind(definition, registry, OperationResolver.rejecting());
+        return FlowBinder.bind(definition, registry, (OperationResolver) null);
     }
 
     /**

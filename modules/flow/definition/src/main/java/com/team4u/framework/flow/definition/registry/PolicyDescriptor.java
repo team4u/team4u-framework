@@ -1,6 +1,8 @@
 package com.team4u.framework.flow.definition.registry;
 
 import com.team4u.framework.flow.api.PersistentPolicy;
+import com.team4u.framework.flow.api.Policy;
+import com.team4u.framework.flow.definition.type.GenericTypeResolver;
 import com.team4u.framework.flow.definition.type.TypeRef;
 import lombok.Builder;
 import lombok.EqualsAndHashCode;
@@ -41,7 +43,18 @@ public final class PolicyDescriptor {
                 ? contract
                 : (instance != null ? instance.getClass() : null);
         this.instance = instance;
-        this.keyType = keyType != null ? keyType : TypeRef.ANY;
+        TypeRef resolvedKeyType = keyType;
+        if (resolvedKeyType == null) {
+            Class<?> targetClass = this.contract;
+            if (targetClass != null) {
+                if (PersistentPolicy.class.isAssignableFrom(targetClass)) {
+                    resolvedKeyType = GenericTypeResolver.resolvePersistentPolicyTypes(targetClass)[0];
+                } else if (Policy.class.isAssignableFrom(targetClass)) {
+                    resolvedKeyType = GenericTypeResolver.resolvePolicyKeyType(targetClass);
+                }
+            }
+        }
+        this.keyType = resolvedKeyType != null ? resolvedKeyType : TypeRef.ANY;
         this.qualifier = qualifier;
         this.persistent = persistent != null
                 ? persistent

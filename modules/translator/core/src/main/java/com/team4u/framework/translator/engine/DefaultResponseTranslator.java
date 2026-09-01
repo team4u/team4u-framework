@@ -1,5 +1,6 @@
 package com.team4u.framework.translator.engine;
 
+import com.team4u.framework.base.util.MapReader;
 import com.team4u.framework.criterion.MatchContext;
 import com.team4u.framework.policy.core.OrderedPolicyChain;
 import com.team4u.framework.policy.util.PolicyScanner;
@@ -136,11 +137,7 @@ public class DefaultResponseTranslator implements ResponseTranslator {
      * @return 链路追踪标识或 null
      */
     private String extractTraceId(Map<String, Object> args) {
-        Object value = args.get("traceId");
-        if (value == null) {
-            return null;
-        }
-        String traceId = String.valueOf(value);
-        return traceId.isEmpty() ? null : traceId;
+        String traceId = MapReader.of(args).getString("traceId");
+        return (traceId == null || traceId.isEmpty()) ? null : traceId;
     }
 }

@@ -1,10 +1,10 @@
 package com.team4u.framework.lease.jdbc;
 
-import com.team4u.framework.base.convert.ConvertUtil;
 import com.team4u.framework.base.jdbc.JdbcUtil;
 import com.team4u.framework.base.jdbc.SqlBuilder;
 import com.team4u.framework.base.jdbc.SqlExpression;
 import com.team4u.framework.base.jdbc.UpdateBuilder;
+import com.team4u.framework.base.util.MapReader;
 import com.team4u.framework.lease.api.TaskQuery;
 import com.team4u.framework.lease.api.TaskStatus;
 import com.team4u.framework.lease.jdbc.codec.LeaseJsonCodec;
@@ -375,26 +375,25 @@ public class JdbcLeaseTaskDao {
     }
 
     private LeaseTaskEntity toEntity(Map<String, Object> row) {
-        Object expiresAt = row.get("lease_expires_at");
+        MapReader reader = MapReader.of(row);
         return LeaseTaskEntity.builder()
-                .taskId((String) row.get("task_id"))
-                .queueName((String) row.get("queue_name"))
-                .taskType((String) row.get("task_type"))
-                .payload((String) row.get("payload"))
-                .deduplicationKey((String) row.get("deduplication_key"))
-                .status(TaskStatus.valueOf((String) row.get("status")))
-                .priority(ConvertUtil.toInt(row.get("priority"), 0))
-                .attemptCount(ConvertUtil.toInt(row.get("attempt_count"), 0))
-                .workerId((String) row.get("worker_id"))
-                .leaseToken((String) row.get("lease_token"))
-                .leaseExpiresAt(expiresAt == null ? null
-                        : Long.valueOf(ConvertUtil.toLong(expiresAt, 0L)))
-                .visibleAt(ConvertUtil.toLong(row.get("visible_at"), 0L))
-                .createdAt(ConvertUtil.toLong(row.get("created_at"), 0L))
-                .updatedAt(ConvertUtil.toLong(row.get("updated_at"), 0L))
-                .version(ConvertUtil.toLong(row.get("version"), 0L))
-                .errorMessage((String) row.get("error_message"))
-                .attributes(jsonCodec.fromJson((String) row.get("attributes_json")))
+                .taskId(reader.getString("task_id"))
+                .queueName(reader.getString("queue_name"))
+                .taskType(reader.getString("task_type"))
+                .payload(reader.getString("payload"))
+                .deduplicationKey(reader.getString("deduplication_key"))
+                .status(reader.getEnum(TaskStatus.class, "status"))
+                .priority(reader.getInt("priority", 0))
+                .attemptCount(reader.getInt("attempt_count", 0))
+                .workerId(reader.getString("worker_id"))
+                .leaseToken(reader.getString("lease_token"))
+                .leaseExpiresAt(reader.getLong("lease_expires_at"))
+                .visibleAt(reader.getLong("visible_at", 0L))
+                .createdAt(reader.getLong("created_at", 0L))
+                .updatedAt(reader.getLong("updated_at", 0L))
+                .version(reader.getLong("version", 0L))
+                .errorMessage(reader.getString("error_message"))
+                .attributes(jsonCodec.fromJson(reader.getString("attributes_json")))
                 .build();
     }
 }

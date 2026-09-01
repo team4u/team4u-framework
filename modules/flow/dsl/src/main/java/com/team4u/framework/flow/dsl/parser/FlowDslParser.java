@@ -151,13 +151,23 @@ public final class FlowDslParser {
             while (!check(TokenType.RBRACE) && !isAtEnd()) {
                 Token modStart = peek();
                 if (match(TokenType.PROJECT)) {
+                    if (project != null) {
+                        throw new FlowDiagnosticException(new Diagnostic(
+                                DiagnosticCodes.DUPLICATE_STEP_PROJECT,
+                                "Duplicate 'project' declaration in step",
+                                modStart.span()));
+                    }
                     Token projToken = consumeIdentifier("Expected projector ID after 'project'");
                     project = SymbolRef.of(projToken.text(), projToken.span());
-                    modifiers.add(new ProjectModifierSpec(project, span(modStart, projToken)));
                 } else if (match(TokenType.MERGE)) {
+                    if (merge != null) {
+                        throw new FlowDiagnosticException(new Diagnostic(
+                                DiagnosticCodes.DUPLICATE_STEP_MERGE,
+                                "Duplicate 'merge' declaration in step",
+                                modStart.span()));
+                    }
                     Token mergeToken = consumeIdentifier("Expected merger ID after 'merge'");
                     merge = SymbolRef.of(mergeToken.text(), mergeToken.span());
-                    modifiers.add(new MergeModifierSpec(merge, span(modStart, mergeToken)));
                 } else if (match(TokenType.OPTIONAL)) {
                     modifiers.add(new OptionalModifierSpec(modStart.span()));
                 } else if (match(TokenType.NAMED)) {

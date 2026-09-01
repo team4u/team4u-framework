@@ -1,6 +1,7 @@
 package com.team4u.framework.config.core.domain;
 
 import com.team4u.framework.base.util.CollectionUtil;
+import com.team4u.framework.base.util.MapReader;
 import com.team4u.framework.base.util.MapUtil;
 import com.team4u.framework.base.util.StringUtil;
 import com.team4u.framework.config.core.internal.PlaceholderResolver;
@@ -237,6 +238,29 @@ public class ConfigSnapshot {
         }
 
         return current.get(searchPrefix.substring(start));
+    }
+
+    /**
+     * 获取以根树形结构为底层的强类型字典读取器
+     *
+     * @return 根配置 MapReader 实例
+     */
+    public MapReader asReader() {
+        return MapReader.of(unflattenedMap());
+    }
+
+    /**
+     * 根据指定前缀获取子树的强类型字典读取器
+     *
+     * @param prefix 配置前缀
+     * @return 对应前缀子树的 MapReader 实例（若非 Map 或不存在则返回空 MapReader）
+     */
+    public MapReader asReader(String prefix) {
+        Object val = getUnflattenedValue(prefix);
+        if (val instanceof Map) {
+            return MapReader.of((Map<?, ?>) val);
+        }
+        return MapReader.of(Collections.emptyMap());
     }
 
     /**
