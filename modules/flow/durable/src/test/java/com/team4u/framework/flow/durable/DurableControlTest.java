@@ -33,7 +33,7 @@ public class DurableControlTest {
     private static DurableExecutable<String, String> compile(Flow<String, String> flow,
                                                              DurableStore store,
                                                              ExecutorService executor) {
-        DurableRuntime.Builder builder = DurableRuntime.builder(store);
+        Durable.Builder builder = Durable.builder(store);
         if (executor != null) {
             builder.executor(executor);
         }

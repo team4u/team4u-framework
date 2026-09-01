@@ -86,7 +86,7 @@ import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
 
 DurableStore memoryStore = new InMemoryDurableStore();
 
-DurableRuntime runtime = DurableRuntime.builder(memoryStore)
+Durable runtime = Durable.builder(memoryStore)
         .build();
 ```
 
@@ -136,8 +136,8 @@ DurableStore durableStore = new KvDurableStore(
         0L                // activeTtlMillis: ACTIVE/SUSPENDED 快照永不过期
 );
 
-// 3. 构建 DurableRuntime
-DurableRuntime runtime = DurableRuntime.builder(durableStore)
+// 3. 构建 Durable
+Durable runtime = Durable.builder(durableStore)
         .build();
 ```
 
@@ -184,21 +184,21 @@ public class DurableFlowAutoConfiguration {
     }
 
     @Bean
-    public DurableRuntime durableRuntime(DurableStore durableStore) {
+    public Durable durableRuntime(DurableStore durableStore) {
         // 配置确定性 Jackson 序列化器
         ObjectMapper mapper = new ObjectMapper();
         mapper.configure(SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS, true);
         SerializerStateMapper jsonMapper = new SerializerStateMapper(
                 "json:jackson", 1, mapper::writeValueAsBytes, b -> mapper.readValue(b, Object.class));
 
-        return DurableRuntime.builder(durableStore)
+        return Durable.builder(durableStore)
                 .stateMapper(CompositeStateMapper.withDefault(jsonMapper))
                 .build();
     }
 
     @Bean
     public DurableExecutable<OrderRequest, Receipt> orderDurableExecutable(
-            DurableRuntime durableRuntime, Flow<OrderRequest, Receipt> orderFlow) {
+            Durable durableRuntime, Flow<OrderRequest, Receipt> orderFlow) {
         // 编译绑定 (flowId="order-fulfillment", flowVersion=1)
         return durableRuntime.compile(orderFlow, "order-fulfillment", 1);
     }

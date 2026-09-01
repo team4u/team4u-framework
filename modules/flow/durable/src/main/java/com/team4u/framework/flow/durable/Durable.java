@@ -16,20 +16,20 @@ import com.team4u.framework.flow.api.FlowObserver;
 import com.team4u.framework.flow.spi.OperationResolver;
 
 /**
- * 耐久化流执行运行时环境（Durable Runtime Facade）。
+ * 耐久化流执行引擎（Durable Flow Engine Facade）。
  *
  * <p>负责配置并管理持久化组件、事件观察者、线程池资源与类型化编解码器。
  *
  * <p>核心契约与安全模型：
  * <ul>
- *   <li><b>外部线程池（Executor）生命周期借用</b>：用户通过 {@link Builder#executor} 传入的线程池，其生命周期完全由调用方管理（DurableRuntime 不负责关闭，使用完毕须由上层手动 shutdown）；</li>
+ *   <li><b>外部线程池（Executor）生命周期借用</b>：用户通过 {@link Builder#executor} 传入的线程池，其生命周期完全由调用方管理（Durable 不负责关闭，使用完毕须由上层手动 shutdown）；</li>
  *   <li><b>StateMapper 确定性契约</b>：外部恢复信号（Resume Signal）的幂等校验依赖 {@link StateMapper#encode} 的确定性（同一信号值多次编码必须产生 {@code equals} 相等的 {@link StoredValue}），否则会引发冲突拒绝。</li>
  * </ul>
  * </p>
  *
  * @author jay.wu
  */
-public final class DurableRuntime {
+public final class Durable {
 
     @Getter
     @Accessors(fluent = true)
@@ -42,7 +42,7 @@ public final class DurableRuntime {
     private final DurableObserver durableObserver;
     private final ExecutorService executor;
 
-    private DurableRuntime(Builder builder) {
+    private Durable(Builder builder) {
         this.store = builder.store;
         this.stateMapper = builder.stateMapper;
         this.operationResolver = builder.operationResolver;
@@ -52,7 +52,18 @@ public final class DurableRuntime {
     }
 
     /**
-     * 创建 DurableRuntime 构造器。
+     * 使用指定存储后端创建默认 Durable 执行引擎实例。
+     *
+     * @param store 持久化存储后端，不能为 null
+     * @return Durable 引擎实例
+     * @throws NullPointerException 当 store 为 null 时抛出
+     */
+    public static Durable of(DurableStore store) {
+        return builder(store).build();
+    }
+
+    /**
+     * 创建 Durable 构造器。
      *
      * @param store 持久化存储后端，不能为 null
      * @return 构造器实例
@@ -65,7 +76,7 @@ public final class DurableRuntime {
     /**
      * 编译指定业务标识与版本的 Flow 为可持久化执行句柄 {@link DurableExecutable}。
      *
-     * <p>fail-fast 校验：当流程定义需要线程池（含 TIMEOUT 控制）而当前运行时未配置 executor 时，
+     * <p>fail-fast 校验：当流程定义需要线程池（含 TIMEOUT 控制）而当前引擎未配置 executor 时，
      * 立即抛出 {@link DurableException.Error#INVALID_CONFIGURATION}，而非在执行期静默降级为同步超时。</p>
      *
      * @param flow        逻辑编排定义，不能为 null
@@ -85,14 +96,14 @@ public final class DurableRuntime {
             throw new DurableException(DurableException.Error.INVALID_CONFIGURATION,
                     "Flow [" + flowId + ":" + flowVersion
                             + "] requires an executor (contains TIMEOUT control)"
-                            + " but DurableRuntime has none configured");
+                            + " but Durable has none configured");
         }
         return new DurableExecutable<I, O>(flowId, flowVersion, definition, store,
                 stateMapper, observer, durableObserver, executor);
     }
 
     /**
-     * DurableRuntime 流式构建器。
+     * Durable 流式构建器。
      */
     public static final class Builder {
         private final DurableStore store;
@@ -164,12 +175,12 @@ public final class DurableRuntime {
         }
 
         /**
-         * 构建持久化运行时实例。
+         * 构建持久化执行引擎实例。
          *
-         * @return DurableRuntime 实例
+         * @return Durable 实例
          */
-        public DurableRuntime build() {
-            return new DurableRuntime(this);
+        public Durable build() {
+            return new Durable(this);
         }
     }
 }

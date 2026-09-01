@@ -94,7 +94,7 @@ public class DurableStructuralRecoveryTest {
                 .withoutOtherwise();
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable =
-                DurableRuntime.builder(store).build().compile(flow, "struct", 1);
+                Durable.builder(store).build().compile(flow, "struct", 1);
         assertStartCrashed(executable, "e");
         DurableResult<String> result = executable.recover("e");
         assertTrue(result.getClass().getSimpleName(), result instanceof DurableResult.Completed);
@@ -112,7 +112,7 @@ public class DurableStructuralRecoveryTest {
                 Flow.<String, String>skipped(Reason.of("NA", "na")));
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable =
-                DurableRuntime.builder(store).build().compile(flow, "struct", 1);
+                Durable.builder(store).build().compile(flow, "struct", 1);
         assertStartCrashed(executable, "e");
         DurableResult<String> result = executable.recover("e");
         assertTrue(result.getClass().getSimpleName(), result instanceof DurableResult.Completed);
@@ -129,7 +129,7 @@ public class DurableStructuralRecoveryTest {
                 .join(concatJoin());
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable =
-                DurableRuntime.builder(store).build().compile(flow, "struct", 1);
+                Durable.builder(store).build().compile(flow, "struct", 1);
         assertStartCrashed(executable, "e");
         DurableResult<String> result = executable.recover("e");
         assertTrue(result.getClass().getSimpleName(), result instanceof DurableResult.Completed);
@@ -161,7 +161,7 @@ public class DurableStructuralRecoveryTest {
                         .otherwise(Flow.<String>identity()));
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable =
-                DurableRuntime.builder(store).build().compile(flow, "struct", 1);
+                Durable.builder(store).build().compile(flow, "struct", 1);
         try {
             executable.start("e", "in");
             fail("嵌套 selector 首调必须崩溃");
@@ -192,7 +192,7 @@ public class DurableStructuralRecoveryTest {
                         Flow.<String, String>skipped(Reason.of("NA", "na"))));
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable =
-                DurableRuntime.builder(store).build().compile(flow, "struct", 1);
+                Durable.builder(store).build().compile(flow, "struct", 1);
         try {
             executable.start("e", "in");
             fail("fallback 首分支首调必须崩溃");
@@ -216,7 +216,7 @@ public class DurableStructuralRecoveryTest {
                         .join(concatJoin()));
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable =
-                DurableRuntime.builder(store).build().compile(flow, "struct", 1);
+                Durable.builder(store).build().compile(flow, "struct", 1);
         try {
             executable.start("e", "in");
             fail("parallel 首分支首调必须崩溃");

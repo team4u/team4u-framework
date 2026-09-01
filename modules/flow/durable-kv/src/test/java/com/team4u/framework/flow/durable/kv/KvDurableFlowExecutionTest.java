@@ -7,7 +7,7 @@ import com.team4u.framework.flow.api.ResumePoint;
 import com.team4u.framework.flow.durable.DurableExecutable;
 import com.team4u.framework.flow.durable.DurableLifecycle;
 import com.team4u.framework.flow.durable.DurableResult;
-import com.team4u.framework.flow.durable.DurableRuntime;
+import com.team4u.framework.flow.durable.Durable;
 import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
 import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.model.Resumed;
@@ -22,13 +22,13 @@ public class KvDurableFlowExecutionTest {
 
     private InMemoryKvStore kvStore;
     private KvDurableStore durableStore;
-    private DurableRuntime runtime;
+    private Durable runtime;
 
     @Before
     public void setUp() {
         kvStore = new InMemoryKvStore();
         durableStore = new KvDurableStore(kvStore);
-        runtime = DurableRuntime.builder(durableStore).build();
+        runtime = Durable.builder(durableStore).build();
     }
 
     private static Operation<String, String> append(final String suffix) {
@@ -129,7 +129,7 @@ public class KvDurableFlowExecutionTest {
         assertEquals(1, step2Calls.get());
 
         // 2. 模拟系统重启：使用新的 Runtime（连接同一个 DurableStore）进行断点恢复
-        DurableRuntime newRuntime = DurableRuntime.builder(durableStore).build();
+        Durable newRuntime = Durable.builder(durableStore).build();
         DurableExecutable<String, String> newExecutable = newRuntime.compile(flow, "recover-flow", 1);
 
         // 3. recover 从 step1 已持久化的检查点续跑

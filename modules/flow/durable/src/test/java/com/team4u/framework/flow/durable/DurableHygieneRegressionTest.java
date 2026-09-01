@@ -74,7 +74,7 @@ public class DurableHygieneRegressionTest {
                 .timeout(Duration.ofSeconds(2));
         // 行为变更：含 TIMEOUT 的定义在无 executor 时编译期 fail-fast
         try {
-            DurableRuntime.builder(new InMemoryDurableStore()).build().compile(flow, "wake", 1);
+            Durable.builder(new InMemoryDurableStore()).build().compile(flow, "wake", 1);
             fail("含 TIMEOUT 而无 executor 必须 INVALID_CONFIGURATION");
         } catch (DurableException error) {
             assertEquals(DurableException.Error.INVALID_CONFIGURATION, error.error());
@@ -84,7 +84,7 @@ public class DurableHygieneRegressionTest {
         try {
             InMemoryDurableStore store = new InMemoryDurableStore();
             DurableExecutable<String, String> executable =
-                    DurableRuntime.builder(store).executor(executor).build()
+                    Durable.builder(store).executor(executor).build()
                             .compile(flow, "wake", 1);
             DurableResult<String> result = executable.start("e", "in");
             assertTrue(result.getClass().getSimpleName(), result instanceof DurableResult.Active);
@@ -115,7 +115,7 @@ public class DurableHygieneRegressionTest {
                 .caseOf("go", Flow.<String>identity())
                 .withoutOtherwise();
         InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableRuntime runtime = DurableRuntime.builder(store).build();
+        Durable runtime = Durable.builder(store).build();
         DurableExecutable<String, String> executable = runtime.compile(flow, "edge", 1);
         DurablePlanCompiler.Definition definition =
                 DurablePlanCompiler.compile(flow, com.team4u.framework.flow.spi.OperationResolver.rejecting());

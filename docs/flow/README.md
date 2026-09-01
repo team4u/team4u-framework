@@ -35,7 +35,7 @@ graph TD
         L --> LR["FlowResult：Completed / Suspended / Cancelled"]
     end
     subgraph "Durable 执行器 (team4u-flow-durable)"
-        PE --> DR["DurableRuntime.compile → DurableExecutable"]
+        PE --> DR["Durable.compile → DurableExecutable"]
         DR --> CK["节点边界 CAS 检查点<br/>（revision 乐观锁）"]
         CK <--> DS[("DurableStore<br/>load + compareAndSet")]
         CK <--> SM["StateMapper<br/>确定性编码 StoredValue"]
@@ -56,7 +56,7 @@ graph TD
 - **Bean 一等公民**：节点原生支持 `Class<? extends Operation>` 与可选限定符；编译期一次性解析绑定容器单例，运行期直接调用无反射，Spring 事务与 AOP 切面代理完整保留。
 - **一个定义，两种执行器**：
   - **Local 同步执行**：`Local.compile(flow).run(input)` 内存驱动，零序列化与持久化开销，挂起、取消、并行、超时全部可用。
-  - **Durable 崩溃恢复**：`DurableRuntime.compile` 在节点边界以 CAS 乐观锁自动提交检查点，进程重启后 `recover` 从最后快照断点续跑。
+  - **Durable 崩溃恢复**：`Durable.compile` 在节点边界以 CAS 乐观锁自动提交检查点，进程重启后 `recover` 从最后快照断点续跑。
 - **强类型流水线与不可变定义**：步骤输入输出严格推导（`A -> B -> C`），类型不匹配在编译期报错；组合方法全部返回新 `Flow` 实例，定义天然线程安全。
 - **四态业务结果与执行生命周期分层**：业务层通过 `Outcome<T>`（`Accepted` / `Rejected` / `Skipped` / `Failed`）明确语义，仅 `Accepted` 携带输出；执行层通过 `FlowResult<O>` / `DurableResult<O>` 表达生命周期状态。
 - **可选步骤透传原值**：`thenOptional` 声明可选步骤，节点弃权返回 `Skipped` 时自动透传步骤入口原值继续执行，无需伪装为 `Accepted`。

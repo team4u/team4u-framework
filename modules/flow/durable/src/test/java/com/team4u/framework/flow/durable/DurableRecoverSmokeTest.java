@@ -43,7 +43,7 @@ public class DurableRecoverSmokeTest {
         CrashOp c = new CrashOp(Integer.MAX_VALUE);
         Flow<String, String> flow = Flow.<String, String>step(a).then(b).then(c);
         InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableExecutable<String, String> executable = DurableRuntime.builder(store)
+        DurableExecutable<String, String> executable = Durable.builder(store)
                 .build().compile(flow, "cf", 1);
         try {
             executable.start("e1", "x");
@@ -73,7 +73,7 @@ public class DurableRecoverSmokeTest {
                 }).await(point);
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, Resumed<String, String>> executable =
-                DurableRuntime.builder(store).build().compile(flow, "aw", 1);
+                Durable.builder(store).build().compile(flow, "aw", 1);
         DurableResult<Resumed<String, String>> suspended = executable.start("e2", "x");
         assertTrue(suspended.getClass().getSimpleName(),
                 suspended instanceof DurableResult.Suspended);
@@ -108,7 +108,7 @@ public class DurableRecoverSmokeTest {
                     }
                 }).await(point).then(after);
         InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableExecutable<String, String> executable = DurableRuntime.builder(store).build()
+        DurableExecutable<String, String> executable = Durable.builder(store).build()
                 .compile(flow, "aw2", 1);
         DurableResult<String> suspended = executable.start("e3", "in");
         assertTrue(suspended instanceof DurableResult.Suspended);

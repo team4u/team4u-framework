@@ -95,7 +95,7 @@ public class DurableSnapshotWakeTest {
         Flow<String, String> flow = Flow.<String, String>step(flaky)
                 .persistentPolicy(policy, s -> s);
         DurableExecutable<String, String> executable =
-                DurableRuntime.builder(store).build().compile(flow, "wake", 1);
+                Durable.builder(store).build().compile(flow, "wake", 1);
 
         // 首驱动：失败 → RetryAt 退避挂起（ACTIVE + wake）
         DurableResult<String> first = executable.start("e", "in");
@@ -160,7 +160,7 @@ public class DurableSnapshotWakeTest {
         Flow<String, String> flow = Flow.<String, String>step(alwaysFails)
                 .persistentPolicy(policy, s -> s);
         DurableExecutable<String, String> executable =
-                DurableRuntime.builder(store).build().compile(flow, "wake2", 1);
+                Durable.builder(store).build().compile(flow, "wake2", 1);
         DurableResult<String> first = executable.start("e", "in");
         Instant firstWake = ((DurableResult.Active<String>) first).wakeAt().get();
         assertEquals(firstWake, store.load("e").get().firstWakeAt());
@@ -199,7 +199,7 @@ public class DurableSnapshotWakeTest {
                         return Outcome.accepted(String.valueOf(in));
                     }
                 });
-        DurableExecutable<Object, String> executable = DurableRuntime.builder(store)
+        DurableExecutable<Object, String> executable = Durable.builder(store)
                 .stateMapper(new FailingMapper())
                 .build()
                 .compile(flow, "codec", 1);
@@ -225,12 +225,12 @@ public class DurableSnapshotWakeTest {
         };
         Flow<String, String> flow = Flow.<String, String>step(alwaysFails)
                 .persistentPolicy(retryPolicy(60_000), s -> s);
-        DurableRuntime runtime = DurableRuntime.builder(store).build();
+        Durable runtime = Durable.builder(store).build();
         DurableExecutable<String, String> normal = runtime.compile(flow, "codec", 1);
         normal.start("e", "in");
         assertEquals(DurableLifecycle.ACTIVE, store.load("e").get().lifecycle());
 
-        DurableExecutable<String, String> broken = DurableRuntime.builder(store)
+        DurableExecutable<String, String> broken = Durable.builder(store)
                 .stateMapper(new FailingMapper())
                 .build()
                 .compile(flow, "codec", 1);

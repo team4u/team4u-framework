@@ -34,7 +34,7 @@ graph TD
     subgraph "可执行计划通道 (Executable Projection)"
         F -->|"flow.project(resolver, visitor)"| PE["ExecutableFlowVisitor&lt;R&gt;<br/>强类型执行计划编译器"]
         PE --> L["Local.compile (LocalExecutable)"]
-        PE --> D["DurableRuntime.compile (DurableExecutable)"]
+        PE --> D["Durable.compile (DurableExecutable)"]
     end
 ```
 

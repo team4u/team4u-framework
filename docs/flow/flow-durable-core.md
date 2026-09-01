@@ -10,7 +10,7 @@
 
 ```mermaid
 graph TD
-    F["Flow&lt;I, O&gt;<br/>不可变纯逻辑拓扑（无副作用）"] --> RT["DurableRuntime<br/>(绑定 DurableStore + StateMapper + BeanResolver)"]
+    F["Flow&lt;I, O&gt;<br/>不可变纯逻辑拓扑（无副作用）"] --> RT["Durable<br/>(绑定 DurableStore + StateMapper + BeanResolver)"]
     RT --> EX["DurableExecutable&lt;I, O&gt;<br/>绑定 (flowId, flowVersion)"]
     
     EX --> CMD["命令入口: start / resume / recover / cancel / snapshot"]
@@ -26,7 +26,7 @@ graph TD
 ### 四大核心设计原则
 
 1. **同一份 Flow 定义，零代码修改**：
-   业务逻辑 `Flow<I, O>` 纯粹描述拓扑结构，既能交付给 `Local.compile` 作为微秒级同步执行器，也能交付给 `DurableRuntime.compile` 作为持久化状态机；
+   业务逻辑 `Flow<I, O>` 纯粹描述拓扑结构，既能交付给 `Local.compile` 作为微秒级同步执行器，也能交付给 `Durable.compile` 作为持久化状态机；
 2. **零 Lambda 与代码序列化**：
    底层快照绝不序列化 Java 字节码、Lambda 闭包或 Bean 实例引用；快照中仅保存框架运行元数据与由 `StateMapper` 编码的业务槽位（`StoredValue`）；
 3. **节点边界 CAS 检查点（Revision 乐观锁）**：

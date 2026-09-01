@@ -549,7 +549,7 @@ import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
 
 public class DurableApprovalDemo {
     public static void main(String[] args) {
-        DurableRuntime runtime = DurableRuntime.builder(new InMemoryDurableStore())
+        Durable runtime = Durable.builder(new InMemoryDurableStore())
                 .stateMapper(new PaymentStateMapper())
                 .build();
 
@@ -606,7 +606,7 @@ public class PaymentApprovalTest {
     @org.junit.Test
     public void durableSurvivesRestart() {
         DurableStore store = new InMemoryDurableStore();
-        DurableRuntime runtime = DurableRuntime.builder(store)
+        Durable runtime = Durable.builder(store)
                 .stateMapper(new PaymentStateMapper())
                 .build();
 

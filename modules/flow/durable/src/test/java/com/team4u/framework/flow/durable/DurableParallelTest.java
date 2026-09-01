@@ -59,7 +59,7 @@ public class DurableParallelTest {
 
     private static DurableExecutable<String, String> compile(Flow<String, String> flow,
                                                              DurableStore store) {
-        return DurableRuntime.builder(store).build().compile(flow, "par", 1);
+        return Durable.builder(store).build().compile(flow, "par", 1);
     }
 
     private static Outcome<String> outcome(DurableResult<String> result) {
@@ -276,7 +276,7 @@ public class DurableParallelTest {
     @Test
     public void parallelBranchesRunSequentiallyInDeclarationOrder() {
         // 锁定串行驱动合同：后序分支开始时前序分支必须已完成（计数器验证），
-        // Durable 不做并发执行；需要并发请使用 Core Local 执行器（见 DurableRuntime javadoc）。
+        // Durable 不做并发执行；需要并发请使用 Core Local 执行器（见 Durable javadoc）。
         final List<String> trace = new ArrayList<String>();
         final AtomicInteger running = new AtomicInteger();
         Operation<String, String> traced = new Operation<String, String>() {

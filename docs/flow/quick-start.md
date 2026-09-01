@@ -309,12 +309,12 @@ Flow<State, State> enriched = Flow.<State>identity().use(
 ```java
 import com.team4u.framework.flow.durable.DurableExecutable;
 import com.team4u.framework.flow.durable.DurableResult;
-import com.team4u.framework.flow.durable.DurableRuntime;
+import com.team4u.framework.flow.durable.Durable;
 import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
 
 // 1. 构建 Durable 运行时（单测使用 InMemoryDurableStore，生产环境引入 team4u-flow-durable-kv 使用 KvDurableStore）
 DurableStore store = new InMemoryDurableStore(); // 生产环境: new KvDurableStore(redisKvStore)
-DurableRuntime runtime = DurableRuntime.builder(store)
+Durable runtime = Durable.builder(store)
         .build();
 
 // 2. 编译为持久化可执行对象（绑定 flowId 与 flowVersion）
@@ -330,16 +330,16 @@ DurableResult<Receipt> recovered = durable.recover("order-0001");
 
 > [!IMPORTANT]
 > **Durable timeout 与 executor 配置**：当流程包含 `timeout` 作用域（依赖限时执行能力）时，
-> 必须在 `DurableRuntime.builder(store).executor(...)` 中显式配置调用方拥有的线程池。
+> 必须在 `Durable.builder(store).executor(...)` 中显式配置调用方拥有的线程池。
 > 编译期 fail-fast 校验：未配置 `executor` 且流程需要线程池时，`compile` 直接抛出
 > `DurableException(INVALID_CONFIGURATION)`，不会静默降级为同步协作式超时检查。
 > 异步命令 `startAsync` / `resumeAsync` 则始终要求配置 executor，缺失时抛出
 > `ASYNC_EXECUTOR_MISSING`。传入的线程池仅为借用，生命周期由调用方管理，
-> `DurableRuntime` 不会将其关闭。
+> `Durable` 不会将其关闭。
 
 ### Local 与 Durable 差异对比
 
-| 维度 | Local (`Local.compile`) | Durable (`DurableRuntime.compile`) |
+| 维度 | Local (`Local.compile`) | Durable (`Durable.compile`) |
 | :--- | :--- | :--- |
 | **结果类型** | `FlowResult` (Completed / Suspended / Cancelled) | `DurableResult` (Completed / Suspended / Active / Cancelled) |
 | **挂起机制** | 内存 `Suspension`（单次消费） | 快照 `awaitingPoint` + `resume(executionId, point, signal)` |

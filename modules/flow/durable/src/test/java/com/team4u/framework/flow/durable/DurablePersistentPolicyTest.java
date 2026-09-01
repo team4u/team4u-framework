@@ -60,7 +60,7 @@ public class DurablePersistentPolicyTest {
 
     private static DurableExecutable<String, String> compile(Flow<String, String> flow,
                                                              DurableStore store) {
-        return DurableRuntime.builder(store).build().compile(flow, "pp", 1);
+        return Durable.builder(store).build().compile(flow, "pp", 1);
     }
 
     @Test

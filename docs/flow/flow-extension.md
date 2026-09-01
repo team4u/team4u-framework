@@ -259,7 +259,7 @@ public interface ExecutableFlowVisitor<R> {
 ```
 
 - 输入为已完成静态拓扑校验与 Bean 绑定的运行时计划；
-- `Local.compile` 与 `DurableRuntime.compile` 内部均通过实现 `ExecutableFlowVisitor` 构建各自的执行计划；
+- `Local.compile` 与 `Durable.compile` 内部均通过实现 `ExecutableFlowVisitor` 构建各自的执行计划；
 - 开发者可基于该 SPI 自定义执行内核或进行代码静态安全审计。
 
 ---

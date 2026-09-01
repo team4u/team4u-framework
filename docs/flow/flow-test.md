@@ -148,12 +148,12 @@ org.junit.Assert.assertEquals(1, ok.callCount());
 ```java
 import com.team4u.framework.flow.durable.snapshot.CompositeStateMapper;
 import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
-import com.team4u.framework.flow.durable.DurableRuntime;
+import com.team4u.framework.flow.durable.Durable;
 import com.team4u.framework.flow.retry.FlowRetryPolicy;
 import com.team4u.framework.flow.retry.FlowRetryStateMapper;
 
 // 将 FlowRetryStateMapper 作为 Durable 引擎的默认编解码器，重试状态获得开箱即用的持久化能力
-DurableExecutable<String, String> executable = DurableRuntime.builder(new InMemoryDurableStore())
+DurableExecutable<String, String> executable = Durable.builder(new InMemoryDurableStore())
         .stateMapper(CompositeStateMapper.withDefault(FlowRetryStateMapper.INSTANCE))
         .build()
         .compile(Flow.step(flakyOp).persistentPolicy(

@@ -68,7 +68,7 @@ public class DurableObserverEventTest {
         Collector observer = new Collector();
         Flow<String, String> flow = Flow.<String, String>step(op("a", null));
         InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableRuntime.builder(store).observer(observer).build()
+        Durable.builder(store).observer(observer).build()
                 .compile(flow, "obs", 1).start("e", "in");
         // 单 step 流的根即 invoke：路径为 "$"
         FlowObserver.Event started = observer.first(FlowObserver.Type.NODE_STARTED, "$");
@@ -90,7 +90,7 @@ public class DurableObserverEventTest {
         Flow<String, String> flow = Flow.<String, String>step(op("bad",
                 Outcome.failed(Failure.of("OP_ERR", "boom"))));
         InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableRuntime.builder(store).observer(observer).build()
+        Durable.builder(store).observer(observer).build()
                 .compile(flow, "obs", 1).start("e", "in");
         FlowObserver.Event completed = observer.first(FlowObserver.Type.NODE_COMPLETED, "$");
         assertNotNull(completed);
@@ -106,7 +106,7 @@ public class DurableObserverEventTest {
         Flow<String, String> flow = Flow.<String, String>step(op("a", null))
                 .then(op("b", null));
         InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableRuntime.builder(store).observer(observer).build()
+        Durable.builder(store).observer(observer).build()
                 .compile(flow, "obs", 1).start("e", "in");
         // 根 sequence（"$"）与两个 invoke（"$/0"、"$/1"）：invoke 事件成对
         for (String path : java.util.Arrays.asList("$/0", "$/1")) {
@@ -151,7 +151,7 @@ public class DurableObserverEventTest {
                                 java.time.Instant.now().plusMillis(60_000), state + 1);
                     }
                 }, s -> s);
-        DurableExecutable<String, String> executable = DurableRuntime.builder(store)
+        DurableExecutable<String, String> executable = Durable.builder(store)
                 .durableObserver(durableObserver)
                 .build()
                 .compile(flow, "obs", 1);

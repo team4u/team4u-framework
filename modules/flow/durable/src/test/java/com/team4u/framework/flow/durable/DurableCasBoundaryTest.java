@@ -27,7 +27,7 @@ public class DurableCasBoundaryTest {
 
     private static DurableExecutable<String, String> compile(Flow<String, String> flow,
                                                              DurableStore store) {
-        return DurableRuntime.builder(store).build().compile(flow, "cas", 1);
+        return Durable.builder(store).build().compile(flow, "cas", 1);
     }
 
     @Test
@@ -173,7 +173,7 @@ public class DurableCasBoundaryTest {
     public void flowIdAndVersionMismatchIsRejected() {
         RecordingOp a = new RecordingOp("a");
         InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableRuntime runtime = DurableRuntime.builder(store).build();
+        Durable runtime = Durable.builder(store).build();
         DurableExecutable<String, String> v1 = runtime.compile(
                 Flow.<String, String>step(a), "flowA", 1);
         v1.start("e", "s");
@@ -192,7 +192,7 @@ public class DurableCasBoundaryTest {
     public void unknownFormatIsRejected() {
         RecordingOp a = new RecordingOp("a");
         InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableExecutable<String, String> executable = DurableRuntime.builder(store).build()
+        DurableExecutable<String, String> executable = Durable.builder(store).build()
                 .compile(Flow.<String, String>step(a), "fmt", 1);
         // 直接塞入一个坏格式快照
         DurableSnapshot bad = new DurableSnapshot("e2", "fmt", 1, "other-format", 9,

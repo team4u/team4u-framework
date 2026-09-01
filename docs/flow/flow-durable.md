@@ -1,6 +1,6 @@
 # Durable 持久化全景总览
 
-`team4u-flow-durable` 是独立于核心的持久化执行器组件。在 `Local` 内存执行器上验证通过的 `Flow<I, O>` 纯逻辑拓扑，无需修改任何代码，原样交给 `DurableRuntime.compile` 编译后，即可获得节点级 CAS 检查点与跨进程断点续跑能力。
+`team4u-flow-durable` 是独立于核心的持久化执行器组件。在 `Local` 内存执行器上验证通过的 `Flow<I, O>` 纯逻辑拓扑，无需修改任何代码，原样交给 `Durable.compile` 编译后，即可获得节点级 CAS 检查点与跨进程断点续跑能力。
 
 本章提供 Durable 执行器的全景架构与快速索引。各项专题已细化并独立成章，推荐结合各独立专章深入研读：
 
@@ -16,7 +16,7 @@
 
 ```mermaid
 graph TD
-    F["Flow&lt;I, O&gt;<br/>不可变逻辑拓扑（纯结构）"] --> RT["DurableRuntime<br/>builder(store)<br/>.stateMapper/.operationResolver/.observer"]
+    F["Flow&lt;I, O&gt;<br/>不可变逻辑拓扑（纯结构）"] --> RT["Durable<br/>builder(store)<br/>.stateMapper/.operationResolver/.observer"]
     RT --> EX["DurableExecutable&lt;I, O&gt;<br/>绑定 (flowId, flowVersion)"]
     EX --> CMD["start / resume / recover / cancel / snapshot"]
     CMD --> M["DurableMachine<br/>单命令驱动至下一稳定边界"]
@@ -41,13 +41,13 @@ graph TD
 import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.durable.DurableExecutable;
 import com.team4u.framework.flow.durable.DurableResult;
-import com.team4u.framework.flow.durable.DurableRuntime;
+import com.team4u.framework.flow.durable.Durable;
 import com.team4u.framework.flow.durable.store.DurableStore;
 import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
 
 // 1. 构建 Durable 运行时
 DurableStore store = new InMemoryDurableStore(); // 生产环境替换为 KvDurableStore (Redis / JDBC)
-DurableRuntime runtime = DurableRuntime.builder(store)
+Durable runtime = Durable.builder(store)
         .stateMapper(customMapper)          // 可选：业务状态编解码器
         .operationResolver(beanResolver)    // 可选：Bean 解析器
         .observer(flowObserver)             // 可选：流程观察者
@@ -64,8 +64,8 @@ DurableResult<Receipt> result = executable.start("order-0001", request);
 ```
 
 > [!IMPORTANT]
-> **executor 借用语义**：通过 `DurableRuntime.builder(store).executor(...)` 传入的线程池，
-> 其生命周期完全由调用方管理——`DurableRuntime` 仅在超时控制（限时执行）与异步命令
+> **executor 借用语义**：通过 `Durable.builder(store).executor(...)` 传入的线程池，
+> 其生命周期完全由调用方管理——`Durable` 仅在超时控制（限时执行）与异步命令
 > （`startAsync` / `resumeAsync`）中借用该线程池，**绝不会在运行时关闭它**；
 > 应用停机时须由上层自行 `shutdown`。未配置 executor 时调用异步命令将抛出
 > `ASYNC_EXECUTOR_MISSING`；包含 timeout 作用域的流程要求显式配置 executor，
@@ -127,7 +127,7 @@ $$\text{invocationId} = \text{flowId} : \text{flowVersion} : \text{executionId} 
 | 错误码 | 严重级别 | 根本原因 | 运维处理指引 |
 | :--- | :--- | :--- | :--- |
 | **`INVALID_DEFINITION`** | 严重 (Error) | 流程定义非法（如快照恢复时拓扑校验失败） | 检查 Flow 定义结构与快照拓扑版本 |
-| **`INVALID_CONFIGURATION`** | 错误 (Error) | 运行时配置非法（如流程含 TIMEOUT 作用域而未配置 executor） | 核对 `DurableRuntime` 装配参数，为含 timeout 的流程显式配置 executor |
+| **`INVALID_CONFIGURATION`** | 错误 (Error) | 运行时配置非法（如流程含 TIMEOUT 作用域而未配置 executor） | 核对 `Durable` 装配参数，为含 timeout 的流程显式配置 executor |
 | **`REVISION_CONFLICT`** | 警告 (Warn) | 多个分布式节点并发驱动同一个 `executionId` 导致 CAS 冲突 | 正常并发竞争保护。客户端稍后重新读取最新快照重试 |
 | **`FLOW_MISMATCH`** | 严重 (Error) | 尝试恢复的快照其 `flowId` 或 `flowVersion` 与当前代码不一致 | 确认是否发生了流程定义拓扑变更；使用与快照版本匹配的 Flow 运行时进行恢复 |
 | **`FORMAT_MISMATCH`** | 严重 (Error) | 快照格式 ID 或版本与当前运行时不兼容 | 检查快照 `formatId`/`formatVersion`，确认集群内框架版本一致 |
@@ -139,7 +139,7 @@ $$\text{invocationId} = \text{flowId} : \text{flowVersion} : \text{executionId} 
 | **`LIFECYCLE_MISMATCH`** | 错误 (Error) | 在非法的生命周期下调用命令（例如对已 COMPLETED 实例调用 recover） | 校验调用时序，避免对终态实例再次发起驱动 |
 | **`RESUME_POINT_MISMATCH`** | 错误 (Error) | resume 传入的挂起点名称与快照中实际等待的点不一致 | 核对外部回调注入的挂起点标识 |
 | **`FRAME_MISMATCH`** | 严重 (Error) | 快照帧栈元数据损坏或与当前拓扑不匹配 | 排查存储数据完整性或代码结构变更 |
-| **`ASYNC_EXECUTOR_MISSING`** | 错误 (Error) | 调用异步命令（`startAsync` / `resumeAsync`）但未配置 `executor` | 在 `DurableRuntime.builder` 中显式配置线程池 |
+| **`ASYNC_EXECUTOR_MISSING`** | 错误 (Error) | 调用异步命令（`startAsync` / `resumeAsync`）但未配置 `executor` | 在 `Durable.builder` 中显式配置线程池 |
 
 ---
 

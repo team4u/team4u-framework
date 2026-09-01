@@ -186,8 +186,8 @@ SerializerStateMapper jacksonStateMapper = new SerializerStateMapper(
 // 2. 构建复合映射器：标量走 Default，复杂业务 DTO 走 Jackson
 StateMapper stateMapper = CompositeStateMapper.withDefault(jacksonStateMapper);
 
-// 3. 注入 DurableRuntime
-DurableRuntime runtime = DurableRuntime.builder(durableStore)
+// 3. 注入 Durable
+Durable runtime = Durable.builder(durableStore)
         .stateMapper(stateMapper)
         .build();
 ```

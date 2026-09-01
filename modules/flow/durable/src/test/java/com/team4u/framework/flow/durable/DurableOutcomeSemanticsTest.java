@@ -24,7 +24,7 @@ public class DurableOutcomeSemanticsTest {
 
     private static DurableExecutable<String, String> compile(Flow<String, String> flow,
                                                              DurableStore store) {
-        return DurableRuntime.builder(store).build().compile(flow, "sem", 1);
+        return Durable.builder(store).build().compile(flow, "sem", 1);
     }
 
     private static Outcome<String> outcome(DurableResult<String> result) {

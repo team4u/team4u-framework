@@ -31,7 +31,7 @@ public class DurableSmokeTest {
                 .then(append("-b"))
                 .then(append("-c"));
         InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableExecutable<String, String> executable = DurableRuntime.builder(store)
+        DurableExecutable<String, String> executable = Durable.builder(store)
                 .build()
                 .compile(flow, "smoke", 1);
         DurableResult<String> result = executable.start("e1", "x");
@@ -49,7 +49,7 @@ public class DurableSmokeTest {
             }
         });
         InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableExecutable<String, String> executable = DurableRuntime.builder(store)
+        DurableExecutable<String, String> executable = Durable.builder(store)
                 .build()
                 .compile(flow, "f", 1);
         DurableResult<String> result = executable.start("e2", "x");
@@ -85,7 +85,7 @@ public class DurableSmokeTest {
                     }
                 }, s -> s);
         InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableExecutable<String, String> executable = DurableRuntime.builder(store)
+        DurableExecutable<String, String> executable = Durable.builder(store)
                 .build()
                 .compile(flow, "r", 1);
         DurableResult<String> result = executable.start("e3", "x");

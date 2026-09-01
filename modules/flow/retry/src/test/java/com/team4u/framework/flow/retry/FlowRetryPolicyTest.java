@@ -8,7 +8,7 @@ import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.OperationContext;
 import com.team4u.framework.flow.durable.DurableExecutable;
 import com.team4u.framework.flow.durable.DurableResult;
-import com.team4u.framework.flow.durable.DurableRuntime;
+import com.team4u.framework.flow.durable.Durable;
 import com.team4u.framework.flow.durable.snapshot.CompositeStateMapper;
 import com.team4u.framework.flow.durable.store.InMemoryDurableStore;
 import com.team4u.framework.flow.model.Cancellation;
@@ -358,7 +358,7 @@ public class FlowRetryPolicyTest {
 
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable =
-                DurableRuntime.builder(store)
+                Durable.builder(store)
                         .stateMapper(CompositeStateMapper.withDefault(FlowRetryStateMapper.INSTANCE))
                         .build()
                         .compile(flow, "durable-retry", 1);
@@ -391,7 +391,7 @@ public class FlowRetryPolicyTest {
 
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable =
-                DurableRuntime.builder(store)
+                Durable.builder(store)
                         .stateMapper(CompositeStateMapper.withDefault(FlowRetryStateMapper.INSTANCE))
                         .build()
                         .compile(flow, "durable-retry-exhausted", 1);

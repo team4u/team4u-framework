@@ -25,7 +25,7 @@ public class DurableCrashRecoveryTest {
 
     private static DurableExecutable<String, String> compile(Flow<String, String> flow,
                                                              DurableStore store) {
-        return DurableRuntime.builder(store).build().compile(flow, "crash", 1);
+        return Durable.builder(store).build().compile(flow, "crash", 1);
     }
 
     /** 驱动直到完成；SimulatedCrash 视为进程崩溃，返回崩溃与否。 */
@@ -240,7 +240,7 @@ public class DurableCrashRecoveryTest {
     public void recoveryWithDivergentPlanTopologyIsRejected() {
         RecordingOp a = new RecordingOp("a");
         InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableRuntime runtime = DurableRuntime.builder(store).build();
+        Durable runtime = Durable.builder(store).build();
         // 使执行在 $/1 前崩溃：路径 $/1 处第一个计划是 invoke，第二个计划是 route
         final java.util.concurrent.atomic.AtomicInteger calls =
                 new java.util.concurrent.atomic.AtomicInteger();

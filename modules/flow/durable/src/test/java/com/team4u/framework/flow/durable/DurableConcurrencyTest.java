@@ -139,7 +139,7 @@ public class DurableConcurrencyTest {
     public void concurrentStartAllowsExactlyOneWinner() throws Exception {
         final InMemoryDurableStore store = new InMemoryDurableStore();
         final DurableExecutable<String, String> executable =
-                DurableRuntime.builder(store).build()
+                Durable.builder(store).build()
                         .compile(Flow.<String, String>step(append("-a")).then(append("-b")),
                                 "conc", 1);
 
@@ -205,7 +205,7 @@ public class DurableConcurrencyTest {
                                 java.time.Instant.now().plusMillis(backoff), state + 1);
                     }
                 }, s -> s);
-        return DurableRuntime.builder(store).build().compile(flow, "conc", 1);
+        return Durable.builder(store).build().compile(flow, "conc", 1);
     }
 
     @Test
@@ -276,7 +276,7 @@ public class DurableConcurrencyTest {
         final InMemoryDurableStore store = new InMemoryDurableStore();
         final ResumePoint<String> gate = ResumePoint.named("gate");
         final DurableExecutable<String, String> executable =
-                DurableRuntime.builder(store).build()
+                Durable.builder(store).build()
                         .compile(awaitThenEchoFlow(gate), "conc", 1);
         DurableResult<String> suspended = executable.start("e-mix", "in");
         assertTrue(suspended.getClass().getSimpleName(),
@@ -321,7 +321,7 @@ public class DurableConcurrencyTest {
         final InMemoryDurableStore store = new InMemoryDurableStore();
         final ResumePoint<String> gate = ResumePoint.named("gate");
         final DurableExecutable<String, String> executable =
-                DurableRuntime.builder(store).build()
+                Durable.builder(store).build()
                         .compile(awaitThenEchoFlow(gate), "conc", 1);
         DurableResult<String> suspended = executable.start("e-dup", "in");
         assertEquals(DurableLifecycle.SUSPENDED,

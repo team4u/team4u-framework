@@ -49,11 +49,11 @@ public class DurableCancelAsyncTest {
                         return PersistentPolicy.retryAt(java.time.Instant.now().plusMillis(60_000), state + 1);
                     }
                 }, s -> s);
-        return DurableRuntime.builder(store).build().compile(flow, "cancel", 1);
+        return Durable.builder(store).build().compile(flow, "cancel", 1);
     }
 
     private static DurableExecutable<String, String> compileAwaitFlow(DurableStore store) {
-        return DurableRuntime.builder(store).build()
+        return Durable.builder(store).build()
                 .compile(Flow.<String, String>step(
                                 new Operation<String, String>() {
                                     @Override
@@ -110,7 +110,7 @@ public class DurableCancelAsyncTest {
     @Test
     public void cancelCompletedExecutionIsRejected() {
         InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableExecutable<String, String> executable = DurableRuntime.builder(store).build()
+        DurableExecutable<String, String> executable = Durable.builder(store).build()
                 .compile(Flow.<String, String>step(
                         new Operation<String, String>() {
                             @Override
@@ -217,7 +217,7 @@ public class DurableCancelAsyncTest {
     @Test
     public void startAsyncWithoutExecutorThrowsAsyncExecutorMissing() {
         InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableExecutable<String, String> executable = DurableRuntime.builder(store).build()
+        DurableExecutable<String, String> executable = Durable.builder(store).build()
                 .compile(Flow.<String, String>step(
                         new Operation<String, String>() {
                             @Override
@@ -252,7 +252,7 @@ public class DurableCancelAsyncTest {
     public void startAsyncRunsOnCallerExecutorAndNeverShutsItDown() throws Exception {
         RecordingExecutor executor = new RecordingExecutor();
         InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableExecutable<String, String> executable = DurableRuntime.builder(store)
+        DurableExecutable<String, String> executable = Durable.builder(store)
                 .executor(executor)
                 .build()
                 .compile(Flow.<String, String>step(
@@ -278,7 +278,7 @@ public class DurableCancelAsyncTest {
         // resumeAsync 成功路径：借用 executor 派发两段式恢复并落定 COMPLETED
         RecordingExecutor executor = new RecordingExecutor();
         InMemoryDurableStore store = new InMemoryDurableStore();
-        DurableExecutable<String, String> executable = DurableRuntime.builder(store)
+        DurableExecutable<String, String> executable = Durable.builder(store)
                 .executor(executor)
                 .build()
                 .compile(compileAwaitFlowFlow(), "cancel", 1);

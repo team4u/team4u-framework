@@ -46,7 +46,7 @@ public class DurableAwaitResumeTest {
 
     private static DurableExecutable<String, String> compile(Flow<String, String> flow,
                                                              DurableStore store) {
-        return DurableRuntime.builder(store).build().compile(flow, "await", 1);
+        return Durable.builder(store).build().compile(flow, "await", 1);
     }
 
     @Test
@@ -248,7 +248,7 @@ public class DurableAwaitResumeTest {
     public void resumeOnMissingExecutionFails() {
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, Resumed<String, String>> executable =
-                DurableRuntime.builder(store).build()
+                Durable.builder(store).build()
                         .compile(singleAwaitFlow(), "await", 1);
         try {
             executable.resume("ghost", "approval", "GO");
@@ -263,7 +263,7 @@ public class DurableAwaitResumeTest {
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableTestOps.RecordingDurableObserver durableObserver =
                 new DurableTestOps.RecordingDurableObserver();
-        DurableExecutable<String, String> executable = DurableRuntime.builder(store)
+        DurableExecutable<String, String> executable = Durable.builder(store)
                 .durableObserver(durableObserver)
                 .build()
                 .compile(awaitThenPostFlow(), "await", 1);

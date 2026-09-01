@@ -4,7 +4,7 @@ import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.durable.DurableExecutable;
 import com.team4u.framework.flow.durable.DurableLifecycle;
 import com.team4u.framework.flow.durable.DurableResult;
-import com.team4u.framework.flow.durable.DurableRuntime;
+import com.team4u.framework.flow.durable.Durable;
 import org.junit.Test;
 
 import static org.junit.Assert.assertEquals;
@@ -35,7 +35,7 @@ public class DurablePublicApiBoundaryTest {
     @Test
     public void externalPackageDrivesFullLifecycleViaPublicApiOnly() {
         Flow<String, String> flow = Flow.<String, String>step(append("a")).then(append("b"));
-        DurableRuntime runtime = DurableRuntime.builder(new InMemoryDurableStore()).build();
+        Durable runtime = Durable.builder(new InMemoryDurableStore()).build();
         DurableExecutable<String, String> executable = runtime.compile(flow, "boundary", 1);
         DurableResult<String> result = executable.start("e", "in");
         assertTrue(result instanceof DurableResult.Completed);

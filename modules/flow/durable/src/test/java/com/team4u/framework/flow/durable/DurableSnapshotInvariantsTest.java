@@ -229,7 +229,7 @@ public class DurableSnapshotInvariantsTest {
         }
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable =
-                DurableRuntime.builder(store).build().compile(flow, "deep", 1);
+                Durable.builder(store).build().compile(flow, "deep", 1);
         DurableResult<String> result = executable.start("e", "in");
         assertTrue(result.getClass().getSimpleName(), result instanceof DurableResult.Completed);
         assertEquals("in>tail", ((Outcome.Accepted<String>)
@@ -258,7 +258,7 @@ public class DurableSnapshotInvariantsTest {
         }
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable =
-                DurableRuntime.builder(store).build().compile(flow, "deep", 1);
+                Durable.builder(store).build().compile(flow, "deep", 1);
         try {
             executable.start("e", "in");
             fail("tail 首次执行必须崩溃");
@@ -325,7 +325,7 @@ public class DurableSnapshotInvariantsTest {
                 });
         InMemoryDurableStore store = new InMemoryDurableStore();
         DurableExecutable<String, String> executable =
-                DurableRuntime.builder(store).build().compile(flow, "round", 1);
+                Durable.builder(store).build().compile(flow, "round", 1);
         DurableResult<String> result = executable.start("e", "in");
         assertTrue(result.getClass().getSimpleName(), result instanceof DurableResult.Completed);
         assertEquals("in>L|in>R|", ((Outcome.Accepted<String>)
