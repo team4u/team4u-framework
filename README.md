@@ -25,15 +25,20 @@ team4u-framework 是一组专注解决后端常见架构模式的基础组件库
 
 | 组件 | 对应模块 | 解决的典型问题 | 文档 |
 | :--- | :--- | :--- | :--- |
+| **流程编排** | `team4u-flow` / `team4u-flow-durable` | 强类型轻量化编排引擎：双投影编译（Local 内存同步 / Durable 崩溃恢复）、四态 Outcome、挂起恢复、细粒度重试与图表渲染。 | [文档](docs/flow/README.md) |
 | **业务路由** | `team4u-router` | 多维条件分流、权重分流与复合决策，替代深层嵌套的 `if-else`。 | [文档](docs/router/README.md) |
 | **规则表达式** | `team4u-criterion` | 纯 Java 实现的类 SQL 语法 DSL 引擎，低分配且支持执行链路白盒追踪。 | [文档](docs/criterion/README.md) |
 | **状态机** | `team4u-fsm` | 强类型有限状态机：不可变迁移定义、守卫与动作、确定性分层匹配与 Mermaid 状态图。 | [文档](docs/fsm/README.md) |
+| **契约翻译** | `team4u-translator` | 统一契约与响应翻译框架，原始响应经路由规则映射与模板渲染为统一对外契约。 | [文档](docs/translator/README.md) |
 | **回源合并** | `team4u-singleflight` | 抑制高并发下相同 Key 的瞬时击穿与惊群效应，支持结果共享与超时接管。 | [文档](docs/singleflight/README.md) |
 | **多算法限流** | `team4u-ratelimiter` | 提供固定窗口、滑动窗口、令牌桶等算法，基于 KV 能力自动协商。 | [文档](docs/ratelimiter/README.md) |
 | **排他任务租约** | `team4u-lease` | 基于租约心跳的任务抢占与故障接管机制，保障单点排他执行。 | [文档](docs/lease/README.md) |
 | **容灾重试** | `team4u-retry` | 统一进程内即时重试与后台托管调度，解耦重试策略与业务执行。 | [文档](docs/retry/README.md) |
 | **动态脱敏** | `team4u-mask` | 纯 Java 字段掩码与 Jackson 自动脱敏，支持规则热更新。 | [文档](docs/mask/README.md) |
+| **结构化日志** | `team4u-log` | 流式结构化日志核心与治理拓展，支持脱敏、方法代理与染色追踪。 | [文档](docs/log/README.md) |
+| **序号生成** | `team4u-id` | 配置驱动的序号生成框架，支持原子计数、分组重置与号段加速。 | [文档](docs/id/README.md) |
 | **配置治理** | `team4u-config` | 强类型快照读取与接口代理，支持多数据源聚合与防抖更新。 | [文档](docs/config/README.md) |
+| **策略模式** | `team4u-policy` | 高性能读写分离策略路由、有序责任链与 Spring 自动发现。 | [文档](docs/policy/README.md) |
 | **基础支撑** | `team4u-proxy` / `team4u-kv` / `team4u-base` | 动态代理、多级 KV 缓存抽象与通用基础工具集。 | [文档](docs/base/README.md) |
 
 各组件更详细的背景、架构设计与高级用法，请参阅 [官方完整文档中心 (docs/README.md)](docs/README.md)。
@@ -62,6 +67,12 @@ team4u-framework 是一组专注解决后端常见架构模式的基础组件库
 
 ```xml
 <dependencies>
+    <!-- 引入流程编排 -->
+    <dependency>
+        <groupId>com.team4u</groupId>
+        <artifactId>team4u-flow</artifactId>
+    </dependency>
+
     <!-- 引入业务路由 -->
     <dependency>
         <groupId>com.team4u</groupId>
