@@ -31,7 +31,7 @@ import com.team4u.framework.flow.spi.NodeDescriptor;
 import com.team4u.framework.flow.spi.OperationResolver;
 
 /**
- * 耐久化物理执行树编译器（Durable Plan Compiler）。
+ * 持久化物理执行树编译器（Durable Plan Compiler）。
  *
  * <p>实现 Core 公开的投影 SPI {@link ExecutableFlowVisitor}，将已校验的拓扑计划投影为 Durable 专属物理树 {@link DurablePlanNode}，
  * 并预计算生成所有插槽角色列表（{@code slotRoles}）、挂起点唯一性校验以及线程池需求特征。</p>
@@ -41,7 +41,7 @@ import com.team4u.framework.flow.spi.OperationResolver;
 public final class DurablePlanCompiler implements ExecutableFlowVisitor<DurablePlanNode> {
 
     /**
-     * 耐久化流程定义元数据密封容器。
+     * 持久化流程定义元数据密封容器。
      */
     @Getter
     @Accessors(fluent = true)

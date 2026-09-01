@@ -16,7 +16,7 @@ import com.team4u.framework.flow.api.FlowObserver;
 import com.team4u.framework.flow.spi.OperationResolver;
 
 /**
- * 耐久化流执行引擎（Durable Flow Engine Facade）。
+ * 持久化流执行引擎（Durable Flow Engine Facade）。
  *
  * <p>负责配置并管理持久化组件、事件观察者、线程池资源与类型化编解码器。
  *

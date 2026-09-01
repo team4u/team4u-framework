@@ -11,7 +11,7 @@ import com.team4u.framework.flow.model.Resumed;
 import com.team4u.framework.flow.model.Outcome;
 
 /**
- * 耐久化流引擎内部状态模型族（Durable Internal State Models）。
+ * 持久化流引擎内部状态模型族（Durable Internal State Models）。
  *
  * <p>封装 Durable 运行时在执行期间的瞬态对象，包括插槽角色路径（{@link SlotRole}）、
  * 携带角色追踪的执行结果（{@link MachineOutcome}）、执行栈帧（{@link RuntimeFrame}）、

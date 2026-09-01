@@ -6,7 +6,7 @@ import lombok.experimental.Accessors;
 import java.util.Objects;
 
 /**
- * 耐久化流引擎统一异常（Durable Domain Exception）。
+ * 持久化流引擎统一异常（Durable Domain Exception）。
  *
  * <p>封装持久化存储、版本冲突、快照编解码、拓扑校验及生命周期调度过程中的所有错误，包含固定的错误码枚举 {@link Error}。</p>
  *

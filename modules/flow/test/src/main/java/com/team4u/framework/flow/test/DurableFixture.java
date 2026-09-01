@@ -17,7 +17,7 @@ import java.util.Objects;
 import java.util.Optional;
 
 /**
- * 耐久化流测试夹具（Durable Flow Test Fixture）。
+ * 持久化流测试夹具（Durable Flow Test Fixture）。
  *
  * <p>默认使用 {@link InMemoryDurableStore} 与 {@link Durable} 编译 {@link DurableExecutable}，
  * 为单元测试提供 start / recover / resume / cancel / snapshot 的精简操作门面与断言能力。</p>

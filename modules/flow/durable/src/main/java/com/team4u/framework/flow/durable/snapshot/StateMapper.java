@@ -2,7 +2,7 @@ package com.team4u.framework.flow.durable.snapshot;
 import com.team4u.framework.flow.durable.DurableException;
 
 /**
- * 业务数据与耐久化存储二进制块映射器 SPI 接口（State Mapper SPI）。
+ * 业务数据与持久化存储二进制块映射器 SPI 接口（State Mapper SPI）。
  *
  * <p>负责将内存中的应用状态对象序列化为 {@link StoredValue}，以及反序列化回内存对象。</p>
  *

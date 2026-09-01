@@ -10,7 +10,7 @@ import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
 import com.team4u.framework.flow.model.Outcome;
 
 /**
- * 耐久化执行命令执行结果封闭代数类型（Durable Execution Result Family）。
+ * 持久化执行命令执行结果封闭代数类型（Durable Execution Result Family）。
  *
  * <p>表示对 {@link DurableExecutable} 触发操作（start / resume / recover / cancel）后的返回结果，
  * 封装了最新的不可变快照信封（{@link DurableSnapshot}），派生四个强类型结果：

@@ -6,7 +6,7 @@ import java.util.Optional;
 import com.team4u.framework.flow.durable.snapshot.DurableSnapshot;
 
 /**
- * 耐久化快照持久化存储 SPI 接口（Durable Snapshot Store SPI）。
+ * 持久化快照持久化存储 SPI 接口（Durable Snapshot Store SPI）。
  *
  * <p>定义快照的只读加载与乐观锁 CAS（Compare-And-Set）原子写入契约：
  * <ul>

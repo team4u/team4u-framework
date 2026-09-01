@@ -46,7 +46,7 @@ import com.team4u.framework.flow.model.Resumed;
 import com.team4u.framework.flow.spi.NodeDescriptor;
 
 /**
- * 耐久化流程状态机执行内核（Durable Execution State Machine）。
+ * 持久化流程状态机执行内核（Durable Execution State Machine）。
  *
  * <p>核心架构与执行语义：
  * <ul>

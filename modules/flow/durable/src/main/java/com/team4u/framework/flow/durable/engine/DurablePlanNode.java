@@ -21,7 +21,7 @@ import com.team4u.framework.flow.spi.FallbackTrigger;
 import com.team4u.framework.flow.spi.NodeDescriptor;
 
 /**
- * 耐久化模块专用的物理执行计划节点接口族（Durable Plan Node Family）。
+ * 持久化模块专用的物理执行计划节点接口族（Durable Plan Node Family）。
  *
  * <p>由 {@link DurablePlanCompiler} 从 Core 物理节点投影生成，持有确定的插槽标识与绑定的实例引用，供 {@link DurableMachine} 驱动执行。</p>
  *
