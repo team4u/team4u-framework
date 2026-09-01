@@ -216,6 +216,7 @@ public class DurableConcurrencyTest {
         final InMemoryDurableStore realStore = new InMemoryDurableStore();
         final AtomicInteger bodyCalls = new AtomicInteger();
         final CountDownLatch bothLoaded = new CountDownLatch(2);
+        final java.util.Set<Long> loadedThreadIds = java.util.Collections.newSetFromMap(new java.util.concurrent.ConcurrentHashMap<Long, Boolean>());
         final AtomicLong expectedRaceRevision = new AtomicLong(-1);
         final DurableStore store = new DurableStore() {
             @Override
@@ -223,7 +224,9 @@ public class DurableConcurrencyTest {
                 Optional<DurableSnapshot> result = realStore.load(executionId);
                 if ("e-recover".equals(executionId) && result.isPresent()
                         && result.get().revision() == expectedRaceRevision.get()) {
-                    bothLoaded.countDown();
+                    if (loadedThreadIds.add(Thread.currentThread().getId())) {
+                        bothLoaded.countDown();
+                    }
                 }
                 return result;
             }

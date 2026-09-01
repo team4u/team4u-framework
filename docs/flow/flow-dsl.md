@@ -330,7 +330,7 @@ order.flow:24:5: [DSL_SYNTAX_ERROR] Expected '}' to close route block but found 
 
 以下示例演示了一个包含**参数提取投影、动态限流重试、多路路由、并行汇聚与单元测试断言**的完整电商订单履约实战。
 
-### 1. 业务流程 DSL 文本 (order-fulfillment.flow)
+### 业务流程 DSL 文本 (order-fulfillment.flow)
 
 ```dsl
 schema 1
@@ -391,7 +391,7 @@ flow order.fulfillment version 1.0 {
 }
 ```
 
-### 2. Java 符号绑定与执行测试
+### Java 符号绑定与执行测试
 
 ```java
 public class OrderFulfillmentTest {

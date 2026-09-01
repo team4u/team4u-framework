@@ -34,6 +34,8 @@
 
 | 模块 | 用途 |
 | :--- | :--- |
+| `team4u-flow-definition` | 外部纯数据 AST 模型、符号注册表（`FlowDefinitionRegistry`）与静态类型检查 |
+| `team4u-flow-dsl` | 人类可读声明式文本 DSL 解析与统一门面（`FlowDsl`） |
 | `team4u-flow-bean`（配合 `team4u-bean-spring`） | Spring / Bean 容器声明式绑定编排 |
 | `team4u-flow-durable` | 节点边界 CAS 检查点与跨进程崩溃恢复 |
 | `team4u-flow-diagram` | 流程结构 Mermaid 图与文本树渲染 |
@@ -350,6 +352,49 @@ DurableResult<Receipt> recovered = durable.recover("order-0001");
 
 ---
 
+## 声明式文本 DSL 快速上手 (Flow DSL)
+
+除了使用 Java Fluent API 编排外，还可通过人类可读的声明式文本 DSL 动态描述业务流程：
+
+```dsl
+# order.flow
+schema 1
+
+flow order.fulfillment version 1.0 {
+    step order.validate
+    step inventory.reserve {
+        timeout 1s
+    }
+    step payment.charge {
+        retry payment.standard { maxAttempts: 3 }
+    }
+}
+```
+
+在 Java 代码中一键绑定与执行：
+
+```java
+import com.team4u.framework.flow.dsl.FlowDsl;
+import com.team4u.framework.flow.definition.binding.BoundFlow;
+import com.team4u.framework.flow.definition.registry.FlowDefinitionRegistry;
+
+// 1. 注册业务组件符号
+FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+        .operation("order.validate", validateOp, OrderContext.class, OrderContext.class)
+        .operation("inventory.reserve", reserveOp, OrderContext.class, OrderContext.class)
+        .operation("payment.charge", chargeOp, OrderContext.class, OrderResult.class)
+        .build();
+
+// 2. 解析 DSL、执行静态类型推导并绑定为强类型执行器
+BoundFlow bound = FlowDsl.bind(dslText, "order.flow", registry);
+LocalExecutable<OrderContext, OrderResult> executable = bound.compileLocal();
+
+// 3. 执行流程
+FlowResult<OrderResult> result = executable.run(new OrderContext("ORD-1001"));
+```
+
+---
+
 ## 结构可视化与测试支持
 
 ### 流程图与文本树渲染 (team4u-flow-diagram)
@@ -390,6 +435,8 @@ public class FlowTest {
 
 ## 下一步与专栏导航
 
+- 外部流程定义与符号注册体系：[外部流程定义与符号注册 (team4u-flow-definition)](flow-definition.md)
+- 文本 DSL 语法原语与统一门面：[文本 DSL 语法与统一门面 (team4u-flow-dsl)](flow-dsl.md)
 - 深入掌握四态代数模型与生命周期：[四态业务结果与生命周期模型](flow-outcome.md)
 - 深入理解四态传播与消费规则：[四态传播规则与消费机制](flow-propagation.md)
 - 掌握 8 种运行时节点与 DSL 原语：[运行时节点与 DSL 编排原语](flow-nodes.md)

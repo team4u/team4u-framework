@@ -369,6 +369,24 @@ public class DurableWakeScheduler {
 
 ---
 
+## 在文本 DSL 与动态流程定义中使用 (Flow DSL 集成)
+
+`team4u-flow-retry` 提供了开箱即用的 [`RetryFlowDefinitionExtension`](file:///root/code/team4u-framework/modules/flow/retry/src/main/java/com/team4u/framework/flow/retry/RetryFlowDefinitionExtension.java) SPI 扩展。只要引入该依赖，即可在 `.flow` 文本 DSL 中直接使用 `retry` 修饰器：
+
+```dsl
+step payment.charge {
+    # 声明重试策略：最大重试 3 次，初始退避 100ms
+    retry payment.standard {
+        maxAttempts: 3,
+        backoff: 100ms
+    }
+}
+```
+
+底层由 [`RetryPolicyProvider`](file:///root/code/team4u-framework/modules/flow/retry/src/main/java/com/team4u/framework/flow/retry/RetryPolicyProvider.java) 与 `ConfigMapReader` 自动解析参数，支持 `maxAttempts`（或 `max-attempts`）、`backoff`（如 `100ms`, `1s`）等参数，无缝转化为 `FlowRetryPolicy`。
+
+---
+
 ## 关键语义与幂等保证
 
 ### 仅对 `Failed` 状态重试

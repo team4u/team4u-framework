@@ -16,6 +16,7 @@
 | **`PersistentPolicy<K, S>`** | `initialState` + `before` + `after` | 有状态且需跨重启持久化的治理策略（如延时重试、配额窗口） |
 | **`JoinStrategy<O>`** | `Outcome<O> join(ParallelResults results)` | 并行分支执行结果的自定义合并、加权与仲裁 |
 | **`OperationResolver`** | `Object resolve(Class<?> contract, String qualifier)` | 容器依赖解析（Spring / Guice 或自定义 IoC 容器集成） |
+| **`FlowDefinitionExtension`** | `void contribute(FlowDefinitionRegistry.Builder)` | 外部定义符号注册表 SPI 扩展与 PolicyProvider 自动发现装配 |
 | **`StateMapper`** | `StoredValue encode(Object)` / `decode(StoredValue)` | Durable 持久化应用状态的确定性序列化与反序列化 |
 | **`DurableStore`** | `load(id)` + `compareAndSet(id, revision, snapshot)` | 快照存储适配（如 Redis、MySQL、PostgreSQL 等外部存储） |
 | **`FlowObserver` / `DurableObserver`** | `void onEvent(Event)` | 全链路执行追踪、监控指标收集与审计日志 |
@@ -264,8 +265,54 @@ public interface ExecutableFlowVisitor<R> {
 
 ---
 
+## 符号注册表与 DSL 策略扩展 (`FlowDefinitionExtension`)
+
+当需要为 `team4u-flow-definition` 或 `team4u-flow-dsl` 贡献自定义的策略解析器（`PolicyProvider`）、自定义类型编解码器（`TypeCodec`）或全局公用函数时，实现 [`FlowDefinitionExtension`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/registry/FlowDefinitionExtension.java) SPI 接口：
+
+```java
+public interface FlowDefinitionExtension {
+    void contribute(FlowDefinitionRegistry.Builder registry);
+}
+```
+
+### 编写自定义扩展与 PolicyProvider
+
+```java
+public class MyFlowDefinitionExtension implements FlowDefinitionExtension {
+
+    @Override
+    public void contribute(FlowDefinitionRegistry.Builder registry) {
+        registry.policyProvider("security.auth", new PolicyProvider() {
+            @Override
+            public PolicyDescriptor descriptor() {
+                return PolicyDescriptor.builder()
+                        .id("security.auth")
+                        .persistent(false)
+                        .build();
+            }
+
+            @Override
+            public PolicyBinding create(Map<String, Object> configuration) {
+                ConfigMapReader reader = ConfigMapReader.of(configuration);
+                String role = reader.getString("ANONYMOUS", "role", "required-role");
+                return PolicyBinding.builder()
+                        .instance(new SecurityAuthPolicy(role))
+                        .persistent(false)
+                        .build();
+            }
+        });
+    }
+}
+```
+
+在 `src/main/resources/META-INF/services/com.team4u.framework.flow.definition.registry.FlowDefinitionExtension` 文件中注册该实现类即可。`FlowDefinitionRegistry.builder()` 将自动发现并装配该扩展。
+
+---
+
 ## 关联章节与进一步阅读
 
+- 外部流程定义与静态类型检查：[外部流程定义与符号注册 (team4u-flow-definition)](flow-definition.md)
+- 文本 DSL 语法与统一门面：[文本 DSL 语法与统一门面 (team4u-flow-dsl)](flow-dsl.md)
 - 掌握综合业务场景实战：[实战案例库与生产模式](flow-sample.md)
 - 了解全链路诊断码体系：[诊断码体系与故障排查手册](flow-diagnostics.md)
 - 查阅单元测试与断言工具：[测试支持与测试套件](flow-test.md)

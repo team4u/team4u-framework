@@ -381,6 +381,24 @@ $$\text{Key} = \text{team4u.ratelimiter.} + \text{point}$$
 
 ---
 
+## 在文本 DSL 与动态流程定义中使用 (Flow DSL 集成)
+
+`team4u-flow-ratelimiter` 提供了开箱即用的 [`RateLimitFlowDefinitionExtension`](file:///root/code/team4u-framework/modules/flow/ratelimiter/src/main/java/com/team4u/framework/flow/ratelimiter/RateLimitFlowDefinitionExtension.java) SPI 扩展。引入依赖后即可在 `.flow` 文本 DSL 中声明限流切面：
+
+```dsl
+step payment.charge {
+    # 声明限流切面：绑定 key 提取器与动态参数
+    policy payment.rateLimit key order.userId {
+        permits: 1,
+        action: "REJECT"
+    }
+}
+```
+
+底层通过 [`RateLimitPolicyProvider`](file:///root/code/team4u-framework/modules/flow/ratelimiter/src/main/java/com/team4u/framework/flow/ratelimiter/RateLimitPolicyProvider.java) 与 `ConfigMapReader` 自动解析参数，支持 `permits`（每次消耗令牌数）、`action`（`REJECT`、`FAIL` 或 `PROCEED`）与 `point`（自定义限流检查点标识），无缝构建强类型 `RateLimitPolicy`。
+
+---
+
 ## 关联章节与进一步阅读
 
 - [流程治理概览与洋葱模型](flow-governance.md)
