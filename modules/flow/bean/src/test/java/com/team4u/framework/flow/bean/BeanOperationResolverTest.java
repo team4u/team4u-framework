@@ -48,7 +48,7 @@ public class BeanOperationResolverTest {
             "flowBeanResolverTest.missing.2b0cfb55";
 
     @Test
-    public void beanFlowsCompileResolvesOperationClassAndQualifierBindings() {
+    public void localCompileResolvesOperationClassAndQualifierBindingsViaSpi() {
         ClassOperation classOperation = new ClassOperation();
         QualifiedOperation qualifiedOperation = new QualifiedOperationImpl();
         register(OPERATION_CLASS, classOperation);
@@ -58,7 +58,7 @@ public class BeanOperationResolverTest {
                 .then(QualifiedOperation.class, OPERATION_QUALIFIED);
 
         assertEquals("input:class:qualified",
-                BeanFlows.compile(flow).run("input").requireAccepted());
+                Local.compile(flow).run("input").requireAccepted());
         assertEquals(1, classOperation.calls.get());
         assertEquals(1, ((QualifiedOperationImpl) qualifiedOperation).calls.get());
     }
@@ -83,7 +83,7 @@ public class BeanOperationResolverTest {
     }
 
     @Test
-    public void beanFlowsCompileWithExplicitManagerResolvesPersistentPolicyBindings() {
+    public void localCompileWithExplicitManagerResolvesPersistentPolicyBindings() {
         ClassPersistentPolicy classPolicy = new ClassPersistentPolicy();
         QualifiedPersistentPolicyImpl qualifiedPolicy = new QualifiedPersistentPolicyImpl();
         register(PERSISTENT_CLASS, classPolicy);
@@ -94,20 +94,22 @@ public class BeanOperationResolverTest {
                 .persistentPolicy(QualifiedPersistentPolicy.class, PERSISTENT_QUALIFIED,
                         value -> value);
 
-        assertEquals("input", BeanFlows.compile(flow, BeanManager.getInstance())
+        assertEquals("input", Local.from(flow)
+                .resolver(new BeanOperationResolver(BeanManager.getInstance()))
+                .compile()
                 .run("input").requireAccepted());
         assertPersistentCalls(classPolicy);
         assertPersistentCalls(qualifiedPolicy);
     }
 
     @Test
-    public void beanFlowsFromBuilderConfiguresCustomOptions() {
+    public void localFromBuilderConfiguresCustomOptionsWithBeanResolver() {
         BuilderOperation op = new BuilderOperation();
         register(BUILDER_PERSISTENT_CLASS, op);
 
         Flow<String, String> flow = Flow.step(BuilderOperation.class, BUILDER_PERSISTENT_CLASS);
 
-        LocalExecutable<String, String> exec = BeanFlows.from(flow)
+        LocalExecutable<String, String> exec = Local.from(flow)
                 .flowId("bean-flow")
                 .flowVersion(3)
                 .compile();

@@ -113,8 +113,8 @@ public class PaymentOperation implements Operation<OrderRequest, Receipt> {
 ```java
 import com.team4u.framework.bean.spring.Team4uBeanConfiguration;
 import com.team4u.framework.flow.Flow;
+import com.team4u.framework.flow.Local;
 import com.team4u.framework.flow.LocalExecutable;
-import com.team4u.framework.flow.bean.BeanFlows;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.context.annotation.Import;
@@ -212,6 +212,17 @@ graph TD
 
 - **执行期透明生效**：`BeanOperationResolver` 查找到 Spring 代理对象后直接原样绑定，`@Transactional` 声明式事务、`@Cacheable` 缓存与自定义 AOP 切面完整触发；
 - **描述期智能解包**：导出只读描述模型 `FlowDescription`（用于 Mermaid 图表渲染）时，框架自动探测并解包出实际契约接口，避免渲染出 `com.sun.proxy.$Proxy42` 或 `PaymentOperation$$EnhancerBySpringCGLIB` 这类动态代理类名。
+
+---
+
+## SPI 自动发现机制与零配置接入
+
+`team4u-flow-bean` 遵循 Java 标准 SPI 契约，内置了 `OperationResolver` 的服务提供者配置：
+
+- **自动装配**：只要项目中引入了 `team4u-flow-bean` 依赖，`Local.compile(flow)`、`Local.from(flow)...compile()` 以及 `DurableRuntime.builder(store).build()` 将通过 `ServiceLoaderUtil` **自动发现并激活 `BeanOperationResolver`**；
+- **零额外参数**：业务代码与 `@Configuration` 中无需手动传递或配置任何 `OperationResolver` 参数；
+- **优雅降级**：在无 IoC 容器的纯 Java 环境中（未引入 `team4u-flow-bean`），解析器自动回退为默认的 `rejecting()` 模式，遇到未绑定的 Class 步骤时在编译期精确阻断并告警；
+- **显式覆盖**：若需使用非全局的自定义 `BeanManager`，仍可通过 `.resolver(new BeanOperationResolver(customManager))` 进行显式覆盖。
 
 ---
 

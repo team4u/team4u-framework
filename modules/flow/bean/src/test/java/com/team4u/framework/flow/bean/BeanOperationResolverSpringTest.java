@@ -56,7 +56,7 @@ public class BeanOperationResolverSpringTest {
     }
 
     @Test
-    public void beanFlowsInvokesExactSpringClassProxyAndItsAdvice() {
+    public void localInvokesExactSpringClassProxyAndItsAdvice() {
         CLASS_PROXY_ADVICE_CALLS.set(0);
         context = new AnnotationConfigApplicationContext(SpringConfiguration.class);
         ClassProxyOperation containerBean = context.getBean(
@@ -66,8 +66,8 @@ public class BeanOperationResolverSpringTest {
         assertTrue(AopUtils.isCglibProxy(containerBean));
         assertSame(containerBean,
                 resolver.resolve(ClassProxyOperation.class, CLASS_PROXY_BEAN_NAME));
-        assertEquals("input:class-proxy", BeanFlows.compile(
-                Flow.step(ClassProxyOperation.class, CLASS_PROXY_BEAN_NAME))
+        assertEquals("input:class-proxy", Local.compile(
+                Flow.step(ClassProxyOperation.class, CLASS_PROXY_BEAN_NAME), resolver)
                 .run("input").requireAccepted());
         assertEquals(1, CLASS_PROXY_ADVICE_CALLS.get());
     }
