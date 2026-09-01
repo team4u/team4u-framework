@@ -267,9 +267,9 @@ graph TD
 
 ---
 
-## 强类型配置读取器 (MapReader)
+## 动态策略参数读取 (MapReader)
 
-在编写自定义策略提供者（[`PolicyProvider`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/registry/PolicyProvider.java)）时，外部传入的配置通常是弱类型的 `Map<String, Object>`。[`MapReader`](file:///root/code/team4u-framework/modules/base/core/src/main/java/com/team4u/framework/base/util/MapReader.java) 提供了统一的安全读取工具：
+在编写自定义策略提供者（[`PolicyProvider`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/registry/PolicyProvider.java)）时，外部传入的配置通常是弱类型的 `Map<String, Object>`。可以直接使用 `team4u-base` 提供的 [`MapReader`](file:///root/code/team4u-framework/modules/base/core/src/main/java/com/team4u/framework/base/util/MapReader.java) 进行强类型安全参数提取（详见 [字典强类型读取器 (MapReader)](../base/base-map-reader.md)）：
 
 ```java
 public class MyRateLimitProvider implements PolicyProvider {
