@@ -173,14 +173,14 @@ FlowResult<OrderContext> result = FlowContextHolder.runWith(context, () -> execu
 
 若需在特定流程中按需挑选字段，可配置不同的 `ContextProjector`：
 
-### 1. 注解驱动模式（默认）
+### 注解驱动模式（默认）
 ```java
 FlowLoggingObserver observer = FlowLoggingObserver.builder()
         .contextProjector(ContextProjector.annotated())
         .build();
 ```
 
-### 2. 函数式 Lambda 投影模式（类型安全）
+### 函数式 Lambda 投影模式（类型安全）
 ```java
 FlowLoggingObserver observer = FlowLoggingObserver.builder()
         .contextProjector(ContextProjector.of((OrderContext ctx) -> Map.of(
@@ -191,7 +191,7 @@ FlowLoggingObserver observer = FlowLoggingObserver.builder()
         .build();
 ```
 
-### 3. 属性白名单模式
+### 属性白名单模式
 ```java
 FlowLoggingObserver observer = FlowLoggingObserver.builder()
         .contextProjector(ContextProjector.fields("orderId", "amount", "mobile"))
@@ -200,9 +200,38 @@ FlowLoggingObserver observer = FlowLoggingObserver.builder()
 
 ---
 
+# 链路树模型编程式获取与断言 (`TraceNode`)
+
+除输出控制台与日志系统外，`FlowLoggingObserver` 还支持通过编程式 API 直接提取结构化的调用拓扑树模型，用于下游 APM 指标上报或单元测试断言：
+
+```java
+// 获取最近一次已完成执行的根追踪节点
+TraceNode rootNode = observer.rootTraceNode();
+
+// 或按 executionId 获取指定执行实例的根节点
+TraceNode targetNode = observer.rootTraceNode("ORD-10086");
+
+// 访问节点核心指标
+String path = rootNode.getPath();            // AST 节点路径，如 "$"、"$/0"
+String label = rootNode.getLabel();          // 节点显示标签
+long duration = rootNode.getDurationMs();    // 耗时毫秒
+String outcome = rootNode.getOutcome();      // 四态执行结果 (ACCEPTED / REJECTED / SKIPPED / FAILED)
+String extra = rootNode.getExtra();          // 附加元数据 (如 attempt=2, selected=case:0)
+
+// 获取线程安全的子节点快照
+List<TraceNode> children = rootNode.snapshotChildren();
+```
+
+### 并发安全与多租户执行隔离
+
+- **Per-Execution 槽位隔离**：`FlowLoggingObserver` 内部使用 `ConcurrentHashMap<String, ExecutionTrace>` 按 `executionId` 进行隔离。多个线程并发复用同一个编译好的 `LocalExecutable` 时，各自的链路追踪树互不干扰；
+- **自闭环回收防泄漏**：当流程执行完毕（`FLOW_COMPLETED` / `FLOW_CANCELLED` / `FLOW_SUSPENDED`）时，当前执行树会自动从活跃跟踪表中弹出，保障高并发吞吐下的内存即时回收。
+
+---
+
 # 完整日志输出样式
 
-### 1. 运行中单步实时日志（逐行流式输出）
+### 运行中单步实时日志（逐行流式输出）
 
 ```text
 [INFO] flow.trace.order-checkout | action=FLOW_STARTED | execId=ORD-10086 | context={"orderId":"ORD-10086","realName":"张*丰","mobile":"138*****000","idCardNo":"11010***********45","cardNo":"622202******1234","amount":299.0,"status":"INITIAL"} | status=start
@@ -212,7 +241,7 @@ FlowLoggingObserver observer = FlowLoggingObserver.builder()
 [INFO] flow.trace.order-checkout | action=NODE_COMPLETED | execId=ORD-10086 | path=$/1 | label=银行扣款 | duration=85ms | outcome=ACCEPTED | attempt=2 | context={"orderId":"ORD-10086","realName":"张*丰","mobile":"138*****000","idCardNo":"11010***********45","cardNo":"622202******1234","amount":299.0,"status":"PAID"} | status=success
 ```
 
-### 2. 流程结束终态执行树与最终上下文汇总
+### 流程结束终态执行树与最终上下文汇总
 
 ```text
 [INFO] Flow Execution Summary [flowId=order-checkout | execId=ORD-10086 | total=125ms | outcome=ACCEPTED]
