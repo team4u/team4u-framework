@@ -129,6 +129,11 @@ public final class FlowBinder implements BindingContext {
     }
 
     @Override
+    public OperationResolver resolver() {
+        return resolver;
+    }
+
+    @Override
     @SuppressWarnings("unchecked")
     public Flow<?, ?> bindSpec(FlowSpec spec) {
         if (spec == null) {

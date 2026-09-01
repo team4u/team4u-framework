@@ -209,4 +209,74 @@ public class FlowDslParserTest {
             Assert.assertEquals("DUPLICATE_STEP_MERGE", ex.getDiagnostics().get(0).code());
         }
     }
+
+    @Test
+    public void testContentAfterEOFThrowsDiagnostic() {
+        String dsl = "flow test {\n" +
+                "    step op\n" +
+                "} extra_content_here";
+        try {
+            FlowDslParser.parse(dsl, "test.flow");
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(1, ex.getDiagnostics().size());
+            Assert.assertEquals(com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.DSL_SYNTAX_ERROR, ex.getDiagnostics().get(0).code());
+            Assert.assertTrue(ex.getMessage().contains("Unexpected content after flow definition"));
+        }
+    }
+
+    @Test
+    public void testDuplicateOtherwiseThrowsDiagnostic() {
+        String dsl = "flow test {\n" +
+                "    route status {\n" +
+                "        case PAID { step op1 }\n" +
+                "        otherwise { step op2 }\n" +
+                "        otherwise { step op3 }\n" +
+                "    }\n" +
+                "}";
+        try {
+            FlowDslParser.parse(dsl, "test.flow");
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(1, ex.getDiagnostics().size());
+            Assert.assertEquals(com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.DUPLICATE_OTHERWISE, ex.getDiagnostics().get(0).code());
+        }
+    }
+
+    @Test
+    public void testDuplicateJoinThrowsDiagnostic() {
+        String dsl = "flow test {\n" +
+                "    parallel {\n" +
+                "        branch b1 { step op1 }\n" +
+                "        join j1\n" +
+                "        join j2\n" +
+                "    }\n" +
+                "}";
+        try {
+            FlowDslParser.parse(dsl, "test.flow");
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(1, ex.getDiagnostics().size());
+            Assert.assertEquals(com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.DUPLICATE_JOIN, ex.getDiagnostics().get(0).code());
+        }
+    }
+
+    @Test
+    public void testDuplicateConfigKeyThrowsDiagnostic() {
+        String dsl = "flow test {\n" +
+                "    step op {\n" +
+                "        policy rate.limit {\n" +
+                "            limit = 10,\n" +
+                "            limit = 20\n" +
+                "        }\n" +
+                "    }\n" +
+                "}";
+        try {
+            FlowDslParser.parse(dsl, "test.flow");
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(1, ex.getDiagnostics().size());
+            Assert.assertEquals(com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.DUPLICATE_CONFIG_KEY, ex.getDiagnostics().get(0).code());
+        }
+    }
 }

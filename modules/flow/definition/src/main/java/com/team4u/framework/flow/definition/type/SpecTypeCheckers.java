@@ -343,6 +343,13 @@ public final class SpecTypeCheckers {
 
         @Override
         public TypeRef check(FirstApplicableSpec spec, TypeRef currentType, TypeCheckContext context) {
+            if (spec.branches() == null || spec.branches().isEmpty()) {
+                context.addDiagnostic(new Diagnostic(
+                        DiagnosticCodes.EMPTY_FIRST_APPLICABLE,
+                        "firstApplicable requires at least one branch",
+                        spec.span()));
+                return currentType;
+            }
             TypeRef branchOutputType = null;
             for (FlowSpec branch : spec.branches()) {
                 TypeRef out = context.checkSpec(branch, currentType);
@@ -376,23 +383,36 @@ public final class SpecTypeCheckers {
 
         @Override
         public TypeRef check(ParallelSpec parallel, TypeRef currentType, TypeCheckContext context) {
-            JoinDescriptor joinDesc = context.registry().join(parallel.join().id());
-            if (joinDesc == null) {
+            if (parallel.branches() == null || parallel.branches().isEmpty()) {
+                context.addDiagnostic(new Diagnostic(
+                        DiagnosticCodes.EMPTY_PARALLEL,
+                        "parallel requires at least one branch",
+                        parallel.span()));
+            }
+
+            JoinDescriptor joinDesc = parallel.join() != null
+                    ? context.registry().join(parallel.join().id())
+                    : null;
+            if (joinDesc == null && parallel.join() != null) {
                 context.addDiagnostic(new Diagnostic(
                         DiagnosticCodes.UNKNOWN_JOIN,
                         "Unknown join strategy: " + parallel.join().id(),
                         parallel.join().span()));
             }
 
-            Set<String> seenBranchNames = new HashSet<String>();
-            for (BranchSpec branch : parallel.branches()) {
-                if (!seenBranchNames.add(branch.name())) {
-                    context.addDiagnostic(new Diagnostic(
-                            DiagnosticCodes.DUPLICATE_BRANCH,
-                            "Duplicate parallel branch name: " + branch.name(),
-                            branch.span()));
+            if (parallel.branches() != null) {
+                Set<String> seenBranchNames = new HashSet<String>();
+                for (BranchSpec branch : parallel.branches()) {
+                    if (branch != null) {
+                        if (!seenBranchNames.add(branch.name())) {
+                            context.addDiagnostic(new Diagnostic(
+                                    DiagnosticCodes.DUPLICATE_BRANCH,
+                                    "Duplicate parallel branch name: " + branch.name(),
+                                    branch.span()));
+                        }
+                        context.checkSpec(branch.flow(), currentType);
+                    }
                 }
-                context.checkSpec(branch.flow(), currentType);
             }
 
             return joinDesc != null ? joinDesc.outputType() : TypeRef.ANY;
@@ -445,6 +465,11 @@ public final class SpecTypeCheckers {
             if (control.kind() == ControlSpec.ControlKind.POLICY || control.kind() == ControlSpec.ControlKind.RETRY) {
                 if (control.symbol() != null) {
                     validatePolicy(currentType, control.symbol(), control.key(), control.span(), context);
+                } else {
+                    context.addDiagnostic(new Diagnostic(
+                            DiagnosticCodes.INVALID_CONTROL,
+                            "Policy/retry control requires a valid symbol reference",
+                            control.span()));
                 }
             }
             return context.checkSpec(control.body(), currentType);

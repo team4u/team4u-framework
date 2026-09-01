@@ -187,8 +187,11 @@ public final class SpecBinders {
         @Override
         @SuppressWarnings({"unchecked", "rawtypes"})
         public Flow<?, ?> bind(FirstApplicableSpec spec, BindingContext context) {
-            if (spec.branches().isEmpty()) {
-                return Flow.identity();
+            if (spec.branches() == null || spec.branches().isEmpty()) {
+                throw new FlowDiagnosticException(
+                        DiagnosticCodes.EMPTY_FIRST_APPLICABLE,
+                        "firstApplicable requires at least one branch",
+                        spec.span());
             }
             if (spec.branches().size() == 1) {
                 return context.bindSpec(spec.branches().get(0));
@@ -226,10 +229,24 @@ public final class SpecBinders {
         @Override
         @SuppressWarnings({"unchecked", "rawtypes"})
         public Flow<?, ?> bind(ParallelSpec parallel, BindingContext context) {
+            if (parallel.branches() == null || parallel.branches().isEmpty()) {
+                throw new FlowDiagnosticException(
+                        DiagnosticCodes.EMPTY_PARALLEL,
+                        "parallel requires at least one branch",
+                        parallel.span());
+            }
+            if (parallel.join() == null) {
+                throw new FlowDiagnosticException(
+                        DiagnosticCodes.UNKNOWN_JOIN,
+                        "Parallel join strategy must be specified",
+                        parallel.span());
+            }
+
             JoinDescriptor joinDesc = context.registry().join(parallel.join().id());
             if (joinDesc == null) {
                 throw new FlowDiagnosticException(
-                        DiagnosticCodes.UNKNOWN_JOIN, "Join strategy not found: " + parallel.join().id());
+                        DiagnosticCodes.UNKNOWN_JOIN, "Join strategy not found: " + parallel.join().id(),
+                        parallel.join().span());
             }
 
             List<Branch> branches = new ArrayList<Branch>();
@@ -238,12 +255,36 @@ public final class SpecBinders {
             }
 
             JoinStrategy<?> strategy = joinDesc.strategy();
+            if (strategy == null && joinDesc.provider() != null) {
+                strategy = joinDesc.provider().provide(context.resolver());
+            }
             if (strategy == null && joinDesc.contract() != null) {
-                try {
-                    strategy = joinDesc.contract().newInstance();
-                } catch (Exception ex) {
-                    throw new IllegalStateException("Failed to instantiate join strategy: " + joinDesc.contract(), ex);
+                if (context.resolver() != null) {
+                    try {
+                        Object resolved = context.resolver().resolve(joinDesc.contract(), joinDesc.qualifier());
+                        if (resolved instanceof JoinStrategy) {
+                            strategy = (JoinStrategy<?>) resolved;
+                        }
+                    } catch (Exception ignored) {
+                    }
                 }
+                if (strategy == null) {
+                    try {
+                        strategy = joinDesc.contract().getDeclaredConstructor().newInstance();
+                    } catch (Exception ex) {
+                        throw new FlowDiagnosticException(
+                                DiagnosticCodes.BINDING_TYPE,
+                                "Failed to instantiate join strategy " + joinDesc.contract().getName() + ": " + ex.getMessage(),
+                                parallel.join().span());
+                    }
+                }
+            }
+
+            if (strategy == null) {
+                throw new FlowDiagnosticException(
+                        DiagnosticCodes.MISSING_BINDING,
+                        "Cannot resolve join strategy for: " + parallel.join().id(),
+                        parallel.join().span());
             }
 
             return Flow.parallel(branches.toArray(new Branch[0])).join((JoinStrategy) strategy);
@@ -279,7 +320,9 @@ public final class SpecBinders {
             String code = complete.literal() != null ? complete.literal() : complete.kind().name();
             switch (complete.kind()) {
                 case ACCEPTED:
-                    return Flow.accepted(complete.literal() != null ? complete.literal() : "");
+                    return complete.literal() != null
+                            ? Flow.accepted(complete.literal())
+                            : Flow.identity();
                 case REJECTED:
                     return Flow.rejected(Reason.of(code, code));
                 case SKIPPED:
@@ -311,6 +354,12 @@ public final class SpecBinders {
                     return Flow.scope((String) control.configuration(), bodyFlow);
                 case POLICY:
                 case RETRY:
+                    if (control.symbol() == null || control.symbol().id() == null) {
+                        throw new FlowDiagnosticException(
+                                DiagnosticCodes.INVALID_CONTROL,
+                                "Policy/retry control requires a valid symbol reference",
+                                control.span());
+                    }
                     return context.applyPolicy(
                             bodyFlow,
                             control.symbol().id(),

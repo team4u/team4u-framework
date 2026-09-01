@@ -109,7 +109,7 @@ public class BeanOperationResolverSpringTest {
         );
 
         BoundFlow bound = FlowBinder.bind(def, registry);
-        LocalExecutable<String, String> exec = bound.compileLocal();
+        LocalExecutable<String, String> exec = bound.compileLocal(String.class, String.class);
         FlowResult<String> result = exec.run("order-100");
         assertEquals("order-100:validated", result.requireAccepted());
     }

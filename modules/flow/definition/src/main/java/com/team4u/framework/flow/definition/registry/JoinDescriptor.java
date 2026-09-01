@@ -25,6 +25,8 @@ public final class JoinDescriptor {
     private final TypeRef outputType;
     private final JoinStrategy<?> strategy;
     private final Class<? extends JoinStrategy<?>> contract;
+    private final String qualifier;
+    private final JoinProvider provider;
 
     @Builder(toBuilder = true)
     @SuppressWarnings("unchecked")
@@ -32,12 +34,16 @@ public final class JoinDescriptor {
             String id,
             TypeRef outputType,
             JoinStrategy<?> strategy,
-            Class<? extends JoinStrategy<?>> contract) {
+            Class<? extends JoinStrategy<?>> contract,
+            String qualifier,
+            JoinProvider provider) {
         this.id = Objects.requireNonNull(id, "join id must not be null");
         this.outputType = outputType != null ? outputType : TypeRef.ANY;
         this.strategy = strategy;
         this.contract = contract != null
                 ? contract
                 : (strategy != null ? (Class<? extends JoinStrategy<?>>) strategy.getClass() : null);
+        this.qualifier = qualifier;
+        this.provider = provider;
     }
 }

@@ -435,4 +435,161 @@ public class TypeCheckerTest {
         Assert.assertFalse(result.success());
         Assert.assertEquals(DiagnosticCodes.UNSUPPORTED_SPEC, result.diagnostics().get(0).code());
     }
+
+    @Test
+    public void testEntryParallelInputTypeInferenceAndSuccess() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("branch.a", (OperationContext ctx, Order in) -> Outcome.accepted("A:" + in.id), Order.class, String.class)
+                .operation("branch.b", (OperationContext ctx, Order in) -> Outcome.accepted("B:" + in.id), Order.class, String.class)
+                .join("join.summary", results -> Outcome.accepted("JOINED"), String.class)
+                .build();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "parallel.flow", "1",
+                new ParallelSpec(
+                        Arrays.asList(
+                                new BranchSpec("b1", new StepSpec(SymbolRef.of("branch.a"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN), SourceSpan.UNKNOWN),
+                                new BranchSpec("b2", new StepSpec(SymbolRef.of("branch.b"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN), SourceSpan.UNKNOWN)
+                        ),
+                        SymbolRef.of("join.summary"),
+                        SourceSpan.UNKNOWN
+                ),
+                "test.flow", SourceSpan.UNKNOWN
+        );
+
+        // inferInitialInputType should narrow Order + Order -> Order
+        TypeCheckResult result = TypeChecker.check(def, registry);
+        Assert.assertTrue(result.success());
+        Assert.assertEquals(TypeRef.of(String.class), result.outputType());
+    }
+
+    @Test
+    public void testEntryParallelInputTypeMismatch() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("branch.order", (OperationContext ctx, Order in) -> Outcome.accepted("A"), Order.class, String.class)
+                .operation("branch.payment", (OperationContext ctx, PaymentRequest in) -> Outcome.accepted("B"), PaymentRequest.class, String.class)
+                .join("join.summary", results -> Outcome.accepted("JOINED"), String.class)
+                .build();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "parallel.flow", "1",
+                new ParallelSpec(
+                        Arrays.asList(
+                                new BranchSpec("b1", new StepSpec(SymbolRef.of("branch.order"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN), SourceSpan.UNKNOWN),
+                                new BranchSpec("b2", new StepSpec(SymbolRef.of("branch.payment"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN), SourceSpan.UNKNOWN)
+                        ),
+                        SymbolRef.of("join.summary"),
+                        SourceSpan.UNKNOWN
+                ),
+                "test.flow", SourceSpan.UNKNOWN
+        );
+
+        TypeCheckResult result = TypeChecker.check(def, registry);
+        Assert.assertFalse(result.success());
+        Assert.assertEquals(DiagnosticCodes.TYPE_MISMATCH, result.diagnostics().get(0).code());
+    }
+
+    @Test
+    public void testEntryFirstApplicableInputTypeInferenceAndSuccess() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("fa.a", (OperationContext ctx, Order in) -> Outcome.accepted("A"), Order.class, String.class)
+                .operation("fa.b", (OperationContext ctx, Order in) -> Outcome.accepted("B"), Order.class, String.class)
+                .build();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "fa.flow", "1",
+                new FirstApplicableSpec(
+                        Arrays.asList(
+                                new StepSpec(SymbolRef.of("fa.a"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN),
+                                new StepSpec(SymbolRef.of("fa.b"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN)
+                        ),
+                        SourceSpan.UNKNOWN
+                ),
+                "test.flow", SourceSpan.UNKNOWN
+        );
+
+        TypeCheckResult result = TypeChecker.check(def, registry);
+        Assert.assertTrue(result.success());
+        Assert.assertEquals(TypeRef.of(String.class), result.outputType());
+    }
+
+    @Test
+    public void testEntryFirstApplicableInputTypeMismatch() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("fa.order", (OperationContext ctx, Order in) -> Outcome.accepted("A"), Order.class, String.class)
+                .operation("fa.payment", (OperationContext ctx, PaymentRequest in) -> Outcome.accepted("B"), PaymentRequest.class, String.class)
+                .build();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "fa.flow", "1",
+                new FirstApplicableSpec(
+                        Arrays.asList(
+                                new StepSpec(SymbolRef.of("fa.order"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN),
+                                new StepSpec(SymbolRef.of("fa.payment"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN)
+                        ),
+                        SourceSpan.UNKNOWN
+                ),
+                "test.flow", SourceSpan.UNKNOWN
+        );
+
+        TypeCheckResult result = TypeChecker.check(def, registry);
+        Assert.assertFalse(result.success());
+        Assert.assertEquals(DiagnosticCodes.TYPE_MISMATCH, result.diagnostics().get(0).code());
+    }
+
+    @Test
+    public void testEmptyParallelThrowsDiagnostic() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .join("join.summary", results -> Outcome.accepted("JOINED"), String.class)
+                .build();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "empty.parallel", "1",
+                new ParallelSpec(Collections.emptyList(), SymbolRef.of("join.summary"), SourceSpan.UNKNOWN),
+                "test.flow", SourceSpan.UNKNOWN
+        );
+
+        TypeCheckResult result = TypeChecker.check(def, registry);
+        Assert.assertFalse(result.success());
+        Assert.assertEquals(DiagnosticCodes.EMPTY_PARALLEL, result.diagnostics().get(0).code());
+    }
+
+    @Test
+    public void testEmptyFirstApplicableThrowsDiagnostic() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.empty();
+        FlowDefinition def = new FlowDefinition(
+                1, "empty.fa", "1",
+                new FirstApplicableSpec(Collections.emptyList(), SourceSpan.UNKNOWN),
+                "test.flow", SourceSpan.UNKNOWN
+        );
+
+        TypeCheckResult result = TypeChecker.check(def, registry);
+        Assert.assertFalse(result.success());
+        Assert.assertEquals(DiagnosticCodes.EMPTY_FIRST_APPLICABLE, result.diagnostics().get(0).code());
+    }
+
+    @Test
+    public void testInvalidFlowDefinitionThrowsDiagnostic() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.empty();
+
+        // 1. blank ID
+        FlowDefinition badId = new FlowDefinition(
+                1, "   ", "1",
+                new CompleteSpec(CompleteSpec.CompleteKind.ACCEPTED, null, SourceSpan.UNKNOWN),
+                "test.flow", SourceSpan.UNKNOWN
+        );
+        TypeCheckResult res1 = TypeChecker.check(badId, registry);
+        Assert.assertFalse(res1.success());
+        Assert.assertEquals(DiagnosticCodes.INVALID_FLOW_ID, res1.diagnostics().get(0).code());
+
+        // 2. negative schema
+        FlowDefinition badSchema = new FlowDefinition(
+                -1, "valid.id", "1",
+                new CompleteSpec(CompleteSpec.CompleteKind.ACCEPTED, null, SourceSpan.UNKNOWN),
+                "test.flow", SourceSpan.UNKNOWN
+        );
+        TypeCheckResult res2 = TypeChecker.check(badSchema, registry);
+        Assert.assertFalse(res2.success());
+        Assert.assertEquals(DiagnosticCodes.DSL_UNSUPPORTED_SCHEMA, res2.diagnostics().get(0).code());
+    }
 }

@@ -55,28 +55,127 @@ public final class BoundFlow {
     }
 
     /**
-     * 编译为本地极速执行器（优先使用绑定期解析器，若无则使用全局默认解析器）。
+     * 编译为默认的通用本地执行器（输入与输出类型为 Object）。
      *
-     * @param <I> 输入类型
-     * @param <O> 输出类型
      * @return 本地执行器
      */
-    @SuppressWarnings("unchecked")
-    public <I, O> LocalExecutable<I, O> compileLocal() {
+    public LocalExecutable<Object, Object> compileLocal() {
         return compileLocal(this.resolver != null ? this.resolver : OperationResolver.defaultResolver());
     }
 
     /**
-     * 以指定的组件解析器编译为本地极速执行器。
+     * 以指定的组件解析器编译为通用本地执行器。
      *
      * @param resolver 组件解析器
-     * @param <I>      输入类型
-     * @param <O>      输出类型
      * @return 本地执行器
      */
     @SuppressWarnings("unchecked")
-    public <I, O> LocalExecutable<I, O> compileLocal(OperationResolver resolver) {
+    public LocalExecutable<Object, Object> compileLocal(OperationResolver resolver) {
+        return Local.compile((Flow<Object, Object>) flow, resolver);
+    }
+
+    /**
+     * 校验请求的输入与输出类型，并编译为强类型本地执行器。
+     *
+     * @param inputType  期望的输入类型 Class
+     * @param outputType 期望的输出类型 Class
+     * @param <I>        输入类型
+     * @param <O>        输出类型
+     * @return 强类型本地执行器
+     * @throws IllegalArgumentException 当请求的类型与 Flow 定义的静态类型不兼容时抛出
+     */
+    public <I, O> LocalExecutable<I, O> compileLocal(Class<I> inputType, Class<O> outputType) {
+        return compileLocal(inputType, outputType, this.resolver != null ? this.resolver : OperationResolver.defaultResolver());
+    }
+
+    /**
+     * 以指定的组件解析器校验请求类型并编译为强类型本地执行器。
+     *
+     * @param inputType  期望的输入类型 Class
+     * @param outputType 期望的输出类型 Class
+     * @param resolver   组件解析器
+     * @param <I>        输入类型
+     * @param <O>        输出类型
+     * @return 强类型本地执行器
+     * @throws IllegalArgumentException 当请求的类型与 Flow 定义的静态类型不兼容时抛出
+     */
+    @SuppressWarnings("unchecked")
+    public <I, O> LocalExecutable<I, O> compileLocal(
+            Class<I> inputType,
+            Class<O> outputType,
+            OperationResolver resolver) {
+        validateTypes(inputType, outputType);
         return Local.compile((Flow<I, O>) flow, resolver);
+    }
+
+    /**
+     * 转换为强类型绑定的视图句柄。
+     *
+     * @param inputType  输入类型 Class
+     * @param outputType 输出类型 Class
+     * @param <I>        输入类型
+     * @param <O>        输出类型
+     * @return 强类型绑定句柄
+     */
+    public <I, O> TypedBoundFlow<I, O> as(Class<I> inputType, Class<O> outputType) {
+        validateTypes(inputType, outputType);
+        return new TypedBoundFlow<I, O>(this, inputType, outputType);
+    }
+
+    private void validateTypes(Class<?> requestedInput, Class<?> requestedOutput) {
+        if (requestedInput != null && this.inputType != TypeRef.ANY) {
+            TypeRef requestedRef = TypeRef.of(requestedInput);
+            if (!this.inputType.isAssignableFrom(requestedRef)) {
+                throw new IllegalArgumentException(
+                        "Requested input type " + requestedInput.getName()
+                                + " is incompatible with flow input type " + this.inputType.typeName());
+            }
+        }
+        if (requestedOutput != null && this.outputType != TypeRef.ANY) {
+            TypeRef requestedRef = TypeRef.of(requestedOutput);
+            if (!requestedRef.isAssignableFrom(this.outputType)) {
+                throw new IllegalArgumentException(
+                        "Requested output type " + requestedOutput.getName()
+                                + " is incompatible with flow output type " + this.outputType.typeName());
+            }
+        }
+    }
+
+    /**
+     * 强类型绑定句柄（Typed Bound Flow）。
+     *
+     * @param <I> 输入类型
+     * @param <O> 输出类型
+     */
+    @Getter
+    @Accessors(fluent = true)
+    public static final class TypedBoundFlow<I, O> {
+        private final BoundFlow delegate;
+        private final Class<I> inputType;
+        private final Class<O> outputType;
+
+        TypedBoundFlow(BoundFlow delegate, Class<I> inputType, Class<O> outputType) {
+            this.delegate = delegate;
+            this.inputType = inputType;
+            this.outputType = outputType;
+        }
+
+        public LocalExecutable<I, O> compileLocal() {
+            return delegate.compileLocal(inputType, outputType);
+        }
+
+        public LocalExecutable<I, O> compileLocal(OperationResolver resolver) {
+            return delegate.compileLocal(inputType, outputType, resolver);
+        }
+
+        @SuppressWarnings("unchecked")
+        public Flow<I, O> flow() {
+            return (Flow<I, O>) delegate.flow();
+        }
+
+        public BoundFlow raw() {
+            return delegate;
+        }
     }
 
     /**

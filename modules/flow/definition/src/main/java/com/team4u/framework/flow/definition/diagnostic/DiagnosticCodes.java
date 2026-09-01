@@ -15,6 +15,17 @@ public final class DiagnosticCodes {
     public static final String DSL_UNSUPPORTED_SCHEMA = "DSL_UNSUPPORTED_SCHEMA";
     public static final String DUPLICATE_STEP_PROJECT = "DUPLICATE_STEP_PROJECT";
     public static final String DUPLICATE_STEP_MERGE = "DUPLICATE_STEP_MERGE";
+    public static final String DUPLICATE_OTHERWISE = "DUPLICATE_OTHERWISE";
+    public static final String DUPLICATE_JOIN = "DUPLICATE_JOIN";
+    public static final String DUPLICATE_CONFIG_KEY = "DUPLICATE_CONFIG_KEY";
+
+    // Definition & Structural 阶段错误码
+    public static final String INVALID_DEFINITION = "INVALID_DEFINITION";
+    public static final String INVALID_FLOW_ID = "INVALID_FLOW_ID";
+    public static final String INVALID_FLOW_VERSION = "INVALID_FLOW_VERSION";
+    public static final String INVALID_CONTROL = "INVALID_CONTROL";
+    public static final String EMPTY_PARALLEL = "EMPTY_PARALLEL";
+    public static final String EMPTY_FIRST_APPLICABLE = "EMPTY_FIRST_APPLICABLE";
 
     // Symbol 阶段错误码
     public static final String UNKNOWN_OPERATION = "UNKNOWN_OPERATION";

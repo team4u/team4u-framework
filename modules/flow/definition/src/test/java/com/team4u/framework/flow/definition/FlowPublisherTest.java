@@ -35,6 +35,7 @@ public class FlowPublisherTest {
         BoundFlow boundV7 = publisher.publish(v7);
         Assert.assertNotNull(boundV7);
         Assert.assertSame(boundV7, publisher.get("order.create", "7"));
+        Assert.assertSame(boundV7, publisher.get(FlowPublisher.FlowKey.of("order.create", "7")));
 
         // 尝试重复覆盖已发布的 (order.create, 7) 必须被拒绝
         FlowDefinition v7Duplicate = new FlowDefinition(
@@ -59,5 +60,8 @@ public class FlowPublisherTest {
         BoundFlow boundV8 = publisher.publish(v8);
         Assert.assertNotNull(boundV8);
         Assert.assertEquals("8", publisher.get("order.create", "8").metadata().version());
+
+        Assert.assertEquals(2, publisher.publishedFlows().size());
+        Assert.assertNull(publisher.get("non.existent"));
     }
 }

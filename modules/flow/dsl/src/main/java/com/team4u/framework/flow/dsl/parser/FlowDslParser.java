@@ -86,7 +86,9 @@ public final class FlowDslParser {
             root = new SequenceSpec(statements, span(startToken, endToken));
         }
 
-        return new FlowDefinition(schema, flowId, version, root, sourceName, span(startToken, endToken));
+        FlowDefinition def = new FlowDefinition(schema, flowId, version, root, sourceName, span(startToken, endToken));
+        consume(TokenType.EOF, "Unexpected content after flow definition");
+        return def;
     }
 
     private List<FlowSpec> parseStatements() {
@@ -220,6 +222,12 @@ public final class FlowDslParser {
                 FlowSpec branch = parseBracedBody(caseStart, "Expected '{' to start case branch", "Expected '}' to close case branch");
                 cases.add(new CaseSpec(keyToken.text(), branch, span(caseStart, previous())));
             } else if (match(TokenType.OTHERWISE)) {
+                if (otherwise != null) {
+                    throw new FlowDiagnosticException(new Diagnostic(
+                            DiagnosticCodes.DUPLICATE_OTHERWISE,
+                            "Duplicate 'otherwise' branch in route block",
+                            caseStart.span()));
+                }
                 otherwise = parseBracedBody(caseStart, "Expected '{' to start otherwise branch", "Expected '}' to close otherwise branch");
             } else {
                 throw error(caseStart, "Expected 'case' or 'otherwise' in route block");
@@ -273,6 +281,12 @@ public final class FlowDslParser {
                 FlowSpec flow = parseBracedBody(token, "Expected '{' after branch name", "Expected '}' to close branch");
                 branches.add(new BranchSpec(nameToken.text(), flow, span(token, previous())));
             } else if (match(TokenType.JOIN)) {
+                if (join != null) {
+                    throw new FlowDiagnosticException(new Diagnostic(
+                            DiagnosticCodes.DUPLICATE_JOIN,
+                            "Duplicate 'join' declaration in parallel block",
+                            token.span()));
+                }
                 Token joinToken = consumeIdentifier("Expected join strategy ID after 'join'");
                 join = SymbolRef.of(joinToken.text(), joinToken.span());
             } else {
@@ -365,6 +379,12 @@ public final class FlowDslParser {
         Map<String, Object> config = new LinkedHashMap<String, Object>();
         while (!check(TokenType.RBRACE) && !isAtEnd()) {
             Token keyToken = consumeIdentifierOrKeyword("Expected config property key");
+            if (config.containsKey(keyToken.text())) {
+                throw new FlowDiagnosticException(new Diagnostic(
+                        DiagnosticCodes.DUPLICATE_CONFIG_KEY,
+                        "Duplicate configuration key: " + keyToken.text(),
+                        keyToken.span()));
+            }
             match(TokenType.COLON);
             match(TokenType.EQUALS);
             Token valToken = advance();

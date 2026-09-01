@@ -70,7 +70,7 @@ public class FlowDslTest {
                 .build();
 
         BoundFlow bound = FlowDsl.bind(dsl, "order.flow", registry);
-        LocalExecutable<OrderContext, OrderContext> exec = bound.compileLocal();
+        LocalExecutable<OrderContext, OrderContext> exec = bound.compileLocal(OrderContext.class, OrderContext.class);
 
         // 验证 PAID 分支
         OrderContext ctxPaid = new OrderContext("O1", 2, true);
@@ -111,7 +111,7 @@ public class FlowDslTest {
                 .build();
 
         BoundFlow bound = FlowDsl.bind(dsl, registry);
-        LocalExecutable<OrderContext, OrderContext> exec = bound.compileLocal();
+        LocalExecutable<OrderContext, OrderContext> exec = bound.compileLocal(OrderContext.class, OrderContext.class);
         OrderContext ctx = new OrderContext("O3", 5, true);
         FlowResult<OrderContext> result = exec.run(ctx);
         OrderContext out = result.requireAccepted();
@@ -144,12 +144,13 @@ public class FlowDslTest {
                 .build();
 
         BoundFlow bound = FlowDsl.bind(dsl, registry);
-        LocalExecutable<String, String> exec = bound.compileLocal();
+        LocalExecutable<String, String> exec = bound.compileLocal(String.class, String.class);
         FlowResult<String> result = exec.run("order123");
         Assert.assertEquals("ALL_PASSED_COUNT=2", result.requireAccepted());
     }
 
     @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public void testAwaitExecution() {
         String dsl = "flow callback.demo {\n" +
                 "    await payment.callback\n" +
@@ -160,7 +161,7 @@ public class FlowDslTest {
                 .build();
 
         BoundFlow bound = FlowDsl.bind(dsl, registry);
-        LocalExecutable<String, Resumed<String, String>> exec = bound.compileLocal();
+        LocalExecutable<String, Resumed<String, String>> exec = (LocalExecutable) bound.compileLocal(String.class, Resumed.class);
         FlowResult<Resumed<String, String>> result = exec.run("init_state");
         Assert.assertTrue(result instanceof FlowResult.Suspended);
         Assert.assertTrue(((FlowResult.Suspended<Resumed<String, String>>) result).awaiting(ResumePoint.named("payment.callback")));
@@ -186,7 +187,7 @@ public class FlowDslTest {
 
         // FlowDsl.bind(dsl, registry) delegates to registry.fallbackResolver()
         BoundFlow bound = FlowDsl.bind(dsl, registry);
-        LocalExecutable<String, String> exec = bound.compileLocal();
+        LocalExecutable<String, String> exec = bound.compileLocal(String.class, String.class);
         FlowResult<String> result = exec.run("hello");
         Assert.assertEquals("ECHO:hello", result.requireAccepted());
     }
@@ -202,7 +203,7 @@ public class FlowDslTest {
                 .build();
 
         BoundFlow bound = FlowDsl.bind(dsl, registry, (contract, qualifier) -> new EchoOperation());
-        LocalExecutable<String, String> exec = bound.compileLocal();
+        LocalExecutable<String, String> exec = bound.compileLocal(String.class, String.class);
         FlowResult<String> result = exec.run("world");
         Assert.assertEquals("ECHO:world", result.requireAccepted());
     }

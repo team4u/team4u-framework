@@ -53,4 +53,17 @@ public final class FlowDefinition implements Serializable {
     public FlowDefinitionMetadata metadata() {
         return new FlowDefinitionMetadata(schema, id, version, source);
     }
+
+    /**
+     * 获取适用于 Durable 持久化引擎的整型版本号。
+     *
+     * @return 整型版本号（若无法解析为整数则回退为 1）
+     */
+    public int durableVersion() {
+        try {
+            return Integer.parseInt(version.trim());
+        } catch (Exception ex) {
+            return 1;
+        }
+    }
 }

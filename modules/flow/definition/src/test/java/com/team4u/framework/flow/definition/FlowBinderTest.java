@@ -47,7 +47,7 @@ public class FlowBinderTest {
 
         BoundFlow bound = FlowBinder.bind(def, registry);
         Assert.assertNotNull(bound.flow());
-        LocalExecutable<Order, Order> exec = bound.compileLocal();
+        LocalExecutable<Order, Order> exec = bound.compileLocal(Order.class, Order.class);
         FlowResult<Order> result = exec.run(new Order("1001", 1));
         Assert.assertEquals(2, result.requireAccepted().count);
     }
@@ -74,7 +74,7 @@ public class FlowBinderTest {
         );
 
         BoundFlow bound = FlowBinder.bind(def, registry);
-        LocalExecutable<String, String> exec = bound.compileLocal();
+        LocalExecutable<String, String> exec = bound.compileLocal(String.class, String.class);
         FlowResult<String> result = exec.run("init");
         Assert.assertEquals("init_step", result.requireAccepted());
     }
@@ -103,12 +103,13 @@ public class FlowBinderTest {
         );
 
         BoundFlow bound = FlowBinder.bind(def, registry);
-        LocalExecutable<String, String> exec = bound.compileLocal();
+        LocalExecutable<String, String> exec = bound.compileLocal(String.class, String.class);
         FlowResult<String> result = exec.run("input");
         Assert.assertEquals("JOINED:2", result.requireAccepted());
     }
 
     @Test
+    @SuppressWarnings({"unchecked", "rawtypes"})
     public void testBindAwaitResumePoint() {
         FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
                 .resumePoint("user.confirm", String.class)
@@ -122,7 +123,7 @@ public class FlowBinderTest {
 
         BoundFlow bound = FlowBinder.bind(def, registry);
         Assert.assertNotNull(bound.flow());
-        LocalExecutable<String, Resumed<String, String>> exec = bound.compileLocal();
+        LocalExecutable<String, Resumed<String, String>> exec = (LocalExecutable) bound.compileLocal(String.class, Resumed.class);
         FlowResult<Resumed<String, String>> result = exec.run("current_val");
         Assert.assertTrue(result instanceof FlowResult.Suspended);
         Assert.assertTrue(((FlowResult.Suspended<Resumed<String, String>>) result).awaiting(ResumePoint.named("user.confirm")));
@@ -213,7 +214,7 @@ public class FlowBinderTest {
         );
 
         BoundFlow bound = FlowBinder.bind(def, registry);
-        LocalExecutable<Order, Order> exec = bound.compileLocal();
+        LocalExecutable<Order, Order> exec = bound.compileLocal(Order.class, Order.class);
         exec.run(new Order("user_123", 1));
 
         Assert.assertEquals(1, recordedKeys.size());
@@ -272,11 +273,66 @@ public class FlowBinderTest {
         );
 
         BoundFlow bound = FlowBinder.bind(def, registry);
-        LocalExecutable<Order, Order> exec = bound.compileLocal();
+        LocalExecutable<Order, Order> exec = bound.compileLocal(Order.class, Order.class);
         exec.run(new Order("user_123", 1));
 
         Assert.assertEquals(1, recordedKeys.size());
         // Provider-specified keyProjection has priority
         Assert.assertEquals("provider_fixed_key", recordedKeys.get(0));
+    }
+
+    @Test
+    public void testBoundFlowTypeValidation() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("order.validate", (OperationContext ctx, Order in) -> Outcome.accepted(in), Order.class, Order.class)
+                .build();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "order.simple", "12",
+                new StepSpec(SymbolRef.of("order.validate"), null, null, Collections.<ModifierSpec>emptyList(), SourceSpan.UNKNOWN),
+                "order.flow", SourceSpan.UNKNOWN
+        );
+
+        BoundFlow bound = FlowBinder.bind(def, registry);
+        Assert.assertEquals(12, def.durableVersion());
+
+        // Correct types
+        LocalExecutable<Order, Order> exec = bound.compileLocal(Order.class, Order.class);
+        Assert.assertNotNull(exec);
+
+        // as() handle
+        LocalExecutable<Order, Order> execViaAs = bound.as(Order.class, Order.class).compileLocal();
+        Assert.assertNotNull(execViaAs);
+
+        // Incompatible input type
+        try {
+            bound.compileLocal(String.class, Order.class);
+            Assert.fail("Expected IllegalArgumentException for incompatible input type");
+        } catch (IllegalArgumentException ex) {
+            Assert.assertTrue(ex.getMessage().contains("incompatible with flow input type"));
+        }
+
+        // Incompatible output type
+        try {
+            bound.compileLocal(Order.class, Integer.class);
+            Assert.fail("Expected IllegalArgumentException for incompatible output type");
+        } catch (IllegalArgumentException ex) {
+            Assert.assertTrue(ex.getMessage().contains("incompatible with flow output type"));
+        }
+    }
+
+    @Test
+    public void testCompleteAcceptedWithoutLiteralReturnsIdentity() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.empty();
+        FlowDefinition def = new FlowDefinition(
+                1, "complete.identity", "1",
+                new CompleteSpec(CompleteSpec.CompleteKind.ACCEPTED, null, SourceSpan.UNKNOWN),
+                "test.flow", SourceSpan.UNKNOWN
+        );
+
+        BoundFlow bound = FlowBinder.bind(def, registry);
+        LocalExecutable<String, String> exec = bound.compileLocal(String.class, String.class);
+        FlowResult<String> result = exec.run("pass_through");
+        Assert.assertEquals("pass_through", result.requireAccepted());
     }
 }

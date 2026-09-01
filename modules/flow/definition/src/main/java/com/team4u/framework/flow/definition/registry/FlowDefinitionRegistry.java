@@ -237,12 +237,31 @@ public final class FlowDefinitionRegistry {
 
         public Builder operation(OperationDescriptor descriptor) {
             Objects.requireNonNull(descriptor, "operation descriptor must not be null");
+            if (this.operations.containsKey(descriptor.id())) {
+                throw new IllegalArgumentException("Duplicate operation registration for id: " + descriptor.id()
+                        + ". Use overrideOperation(...) to explicitly overwrite.");
+            }
+            this.operations.put(descriptor.id(), descriptor);
+            return this;
+        }
+
+        public Builder overrideOperation(OperationDescriptor descriptor) {
+            Objects.requireNonNull(descriptor, "operation descriptor must not be null");
             this.operations.put(descriptor.id(), descriptor);
             return this;
         }
 
         public <I, O> Builder operation(String id, Operation<I, O> instance, Class<I> input, Class<O> output) {
             return operation(OperationDescriptor.builder()
+                    .id(id)
+                    .instance(instance)
+                    .inputType(TypeRef.of(input))
+                    .outputType(TypeRef.of(output))
+                    .build());
+        }
+
+        public <I, O> Builder overrideOperation(String id, Operation<I, O> instance, Class<I> input, Class<O> output) {
+            return overrideOperation(OperationDescriptor.builder()
                     .id(id)
                     .instance(instance)
                     .inputType(TypeRef.of(input))
@@ -261,8 +280,23 @@ public final class FlowDefinitionRegistry {
                     .build());
         }
 
+        public <I, O> Builder overrideOperation(String id, Operation<I, O> instance) {
+            Objects.requireNonNull(instance, "operation instance must not be null");
+            TypeRef[] types = GenericTypeResolver.resolveOperationTypes(instance.getClass());
+            return overrideOperation(OperationDescriptor.builder()
+                    .id(id)
+                    .instance(instance)
+                    .inputType(types[0])
+                    .outputType(types[1])
+                    .build());
+        }
+
         public Builder operation(String id, Class<? extends Operation<?, ?>> contract) {
             return operation(id, contract, (String) null);
+        }
+
+        public Builder overrideOperation(String id, Class<? extends Operation<?, ?>> contract) {
+            return overrideOperation(id, contract, (String) null);
         }
 
         public Builder operation(String id, Class<? extends Operation<?, ?>> contract, String qualifier) {
@@ -277,12 +311,32 @@ public final class FlowDefinitionRegistry {
                     .build());
         }
 
+        public Builder overrideOperation(String id, Class<? extends Operation<?, ?>> contract, String qualifier) {
+            Objects.requireNonNull(contract, "operation contract must not be null");
+            TypeRef[] types = GenericTypeResolver.resolveOperationTypes(contract);
+            return overrideOperation(OperationDescriptor.builder()
+                    .id(id)
+                    .contract(contract)
+                    .qualifier(qualifier)
+                    .inputType(types[0])
+                    .outputType(types[1])
+                    .build());
+        }
+
         public <I, O> Builder operation(
                 String id,
                 Class<? extends Operation<I, O>> contract,
                 Class<I> input,
                 Class<O> output) {
             return operation(id, contract, null, input, output);
+        }
+
+        public <I, O> Builder overrideOperation(
+                String id,
+                Class<? extends Operation<I, O>> contract,
+                Class<I> input,
+                Class<O> output) {
+            return overrideOperation(id, contract, null, input, output);
         }
 
         public <I, O> Builder operation(
@@ -300,7 +354,32 @@ public final class FlowDefinitionRegistry {
                     .build());
         }
 
+        public <I, O> Builder overrideOperation(
+                String id,
+                Class<? extends Operation<I, O>> contract,
+                String qualifier,
+                Class<I> input,
+                Class<O> output) {
+            return overrideOperation(OperationDescriptor.builder()
+                    .id(id)
+                    .contract(contract)
+                    .qualifier(qualifier)
+                    .inputType(TypeRef.of(input))
+                    .outputType(TypeRef.of(output))
+                    .build());
+        }
+
         public Builder policy(PolicyDescriptor descriptor) {
+            Objects.requireNonNull(descriptor, "policy descriptor must not be null");
+            if (this.policies.containsKey(descriptor.id())) {
+                throw new IllegalArgumentException("Duplicate policy registration for id: " + descriptor.id()
+                        + ". Use overridePolicy(...) to explicitly overwrite.");
+            }
+            this.policies.put(descriptor.id(), descriptor);
+            return this;
+        }
+
+        public Builder overridePolicy(PolicyDescriptor descriptor) {
             Objects.requireNonNull(descriptor, "policy descriptor must not be null");
             this.policies.put(descriptor.id(), descriptor);
             return this;
@@ -308,6 +387,15 @@ public final class FlowDefinitionRegistry {
 
         public <K> Builder policy(String id, Policy<K> instance, Class<K> keyType) {
             return policy(PolicyDescriptor.builder()
+                    .id(id)
+                    .instance(instance)
+                    .keyType(TypeRef.of(keyType))
+                    .persistent(false)
+                    .build());
+        }
+
+        public <K> Builder overridePolicy(String id, Policy<K> instance, Class<K> keyType) {
+            return overridePolicy(PolicyDescriptor.builder()
                     .id(id)
                     .instance(instance)
                     .keyType(TypeRef.of(keyType))
@@ -326,8 +414,23 @@ public final class FlowDefinitionRegistry {
                     .build());
         }
 
+        public <K> Builder overridePolicy(String id, Policy<K> instance) {
+            Objects.requireNonNull(instance, "policy instance must not be null");
+            TypeRef keyType = GenericTypeResolver.resolvePolicyKeyType(instance.getClass());
+            return overridePolicy(PolicyDescriptor.builder()
+                    .id(id)
+                    .instance(instance)
+                    .keyType(keyType)
+                    .persistent(false)
+                    .build());
+        }
+
         public Builder policy(String id, Class<? extends Policy<?>> contract) {
             return policy(id, contract, (String) null);
+        }
+
+        public Builder overridePolicy(String id, Class<? extends Policy<?>> contract) {
+            return overridePolicy(id, contract, (String) null);
         }
 
         public Builder policy(String id, Class<? extends Policy<?>> contract, String qualifier) {
@@ -342,8 +445,24 @@ public final class FlowDefinitionRegistry {
                     .build());
         }
 
+        public Builder overridePolicy(String id, Class<? extends Policy<?>> contract, String qualifier) {
+            Objects.requireNonNull(contract, "policy contract must not be null");
+            TypeRef keyType = GenericTypeResolver.resolvePolicyKeyType(contract);
+            return overridePolicy(PolicyDescriptor.builder()
+                    .id(id)
+                    .contract(contract)
+                    .qualifier(qualifier)
+                    .keyType(keyType)
+                    .persistent(false)
+                    .build());
+        }
+
         public <K> Builder policy(String id, Class<? extends Policy<K>> contract, Class<K> keyType) {
             return policy(id, contract, null, keyType);
+        }
+
+        public <K> Builder overridePolicy(String id, Class<? extends Policy<K>> contract, Class<K> keyType) {
+            return overridePolicy(id, contract, null, keyType);
         }
 
         public <K> Builder policy(
@@ -360,8 +479,31 @@ public final class FlowDefinitionRegistry {
                     .build());
         }
 
+        public <K> Builder overridePolicy(
+                String id,
+                Class<? extends Policy<K>> contract,
+                String qualifier,
+                Class<K> keyType) {
+            return overridePolicy(PolicyDescriptor.builder()
+                    .id(id)
+                    .contract(contract)
+                    .qualifier(qualifier)
+                    .keyType(TypeRef.of(keyType))
+                    .persistent(false)
+                    .build());
+        }
+
         public <K, S> Builder persistentPolicy(String id, PersistentPolicy<K, S> instance, Class<K> keyType) {
             return policy(PolicyDescriptor.builder()
+                    .id(id)
+                    .instance(instance)
+                    .keyType(TypeRef.of(keyType))
+                    .persistent(true)
+                    .build());
+        }
+
+        public <K, S> Builder overridePersistentPolicy(String id, PersistentPolicy<K, S> instance, Class<K> keyType) {
+            return overridePolicy(PolicyDescriptor.builder()
                     .id(id)
                     .instance(instance)
                     .keyType(TypeRef.of(keyType))
@@ -380,8 +522,23 @@ public final class FlowDefinitionRegistry {
                     .build());
         }
 
+        public <K, S> Builder overridePersistentPolicy(String id, PersistentPolicy<K, S> instance) {
+            Objects.requireNonNull(instance, "persistent policy instance must not be null");
+            TypeRef[] types = GenericTypeResolver.resolvePersistentPolicyTypes(instance.getClass());
+            return overridePolicy(PolicyDescriptor.builder()
+                    .id(id)
+                    .instance(instance)
+                    .keyType(types[0])
+                    .persistent(true)
+                    .build());
+        }
+
         public Builder persistentPolicy(String id, Class<? extends PersistentPolicy<?, ?>> contract) {
             return persistentPolicy(id, contract, (String) null);
+        }
+
+        public Builder overridePersistentPolicy(String id, Class<? extends PersistentPolicy<?, ?>> contract) {
+            return overridePersistentPolicy(id, contract, (String) null);
         }
 
         public Builder persistentPolicy(
@@ -399,11 +556,33 @@ public final class FlowDefinitionRegistry {
                     .build());
         }
 
+        public Builder overridePersistentPolicy(
+                String id,
+                Class<? extends PersistentPolicy<?, ?>> contract,
+                String qualifier) {
+            Objects.requireNonNull(contract, "persistent policy contract must not be null");
+            TypeRef[] types = GenericTypeResolver.resolvePersistentPolicyTypes(contract);
+            return overridePolicy(PolicyDescriptor.builder()
+                    .id(id)
+                    .contract(contract)
+                    .qualifier(qualifier)
+                    .keyType(types[0])
+                    .persistent(true)
+                    .build());
+        }
+
         public <K, S> Builder persistentPolicy(
                 String id,
                 Class<? extends PersistentPolicy<K, S>> contract,
                 Class<K> keyType) {
             return persistentPolicy(id, contract, null, keyType);
+        }
+
+        public <K, S> Builder overridePersistentPolicy(
+                String id,
+                Class<? extends PersistentPolicy<K, S>> contract,
+                Class<K> keyType) {
+            return overridePersistentPolicy(id, contract, null, keyType);
         }
 
         public <K, S> Builder persistentPolicy(
@@ -420,13 +599,48 @@ public final class FlowDefinitionRegistry {
                     .build());
         }
 
+        public <K, S> Builder overridePersistentPolicy(
+                String id,
+                Class<? extends PersistentPolicy<K, S>> contract,
+                String qualifier,
+                Class<K> keyType) {
+            return overridePolicy(PolicyDescriptor.builder()
+                    .id(id)
+                    .contract(contract)
+                    .qualifier(qualifier)
+                    .keyType(TypeRef.of(keyType))
+                    .persistent(true)
+                    .build());
+        }
+
         public Builder policyProvider(PolicyProvider provider) {
+            Objects.requireNonNull(provider, "policy provider must not be null");
+            String id = provider.descriptor().id();
+            if (this.policyProviders.containsKey(id)) {
+                throw new IllegalArgumentException("Duplicate policy provider registration for id: " + id
+                        + ". Use overridePolicyProvider(...) to explicitly overwrite.");
+            }
+            this.policyProviders.put(id, provider);
+            return this;
+        }
+
+        public Builder overridePolicyProvider(PolicyProvider provider) {
             Objects.requireNonNull(provider, "policy provider must not be null");
             this.policyProviders.put(provider.descriptor().id(), provider);
             return this;
         }
 
         public Builder projector(ProjectorDescriptor descriptor) {
+            Objects.requireNonNull(descriptor, "projector descriptor must not be null");
+            if (this.projectors.containsKey(descriptor.id())) {
+                throw new IllegalArgumentException("Duplicate projector registration for id: " + descriptor.id()
+                        + ". Use overrideProjector(...) to explicitly overwrite.");
+            }
+            this.projectors.put(descriptor.id(), descriptor);
+            return this;
+        }
+
+        public Builder overrideProjector(ProjectorDescriptor descriptor) {
             Objects.requireNonNull(descriptor, "projector descriptor must not be null");
             this.projectors.put(descriptor.id(), descriptor);
             return this;
@@ -441,7 +655,26 @@ public final class FlowDefinitionRegistry {
                     .build());
         }
 
+        public <I, P> Builder overrideProjector(String id, Class<I> input, Class<P> projected, Function<I, P> function) {
+            return overrideProjector(ProjectorDescriptor.builder()
+                    .id(id)
+                    .inputType(TypeRef.of(input))
+                    .outputType(TypeRef.of(projected))
+                    .function(function)
+                    .build());
+        }
+
         public Builder merger(MergerDescriptor descriptor) {
+            Objects.requireNonNull(descriptor, "merger descriptor must not be null");
+            if (this.mergers.containsKey(descriptor.id())) {
+                throw new IllegalArgumentException("Duplicate merger registration for id: " + descriptor.id()
+                        + ". Use overrideMerger(...) to explicitly overwrite.");
+            }
+            this.mergers.put(descriptor.id(), descriptor);
+            return this;
+        }
+
+        public Builder overrideMerger(MergerDescriptor descriptor) {
             Objects.requireNonNull(descriptor, "merger descriptor must not be null");
             this.mergers.put(descriptor.id(), descriptor);
             return this;
@@ -462,7 +695,32 @@ public final class FlowDefinitionRegistry {
                     .build());
         }
 
+        public <I, R, O> Builder overrideMerger(
+                String id,
+                Class<I> stateType,
+                Class<R> resultType,
+                Class<O> outputType,
+                BiFunction<I, R, O> function) {
+            return overrideMerger(MergerDescriptor.builder()
+                    .id(id)
+                    .stateType(TypeRef.of(stateType))
+                    .resultType(TypeRef.of(resultType))
+                    .outputType(TypeRef.of(outputType))
+                    .function(function)
+                    .build());
+        }
+
         public Builder keyProjection(KeyProjectionDescriptor descriptor) {
+            Objects.requireNonNull(descriptor, "key projection descriptor must not be null");
+            if (this.keyProjections.containsKey(descriptor.id())) {
+                throw new IllegalArgumentException("Duplicate key projection registration for id: " + descriptor.id()
+                        + ". Use overrideKeyProjection(...) to explicitly overwrite.");
+            }
+            this.keyProjections.put(descriptor.id(), descriptor);
+            return this;
+        }
+
+        public Builder overrideKeyProjection(KeyProjectionDescriptor descriptor) {
             Objects.requireNonNull(descriptor, "key projection descriptor must not be null");
             this.keyProjections.put(descriptor.id(), descriptor);
             return this;
@@ -477,10 +735,39 @@ public final class FlowDefinitionRegistry {
                     .build());
         }
 
+        public <I, K> Builder overrideKeyProjection(String id, Class<I> input, Class<K> keyType, Function<I, K> function) {
+            return overrideKeyProjection(KeyProjectionDescriptor.builder()
+                    .id(id)
+                    .inputType(TypeRef.of(input))
+                    .keyType(TypeRef.of(keyType))
+                    .function(function)
+                    .build());
+        }
+
         public Builder join(JoinDescriptor descriptor) {
+            Objects.requireNonNull(descriptor, "join descriptor must not be null");
+            if (this.joins.containsKey(descriptor.id())) {
+                throw new IllegalArgumentException("Duplicate join registration for id: " + descriptor.id()
+                        + ". Use overrideJoin(...) to explicitly overwrite.");
+            }
+            this.joins.put(descriptor.id(), descriptor);
+            return this;
+        }
+
+        public Builder overrideJoin(JoinDescriptor descriptor) {
             Objects.requireNonNull(descriptor, "join descriptor must not be null");
             this.joins.put(descriptor.id(), descriptor);
             return this;
+        }
+
+        public Builder join(JoinProvider provider) {
+            Objects.requireNonNull(provider, "join provider must not be null");
+            return join(provider.descriptor().toBuilder().provider(provider).build());
+        }
+
+        public Builder overrideJoin(JoinProvider provider) {
+            Objects.requireNonNull(provider, "join provider must not be null");
+            return overrideJoin(provider.descriptor().toBuilder().provider(provider).build());
         }
 
         public <O> Builder join(String id, JoinStrategy<O> strategy, Class<O> outputType) {
@@ -491,15 +778,51 @@ public final class FlowDefinitionRegistry {
                     .build());
         }
 
+        public <O> Builder overrideJoin(String id, JoinStrategy<O> strategy, Class<O> outputType) {
+            return overrideJoin(JoinDescriptor.builder()
+                    .id(id)
+                    .strategy(strategy)
+                    .outputType(TypeRef.of(outputType))
+                    .build());
+        }
+
         public <O> Builder join(String id, Class<? extends JoinStrategy<O>> contract, Class<O> outputType) {
+            return join(id, contract, null, outputType);
+        }
+
+        public <O> Builder overrideJoin(String id, Class<? extends JoinStrategy<O>> contract, Class<O> outputType) {
+            return overrideJoin(id, contract, null, outputType);
+        }
+
+        public <O> Builder join(String id, Class<? extends JoinStrategy<O>> contract, String qualifier, Class<O> outputType) {
             return join(JoinDescriptor.builder()
                     .id(id)
                     .contract(contract)
+                    .qualifier(qualifier)
+                    .outputType(TypeRef.of(outputType))
+                    .build());
+        }
+
+        public <O> Builder overrideJoin(String id, Class<? extends JoinStrategy<O>> contract, String qualifier, Class<O> outputType) {
+            return overrideJoin(JoinDescriptor.builder()
+                    .id(id)
+                    .contract(contract)
+                    .qualifier(qualifier)
                     .outputType(TypeRef.of(outputType))
                     .build());
         }
 
         public Builder resumePoint(ResumeDescriptor descriptor) {
+            Objects.requireNonNull(descriptor, "resume descriptor must not be null");
+            if (this.resumePoints.containsKey(descriptor.id())) {
+                throw new IllegalArgumentException("Duplicate resume point registration for id: " + descriptor.id()
+                        + ". Use overrideResumePoint(...) to explicitly overwrite.");
+            }
+            this.resumePoints.put(descriptor.id(), descriptor);
+            return this;
+        }
+
+        public Builder overrideResumePoint(ResumeDescriptor descriptor) {
             Objects.requireNonNull(descriptor, "resume descriptor must not be null");
             this.resumePoints.put(descriptor.id(), descriptor);
             return this;
@@ -512,11 +835,33 @@ public final class FlowDefinitionRegistry {
                     .build());
         }
 
+        public <S> Builder overrideResumePoint(String id, Class<S> signalType) {
+            return overrideResumePoint(ResumeDescriptor.builder()
+                    .id(id)
+                    .signalType(TypeRef.of(signalType))
+                    .build());
+        }
+
         public <T> Builder typeCodec(Class<T> type, TypeCodec<T> codec) {
             return typeCodec(TypeRef.of(type), codec);
         }
 
+        public <T> Builder overrideTypeCodec(Class<T> type, TypeCodec<T> codec) {
+            return overrideTypeCodec(TypeRef.of(type), codec);
+        }
+
         public Builder typeCodec(TypeRef type, TypeCodec<?> codec) {
+            Objects.requireNonNull(type, "type must not be null");
+            Objects.requireNonNull(codec, "codec must not be null");
+            if (this.typeCodecs.containsKey(type)) {
+                throw new IllegalArgumentException("Duplicate type codec registration for type: " + type.typeName()
+                        + ". Use overrideTypeCodec(...) to explicitly overwrite.");
+            }
+            this.typeCodecs.put(type, codec);
+            return this;
+        }
+
+        public Builder overrideTypeCodec(TypeRef type, TypeCodec<?> codec) {
             Objects.requireNonNull(type, "type must not be null");
             Objects.requireNonNull(codec, "codec must not be null");
             this.typeCodecs.put(type, codec);

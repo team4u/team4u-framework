@@ -43,4 +43,13 @@ public interface BindingContext {
             String policyId,
             SymbolRef keyRef,
             Map<String, Object> configuration);
+
+    /**
+     * 获取组件解析器。
+     *
+     * @return 组件解析器
+     */
+    default com.team4u.framework.flow.spi.OperationResolver resolver() {
+        return null;
+    }
 }

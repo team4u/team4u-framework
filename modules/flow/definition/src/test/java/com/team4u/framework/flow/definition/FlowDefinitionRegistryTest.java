@@ -1,6 +1,7 @@
 package com.team4u.framework.flow.definition;
 
 import com.team4u.framework.flow.Flow;
+import com.team4u.framework.flow.LocalExecutable;
 import com.team4u.framework.flow.api.*;
 import com.team4u.framework.flow.definition.binding.BoundFlow;
 import com.team4u.framework.flow.definition.binding.FlowBinder;
@@ -11,6 +12,7 @@ import com.team4u.framework.flow.definition.registry.PolicyDescriptor;
 import com.team4u.framework.flow.definition.type.TypeCheckResult;
 import com.team4u.framework.flow.definition.type.TypeChecker;
 import com.team4u.framework.flow.definition.type.TypeRef;
+import com.team4u.framework.flow.model.FlowResult;
 import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.spi.OperationResolver;
 import org.junit.Assert;
@@ -196,5 +198,76 @@ public class FlowDefinitionRegistryTest {
         Assert.assertNotNull(bound);
         Assert.assertEquals(TypeRef.of(OrderReq.class), bound.inputType());
         Assert.assertEquals(TypeRef.of(String.class), bound.outputType());
+    }
+
+    @Test
+    public void testDuplicateRegistrationThrowsIllegalArgumentException() {
+        ValidateOp op1 = new ValidateOp();
+        ValidateOp op2 = new ValidateOp();
+
+        try {
+            FlowDefinitionRegistry.builder()
+                    .operation("order.validate", op1)
+                    .operation("order.validate", op2)
+                    .build();
+            Assert.fail("Expected IllegalArgumentException for duplicate operation registration");
+        } catch (IllegalArgumentException ex) {
+            Assert.assertTrue(ex.getMessage().contains("Duplicate operation registration"));
+        }
+    }
+
+    @Test
+    public void testExplicitOverrideReplacesRegistration() {
+        ValidateOp op1 = new ValidateOp();
+        ValidateOp op2 = new ValidateOp();
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("order.validate", op1)
+                .overrideOperation("order.validate", op2)
+                .build();
+
+        Assert.assertSame(op2, registry.operation("order.validate").instance());
+    }
+
+    @Test
+    public void testJoinProviderRegistrationAndIoCResolution() {
+        com.team4u.framework.flow.api.JoinStrategy<String> dynamicJoin = results -> Outcome.accepted("RESOLVED_BY_PROVIDER");
+
+        com.team4u.framework.flow.definition.registry.JoinProvider joinProvider = new com.team4u.framework.flow.definition.registry.JoinProvider() {
+            @Override
+            public com.team4u.framework.flow.definition.registry.JoinDescriptor descriptor() {
+                return com.team4u.framework.flow.definition.registry.JoinDescriptor.builder()
+                        .id("dynamic.join")
+                        .outputType(TypeRef.of(String.class))
+                        .build();
+            }
+
+            @Override
+            public com.team4u.framework.flow.api.JoinStrategy<?> provide(OperationResolver resolver) {
+                return dynamicJoin;
+            }
+        };
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .join(joinProvider)
+                .operation("step1", (OperationContext ctx, String in) -> Outcome.accepted(in), String.class, String.class)
+                .build();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "parallel.provider", "1",
+                new ParallelSpec(
+                        Collections.singletonList(
+                                new BranchSpec("b1", new StepSpec(SymbolRef.of("step1"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN), SourceSpan.UNKNOWN)
+                        ),
+                        SymbolRef.of("dynamic.join"),
+                        SourceSpan.UNKNOWN
+                ),
+                "test.flow", SourceSpan.UNKNOWN
+        );
+
+        BoundFlow bound = FlowBinder.bind(def, registry);
+        LocalExecutable<String, String> exec = bound.compileLocal(String.class, String.class);
+        FlowResult<String> result = exec.run("data");
+        Assert.assertEquals("RESOLVED_BY_PROVIDER", result.requireAccepted());
     }
 }
