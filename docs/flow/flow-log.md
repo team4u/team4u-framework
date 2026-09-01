@@ -138,14 +138,12 @@ FlowLoggingObserver observer = FlowLoggingObserver.builder()
         .build();
 
 // 2. 编译流程
-LocalExecutable<OrderContext, OrderContext> executable = Local.compile(
-        orderFlow,
-        "order-checkout",
-        1,
-        beanResolver,
-        observer,
-        null
-);
+LocalExecutable<OrderContext, OrderContext> executable = Local.from(orderFlow)
+        .flowId("order-checkout")
+        .flowVersion(1)
+        .resolver(beanResolver)
+        .observer(observer)
+        .compile();
 
 // 3. 在绑定的上下文内安全执行
 OrderContext context = new OrderContext();

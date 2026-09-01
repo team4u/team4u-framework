@@ -61,8 +61,9 @@ public class ObserverContractTest {
                         resumed.state() + ":" + resumed.signal()));
 
         final List<FlowObserver.Event> events = new ArrayList<FlowObserver.Event>();
-        LocalExecutable<String, String> local = Local.compile(flow,
-                OperationResolver.rejecting(), events::add);
+        LocalExecutable<String, String> local = Local.from(flow)
+                .observer(events::add)
+                .compile();
         FlowResult.Suspended<String> suspended =
                 (FlowResult.Suspended<String>) local.run("business-secret");
         assertEquals("business-secret-parallel:ok", local.resume(
@@ -104,7 +105,9 @@ public class ObserverContractTest {
     @Test
     public void observerRuntimeExceptionsCannotChangeResult() {
         FlowObserver broken = event -> { throw new IllegalStateException("observer failed"); };
-        assertEquals("value", Local.compile(Flow.<String>identity(),
-                OperationResolver.rejecting(), broken).run("value").requireAccepted());
+        assertEquals("value", Local.from(Flow.<String>identity())
+                .observer(broken)
+                .compile()
+                .run("value").requireAccepted());
     }
 }

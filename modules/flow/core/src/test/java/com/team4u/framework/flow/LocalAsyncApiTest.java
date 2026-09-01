@@ -115,9 +115,12 @@ public class LocalAsyncApiTest {
         FlowObserver observer = event -> {
             metadatas.add(event.metadata());
         };
-        LocalExecutable<String, Resumed<String, String>> local = Local.compile(
-                Flow.step(capture).await(point), "order-flow", 7,
-                OperationResolver.rejecting(), observer, null);
+        LocalExecutable<String, Resumed<String, String>> local = Local.from(
+                Flow.step(capture).await(point))
+                .flowId("order-flow")
+                .flowVersion(7)
+                .observer(observer)
+                .compile();
         FlowResult.Suspended<Resumed<String, String>> suspended =
                 (FlowResult.Suspended<Resumed<String, String>>) local.run("in");
         local.resume(suspended.suspension(), point, "sig").requireAccepted();

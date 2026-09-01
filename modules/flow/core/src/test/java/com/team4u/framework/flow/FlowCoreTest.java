@@ -106,7 +106,10 @@ public class FlowCoreTest {
         };
         Flow<String, String> flow = Flow.step(Upper.class, "primary")
                 .then(Upper.class, "primary");
-        LocalExecutable<String, String> executable = Local.compile(flow, resolver, events::add);
+        LocalExecutable<String, String> executable = Local.from(flow)
+                .resolver(resolver)
+                .observer(events::add)
+                .compile();
         assertEquals(1, resolutions.get());
         assertEquals("ABC", executable.run("abc").requireAccepted());
         FlowObserver.Event invoke = null;
@@ -120,6 +123,24 @@ public class FlowCoreTest {
         assertEquals(Upper.class, invoke.descriptor().contractClass().get());
         assertEquals(Upper.class, invoke.descriptor().implementationClass().get());
         assertEquals("primary", invoke.descriptor().qualifier().get());
+    }
+
+    @Test
+    public void localBuilderConfiguresAllProperties() {
+        final List<FlowObserver.Event> events = new ArrayList<FlowObserver.Event>();
+        Flow<String, String> flow = Flow.<String>identity();
+
+        LocalExecutable<String, String> executable = Local.from(flow)
+                .flowId("custom-flow")
+                .flowVersion(2)
+                .observer(events::add)
+                .cached(true)
+                .compile();
+
+        assertEquals("hello", executable.run("hello").requireAccepted());
+        assertEquals(4, events.size());
+        assertEquals("custom-flow", events.get(0).metadata().flowId());
+        assertEquals(2, events.get(0).metadata().flowVersion());
     }
 
     @Test

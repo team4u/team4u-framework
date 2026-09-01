@@ -37,16 +37,33 @@ public final class DurableFixture<I, O> {
     }
 
 
+    /** 默认 fixture：InMemoryDurableStore + rejecting resolver，默认 flowId="test", flowVersion=1。 */
+    public static <I, O> DurableFixture<I, O> compile(Flow<I, O> flow) {
+        return compile(flow, "test", 1);
+    }
+
     /** 默认 fixture：InMemoryDurableStore + rejecting resolver。 */
     public static <I, O> DurableFixture<I, O> compile(
             Flow<I, O> flow, String flowId, int flowVersion) {
         return withStore(new InMemoryDurableStore(), flow, flowId, flowVersion);
     }
 
+    /** 指定 store 构建 runtime 并编译（默认 flowId="test", flowVersion=1）。 */
+    public static <I, O> DurableFixture<I, O> withStore(
+            DurableStore store, Flow<I, O> flow) {
+        return withStore(store, flow, "test", 1);
+    }
+
     /** 指定 store（如注入冲突/崩溃的探针）构建 runtime 并编译。 */
     public static <I, O> DurableFixture<I, O> withStore(
             DurableStore store, Flow<I, O> flow, String flowId, int flowVersion) {
         return withRuntime(DurableRuntime.builder(store).build(), flow, flowId, flowVersion);
+    }
+
+    /** 指定 runtime 编译（默认 flowId="test", flowVersion=1）。 */
+    public static <I, O> DurableFixture<I, O> withRuntime(
+            DurableRuntime runtime, Flow<I, O> flow) {
+        return withRuntime(runtime, flow, "test", 1);
     }
 
     /** 指定 runtime（可自定义 stateMapper/observer）编译。 */

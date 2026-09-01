@@ -67,7 +67,7 @@ public class ExecutorResourceTest {
             Flow<String, String> flow = Flow.parallel(b1, b2).join(results ->
                     results.allAccepted().map(v -> v.get(b1) + "|" + v.get(b2)));
 
-            LocalExecutable<String, String> executable = Local.compile(flow, customWorker);
+            LocalExecutable<String, String> executable = Local.from(flow).executor(customWorker).compile();
             CompletableFuture<FlowResult<String>> future = executable.runAsync("hello")
                     .toCompletableFuture();
 
@@ -101,7 +101,7 @@ public class ExecutorResourceTest {
                 return Outcome.accepted(input);
             }).timeout(Duration.ofMillis(30));
 
-            LocalExecutable<String, String> executable = Local.compile(flow, customWorker);
+            LocalExecutable<String, String> executable = Local.from(flow).executor(customWorker).compile();
             FlowResult<String> result = executable.run("test");
             assertTrue(result instanceof FlowResult.Completed);
             FlowResult.Completed<String> completed = (FlowResult.Completed<String>) result;
@@ -130,7 +130,7 @@ public class ExecutorResourceTest {
             Flow<String, String> parallelFlow = Flow.parallel(b1, b2)
                     .join(r -> r.allAccepted().map(v -> v.get(b1) + "&" + v.get(b2)));
 
-            LocalExecutable<String, String> exec = Local.compile(parallelFlow, singleWorker);
+            LocalExecutable<String, String> exec = Local.from(parallelFlow).executor(singleWorker).compile();
             // 同步调用在 caller 线程推进 SerialMachine，singleWorker 顺序执行 b1, b2
             FlowResult<String> result = exec.run("data");
             assertEquals("1:data&2:data", result.requireAccepted());
@@ -138,7 +138,7 @@ public class ExecutorResourceTest {
             // 测试带 timeout 的 step 在单线程 worker 下同步执行
             Flow<String, String> timedFlow = Flow.step((Operation<String, String>) (c, i) -> Outcome.accepted("ok:" + i))
                     .timeout(Duration.ofSeconds(2));
-            LocalExecutable<String, String> timedExec = Local.compile(timedFlow, singleWorker);
+            LocalExecutable<String, String> timedExec = Local.from(timedFlow).executor(singleWorker).compile();
             assertEquals("ok:data", timedExec.run("data").requireAccepted());
         } finally {
             singleWorker.shutdown();
@@ -155,7 +155,7 @@ public class ExecutorResourceTest {
             Flow<String, String> parallelFlow = Flow.parallel(b1, b2)
                     .join(r -> r.allAccepted().map(v -> "joined"));
 
-            LocalExecutable<String, String> exec = Local.compile(parallelFlow, singleWorker);
+            LocalExecutable<String, String> exec = Local.from(parallelFlow).executor(singleWorker).compile();
             // 默认 dispatcher (commonPool) 调度顶层，singleWorker 运行分支
             FlowResult<String> result = exec.runAsync("in").toCompletableFuture().get(4, TimeUnit.SECONDS);
             assertEquals("joined", result.requireAccepted());
@@ -171,7 +171,7 @@ public class ExecutorResourceTest {
         try {
             Branch<String, String> b1 = Branch.of("b1", (c, i) -> Outcome.accepted("b1"));
             Flow<String, String> flow = Flow.parallel(b1).join(r -> r.allAccepted().map(v -> "ok"));
-            LocalExecutable<String, String> exec = Local.compile(flow, single);
+            LocalExecutable<String, String> exec = Local.from(flow).executor(single).compile();
 
             try {
                 // 危险组合：dispatcher == workerExecutor == single
@@ -211,7 +211,7 @@ public class ExecutorResourceTest {
             });
 
             Flow<String, String> flow = Flow.parallel(b1, b2).join(r -> r.allAccepted().map(v -> "ok"));
-            LocalExecutable<String, String> exec = Local.compile(flow, workerPool);
+            LocalExecutable<String, String> exec = Local.from(flow).executor(workerPool).compile();
 
             FlowResult<String> result = exec.run("in");
             long runReturnTimestamp = System.currentTimeMillis();
@@ -238,7 +238,7 @@ public class ExecutorResourceTest {
                 branchEntered.countDown();
                 try {
                     // 有限分片等待：取消级联会在等待期间中断本线程
-                    Thread.sleep(80);
+                    Thread.sleep(3000);
                 } catch (InterruptedException e) {
                     branchInterrupted.set(true);
                     Thread.currentThread().interrupt();
@@ -247,7 +247,7 @@ public class ExecutorResourceTest {
             });
 
             Flow<String, String> flow = Flow.parallel(b1).join(r -> r.allAccepted().map(v -> "ok"));
-            LocalExecutable<String, String> exec = Local.compile(flow, workerPool);
+            LocalExecutable<String, String> exec = Local.from(flow).executor(workerPool).compile();
 
             Cancellation rootCancellation = Cancellation.create();
             CompletableFuture<FlowResult<String>> future = exec.runAsync("in", rootCancellation)
@@ -300,7 +300,7 @@ public class ExecutorResourceTest {
                     .join(r -> r.allAccepted().map(v -> "all"))
                     .timeout(Duration.ofMillis(25));
 
-            LocalExecutable<String, String> exec = Local.compile(flow, singleWorker);
+            LocalExecutable<String, String> exec = Local.from(flow).executor(singleWorker).compile();
 
             Cancellation root = Cancellation.create();
             long start = System.currentTimeMillis();
@@ -370,7 +370,10 @@ public class ExecutorResourceTest {
                     .join(r -> r.allAccepted().map(v -> "joined"));
 
             final List<FlowObserver.Event> events = Collections.synchronizedList(new ArrayList<FlowObserver.Event>());
-            LocalExecutable<String, String> exec = Local.compile(flow, OperationResolver.rejecting(), events::add, rejectingWorker);
+            LocalExecutable<String, String> exec = Local.from(flow)
+                    .observer(events::add)
+                    .executor(rejectingWorker)
+                    .compile();
 
             Cancellation root = Cancellation.create();
             FlowResult<String> result = exec.run("in", root);
@@ -419,7 +422,7 @@ public class ExecutorResourceTest {
                 .timeout(Duration.ofSeconds(2));
 
         Cancellation root = Cancellation.create();
-        LocalExecutable<String, String> exec = Local.compile(flow, alwaysRejecting);
+        LocalExecutable<String, String> exec = Local.from(flow).executor(alwaysRejecting).compile();
 
         FlowResult<String> result = exec.run("in", root);
         assertTrue(result instanceof FlowResult.Completed);
@@ -449,7 +452,7 @@ public class ExecutorResourceTest {
                 .timeout(Duration.ofSeconds(2));
 
         Cancellation root = Cancellation.create();
-        LocalExecutable<String, String> exec = Local.compile(flow, alwaysRejecting);
+        LocalExecutable<String, String> exec = Local.from(flow).executor(alwaysRejecting).compile();
 
         FlowResult<String> result = exec.run("in", root);
         assertTrue(result instanceof FlowResult.Completed);
@@ -468,7 +471,7 @@ public class ExecutorResourceTest {
             opStarted.countDown();
             try {
                 // 有限分片等待：父取消会在等待期间中断本工作线程
-                Thread.sleep(80);
+                Thread.sleep(3000);
             } catch (InterruptedException e) {
                 opInterrupted.set(true);
                 Thread.currentThread().interrupt();
@@ -512,7 +515,7 @@ public class ExecutorResourceTest {
             Flow<String, String> nestedParallelFlow = Flow.parallel(outer1).join(r -> r.allAccepted().map(v -> "outer"));
 
             try {
-                Local.compile(nestedParallelFlow, singleWorker);
+                Local.from(nestedParallelFlow).executor(singleWorker).compile();
                 fail("Expected IllegalArgumentException for nested parallel on non-ForkJoin worker");
             } catch (IllegalArgumentException e) {
                 assertTrue(e.getMessage().contains("ForkJoinPool"));
@@ -524,7 +527,7 @@ public class ExecutorResourceTest {
             Flow<String, String> parallelWithTimedBranch = Flow.parallel(timedBranch).join(r -> r.allAccepted().map(v -> "ok"));
 
             try {
-                Local.compile(parallelWithTimedBranch, singleWorker);
+                Local.from(parallelWithTimedBranch).executor(singleWorker).compile();
                 fail("Expected IllegalArgumentException for parallel branch with timeout on non-ForkJoin worker");
             } catch (IllegalArgumentException e) {
                 assertTrue(e.getMessage().contains("ForkJoinPool"));
@@ -534,7 +537,7 @@ public class ExecutorResourceTest {
             Branch<String, String> normalB1 = Branch.of("nb1", (c, i) -> Outcome.accepted("ok"));
             Flow<String, String> topTimedParallel = Flow.parallel(normalB1).join(r -> r.allAccepted().map(v -> "ok"))
                     .timeout(Duration.ofSeconds(5));
-            LocalExecutable<String, String> exec = Local.compile(topTimedParallel, singleWorker);
+            LocalExecutable<String, String> exec = Local.from(topTimedParallel).executor(singleWorker).compile();
             assertEquals("ok", exec.run("in").requireAccepted());
 
             // Nested parallel on commonPool (default) should compile and run successfully

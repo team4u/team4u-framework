@@ -34,7 +34,7 @@ public class SuspendCancellationRaceTest {
         };
         FlowResult<Resumed<String, String>> result;
         try {
-            result = Local.compile(flow, OperationResolver.rejecting(), observer)
+            result = Local.from(flow).observer(observer).compile()
                     .run("input", cancellation);
         } finally {
             Thread.interrupted();

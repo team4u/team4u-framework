@@ -107,7 +107,7 @@ public class RuntimeFailureCodesTest {
                 (Operation<String, String>) (context, input) -> Outcome.accepted(input))
                 .timeout(Duration.ofSeconds(2));
         assertEquals("EXECUTOR_REJECTED", failureCode(
-                Local.compile(timed, rejecting).run("in", Cancellation.create())));
+                Local.from(timed).executor(rejecting).compile().run("in", Cancellation.create())));
     }
 
     @Test

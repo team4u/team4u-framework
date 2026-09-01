@@ -38,7 +38,7 @@ public final class BeanFlows {
      * @return 编译后的本地可执行句柄
      */
     public static <I, O> LocalExecutable<I, O> compile(Flow<I, O> flow) {
-        return compile(flow, BeanManager.getInstance());
+        return from(flow).compile();
     }
 
     /**
@@ -52,6 +52,31 @@ public final class BeanFlows {
      */
     public static <I, O> LocalExecutable<I, O> compile(
             Flow<I, O> flow, BeanManager beanManager) {
-        return Local.compile(flow, new BeanOperationResolver(beanManager));
+        return from(flow, beanManager).compile();
+    }
+
+    /**
+     * 基于全局默认 {@link BeanManager#getInstance()} 创建 Local 流程编译构建器。
+     *
+     * @param flow 逻辑流程定义，不能为 null
+     * @param <I>  流程输入类型
+     * @param <O>  流程输出类型
+     * @return 预置 BeanOperationResolver 的 Local 构建器
+     */
+    public static <I, O> Local.Builder<I, O> from(Flow<I, O> flow) {
+        return Local.from(flow).resolver(resolver());
+    }
+
+    /**
+     * 基于指定的 {@link BeanManager} 容器实例创建 Local 流程编译构建器。
+     *
+     * @param flow        逻辑流程定义，不能为 null
+     * @param beanManager Bean 管理器实例，不能为 null
+     * @param <I>         流程输入类型
+     * @param <O>         流程输出类型
+     * @return 预置 BeanOperationResolver 的 Local 构建器
+     */
+    public static <I, O> Local.Builder<I, O> from(Flow<I, O> flow, BeanManager beanManager) {
+        return Local.from(flow).resolver(resolver(beanManager));
     }
 }

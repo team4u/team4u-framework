@@ -41,7 +41,7 @@ public final class Local {
      * @throws FlowBuildException 当流程定义存在拓扑冲突或非法节点时抛出
      */
     public static <I, O> LocalExecutable<I, O> compile(Flow<I, O> flow) {
-        return compile(flow, OperationResolver.rejecting());
+        return from(flow).compile();
     }
 
     /**
@@ -61,7 +61,7 @@ public final class Local {
      */
     public static <I, O> LocalExecutable<I, O> compile(
             Flow<I, O> flow, OperationResolver resolver) {
-        return compile(flow, resolver, FlowObserver.noop());
+        return from(flow).resolver(resolver).compile();
     }
 
     /**
@@ -84,86 +84,131 @@ public final class Local {
      */
     public static <I, O> LocalExecutable<I, O> compileCached(
             Flow<I, O> flow, OperationResolver resolver) {
-        Compiler.Compiled compiled = CompileCache.obtain(flow, resolver);
-        return LocalExecutable.create(compiled, "local", 0,
-                FlowObserver.noop(), ForkJoinPool.commonPool());
+        return from(flow).resolver(resolver).cached().compile();
     }
 
     /**
-     * 编译逻辑流程（注入自定义并发线程池）。
+     * 创建强类型 Fluent 编译构建器，自动推导流程输入输出泛型类型。
      *
-     * @param flow     逻辑流程定义，不能为 null
-     * @param executor 用于并发/异步调度的线程池，为 null 时默认回退到 commonPool
-     * @param <I>      流程输入类型
-     * @param <O>      流程输出类型
-     * @return 编译就绪的 {@link LocalExecutable} 实例
-     * @throws FlowBuildException 当流程定义存在拓扑冲突时抛出
+     * @param flow 逻辑流程定义，不能为 null
+     * @param <I>  流程输入类型
+     * @param <O>  流程输出类型
+     * @return Local 编译构建器实例
+     * @throws NullPointerException 当 {@code flow} 为 null 时抛出
      */
-    public static <I, O> LocalExecutable<I, O> compile(
-            Flow<I, O> flow, ExecutorService executor) {
-        return compile(flow, OperationResolver.rejecting(), FlowObserver.noop(), executor);
+    public static <I, O> Builder<I, O> from(Flow<I, O> flow) {
+        return new Builder<I, O>(flow);
     }
 
     /**
-     * 编译逻辑流程（注入组件解析器与事件观察者）。
+     * Local 执行器流式编译构建器（Fluent Local Compiler Builder）。
      *
-     * @param flow     逻辑流程定义，不能为 null
-     * @param resolver 组件解析器，不能为 null
-     * @param observer 事件观察者，不能为 null
-     * @param <I>      流程输入类型
-     * @param <O>      流程输出类型
-     * @return 编译就绪的 {@link LocalExecutable} 实例
-     * @throws FlowBuildException 当流程定义校验失败时抛出
+     * @param <I> 流程输入类型
+     * @param <O> 流程输出类型
      */
-    public static <I, O> LocalExecutable<I, O> compile(
-            Flow<I, O> flow, OperationResolver resolver, FlowObserver observer) {
-        return compile(flow, resolver, observer, ForkJoinPool.commonPool());
-    }
+    public static final class Builder<I, O> {
+        private final Flow<I, O> flow;
+        private String flowId = "local";
+        private int flowVersion = 0;
+        private OperationResolver resolver = OperationResolver.rejecting();
+        private FlowObserver observer = FlowObserver.noop();
+        private ExecutorService executor = ForkJoinPool.commonPool();
+        private boolean cached = false;
 
-    /**
-     * 全参编译逻辑流程为内存可执行实例。
-     *
-     * @param flow     逻辑流程定义，不能为 null
-     * @param resolver 组件解析器，不能为 null
-     * @param observer 事件观察者（为 null 则自动使用 noop 观察者）
-     * @param executor 并发执行线程池（为 null 则自动使用 ForkJoinPool.commonPool）
-     * @param <I>      流程输入类型
-     * @param <O>      流程输出类型
-     * @return 编译就绪的 {@link LocalExecutable} 实例
-     * @throws FlowBuildException 当流程定义存在拓扑错误、命名冲突或组件未解析时抛出
-     */
-    public static <I, O> LocalExecutable<I, O> compile(
-            Flow<I, O> flow, OperationResolver resolver, FlowObserver observer, ExecutorService executor) {
-        return new LocalExecutable<I, O>(Compiler.compile(flow, resolver),
-                observer, executor != null ? executor : ForkJoinPool.commonPool());
-    }
+        Builder(Flow<I, O> flow) {
+            this.flow = Objects.requireNonNull(flow, "flow must not be null");
+        }
 
-    /**
-     * 全参编译逻辑流程为内存可执行实例（自定义流程标识，flowId 默认为 "local"、版本默认 0）。
-     *
-     * <p><b>invocationId 语义</b>：flowId 与 flowVersion 参与组成每个 Operation 调用的幂等键
-     * {@code invocationId = flowId:flowVersion:executionId:nodePath}（见
-     * {@link com.team4u.framework.flow.api.OperationContext#invocationId()}），可用于外部 RPC/DB
-     * 写入的幂等防重；同一流程定义的多次执行共享 flowId/flowVersion，但 executionId 每次随机生成。
-     * 自定义 flowId 后，观察者事件的 {@link com.team4u.framework.flow.api.Metadata} 亦携带该标识。</p>
-     *
-     * @param flow        逻辑流程定义，不能为 null
-     * @param flowId      流程标识，不能为 null 或空白
-     * @param flowVersion 流程版本号
-     * @param resolver    组件解析器，不能为 null
-     * @param observer    事件观察者（为 null 则自动使用 noop 观察者）
-     * @param executor    并发执行线程池（为 null 则自动使用 ForkJoinPool.commonPool）
-     * @param <I>         流程输入类型
-     * @param <O>         流程输出类型
-     * @return 编译就绪的 {@link LocalExecutable} 实例
-     * @throws FlowBuildException 当流程定义存在拓扑错误、命名冲突或组件未解析时抛出
-     */
-    public static <I, O> LocalExecutable<I, O> compile(
-            Flow<I, O> flow, String flowId, int flowVersion,
-            OperationResolver resolver, FlowObserver observer, ExecutorService executor) {
-        return LocalExecutable.create(Compiler.compile(flow, resolver),
-                flowId, flowVersion, observer,
-                executor != null ? executor : ForkJoinPool.commonPool());
+        /**
+         * 设置流程全局标识（参与 invocationId 与事件 Metadata）。
+         *
+         * @param flowId 流程标识，不能为 null 或空白
+         * @return 当前构建器
+         */
+        public Builder<I, O> flowId(String flowId) {
+            this.flowId = Objects.requireNonNull(flowId, "flowId must not be null");
+            if (flowId.trim().isEmpty()) {
+                throw new IllegalArgumentException("flowId must not be blank");
+            }
+            return this;
+        }
+
+        /**
+         * 设置流程版本号。
+         *
+         * @param flowVersion 流程版本号
+         * @return 当前构建器
+         */
+        public Builder<I, O> flowVersion(int flowVersion) {
+            this.flowVersion = flowVersion;
+            return this;
+        }
+
+        /**
+         * 设置组件解析器（如 Spring Bean 查找器）。
+         *
+         * @param resolver 组件解析器（为 null 时回退为 rejecting 解析器）
+         * @return 当前构建器
+         */
+        public Builder<I, O> resolver(OperationResolver resolver) {
+            this.resolver = resolver != null ? resolver : OperationResolver.rejecting();
+            return this;
+        }
+
+        /**
+         * 设置流程事件观察者。
+         *
+         * @param observer 事件观察者（为 null 时回退为 noop 观察者）
+         * @return 当前构建器
+         */
+        public Builder<I, O> observer(FlowObserver observer) {
+            this.observer = observer != null ? observer : FlowObserver.noop();
+            return this;
+        }
+
+        /**
+         * 设置用于并发分支调度与异步驱动的工作线程池。
+         *
+         * @param executor 工作线程池（为 null 时回退为 ForkJoinPool.commonPool）
+         * @return 当前构建器
+         */
+        public Builder<I, O> executor(ExecutorService executor) {
+            this.executor = executor != null ? executor : ForkJoinPool.commonPool();
+            return this;
+        }
+
+        /**
+         * 设置是否开启弱缓存复用编译产物。
+         *
+         * @param cached 是否开启弱缓存
+         * @return 当前构建器
+         */
+        public Builder<I, O> cached(boolean cached) {
+            this.cached = cached;
+            return this;
+        }
+
+        /**
+         * 开启弱缓存复用编译产物。
+         *
+         * @return 当前构建器
+         */
+        public Builder<I, O> cached() {
+            return cached(true);
+        }
+
+        /**
+         * 编译逻辑流程并静态校验拓扑，产出内存可执行流实例。
+         *
+         * @return 编译就绪的 {@link LocalExecutable} 实例
+         * @throws FlowBuildException 当流程定义存在拓扑冲突、命名冲突或组件未解析时抛出
+         */
+        public LocalExecutable<I, O> compile() {
+            Compiler.Compiled compiled = cached
+                    ? CompileCache.obtain(flow, resolver)
+                    : Compiler.compile(flow, resolver);
+            return LocalExecutable.create(compiled, flowId, flowVersion, observer, executor);
+        }
     }
 
     /**

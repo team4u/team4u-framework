@@ -207,8 +207,8 @@ public class ControlParallelSuspendTest {
                 .join(results -> results.outcome(left))
                 .timeout(Duration.ofMillis(20));
         final List<FlowObserver.Event> events = Collections.synchronizedList(new ArrayList<FlowObserver.Event>());
-        FlowResult.Completed<String> result = (FlowResult.Completed<String>) Local.compile(
-                flow, OperationResolver.rejecting(), events::add).run("input");
+        FlowResult.Completed<String> result = (FlowResult.Completed<String>) Local.from(flow)
+                .observer(events::add).compile().run("input");
         assertEquals("TIMEOUT",
                 ((Outcome.Failed<String>) result.outcome()).failure().code());
         assertTrue(late.await(2, TimeUnit.SECONDS));
@@ -256,7 +256,7 @@ public class ControlParallelSuspendTest {
                 .join(results -> results.outcome(left));
         final List<FlowObserver.Event> events = Collections.synchronizedList(new ArrayList<FlowObserver.Event>());
         Cancellation cancellation = Cancellation.create();
-        CompletableFuture<FlowResult<String>> future = Local.compile(flow, OperationResolver.rejecting(), events::add)
+        CompletableFuture<FlowResult<String>> future = Local.from(flow).observer(events::add).compile()
                 .runAsync("input", cancellation).toCompletableFuture();
         assertTrue(entered.await(2, TimeUnit.SECONDS));
         cancellation.cancel();

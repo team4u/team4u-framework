@@ -60,14 +60,11 @@ public class FlowLoggingObserverTest {
                     .printTreeSummary(true)
                     .build();
 
-            LocalExecutable<TestOrderContext, TestOrderContext> executable = Local.compile(
-                    flow,
-                    "order-test-flow",
-                    1,
-                    com.team4u.framework.flow.spi.OperationResolver.rejecting(),
-                    observer,
-                    null
-            );
+            LocalExecutable<TestOrderContext, TestOrderContext> executable = Local.from(flow)
+                    .flowId("order-test-flow")
+                    .flowVersion(1)
+                    .observer(observer)
+                    .compile();
 
             // 3. 执行流程
             TestOrderContext context = new TestOrderContext();
@@ -125,9 +122,11 @@ public class FlowLoggingObserverTest {
         Flow<TestOrderContext, TestOrderContext> flow = Flow.parallel(b1, b2).join(results -> results.outcome(b1));
 
         FlowLoggingObserver observer = new FlowLoggingObserver();
-        LocalExecutable<TestOrderContext, TestOrderContext> executable = Local.compile(
-                flow, "parallel-flow", 1, com.team4u.framework.flow.spi.OperationResolver.rejecting(), observer, null
-        );
+        LocalExecutable<TestOrderContext, TestOrderContext> executable = Local.from(flow)
+                .flowId("parallel-flow")
+                .flowVersion(1)
+                .observer(observer)
+                .compile();
 
         TestOrderContext context = new TestOrderContext();
         FlowResult<TestOrderContext> result = FlowContextHolder.runWith(context, () -> executable.run(context));
@@ -159,9 +158,11 @@ public class FlowLoggingObserverTest {
                 .printTreeSummary(true)
                 .build();
 
-        LocalExecutable<TestOrderContext, TestOrderContext> executable = Local.compile(
-                flow, "route-test-flow", 1, com.team4u.framework.flow.spi.OperationResolver.rejecting(), observer, null
-        );
+        LocalExecutable<TestOrderContext, TestOrderContext> executable = Local.from(flow)
+                .flowId("route-test-flow")
+                .flowVersion(1)
+                .observer(observer)
+                .compile();
 
         TestOrderContext context = new TestOrderContext();
         FlowResult<TestOrderContext> result = FlowContextHolder.runWith(context, () -> executable.run(context));
@@ -184,9 +185,11 @@ public class FlowLoggingObserverTest {
             );
 
             FlowLoggingObserver observer = new FlowLoggingObserver();
-            LocalExecutable<TestOrderContext, TestOrderContext> executable = Local.compile(
-                    rejectedFlow, "rejected-flow", 1, com.team4u.framework.flow.spi.OperationResolver.rejecting(), observer, null
-            );
+            LocalExecutable<TestOrderContext, TestOrderContext> executable = Local.from(rejectedFlow)
+                    .flowId("rejected-flow")
+                    .flowVersion(1)
+                    .observer(observer)
+                    .compile();
 
             TestOrderContext context = new TestOrderContext();
             FlowResult<TestOrderContext> result = FlowContextHolder.runWith(context, () -> executable.run(context));
@@ -216,9 +219,11 @@ public class FlowLoggingObserverTest {
             Flow<TestOrderContext, TestOrderContext> flow = Flow.<TestOrderContext, TestOrderContext>step(
                     (ctx, req) -> Outcome.accepted(req)
             ).named("Single Step");
-            LocalExecutable<TestOrderContext, TestOrderContext> executable = Local.compile(
-                    flow, "custom-projector-flow", 1, com.team4u.framework.flow.spi.OperationResolver.rejecting(), observer, null
-            );
+            LocalExecutable<TestOrderContext, TestOrderContext> executable = Local.from(flow)
+                    .flowId("custom-projector-flow")
+                    .flowVersion(1)
+                    .observer(observer)
+                    .compile();
 
             TestOrderContext context = new TestOrderContext();
             FlowResult<TestOrderContext> result = FlowContextHolder.runWith(context, () -> executable.run(context));

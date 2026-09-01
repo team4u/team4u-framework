@@ -133,8 +133,15 @@ public class OrderFlowConfiguration {
     @Bean
     public LocalExecutable<OrderRequest, Receipt> orderExecutable(
             Flow<OrderRequest, Receipt> orderFlowDefinition) {
-        // 编译期一次性从 Spring 容器解析所有 Bean 依赖
+        // 编译期一次性从 Spring 容器解析所有 Bean 依赖（极简入口）
         return BeanFlows.compile(orderFlowDefinition);
+
+        // 或使用 Fluent Builder 定制流程标识与观察者：
+        // return BeanFlows.from(orderFlowDefinition)
+        //         .flowId("order-checkout")
+        //         .flowVersion(1)
+        //         .observer(loggingObserver)
+        //         .compile();
     }
 }
 ```

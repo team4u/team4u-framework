@@ -295,6 +295,11 @@ public class TestkitSmokeTest {
                 fixture.requireSnapshot("exec-1").lifecycle());
         assertFalse(fixture.snapshot("missing").isPresent());
 
+        // 测试默认 flowId/flowVersion 的便捷重载
+        DurableFixture<String, String> defaultFixture = DurableFixture.compile(flow);
+        assertEquals("test", defaultFixture.executable().flowId());
+        assertEquals(1, defaultFixture.executable().flowVersion());
+
         fixture.start("exec-2", "state");
         FlowAssertions.assertCancelled(fixture.cancel("exec-2"));
         assertEquals(DurableLifecycle.CANCELLED,
@@ -356,7 +361,7 @@ public class TestkitSmokeTest {
                             .map(values -> values.get(left) + values.get(right)));
             TraceCollector trace = new TraceCollector();
             LocalFixture<String, String> fixture = LocalFixture.of(
-                    Local.compile(parallel, OperationResolver.rejecting(), trace, callerExecutor));
+                    Local.from(parallel).observer(trace).executor(callerExecutor).compile());
 
             // 异步驱动：若两分支未真正并发，awaitEntered 会超时返回 false（而非死锁挂死）
             CompletableFuture<FlowResult<String>> running = fixture.executable()

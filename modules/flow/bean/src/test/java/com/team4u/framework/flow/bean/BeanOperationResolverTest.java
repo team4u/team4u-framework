@@ -6,6 +6,7 @@ import com.team4u.framework.flow.model.Completion;
 import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.api.Gate;
 import com.team4u.framework.flow.Local;
+import com.team4u.framework.flow.LocalExecutable;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.OperationContext;
 import com.team4u.framework.flow.model.Outcome;
@@ -37,6 +38,8 @@ public class BeanOperationResolverTest {
             "flowBeanResolverTest.persistent.class.2b0cfb55";
     private static final String PERSISTENT_QUALIFIED =
             "flowBeanResolverTest.persistent.qualified.2b0cfb55";
+    private static final String BUILDER_PERSISTENT_CLASS =
+            "flowBeanResolverTest.builder.persistent.class.2b0cfb55";
     private static final String PROXY_QUALIFIED =
             "flowBeanResolverTest.proxy.qualified.2b0cfb55";
     private static final String WRONG_TYPE =
@@ -95,6 +98,22 @@ public class BeanOperationResolverTest {
                 .run("input").requireAccepted());
         assertPersistentCalls(classPolicy);
         assertPersistentCalls(qualifiedPolicy);
+    }
+
+    @Test
+    public void beanFlowsFromBuilderConfiguresCustomOptions() {
+        BuilderOperation op = new BuilderOperation();
+        register(BUILDER_PERSISTENT_CLASS, op);
+
+        Flow<String, String> flow = Flow.step(BuilderOperation.class, BUILDER_PERSISTENT_CLASS);
+
+        LocalExecutable<String, String> exec = BeanFlows.from(flow)
+                .flowId("bean-flow")
+                .flowVersion(3)
+                .compile();
+
+        assertEquals("input:builder", exec.run("input").requireAccepted());
+        assertEquals(1, op.calls.get());
     }
 
     @Test
@@ -299,6 +318,16 @@ public class BeanOperationResolverTest {
         @Override
         public Outcome<String> execute(OperationContext context, String input) {
             return Outcome.accepted(input + ":proxy");
+        }
+    }
+
+    public static final class BuilderOperation implements Operation<String, String> {
+        private final AtomicInteger calls = new AtomicInteger();
+
+        @Override
+        public Outcome<String> execute(OperationContext context, String input) {
+            calls.incrementAndGet();
+            return Outcome.accepted(input + ":builder");
         }
     }
 }

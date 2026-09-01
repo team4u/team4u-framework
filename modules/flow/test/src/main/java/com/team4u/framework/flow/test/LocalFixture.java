@@ -39,18 +39,26 @@ public final class LocalFixture<I, O> {
         return new LocalFixture<I, O>(Local.compile(flow));
     }
 
+    /** 指定 resolver 的 fixture。 */
+    public static <I, O> LocalFixture<I, O> compile(
+            Flow<I, O> flow, OperationResolver resolver) {
+        return new LocalFixture<I, O>(Local.compile(flow, resolver));
+    }
+
     /** 注入 TraceCollector 的便捷工厂。 */
     public static <I, O> LocalFixture<I, O> compile(
             Flow<I, O> flow, final TraceCollector collector) {
         Objects.requireNonNull(collector, "collector must not be null");
-        return new LocalFixture<I, O>(Local.compile(flow,
-                OperationResolver.rejecting(), collector));
+        return new LocalFixture<I, O>(Local.from(flow).observer(collector).compile());
     }
 
     /** 全参工厂：显式 resolver 与 observer。 */
     public static <I, O> LocalFixture<I, O> compile(
             Flow<I, O> flow, OperationResolver resolver, FlowObserver observer) {
-        return new LocalFixture<I, O>(Local.compile(flow, resolver, observer));
+        return new LocalFixture<I, O>(Local.from(flow)
+                .resolver(resolver)
+                .observer(observer)
+                .compile());
     }
 
     /** 直接包装已编译的 LocalExecutable。 */

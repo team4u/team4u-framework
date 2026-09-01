@@ -176,8 +176,9 @@ import com.team4u.framework.flow.api.FlowObserver;
 import com.team4u.framework.flow.test.TraceCollector;
 
 TraceCollector collector = new TraceCollector();
-LocalExecutable<String, String> executable = Local.compile(
-        flow, OperationResolver.rejecting(), collector);
+LocalExecutable<String, String> executable = Local.from(flow)
+        .observer(collector)
+        .compile();
 executable.run("input");
 
 // 获取全部事件列表
@@ -254,9 +255,10 @@ FlowAssertions.assertAccepted(finalResult, "approved");
 ```java
 import com.team4u.framework.flow.test.DurableFixture;
 
-// 1. 默认使用内存存储编译夹具
-DurableFixture<String, String> fixture =
-        DurableFixture.compile(flow, "payment-flow", 1);
+// 1. 默认使用内存存储编译夹具（支持极简单测 compile(flow)，默认 flowId="test", flowVersion=1）
+DurableFixture<String, String> fixture = DurableFixture.compile(flow);
+// 或显式指定业务标识：
+// DurableFixture<String, String> fixture = DurableFixture.compile(flow, "payment-flow", 1);
 
 // 2. 驱动命令
 fixture.start("exec-1", "input");
@@ -308,9 +310,11 @@ Flow<String, String> flow = Flow.<String>parallel(left, right)
 ExecutorService workers = Executors.newFixedThreadPool(2);
 
 // 必须使用 runAsync 异步驱动，避免阻塞主测试线程
-CompletableFuture<FlowResult<String>> future = Local.compile(
-        flow, OperationResolver.rejecting(), FlowObserver.noop(), workers
-).runAsync("in").toCompletableFuture();
+CompletableFuture<FlowResult<String>> future = Local.from(flow)
+        .executor(workers)
+        .compile()
+        .runAsync("in")
+        .toCompletableFuture();
 
 // 验证两分支在 2 秒内均到达屏障（证明真并发重叠）
 org.junit.Assert.assertTrue(barrier.awaitEntered(2000));

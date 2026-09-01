@@ -171,8 +171,8 @@ public class ThenOptionalTest {
         Flow<String, String> flow = Flow.<String>identity()
                 .thenOptional((context, input) ->
                         Outcome.skipped(Reason.of("NA", "not applicable")));
-        assertEquals("entry", Local.compile(flow,
-                OperationResolver.rejecting(), events::add).run("entry").requireAccepted());
+        assertEquals("entry", Local.from(flow)
+                .observer(events::add).compile().run("entry").requireAccepted());
 
         boolean fallbackSelected = false;
         int skippedInvokes = 0;
