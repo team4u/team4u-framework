@@ -102,4 +102,23 @@ public interface ContextProjector {
         Objects.requireNonNull(selector, "selector must not be null");
         return context -> context != null ? selector.apply((T) context) : null;
     }
+
+    /**
+     * 创建基于类型的多路路由投影器构建器。
+     *
+     * @return 路由投影器构建器
+     */
+    static TypeRoutingContextProjector.Builder byType() {
+        return TypeRoutingContextProjector.builder();
+    }
+
+    /**
+     * 根据指定的类型与投影器映射字典创建路由投影器。
+     *
+     * @param mappings 类型与投影器映射字典
+     * @return 类型路由投影器
+     */
+    static ContextProjector byType(Map<Class<?>, ContextProjector> mappings) {
+        return byType().bindAll(mappings).build();
+    }
 }

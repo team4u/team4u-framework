@@ -196,6 +196,28 @@ FlowLoggingObserver observer = FlowLoggingObserver.builder()
         .build();
 ```
 
+### 多类型路由模式（融入 of 自定义值与白名单）
+
+针对多步骤流转异构 DTO（不同步骤类型不同）且不想侵入注解的场景，可通过 `byType()` 针对每个类型独立配置投影规则（支持融入 `of` 自定义函数、白名单与继承匹配）：
+
+```java
+ContextProjector typeProjector = ContextProjector.byType()
+        // 1. 融入 of 函数式自定义值与重命名能力
+        .bind(UserVerifyReq.class, (UserVerifyReq req) -> Map.of(
+                "uid", req.getUserId(),
+                "displayTag", "VIP-" + req.getLevel()
+        ))
+        // 2. 绑定特定类型的字段白名单
+        .bindFields(PaymentOrderDTO.class, "orderId", "amount", "cardNo")
+        // 3. 兜底回退模式（未注册类回退到注解模式，或传 null 原样透传）
+        .fallback(ContextProjector.annotated())
+        .build();
+
+FlowLoggingObserver observer = FlowLoggingObserver.builder()
+        .contextProjector(typeProjector)
+        .build();
+```
+
 ---
 
 # 链路树模型编程式获取与断言 (`TraceNode`)
