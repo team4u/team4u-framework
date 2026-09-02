@@ -255,14 +255,29 @@ public final class SpecTypeCheckers {
             TypeRef subOutputType = TypeRef.ANY;
 
             if (subflow != null) {
-                TypeCheckResult subResult = TypeChecker.check(subflow, context.registry());
-                if (!subResult.success()) {
-                    for (Diagnostic d : subResult.diagnostics()) {
-                        context.addDiagnostic(d);
-                    }
+                if (context.isVisiting(call.flow().id())) {
+                    SourceSpan span = call.span() != null && call.span() != SourceSpan.UNKNOWN
+                            ? call.span()
+                            : (call.flow().span() != null ? call.flow().span() : SourceSpan.UNKNOWN);
+                    context.addDiagnostic(new Diagnostic(
+                            DiagnosticCodes.CYCLIC_FLOW_CALL,
+                            "Cyclic flow call detected: " + call.flow().id(),
+                            span));
+                    return currentType;
                 }
-                subInputType = subResult.inputType();
-                subOutputType = subResult.outputType();
+                context.pushVisiting(call.flow().id());
+                try {
+                    TypeCheckResult subResult = TypeChecker.check(subflow, context.registry(), null, context.visitingFlows());
+                    if (!subResult.success()) {
+                        for (Diagnostic d : subResult.diagnostics()) {
+                            context.addDiagnostic(d);
+                        }
+                    }
+                    subInputType = subResult.inputType();
+                    subOutputType = subResult.outputType();
+                } finally {
+                    context.popVisiting(call.flow().id());
+                }
             } else {
                 OperationDescriptor op = context.registry().operation(call.flow().id());
                 if (op != null) {

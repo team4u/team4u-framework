@@ -6,6 +6,7 @@ import com.team4u.framework.flow.api.OperationContext;
 import com.team4u.framework.flow.definition.binding.BoundFlow;
 import com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes;
 import com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException;
+import com.team4u.framework.flow.definition.model.CallSpec;
 import com.team4u.framework.flow.definition.model.FlowDefinition;
 import com.team4u.framework.flow.definition.model.StepSpec;
 import com.team4u.framework.flow.definition.model.SymbolRef;
@@ -227,5 +228,43 @@ public class FlowDefinitionEngineTest {
         FlowDefinitionReader nullReader = (source, sourceName) -> null;
         FlowDefinitionEngine engine = FlowDefinitionEngine.withReader(nullReader);
         engine.readAll("dummy");
+    }
+
+    @Test
+    public void testEngineSelfLoopThrowsCyclicFlowCall() {
+        FlowDefinition def = new FlowDefinition(
+                1, "loop.self", "1",
+                new CallSpec(SymbolRef.of("loop.self"), SourceSpan.UNKNOWN),
+                "test.src", SourceSpan.UNKNOWN);
+        FlowDefinitionReader reader = (source, sourceName) -> Collections.singletonList(def);
+        FlowDefinitionEngine engine = FlowDefinitionEngine.withReader(reader);
+
+        try {
+            engine.bind("dummy");
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertTrue(ex.diagnostics().stream().anyMatch(d -> DiagnosticCodes.CYCLIC_FLOW_CALL.equals(d.code())));
+        }
+    }
+
+    @Test
+    public void testEngineMutualCycleThrowsCyclicFlowCall() {
+        FlowDefinition defA = new FlowDefinition(
+                1, "flowA", "1",
+                new CallSpec(SymbolRef.of("flowB"), SourceSpan.UNKNOWN),
+                "test.src", SourceSpan.UNKNOWN);
+        FlowDefinition defB = new FlowDefinition(
+                1, "flowB", "1",
+                new CallSpec(SymbolRef.of("flowA"), SourceSpan.UNKNOWN),
+                "test.src", SourceSpan.UNKNOWN);
+        FlowDefinitionReader reader = (source, sourceName) -> Arrays.asList(defA, defB);
+        FlowDefinitionEngine engine = FlowDefinitionEngine.withReader(reader);
+
+        try {
+            engine.bindTarget("dummy", "flowA");
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertTrue(ex.diagnostics().stream().anyMatch(d -> DiagnosticCodes.CYCLIC_FLOW_CALL.equals(d.code())));
+        }
     }
 }

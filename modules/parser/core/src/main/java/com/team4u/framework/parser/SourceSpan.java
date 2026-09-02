@@ -42,6 +42,30 @@ public final class SourceSpan implements Serializable {
             int endOffset,
             int endLine,
             int endColumn) {
+        boolean allUnknown = startOffset == -1 && startLine == -1 && startColumn == -1
+                && endOffset == -1 && endLine == -1 && endColumn == -1;
+        if (!allUnknown) {
+            if (startOffset < 0 || endOffset < startOffset) {
+                throw new IllegalArgumentException(
+                        "Invalid offset range: [" + startOffset + ", " + endOffset + ")");
+            }
+            if (startLine < 1 || endLine < 1) {
+                throw new IllegalArgumentException(
+                        "Line numbers must be >= 1 (got startLine=" + startLine + ", endLine=" + endLine + ")");
+            }
+            if (startColumn < 1 || endColumn < 1) {
+                throw new IllegalArgumentException(
+                        "Column numbers must be >= 1 (got startColumn=" + startColumn + ", endColumn=" + endColumn + ")");
+            }
+            if (endLine < startLine) {
+                throw new IllegalArgumentException(
+                        "endLine (" + endLine + ") must be >= startLine (" + startLine + ")");
+            }
+            if (startLine == endLine && endColumn < startColumn) {
+                throw new IllegalArgumentException(
+                        "On same line, endColumn (" + endColumn + ") must be >= startColumn (" + startColumn + ")");
+            }
+        }
         this.source = source;
         this.startOffset = startOffset;
         this.startLine = startLine;

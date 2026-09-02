@@ -102,4 +102,34 @@ public class SourceSpanTest {
         SourceSpan deserialized = (SourceSpan) ois.readObject();
         Assert.assertEquals(original, deserialized);
     }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testInvalidOffsetRange() {
+        new SourceSpan("test.src", 10, 1, 1, 5, 1, 6);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testNegativeStartOffset() {
+        new SourceSpan("test.src", -2, 1, 1, 5, 1, 6);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testInvalidStartLine() {
+        new SourceSpan("test.src", 0, 0, 1, 5, 1, 6);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testInvalidStartColumn() {
+        new SourceSpan("test.src", 0, 1, 0, 5, 1, 6);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testEndLineLessThanStartLine() {
+        new SourceSpan("test.src", 2, 5, 10, 20, 2, 15);
+    }
+
+    @Test(expected = IllegalArgumentException.class)
+    public void testSameLineEndColumnLessThanStartColumn() {
+        new SourceSpan("test.src", 2, 5, 10, 20, 5, 8);
+    }
 }

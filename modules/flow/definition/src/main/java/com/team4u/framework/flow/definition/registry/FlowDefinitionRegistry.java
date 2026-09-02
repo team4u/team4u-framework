@@ -77,6 +77,29 @@ public final class FlowDefinitionRegistry {
         return builder;
     }
 
+    public static Builder builder(FlowDefinitionRegistry base) {
+        if (base == null) {
+            return builder();
+        }
+        return base.toBuilder();
+    }
+
+    public Builder toBuilder() {
+        Builder builder = new Builder();
+        builder.subflows(this.subflows);
+        builder.operations(this.operations);
+        builder.policies(this.policies);
+        builder.policyProviders(this.policyProviders);
+        builder.projectors(this.projectors);
+        builder.mergers(this.mergers);
+        builder.keyProjections(this.keyProjections);
+        builder.joins(this.joins);
+        builder.resumePoints(this.resumePoints);
+        builder.typeCodecs(this.typeCodecs);
+        builder.fallbackResolver(this.fallbackResolver);
+        return builder;
+    }
+
     public static FlowDefinitionRegistry empty() {
         return new Builder().build();
     }

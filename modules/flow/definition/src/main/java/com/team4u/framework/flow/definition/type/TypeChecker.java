@@ -9,6 +9,7 @@ import com.team4u.framework.flow.definition.registry.FlowDefinitionRegistry;
 import com.team4u.framework.flow.definition.registry.OperationDescriptor;
 import com.team4u.framework.flow.definition.registry.ProjectorDescriptor;
 
+import com.team4u.framework.flow.definition.validation.FlowCallGraphValidator;
 import com.team4u.framework.flow.definition.validation.FlowDefinitionValidator;
 
 import java.util.*;
@@ -58,7 +59,24 @@ public final class TypeChecker {
             FlowDefinition definition,
             FlowDefinitionRegistry registry,
             TypeRef initialInputType) {
-        return new TypeChecker(registry).check(definition, initialInputType);
+        return new TypeChecker(registry).check(definition, initialInputType, null);
+    }
+
+    /**
+     * 带初始输入类型及递归调用访问链路的静态检查方法。
+     *
+     * @param definition       流程定义
+     * @param registry         符号注册表
+     * @param initialInputType 初始输入类型
+     * @param visitingFlows    当前访问链路
+     * @return 类型检查结果
+     */
+    public static TypeCheckResult check(
+            FlowDefinition definition,
+            FlowDefinitionRegistry registry,
+            TypeRef initialInputType,
+            Set<String> visitingFlows) {
+        return new TypeChecker(registry).check(definition, initialInputType, visitingFlows);
     }
 
     /**
@@ -79,6 +97,21 @@ public final class TypeChecker {
      * @return 类型检查结果
      */
     public TypeCheckResult check(FlowDefinition definition, TypeRef initialInputType) {
+        return check(definition, initialInputType, null);
+    }
+
+    /**
+     * 执行静态类型检查与推导（包含调用栈访问链路）。
+     *
+     * @param definition       流程定义
+     * @param initialInputType 初始输入类型（若为 null 则自动从首节点推导）
+     * @param visitingFlows    当前调用链路中的流程 ID 集合
+     * @return 类型检查结果
+     */
+    public TypeCheckResult check(
+            FlowDefinition definition,
+            TypeRef initialInputType,
+            Set<String> visitingFlows) {
         if (definition == null) {
             return TypeCheckResult.builder()
                     .success(false)
@@ -91,10 +124,16 @@ public final class TypeChecker {
                     .build();
         }
 
-        TypeCheckContextImpl context = new TypeCheckContextImpl(registry, checkerRegistry);
+        TypeCheckContextImpl context = new TypeCheckContextImpl(
+                registry, checkerRegistry, definition.id(), visitingFlows);
 
         List<Diagnostic> structuralDiagnostics = FlowDefinitionValidator.validate(definition);
         for (Diagnostic d : structuralDiagnostics) {
+            context.addDiagnostic(d);
+        }
+
+        List<Diagnostic> cycleDiagnostics = FlowCallGraphValidator.validate(definition, registry);
+        for (Diagnostic d : cycleDiagnostics) {
             context.addDiagnostic(d);
         }
 
@@ -109,7 +148,7 @@ public final class TypeChecker {
 
         TypeRef inputType = initialInputType != null
                 ? initialInputType
-                : inferInitialInputType(definition.root());
+                : inferInitialInputType(definition.root(), new HashSet<String>(context.visitingFlows()));
 
         TypeRef outputType = context.checkSpec(definition.root(), inputType);
 
@@ -124,7 +163,7 @@ public final class TypeChecker {
                 .build();
     }
 
-    private TypeRef inferInitialInputType(FlowSpec spec) {
+    private TypeRef inferInitialInputType(FlowSpec spec, Set<String> visitedFlows) {
         if (spec == null) {
             return TypeRef.ANY;
         }
@@ -153,11 +192,18 @@ public final class TypeChecker {
                 }
             }
             if (call.flow() != null && call.flow().id() != null) {
-                FlowDefinition subflow = registry.subflow(call.flow().id());
-                if (subflow != null && subflow.root() != null) {
-                    return inferInitialInputType(subflow.root());
+                String targetId = call.flow().id();
+                if (visitedFlows.add(targetId)) {
+                    try {
+                        FlowDefinition subflow = registry.subflow(targetId);
+                        if (subflow != null && subflow.root() != null) {
+                            return inferInitialInputType(subflow.root(), visitedFlows);
+                        }
+                    } finally {
+                        visitedFlows.remove(targetId);
+                    }
                 }
-                OperationDescriptor op = registry.operation(call.flow().id());
+                OperationDescriptor op = registry.operation(targetId);
                 if (op != null && op.inputType() != TypeRef.ANY) {
                     return op.inputType();
                 }
@@ -165,7 +211,7 @@ public final class TypeChecker {
         } else if (spec instanceof SequenceSpec) {
             SequenceSpec seq = (SequenceSpec) spec;
             if (seq.elements() != null && !seq.elements().isEmpty()) {
-                return inferInitialInputType(seq.elements().get(0));
+                return inferInitialInputType(seq.elements().get(0), visitedFlows);
             }
         } else if (spec instanceof RouteSpec) {
             RouteSpec route = (RouteSpec) spec;
@@ -176,15 +222,15 @@ public final class TypeChecker {
                 }
             }
         } else if (spec instanceof RecoverSpec) {
-            return inferInitialInputType(((RecoverSpec) spec).body());
+            return inferInitialInputType(((RecoverSpec) spec).body(), visitedFlows);
         } else if (spec instanceof ControlSpec) {
-            return inferInitialInputType(((ControlSpec) spec).body());
+            return inferInitialInputType(((ControlSpec) spec).body(), visitedFlows);
         } else if (spec instanceof FirstApplicableSpec) {
             FirstApplicableSpec fa = (FirstApplicableSpec) spec;
             TypeRef inferred = TypeRef.ANY;
             if (fa.branches() != null) {
                 for (FlowSpec branch : fa.branches()) {
-                    TypeRef branchIn = inferInitialInputType(branch);
+                    TypeRef branchIn = inferInitialInputType(branch, visitedFlows);
                     inferred = narrowInputType(inferred, branchIn);
                 }
             }
@@ -195,7 +241,7 @@ public final class TypeChecker {
             if (parallel.branches() != null) {
                 for (BranchSpec branch : parallel.branches()) {
                     if (branch != null && branch.flow() != null) {
-                        TypeRef branchIn = inferInitialInputType(branch.flow());
+                        TypeRef branchIn = inferInitialInputType(branch.flow(), visitedFlows);
                         inferred = narrowInputType(inferred, branchIn);
                     }
                 }
@@ -230,15 +276,50 @@ public final class TypeChecker {
         private final List<Diagnostic> diagnostics = new ArrayList<Diagnostic>();
         private final Map<FlowSpec, TypeRef> specInputTypes = new LinkedHashMap<FlowSpec, TypeRef>();
         private final Map<FlowSpec, TypeRef> specOutputTypes = new LinkedHashMap<FlowSpec, TypeRef>();
+        private final Set<String> visitingFlows = new HashSet<String>();
 
-        TypeCheckContextImpl(FlowDefinitionRegistry registry, SpecTypeCheckerRegistry checkerRegistry) {
+        TypeCheckContextImpl(
+                FlowDefinitionRegistry registry,
+                SpecTypeCheckerRegistry checkerRegistry,
+                String rootFlowId,
+                Set<String> initialVisiting) {
             this.registry = registry;
             this.checkerRegistry = checkerRegistry;
+            if (initialVisiting != null) {
+                this.visitingFlows.addAll(initialVisiting);
+            }
+            if (rootFlowId != null) {
+                this.visitingFlows.add(rootFlowId);
+            }
         }
 
         @Override
         public FlowDefinitionRegistry registry() {
             return registry;
+        }
+
+        @Override
+        public boolean isVisiting(String flowId) {
+            return flowId != null && visitingFlows.contains(flowId);
+        }
+
+        @Override
+        public void pushVisiting(String flowId) {
+            if (flowId != null) {
+                visitingFlows.add(flowId);
+            }
+        }
+
+        @Override
+        public void popVisiting(String flowId) {
+            if (flowId != null) {
+                visitingFlows.remove(flowId);
+            }
+        }
+
+        @Override
+        public Set<String> visitingFlows() {
+            return Collections.unmodifiableSet(visitingFlows);
         }
 
         @Override

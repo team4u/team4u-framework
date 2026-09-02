@@ -87,4 +87,43 @@ public class FlowLexerTest {
         Assert.assertEquals(9, stepToken.span().endColumn());
         Assert.assertEquals("step", dsl.substring(stepToken.span().startOffset(), stepToken.span().endOffset()));
     }
+
+    @Test
+    public void testSingleLineCommentsWithCrAndCrlf() {
+        String dsl = "# Comment 1\r" +
+                "// Comment 2\r\n" +
+                "flow test {\r\n" +
+                "    # inline\r" +
+                "    step op1\r\n" +
+                "}";
+        FlowLexer lexer = new FlowLexer(dsl, "test.flow");
+        List<Token> tokens = lexer.tokenize();
+        Assert.assertEquals(TokenType.FLOW, tokens.get(0).type());
+        Assert.assertEquals(TokenType.IDENTIFIER, tokens.get(1).type());
+        Assert.assertEquals(TokenType.LBRACE, tokens.get(2).type());
+        Assert.assertEquals(TokenType.STEP, tokens.get(3).type());
+        Assert.assertEquals(TokenType.IDENTIFIER, tokens.get(4).type());
+        Assert.assertEquals(TokenType.RBRACE, tokens.get(5).type());
+        Assert.assertEquals(TokenType.EOF, tokens.get(6).type());
+    }
+
+    @Test
+    public void testUnclosedBlockCommentThrowsDiagnosticException() {
+        String dsl = "flow test {\n" +
+                "    /* unclosed block comment without closing\n" +
+                "    step op1\n" +
+                "}";
+        FlowLexer lexer = new FlowLexer(dsl, "test.flow");
+        try {
+            lexer.tokenize();
+            Assert.fail("Expected FlowDiagnosticException for unclosed block comment");
+        } catch (com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException ex) {
+            Assert.assertEquals(1, ex.getDiagnostics().size());
+            Assert.assertEquals(
+                    com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.DSL_SYNTAX_ERROR,
+                    ex.getDiagnostics().get(0).code());
+            // Verify that the span covers up to the end of input
+            Assert.assertEquals(dsl.length(), ex.getDiagnostics().get(0).span().endOffset());
+        }
+    }
 }
