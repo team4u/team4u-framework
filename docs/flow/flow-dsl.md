@@ -281,6 +281,156 @@ scope "settlementPhase" {
 
 ---
 
+## 嵌套流程与子流程编排 (Nested & Modular Subflows)
+
+在面对大型、复杂的业务编排时，将庞大的流水线拆解为层次分明、高内聚的嵌套子结构或独立子流程，是保持流程清晰与高可维护性的关键。`team4u-flow-dsl` 原生支持两种维度的嵌套编排：
+
+- **语法块级多层控制流嵌套 (Block-Level Structural Nesting)** ：在 `route` 分支、`parallel` 并行分支、`recover` 补偿块或治理 `scope` 内部，自由多层嵌套子路由、子并行与顺序流水线；
+- **模块化子流程组件化复用 (Modular Subflow Invocation & Projection)** ：将可复用的子业务（如支付流水线、风控评估流水线）定义为独立的 Flow / DSL，在主流程中通过 `step` 符号像调用普通原子步骤一样调用子流程，并配合 `project` 与 `merge` 实现上下文切片与结果融合。
+
+### 语法块级多层控制流嵌套
+
+DSL 的语法块（`route`、`parallel`、`recover`、`firstApplicable`、`scope`、`timeout`、`policy` 等）均天然支持多层复合嵌套。
+
+以下示例演示了一个在全渠道履约场景下，**条件路由内部嵌套超时作用域，超时作用域内部嵌套结构化并行分支**的 DSL：
+
+```dsl
+schema 1
+
+flow order.omnichannel version 1.0 {
+    step order.validate
+
+    # 顶层条件路由：区分线上履约与门店履约
+    route order.channel {
+        case "ONLINE" {
+            # 线上履约具名作用域（带 5 秒全局超时控制）
+            timeout 5s {
+                step inventory.lockOnline
+
+                # 作用域内嵌套结构化并行分支
+                parallel {
+                    branch payment {
+                        step payment.chargeOnline {
+                            retry payment.quickRetry {
+                                maxAttempts: 2
+                            }
+                        }
+                    }
+                    branch logistics {
+                        step logistics.generateWaybill
+                    }
+                    join order.onlineSummary
+                }
+            }
+        }
+        case "STORE" {
+            step inventory.lockStore
+            step pos.settleOffline
+        }
+        otherwise {
+            rejected "UNSUPPORTED_CHANNEL"
+        }
+    }
+
+    step order.notifyCustomer
+}
+```
+
+### 模块化独立子流程编排与复用
+
+当子业务流程本身逻辑复杂、或者需要在多个父流程之间共享复用时，推荐将子流程编写为独立的 `.flow` 定义，并在主流程中通过 `step` 引用。
+
+#### 定义独立子流程 DSL (payment-subflow.flow)
+
+子流程专注于自身的输入（如 `PaymentRequest`）与输出（如 `PaymentReceipt`），与父流程的大对象彻底解耦：
+
+```dsl
+schema 1
+
+flow payment.subflow version 1.0 {
+    step payment.validateAccount
+
+    # 优先使用余额支付，失败或弃权时回退至信用账户支付
+    firstApplicable {
+        step payment.payWithBalance
+        step payment.payWithCredit
+    }
+
+    step payment.issueReceipt
+}
+```
+
+#### 定义主流程 DSL (main-order.flow)
+
+主流程通过 `step payment.subflow` 声明调用子流程，并通过 `project` 提取所需入参、`merge` 合并回写结果：
+
+```dsl
+schema 1
+
+flow main.order version 1.0 {
+    step order.create
+
+    # 嵌套调用独立子流程（支持附加修饰符如 named、timeout）
+    step payment.subflow {
+        named "执行支付子流程"
+        project order.toPaymentRequest
+        merge order.withPaymentReceipt
+        timeout 3s
+    }
+
+    step order.dispatchDelivery
+}
+```
+
+#### Java 符号绑定与执行装配
+
+在 Java 代码中，只需将编译好的子流程通过 Lambda 包装或 [`Operation`](file:///root/code/team4u-framework/modules/flow/core/src/main/java/com/team4u/framework/flow/api/Operation.java) 注册进主流程的 [`FlowDefinitionRegistry`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/registry/FlowDefinitionRegistry.java) 即可：
+
+```java
+// 1. 编译子流程
+FlowDefinitionRegistry paymentRegistry = FlowDefinitionRegistry.builder()
+        .operation("payment.validateAccount", new ValidateAccountOp())
+        .operation("payment.payWithBalance", new PayWithBalanceOp())
+        .operation("payment.payWithCredit", new PayWithCreditOp())
+        .operation("payment.issueReceipt", new IssueReceiptOp())
+        .build();
+
+BoundFlow paymentBound = FlowDsl.bind(paymentDslText, "payment-subflow.flow", paymentRegistry);
+LocalExecutable<PaymentRequest, PaymentReceipt> paymentExecutable = paymentBound.compileLocal();
+
+// 2. 在主流程注册表中登记子流程 Operation，并配置上下文投影与结果合并
+FlowDefinitionRegistry mainRegistry = FlowDefinitionRegistry.builder()
+        .operation("order.create", new CreateOrderOp())
+        
+        // 将子流程作为原子 Operation 登记到主流程符号表
+        .operation("payment.subflow", (ctx, req) -> {
+            FlowResult<PaymentReceipt> result = paymentExecutable.run(req);
+            return result.isAccepted()
+                    ? Outcome.accepted(result.requireAccepted())
+                    : Outcome.rejected("PAYMENT_SUBFLOW_FAILED");
+        }, PaymentRequest.class, PaymentReceipt.class)
+        
+        .operation("order.dispatchDelivery", new DispatchDeliveryOp())
+        
+        // 注册主上下文与子流程出入参的数据投影与合并函数
+        .projector("order.toPaymentRequest", OrderContext.class, PaymentRequest.class, OrderContext::toPaymentRequest)
+        .merger("order.withPaymentReceipt", OrderContext.class, PaymentReceipt.class, OrderContext.class, OrderContext::withPaymentReceipt)
+        .build();
+
+// 3. 编译并执行主流程
+BoundFlow mainBound = FlowDsl.bind(mainDslText, "main-order.flow", mainRegistry);
+LocalExecutable<OrderContext, OrderContext> mainExecutable = mainBound.compileLocal();
+
+FlowResult<OrderContext> result = mainExecutable.run(new OrderContext("ORD-001"));
+```
+
+### 嵌套流程设计最佳实践
+
+- **上下文数据隔离 (Context Encapsulation)** ：主流程与子流程严禁共享全局可变状态或强制绑定同一个扁平大 Context。优先使用 `project`（入参裁剪提取）与 `merge`（输出合并回写），使每个子流程保持强类型单一职责与独立单测能力；
+- **嵌套并发线程池配置 (Nested Parallel Scheduling)** ：当在 `parallel` 分支内部进一步嵌套 `parallel` 并行或 `timeout` 超时控制时，底层 Worker 线程池必须配置支持工作窃取与动态补偿的 `ForkJoinPool`，防止传统固定容量线程池在多层嵌套阻塞等待时产生线程饥饿死锁。
+
+---
+
 ## 统一门面 API (FlowDsl)
 
 [`FlowDsl`](file:///root/code/team4u-framework/modules/flow/dsl/src/main/java/com/team4u/framework/flow/dsl/FlowDsl.java) 是面向业务调用方的统一静态入口：
