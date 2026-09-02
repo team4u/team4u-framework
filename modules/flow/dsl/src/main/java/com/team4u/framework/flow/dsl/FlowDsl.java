@@ -1,21 +1,18 @@
 package com.team4u.framework.flow.dsl;
 
 import com.team4u.framework.flow.definition.binding.BoundFlow;
-import com.team4u.framework.flow.definition.binding.FlowBinder;
-import com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes;
-import com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException;
 import com.team4u.framework.flow.definition.model.FlowDefinition;
+import com.team4u.framework.flow.definition.reader.FlowDefinitionReader;
 import com.team4u.framework.flow.definition.registry.FlowDefinitionRegistry;
-import com.team4u.framework.flow.dsl.parser.FlowDslParser;
 import com.team4u.framework.flow.spi.OperationResolver;
 
 import java.util.List;
-import java.util.Objects;
 
 /**
- * 流程文本 DSL 核心统一门面入口（Flow DSL Facade）。
+ * 流程 DSL 核心统一门面入口（Flow DSL Facade）。
  *
- * <p>提供文本 DSL 语法解析、多流程拆解、类型校验、符号解析绑定与 Local/Durable 可执行流编译的一站式服务。</p>
+ * <p>提供文本 DSL 语法解析、多流程拆解、类型校验、符号解析绑定与 Local/Durable 可执行流编译的一站式静态门面服务。
+ * 内部委托给 {@link FlowDslEngine} 默认实例执行。</p>
  *
  * @author jay.wu
  */
@@ -24,13 +21,41 @@ public final class FlowDsl {
     private FlowDsl() { }
 
     /**
+     * 获取默认配置的 {@link FlowDslEngine} 实例。
+     *
+     * @return 默认 DSL 引擎实例
+     */
+    public static FlowDslEngine engine() {
+        return FlowDslEngine.defaultEngine();
+    }
+
+    /**
+     * 创建 {@link FlowDslEngine} 构建器。
+     *
+     * @return 引擎构建器实例
+     */
+    public static FlowDslEngine.Builder builder() {
+        return FlowDslEngine.builder();
+    }
+
+    /**
+     * 基于指定流程定义读取器创建 {@link FlowDslEngine} 实例。
+     *
+     * @param reader 流程定义读取器
+     * @return 引擎实例
+     */
+    public static FlowDslEngine withReader(FlowDefinitionReader reader) {
+        return FlowDslEngine.withReader(reader);
+    }
+
+    /**
      * 将文本 DSL 解析为外部配置模型 {@link FlowDefinition}（若有多个 flow 则返回最后一个/主流程）。
      *
      * @param dsl DSL 文本内容
      * @return 流程定义 AST
      */
     public static FlowDefinition parse(String dsl) {
-        return FlowDslParser.parse(dsl);
+        return FlowDslEngine.defaultEngine().parse(dsl);
     }
 
     /**
@@ -41,7 +66,7 @@ public final class FlowDsl {
      * @return 流程定义 AST
      */
     public static FlowDefinition parse(String dsl, String sourceName) {
-        return FlowDslParser.parse(dsl, sourceName);
+        return FlowDslEngine.defaultEngine().parse(dsl, sourceName);
     }
 
     /**
@@ -51,7 +76,7 @@ public final class FlowDsl {
      * @return 流程定义 AST 列表
      */
     public static List<FlowDefinition> parseAll(String dsl) {
-        return FlowDslParser.parseDefinitions(dsl);
+        return FlowDslEngine.defaultEngine().parseAll(dsl);
     }
 
     /**
@@ -62,7 +87,7 @@ public final class FlowDsl {
      * @return 流程定义 AST 列表
      */
     public static List<FlowDefinition> parseAll(String dsl, String sourceName) {
-        return FlowDslParser.parseDefinitions(dsl, sourceName);
+        return FlowDslEngine.defaultEngine().parseAll(dsl, sourceName);
     }
 
     /**
@@ -72,7 +97,7 @@ public final class FlowDsl {
      * @return 流程定义 AST 列表
      */
     public static List<FlowDefinition> parseDefinitions(String dsl) {
-        return FlowDslParser.parseDefinitions(dsl);
+        return FlowDslEngine.defaultEngine().parseDefinitions(dsl);
     }
 
     /**
@@ -83,7 +108,7 @@ public final class FlowDsl {
      * @return 流程定义 AST 列表
      */
     public static List<FlowDefinition> parseDefinitions(String dsl, String sourceName) {
-        return FlowDslParser.parseDefinitions(dsl, sourceName);
+        return FlowDslEngine.defaultEngine().parseDefinitions(dsl, sourceName);
     }
 
     /**
@@ -94,7 +119,7 @@ public final class FlowDsl {
      * @return 绑定后的 BoundFlow
      */
     public static BoundFlow bind(String dsl, FlowDefinitionRegistry registry) {
-        return bind(dsl, null, null, registry, null);
+        return FlowDslEngine.defaultEngine().bind(dsl, registry);
     }
 
     /**
@@ -106,7 +131,7 @@ public final class FlowDsl {
      * @return 绑定后的 BoundFlow
      */
     public static BoundFlow bindTarget(String dsl, String targetFlowId, FlowDefinitionRegistry registry) {
-        return bind(dsl, null, targetFlowId, registry, null);
+        return FlowDslEngine.defaultEngine().bindTarget(dsl, targetFlowId, registry);
     }
 
     /**
@@ -123,7 +148,7 @@ public final class FlowDsl {
             String targetFlowId,
             FlowDefinitionRegistry registry,
             OperationResolver resolver) {
-        return bind(dsl, null, targetFlowId, registry, resolver);
+        return FlowDslEngine.defaultEngine().bindTarget(dsl, targetFlowId, registry, resolver);
     }
 
     /**
@@ -135,7 +160,7 @@ public final class FlowDsl {
      * @return 绑定后的 BoundFlow
      */
     public static BoundFlow bind(String dsl, String sourceName, FlowDefinitionRegistry registry) {
-        return bind(dsl, sourceName, null, registry, null);
+        return FlowDslEngine.defaultEngine().bind(dsl, sourceName, registry);
     }
 
     /**
@@ -150,7 +175,7 @@ public final class FlowDsl {
             String dsl,
             FlowDefinitionRegistry registry,
             OperationResolver resolver) {
-        return bind(dsl, null, null, registry, resolver);
+        return FlowDslEngine.defaultEngine().bind(dsl, registry, resolver);
     }
 
     /**
@@ -167,7 +192,7 @@ public final class FlowDsl {
             String sourceName,
             FlowDefinitionRegistry registry,
             OperationResolver resolver) {
-        return bind(dsl, sourceName, null, registry, resolver);
+        return FlowDslEngine.defaultEngine().bind(dsl, sourceName, registry, resolver);
     }
 
     /**
@@ -184,7 +209,7 @@ public final class FlowDsl {
             String sourceName,
             String targetFlowId,
             FlowDefinitionRegistry registry) {
-        return bind(dsl, sourceName, targetFlowId, registry, null);
+        return FlowDslEngine.defaultEngine().bind(dsl, sourceName, targetFlowId, registry);
     }
 
     /**
@@ -203,52 +228,7 @@ public final class FlowDsl {
             String targetFlowId,
             FlowDefinitionRegistry registry,
             OperationResolver resolver) {
-        List<FlowDefinition> definitions = FlowDslParser.parseDefinitions(dsl, sourceName);
-        if (registry == null) {
-            registry = FlowDefinitionRegistry.empty();
-        }
-
-        // 如果定义中包含多个 flow，或者已有 subflows，将所有解析出的 flow 注册到 multi-flow registry
-        if (definitions.size() > 1 || !registry.subflows().isEmpty()) {
-            FlowDefinitionRegistry.Builder builder = FlowDefinitionRegistry.builder()
-                    .subflows(registry.subflows())
-                    .operations(registry.operations())
-                    .policies(registry.policies())
-                    .policyProviders(registry.policyProviders())
-                    .projectors(registry.projectors())
-                    .mergers(registry.mergers())
-                    .keyProjections(registry.keyProjections())
-                    .joins(registry.joins())
-                    .resumePoints(registry.resumePoints())
-                    .typeCodecs(registry.typeCodecs())
-                    .fallbackResolver(registry.fallbackResolver());
-
-            for (FlowDefinition def : definitions) {
-                builder.overrideSubflow(def);
-            }
-            registry = builder.build();
-        }
-
-        FlowDefinition targetDef = null;
-        if (targetFlowId != null) {
-            for (FlowDefinition def : definitions) {
-                if (targetFlowId.equals(def.id())) {
-                    targetDef = def;
-                    break;
-                }
-            }
-            if (targetDef == null) {
-                targetDef = registry.subflow(targetFlowId);
-            }
-            if (targetDef == null) {
-                throw new FlowDiagnosticException(
-                        DiagnosticCodes.UNKNOWN_FLOW, "Target flow not found: " + targetFlowId);
-            }
-        } else {
-            targetDef = definitions.get(definitions.size() - 1);
-        }
-
-        return FlowBinder.bind(targetDef, registry, resolver);
+        return FlowDslEngine.defaultEngine().bind(dsl, sourceName, targetFlowId, registry, resolver);
     }
 
     /**
@@ -259,7 +239,7 @@ public final class FlowDsl {
      * @return 绑定后的 BoundFlow
      */
     public static BoundFlow bind(FlowDefinition definition, FlowDefinitionRegistry registry) {
-        return FlowBinder.bind(definition, registry, (OperationResolver) null);
+        return FlowDslEngine.defaultEngine().bind(definition, registry);
     }
 
     /**
@@ -274,6 +254,6 @@ public final class FlowDsl {
             FlowDefinition definition,
             FlowDefinitionRegistry registry,
             OperationResolver resolver) {
-        return FlowBinder.bind(definition, registry, resolver);
+        return FlowDslEngine.defaultEngine().bind(definition, registry, resolver);
     }
 }

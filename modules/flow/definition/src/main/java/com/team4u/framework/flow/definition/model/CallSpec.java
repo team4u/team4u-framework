@@ -50,6 +50,14 @@ public final class CallSpec implements FlowSpec {
         this(flow, null, null, modifiers, span);
     }
 
+    public CallSpec(SymbolRef flow, SourceSpan span) {
+        this(flow, null, null, Collections.<ModifierSpec>emptyList(), span);
+    }
+
+    public CallSpec(SymbolRef flow) {
+        this(flow, null, null, Collections.<ModifierSpec>emptyList(), SourceSpan.UNKNOWN);
+    }
+
     /**
      * 获取输入提取投影符号引用。
      *

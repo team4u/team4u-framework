@@ -48,6 +48,14 @@ public final class StepSpec implements FlowSpec {
         this(operation, null, null, modifiers, span);
     }
 
+    public StepSpec(SymbolRef operation, SourceSpan span) {
+        this(operation, null, null, Collections.<ModifierSpec>emptyList(), span);
+    }
+
+    public StepSpec(SymbolRef operation) {
+        this(operation, null, null, Collections.<ModifierSpec>emptyList(), SourceSpan.UNKNOWN);
+    }
+
     /**
      * 获取输入提取投影符号引用。
      *

@@ -1,4 +1,4 @@
-# 外部流程定义与符号注册 (team4u-flow-definition)
+# 外部流程定义与符号注册
 
 `team4u-flow-definition` 是流程引擎连接外部世界（如文本 DSL、JSON/YAML 配置、数据库动态规则、低代码可视化编排等）的核心桥梁。
 
@@ -17,18 +17,18 @@
 
 ---
 
-## 为什么需要这个模块
+## 核心价值
 
 在传统的业务流程开发中，我们通常面临两难的选择：
 
-- **硬编码在 Java 代码中**：类型安全且执行速度极快，但业务流程一旦变动（例如大促期间调整履约规则、增加风控校验），必须重新编译并上线发布；
-- **使用传统的动态脚本或反射引擎**：虽然支持配置化，但通常直接在 JSON 配置文件中写满 Java 类名、包路径，不仅重构容易引发线上崩溃，而且缺乏类型检查，配置一旦写错只有在真实用户请求跑到那一步时才会抛出异常。
+- **硬编码在 Java 代码中** ：类型安全且执行速度极快，但业务流程一旦变动（例如大促期间调整履约规则、增加风控校验），必须重新编译并上线发布；
+- **使用传统的动态脚本或反射引擎** ：虽然支持配置化，但通常直接在 JSON 配置文件中写满 Java 类名、包路径，不仅重构容易引发线上崩溃，而且缺乏类型检查，配置一旦写错只有在真实用户请求跑到那一步时才会抛出异常。
 
 `team4u-flow-definition` 提出了全新的解决方案：
 
 ```mermaid
 graph LR
-    subgraph "外部配置 (纯数据文本/JSON)"
+    subgraph "外部配置 (纯数据文本/JSON/YAML)"
         CFG["flow: order.process<br/>- step: order.validate<br/>- step: inventory.reserve<br/>- step: payment.charge"]
     end
 
@@ -49,24 +49,29 @@ graph LR
     CHECK --> EXEC
 ```
 
-- **纯数据解耦**：流程定义是一份纯粹的数据蓝图（`FlowSpec`），只记录业务步骤的名字（如 `order.validate`），绝不硬编码任何 Java 类名或 Lambda 表达式，天然支持存储在 MySQL、Redis 或配置中心；
-- **符号显式映射**：通过符号注册表（`FlowDefinitionRegistry`），将字符串名字显式绑定到 Spring Bean 或 Java 方法，杜绝不安全的动态反射；
-- **启动期静态类型推导**：通过 `TypeChecker` 在流程加载时自动推导整个流水线的入参和出参，提前拦截类型不匹配的错误；
-- **不可变发布与防篡改**：通过 `FlowPublisher` 保证发布后的版本全局不可变，彻底消除并发运行时的脏覆盖风险。
+- **纯数据解耦** ：流程定义是一份纯粹的数据蓝图（`FlowSpec`），只记录业务步骤的名字（如 `order.validate`），绝不硬编码任何 Java 类名或 Lambda 表达式，天然支持存储在 MySQL、Redis 或配置中心；
+- **符号显式映射** ：通过符号注册表（`FlowDefinitionRegistry`），将字符串名字显式绑定到 Spring Bean 或 Java 方法，杜绝不安全的动态反射；
+- **启动期静态类型推导** ：通过 `TypeChecker` 在流程加载时自动推导整个流水线的入参和出参，提前拦截类型不匹配的错误；
+- **不可变发布与防篡改** ：通过 `FlowPublisher` 保证发布后的版本全局不可变，彻底消除并发运行时的脏覆盖风险。
 
 ---
 
 ## 核心架构与设计模型
 
-框架内部严格划分为三层抽象，职责清晰正交：
+框架内部严格划分为四层抽象，职责清晰正交：
 
 ```mermaid
 graph TD
-    subgraph "1. 外部配置层 (External Configuration IR)"
-        AST["FlowDefinition / FlowSpec AST<br/>• 纯数据模型，实现 Serializable<br/>• 集合完全不可变包装，防止原地篡改<br/>• 携带 SourceSpan 源码文件与行列号坐标"]
+    subgraph "1. 前端读取层"
+        RDR["FlowDefinitionReader 统一读取器 SPI<br/>• 文本 DSL (TextFlowDefinitionReader)<br/>• ANTLR / JSON / YAML / 配置中心"]
     end
 
-    subgraph "2. 符号绑定与校验层 (Logical Binding & Typing)"
+    subgraph "2. 外部配置层"
+        AST["FlowDefinition / FlowSpec AST<br/>• 纯数据模型，实现 Serializable<br/>• 集合完全不可变包装，防止原地篡改<br/>• 携带 SourceSpan 源码文件与行列号坐标"]
+        RDR --> AST
+    end
+
+    subgraph "3. 符号绑定与校验层"
         REG["FlowDefinitionRegistry 符号注册表"]
         TC["TypeChecker 静态类型检查器 (SpecTypeCheckerRegistry)"]
         FB["FlowBinder 符号绑定器 (SpecBinderRegistry)"]
@@ -74,13 +79,10 @@ graph TD
         AST & REG --> TC --> FB --> SM
     end
 
-    subgraph "3. 运行时执行层 (Runtime Execution IR)"
+    subgraph "4. 运行时执行与驱动层"
         LOG["Flow&lt;I, O&gt; 逻辑编排树"]
         PLAN["PlanNode 物理执行计划 (8 种封闭节点)"]
         FB --> LOG --> PLAN
-    end
-
-    subgraph "4. 执行引擎驱动 (Engines)"
         PLAN --> LOC["LocalExecutable 内存极速流水线"]
         PLAN --> DUR["DurableExecutable 持久化断点续跑状态机"]
     end
@@ -88,7 +90,8 @@ graph TD
 
 | 层次 | 核心载体 | 核心特点与职责 |
 | :--- | :--- | :--- |
-| **外部配置层** | [`FlowDefinition`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FlowDefinition.java), [`FlowSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FlowSpec.java) | 纯数据 AST，无代码依赖，用于接收 DSL/JSON/低代码平台输出 |
+| **前端读取层** | [`FlowDefinitionReader`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/reader/FlowDefinitionReader.java) | 流程定义读取器抽象 SPI，将文本 DSL、JSON、YAML 或外部源解析为标准 AST |
+| **外部配置层** | [`FlowDefinition`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FlowDefinition.java), [`FlowSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FlowSpec.java) | 纯数据 AST，无代码依赖，作为全引擎通用的标准模型 |
 | **符号绑定层** | [`FlowDefinitionRegistry`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/registry/FlowDefinitionRegistry.java), [`FlowBinder`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/binding/FlowBinder.java) | 将字符串符号解析为 Java 实例/Bean 契约，完成类型推导与拓扑校验 |
 | **运行时执行层** | [`PlanNode`](file:///root/code/team4u-framework/modules/flow/core/src/main/java/com/team4u/framework/flow/compiler/PlanNode.java) | 编译优化后的只读执行拓扑，驱动 Local/Durable 引擎运行 |
 
@@ -219,7 +222,40 @@ if (result.isAccepted()) {
 
 ---
 
-## 纯数据语法节点全景 (FlowSpec 家族)
+## 流程定义读取器抽象
+
+为了使流程引擎能够解耦地支持多样化的前端源格式（如文本 DSL、ANTLR 语法树、JSON、YAML、数据库配置中心等），`team4u-flow-definition` 提供了中立的流程定义读取器 SPI 抽象 [`FlowDefinitionReader`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/reader/FlowDefinitionReader.java)：
+
+```java
+@FunctionalInterface
+public interface FlowDefinitionReader {
+
+    /**
+     * 将源输入读取解析为流程定义列表。
+     *
+     * @param source     源配置文本或内容
+     * @param sourceName 源码文件名或资源标识
+     * @return 流程定义 AST 列表
+     */
+    List<FlowDefinition> read(String source, String sourceName);
+
+    /**
+     * 将源输入读取解析为单个流程定义（若包含多个 flow 则返回最后一个/主流程）。
+     *
+     * @param source     源配置文本或内容
+     * @param sourceName 源码文件名或资源标识
+     * @return 流程定义 AST
+     */
+    default FlowDefinition readDefinition(String source, String sourceName) { ... }
+}
+```
+
+- **统一抽象与稳定中间模型** ：无论上层前端采用手写解析器、ANTLR 还是 Jackson/SnakeYAML，最终均统一输出为纯数据模型 `FlowDefinition`；
+- **职责清晰隔离** ：Reader 仅负责语法（Syntax）解析；符号有效性、类型兼容性、路由分支完整性与拓扑合法性则统一由 `TypeChecker` 与 `FlowBinder` 负责定义与校验。
+
+---
+
+## 纯数据语法节点全景
 
 所有语法节点均实现 [`FlowSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FlowSpec.java) 接口，支持自由组合嵌套：
 
@@ -237,7 +273,7 @@ if (result.isAccepted()) {
 
 ---
 
-## 步骤修饰器与洋葱圈模型 (Step Modifiers)
+## 步骤修饰器与洋葱圈模型
 
 单个业务步骤（[`StepSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/StepSpec.java)）可以通过修饰器列表（[`ModifierSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/ModifierSpec.java)）叠加治理能力：
 
@@ -267,9 +303,9 @@ graph TD
 
 ---
 
-## 动态策略参数读取 (MapReader)
+## 动态策略参数读取
 
-在编写自定义策略提供者（[`PolicyProvider`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/registry/PolicyProvider.java)）时，外部传入的配置通常是弱类型的 `Map<String, Object>`。可以直接使用 `team4u-base` 提供的 [`MapReader`](file:///root/code/team4u-framework/modules/base/core/src/main/java/com/team4u/framework/base/util/MapReader.java) 进行强类型安全参数提取（详见 [字典强类型读取器 (MapReader)](../base/base-map-reader.md)）：
+在编写自定义策略提供者（[`PolicyProvider`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/registry/PolicyProvider.java)）时，外部传入的配置通常是弱类型的 `Map<String, Object>`。可以直接使用 `team4u-base` 提供的 [`MapReader`](file:///root/code/team4u-framework/modules/base/core/src/main/java/com/team4u/framework/base/util/MapReader.java) 进行强类型安全参数提取：
 
 ```java
 public class MyRateLimitProvider implements PolicyProvider {
