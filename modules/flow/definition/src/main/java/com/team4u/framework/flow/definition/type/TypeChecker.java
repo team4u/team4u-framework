@@ -132,9 +132,21 @@ public final class TypeChecker {
             context.addDiagnostic(d);
         }
 
-        List<Diagnostic> cycleDiagnostics = FlowCallGraphValidator.validate(definition, registry);
-        for (Diagnostic d : cycleDiagnostics) {
-            context.addDiagnostic(d);
+        boolean topLevel = visitingFlows == null || visitingFlows.isEmpty();
+        if (topLevel) {
+            List<Diagnostic> cycleDiagnostics = FlowCallGraphValidator.validate(definition, registry);
+            for (Diagnostic d : cycleDiagnostics) {
+                context.addDiagnostic(d);
+            }
+
+            if (!cycleDiagnostics.isEmpty()) {
+                return TypeCheckResult.builder()
+                        .success(false)
+                        .diagnostics(context.diagnostics())
+                        .inputType(TypeRef.ANY)
+                        .outputType(TypeRef.ANY)
+                        .build();
+            }
         }
 
         if (definition.root() == null) {

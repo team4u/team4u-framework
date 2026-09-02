@@ -42,13 +42,16 @@ public class FlowCallGraphValidatorTest {
         // TypeChecker integration
         TypeCheckResult result = TypeChecker.check(flowA, registry);
         Assert.assertFalse(result.success());
-        Assert.assertTrue(result.diagnostics().stream().anyMatch(d -> DiagnosticCodes.CYCLIC_FLOW_CALL.equals(d.code())));
+        Assert.assertEquals(1, result.diagnostics().size());
+        Assert.assertEquals(DiagnosticCodes.CYCLIC_FLOW_CALL, result.diagnostics().get(0).code());
+        Assert.assertEquals(callSelf.span(), result.diagnostics().get(0).span());
 
         // FlowBinder integration
         try {
             FlowBinder.bind(flowA, registry);
             Assert.fail("Expected FlowDiagnosticException");
         } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(1, ex.diagnostics().size());
             Assert.assertTrue(ex.diagnostics().stream().anyMatch(d -> DiagnosticCodes.CYCLIC_FLOW_CALL.equals(d.code())));
         }
     }
@@ -83,7 +86,9 @@ public class FlowCallGraphValidatorTest {
 
         TypeCheckResult result = TypeChecker.check(flowA, registry);
         Assert.assertFalse(result.success());
-        Assert.assertTrue(result.diagnostics().stream().anyMatch(d -> DiagnosticCodes.CYCLIC_FLOW_CALL.equals(d.code())));
+        Assert.assertEquals(1, result.diagnostics().size());
+        Assert.assertEquals(DiagnosticCodes.CYCLIC_FLOW_CALL, result.diagnostics().get(0).code());
+        Assert.assertEquals(callA.span(), result.diagnostics().get(0).span());
     }
 
     @Test
@@ -122,6 +127,12 @@ public class FlowCallGraphValidatorTest {
         Assert.assertEquals(1, diagnostics.size());
         Assert.assertEquals(DiagnosticCodes.CYCLIC_FLOW_CALL, diagnostics.get(0).code());
         Assert.assertEquals(callBackToA.span(), diagnostics.get(0).span());
+
+        TypeCheckResult result = TypeChecker.check(flowA, registry);
+        Assert.assertFalse(result.success());
+        Assert.assertEquals(1, result.diagnostics().size());
+        Assert.assertEquals(DiagnosticCodes.CYCLIC_FLOW_CALL, result.diagnostics().get(0).code());
+        Assert.assertEquals(callBackToA.span(), result.diagnostics().get(0).span());
     }
 
     @Test
@@ -227,7 +238,9 @@ public class FlowCallGraphValidatorTest {
         TypeChecker typeChecker = new TypeChecker(registry, checkerRegistry);
         TypeCheckResult result = typeChecker.check(flowA);
         Assert.assertFalse(result.success());
-        Assert.assertTrue(result.diagnostics().stream().anyMatch(d ->
-                DiagnosticCodes.CYCLIC_FLOW_CALL.equals(d.code()) && d.message().contains("flowA")));
+        Assert.assertEquals(1, result.diagnostics().size());
+        Assert.assertEquals(DiagnosticCodes.CYCLIC_FLOW_CALL, result.diagnostics().get(0).code());
+        Assert.assertTrue(result.diagnostics().get(0).message().contains("flowA"));
+        Assert.assertEquals(callSelf.span(), result.diagnostics().get(0).span());
     }
 }
