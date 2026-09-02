@@ -255,22 +255,14 @@ public final class SpecTypeCheckers {
             TypeRef subOutputType = TypeRef.ANY;
 
             if (subflow != null) {
-                if (context.isVisiting(call.flow().id())) {
-                    return currentType;
-                }
-                context.pushVisiting(call.flow().id());
-                try {
-                    TypeCheckResult subResult = TypeChecker.check(subflow, context.registry(), null, context.visitingFlows());
-                    if (!subResult.success()) {
-                        for (Diagnostic d : subResult.diagnostics()) {
-                            context.addDiagnostic(d);
-                        }
+                TypeCheckResult subResult = TypeChecker.check(subflow, context.registry());
+                if (!subResult.success()) {
+                    for (Diagnostic d : subResult.diagnostics()) {
+                        context.addDiagnostic(d);
                     }
-                    subInputType = subResult.inputType();
-                    subOutputType = subResult.outputType();
-                } finally {
-                    context.popVisiting(call.flow().id());
                 }
+                subInputType = subResult.inputType();
+                subOutputType = subResult.outputType();
             } else {
                 OperationDescriptor op = context.registry().operation(call.flow().id());
                 if (op != null) {

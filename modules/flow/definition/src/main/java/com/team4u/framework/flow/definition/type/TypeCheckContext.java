@@ -57,39 +57,4 @@ public interface TypeCheckContext {
      * @return Spec 输出类型 Map
      */
     Map<FlowSpec, TypeRef> specOutputTypes();
-
-    /**
-     * 判断指定子流程是否正在当前检查调用栈中。
-     *
-     * @param flowId 子流程 ID
-     * @return 若正在检查则返回 true
-     */
-    default boolean isVisiting(String flowId) {
-        return false;
-    }
-
-    /**
-     * 标记进入子流程检查。
-     *
-     * @param flowId 子流程 ID
-     */
-    default void pushVisiting(String flowId) {
-    }
-
-    /**
-     * 标记退出子流程检查。
-     *
-     * @param flowId 子流程 ID
-     */
-    default void popVisiting(String flowId) {
-    }
-
-    /**
-     * 获取当前正在检查的调用栈中的所有流程 ID 集合。
-     *
-     * @return 正在检查的流程 ID 集合
-     */
-    default java.util.Set<String> visitingFlows() {
-        return java.util.Collections.emptySet();
-    }
 }

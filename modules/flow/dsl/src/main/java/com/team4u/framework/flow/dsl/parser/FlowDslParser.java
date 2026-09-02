@@ -115,6 +115,13 @@ public final class FlowDslParser {
         return definitions;
     }
 
+    /**
+     * 解析顶层 FlowDefinition（若包含多个 flow 则返回最后一个/主 flow）。
+     *
+     * @return 流程定义 AST
+     */
+
+
     private List<FlowSpec> parseStatements() {
         List<FlowSpec> statements = new ArrayList<FlowSpec>();
         while (!check(TokenType.RBRACE) && !isAtEnd()) {

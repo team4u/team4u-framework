@@ -42,10 +42,6 @@ public class FlowDiagnosticException extends RuntimeException {
         return diagnostics != null && !diagnostics.isEmpty() ? diagnostics.get(0) : null;
     }
 
-    public List<Diagnostic> diagnostics() {
-        return diagnostics;
-    }
-
     private static String formatMessage(List<Diagnostic> diagnostics) {
         if (diagnostics == null || diagnostics.isEmpty()) {
             return "Flow definition diagnostic error";

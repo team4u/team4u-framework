@@ -95,12 +95,7 @@ public final class FlowDefinitionEngine {
      */
     public List<FlowDefinition> readAll(String source, String sourceName) {
         List<FlowDefinition> definitions = reader.read(source, sourceName);
-        Objects.requireNonNull(definitions, "FlowDefinitionReader must not return null");
-        List<FlowDefinition> snapshot = new ArrayList<FlowDefinition>(definitions.size());
-        for (FlowDefinition def : definitions) {
-            snapshot.add(Objects.requireNonNull(def, "FlowDefinition element must not be null"));
-        }
-        return Collections.unmodifiableList(snapshot);
+        return Objects.requireNonNull(definitions, "FlowDefinitionReader must not return null");
     }
 
     /**
@@ -285,7 +280,8 @@ public final class FlowDefinitionEngine {
             String targetFlowId,
             FlowDefinitionRegistry registry,
             OperationResolver resolver) {
-        List<FlowDefinition> definitions = readAll(source, sourceName);
+        List<FlowDefinition> definitions = reader.read(source, sourceName);
+        Objects.requireNonNull(definitions, "FlowDefinitionReader must not return null");
 
         if (definitions.isEmpty()) {
             throw new FlowDiagnosticException(new Diagnostic(
@@ -310,14 +306,29 @@ public final class FlowDefinitionEngine {
             }
         }
 
-        // 无条件将本次 definitions 注册至 effectiveRegistry，确保单/多 flow 行为一致且支持自环与相互调用检测
-        FlowDefinitionRegistry.Builder regBuilder = baseRegistry.toBuilder();
-        for (FlowDefinition def : definitions) {
-            regBuilder.subflow(def);
-        }
-        FlowDefinitionRegistry effectiveRegistry = regBuilder.build();
+        // 若包含多个 flow 或已有子流程，则组装包含新子流程的 effectiveRegistry
+        FlowDefinitionRegistry effectiveRegistry = baseRegistry;
+        if (definitions.size() > 1 || !baseRegistry.subflows().isEmpty()) {
+            FlowDefinitionRegistry.Builder regBuilder = FlowDefinitionRegistry.builder()
+                    .subflows(baseRegistry.subflows())
+                    .operations(baseRegistry.operations())
+                    .policies(baseRegistry.policies())
+                    .policyProviders(baseRegistry.policyProviders())
+                    .projectors(baseRegistry.projectors())
+                    .mergers(baseRegistry.mergers())
+                    .keyProjections(baseRegistry.keyProjections())
+                    .joins(baseRegistry.joins())
+                    .resumePoints(baseRegistry.resumePoints())
+                    .typeCodecs(baseRegistry.typeCodecs())
+                    .fallbackResolver(baseRegistry.fallbackResolver());
 
-        // 目标流程选择（严格限定于本次 source definitions 集合中，不跨界 fallback 外部已注册流程）
+            for (FlowDefinition def : definitions) {
+                regBuilder.subflow(def);
+            }
+            effectiveRegistry = regBuilder.build();
+        }
+
+        // 目标流程选择
         FlowDefinition targetDef = null;
         if (targetFlowId == null) {
             if (definitions.size() == 1) {
@@ -336,9 +347,12 @@ public final class FlowDefinitionEngine {
                 }
             }
             if (targetDef == null) {
+                targetDef = baseRegistry.subflow(targetFlowId);
+            }
+            if (targetDef == null) {
                 throw new FlowDiagnosticException(new Diagnostic(
                         DiagnosticCodes.UNKNOWN_FLOW,
-                        "Target flow not found in source: " + targetFlowId,
+                        "Target flow not found: " + targetFlowId,
                         SourceSpan.UNKNOWN));
             }
         }

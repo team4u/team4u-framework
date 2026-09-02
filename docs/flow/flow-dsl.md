@@ -471,11 +471,12 @@ order.flow:24:5: [DSL_SYNTAX_ERROR] Expected '}' to close route block but found 
 
 以下示例演示了一个包含**参数提取投影、动态限流重试、多路路由、并行汇聚与单元测试断言**的完整电商订单履约实战。为了直观展示文本 DSL 与 Java Bean 容器编排两种开发范式的异同，本节分别提供 **Flow DSL 声明模式** 与 **Spring Bean 容器编排模式** 的完整实现代码与对比选型建议。
 
-### 业务模型定义
+### 业务模型与 Spring Bean 组件定义
 
-两种模式共用的业务上下文与状态枚举：
+两种模式共用的业务上下文模型与 Spring Bean 业务组件：
 
 ```java
+// 业务上下文与状态枚举
 public class OrderContext {
     private String orderId;
     private String userId;
@@ -501,6 +502,103 @@ public class OrderContext {
 }
 
 public enum PaymentState { PAID, UNPAID }
+
+// 1. 入参校验组件
+@Component("order.validate")
+public class ValidateOrderOp implements Operation<OrderContext, OrderContext> {
+    @Override
+    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
+        in.getLogs().add("validated");
+        return Outcome.accepted(in);
+    }
+}
+
+// 2. 库存扣减组件（接收 items 列表，返回预留流水号）
+@Component("inventory.reserve")
+public class ReserveInventoryOp implements Operation<List<String>, String> {
+    @Override
+    public Outcome<String> execute(OperationContext context, List<String> items) {
+        return Outcome.accepted("RES_" + items.size());
+    }
+}
+
+// 3. 支付扣款组件（支持 Spring 声明式事务）
+@Component("payment.charge")
+public class ChargePaymentOp implements Operation<OrderContext, OrderContext> {
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
+        in.getLogs().add("charged");
+        return Outcome.accepted(in);
+    }
+}
+
+// 4. 支付状态路由判决器
+@Component("order.paymentStatus")
+public class PaymentStatusSelector implements Operation<OrderContext, PaymentState> {
+    @Override
+    public Outcome<PaymentState> execute(OperationContext context, OrderContext in) {
+        return Outcome.accepted(in.isPaid() ? PaymentState.PAID : PaymentState.UNPAID);
+    }
+}
+
+// 5. 风控复核并行分支
+@Component("risk.audit")
+public class RiskAuditOp implements Operation<OrderContext, OrderContext> {
+    @Override
+    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
+        in.getLogs().add("risk_passed");
+        return Outcome.accepted(in);
+    }
+}
+
+// 6. 短信通知并行分支
+@Component("notify.sendSms")
+public class SendSmsOp implements Operation<OrderContext, OrderContext> {
+    @Override
+    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
+        in.getLogs().add("sms_sent");
+        return Outcome.accepted(in);
+    }
+}
+
+// 7. 未支付关单组件
+@Component("order.closeUnpaid")
+public class CloseUnpaidOp implements Operation<OrderContext, OrderContext> {
+    @Override
+    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
+        in.getLogs().add("closed");
+        return Outcome.accepted(in);
+    }
+}
+
+// 8. 流程完结组件
+@Component("order.finish")
+public class OrderFinishOp implements Operation<OrderContext, OrderContext> {
+    @Override
+    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
+        in.getLogs().add("finished");
+        return Outcome.accepted(in);
+    }
+}
+
+// 9. 并行分支汇聚策略
+@Component("order.parallelPassed")
+public class ParallelPassedJoin implements JoinStrategy<OrderContext> {
+    @Override
+    public Outcome<OrderContext> join(JoinResults<OrderContext> results) {
+        return Outcome.accepted(results.branches().get(0).requireAccepted());
+    }
+}
+
+// 10. 支付限流策略 Bean
+@Component("payment.rateLimit")
+public class PaymentRateLimitPolicy implements Policy<String> {
+    @Override
+    public Gate before(PolicyContext context, String userId) {
+        return Gate.proceed();
+    }
+}
 ```
 
 ### 文本 DSL 声明模式
@@ -570,54 +668,32 @@ flow order.fulfillment version 1.0 {
 
 #### DSL 符号注册与执行测试
 
+在 `FlowDefinitionRegistry` 中，提供了多种注册模式以适配不同的开发场景：
+
+##### Bean / Class 注册模式（非 Lambda 推荐模式）
+
+当注册实现了 `Operation<I, O>` 或 `Policy<K>` 契约的 Bean 实例或 Class 时，注册表通过 `GenericTypeResolver` **自动从接口泛型中推导入参与出参类型，无需显式指定任何 Class 类型参数**：
+
 ```java
-public class DslOrderFulfillmentTest {
+public class DslOrderFulfillmentBeanRegistryTest {
 
     @Test
-    public void testOrderFulfillmentFlow() {
+    public void testOrderFulfillmentWithBeanRegistry() {
         String dsl = "..."; // 加载上述 DSL 文本
 
-        // 1. 注册业务组件符号
+        // 1. 直接注册 Bean 实例（或 Class），泛型类型由注册表自动推导
         FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
-                .operation("order.validate", (ctx, in) -> {
-                    in.getLogs().add("validated");
-                    return Outcome.accepted(in);
-                }, OrderContext.class, OrderContext.class)
+                // 注册业务 Operation Bean（无需手动传入 OrderContext.class 等入参/出参类型）
+                .operation("order.validate", new ValidateOrderOp())
+                .operation("inventory.reserve", new ReserveInventoryOp())
+                .operation("payment.charge", new ChargePaymentOp())
+                .operation("order.paymentStatus", new PaymentStatusSelector())
+                .operation("risk.audit", new RiskAuditOp())
+                .operation("notify.sendSms", new SendSmsOp())
+                .operation("order.closeUnpaid", new CloseUnpaidOp())
+                .operation("order.finish", new OrderFinishOp())
 
-                .operation("inventory.reserve", (ctx, items) -> {
-                    return Outcome.accepted("RES_" + items.size());
-                }, (Class) List.class, String.class)
-
-                .operation("payment.charge", (ctx, in) -> {
-                    in.getLogs().add("charged");
-                    return Outcome.accepted(in);
-                }, OrderContext.class, OrderContext.class)
-
-                .operation("order.paymentStatus", (ctx, in) -> {
-                    return Outcome.accepted(in.isPaid() ? PaymentState.PAID : PaymentState.UNPAID);
-                }, OrderContext.class, PaymentState.class)
-
-                .operation("risk.audit", (ctx, in) -> {
-                    in.getLogs().add("risk_passed");
-                    return Outcome.accepted(in);
-                }, OrderContext.class, OrderContext.class)
-
-                .operation("notify.sendSms", (ctx, in) -> {
-                    in.getLogs().add("sms_sent");
-                    return Outcome.accepted(in);
-                }, OrderContext.class, OrderContext.class)
-
-                .operation("order.closeUnpaid", (ctx, in) -> {
-                    in.getLogs().add("closed");
-                    return Outcome.accepted(in);
-                }, OrderContext.class, OrderContext.class)
-
-                .operation("order.finish", (ctx, in) -> {
-                    in.getLogs().add("finished");
-                    return Outcome.accepted(in);
-                }, OrderContext.class, OrderContext.class)
-
-                // 注册数据投影与结果合并
+                // 注册数据投影与合并
                 .projector("order.items", OrderContext.class, (Class) List.class, OrderContext::getItems)
                 .merger("order.withReservation", OrderContext.class, String.class, OrderContext.class, (ctx, res) -> {
                     ctx.setReservationId(res);
@@ -625,22 +701,16 @@ public class DslOrderFulfillmentTest {
                     return ctx;
                 })
 
-                // 注册 Key 提取器与治理策略
+                // 注册 Key 提取器与治理策略（Policy Bean 自动推导 Key 为 String 类型）
                 .keyProjection("order.userId", OrderContext.class, String.class, OrderContext::getUserId)
-                .policy("payment.rateLimit", RateLimitPolicy.<String>builder()
-                        .point("payment.charge")
-                        .permits(10)
-                        .action(RateLimitAction.REJECT)
-                        .build(), String.class)
+                .policy("payment.rateLimit", new PaymentRateLimitPolicy())
                 .policy("payment.retryPolicy", FlowRetryPolicy.<Object>builder()
                         .maxAttempts(3)
                         .backoff(Backoffs.fixed(100))
                         .build())
 
                 // 注册并行汇聚策略
-                .join("order.parallelPassed", (JoinResults<OrderContext> results) -> {
-                    return Outcome.accepted(results.branches().get(0).requireAccepted());
-                }, OrderContext.class)
+                .join("order.parallelPassed", new ParallelPassedJoin(), OrderContext.class)
                 .build();
 
         // 2. 编译并绑定
@@ -663,92 +733,89 @@ public class DslOrderFulfillmentTest {
 }
 ```
 
-### Spring Bean 容器编排模式
+##### Spring 容器约定自动发现模式（零手动注册）
 
-Spring Bean 编排模式通过 Java 强类型 Fluent API 构建流程拓扑，所有业务操作与治理策略均声明为 Spring Bean。编译期由 `BeanOperationResolver` 自动完成单例查找与契约校验，运行期享受零反射调用与 Spring 声明式事务（`@Transactional`）支持。
-
-#### 声明 Spring Bean 业务组件
+在 Spring 环境下（引入 `team4u-flow-bean`），所有标注了 `@Component("order.validate")` 等与 DSL 符号名同名的 Spring Bean，会被注册表的 `fallbackResolver` **自动发现并完成类型推导与实例绑定，无需在 Registry 中逐个手动注册**：
 
 ```java
-@Component
-public class ValidateOrderOp implements Operation<OrderContext, OrderContext> {
-    @Override
-    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
-        in.getLogs().add("validated");
-        return Outcome.accepted(in);
-    }
-}
+@RunWith(SpringRunner.class)
+@ContextConfiguration(classes = {
+        Team4uBeanConfiguration.class,
+        ValidateOrderOp.class,
+        ReserveInventoryOp.class,
+        ChargePaymentOp.class,
+        PaymentStatusSelector.class,
+        RiskAuditOp.class,
+        SendSmsOp.class,
+        CloseUnpaidOp.class,
+        OrderFinishOp.class,
+        ParallelPassedJoin.class,
+        PaymentRateLimitPolicy.class
+})
+public class DslOrderFulfillmentSpringConventionTest {
 
-@Component
-public class ReserveInventoryOp implements Operation<List<String>, String> {
-    @Override
-    public Outcome<String> execute(OperationContext context, List<String> items) {
-        return Outcome.accepted("RES_" + items.size());
-    }
-}
+    @Test
+    public void testOrderFulfillmentWithSpringConvention() {
+        String dsl = "..."; // 加载上述 DSL 文本
 
-@Component
-public class ChargePaymentOp implements Operation<OrderContext, OrderContext> {
-    @Override
-    @Transactional(rollbackFor = Exception.class)
-    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
-        in.getLogs().add("charged");
-        return Outcome.accepted(in);
-    }
-}
+        // 仅需注册辅助的 Projector、Merger、KeyProjection 与重试配置，各 Operation / Policy Bean 由 Spring 自动解析
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .projector("order.items", OrderContext.class, (Class) List.class, OrderContext::getItems)
+                .merger("order.withReservation", OrderContext.class, String.class, OrderContext.class, (ctx, res) -> {
+                    ctx.setReservationId(res);
+                    ctx.getLogs().add("reserved:" + res);
+                    return ctx;
+                })
+                .keyProjection("order.userId", OrderContext.class, String.class, OrderContext::getUserId)
+                .policy("payment.retryPolicy", FlowRetryPolicy.<Object>builder()
+                        .maxAttempts(3)
+                        .backoff(Backoffs.fixed(100))
+                        .build())
+                .build();
 
-@Component
-public class PaymentStatusSelector implements Operation<OrderContext, PaymentState> {
-    @Override
-    public Outcome<PaymentState> execute(OperationContext context, OrderContext in) {
-        return Outcome.accepted(in.isPaid() ? PaymentState.PAID : PaymentState.UNPAID);
-    }
-}
+        // 绑定时自动结合 Spring 容器发现并注入 Bean
+        BoundFlow boundFlow = FlowDsl.bind(dsl, "order-fulfillment.flow", registry);
+        LocalExecutable<OrderContext, OrderContext> executable = boundFlow.compileLocal();
 
-@Component
-public class RiskAuditOp implements Operation<OrderContext, OrderContext> {
-    @Override
-    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
-        in.getLogs().add("risk_passed");
-        return Outcome.accepted(in);
-    }
-}
+        OrderContext input = new OrderContext("ORD-9999", "USER-88", Arrays.asList("apple", "banana"), true);
+        FlowResult<OrderContext> result = executable.run(input);
 
-@Component
-public class SendSmsOp implements Operation<OrderContext, OrderContext> {
-    @Override
-    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
-        in.getLogs().add("sms_sent");
-        return Outcome.accepted(in);
-    }
-}
-
-@Component
-public class CloseUnpaidOp implements Operation<OrderContext, OrderContext> {
-    @Override
-    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
-        in.getLogs().add("closed");
-        return Outcome.accepted(in);
-    }
-}
-
-@Component
-public class OrderFinishOp implements Operation<OrderContext, OrderContext> {
-    @Override
-    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
-        in.getLogs().add("finished");
-        return Outcome.accepted(in);
-    }
-}
-
-@Component
-public class PaymentRateLimitPolicy implements Policy<String> {
-    @Override
-    public Gate before(PolicyContext context, String userId) {
-        return Gate.proceed();
+        Assert.assertTrue(result.isAccepted());
+        Assert.assertEquals("RES_2", result.requireAccepted().getReservationId());
     }
 }
 ```
+
+##### Lambda 内联注册模式（单测桩与临时逻辑）
+
+当使用匿名 Lambda 表达式（如 `(ctx, in) -> ...`）快速构造单测桩时，由于 Java 运行时泛型擦除无法提取类型参数，此时需显式传入入参和出参的 `Class`：
+
+```java
+// 仅在 Lambda 匿名函数模式下才需要显式声明 Class 类型
+FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+        .operation("order.validate", (ctx, in) -> {
+            in.getLogs().add("validated");
+            return Outcome.accepted(in);
+        }, OrderContext.class, OrderContext.class)
+        .build();
+```
+
+### Spring Bean 容器编排模式
+
+Spring Bean 编排模式通过 Java 强类型 Fluent API 构建流程拓扑，直接引用业务 Bean Class。**该模式在底层抽象语法树（AST）、执行语义、控制流拓扑与治理策略上与上述 DSL 文本保持 100% 严格等价**。编译期由 `BeanOperationResolver` 自动完成单例查找与契约校验，运行期享受零反射调用与 Spring 声明式事务（`@Transactional`）支持。
+
+#### 语法与语义 1:1 等价映射对照
+
+下表展示了上述 `order-fulfillment.flow` 文本中的各个原语与 Spring Bean Java 代码的严格等价对应关系：
+
+| 业务编排环节 | 文本 DSL 语法表达 | Spring Bean 强类型 Java 等价表达 | 等价说明 |
+| :--- | :--- | :--- | :--- |
+| **基础入参校验** | `step order.validate { named "..."; timeout 500ms; }` | `Flow.step(ValidateOrderOp.class).named("...").timeout(Duration.ofMillis(500))` | 延迟解析 Class 契约，附加中文标签与超时时限修饰器 |
+| **数据投影与合并** | `step inventory.reserve { project order.items; merge order.withReservation; timeout 1s; }` | `.use(ReserveInventoryOp.class, OrderContext::getItems, merger).named("...").timeout(Duration.ofSeconds(1))` | `use` 组合入参提取投影与出参回写合并 |
+| **限流重试治理** | `step payment.charge { policy payment.rateLimit key ...; retry ...; timeout 3s; }` | `Flow.step(ChargePaymentOp.class).policy(PaymentRateLimitPolicy.class, keyFn).persistentPolicy(retryPolicy, keyFn)...` | 无状态准入 Policy 与持久化重试策略链式包裹 |
+| **条件多路分流** | `route order.paymentStatus { case PAID { ... } case UNPAID { ... } otherwise { ... } }` | `Flow.route(PaymentStatusSelector.class).caseOf(PaymentState.PAID, ...).caseOf(PaymentState.UNPAID, ...).otherwise(...)` | 状态判决器返回路由键并精确匹配分支 |
+| **结构化并行汇聚** | `parallel { branch riskAudit { ... } branch customerNotify { ... } join order.parallelPassed; }` | `Flow.parallel(Branch.of("riskAudit", RiskAuditOp.class), Branch.of("customerNotify", SendSmsOp.class)).join(new ParallelPassedJoin())` | 多分支并发执行与 JoinStrategy 汇聚归约 |
+| **显式拒绝与弃权** | `rejected "ORDER_PAYMENT_FAILED"` / `skipped "UNKNOWN_PAYMENT_STATUS"` | `Flow.rejected(Reason.of("ORDER_PAYMENT_FAILED", "..."))` / `Flow.skipped(...)` | 显式返回非成功四态结果并触发分支短路 |
 
 #### 容器配置与流程拓扑编排
 
@@ -759,11 +826,13 @@ public class OrderFulfillmentBeanConfiguration {
 
     @Bean
     public Flow<OrderContext, OrderContext> orderFulfillmentFlow() {
-        return Flow.step(ValidateOrderOp.class)
+        return Flow
+                // 1. 等价于 DSL 中的: step order.validate { named "入参合规校验"; timeout 500ms; }
+                .step(ValidateOrderOp.class)
                 .named("入参合规校验")
                 .timeout(Duration.ofMillis(500))
 
-                // use 模式：提取 items 投影并合并预留单号
+                // 2. 等价于 DSL 中的: step inventory.reserve { project order.items; merge order.withReservation; timeout 1s; }
                 .use(
                         ReserveInventoryOp.class,
                         OrderContext::getItems,
@@ -776,7 +845,7 @@ public class OrderFulfillmentBeanConfiguration {
                 .named("锁定商品库存")
                 .timeout(Duration.ofSeconds(1))
 
-                // 衔接支付扣款（附加限流、重试与单步超时）
+                // 3. 等价于 DSL 中的: step payment.charge { policy payment.rateLimit key order.userId; retry ...; timeout 3s; }
                 .then(
                         Flow.step(ChargePaymentOp.class)
                                 .policy(PaymentRateLimitPolicy.class, OrderContext::getUserId)
@@ -791,23 +860,26 @@ public class OrderFulfillmentBeanConfiguration {
                                 .timeout(Duration.ofSeconds(3))
                 )
 
-                // 条件路由分支
+                // 4. 等价于 DSL 中的: route order.paymentStatus { case PAID { ... } case UNPAID { ... } otherwise { ... } }
                 .then(
                         Flow.route(PaymentStatusSelector.class)
+                                // case PAID 分支：等价于 parallel { branch riskAudit { ... } branch customerNotify { ... } join ... } + step order.finish
                                 .caseOf(
                                         PaymentState.PAID,
                                         Flow.parallel(
                                                 Branch.of("riskAudit", RiskAuditOp.class),
                                                 Branch.of("customerNotify", SendSmsOp.class)
                                         )
-                                        .join(results -> Outcome.accepted(results.branches().get(0).requireAccepted()))
+                                        .join(new ParallelPassedJoin())
                                         .then(OrderFinishOp.class)
                                 )
+                                // case UNPAID 分支：等价于 step order.closeUnpaid + rejected "ORDER_PAYMENT_FAILED"
                                 .caseOf(
                                         PaymentState.UNPAID,
                                         Flow.step(CloseUnpaidOp.class)
                                                 .then(Flow.rejected(Reason.of("ORDER_PAYMENT_FAILED", "支付未完成，订单已关闭")))
                                 )
+                                // otherwise 分支：等价于 skipped "UNKNOWN_PAYMENT_STATUS"
                                 .otherwise(Flow.skipped(Reason.of("UNKNOWN_PAYMENT_STATUS", "未知的支付状态")))
                 );
     }
@@ -835,6 +907,7 @@ public class OrderFulfillmentBeanConfiguration {
         SendSmsOp.class,
         CloseUnpaidOp.class,
         OrderFinishOp.class,
+        ParallelPassedJoin.class,
         PaymentRateLimitPolicy.class
 })
 public class BeanOrderFulfillmentTest {
