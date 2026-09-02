@@ -4,7 +4,7 @@ import com.team4u.framework.flow.api.OperationContext;
 import com.team4u.framework.flow.definition.binding.BoundFlow;
 import com.team4u.framework.flow.definition.model.FlowDefinition;
 import com.team4u.framework.flow.definition.model.ModifierSpec;
-import com.team4u.framework.flow.definition.model.SourceSpan;
+import com.team4u.framework.parser.SourceSpan;
 import com.team4u.framework.flow.definition.model.StepSpec;
 import com.team4u.framework.flow.definition.model.SymbolRef;
 import com.team4u.framework.flow.definition.publish.FlowPublisher;

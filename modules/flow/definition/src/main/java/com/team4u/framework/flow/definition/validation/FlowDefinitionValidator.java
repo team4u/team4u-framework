@@ -1,5 +1,7 @@
 package com.team4u.framework.flow.definition.validation;
 
+import com.team4u.framework.parser.SourceSpan;
+
 import com.team4u.framework.flow.definition.diagnostic.Diagnostic;
 import com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes;
 import com.team4u.framework.flow.definition.model.*;

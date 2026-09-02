@@ -1,8 +1,9 @@
 package com.team4u.framework.criterion.parser.impl;
 
+import com.team4u.framework.criterion.parser.token.Token;
+import com.team4u.framework.parser.SourceSpan;
 import org.junit.Assert;
 import org.junit.Test;
-import com.team4u.framework.criterion.parser.token.Token;
 
 import java.util.Arrays;
 import java.util.Collections;
@@ -10,9 +11,9 @@ import java.util.List;
 import java.util.stream.Collectors;
 
 /**
- * CharTokenScanner 单元测试
+ * CriterionLexer 单元测试
  */
-public class CharTokenScannerTest {
+public class CriterionLexerTest {
 
     @Test
     public void testEmptyInput() {
@@ -65,16 +66,39 @@ public class CharTokenScannerTest {
 
     @Test
     public void testIdentifierWithSpecialChars() {
-        // CharTokenScanner 不再将 - 和 | 错误地作为标识符的一部分 -> 因为需求改为了支持，所以现在作为标识符一部分
         assertScan("user_name $price meta-data v|1",
                 Arrays.asList("user_name", "$price", "meta-data", "v|1"));
+    }
+
+    @Test
+    public void testTokenSourceSpan() {
+        String expr = "age >= 18";
+        CriterionLexer lexer = new CriterionLexer(expr, "test.rule");
+        List<Token> tokens = lexer.scan();
+
+        Assert.assertEquals(3, tokens.size());
+
+        Token t1 = tokens.get(0);
+        Assert.assertEquals("age", t1.getValue());
+        SourceSpan s1 = t1.getSpan();
+        Assert.assertEquals(0, s1.startOffset());
+        Assert.assertEquals(3, s1.endOffset());
+        Assert.assertEquals(1, s1.startLine());
+        Assert.assertEquals(1, s1.startColumn());
+        Assert.assertEquals("test.rule", s1.source());
+
+        Token t2 = tokens.get(1);
+        Assert.assertEquals(">=", t2.getValue());
+        SourceSpan s2 = t2.getSpan();
+        Assert.assertEquals(4, s2.startOffset());
+        Assert.assertEquals(6, s2.endOffset());
     }
 
     /**
      * 辅助断言方法：验证分词结果是否符合预期
      */
     private void assertScan(String expression, List<String> expected) {
-        CharTokenScanner scanner = new CharTokenScanner(expression);
+        CriterionLexer scanner = new CriterionLexer(expression);
         List<String> actual = scanner.scan().stream()
                 .map(Token::getValue)
                 .collect(Collectors.toList());

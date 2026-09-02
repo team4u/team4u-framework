@@ -3,8 +3,9 @@ package com.team4u.framework.flow.dsl.lexer;
 import com.team4u.framework.flow.definition.diagnostic.Diagnostic;
 import com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes;
 import com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException;
-import com.team4u.framework.flow.definition.model.SourceSpan;
 import com.team4u.framework.flow.definition.type.TypeCodecs;
+import com.team4u.framework.parser.CharCursor;
+import com.team4u.framework.parser.SourceSpan;
 
 import java.time.Duration;
 import java.util.*;
@@ -12,7 +13,7 @@ import java.util.*;
 /**
  * 流程 DSL 词法分析器（Flow Lexer）。
  *
- * <p>将 DSL 源码字符串扫描为带有精确 {@link SourceSpan}（行号、列号）的 {@link Token} 序列。</p>
+ * <p>基于 {@link CharCursor} 将 DSL 源码字符串扫描为带有精确 {@link SourceSpan} 的 {@link Token} 序列。</p>
  *
  * @author jay.wu
  */
@@ -30,17 +31,10 @@ public final class FlowLexer {
         KEYWORDS = Collections.unmodifiableMap(map);
     }
 
-    private final String source;
-    private final String sourceName;
-    private final int length;
-    private int index = 0;
-    private int line = 1;
-    private int column = 1;
+    private final CharCursor cursor;
 
     public FlowLexer(String source, String sourceName) {
-        this.source = source != null ? source : "";
-        this.sourceName = sourceName;
-        this.length = this.source.length();
+        this.cursor = new CharCursor(source, sourceName);
     }
 
     public FlowLexer(String source) {
@@ -72,73 +66,71 @@ public final class FlowLexer {
     public Token nextToken() {
         skipWhitespaceAndComments();
 
-        if (index >= length) {
-            SourceSpan span = new SourceSpan(sourceName, line, column, line, column);
-            return new Token(TokenType.EOF, "<EOF>", span);
+        if (!cursor.hasNext()) {
+            CharCursor.Mark mark = cursor.mark();
+            return new Token(TokenType.EOF, "<EOF>", cursor.spanFrom(mark));
         }
 
-        int startLine = line;
-        int startColumn = column;
-        char ch = source.charAt(index);
+        CharCursor.Mark start = cursor.mark();
+        char ch = cursor.peek();
 
         // 标点符号
         if (ch == '{') {
-            advance();
-            return new Token(TokenType.LBRACE, "{", span(startLine, startColumn));
+            cursor.advance();
+            return new Token(TokenType.LBRACE, "{", cursor.spanFrom(start));
         } else if (ch == '}') {
-            advance();
-            return new Token(TokenType.RBRACE, "}", span(startLine, startColumn));
+            cursor.advance();
+            return new Token(TokenType.RBRACE, "}", cursor.spanFrom(start));
         } else if (ch == ':') {
-            advance();
-            return new Token(TokenType.COLON, ":", span(startLine, startColumn));
+            cursor.advance();
+            return new Token(TokenType.COLON, ":", cursor.spanFrom(start));
         } else if (ch == ',') {
-            advance();
-            return new Token(TokenType.COMMA, ",", span(startLine, startColumn));
+            cursor.advance();
+            return new Token(TokenType.COMMA, ",", cursor.spanFrom(start));
         } else if (ch == '=') {
-            advance();
-            return new Token(TokenType.EQUALS, "=", span(startLine, startColumn));
+            cursor.advance();
+            return new Token(TokenType.EQUALS, "=", cursor.spanFrom(start));
         }
 
         // 字符串字面量
         if (ch == '"' || ch == '\'') {
-            return scanString(startLine, startColumn, ch);
+            return scanString(start, ch);
         }
 
         // 数字与时间长度字面量（如 1s, 500ms, 100, 3.14）
         if (Character.isDigit(ch)) {
-            return scanNumberOrDuration(startLine, startColumn);
+            return scanNumberOrDuration(start);
         }
 
         // 标识符与关键字
         if (isIdentifierStart(ch)) {
-            return scanIdentifierOrKeyword(startLine, startColumn);
+            return scanIdentifierOrKeyword(start);
         }
 
-        advance();
-        SourceSpan span = span(startLine, startColumn);
+        cursor.advance();
+        SourceSpan span = cursor.spanFrom(start);
         throw new FlowDiagnosticException(new Diagnostic(
                 DiagnosticCodes.DSL_SYNTAX_ERROR,
                 "Unexpected character: '" + ch + "'",
                 span));
     }
 
-    private Token scanString(int startLine, int startColumn, char quoteChar) {
-        advance(); // 跳过起始引号
+    private Token scanString(CharCursor.Mark start, char quoteChar) {
+        cursor.advance(); // 跳过起始引号
         StringBuilder sb = new StringBuilder();
 
-        while (index < length) {
-            char ch = source.charAt(index);
+        while (cursor.hasNext()) {
+            char ch = cursor.peek();
             if (ch == quoteChar) {
-                advance(); // 跳过结束引号
-                SourceSpan span = span(startLine, startColumn);
+                cursor.advance(); // 跳过结束引号
+                SourceSpan span = cursor.spanFrom(start);
                 return new Token(TokenType.STRING, sb.toString(), span, sb.toString());
             } else if (ch == '\\') {
-                advance();
-                if (index >= length) {
+                cursor.advance();
+                if (!cursor.hasNext()) {
                     break;
                 }
-                char escape = source.charAt(index);
-                advance();
+                char escape = cursor.advance();
                 if (escape == 'n') sb.append('\n');
                 else if (escape == 't') sb.append('\t');
                 else if (escape == 'r') sb.append('\r');
@@ -149,45 +141,44 @@ public final class FlowLexer {
                 else if (escape == '\\') sb.append('\\');
                 else sb.append(escape);
             } else if (ch == '\n') {
-                advance();
+                cursor.advance();
                 sb.append('\n');
             } else {
-                advance();
-                sb.append(ch);
+                sb.append(cursor.advance());
             }
         }
 
-        SourceSpan span = span(startLine, startColumn);
+        SourceSpan span = cursor.spanFrom(start);
         throw new FlowDiagnosticException(new Diagnostic(
                 DiagnosticCodes.DSL_SYNTAX_ERROR,
                 "Unterminated string literal",
                 span));
     }
 
-    private Token scanNumberOrDuration(int startLine, int startColumn) {
-        int startIndex = index;
+    private Token scanNumberOrDuration(CharCursor.Mark start) {
+        StringBuilder numBuf = new StringBuilder();
         boolean hasDot = false;
 
-        while (index < length) {
-            char ch = source.charAt(index);
+        while (cursor.hasNext()) {
+            char ch = cursor.peek();
             if (Character.isDigit(ch)) {
-                advance();
-            } else if (ch == '.' && !hasDot && index + 1 < length && Character.isDigit(source.charAt(index + 1))) {
+                numBuf.append(cursor.advance());
+            } else if (ch == '.' && !hasDot && cursor.has(1) && Character.isDigit(cursor.peek(1))) {
                 hasDot = true;
-                advance();
+                numBuf.append(cursor.advance());
             } else {
                 break;
             }
         }
 
         // 检查是否紧随时间单位（如 ns, us, ms, s, m, h, d）
-        if (index < length && Character.isLetter(source.charAt(index))) {
-            int unitStart = index;
-            while (index < length && Character.isLetter(source.charAt(index))) {
-                advance();
+        if (cursor.hasNext() && Character.isLetter(cursor.peek())) {
+            StringBuilder unitBuf = new StringBuilder();
+            while (cursor.hasNext() && Character.isLetter(cursor.peek())) {
+                unitBuf.append(cursor.advance());
             }
-            String durationText = source.substring(startIndex, index);
-            SourceSpan span = span(startLine, startColumn);
+            String durationText = numBuf.toString() + unitBuf.toString();
+            SourceSpan span = cursor.spanFrom(start);
             try {
                 Duration duration = TypeCodecs.parseDuration(durationText);
                 return new Token(TokenType.DURATION, durationText, span, duration);
@@ -199,8 +190,8 @@ public final class FlowLexer {
             }
         }
 
-        String numText = source.substring(startIndex, index);
-        SourceSpan span = span(startLine, startColumn);
+        String numText = numBuf.toString();
+        SourceSpan span = cursor.spanFrom(start);
         Number value;
         if (hasDot) {
             value = Double.parseDouble(numText);
@@ -214,19 +205,14 @@ public final class FlowLexer {
         return new Token(TokenType.NUMBER, numText, span, value);
     }
 
-    private Token scanIdentifierOrKeyword(int startLine, int startColumn) {
-        int startIndex = index;
-        while (index < length) {
-            char ch = source.charAt(index);
-            if (isIdentifierPart(ch)) {
-                advance();
-            } else {
-                break;
-            }
+    private Token scanIdentifierOrKeyword(CharCursor.Mark start) {
+        StringBuilder sb = new StringBuilder();
+        while (cursor.hasNext() && isIdentifierPart(cursor.peek())) {
+            sb.append(cursor.advance());
         }
 
-        String text = source.substring(startIndex, index);
-        SourceSpan span = span(startLine, startColumn);
+        String text = sb.toString();
+        SourceSpan span = cursor.spanFrom(start);
 
         TokenType keywordType = KEYWORDS.get(text);
         if (keywordType != null) {
@@ -245,43 +231,43 @@ public final class FlowLexer {
     }
 
     private void skipWhitespaceAndComments() {
-        while (index < length) {
-            char ch = source.charAt(index);
+        while (cursor.hasNext()) {
+            char ch = cursor.peek();
 
             // 空白字符
             if (Character.isWhitespace(ch)) {
-                advance();
+                cursor.advance();
                 continue;
             }
 
             // 单行注释 #
             if (ch == '#') {
-                while (index < length && source.charAt(index) != '\n') {
-                    advance();
+                while (cursor.hasNext() && cursor.peek() != '\n') {
+                    cursor.advance();
                 }
                 continue;
             }
 
             // // 单行注释 或 /* 多行注释 */
-            if (ch == '/' && index + 1 < length) {
-                char next = source.charAt(index + 1);
+            if (ch == '/' && cursor.has(1)) {
+                char next = cursor.peek(1);
                 if (next == '/') {
-                    advance();
-                    advance();
-                    while (index < length && source.charAt(index) != '\n') {
-                        advance();
+                    cursor.advance();
+                    cursor.advance();
+                    while (cursor.hasNext() && cursor.peek() != '\n') {
+                        cursor.advance();
                     }
                     continue;
                 } else if (next == '*') {
-                    advance();
-                    advance();
-                    while (index + 1 < length) {
-                        if (source.charAt(index) == '*' && source.charAt(index + 1) == '/') {
-                            advance();
-                            advance();
+                    cursor.advance();
+                    cursor.advance();
+                    while (cursor.has(1)) {
+                        if (cursor.peek() == '*' && cursor.peek(1) == '/') {
+                            cursor.advance();
+                            cursor.advance();
                             break;
                         }
-                        advance();
+                        cursor.advance();
                     }
                     continue;
                 }
@@ -289,22 +275,5 @@ public final class FlowLexer {
 
             break;
         }
-    }
-
-    private void advance() {
-        if (index < length) {
-            char ch = source.charAt(index);
-            index++;
-            if (ch == '\n') {
-                line++;
-                column = 1;
-            } else {
-                column++;
-            }
-        }
-    }
-
-    private SourceSpan span(int startLine, int startColumn) {
-        return new SourceSpan(sourceName, startLine, startColumn, line, column);
     }
 }

@@ -1,5 +1,7 @@
 package com.team4u.framework.flow.definition.diagnostic;
 
+import com.team4u.framework.parser.SourceSpan;
+
 import lombok.Getter;
 
 import java.util.ArrayList;
@@ -32,8 +34,12 @@ public class FlowDiagnosticException extends RuntimeException {
         this(new Diagnostic(code, message));
     }
 
-    public FlowDiagnosticException(String code, String message, com.team4u.framework.flow.definition.model.SourceSpan span) {
+    public FlowDiagnosticException(String code, String message, SourceSpan span) {
         this(new Diagnostic(code, message, span));
+    }
+
+    public Diagnostic diagnostic() {
+        return diagnostics != null && !diagnostics.isEmpty() ? diagnostics.get(0) : null;
     }
 
     private static String formatMessage(List<Diagnostic> diagnostics) {

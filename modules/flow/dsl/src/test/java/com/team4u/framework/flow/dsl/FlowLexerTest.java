@@ -81,5 +81,10 @@ public class FlowLexerTest {
         Assert.assertEquals(TokenType.STEP, stepToken.type());
         Assert.assertEquals(2, stepToken.span().startLine());
         Assert.assertEquals(5, stepToken.span().startColumn());
+        Assert.assertEquals(16, stepToken.span().startOffset());
+        Assert.assertEquals(20, stepToken.span().endOffset());
+        Assert.assertEquals(2, stepToken.span().endLine());
+        Assert.assertEquals(9, stepToken.span().endColumn());
+        Assert.assertEquals("step", dsl.substring(stepToken.span().startOffset(), stepToken.span().endOffset()));
     }
 }

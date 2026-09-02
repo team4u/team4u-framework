@@ -647,18 +647,18 @@ public class OrderFulfillmentTest {
 
 ---
 
-## 门面模式与引擎实例
-
-`team4u-flow-dsl` 采用清晰的门面与引擎分层架构：
+## 门面模式与流程定义引擎
+ 
+`team4u-flow-dsl` 采用清晰的门面与流程定义引擎分层架构：
 
 ```mermaid
 graph TD
     subgraph "统一静态门面"
-        FACADE["FlowDsl (静态便捷入口)<br/>• FlowDsl.parse(...)<br/>• FlowDsl.bind(...)"]
+        FACADE["FlowDsl (静态便捷入口)<br/>• FlowDsl.parse(...)<br/>• FlowDsl.parseAll(...)<br/>• FlowDsl.bind(...)<br/>• FlowDsl.bindTarget(...)"]
     end
 
-    subgraph "DSL 执行引擎"
-        ENG["FlowDslEngine (有状态/可定制引擎)<br/>• FlowDefinitionReader 读取器<br/>• FlowDefinitionRegistry 预设注册表<br/>• OperationResolver 组件解析器"]
+    subgraph "流程定义引擎"
+        ENG["FlowDefinitionEngine (流程定义引擎)<br/>• FlowDefinitionReader 读取器<br/>• FlowDefinitionRegistry 预设注册表<br/>• OperationResolver 组件解析器"]
     end
 
     subgraph "前端读取器 SPI"
@@ -682,24 +682,24 @@ BoundFlow bound = FlowDsl.bind(dslText, "order.flow", registry);
 
 ### 引擎实例构建与定制
 
-当需要注入预设注册表、组件解析器，或使用自定义前端解析器（如 ANTLR、JSON、YAML 等）时，可以通过 `FlowDslEngine.builder()` 构建独立引擎实例：
+当需要注入预设注册表、组件解析器，或使用自定义前端解析器（如 ANTLR、JSON、YAML 等）时，可以通过 `FlowDefinitionEngine.builder()` 构建独立引擎实例：
 
 ```java
 // 构建带有预设注册表与解析器的定制引擎
-FlowDslEngine engine = FlowDslEngine.builder()
-        .reader(new TextFlowDefinitionReader())
+FlowDefinitionEngine engine = FlowDefinitionEngine.builder()
+        .reader(TextFlowDefinitionReader.INSTANCE)
         .registry(preconfiguredRegistry)
         .resolver(springOperationResolver)
         .build();
 
 // 直接绑定，无需每次重复传入注册表与解析器
 BoundFlow bound = engine.bind(dslText);
-LocalExecutable<OrderContext, OrderContext> exec = bound.compileLocal();
+LocalExecutable<OrderContext, OrderContext> exec = bound.compileLocal(OrderContext.class, OrderContext.class);
 ```
 
 ### 自定义前端读取器接入
 
-所有前端读取器均实现 [`FlowDefinitionReader`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/reader/FlowDefinitionReader.java) 接口，直接输出统一的 `FlowDefinition` AST，核心校验与执行层零侵入：
+所有前端读取器均实现 [`FlowDefinitionReader`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/reader/FlowDefinitionReader.java) 接口，直接输出统一的 `FlowDefinition` AST 列表，核心校验与执行层零侵入：
 
 ```java
 // 自定义读取器（如 JSON、YAML 或其他语法）
@@ -708,7 +708,7 @@ FlowDefinitionReader customReader = (source, sourceName) -> {
 };
 
 // 基于自定义读取器创建引擎
-FlowDslEngine customEngine = FlowDsl.withReader(customReader);
+FlowDefinitionEngine customEngine = FlowDefinitionEngine.withReader(customReader);
 BoundFlow bound = customEngine.bind(sourceText, registry);
 ```
 

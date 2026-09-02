@@ -1,5 +1,7 @@
 package com.team4u.framework.flow.definition;
 
+import com.team4u.framework.parser.SourceSpan;
+
 import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.LocalExecutable;
 import com.team4u.framework.flow.api.*;

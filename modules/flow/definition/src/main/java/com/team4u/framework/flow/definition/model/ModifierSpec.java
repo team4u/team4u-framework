@@ -1,5 +1,7 @@
 package com.team4u.framework.flow.definition.model;
 
+import com.team4u.framework.parser.SourceSpan;
+
 import java.io.Serializable;
 
 /**

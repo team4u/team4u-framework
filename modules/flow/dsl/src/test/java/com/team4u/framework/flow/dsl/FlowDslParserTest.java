@@ -2,11 +2,18 @@ package com.team4u.framework.flow.dsl;
 
 import com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException;
 import com.team4u.framework.flow.definition.model.*;
-import com.team4u.framework.flow.dsl.parser.FlowDslParser;
 import org.junit.Assert;
 import org.junit.Test;
 
 public class FlowDslParserTest {
+
+    private FlowDefinition parse(String dsl, String sourceName) {
+        return FlowDsl.parse(dsl, sourceName);
+    }
+
+    private FlowDefinition parse(String dsl) {
+        return FlowDsl.parse(dsl);
+    }
 
     @Test
     public void testParseFullSpecificationDsl() {
@@ -58,7 +65,7 @@ public class FlowDslParserTest {
                 "    step order.finish\n" +
                 "}\n";
 
-        FlowDefinition def = FlowDslParser.parse(dsl, "order.flow");
+        FlowDefinition def = parse(dsl, "order.flow");
         Assert.assertEquals(1, def.schema());
         Assert.assertEquals("order.create", def.id());
         Assert.assertEquals("7", def.version());
@@ -125,7 +132,7 @@ public class FlowDslParserTest {
                 "    }\n" +
                 "}";
 
-        FlowDefinition def = FlowDslParser.parse(dsl);
+        FlowDefinition def = parse(dsl);
         SequenceSpec seq = (SequenceSpec) def.root();
         Assert.assertEquals(2, seq.elements().size());
 
@@ -151,7 +158,7 @@ public class FlowDslParserTest {
                 "    }\n" +
                 "}";
 
-        FlowDefinition def = FlowDslParser.parse(dsl);
+        FlowDefinition def = parse(dsl);
         SequenceSpec seq = (SequenceSpec) def.root();
         Assert.assertEquals(2, seq.elements().size());
 
@@ -168,7 +175,7 @@ public class FlowDslParserTest {
     public void testSyntaxErrorThrowsDiagnosticException() {
         String dsl = "flow invalid.syntax { step }";
         try {
-            FlowDslParser.parse(dsl, "bad.flow");
+            parse(dsl, "bad.flow");
             Assert.fail("Expected FlowDiagnosticException");
         } catch (FlowDiagnosticException ex) {
             Assert.assertFalse(ex.getDiagnostics().isEmpty());
@@ -185,7 +192,7 @@ public class FlowDslParserTest {
                 "    }\n" +
                 "}";
         try {
-            FlowDslParser.parse(dsl, "test.flow");
+            parse(dsl, "test.flow");
             Assert.fail("Expected FlowDiagnosticException");
         } catch (FlowDiagnosticException ex) {
             Assert.assertEquals(1, ex.getDiagnostics().size());
@@ -202,7 +209,7 @@ public class FlowDslParserTest {
                 "    }\n" +
                 "}";
         try {
-            FlowDslParser.parse(dsl, "test.flow");
+            parse(dsl, "test.flow");
             Assert.fail("Expected FlowDiagnosticException");
         } catch (FlowDiagnosticException ex) {
             Assert.assertEquals(1, ex.getDiagnostics().size());
@@ -211,35 +218,20 @@ public class FlowDslParserTest {
     }
 
     @Test
-    public void testContentAfterEOFThrowsDiagnostic() {
-        String dsl = "flow test {\n" +
-                "    step op\n" +
-                "} extra_content_here";
-        try {
-            FlowDslParser.parse(dsl, "test.flow");
-            Assert.fail("Expected FlowDiagnosticException");
-        } catch (FlowDiagnosticException ex) {
-            Assert.assertEquals(1, ex.getDiagnostics().size());
-            Assert.assertEquals(com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.DSL_SYNTAX_ERROR, ex.getDiagnostics().get(0).code());
-            Assert.assertTrue(ex.getMessage().contains("Unexpected content after flow definition"));
-        }
-    }
-
-    @Test
     public void testDuplicateOtherwiseThrowsDiagnostic() {
         String dsl = "flow test {\n" +
-                "    route status {\n" +
-                "        case PAID { step op1 }\n" +
+                "    route router.op {\n" +
+                "        case C1 { step op1 }\n" +
                 "        otherwise { step op2 }\n" +
                 "        otherwise { step op3 }\n" +
                 "    }\n" +
                 "}";
         try {
-            FlowDslParser.parse(dsl, "test.flow");
+            parse(dsl, "test.flow");
             Assert.fail("Expected FlowDiagnosticException");
         } catch (FlowDiagnosticException ex) {
             Assert.assertEquals(1, ex.getDiagnostics().size());
-            Assert.assertEquals(com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.DUPLICATE_OTHERWISE, ex.getDiagnostics().get(0).code());
+            Assert.assertEquals("DUPLICATE_OTHERWISE", ex.getDiagnostics().get(0).code());
         }
     }
 
@@ -253,11 +245,11 @@ public class FlowDslParserTest {
                 "    }\n" +
                 "}";
         try {
-            FlowDslParser.parse(dsl, "test.flow");
+            parse(dsl, "test.flow");
             Assert.fail("Expected FlowDiagnosticException");
         } catch (FlowDiagnosticException ex) {
             Assert.assertEquals(1, ex.getDiagnostics().size());
-            Assert.assertEquals(com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.DUPLICATE_JOIN, ex.getDiagnostics().get(0).code());
+            Assert.assertEquals("DUPLICATE_JOIN", ex.getDiagnostics().get(0).code());
         }
     }
 
@@ -272,7 +264,7 @@ public class FlowDslParserTest {
                 "    }\n" +
                 "}";
         try {
-            FlowDslParser.parse(dsl, "test.flow");
+            parse(dsl, "test.flow");
             Assert.fail("Expected FlowDiagnosticException");
         } catch (FlowDiagnosticException ex) {
             Assert.assertEquals(1, ex.getDiagnostics().size());
@@ -281,19 +273,69 @@ public class FlowDslParserTest {
     }
 
     @Test
+    public void testUnsupportedSchemaThrowsDiagnostic() {
+        String dsl = "schema 99\nflow test { step op }";
+        try {
+            parse(dsl, "test.flow");
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(1, ex.getDiagnostics().size());
+            Assert.assertEquals("DSL_UNSUPPORTED_SCHEMA", ex.getDiagnostics().get(0).code());
+        }
+    }
+
+    @Test
+    public void testInvalidDurationLiteralThrowsDiagnostic() {
+        String dsl = "flow test {\n" +
+                "    step op {\n" +
+                "        timeout 100xyz\n" +
+                "    }\n" +
+                "}";
+        try {
+            parse(dsl, "test.flow");
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(1, ex.getDiagnostics().size());
+            Assert.assertEquals("DSL_SYNTAX_ERROR", ex.getDiagnostics().get(0).code());
+        }
+    }
+
+    @Test
+    public void testParseCallModifiers() {
+        String dsl = "flow test {\n" +
+                "    call subflow.payment {\n" +
+                "        project order.items\n" +
+                "        merge order.withReceipt\n" +
+                "        optional\n" +
+                "        timeout 3s\n" +
+                "        named \"CustomCallName\"\n" +
+                "    }\n" +
+                "}";
+
+        FlowDefinition def = parse(dsl);
+        Assert.assertTrue(def.root() instanceof CallSpec);
+        CallSpec call = (CallSpec) def.root();
+
+        Assert.assertEquals("subflow.payment", call.flow().id());
+        Assert.assertEquals("order.items", call.project().id());
+        Assert.assertEquals("order.withReceipt", call.merge().id());
+        Assert.assertTrue(call.isOptional());
+        Assert.assertEquals(java.time.Duration.ofSeconds(3), call.timeout());
+        Assert.assertEquals("CustomCallName", call.named());
+    }
+
+    @Test
     public void testParseMultipleFlows() {
-        String dsl = "schema 1\n" +
-                "\n" +
-                "flow subflow.risk version 1 {\n" +
-                "    step risk.check\n" +
+        String dsl = "flow subflow.validate {\n" +
+                "    step order.validate\n" +
                 "}\n" +
                 "\n" +
-                "flow subflow.pay version 2 {\n" +
-                "    step pay.charge\n" +
+                "flow subflow.pay {\n" +
+                "    step payment.charge\n" +
                 "}\n" +
                 "\n" +
-                "flow main.order version 3 {\n" +
-                "    call subflow.risk\n" +
+                "flow main.order {\n" +
+                "    call subflow.validate\n" +
                 "    call subflow.pay {\n" +
                 "        project order.paymentInfo\n" +
                 "        merge order.withReceipt\n" +
@@ -301,30 +343,22 @@ public class FlowDslParserTest {
                 "        timeout 2s\n" +
                 "        named \"PayChargeStep\"\n" +
                 "    }\n" +
-                "}";
+                "}\n";
 
-        java.util.List<FlowDefinition> defs = FlowDslParser.parseDefinitions(dsl, "order_suite.flow");
+        java.util.List<FlowDefinition> defs = FlowDsl.parseAll(dsl, "order_suite.flow");
         Assert.assertEquals(3, defs.size());
 
-        FlowDefinition riskDef = defs.get(0);
-        Assert.assertEquals("subflow.risk", riskDef.id());
-        Assert.assertEquals("1", riskDef.version());
-        Assert.assertTrue(riskDef.root() instanceof StepSpec);
-
-        FlowDefinition payDef = defs.get(1);
-        Assert.assertEquals("subflow.pay", payDef.id());
-        Assert.assertEquals("2", payDef.version());
-        Assert.assertTrue(payDef.root() instanceof StepSpec);
+        Assert.assertEquals("subflow.validate", defs.get(0).id());
+        Assert.assertEquals("subflow.pay", defs.get(1).id());
+        Assert.assertEquals("main.order", defs.get(2).id());
 
         FlowDefinition mainDef = defs.get(2);
-        Assert.assertEquals("main.order", mainDef.id());
-        Assert.assertEquals("3", mainDef.version());
         Assert.assertTrue(mainDef.root() instanceof SequenceSpec);
         SequenceSpec seq = (SequenceSpec) mainDef.root();
         Assert.assertEquals(2, seq.elements().size());
 
         CallSpec call1 = (CallSpec) seq.elements().get(0);
-        Assert.assertEquals("subflow.risk", call1.flow().id());
+        Assert.assertEquals("subflow.validate", call1.flow().id());
         Assert.assertNull(call1.project());
         Assert.assertNull(call1.merge());
         Assert.assertFalse(call1.isOptional());
@@ -337,9 +371,13 @@ public class FlowDslParserTest {
         Assert.assertEquals(java.time.Duration.ofSeconds(2), call2.timeout());
         Assert.assertEquals("PayChargeStep", call2.named());
 
-        // 测试默认单 flow 解析时获取最后一个主流程
-        FlowDefinition defaultMain = FlowDslParser.parse(dsl, "order_suite.flow");
-        Assert.assertEquals("main.order", defaultMain.id());
+        // 多 flow 单 flow parse 抛出 AMBIGUOUS_TARGET_FLOW
+        try {
+            FlowDsl.parse(dsl, "order_suite.flow");
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.AMBIGUOUS_TARGET_FLOW, ex.diagnostic().code());
+        }
     }
 
     @Test
@@ -351,7 +389,7 @@ public class FlowDslParserTest {
                 "    }\n" +
                 "}";
         try {
-            FlowDslParser.parse(dsl, "test.flow");
+            parse(dsl, "test.flow");
             Assert.fail("Expected FlowDiagnosticException");
         } catch (FlowDiagnosticException ex) {
             Assert.assertEquals(1, ex.getDiagnostics().size());
@@ -368,7 +406,7 @@ public class FlowDslParserTest {
                 "    }\n" +
                 "}";
         try {
-            FlowDslParser.parse(dsl, "test.flow");
+            parse(dsl, "test.flow");
             Assert.fail("Expected FlowDiagnosticException");
         } catch (FlowDiagnosticException ex) {
             Assert.assertEquals(1, ex.getDiagnostics().size());

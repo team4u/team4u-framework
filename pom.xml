@@ -78,6 +78,7 @@
         <module>modules/mask/core</module>
         <module>modules/mask/config</module>
         <module>modules/mask/jackson</module>
+        <module>modules/parser/core</module>
         <module>modules/policy/core</module>
         <module>modules/proxy/core</module>
         <module>modules/proxy/spring</module>
@@ -140,6 +141,11 @@
             <dependency>
                 <groupId>com.team4u</groupId>
                 <artifactId>team4u-criterion</artifactId>
+                <version>${project.version}</version>
+            </dependency>
+            <dependency>
+                <groupId>com.team4u</groupId>
+                <artifactId>team4u-parser</artifactId>
                 <version>${project.version}</version>
             </dependency>
             <dependency>

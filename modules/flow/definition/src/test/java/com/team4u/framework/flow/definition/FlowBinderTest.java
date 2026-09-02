@@ -1,5 +1,7 @@
 package com.team4u.framework.flow.definition;
 
+import com.team4u.framework.parser.SourceSpan;
+
 import com.team4u.framework.flow.LocalExecutable;
 import com.team4u.framework.flow.api.*;
 import com.team4u.framework.flow.definition.binding.BoundFlow;
@@ -138,8 +140,8 @@ public class FlowBinderTest {
                 .join("test.join", joinStrategy, String.class)
                 .build();
 
-        SourceSpan branch1Span = new SourceSpan("order.flow", 10, 5, 12, 5);
-        SourceSpan branch2Span = new SourceSpan("order.flow", 14, 5, 16, 5);
+        SourceSpan branch1Span = new SourceSpan("order.flow", 100, 10, 5, 120, 12, 5);
+        SourceSpan branch2Span = new SourceSpan("order.flow", 140, 14, 5, 160, 16, 5);
 
         FlowDefinition def = new FlowDefinition(
                 1, "dup.branch.flow", "1",

@@ -1,5 +1,7 @@
 package com.team4u.framework.flow.definition;
 
+import com.team4u.framework.parser.SourceSpan;
+
 import com.team4u.framework.flow.api.Gate;
 import com.team4u.framework.flow.api.OperationContext;
 import com.team4u.framework.flow.api.Policy;

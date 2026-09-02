@@ -222,9 +222,9 @@ if (result.isAccepted()) {
 
 ---
 
-## 流程定义读取器抽象
+## 流程定义读取器抽象与引擎
 
-为了使流程引擎能够解耦地支持多样化的前端源格式（如文本 DSL、ANTLR 语法树、JSON、YAML、数据库配置中心等），`team4u-flow-definition` 提供了中立的流程定义读取器 SPI 抽象 [`FlowDefinitionReader`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/reader/FlowDefinitionReader.java)：
+为了使流程引擎能够解耦地支持多样化的前端源格式（如文本 DSL、ANTLR 语法树、JSON、YAML、数据库配置中心等），`team4u-flow-definition` 提供了中立的流程定义读取器 SPI 抽象 [`FlowDefinitionReader`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/reader/FlowDefinitionReader.java) 与流程定义引擎 [`FlowDefinitionEngine`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/engine/FlowDefinitionEngine.java)：
 
 ```java
 @FunctionalInterface
@@ -235,23 +235,15 @@ public interface FlowDefinitionReader {
      *
      * @param source     源配置文本或内容
      * @param sourceName 源码文件名或资源标识
-     * @return 流程定义 AST 列表
+     * @return 流程定义 AST 列表，不得返回 null
      */
     List<FlowDefinition> read(String source, String sourceName);
-
-    /**
-     * 将源输入读取解析为单个流程定义（若包含多个 flow 则返回最后一个/主流程）。
-     *
-     * @param source     源配置文本或内容
-     * @param sourceName 源码文件名或资源标识
-     * @return 流程定义 AST
-     */
-    default FlowDefinition readDefinition(String source, String sourceName) { ... }
 }
 ```
 
-- **统一抽象与稳定中间模型** ：无论上层前端采用手写解析器、ANTLR 还是 Jackson/SnakeYAML，最终均统一输出为纯数据模型 `FlowDefinition`；
-- **职责清晰隔离** ：Reader 仅负责语法（Syntax）解析；符号有效性、类型兼容性、路由分支完整性与拓扑合法性则统一由 `TypeChecker` 与 `FlowBinder` 负责定义与校验。
+- **统一抽象与稳定中间模型** ：无论上层前端采用手写解析器、ANTLR 还是 Jackson/SnakeYAML，最终均统一输出为纯数据模型 `FlowDefinition` 列表；
+- **引擎统一编排** ：[`FlowDefinitionEngine`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/engine/FlowDefinitionEngine.java) 封装了读取器调用、多 Flow 目标选择、子流程注册以及与 `FlowBinder` 的绑定逻辑；
+- **职责清晰隔离** ：Reader 仅负责语法解析；符号有效性、类型兼容性、路由分支完整性与拓扑合法性则统一由 `TypeChecker` 与 `FlowBinder` 负责定义与校验。
 
 ---
 

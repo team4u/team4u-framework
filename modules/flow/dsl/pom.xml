@@ -17,6 +17,11 @@
     <dependencies>
         <dependency>
             <groupId>com.team4u</groupId>
+            <artifactId>team4u-parser</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+        <dependency>
+            <groupId>com.team4u</groupId>
             <artifactId>team4u-flow-definition</artifactId>
             <version>${project.version}</version>
         </dependency>

@@ -21,6 +21,7 @@ public final class DiagnosticCodes {
 
     // Definition & Structural 阶段错误码
     public static final String INVALID_DEFINITION = "INVALID_DEFINITION";
+    public static final String AMBIGUOUS_TARGET_FLOW = "AMBIGUOUS_TARGET_FLOW";
     public static final String INVALID_FLOW_ID = "INVALID_FLOW_ID";
     public static final String INVALID_FLOW_VERSION = "INVALID_FLOW_VERSION";
     public static final String INVALID_CONTROL = "INVALID_CONTROL";

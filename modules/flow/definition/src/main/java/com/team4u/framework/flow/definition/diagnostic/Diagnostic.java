@@ -1,6 +1,6 @@
 package com.team4u.framework.flow.definition.diagnostic;
 
-import com.team4u.framework.flow.definition.model.SourceSpan;
+import com.team4u.framework.parser.SourceSpan;
 import lombok.EqualsAndHashCode;
 import lombok.Getter;
 import lombok.experimental.Accessors;

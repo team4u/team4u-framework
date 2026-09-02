@@ -12,6 +12,8 @@ import com.team4u.framework.criterion.parser.SyntaxHandler;
 import com.team4u.framework.criterion.parser.handler.*;
 import com.team4u.framework.criterion.parser.token.Token;
 import com.team4u.framework.criterion.parser.token.TokenType;
+import com.team4u.framework.parser.SourceSpan;
+import com.team4u.framework.parser.TokenCursor;
 import com.team4u.framework.policy.core.OrderedPolicyChain;
 
 import java.util.ArrayList;
@@ -127,7 +129,7 @@ public class StandardCriterionParser implements CriterionParser {
     }
 
     private List<Token> tokenize(String expression) {
-        return new CharTokenScanner(expression).scan();
+        return new CriterionLexer(expression).scan();
     }
 
     /**
@@ -154,7 +156,7 @@ public class StandardCriterionParser implements CriterionParser {
     private class ParserContext implements Context {
         private final String expression;
         private final List<Token> tokens;
-        private int pos = 0;
+        private final TokenCursor<Token> cursor;
 
         // 记录每次 parsePrimary 尝试调用 handler 时的起始位置（subject 之后）
         private int predicateStartPos = 0;
@@ -162,16 +164,19 @@ public class StandardCriterionParser implements CriterionParser {
         public ParserContext(String expression, List<Token> tokens) {
             this.expression = expression;
             this.tokens = tokens;
+            this.cursor = new TokenCursor<Token>(tokens);
         }
 
         private CriterionParseException error(String message) {
-            return new CriterionParseException(message, expression, pos);
+            Token t = cursor.hasNext() ? cursor.peek() : (tokens.isEmpty() ? null : tokens.get(tokens.size() - 1));
+            SourceSpan span = t != null ? t.span() : SourceSpan.UNKNOWN;
+            return new CriterionParseException(message, expression, span);
         }
 
         public Criterion parse() {
             Criterion c = parseOr();
-            if (pos < tokens.size()) {
-                throw error("Unexpected token at end: " + tokens.get(pos).getValue());
+            if (cursor.hasNext()) {
+                throw error("Unexpected token at end: " + cursor.peek().getValue());
             }
             return c;
         }
@@ -205,11 +210,11 @@ public class StandardCriterionParser implements CriterionParser {
             String subject = consumeSubject();
 
             // 2. 记录谓词部分的起始 Token 索引
-            this.predicateStartPos = pos;
+            this.predicateStartPos = cursor.position();
 
             // 3. 遍历插件链
             for (SyntaxHandler handler : getHandlers()) {
-                int snapshotPos = this.pos;
+                int mark = cursor.mark();
 
                 Criterion criterion = handler.tryParse(subject, this);
                 if (criterion != null) {
@@ -217,8 +222,8 @@ public class StandardCriterionParser implements CriterionParser {
                 }
 
                 // 若解析失败，回滚位置与 Token 流游标
-                this.pos = snapshotPos;
-                this.predicateStartPos = snapshotPos;
+                cursor.reset(mark);
+                this.predicateStartPos = cursor.position();
             }
 
             throw error("Unable to parse expression for subject: " + subject);
@@ -226,13 +231,12 @@ public class StandardCriterionParser implements CriterionParser {
 
         @Override
         public Token peekToken() {
-            return peekToken(0);
+            return cursor.hasNext() ? cursor.peek() : null;
         }
 
         @Override
         public Token peekToken(int forwardOffset) {
-            int targetPos = pos + forwardOffset;
-            return targetPos >= tokens.size() ? null : tokens.get(targetPos);
+            return cursor.peek(forwardOffset);
         }
 
         @Override
@@ -251,7 +255,7 @@ public class StandardCriterionParser implements CriterionParser {
         public boolean match(String expected) {
             Token t = peekToken();
             if (t != null && t.getValue().equalsIgnoreCase(expected)) {
-                pos++;
+                cursor.advance();
                 return true;
             }
             return false;
@@ -275,7 +279,7 @@ public class StandardCriterionParser implements CriterionParser {
                     && t.getType() != TokenType.STRING) {
                 throw error("Expected subject but found " + t.getType());
             }
-            pos++;
+            cursor.advance();
             return t.getValue();
         }
 
@@ -286,15 +290,15 @@ public class StandardCriterionParser implements CriterionParser {
                 throw error("Expected operator");
             if (t.getType() != TokenType.OPERATOR && t.getType() != TokenType.IDENTIFIER)
                 throw error("Expected operator but found " + t.getType());
-            pos++;
+            cursor.advance();
             return t.getValue();
         }
 
         @Override
         public String consumeValue() {
-            if (pos >= tokens.size())
+            if (!cursor.hasNext())
                 throw error("Unexpected EOF");
-            return tokens.get(pos++).getValue();
+            return cursor.advance().getValue();
         }
 
         @Override
@@ -311,7 +315,7 @@ public class StandardCriterionParser implements CriterionParser {
         public Criterion wrapProperty(String subject, Criterion leaf) {
             // 1. 自动注入叶子节点的表达式字符串
             if (leaf != null && leaf.getExpression() == null) {
-                String leafExpr = reconstructExpression(predicateStartPos, pos);
+                String leafExpr = reconstructExpression(predicateStartPos, cursor.position());
                 if (leafExpr.isEmpty() && !SUBJECT_IT.equals(subject)) {
                     leafExpr = subject;
                 }

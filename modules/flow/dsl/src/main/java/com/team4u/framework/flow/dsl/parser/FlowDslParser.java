@@ -7,6 +7,8 @@ import com.team4u.framework.flow.definition.model.*;
 import com.team4u.framework.flow.dsl.lexer.FlowLexer;
 import com.team4u.framework.flow.dsl.lexer.Token;
 import com.team4u.framework.flow.dsl.lexer.TokenType;
+import com.team4u.framework.parser.SourceSpan;
+import com.team4u.framework.parser.TokenCursor;
 
 import java.time.Duration;
 import java.util.*;
@@ -20,34 +22,19 @@ import java.util.*;
  */
 public final class FlowDslParser {
 
-    private final List<Token> tokens;
+    private final TokenCursor<Token> tokens;
     private final String sourceName;
-    private int current = 0;
 
     public FlowDslParser(List<Token> tokens, String sourceName) {
-        this.tokens = Objects.requireNonNull(tokens, "tokens must not be null");
+        this.tokens = new TokenCursor<Token>(Objects.requireNonNull(tokens, "tokens must not be null"));
         this.sourceName = sourceName;
     }
 
-    public static FlowDefinition parse(String dsl, String sourceName) {
-        FlowLexer lexer = new FlowLexer(dsl, sourceName);
-        List<Token> tokens = lexer.tokenize();
-        return new FlowDslParser(tokens, sourceName).parseDefinition();
+    public FlowDslParser(List<Token> tokens) {
+        this(tokens, null);
     }
 
-    public static FlowDefinition parse(String dsl) {
-        return parse(dsl, null);
-    }
 
-    public static List<FlowDefinition> parseDefinitions(String dsl, String sourceName) {
-        FlowLexer lexer = new FlowLexer(dsl, sourceName);
-        List<Token> tokens = lexer.tokenize();
-        return new FlowDslParser(tokens, sourceName).parseDefinitions();
-    }
-
-    public static List<FlowDefinition> parseDefinitions(String dsl) {
-        return parseDefinitions(dsl, null);
-    }
 
     /**
      * 解析顶层全部 FlowDefinition。
@@ -133,13 +120,7 @@ public final class FlowDslParser {
      *
      * @return 流程定义 AST
      */
-    public FlowDefinition parseDefinition() {
-        List<FlowDefinition> defs = parseDefinitions();
-        if (defs.size() == 1) {
-            return defs.get(0);
-        }
-        return defs.get(defs.size() - 1);
-    }
+
 
     private List<FlowSpec> parseStatements() {
         List<FlowSpec> statements = new ArrayList<FlowSpec>();
@@ -569,28 +550,30 @@ public final class FlowDslParser {
 
     private Token advance() {
         if (!isAtEnd()) {
-            current++;
+            return tokens.advance();
         }
-        return previous();
+        return tokens.peek();
     }
 
     private boolean isAtEnd() {
-        return peek().type() == TokenType.EOF;
+        return !tokens.hasNext() || tokens.peek().type() == TokenType.EOF;
     }
 
     private Token peek() {
-        return tokens.get(current);
+        return tokens.peek();
     }
 
     private Token previous() {
-        return tokens.get(current - 1);
+        return tokens.previous();
     }
 
     private SourceSpan span(Token start, Token end) {
         return new SourceSpan(
                 sourceName,
+                start.span().startOffset(),
                 start.span().startLine(),
                 start.span().startColumn(),
+                end.span().endOffset(),
                 end.span().endLine(),
                 end.span().endColumn());
     }

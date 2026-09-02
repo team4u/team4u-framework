@@ -1,5 +1,6 @@
 package com.team4u.framework.criterion.parser.token;
 
+import com.team4u.framework.parser.SourceSpan;
 import lombok.AllArgsConstructor;
 import lombok.Data;
 import lombok.NoArgsConstructor;
@@ -20,7 +21,11 @@ public class Token {
      */
     private String value;
     /**
-     * 在表达式中的起始位置，用于精准报错
+     * 源码空间范围定位
      */
-    private int startPos;
+    private SourceSpan span;
+
+    public SourceSpan span() {
+        return span;
+    }
 }

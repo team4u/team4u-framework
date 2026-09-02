@@ -82,4 +82,16 @@ public class StandardCriterionParserTest {
         Assert.assertNotNull(criteria.parse("it is null"));
         Assert.assertNotNull(criteria.parse("'foo'"));
     }
+
+    @Test
+    public void testParseExceptionWithSourceSpan() {
+        try {
+            criteria.parse("a >");
+            Assert.fail("Expected CriterionParseException");
+        } catch (com.team4u.framework.criterion.parser.CriterionParseException ex) {
+            Assert.assertNotNull(ex.span());
+            Assert.assertEquals(1, ex.span().startLine());
+            Assert.assertTrue(ex.getMessage().contains("a >"));
+        }
+    }
 }

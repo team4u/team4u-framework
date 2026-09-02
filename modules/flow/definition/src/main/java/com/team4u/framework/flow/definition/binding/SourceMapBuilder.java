@@ -1,5 +1,7 @@
 package com.team4u.framework.flow.definition.binding;
 
+import com.team4u.framework.parser.SourceSpan;
+
 import com.team4u.framework.flow.compiler.FlowPaths;
 import com.team4u.framework.flow.compiler.Logical;
 import com.team4u.framework.flow.definition.model.*;

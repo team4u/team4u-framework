@@ -4,7 +4,7 @@ import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.Local;
 import com.team4u.framework.flow.LocalExecutable;
 import com.team4u.framework.flow.definition.model.FlowDefinitionMetadata;
-import com.team4u.framework.flow.definition.model.SourceSpan;
+import com.team4u.framework.parser.SourceSpan;
 import com.team4u.framework.flow.definition.type.TypeRef;
 import com.team4u.framework.flow.desc.FlowDescription;
 import com.team4u.framework.flow.spi.OperationResolver;

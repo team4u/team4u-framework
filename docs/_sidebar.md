@@ -26,5 +26,6 @@
 * **核心基础与架构支撑**
   * [对象容器组件](bean/README.md)
   * [动态代理组件](proxy/README.md)
+  * [解析器基础设施组件](parser/README.md)
   * [序列化组件](serializer/README.md)
   * [核心基础组件](base/README.md)

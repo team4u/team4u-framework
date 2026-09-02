@@ -237,7 +237,7 @@ public class FlowDslTest {
                 }, OrderContext.class, OrderContext.class)
                 .build();
 
-        BoundFlow bound = FlowDsl.bind(dsl, registry);
+        BoundFlow bound = FlowDsl.bindTarget(dsl, "main.checkout", registry);
         LocalExecutable<OrderContext, OrderContext> exec = bound.compileLocal(OrderContext.class, OrderContext.class);
 
         OrderContext ctx = new OrderContext("O100", 3, true);
@@ -273,7 +273,15 @@ public class FlowDslTest {
                 })
                 .build();
 
-        BoundFlow bound = FlowDsl.bind(dsl, registry);
+        // 多 flow 未显式指定 target 抛出 AMBIGUOUS_TARGET_FLOW
+        try {
+            FlowDsl.bind(dsl, registry);
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException ex) {
+            Assert.assertEquals(com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.AMBIGUOUS_TARGET_FLOW, ex.diagnostic().code());
+        }
+
+        BoundFlow bound = FlowDsl.bindTarget(dsl, "main.order", registry);
         LocalExecutable<OrderContext, OrderContext> exec = bound.compileLocal(OrderContext.class, OrderContext.class);
 
         OrderContext ctx = new OrderContext("O200", 5, true);
@@ -346,7 +354,7 @@ public class FlowDslTest {
                 }, OrderContext.class, OrderContext.class)
                 .build();
 
-        BoundFlow bound = FlowDsl.bind(dsl, registry);
+        BoundFlow bound = FlowDsl.bindTarget(dsl, "main", registry);
         LocalExecutable<OrderContext, OrderContext> exec = bound.compileLocal(OrderContext.class, OrderContext.class);
 
         OrderContext ctx = new OrderContext("O300", 1, true);

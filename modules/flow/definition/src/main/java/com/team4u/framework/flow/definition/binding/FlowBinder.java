@@ -9,7 +9,7 @@ import com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes;
 import com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException;
 import com.team4u.framework.flow.definition.model.FlowDefinition;
 import com.team4u.framework.flow.definition.model.FlowSpec;
-import com.team4u.framework.flow.definition.model.SourceSpan;
+import com.team4u.framework.parser.SourceSpan;
 import com.team4u.framework.flow.definition.model.SymbolRef;
 import com.team4u.framework.flow.definition.registry.*;
 import com.team4u.framework.flow.definition.type.TypeCheckResult;
