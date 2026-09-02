@@ -222,8 +222,7 @@ public class DurableConcurrencyTest {
             @Override
             public Optional<DurableSnapshot> load(String executionId) {
                 Optional<DurableSnapshot> result = realStore.load(executionId);
-                if ("e-recover".equals(executionId) && result.isPresent()
-                        && result.get().revision() == expectedRaceRevision.get()) {
+                if ("e-recover".equals(executionId) && expectedRaceRevision.get() != -1) {
                     if (loadedThreadIds.add(Thread.currentThread().getId())) {
                         bothLoaded.countDown();
                     }
@@ -236,7 +235,7 @@ public class DurableConcurrencyTest {
                                          DurableSnapshot update) {
                 if ("e-recover".equals(executionId) && expectedRevision == expectedRaceRevision.get()) {
                     try {
-                        bothLoaded.await(5, TimeUnit.SECONDS);
+                        bothLoaded.await(500, TimeUnit.MILLISECONDS);
                     } catch (InterruptedException e) {
                         Thread.currentThread().interrupt();
                     }

@@ -469,9 +469,45 @@ order.flow:24:5: [DSL_SYNTAX_ERROR] Expected '}' to close route block but found 
 
 ## 端到端生产级实战示例
 
-以下示例演示了一个包含**参数提取投影、动态限流重试、多路路由、并行汇聚与单元测试断言**的完整电商订单履约实战。
+以下示例演示了一个包含**参数提取投影、动态限流重试、多路路由、并行汇聚与单元测试断言**的完整电商订单履约实战。为了直观展示文本 DSL 与 Java Bean 容器编排两种开发范式的异同，本节分别提供 **Flow DSL 声明模式** 与 **Spring Bean 容器编排模式** 的完整实现代码与对比选型建议。
 
-### 业务流程 DSL 文本 (order-fulfillment.flow)
+### 业务模型定义
+
+两种模式共用的业务上下文与状态枚举：
+
+```java
+public class OrderContext {
+    private String orderId;
+    private String userId;
+    private List<String> items;
+    private String reservationId;
+    private boolean paid;
+    private List<String> logs = new ArrayList<>();
+
+    public OrderContext(String orderId, String userId, List<String> items, boolean paid) {
+        this.orderId = orderId;
+        this.userId = userId;
+        this.items = items;
+        this.paid = paid;
+    }
+
+    public String getOrderId() { return orderId; }
+    public String getUserId() { return userId; }
+    public List<String> getItems() { return items; }
+    public boolean isPaid() { return paid; }
+    public String getReservationId() { return reservationId; }
+    public void setReservationId(String reservationId) { this.reservationId = reservationId; }
+    public List<String> getLogs() { return logs; }
+}
+
+public enum PaymentState { PAID, UNPAID }
+```
+
+### 文本 DSL 声明模式
+
+文本 DSL 模式将流程拓扑抽取为纯文本脚本，通过符号表解耦业务标识与实现代码。
+
+#### 业务流程 DSL 文本
 
 ```dsl
 schema 1
@@ -532,33 +568,10 @@ flow order.fulfillment version 1.0 {
 }
 ```
 
-### Java 符号绑定与执行测试
+#### DSL 符号注册与执行测试
 
 ```java
-public class OrderFulfillmentTest {
-
-    static class OrderContext {
-        private String orderId;
-        private String userId;
-        private List<String> items;
-        private String reservationId;
-        private boolean paid;
-        private List<String> logs = new ArrayList<>();
-
-        public OrderContext(String orderId, String userId, List<String> items, boolean paid) {
-            this.orderId = orderId;
-            this.userId = userId;
-            this.items = items;
-            this.paid = paid;
-        }
-
-        public String getUserId() { return userId; }
-        public List<String> getItems() { return items; }
-        public void setReservationId(String reservationId) { this.reservationId = reservationId; }
-        public List<String> getLogs() { return logs; }
-    }
-
-    enum PaymentState { PAID, UNPAID }
+public class DslOrderFulfillmentTest {
 
     @Test
     public void testOrderFulfillmentFlow() {
@@ -581,7 +594,7 @@ public class OrderFulfillmentTest {
                 }, OrderContext.class, OrderContext.class)
 
                 .operation("order.paymentStatus", (ctx, in) -> {
-                    return Outcome.accepted(in.paid ? PaymentState.PAID : PaymentState.UNPAID);
+                    return Outcome.accepted(in.isPaid() ? PaymentState.PAID : PaymentState.UNPAID);
                 }, OrderContext.class, PaymentState.class)
 
                 .operation("risk.audit", (ctx, in) -> {
@@ -591,6 +604,11 @@ public class OrderFulfillmentTest {
 
                 .operation("notify.sendSms", (ctx, in) -> {
                     in.getLogs().add("sms_sent");
+                    return Outcome.accepted(in);
+                }, OrderContext.class, OrderContext.class)
+
+                .operation("order.closeUnpaid", (ctx, in) -> {
+                    in.getLogs().add("closed");
                     return Outcome.accepted(in);
                 }, OrderContext.class, OrderContext.class)
 
@@ -636,7 +654,7 @@ public class OrderFulfillmentTest {
         // 4. 验证断言
         Assert.assertTrue(result.isAccepted());
         OrderContext output = result.requireAccepted();
-        Assert.assertEquals("RES_2", output.reservationId);
+        Assert.assertEquals("RES_2", output.getReservationId());
         Assert.assertTrue(output.getLogs().contains("validated"));
         Assert.assertTrue(output.getLogs().contains("reserved:RES_2"));
         Assert.assertTrue(output.getLogs().contains("charged"));
@@ -644,6 +662,219 @@ public class OrderFulfillmentTest {
     }
 }
 ```
+
+### Spring Bean 容器编排模式
+
+Spring Bean 编排模式通过 Java 强类型 Fluent API 构建流程拓扑，所有业务操作与治理策略均声明为 Spring Bean。编译期由 `BeanOperationResolver` 自动完成单例查找与契约校验，运行期享受零反射调用与 Spring 声明式事务（`@Transactional`）支持。
+
+#### 声明 Spring Bean 业务组件
+
+```java
+@Component
+public class ValidateOrderOp implements Operation<OrderContext, OrderContext> {
+    @Override
+    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
+        in.getLogs().add("validated");
+        return Outcome.accepted(in);
+    }
+}
+
+@Component
+public class ReserveInventoryOp implements Operation<List<String>, String> {
+    @Override
+    public Outcome<String> execute(OperationContext context, List<String> items) {
+        return Outcome.accepted("RES_" + items.size());
+    }
+}
+
+@Component
+public class ChargePaymentOp implements Operation<OrderContext, OrderContext> {
+    @Override
+    @Transactional(rollbackFor = Exception.class)
+    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
+        in.getLogs().add("charged");
+        return Outcome.accepted(in);
+    }
+}
+
+@Component
+public class PaymentStatusSelector implements Operation<OrderContext, PaymentState> {
+    @Override
+    public Outcome<PaymentState> execute(OperationContext context, OrderContext in) {
+        return Outcome.accepted(in.isPaid() ? PaymentState.PAID : PaymentState.UNPAID);
+    }
+}
+
+@Component
+public class RiskAuditOp implements Operation<OrderContext, OrderContext> {
+    @Override
+    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
+        in.getLogs().add("risk_passed");
+        return Outcome.accepted(in);
+    }
+}
+
+@Component
+public class SendSmsOp implements Operation<OrderContext, OrderContext> {
+    @Override
+    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
+        in.getLogs().add("sms_sent");
+        return Outcome.accepted(in);
+    }
+}
+
+@Component
+public class CloseUnpaidOp implements Operation<OrderContext, OrderContext> {
+    @Override
+    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
+        in.getLogs().add("closed");
+        return Outcome.accepted(in);
+    }
+}
+
+@Component
+public class OrderFinishOp implements Operation<OrderContext, OrderContext> {
+    @Override
+    public Outcome<OrderContext> execute(OperationContext context, OrderContext in) {
+        in.getLogs().add("finished");
+        return Outcome.accepted(in);
+    }
+}
+
+@Component
+public class PaymentRateLimitPolicy implements Policy<String> {
+    @Override
+    public Gate before(PolicyContext context, String userId) {
+        return Gate.proceed();
+    }
+}
+```
+
+#### 容器配置与流程拓扑编排
+
+```java
+@Configuration
+@Import(Team4uBeanConfiguration.class) // 桥接 Spring 容器至 BeanManager
+public class OrderFulfillmentBeanConfiguration {
+
+    @Bean
+    public Flow<OrderContext, OrderContext> orderFulfillmentFlow() {
+        return Flow.step(ValidateOrderOp.class)
+                .named("入参合规校验")
+                .timeout(Duration.ofMillis(500))
+
+                // use 模式：提取 items 投影并合并预留单号
+                .use(
+                        ReserveInventoryOp.class,
+                        OrderContext::getItems,
+                        (ctx, res) -> {
+                            ctx.setReservationId(res);
+                            ctx.getLogs().add("reserved:" + res);
+                            return ctx;
+                        }
+                )
+                .named("锁定商品库存")
+                .timeout(Duration.ofSeconds(1))
+
+                // 衔接支付扣款（附加限流、重试与单步超时）
+                .then(
+                        Flow.step(ChargePaymentOp.class)
+                                .policy(PaymentRateLimitPolicy.class, OrderContext::getUserId)
+                                .persistentPolicy(
+                                        FlowRetryPolicy.<OrderContext>builder()
+                                                .maxAttempts(3)
+                                                .backoff(Backoffs.fixed(100))
+                                                .build(),
+                                        OrderContext::getUserId
+                                )
+                                .named("扣减支付账户")
+                                .timeout(Duration.ofSeconds(3))
+                )
+
+                // 条件路由分支
+                .then(
+                        Flow.route(PaymentStatusSelector.class)
+                                .caseOf(
+                                        PaymentState.PAID,
+                                        Flow.parallel(
+                                                Branch.of("riskAudit", RiskAuditOp.class),
+                                                Branch.of("customerNotify", SendSmsOp.class)
+                                        )
+                                        .join(results -> Outcome.accepted(results.branches().get(0).requireAccepted()))
+                                        .then(OrderFinishOp.class)
+                                )
+                                .caseOf(
+                                        PaymentState.UNPAID,
+                                        Flow.step(CloseUnpaidOp.class)
+                                                .then(Flow.rejected(Reason.of("ORDER_PAYMENT_FAILED", "支付未完成，订单已关闭")))
+                                )
+                                .otherwise(Flow.skipped(Reason.of("UNKNOWN_PAYMENT_STATUS", "未知的支付状态")))
+                );
+    }
+
+    @Bean
+    public LocalExecutable<OrderContext, OrderContext> orderExecutable(
+            Flow<OrderContext, OrderContext> orderFulfillmentFlow) {
+        // Local.compile 自动通过 SPI 发现 BeanOperationResolver 并完成所有 Bean 依赖解析与类型校验
+        return Local.compile(orderFulfillmentFlow);
+    }
+}
+```
+
+#### 容器环境执行测试
+
+```java
+@RunWith(SpringRunner.class)
+@ContextConfiguration(classes = {
+        OrderFulfillmentBeanConfiguration.class,
+        ValidateOrderOp.class,
+        ReserveInventoryOp.class,
+        ChargePaymentOp.class,
+        PaymentStatusSelector.class,
+        RiskAuditOp.class,
+        SendSmsOp.class,
+        CloseUnpaidOp.class,
+        OrderFinishOp.class,
+        PaymentRateLimitPolicy.class
+})
+public class BeanOrderFulfillmentTest {
+
+    @Autowired
+    private LocalExecutable<OrderContext, OrderContext> orderExecutable;
+
+    @Test
+    public void testBeanOrderFulfillmentFlow() {
+        // 1. 构造测试入参
+        OrderContext input = new OrderContext("ORD-9999", "USER-88", Arrays.asList("apple", "banana"), true);
+
+        // 2. 执行流程
+        FlowResult<OrderContext> result = orderExecutable.run(input);
+
+        // 3. 验证断言
+        Assert.assertTrue(result.isAccepted());
+        OrderContext output = result.requireAccepted();
+        Assert.assertEquals("RES_2", output.getReservationId());
+        Assert.assertTrue(output.getLogs().contains("validated"));
+        Assert.assertTrue(output.getLogs().contains("reserved:RES_2"));
+        Assert.assertTrue(output.getLogs().contains("charged"));
+        Assert.assertTrue(output.getLogs().contains("finished"));
+    }
+}
+```
+
+### 两种编排范式对比与选型
+
+| 对比维度 | 文本 DSL 声明模式 (`team4u-flow-dsl`) | Spring Bean 容器编排模式 (`team4u-flow-bean`) |
+| :--- | :--- | :--- |
+| **流程定义载体** | 独立 `.flow` 纯文本声明文件或配置字符串 | Java `@Configuration` 代码与强类型 Fluent API |
+| **组件解耦机制** | 基于字符串符号 ID 映射，业务逻辑与实现完全解耦 | 基于 Java `Class` 与 Spring Qualifier 限定符直接引用 |
+| **类型检查时机** | `FlowDsl.bind` 时静态推导并严格校验 AST 输入输出类型契约 | Java 编译器泛型检查 + `Local.compile` 容器契约二次校验 |
+| **动态性与热发布** | **极高** ：DSL 文本可外置于配置中心或数据库，支持不停机热更新 | **低** ：流程编排固化在 Java 字节码中，变更需重新编译与部署应用 |
+| **业务人员可读性** | **优秀** ：类自然语言语法，非开发人员也能直观审阅与维护 | **一般** ：适合熟悉 Java 函数式语法的研发人员阅读与维护 |
+| **IDE 与重构体验** | 依托 DSL 诊断器与行号报错，跨文件符号跳转需配合注册表 | 原生 Java 代码导航、类重命名与方法签名重构 100% 自动联动 |
+| **Spring 事务与切面** | 符号若绑定为 Spring 代理 Bean，事务与 AOP 切面正常生效 | 原生无缝保留 `@Transactional`、`@Autowired` 与自定义 AOP 切面 |
+| **可视化图表导出** | `boundFlow.describe()` 一键导出 Mermaid 流程图 | `flow.describe()` 一键导出 Mermaid 流程图 |
+| **适用场景建议** | 流程多变、需动态配置下发、多方协作（产品/架构/开发）的复杂业务流 | 流程相对固定、重度依赖 Spring 容器管理组件、追求极致编译期安全的工程 |
 
 ---
 

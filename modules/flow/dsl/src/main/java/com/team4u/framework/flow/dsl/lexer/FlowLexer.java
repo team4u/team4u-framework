@@ -230,6 +230,10 @@ public final class FlowLexer {
         return Character.isLetterOrDigit(ch) || ch == '_' || ch == '.' || ch == '-';
     }
 
+    private boolean isLineBreak(char ch) {
+        return ch == '\r' || ch == '\n';
+    }
+
     private void skipWhitespaceAndComments() {
         while (cursor.hasNext()) {
             char ch = cursor.peek();
@@ -242,7 +246,7 @@ public final class FlowLexer {
 
             // 单行注释 #
             if (ch == '#') {
-                while (cursor.hasNext() && cursor.peek() != '\n') {
+                while (cursor.hasNext() && !isLineBreak(cursor.peek())) {
                     cursor.advance();
                 }
                 continue;
@@ -254,20 +258,30 @@ public final class FlowLexer {
                 if (next == '/') {
                     cursor.advance();
                     cursor.advance();
-                    while (cursor.hasNext() && cursor.peek() != '\n') {
+                    while (cursor.hasNext() && !isLineBreak(cursor.peek())) {
                         cursor.advance();
                     }
                     continue;
                 } else if (next == '*') {
+                    CharCursor.Mark commentStart = cursor.mark();
                     cursor.advance();
                     cursor.advance();
+                    boolean closed = false;
                     while (cursor.has(1)) {
                         if (cursor.peek() == '*' && cursor.peek(1) == '/') {
                             cursor.advance();
                             cursor.advance();
+                            closed = true;
                             break;
                         }
                         cursor.advance();
+                    }
+                    if (!closed) {
+                        SourceSpan span = cursor.spanFrom(commentStart);
+                        throw new FlowDiagnosticException(new Diagnostic(
+                                DiagnosticCodes.DSL_SYNTAX_ERROR,
+                                "Unterminated block comment",
+                                span));
                     }
                     continue;
                 }

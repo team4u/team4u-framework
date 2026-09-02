@@ -364,4 +364,41 @@ public class FlowDslTest {
         Assert.assertEquals(1, out.logs.size());
         Assert.assertEquals("recovered_and_continued", out.logs.get(0));
     }
+
+    @Test
+    public void testCyclicFlowCallSelfLoopDetectedInDsl() {
+        String dsl = "flow loop.self {\n" +
+                "    call loop.self\n" +
+                "}";
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.empty();
+        try {
+            FlowDsl.bind(dsl, registry);
+            Assert.fail("Expected FlowDiagnosticException for cyclic flow call");
+        } catch (com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException ex) {
+            Assert.assertTrue(ex.diagnostics().stream().anyMatch(d ->
+                    com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.CYCLIC_FLOW_CALL.equals(d.code())));
+            Assert.assertTrue(ex.getMessage().contains("CYCLIC_FLOW_CALL"));
+        }
+    }
+
+    @Test
+    public void testMutualCyclicFlowCallDetectedInDsl() {
+        String dsl = "flow flow.a {\n" +
+                "    call flow.b\n" +
+                "}\n" +
+                "\n" +
+                "flow flow.b {\n" +
+                "    call flow.a\n" +
+                "}";
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.empty();
+        try {
+            FlowDsl.bindTarget(dsl, "flow.a", registry);
+            Assert.fail("Expected FlowDiagnosticException for cyclic flow call");
+        } catch (com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException ex) {
+            Assert.assertTrue(ex.diagnostics().stream().anyMatch(d ->
+                    com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.CYCLIC_FLOW_CALL.equals(d.code())));
+        }
+    }
 }
