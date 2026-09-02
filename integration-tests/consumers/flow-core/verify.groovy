@@ -12,7 +12,6 @@ treeFile.eachLine { line ->
     if (line.contains("org.springframework") ||
             line.contains("com.fasterxml.jackson") ||
             line.contains("net.bytebuddy") ||
-            line.contains("team4u-base") ||
             line.contains("team4u-retry") ||
             line.contains("team4u-router") ||
             line.contains("team4u-log") ||
