@@ -9,6 +9,7 @@ import com.team4u.framework.flow.definition.binding.BoundFlow;
 import com.team4u.framework.flow.definition.registry.FlowDefinitionRegistry;
 import com.team4u.framework.flow.model.FlowResult;
 import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.Reason;
 import com.team4u.framework.flow.model.Resumed;
 import org.junit.Assert;
 import org.junit.Test;
@@ -206,5 +207,153 @@ public class FlowDslTest {
         LocalExecutable<String, String> exec = bound.compileLocal(String.class, String.class);
         FlowResult<String> result = exec.run("world");
         Assert.assertEquals("ECHO:world", result.requireAccepted());
+    }
+
+    @Test
+    public void testMultiFlowDeclarationAndDirectCall() {
+        String dsl = "schema 1\n" +
+                "\n" +
+                "flow subflow.risk {\n" +
+                "    step risk.op\n" +
+                "}\n" +
+                "\n" +
+                "flow subflow.pay {\n" +
+                "    step pay.op\n" +
+                "}\n" +
+                "\n" +
+                "flow main.checkout {\n" +
+                "    call subflow.risk\n" +
+                "    call subflow.pay\n" +
+                "}";
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("risk.op", (OperationContext ctx, OrderContext in) -> {
+                    in.logs.add("risk_checked");
+                    return Outcome.accepted(in);
+                }, OrderContext.class, OrderContext.class)
+                .operation("pay.op", (OperationContext ctx, OrderContext in) -> {
+                    in.logs.add("pay_charged");
+                    return Outcome.accepted(in);
+                }, OrderContext.class, OrderContext.class)
+                .build();
+
+        BoundFlow bound = FlowDsl.bind(dsl, registry);
+        LocalExecutable<OrderContext, OrderContext> exec = bound.compileLocal(OrderContext.class, OrderContext.class);
+
+        OrderContext ctx = new OrderContext("O100", 3, true);
+        FlowResult<OrderContext> result = exec.run(ctx);
+        OrderContext out = result.requireAccepted();
+
+        Assert.assertEquals(2, out.logs.size());
+        Assert.assertEquals("risk_checked", out.logs.get(0));
+        Assert.assertEquals("pay_charged", out.logs.get(1));
+    }
+
+    @Test
+    public void testMultiFlowWithProjectAndMergeCall() {
+        String dsl = "flow calc.tax {\n" +
+                "    step compute.tax\n" +
+                "}\n" +
+                "\n" +
+                "flow main.order {\n" +
+                "    call calc.tax {\n" +
+                "        project order.itemsCount\n" +
+                "        merge order.withTax\n" +
+                "    }\n" +
+                "}";
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("compute.tax", (OperationContext ctx, Integer count) -> {
+                    return Outcome.accepted("TAX_" + (count * 10));
+                }, Integer.class, String.class)
+                .projector("order.itemsCount", OrderContext.class, Integer.class, (OrderContext ctx) -> ctx.itemsCount)
+                .merger("order.withTax", OrderContext.class, String.class, OrderContext.class, (OrderContext state, String tax) -> {
+                    state.logs.add(tax);
+                    return state;
+                })
+                .build();
+
+        BoundFlow bound = FlowDsl.bind(dsl, registry);
+        LocalExecutable<OrderContext, OrderContext> exec = bound.compileLocal(OrderContext.class, OrderContext.class);
+
+        OrderContext ctx = new OrderContext("O200", 5, true);
+        FlowResult<OrderContext> result = exec.run(ctx);
+        OrderContext out = result.requireAccepted();
+
+        Assert.assertEquals(1, out.logs.size());
+        Assert.assertEquals("TAX_50", out.logs.get(0));
+    }
+
+    @Test
+    public void testMultiFlowBindTarget() {
+        String dsl = "flow subflow.a {\n" +
+                "    step op.a\n" +
+                "}\n" +
+                "\n" +
+                "flow subflow.b {\n" +
+                "    step op.b\n" +
+                "}";
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("op.a", (OperationContext ctx, String in) -> Outcome.accepted("A:" + in), String.class, String.class)
+                .operation("op.b", (OperationContext ctx, String in) -> Outcome.accepted("B:" + in), String.class, String.class)
+                .build();
+
+        BoundFlow boundA = FlowDsl.bindTarget(dsl, "subflow.a", registry);
+        LocalExecutable<String, String> execA = boundA.compileLocal(String.class, String.class);
+        Assert.assertEquals("A:hello", execA.run("hello").requireAccepted());
+
+        BoundFlow boundB = FlowDsl.bindTarget(dsl, "subflow.b", registry);
+        LocalExecutable<String, String> execB = boundB.compileLocal(String.class, String.class);
+        Assert.assertEquals("B:hello", execB.run("hello").requireAccepted());
+    }
+
+    @Test
+    public void testCallUnknownFlowThrowsDiagnostic() {
+        String dsl = "flow main {\n" +
+                "    call non.existent.flow\n" +
+                "}";
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.empty();
+        try {
+            FlowDsl.bind(dsl, registry);
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException ex) {
+            Assert.assertTrue(ex.getMessage().contains("UNKNOWN_FLOW"));
+        }
+    }
+
+    @Test
+    public void testCallWithOptionalModifier() {
+        String dsl = "flow sub.failing {\n" +
+                "    step op.fail\n" +
+                "}\n" +
+                "\n" +
+                "flow main {\n" +
+                "    call sub.failing {\n" +
+                "        optional\n" +
+                "    }\n" +
+                "    step op.succ\n" +
+                "}";
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("op.fail", (OperationContext ctx, OrderContext in) -> {
+                    return Outcome.skipped(Reason.of("NOT_ELIGIBLE", "Skipped branch"));
+                }, OrderContext.class, OrderContext.class)
+                .operation("op.succ", (OperationContext ctx, OrderContext in) -> {
+                    in.logs.add("recovered_and_continued");
+                    return Outcome.accepted(in);
+                }, OrderContext.class, OrderContext.class)
+                .build();
+
+        BoundFlow bound = FlowDsl.bind(dsl, registry);
+        LocalExecutable<OrderContext, OrderContext> exec = bound.compileLocal(OrderContext.class, OrderContext.class);
+
+        OrderContext ctx = new OrderContext("O300", 1, true);
+        FlowResult<OrderContext> result = exec.run(ctx);
+        OrderContext out = result.requireAccepted();
+
+        Assert.assertEquals(1, out.logs.size());
+        Assert.assertEquals("recovered_and_continued", out.logs.get(0));
     }
 }

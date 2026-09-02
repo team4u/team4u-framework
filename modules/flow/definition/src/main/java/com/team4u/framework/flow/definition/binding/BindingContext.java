@@ -52,4 +52,14 @@ public interface BindingContext {
     default com.team4u.framework.flow.spi.OperationResolver resolver() {
         return null;
     }
+
+    /**
+     * 获取指定 ID 的子流程定义。
+     *
+     * @param id 子流程 ID
+     * @return 子流程定义（若未注册则返回 null）
+     */
+    default com.team4u.framework.flow.definition.model.FlowDefinition subflow(String id) {
+        return registry() != null ? registry().subflow(id) : null;
+    }
 }

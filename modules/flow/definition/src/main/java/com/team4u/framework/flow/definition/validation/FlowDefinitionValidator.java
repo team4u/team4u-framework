@@ -90,6 +90,8 @@ public final class FlowDefinitionValidator {
 
         if (spec instanceof StepSpec) {
             validateStep((StepSpec) spec, diagnostics);
+        } else if (spec instanceof CallSpec) {
+            validateCall((CallSpec) spec, diagnostics);
         } else if (spec instanceof SequenceSpec) {
             validateSequence((SequenceSpec) spec, diagnostics);
         } else if (spec instanceof RouteSpec) {
@@ -106,6 +108,71 @@ public final class FlowDefinitionValidator {
             validateComplete((CompleteSpec) spec, diagnostics);
         } else if (spec instanceof ControlSpec) {
             validateControl((ControlSpec) spec, diagnostics);
+        }
+    }
+
+    private static void validateCall(CallSpec call, List<Diagnostic> diagnostics) {
+        if (call.flow() == null || call.flow().id() == null || call.flow().id().trim().isEmpty()) {
+            diagnostics.add(new Diagnostic(
+                    DiagnosticCodes.UNKNOWN_FLOW,
+                    "Call flow identifier must not be blank",
+                    call.span()));
+        }
+
+        if (call.modifiers() != null) {
+            int projectCount = 0;
+            int mergeCount = 0;
+            for (ModifierSpec mod : call.modifiers()) {
+                if (mod instanceof ProjectModifierSpec) {
+                    projectCount++;
+                    if (projectCount > 1) {
+                        diagnostics.add(new Diagnostic(
+                                DiagnosticCodes.DUPLICATE_STEP_PROJECT,
+                                "Duplicate 'project' declaration in call",
+                                mod.span()));
+                    }
+                } else if (mod instanceof MergeModifierSpec) {
+                    mergeCount++;
+                    if (mergeCount > 1) {
+                        diagnostics.add(new Diagnostic(
+                                DiagnosticCodes.DUPLICATE_STEP_MERGE,
+                                "Duplicate 'merge' declaration in call",
+                                mod.span()));
+                    }
+                } else if (mod instanceof TimeoutModifierSpec) {
+                    Duration d = ((TimeoutModifierSpec) mod).duration();
+                    if (d == null || d.isNegative() || d.isZero()) {
+                        diagnostics.add(new Diagnostic(
+                                DiagnosticCodes.INVALID_CONTROL,
+                                "Timeout modifier must specify a positive duration",
+                                mod.span()));
+                    }
+                } else if (mod instanceof NamedModifierSpec) {
+                    String name = ((NamedModifierSpec) mod).name();
+                    if (name == null || name.trim().isEmpty()) {
+                        diagnostics.add(new Diagnostic(
+                                DiagnosticCodes.INVALID_CONTROL,
+                                "Named modifier must specify a non-blank label",
+                                mod.span()));
+                    }
+                } else if (mod instanceof PolicyModifierSpec) {
+                    PolicyModifierSpec p = (PolicyModifierSpec) mod;
+                    if (p.policy() == null || p.policy().id() == null || p.policy().id().trim().isEmpty()) {
+                        diagnostics.add(new Diagnostic(
+                                DiagnosticCodes.INVALID_CONTROL,
+                                "Policy modifier must specify a policy reference",
+                                mod.span()));
+                    }
+                } else if (mod instanceof RetryModifierSpec) {
+                    RetryModifierSpec r = (RetryModifierSpec) mod;
+                    if (r.retry() == null || r.retry().id() == null || r.retry().id().trim().isEmpty()) {
+                        diagnostics.add(new Diagnostic(
+                                DiagnosticCodes.INVALID_CONTROL,
+                                "Retry modifier must specify a retry policy reference",
+                                mod.span()));
+                    }
+                }
+            }
         }
     }
 

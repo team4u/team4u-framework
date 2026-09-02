@@ -141,6 +141,25 @@ public final class TypeChecker {
                     return op.inputType();
                 }
             }
+        } else if (spec instanceof CallSpec) {
+            CallSpec call = (CallSpec) spec;
+            SymbolRef projectRef = call.project();
+            if (projectRef != null) {
+                ProjectorDescriptor projector = registry.projector(projectRef.id());
+                if (projector != null && projector.inputType() != TypeRef.ANY) {
+                    return projector.inputType();
+                }
+            }
+            if (call.flow() != null && call.flow().id() != null) {
+                FlowDefinition subflow = registry.subflow(call.flow().id());
+                if (subflow != null && subflow.root() != null) {
+                    return inferInitialInputType(subflow.root());
+                }
+                OperationDescriptor op = registry.operation(call.flow().id());
+                if (op != null && op.inputType() != TypeRef.ANY) {
+                    return op.inputType();
+                }
+            }
         } else if (spec instanceof SequenceSpec) {
             SequenceSpec seq = (SequenceSpec) spec;
             if (seq.elements() != null && !seq.elements().isEmpty()) {

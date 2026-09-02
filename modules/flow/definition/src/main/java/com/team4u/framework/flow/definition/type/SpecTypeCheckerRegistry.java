@@ -17,6 +17,7 @@ public final class SpecTypeCheckerRegistry extends FrozenKeyedPolicyRegistry<Cla
 
     static {
         GLOBAL.register(new SpecTypeCheckers.StepSpecTypeChecker());
+        GLOBAL.register(new SpecTypeCheckers.CallSpecTypeChecker());
         GLOBAL.register(new SpecTypeCheckers.SequenceSpecTypeChecker());
         GLOBAL.register(new SpecTypeCheckers.RouteSpecTypeChecker());
         GLOBAL.register(new SpecTypeCheckers.FirstApplicableSpecTypeChecker());

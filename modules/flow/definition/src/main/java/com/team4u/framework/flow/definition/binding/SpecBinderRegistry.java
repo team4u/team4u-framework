@@ -17,6 +17,7 @@ public final class SpecBinderRegistry extends FrozenKeyedPolicyRegistry<Class<? 
 
     static {
         GLOBAL.register(new SpecBinders.StepSpecBinder());
+        GLOBAL.register(new SpecBinders.CallSpecBinder());
         GLOBAL.register(new SpecBinders.SequenceSpecBinder());
         GLOBAL.register(new SpecBinders.RouteSpecBinder());
         GLOBAL.register(new SpecBinders.FirstApplicableSpecBinder());

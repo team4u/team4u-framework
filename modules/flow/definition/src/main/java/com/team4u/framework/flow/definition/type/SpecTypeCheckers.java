@@ -240,6 +240,133 @@ public final class SpecTypeCheckers {
         }
     }
 
+    public static final class CallSpecTypeChecker implements SpecTypeChecker<CallSpec> {
+        @Override
+        public Class<? extends FlowSpec> key() {
+            return CallSpec.class;
+        }
+
+        @Override
+        public TypeRef check(CallSpec call, TypeRef currentType, TypeCheckContext context) {
+            FlowDefinition subflow = context.registry().subflow(call.flow().id());
+            TypeRef subInputType = TypeRef.ANY;
+            TypeRef subOutputType = TypeRef.ANY;
+
+            if (subflow != null) {
+                TypeCheckResult subResult = TypeChecker.check(subflow, context.registry());
+                if (!subResult.success()) {
+                    for (Diagnostic d : subResult.diagnostics()) {
+                        context.addDiagnostic(d);
+                    }
+                }
+                subInputType = subResult.inputType();
+                subOutputType = subResult.outputType();
+            } else {
+                OperationDescriptor op = context.registry().operation(call.flow().id());
+                if (op != null) {
+                    subInputType = op.inputType();
+                    subOutputType = op.outputType();
+                } else {
+                    context.addDiagnostic(new Diagnostic(
+                            DiagnosticCodes.UNKNOWN_FLOW,
+                            "Unknown flow: " + call.flow().id(),
+                            call.flow().span()));
+                    return currentType;
+                }
+            }
+
+            SymbolRef projectRef = call.project();
+            SymbolRef mergeRef = call.merge();
+            boolean isOptional = call.isOptional();
+
+            TypeRef callActualInputType = currentType;
+            TypeRef callOutputType = subOutputType;
+
+            // 校验 Projector
+            if (projectRef != null) {
+                ProjectorDescriptor projector = context.registry().projector(projectRef.id());
+                if (projector == null) {
+                    context.addDiagnostic(new Diagnostic(
+                            DiagnosticCodes.UNKNOWN_PROJECTOR,
+                            "Unknown projector: " + projectRef.id(),
+                            projectRef.span()));
+                } else {
+                    if (currentType != TypeRef.ANY && projector.inputType() != TypeRef.ANY
+                            && !projector.inputType().isAssignableFrom(currentType)) {
+                        context.addDiagnostic(new Diagnostic(
+                                DiagnosticCodes.INVALID_PROJECTOR,
+                                "Projector '" + projectRef.id() + "' expects input " + projector.inputType().typeName()
+                                        + " but current type is " + currentType.typeName(),
+                                projectRef.span()));
+                    }
+                    callActualInputType = projector.outputType();
+                }
+            }
+
+            // 校验 Flow 入参类型
+            if (callActualInputType != TypeRef.ANY && subInputType != TypeRef.ANY
+                    && !subInputType.isAssignableFrom(callActualInputType)) {
+                context.addDiagnostic(new Diagnostic(
+                        DiagnosticCodes.TYPE_MISMATCH,
+                        "Flow '" + call.flow().id() + "' expects input " + subInputType.typeName()
+                                + " but received " + callActualInputType.typeName(),
+                        call.flow().span()));
+            }
+
+            // 校验 Merger
+            if (mergeRef != null) {
+                MergerDescriptor merger = context.registry().merger(mergeRef.id());
+                if (merger == null) {
+                    context.addDiagnostic(new Diagnostic(
+                            DiagnosticCodes.UNKNOWN_MERGER,
+                            "Unknown merger: " + mergeRef.id(),
+                            mergeRef.span()));
+                } else {
+                    if (currentType != TypeRef.ANY && merger.stateType() != TypeRef.ANY
+                            && !merger.stateType().isAssignableFrom(currentType)) {
+                        context.addDiagnostic(new Diagnostic(
+                                DiagnosticCodes.INVALID_MERGER,
+                                "Merger '" + mergeRef.id() + "' expects state type " + merger.stateType().typeName()
+                                        + " but current type is " + currentType.typeName(),
+                                mergeRef.span()));
+                    }
+                    if (subOutputType != TypeRef.ANY && merger.resultType() != TypeRef.ANY
+                            && !merger.resultType().isAssignableFrom(subOutputType)) {
+                        context.addDiagnostic(new Diagnostic(
+                                DiagnosticCodes.INVALID_MERGER,
+                                "Merger '" + mergeRef.id() + "' expects result type " + merger.resultType().typeName()
+                                        + " but subflow outputs " + subOutputType.typeName(),
+                                mergeRef.span()));
+                    }
+                    callOutputType = merger.outputType();
+                }
+            }
+
+            // 校验 Optional Call 类型要求（输入输出类型必须一致）
+            if (isOptional) {
+                if (currentType != TypeRef.ANY && callOutputType != TypeRef.ANY
+                        && !currentType.isAssignableFrom(callOutputType)) {
+                    context.addDiagnostic(new Diagnostic(
+                            DiagnosticCodes.INVALID_OPTIONAL_STEP,
+                            "Optional call requires matching input and output type (expected "
+                                    + currentType.typeName() + " but got " + callOutputType.typeName() + ")",
+                            call.span()));
+                }
+                callOutputType = currentType;
+            }
+
+            // 校验 Policies 与 Retries
+            for (PolicyModifierSpec policyMod : call.policies()) {
+                validatePolicy(currentType, policyMod.policy(), policyMod.key(), policyMod.span(), context);
+            }
+            for (RetryModifierSpec retryMod : call.retries()) {
+                validatePolicy(currentType, retryMod.retry(), null, retryMod.span(), context);
+            }
+
+            return callOutputType;
+        }
+    }
+
     public static final class SequenceSpecTypeChecker implements SpecTypeChecker<SequenceSpec> {
         @Override
         public Class<? extends FlowSpec> key() {

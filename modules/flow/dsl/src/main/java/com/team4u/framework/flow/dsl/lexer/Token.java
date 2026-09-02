@@ -34,6 +34,22 @@ public final class Token implements Serializable {
         this(type, text, span, null);
     }
 
+    public TokenType type() {
+        return type;
+    }
+
+    public String text() {
+        return text;
+    }
+
+    public SourceSpan span() {
+        return span;
+    }
+
+    public Object value() {
+        return value;
+    }
+
     @Override
     public String toString() {
         return type + "('" + text + "')@" + span.format();

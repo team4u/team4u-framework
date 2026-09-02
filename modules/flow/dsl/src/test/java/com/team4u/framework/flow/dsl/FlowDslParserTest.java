@@ -279,4 +279,100 @@ public class FlowDslParserTest {
             Assert.assertEquals(com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.DUPLICATE_CONFIG_KEY, ex.getDiagnostics().get(0).code());
         }
     }
+
+    @Test
+    public void testParseMultipleFlows() {
+        String dsl = "schema 1\n" +
+                "\n" +
+                "flow subflow.risk version 1 {\n" +
+                "    step risk.check\n" +
+                "}\n" +
+                "\n" +
+                "flow subflow.pay version 2 {\n" +
+                "    step pay.charge\n" +
+                "}\n" +
+                "\n" +
+                "flow main.order version 3 {\n" +
+                "    call subflow.risk\n" +
+                "    call subflow.pay {\n" +
+                "        project order.paymentInfo\n" +
+                "        merge order.withReceipt\n" +
+                "        optional\n" +
+                "        timeout 2s\n" +
+                "        named \"PayChargeStep\"\n" +
+                "    }\n" +
+                "}";
+
+        java.util.List<FlowDefinition> defs = FlowDslParser.parseDefinitions(dsl, "order_suite.flow");
+        Assert.assertEquals(3, defs.size());
+
+        FlowDefinition riskDef = defs.get(0);
+        Assert.assertEquals("subflow.risk", riskDef.id());
+        Assert.assertEquals("1", riskDef.version());
+        Assert.assertTrue(riskDef.root() instanceof StepSpec);
+
+        FlowDefinition payDef = defs.get(1);
+        Assert.assertEquals("subflow.pay", payDef.id());
+        Assert.assertEquals("2", payDef.version());
+        Assert.assertTrue(payDef.root() instanceof StepSpec);
+
+        FlowDefinition mainDef = defs.get(2);
+        Assert.assertEquals("main.order", mainDef.id());
+        Assert.assertEquals("3", mainDef.version());
+        Assert.assertTrue(mainDef.root() instanceof SequenceSpec);
+        SequenceSpec seq = (SequenceSpec) mainDef.root();
+        Assert.assertEquals(2, seq.elements().size());
+
+        CallSpec call1 = (CallSpec) seq.elements().get(0);
+        Assert.assertEquals("subflow.risk", call1.flow().id());
+        Assert.assertNull(call1.project());
+        Assert.assertNull(call1.merge());
+        Assert.assertFalse(call1.isOptional());
+
+        CallSpec call2 = (CallSpec) seq.elements().get(1);
+        Assert.assertEquals("subflow.pay", call2.flow().id());
+        Assert.assertEquals("order.paymentInfo", call2.project().id());
+        Assert.assertEquals("order.withReceipt", call2.merge().id());
+        Assert.assertTrue(call2.isOptional());
+        Assert.assertEquals(java.time.Duration.ofSeconds(2), call2.timeout());
+        Assert.assertEquals("PayChargeStep", call2.named());
+
+        // 测试默认单 flow 解析时获取最后一个主流程
+        FlowDefinition defaultMain = FlowDslParser.parse(dsl, "order_suite.flow");
+        Assert.assertEquals("main.order", defaultMain.id());
+    }
+
+    @Test
+    public void testCallDuplicateProjectThrowsDiagnostic() {
+        String dsl = "flow test {\n" +
+                "    call subflow {\n" +
+                "        project p1\n" +
+                "        project p2\n" +
+                "    }\n" +
+                "}";
+        try {
+            FlowDslParser.parse(dsl, "test.flow");
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(1, ex.getDiagnostics().size());
+            Assert.assertEquals(com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.DUPLICATE_STEP_PROJECT, ex.getDiagnostics().get(0).code());
+        }
+    }
+
+    @Test
+    public void testCallDuplicateMergeThrowsDiagnostic() {
+        String dsl = "flow test {\n" +
+                "    call subflow {\n" +
+                "        merge m1\n" +
+                "        merge m2\n" +
+                "    }\n" +
+                "}";
+        try {
+            FlowDslParser.parse(dsl, "test.flow");
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(1, ex.getDiagnostics().size());
+            Assert.assertEquals(com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.DUPLICATE_STEP_MERGE, ex.getDiagnostics().get(0).code());
+        }
+    }
 }

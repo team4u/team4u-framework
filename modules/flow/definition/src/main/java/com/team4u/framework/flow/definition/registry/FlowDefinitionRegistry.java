@@ -4,6 +4,7 @@ import com.team4u.framework.flow.api.JoinStrategy;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.Policy;
+import com.team4u.framework.flow.definition.model.FlowDefinition;
 import com.team4u.framework.flow.definition.type.ClassTypeRef;
 import com.team4u.framework.flow.definition.type.GenericTypeResolver;
 import com.team4u.framework.flow.definition.type.TypeCodec;
@@ -15,6 +16,7 @@ import lombok.experimental.Accessors;
 
 import com.team4u.framework.base.util.ServiceLoaderUtil;
 
+import java.util.Collection;
 import java.util.Collections;
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -27,7 +29,7 @@ import java.util.function.Function;
 /**
  * 流程定义外部符号注册表（Flow Definition Registry）。
  *
- * <p>统一管理流程 DSL 中引用的所有 Operation、Policy、Projector、Merger、KeyProjection、Join、
+ * <p>统一管理流程 DSL 中引用的所有 Operation、Subflow、Policy、Projector、Merger、KeyProjection、Join、
  * ResumePoint 及 TypeCodec 映射关系，实现 DSL 符号与 Java 类/Bean 的解耦。</p>
  *
  * @author jay.wu
@@ -36,6 +38,7 @@ import java.util.function.Function;
 @Accessors(fluent = true)
 public final class FlowDefinitionRegistry {
 
+    private final Map<String, FlowDefinition> subflows;
     private final Map<String, OperationDescriptor> operations;
     private final Map<String, PolicyDescriptor> policies;
     private final Map<String, PolicyProvider> policyProviders;
@@ -53,6 +56,7 @@ public final class FlowDefinitionRegistry {
             new ConcurrentHashMap<String, PolicyDescriptor>();
 
     private FlowDefinitionRegistry(Builder builder) {
+        this.subflows = Collections.unmodifiableMap(new LinkedHashMap<String, FlowDefinition>(builder.subflows));
         this.operations = Collections.unmodifiableMap(new LinkedHashMap<String, OperationDescriptor>(builder.operations));
         this.policies = Collections.unmodifiableMap(new LinkedHashMap<String, PolicyDescriptor>(builder.policies));
         this.policyProviders = Collections.unmodifiableMap(new LinkedHashMap<String, PolicyProvider>(builder.policyProviders));
@@ -75,6 +79,13 @@ public final class FlowDefinitionRegistry {
 
     public static FlowDefinitionRegistry empty() {
         return new Builder().build();
+    }
+
+    public FlowDefinition subflow(String id) {
+        if (id == null) {
+            return null;
+        }
+        return subflows.get(id);
     }
 
     @SuppressWarnings("unchecked")
@@ -219,6 +230,7 @@ public final class FlowDefinitionRegistry {
      * 注册表构建器。
      */
     public static final class Builder {
+        private final Map<String, FlowDefinition> subflows = new LinkedHashMap<String, FlowDefinition>();
         private final Map<String, OperationDescriptor> operations = new LinkedHashMap<String, OperationDescriptor>();
         private final Map<String, PolicyDescriptor> policies = new LinkedHashMap<String, PolicyDescriptor>();
         private final Map<String, PolicyProvider> policyProviders = new LinkedHashMap<String, PolicyProvider>();
@@ -232,6 +244,133 @@ public final class FlowDefinitionRegistry {
 
         public Builder fallbackResolver(OperationResolver fallbackResolver) {
             this.fallbackResolver = fallbackResolver;
+            return this;
+        }
+
+        public Builder subflow(FlowDefinition definition) {
+            Objects.requireNonNull(definition, "flow definition must not be null");
+            return subflow(definition.id(), definition);
+        }
+
+        public Builder subflow(String id, FlowDefinition definition) {
+            Objects.requireNonNull(id, "flow id must not be null");
+            Objects.requireNonNull(definition, "flow definition must not be null");
+            if (this.subflows.containsKey(id)) {
+                throw new IllegalArgumentException("Duplicate subflow registration for id: " + id
+                        + ". Use overrideSubflow(...) to explicitly overwrite.");
+            }
+            this.subflows.put(id, definition);
+            return this;
+        }
+
+        public Builder overrideSubflow(FlowDefinition definition) {
+            Objects.requireNonNull(definition, "flow definition must not be null");
+            return overrideSubflow(definition.id(), definition);
+        }
+
+        public Builder overrideSubflow(String id, FlowDefinition definition) {
+            Objects.requireNonNull(id, "flow id must not be null");
+            Objects.requireNonNull(definition, "flow definition must not be null");
+            this.subflows.put(id, definition);
+            return this;
+        }
+
+        public Builder subflows(Map<String, FlowDefinition> subflows) {
+            if (subflows != null) {
+                for (Map.Entry<String, FlowDefinition> entry : subflows.entrySet()) {
+                    subflow(entry.getKey(), entry.getValue());
+                }
+            }
+            return this;
+        }
+
+        public Builder overrideSubflows(Map<String, FlowDefinition> subflows) {
+            if (subflows != null) {
+                for (Map.Entry<String, FlowDefinition> entry : subflows.entrySet()) {
+                    overrideSubflow(entry.getKey(), entry.getValue());
+                }
+            }
+            return this;
+        }
+
+        public Builder subflows(Collection<FlowDefinition> definitions) {
+            if (definitions != null) {
+                for (FlowDefinition def : definitions) {
+                    subflow(def);
+                }
+            }
+            return this;
+        }
+
+        public Builder overrideSubflows(Collection<FlowDefinition> definitions) {
+            if (definitions != null) {
+                for (FlowDefinition def : definitions) {
+                    overrideSubflow(def);
+                }
+            }
+            return this;
+        }
+
+        public Builder operations(Map<String, OperationDescriptor> operations) {
+            if (operations != null) {
+                this.operations.putAll(operations);
+            }
+            return this;
+        }
+
+        public Builder policies(Map<String, PolicyDescriptor> policies) {
+            if (policies != null) {
+                this.policies.putAll(policies);
+            }
+            return this;
+        }
+
+        public Builder policyProviders(Map<String, PolicyProvider> policyProviders) {
+            if (policyProviders != null) {
+                this.policyProviders.putAll(policyProviders);
+            }
+            return this;
+        }
+
+        public Builder projectors(Map<String, ProjectorDescriptor> projectors) {
+            if (projectors != null) {
+                this.projectors.putAll(projectors);
+            }
+            return this;
+        }
+
+        public Builder mergers(Map<String, MergerDescriptor> mergers) {
+            if (mergers != null) {
+                this.mergers.putAll(mergers);
+            }
+            return this;
+        }
+
+        public Builder keyProjections(Map<String, KeyProjectionDescriptor> keyProjections) {
+            if (keyProjections != null) {
+                this.keyProjections.putAll(keyProjections);
+            }
+            return this;
+        }
+
+        public Builder joins(Map<String, JoinDescriptor> joins) {
+            if (joins != null) {
+                this.joins.putAll(joins);
+            }
+            return this;
+        }
+
+        public Builder resumePoints(Map<String, ResumeDescriptor> resumePoints) {
+            if (resumePoints != null) {
+                this.resumePoints.putAll(resumePoints);
+            }
+            return this;
+        }
+
+        public Builder typeCodecs(Map<TypeRef, TypeCodec<?>> typeCodecs) {
+            if (typeCodecs != null) {
+                this.typeCodecs.putAll(typeCodecs);
+            }
             return this;
         }
 

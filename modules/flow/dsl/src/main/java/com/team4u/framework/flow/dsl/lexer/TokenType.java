@@ -11,6 +11,7 @@ public enum TokenType {
     FLOW("flow"),
     VERSION("version"),
     STEP("step"),
+    CALL("call"),
     PROJECT("project"),
     MERGE("merge"),
     OPTIONAL("optional"),

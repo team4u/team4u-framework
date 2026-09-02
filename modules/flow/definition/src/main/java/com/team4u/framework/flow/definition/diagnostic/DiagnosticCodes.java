@@ -29,12 +29,15 @@ public final class DiagnosticCodes {
 
     // Symbol 阶段错误码
     public static final String UNKNOWN_OPERATION = "UNKNOWN_OPERATION";
+    public static final String UNKNOWN_FLOW = "UNKNOWN_FLOW";
     public static final String UNKNOWN_POLICY = "UNKNOWN_POLICY";
     public static final String UNKNOWN_PROJECTOR = "UNKNOWN_PROJECTOR";
     public static final String UNKNOWN_MERGER = "UNKNOWN_MERGER";
     public static final String UNKNOWN_KEY_PROJECTION = "UNKNOWN_KEY_PROJECTION";
     public static final String UNKNOWN_JOIN = "UNKNOWN_JOIN";
     public static final String UNKNOWN_RESUME_POINT = "UNKNOWN_RESUME_POINT";
+    public static final String DUPLICATE_FLOW_ID = "DUPLICATE_FLOW_ID";
+    public static final String CYCLIC_FLOW_CALL = "CYCLIC_FLOW_CALL";
 
     // Type 阶段错误码
     public static final String TYPE_MISMATCH = "TYPE_MISMATCH";

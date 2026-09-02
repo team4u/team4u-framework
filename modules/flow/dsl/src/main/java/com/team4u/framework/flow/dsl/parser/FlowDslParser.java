@@ -39,16 +39,25 @@ public final class FlowDslParser {
         return parse(dsl, null);
     }
 
+    public static List<FlowDefinition> parseDefinitions(String dsl, String sourceName) {
+        FlowLexer lexer = new FlowLexer(dsl, sourceName);
+        List<Token> tokens = lexer.tokenize();
+        return new FlowDslParser(tokens, sourceName).parseDefinitions();
+    }
+
+    public static List<FlowDefinition> parseDefinitions(String dsl) {
+        return parseDefinitions(dsl, null);
+    }
+
     /**
-     * 解析顶层 FlowDefinition。
+     * 解析顶层全部 FlowDefinition。
      *
-     * @return 流程定义 AST
+     * @return 流程定义 AST 列表
      */
-    public FlowDefinition parseDefinition() {
-        Token startToken = peek();
+    public List<FlowDefinition> parseDefinitions() {
         int schema = 1;
 
-        // 可选头部 schema 1
+        // 可选全局头部 schema 1
         if (match(TokenType.SCHEMA)) {
             Token schemaToken = consume(TokenType.NUMBER, "Expected schema version number after 'schema'");
             schema = ((Number) schemaToken.value()).intValue();
@@ -60,35 +69,76 @@ public final class FlowDslParser {
             }
         }
 
-        consume(TokenType.FLOW, "Expected 'flow' declaration");
-        Token idToken = consumeIdentifierOrString("Expected flow ID identifier");
-        String flowId = idToken.text();
-
-        String version = "1";
-        if (match(TokenType.VERSION)) {
-            Token verToken = advance();
-            if (verToken.type() != TokenType.IDENTIFIER && verToken.type() != TokenType.NUMBER && verToken.type() != TokenType.STRING) {
-                throw error(verToken, "Expected version identifier, number or string after 'version'");
+        List<FlowDefinition> definitions = new ArrayList<FlowDefinition>();
+        while (!isAtEnd()) {
+            Token startToken = peek();
+            if (match(TokenType.SCHEMA)) {
+                Token schemaToken = consume(TokenType.NUMBER, "Expected schema version number after 'schema'");
+                schema = ((Number) schemaToken.value()).intValue();
+                if (schema != 1) {
+                    throw new FlowDiagnosticException(new Diagnostic(
+                            DiagnosticCodes.DSL_UNSUPPORTED_SCHEMA,
+                            "Unsupported DSL schema version: " + schema + " (currently only schema 1 is supported)",
+                            schemaToken.span()));
+                }
+                startToken = peek();
             }
-            version = verToken.text();
+
+            if (!check(TokenType.FLOW)) {
+                if (definitions.isEmpty()) {
+                    throw error(peek(), "Expected 'flow' declaration");
+                } else {
+                    throw error(peek(), "Unexpected content after flow definition: " + peek().text());
+                }
+            }
+            consume(TokenType.FLOW, "Expected 'flow' declaration");
+            Token idToken = consumeIdentifierOrString("Expected flow ID identifier");
+            String flowId = idToken.text();
+
+            String version = "1";
+            if (match(TokenType.VERSION)) {
+                Token verToken = advance();
+                if (verToken.type() != TokenType.IDENTIFIER && verToken.type() != TokenType.NUMBER && verToken.type() != TokenType.STRING) {
+                    throw error(verToken, "Expected version identifier, number or string after 'version'");
+                }
+                version = verToken.text();
+            }
+
+            consume(TokenType.LBRACE, "Expected '{' to start flow body");
+            List<FlowSpec> statements = parseStatements();
+            Token endToken = consume(TokenType.RBRACE, "Expected '}' to close flow body");
+
+            FlowSpec root;
+            if (statements.isEmpty()) {
+                root = new SequenceSpec(Collections.<FlowSpec>emptyList(), span(startToken, endToken));
+            } else if (statements.size() == 1) {
+                root = statements.get(0);
+            } else {
+                root = new SequenceSpec(statements, span(startToken, endToken));
+            }
+
+            FlowDefinition def = new FlowDefinition(schema, flowId, version, root, sourceName, span(startToken, endToken));
+            definitions.add(def);
         }
 
-        consume(TokenType.LBRACE, "Expected '{' to start flow body");
-        List<FlowSpec> statements = parseStatements();
-        Token endToken = consume(TokenType.RBRACE, "Expected '}' to close flow body");
-
-        FlowSpec root;
-        if (statements.isEmpty()) {
-            root = new SequenceSpec(Collections.<FlowSpec>emptyList(), span(startToken, endToken));
-        } else if (statements.size() == 1) {
-            root = statements.get(0);
-        } else {
-            root = new SequenceSpec(statements, span(startToken, endToken));
+        if (definitions.isEmpty()) {
+            throw new FlowDiagnosticException(new Diagnostic(
+                    DiagnosticCodes.INVALID_DEFINITION, "No flow definition found in DSL", SourceSpan.UNKNOWN));
         }
+        return definitions;
+    }
 
-        FlowDefinition def = new FlowDefinition(schema, flowId, version, root, sourceName, span(startToken, endToken));
-        consume(TokenType.EOF, "Unexpected content after flow definition");
-        return def;
+    /**
+     * 解析顶层 FlowDefinition（若包含多个 flow 则返回最后一个/主 flow）。
+     *
+     * @return 流程定义 AST
+     */
+    public FlowDefinition parseDefinition() {
+        List<FlowDefinition> defs = parseDefinitions();
+        if (defs.size() == 1) {
+            return defs.get(0);
+        }
+        return defs.get(defs.size() - 1);
     }
 
     private List<FlowSpec> parseStatements() {
@@ -107,6 +157,8 @@ public final class FlowDslParser {
 
         if (match(TokenType.STEP)) {
             return parseStep(token);
+        } else if (match(TokenType.CALL)) {
+            return parseCall(token);
         } else if (match(TokenType.ROUTE)) {
             return parseRoute(token);
         } else if (match(TokenType.FIRST_APPLICABLE)) {
@@ -201,6 +253,69 @@ public final class FlowDslParser {
         }
 
         return new StepSpec(operation, project, merge, modifiers, span(startToken, endToken));
+    }
+
+    private FlowSpec parseCall(Token startToken) {
+        Token flowToken = consumeIdentifierOrString("Expected flow ID after 'call'");
+        SymbolRef flow = SymbolRef.of(flowToken.text(), flowToken.span());
+
+        SymbolRef project = null;
+        SymbolRef merge = null;
+        List<ModifierSpec> modifiers = new ArrayList<ModifierSpec>();
+        Token endToken = flowToken;
+
+        if (match(TokenType.LBRACE)) {
+            while (!check(TokenType.RBRACE) && !isAtEnd()) {
+                Token modStart = peek();
+                if (match(TokenType.PROJECT)) {
+                    if (project != null) {
+                        throw new FlowDiagnosticException(new Diagnostic(
+                                DiagnosticCodes.DUPLICATE_STEP_PROJECT,
+                                "Duplicate 'project' declaration in call",
+                                modStart.span()));
+                    }
+                    Token projToken = consumeIdentifier("Expected projector ID after 'project'");
+                    project = SymbolRef.of(projToken.text(), projToken.span());
+                } else if (match(TokenType.MERGE)) {
+                    if (merge != null) {
+                        throw new FlowDiagnosticException(new Diagnostic(
+                                DiagnosticCodes.DUPLICATE_STEP_MERGE,
+                                "Duplicate 'merge' declaration in call",
+                                modStart.span()));
+                    }
+                    Token mergeToken = consumeIdentifier("Expected merger ID after 'merge'");
+                    merge = SymbolRef.of(mergeToken.text(), mergeToken.span());
+                } else if (match(TokenType.OPTIONAL)) {
+                    modifiers.add(new OptionalModifierSpec(modStart.span()));
+                } else if (match(TokenType.NAMED)) {
+                    Token nameToken = consume(TokenType.STRING, "Expected string label after 'named'");
+                    modifiers.add(new NamedModifierSpec(nameToken.text(), span(modStart, nameToken)));
+                } else if (match(TokenType.TIMEOUT)) {
+                    Token durToken = consume(TokenType.DURATION, "Expected duration literal after 'timeout'");
+                    modifiers.add(new TimeoutModifierSpec((Duration) durToken.value(), span(modStart, durToken)));
+                } else if (match(TokenType.POLICY)) {
+                    Token policyToken = consumeIdentifier("Expected policy ID after 'policy'");
+                    SymbolRef policyRef = SymbolRef.of(policyToken.text(), policyToken.span());
+                    SymbolRef keyRef = parseOptionalKey();
+                    Map<String, Object> config = parseOptionalConfigBlock("Expected '}' after policy configuration");
+                    if (keyRef == null && config.containsKey("key")) {
+                        Object keyVal = config.get("key");
+                        keyRef = SymbolRef.of(String.valueOf(keyVal));
+                    }
+                    modifiers.add(new PolicyModifierSpec(policyRef, keyRef, config, span(modStart, previous())));
+                } else if (match(TokenType.RETRY)) {
+                    Token retryToken = consumeIdentifier("Expected retry policy ID after 'retry'");
+                    SymbolRef retryRef = SymbolRef.of(retryToken.text(), retryToken.span());
+                    Map<String, Object> config = parseOptionalConfigBlock("Expected '}' after retry configuration");
+                    modifiers.add(new RetryModifierSpec(retryRef, config, span(modStart, previous())));
+                } else {
+                    throw error(modStart, "Unexpected call modifier: " + modStart.text());
+                }
+            }
+            endToken = consume(TokenType.RBRACE, "Expected '}' to close call modifier block");
+        }
+
+        return new CallSpec(flow, project, merge, modifiers, span(startToken, endToken));
     }
 
     private FlowSpec parseRoute(Token startToken) {

@@ -1,6 +1,8 @@
 package com.team4u.framework.flow.definition.binding;
 
 import com.team4u.framework.flow.Flow;
+import com.team4u.framework.flow.Local;
+import com.team4u.framework.flow.LocalExecutable;
 import com.team4u.framework.flow.api.Branch;
 import com.team4u.framework.flow.api.JoinStrategy;
 import com.team4u.framework.flow.api.Operation;
@@ -81,6 +83,98 @@ public final class SpecBinders {
 
             // 应用 Step 上的 Modifier 列表（后声明的位于外层）
             for (ModifierSpec mod : step.modifiers()) {
+                flow = applyModifier(flow, mod, context);
+            }
+
+            return flow;
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        private Flow applyModifier(Flow flow, ModifierSpec mod, BindingContext context) {
+            if (mod instanceof OptionalModifierSpec) {
+                return Flow.firstApplicable(flow, Flow.identity());
+            } else if (mod instanceof PolicyModifierSpec) {
+                PolicyModifierSpec policyMod = (PolicyModifierSpec) mod;
+                return (Flow) context.applyPolicy(flow, policyMod.policy().id(), policyMod.key(), policyMod.configuration());
+            } else if (mod instanceof RetryModifierSpec) {
+                RetryModifierSpec retryMod = (RetryModifierSpec) mod;
+                return (Flow) context.applyPolicy(flow, retryMod.retry().id(), null, retryMod.configuration());
+            } else if (mod instanceof TimeoutModifierSpec) {
+                return flow.timeout(((TimeoutModifierSpec) mod).duration());
+            } else if (mod instanceof NamedModifierSpec) {
+                return flow.named(((NamedModifierSpec) mod).name());
+            }
+            return flow;
+        }
+    }
+
+    public static final class CallSpecBinder implements SpecBinder<CallSpec> {
+        @Override
+        public Class<? extends FlowSpec> key() {
+            return CallSpec.class;
+        }
+
+        @Override
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        public Flow<?, ?> bind(CallSpec call, BindingContext context) {
+            FlowDefinition subflowDef = context.subflow(call.flow().id());
+            Flow subflow;
+            if (subflowDef != null) {
+                subflow = context.bindSpec(subflowDef.root());
+            } else {
+                OperationDescriptor op = context.registry().operation(call.flow().id());
+                if (op == null) {
+                    throw new FlowDiagnosticException(
+                            DiagnosticCodes.UNKNOWN_FLOW, "Flow not found: " + call.flow().id());
+                }
+                if (op.instance() != null) {
+                    subflow = Flow.step((Operation) op.instance());
+                } else {
+                    subflow = Flow.step((Class) op.contract(), op.qualifier());
+                }
+            }
+
+            SymbolRef projectRef = call.project();
+            SymbolRef mergeRef = call.merge();
+
+            Function<Object, Object> projectFn = Function.identity();
+            if (projectRef != null) {
+                ProjectorDescriptor projDesc = context.registry().projector(projectRef.id());
+                if (projDesc != null) {
+                    projectFn = projDesc.function();
+                }
+            }
+
+            BiFunction<Object, Object, Object> mergeFn = (state, result) -> result;
+            if (mergeRef != null) {
+                MergerDescriptor mergeDesc = context.registry().merger(mergeRef.id());
+                if (mergeDesc != null) {
+                    mergeFn = mergeDesc.function();
+                }
+            }
+
+            Flow flow;
+            if (projectRef != null || mergeRef != null) {
+                LocalExecutable subExec = Local.compile(subflow, context.resolver());
+                Operation subflowOp = (opCtx, input) -> {
+                    com.team4u.framework.flow.model.FlowResult res = subExec.run(input);
+                    if (res instanceof com.team4u.framework.flow.model.FlowResult.Completed) {
+                        return ((com.team4u.framework.flow.model.FlowResult.Completed) res).outcome();
+                    } else if (res instanceof com.team4u.framework.flow.model.FlowResult.Suspended) {
+                        return com.team4u.framework.flow.model.Outcome.failed(
+                                com.team4u.framework.flow.model.Failure.of("SUBFLOW_SUSPENDED", "Subflow suspended unexpectedly"));
+                    } else {
+                        return com.team4u.framework.flow.model.Outcome.failed(
+                                com.team4u.framework.flow.model.Failure.of("CANCELLED", "Subflow was cancelled"));
+                    }
+                };
+                flow = Flow.identity().use(subflowOp, projectFn, mergeFn);
+            } else {
+                flow = subflow;
+            }
+
+            // 应用 Call 上的 Modifier 列表
+            for (ModifierSpec mod : call.modifiers()) {
                 flow = applyModifier(flow, mod, context);
             }
 
