@@ -1,4 +1,4 @@
-# 文本 DSL 语法与统一门面 (team4u-flow-dsl)
+# 文本 DSL 语法与统一门面
 
 `team4u-flow-dsl` 提供了人类可读的流程声明式文本领域特定语言（Flow DSL）。通过极简、直观的类自然语言语法，开发者、业务人员与架构师可以轻松编排复杂的顺序流水线、条件路由、并行并发、超时限流、重试补偿与异步挂起流程，并由统一门面 `FlowDsl` 一键编译为强类型执行器。
 
@@ -15,7 +15,7 @@
 
 ---
 
-## 10 秒极简速览 (Quick Taste)
+## 极简速览
 
 一份典型的 `.flow` 文件如下所示：
 
@@ -72,12 +72,12 @@ FlowResult<OrderContext> result = executable.run(new OrderContext("ORD-1001"));
 
 - **纯声明式与无隐式副作用**：无死循环、无全局可变变量，所有数据流转由入参出参严格驱动；
 - **解耦符号身份**：DSL 文本中严格只使用业务字符串标识（如 `order.validate`、`payment.standard`），不暴露任何 Java 类名、包路径，彻底隔离配置层与实现层；
-- **单模型多执行引擎 (Single Execution Model)** ：同一份 DSL 既可编译为极速内存同步执行器（`Local`），也可直接驱动支持 CAS 检查点与断点续跑的持久化执行器（`Durable`）；
+- **单模型多执行引擎** ：同一份 DSL 既可编译为极速内存同步执行器（`Local`），也可直接驱动支持 CAS 检查点与断点续跑的持久化执行器（`Durable`）；
 - **编译期零反射与精准报错**：在 `FlowDsl.bind` 时一次性完成静态类型推导与符号注入，运行时执行原生委托，零反射开销；语法错误精确提示到源码行号与列号。
 
 ---
 
-## 语法速查卡片 (Syntax Cheat Sheet)
+## 语法速查卡片
 
 | 业务诉求 | DSL 语法表达 | 简要说明 |
 | :--- | :--- | :--- |
@@ -101,7 +101,7 @@ FlowResult<OrderContext> result = executable.run(new OrderContext("ORD-1001"));
 
 ## 完整语法原语详解
 
-### 流程声明与版本 (Flow Declaration)
+### 流程声明与版本
 
 每个 DSL 文本以可选的 `schema` 头部开头，随后使用 `flow` 声明根流程块：
 
@@ -114,7 +114,7 @@ flow order.fulfillment version 1.0 {
 }
 ```
 
-### 步骤与修饰符 (Step & Modifiers)
+### 步骤与修饰符
 
 原子业务步骤使用 `step <operation-id>` 声明，支持附加各类修饰器：
 
@@ -150,10 +150,10 @@ step inventory.reserve {
 ```
 
 > [!NOTE]
-> **洋葱圈嵌套规则 (Onion-Skin Model)** ：
+> **洋葱圈嵌套规则** ：
 > 在单个 `step` 内声明多个修饰器时，框架严格由外向内包裹执行：`named -> timeout -> policy / retry -> optional -> merge/project(operation)`。
 
-### 条件路由 (Route)
+### 条件路由
 
 使用 `route <selector-id>` 根据选择器操作返回的键值进行多路分支匹配：
 
@@ -179,7 +179,7 @@ route order.paymentStatus {
 - `case <literal>`：匹配特定分支（支持枚举名称、带引号字符串或数字）；
 - `otherwise`：当所有 `case` 均未命中时的兜底流程（若未显式声明且未命中，默认以 `NO_ROUTE` 弃权短路）。
 
-### 首选候选分支 (FirstApplicable)
+### 首选候选分支
 
 表达按优先级尝试多个备选方案的语义。按顺序尝试各分支，只要遇到首个 `Accepted` 成功即采纳并结束；若返回 `Skipped` 弃权则自动尝试下一个备选：
 
@@ -196,7 +196,7 @@ firstApplicable {
 }
 ```
 
-### 失败恢复与补偿 (Recover)
+### 失败恢复与补偿
 
 声明针对业务拒绝（`Rejected`）或技术故障（`Failed`）的补偿流程：
 
@@ -214,7 +214,7 @@ recover {
 }
 ```
 
-### 结构化并行 (Parallel & Join)
+### 结构化并行与汇聚
 
 使用 `parallel` 声明多分支并发执行，并通过 `join <join-id>` 指定结果汇合策略：
 
@@ -233,7 +233,7 @@ parallel {
 }
 ```
 
-### 异步挂起等待 (Await)
+### 异步挂起等待
 
 使用 `await <resume-point-id>` 声明流程在此处暂停执行并让出当前计算线程。流程状态在唤醒时将转变为复合类型 `Resumed<V, S>`（原值与唤醒信号载荷）：
 
@@ -245,7 +245,7 @@ await payment.callback
 step payment.processCallback
 ```
 
-### 显式终态结果 (Complete)
+### 显式终态结果
 
 显式构造四态业务结果并终止当前分支或整个流程：
 
@@ -256,7 +256,7 @@ skipped "CONDITION_NOT_MET"   # 显式弃权
 failed "THIRD_PARTY_TIMEOUT"  # 显式技术失败，附带错误码
 ```
 
-### 作用域治理控制 (Scope Controls)
+### 作用域治理控制
 
 支持对一组连续语句应用全局切面治理：
 
@@ -282,14 +282,14 @@ scope "settlementPhase" {
 
 ---
 
-## 嵌套流程与子流程编排 (Nested & Modular Subflows)
+## 嵌套流程与子流程编排
 
 在面对大型、复杂的业务编排时，将庞大的流水线拆解为层次分明、高内聚的嵌套子结构或独立子流程，是保持流程清晰与高可维护性的关键。`team4u-flow-dsl` 原生支持以下编排模式：
 
-- **单文件多流程独立声明与原生调用 (In-File Multi-Flow & Native Call)** ：同一 DSL 文件内支持定义多个独立的 `flow <id> { ... }` 块，主流程使用原生 `call <subflowId>` 语法进行模块化调用；
-- **跨文件/注册表模块化子流程 (Registry Subflows)** ：将子流程定义注册至 [`FlowDefinitionRegistry`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/registry/FlowDefinitionRegistry.java)，通过 `call` 跨脚本/跨模块复用；
-- **语法块级多层控制流嵌套 (Block-Level Structural Nesting)** ：在 `route` 分支、`parallel` 并行分支、`recover` 补偿块或治理 `scope` 内部，自由多层嵌套子路由、子并行与顺序流水线；
-- **上下文投影与结果融合 (Projection & Merge)** ：`call` 原语原生支持 `project` 与 `merge`，实现主流程与子流程入参裁剪与出参回写的无缝解耦。
+- **单文件多流程独立声明与原生调用** ：同一 DSL 文件内支持定义多个独立的 `flow <id> { ... }` 块，主流程使用原生 `call <subflowId>` 语法进行模块化调用；
+- **跨文件/注册表模块化子流程** ：将子流程定义注册至 [`FlowDefinitionRegistry`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/registry/FlowDefinitionRegistry.java)，通过 `call` 跨脚本/跨模块复用；
+- **语法块级多层控制流嵌套** ：在 `route` 分支、`parallel` 并行分支、`recover` 补偿块或治理 `scope` 内部，自由多层嵌套子路由、子并行与顺序流水线；
+- **上下文投影与结果融合** ：`call` 原语原生支持 `project` 与 `merge`，实现主流程与子流程入参裁剪与出参回写的无缝解耦。
 
 ### 单文件多 Flow 独立声明与 call 调用
 
@@ -417,12 +417,12 @@ flow order.omnichannel version 1 {
 ### 嵌套流程设计最佳实践
 
 - **优先拆解独立 Flow 与原生 call 调用** ：避免将上百行的庞大业务逻辑堆砌在单一 flow 块内。按业务内聚度将主干与分支拆为多个 subflow，利用 `call` 原生组装，使 DSL 具备极高的可读性与模块化维护体验；
-- **上下文数据隔离 (Context Encapsulation)** ：主流程与子流程避免强制绑定同一个扁平大 Context。优先使用 `project`（入参裁剪提取）与 `merge`（输出合并回写），使每个子流程保持强类型单一职责与独立单测能力；
-- **嵌套并发线程池配置 (Nested Parallel Scheduling)** ：当在 `parallel` 分支内部进一步嵌套 `parallel` 并行或 `timeout` 超时控制时，底层 Worker 线程池推荐配置支持工作窃取与动态补偿的 `ForkJoinPool`，防止传统固定容量线程池在多层嵌套阻塞等待时产生线程饥饿死锁。
+- **上下文数据隔离** ：主流程与子流程避免强制绑定同一个扁平大 Context。优先使用 `project`（入参裁剪提取）与 `merge`（输出合并回写），使每个子流程保持强类型单一职责与独立单测能力；
+- **嵌套并发线程池配置** ：当在 `parallel` 分支内部进一步嵌套 `parallel` 并行或 `timeout` 超时控制时，底层 Worker 线程池推荐配置支持工作窃取与动态补偿的 `ForkJoinPool`，防止传统固定容量线程池在多层嵌套阻塞等待时产生线程饥饿死锁。
 
 ---
 
-## 统一门面 API (FlowDsl)
+## 统一门面 API
 
 [`FlowDsl`](file:///root/code/team4u-framework/modules/flow/dsl/src/main/java/com/team4u/framework/flow/dsl/FlowDsl.java) 是面向业务调用方的统一静态入口：
 
@@ -453,7 +453,7 @@ BoundFlow boundFlow = FlowDsl.bind(def, registry, springBeanResolver);
 
 ---
 
-## 错误诊断体验 (Diagnostics & Error Reporting)
+## 错误诊断与提示
 
 当 DSL 文本存在语法拼写错误、括号未闭合或类型不兼容时，`FlowDsl` 会抛出结构化异常 [`FlowDiagnosticException`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/diagnostic/FlowDiagnosticException.java)，精准打印源文件名、行号与列号：
 
