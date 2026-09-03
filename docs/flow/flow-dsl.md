@@ -816,7 +816,7 @@ Spring Bean 编排模式通过 Java 强类型 Fluent API 构建流程拓扑，�
 | 业务编排环节 | 文本 DSL 语法表达 | Spring Bean 强类型 Java 等价表达 | 等价说明 |
 | :--- | :--- | :--- | :--- |
 | **基础入参校验** | `step order.validate { named "..."; timeout 500ms; }` | `Flow.step(ValidateOrderOp.class).named("...").timeout(Duration.ofMillis(500))` | 延迟解析 Class 契约，附加中文标签与超时时限修饰器 |
-| **数据投影与合并** | `step inventory.reserve { project order.items; merge order.withReservation; timeout 1s; }` | `.use(ReserveInventoryOp.class, OrderContext::getItems, merger).named("...").timeout(Duration.ofSeconds(1))` | `use` 组合入参提取投影与出参回写合并 |
+| **数据投影与合并** | `step inventory.reserve { project order.items; merge order.withReservation; timeout 1s; }` | `.use(ReserveInventoryOp.class).project(OrderContext::getItems).named("...").timeout(Duration.ofSeconds(1)).merge(merger)` | `use` 链式分阶段组合入参提取投影、修饰器与出参合并 |
 | **限流重试治理** | `step payment.charge { policy payment.rateLimit key ...; retry ...; timeout 3s; }` | `Flow.step(ChargePaymentOp.class).policy(PaymentRateLimitPolicy.class, keyFn).persistentPolicy(retryPolicy, keyFn)...` | 无状态准入 Policy 与持久化重试策略链式包裹 |
 | **条件多路分流** | `route order.paymentStatus { case PAID { ... } case UNPAID { ... } otherwise { ... } }` | `Flow.route(PaymentStatusSelector.class).caseOf(PaymentState.PAID, ...).caseOf(PaymentState.UNPAID, ...).otherwise(...)` | 状态判决器返回路由键并精确匹配分支 |
 | **结构化并行汇聚** | `parallel { branch riskAudit { ... } branch customerNotify { ... } join order.parallelPassed; }` | `Flow.parallel(Branch.of("riskAudit", RiskAuditOp.class), Branch.of("customerNotify", SendSmsOp.class)).join(new ParallelPassedJoin())` | 多分支并发执行与 JoinStrategy 汇聚归约 |
@@ -838,17 +838,15 @@ public class OrderFulfillmentBeanConfiguration {
                 .timeout(Duration.ofMillis(500))
 
                 // 2. 等价于 DSL 中的: step inventory.reserve { project order.items; merge order.withReservation; timeout 1s; }
-                .use(
-                        ReserveInventoryOp.class,
-                        OrderContext::getItems,
-                        (ctx, res) -> {
-                            ctx.setReservationId(res);
-                            ctx.getLogs().add("reserved:" + res);
-                            return ctx;
-                        }
-                )
+                .use(ReserveInventoryOp.class)
+                .project(OrderContext::getItems)
                 .named("锁定商品库存")
                 .timeout(Duration.ofSeconds(1))
+                .merge((ctx, res) -> {
+                    ctx.setReservationId(res);
+                    ctx.getLogs().add("reserved:" + res);
+                    return ctx;
+                })
 
                 // 3. 等价于 DSL 中的: step payment.charge { policy payment.rateLimit key order.userId; retry ...; timeout 3s; }
                 .then(

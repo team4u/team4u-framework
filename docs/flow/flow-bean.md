@@ -45,7 +45,7 @@
 | **单步起点** | `Flow.step(Class<Op>)` | `Flow.step(Class<Op>, "beanName")` |
 | **顺序步骤** | `flow.then(Class<Op>)` | `flow.then(Class<Op>, "beanName")` |
 | **可选步骤** | `flow.thenOptional(Class<Op>)` | `flow.thenOptional(Class<Op>, "beanName")` |
-| **上下文调用** | `flow.use(Class<Op>, proj, merge)` | `flow.use(Class<Op>, "beanName", proj, merge)` |
+| **上下文调用** | `flow.use(Class<Op>).project(proj).merge(merge)` | `flow.use(Class<Op>, "beanName").project(proj).merge(merge)` |
 | **条件路由** | `Flow.route(Class<Op>)` | `Flow.route(Class<Op>, "beanName")` |
 | **并行分支** | `Branch.of(name, Class<Op>)` | `Branch.of(name, Class<Op>, "beanName")` |
 | **无状态网关** | `flow.policy(Class<Policy>, keyFn)` | `flow.policy(Class<Policy>, "beanName", keyFn)` |

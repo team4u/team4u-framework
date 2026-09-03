@@ -295,11 +295,10 @@ Flow<OrderRequest, Receipt> recoverFlow = Flow.step(chargeOperation)
 调用外部服务而不丢失上游主上下文：
 
 ```java
-Flow<State, State> enriched = Flow.<State>identity().use(
-        riskOperation,             // Operation<RiskReq, RiskScore> 或 Class 绑定
-        State::toRiskRequest,      // project: 派生入参
-        (state, score) -> state.withScore(score) // merge: 合并结果
-);
+Flow<State, State> enriched = Flow.<State>identity()
+        .use(riskOperation)                      // Operation<RiskReq, RiskScore> 或 Class 绑定
+        .project(State::toRiskRequest)           // project: 派生入参
+        .merge((state, score) -> state.withScore(score)); // merge: 合并结果
 ```
 
 ### 子流程适配与只读旁路

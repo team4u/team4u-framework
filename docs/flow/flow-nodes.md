@@ -98,11 +98,19 @@ graph LR
 ```
 
 ```java
-Flow<OrderState, OrderState> flow = Flow.<OrderState>identity().use(
-        RiskCheckOperation.class,
-        orderState -> new RiskReq(orderState.getUserId(), orderState.getAmount()), // project
-        (orderState, riskScore) -> orderState.withRiskScore(riskScore)            // merge
-);
+// 链式分阶段投影调用（UseBuilder 模式）
+Flow<OrderState, OrderState> flow = Flow.<OrderState>identity()
+        .use(RiskCheckOperation.class)
+        .project(orderState -> new RiskReq(orderState.getUserId(), orderState.getAmount())) // project
+        .merge((orderState, riskScore) -> orderState.withRiskScore(riskScore));            // merge
+
+// 支持在中间自由叠加单步修饰器（如 named、timeout 等）
+Flow<OrderState, OrderState> flowWithGovernance = Flow.<OrderState>identity()
+        .use(RiskCheckOperation.class)
+        .project(orderState -> new RiskReq(orderState.getUserId(), orderState.getAmount()))
+        .named("前置风控拦截")
+        .timeout(Duration.ofSeconds(2))
+        .merge((orderState, riskScore) -> orderState.withRiskScore(riskScore));
 ```
 
 #### 内核执行机制
