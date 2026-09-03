@@ -44,14 +44,14 @@ public final class FlowDslParser {
     public List<FlowDefinition> parseDefinitions() {
         int schema = 1;
 
-        // 可选全局头部 schema 1 或 2
+        // 可选全局头部 schema 1
         if (match(TokenType.SCHEMA)) {
             Token schemaToken = consumeIntegerToken("Expected schema version number after 'schema'");
             schema = ((Number) schemaToken.value()).intValue();
-            if (schema != 1 && schema != 2) {
+            if (schema != 1) {
                 throw new FlowDiagnosticException(new Diagnostic(
                         DiagnosticCodes.DSL_UNSUPPORTED_SCHEMA,
-                        "Unsupported DSL schema version: " + schema + " (currently schema 1 and 2 are supported)",
+                        "Unsupported DSL schema version: " + schema + " (currently only schema 1 is supported)",
                         schemaToken.span()));
             }
         }
@@ -62,10 +62,10 @@ public final class FlowDslParser {
             if (match(TokenType.SCHEMA)) {
                 Token schemaToken = consumeIntegerToken("Expected schema version number after 'schema'");
                 schema = ((Number) schemaToken.value()).intValue();
-                if (schema != 1 && schema != 2) {
+                if (schema != 1) {
                     throw new FlowDiagnosticException(new Diagnostic(
                             DiagnosticCodes.DSL_UNSUPPORTED_SCHEMA,
-                            "Unsupported DSL schema version: " + schema + " (currently schema 1 and 2 are supported)",
+                            "Unsupported DSL schema version: " + schema + " (currently only schema 1 is supported)",
                             schemaToken.span()));
                 }
                 startToken = peek();

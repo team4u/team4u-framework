@@ -123,7 +123,7 @@ graph TD
 | 诊断码 | 所属阶段 | 根本原因 | 修复指引 |
 | :--- | :--- | :--- | :--- |
 | **`DSL_SYNTAX_ERROR`** | Parser | DSL 文本语法错误、非预期记号或未闭合大括号 | 检查报错行号列号，修正 DSL 语法结构 |
-| **`DSL_UNSUPPORTED_SCHEMA`** | Parser | DSL 声明的 `schema` 版本不受支持 | 当前支持 `schema 1` 与 `schema 2` |
+| **`DSL_UNSUPPORTED_SCHEMA`** | Parser | DSL 声明的 `schema` 版本不受支持 | 当前仅支持 `schema 1` |
 | **`UNKNOWN_OPERATION`** | Symbol | DSL 中引用的步骤符号未在 `FlowDefinitionRegistry` 中注册 | 在 Registry 中通过 `.operation(id, ...)` 进行登记 |
 | **`UNKNOWN_POLICY`** | Symbol | 引用的治理策略符号未在 Registry 中注册 | 在 Registry 中通过 `.policy(id, ...)` 或引入对应 SPI 模块 |
 | **`UNKNOWN_PROJECTOR`** | Symbol | 引用的入参提取函数 `project` 符号未注册 | 在 Registry 中通过 `.projector(id, ...)` 注册对应映射函数 |

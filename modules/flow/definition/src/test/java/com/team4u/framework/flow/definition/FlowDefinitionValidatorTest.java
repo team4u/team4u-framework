@@ -19,7 +19,7 @@ import java.util.List;
 public class FlowDefinitionValidatorTest {
 
     @Test
-    public void testSchema1And2Supported() {
+    public void testSchemaValidation() {
         StepSpec step1 = new StepSpec(SymbolRef.of("op1"), null, null, Collections.<ModifierSpec>emptyList(), SourceSpan.UNKNOWN);
         FlowDefinition def1 = new FlowDefinition(1, "flow1", "1", step1, "flow1.flow", SourceSpan.UNKNOWN);
         List<Diagnostic> d1 = FlowDefinitionValidator.validate(def1);
@@ -28,13 +28,8 @@ public class FlowDefinitionValidatorTest {
         StepSpec step2 = new StepSpec(SymbolRef.of("op2"), null, null, Collections.<ModifierSpec>emptyList(), SourceSpan.UNKNOWN);
         FlowDefinition def2 = new FlowDefinition(2, "flow2", "1", step2, "flow2.flow", SourceSpan.UNKNOWN);
         List<Diagnostic> d2 = FlowDefinitionValidator.validate(def2);
-        Assert.assertTrue(d2.isEmpty());
-
-        StepSpec step3 = new StepSpec(SymbolRef.of("op3"), null, null, Collections.<ModifierSpec>emptyList(), SourceSpan.UNKNOWN);
-        FlowDefinition def3 = new FlowDefinition(3, "flow3", "1", step3, "flow3.flow", SourceSpan.UNKNOWN);
-        List<Diagnostic> d3 = FlowDefinitionValidator.validate(def3);
-        Assert.assertFalse(d3.isEmpty());
-        Assert.assertEquals(DiagnosticCodes.DSL_UNSUPPORTED_SCHEMA, d3.get(0).code());
+        Assert.assertFalse(d2.isEmpty());
+        Assert.assertEquals(DiagnosticCodes.DSL_UNSUPPORTED_SCHEMA, d2.get(0).code());
     }
 
     @Test
@@ -42,7 +37,7 @@ public class FlowDefinitionValidatorTest {
         StepSpec sharedStep = new StepSpec(SymbolRef.of("sharedOp"), null, null, Collections.<ModifierSpec>emptyList(), SourceSpan.UNKNOWN);
         SequenceSpec seq = new SequenceSpec(Arrays.asList(sharedStep, sharedStep), SourceSpan.UNKNOWN);
 
-        FlowDefinition def = new FlowDefinition(2, "flow.dup", "1", seq, "dup.flow", SourceSpan.UNKNOWN);
+        FlowDefinition def = new FlowDefinition(1, "flow.dup", "1", seq, "dup.flow", SourceSpan.UNKNOWN);
         List<Diagnostic> diagnostics = FlowDefinitionValidator.validate(def);
 
         Assert.assertFalse(diagnostics.isEmpty());

@@ -862,11 +862,11 @@ public class TaskWorkerTest {
                 closeInterrupted.incrementAndGet();
                 throw ex;
             }
+            lastCloseResult = RuntimeResult.APPLIED;
             closeLatch.countDown();
             if (closeFailure != null) {
                 throw closeFailure;
             }
-            lastCloseResult = RuntimeResult.APPLIED;
             return RuntimeResult.APPLIED;
         }
 

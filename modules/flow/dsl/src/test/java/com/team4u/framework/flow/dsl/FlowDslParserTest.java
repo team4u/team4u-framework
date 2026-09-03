@@ -273,11 +273,15 @@ public class FlowDslParserTest {
     }
 
     @Test
-    public void testSchema2Supported() {
+    public void testSchema2ThrowsDiagnostic() {
         String dsl = "schema 2\nflow test { step op }";
-        FlowDefinition def = parse(dsl, "test.flow");
-        Assert.assertNotNull(def);
-        Assert.assertEquals(2, def.schema());
+        try {
+            parse(dsl, "test.flow");
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(1, ex.getDiagnostics().size());
+            Assert.assertEquals("DSL_UNSUPPORTED_SCHEMA", ex.getDiagnostics().get(0).code());
+        }
     }
 
     @Test

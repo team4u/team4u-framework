@@ -24,11 +24,11 @@ import java.util.Set;
  */
 public final class FlowDefinitionValidator {
 
-    public static final int CURRENT_SCHEMA = 2;
-    public static final int SUPPORTED_SCHEMA = 2;
+    public static final int CURRENT_SCHEMA = 1;
+    public static final int SUPPORTED_SCHEMA = 1;
 
     public static boolean isSupportedSchema(int schema) {
-        return schema == 1 || schema == 2;
+        return schema == 1;
     }
 
     private FlowDefinitionValidator() {
@@ -56,7 +56,7 @@ public final class FlowDefinitionValidator {
         if (!isSupportedSchema(definition.schema())) {
             diagnostics.add(new Diagnostic(
                     DiagnosticCodes.DSL_UNSUPPORTED_SCHEMA,
-                    "Unsupported schema version: " + definition.schema() + " (supported: 1, 2)",
+                    "Unsupported schema version: " + definition.schema() + " (supported: 1)",
                     span));
         }
 
