@@ -135,6 +135,42 @@ public abstract class Outcome<T> {
     }
 
     /**
+     * 当前结果是否为成功态（Accepted）。
+     *
+     * @return 若为 Accepted 返回 true，否则返回 false
+     */
+    public boolean isAccepted() {
+        return this instanceof Accepted;
+    }
+
+    /**
+     * 当前结果是否为业务拒绝态（Rejected）。
+     *
+     * @return 若为 Rejected 返回 true，否则返回 false
+     */
+    public boolean isRejected() {
+        return this instanceof Rejected;
+    }
+
+    /**
+     * 当前结果是否为弃权跳过态（Skipped）。
+     *
+     * @return 若为 Skipped 返回 true，否则返回 false
+     */
+    public boolean isSkipped() {
+        return this instanceof Skipped;
+    }
+
+    /**
+     * 当前结果是否为执行失败态（Failed）。
+     *
+     * @return 若为 Failed 返回 true，否则返回 false
+     */
+    public boolean isFailed() {
+        return this instanceof Failed;
+    }
+
+    /**
      * Outcome 状态类型枚举。
      */
     public enum Kind {

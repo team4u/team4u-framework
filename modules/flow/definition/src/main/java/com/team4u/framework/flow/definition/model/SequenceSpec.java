@@ -38,4 +38,8 @@ public final class SequenceSpec implements FlowSpec {
     public SequenceSpec(List<FlowSpec> elements, SourceSpan span) {
         this(elements, null, span);
     }
+
+    public SequenceSpec(List<FlowSpec> elements) {
+        this(elements, null, SourceSpan.UNKNOWN);
+    }
 }

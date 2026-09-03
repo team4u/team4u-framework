@@ -65,4 +65,28 @@ public class StepSpecMethodsTest {
         );
         seq.elements().add(new StepSpec(SymbolRef.of("s2"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN));
     }
+
+    @Test
+    public void testConvenienceConstructors() {
+        StepSpec step = new StepSpec(SymbolRef.of("s1"));
+        Assert.assertEquals("s1", step.operation().id());
+        Assert.assertEquals(SourceSpan.UNKNOWN, step.span());
+
+        SequenceSpec seq = new SequenceSpec(Collections.singletonList(step));
+        Assert.assertEquals(1, seq.elements().size());
+        Assert.assertNull(seq.scopeName());
+        Assert.assertEquals(SourceSpan.UNKNOWN, seq.span());
+
+        FlowDefinition def = new FlowDefinition(1, "test.flow", "1.0", seq);
+        Assert.assertEquals(1, def.schema());
+        Assert.assertEquals("test.flow", def.id());
+        Assert.assertEquals("1.0", def.version());
+        Assert.assertSame(seq, def.root());
+        Assert.assertNull(def.source());
+        Assert.assertEquals(SourceSpan.UNKNOWN, def.span());
+
+        FlowDefinition def2 = new FlowDefinition("test.flow2", "2.0", seq);
+        Assert.assertEquals(1, def2.schema());
+        Assert.assertEquals("test.flow2", def2.id());
+    }
 }

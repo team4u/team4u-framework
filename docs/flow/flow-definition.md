@@ -124,12 +124,13 @@ sequenceDiagram
 使用纯数据 AST 组装流程结构。以下示例构建一个包含“参数校验 -> 锁定库存 -> 扣减支付”的顺序流水线：
 
 ```java
-StepSpec validateStep = new StepSpec(SymbolRef.of("order.validate"), null, null);
-StepSpec inventoryStep = new StepSpec(SymbolRef.of("inventory.reserve"), null, null);
-StepSpec paymentStep = new StepSpec(SymbolRef.of("payment.charge"), null, null);
+// 业务步骤定义
+StepSpec validateStep = new StepSpec(SymbolRef.of("order.validate"));
+StepSpec inventoryStep = new StepSpec(SymbolRef.of("inventory.reserve"));
+StepSpec paymentStep = new StepSpec(SymbolRef.of("payment.charge"));
 
 // 组合为顺序流水线 AST
-SequenceSpec pipeline = new SequenceSpec(Arrays.asList(validateStep, inventoryStep, paymentStep), null);
+SequenceSpec pipeline = new SequenceSpec(Arrays.asList(validateStep, inventoryStep, paymentStep));
 
 // 包装为完整的流程定义（包含流程标识与版本号）
 FlowDefinition definition = new FlowDefinition(
@@ -182,7 +183,7 @@ System.out.println("输出类型: " + boundFlow.outputType().typeName());
 
 > [!TIP]
 > **Spring Bean 自动解析** ：
-> 只要项目中引入了 `team4u-flow-bean`（配合 `team4u-bean-spring`），`FlowBinder` 默认会通过 SPI 自动加载 [`BeanOperationResolver`](file:///root/code/team4u-framework/modules/flow/bean/src/main/java/com/team4u/framework/flow/bean/BeanOperationResolver.java)，自动完成 Spring 单例 Bean 与限定符的依赖注入，无需在代码中手动传递任何 resolver 参数。
+> 只要项目中引入了 `team4u-flow-bean`（配合 `team4u-bean-spring`），`FlowBinder` 默认会通过 SPI 自动加载 [`BindingResolver`](file:///root/code/team4u-framework/modules/flow/core/src/main/java/com/team4u/framework/flow/spi/BindingResolver.java)（如 [`BeanOperationResolver`](file:///root/code/team4u-framework/modules/flow/bean/src/main/java/com/team4u/framework/flow/bean/BeanOperationResolver.java)），自动完成 Spring 单例 Bean 与限定符的依赖注入，无需在代码中手动传递任何 resolver 参数。
 
 若配置中存在类型不兼容（例如上游输出 `OrderContext`，下游步骤却需要 `PaymentRequest`），编译器将在启动时立即报错并精确指出问题节点：
 
@@ -192,7 +193,7 @@ System.out.println("输出类型: " + boundFlow.outputType().typeName());
 
 ### 原子发布与并发执行
 
-通过 `FlowPublisher` 进行版本发布。发布器保障同一个 `(flowId, version)` 一旦发布即全局不可变，并支持随时获取已编译好的极速执行器：
+通过 `FlowPublisher` 进行版本发布。发布器保障同一个 `(flowId, version)` 一旦发布即全局不可变，并支持按需编译为强类型极速执行器：
 
 ```java
 FlowPublisher publisher = new FlowPublisher(registry);
@@ -203,11 +204,11 @@ publisher.publish(definition);
 // 尝试重复发布相同版本 1.0 将被拒绝并抛出异常，防止线上配置脏覆盖
 // publisher.publish(definition); // Throws IllegalStateException
 
-// 检索已发布流程并编译为极速内存执行器
+// 检索已发布流程并以期望类型编译为强类型内存执行器
 BoundFlow bound = publisher.get("order.fulfillment", "1.0");
-LocalExecutable<OrderContext, OrderResult> executable = bound.compileLocal();
+LocalExecutable<OrderContext, OrderResult> executable = bound.compileLocal(OrderContext.class, OrderResult.class);
 
-// 执行流程
+// 执行流程并检查是否成功
 OrderContext context = new OrderContext("ORD-10001", 199.00);
 FlowResult<OrderResult> result = executable.run(context);
 
@@ -251,6 +252,7 @@ public interface FlowDefinitionReader {
 | 语法节点模型 | 表达的业务语义 | 核心属性与方法 |
 | :--- | :--- | :--- |
 | [`StepSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/StepSpec.java) | 单个原子业务步骤 | `operation()`（业务符号）、`projectSpec()`（入参提取规范，支持符号或 `$.path`）、`mergeSpec()`（结果合并规范）、`modifiers()`（修饰器列表） |
+| [`CallSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/CallSpec.java) | 子流程调用 | `flow()`（子流程符号引用）、`projectSpec()`（入参提取规范）、`mergeSpec()`（结果合并规范）、`modifiers()`（修饰器列表） |
 | [`SequenceSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/SequenceSpec.java) | 顺序执行流水线 | `elements()`（按序执行的子节点只读列表）、`scopeName()`（命名作用域） |
 | [`RouteSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/RouteSpec.java) | 多路条件分支路由 | `selector()`（选择器符号）、`cases()`（Case 分支列表）、`otherwise()`（兜底分支） |
 | [`FirstApplicableSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FirstApplicableSpec.java) | 按优先级尝试候选分支 | `branches()`（候选分支列表，遇 `Skipped` 自动尝试下一个，首个 `Accepted` 即终止） |
@@ -258,13 +260,13 @@ public interface FlowDefinitionReader {
 | [`ParallelSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/ParallelSpec.java) | 结构化多分支并发 | `branches()`（多命名并发分支）、`joinSpec()`（汇聚策略规范，支持内置策略或自定义符号） |
 | [`AwaitSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/AwaitSpec.java) | 异步外部挂起等待 | `resumePoint()`（挂起点符号，等待外部异步信号唤醒） |
 | [`CompleteSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/CompleteSpec.java) | 显式返回终态结果 | `kind()`（`ACCEPTED`/`REJECTED`/`SKIPPED`/`FAILED`）、`literal()`（原因码/描述） |
-| [`ControlSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/ControlSpec.java) | 作用域级策略控制 | `kind()`（`TIMEOUT`/`POLICY`/`RETRY`/`SCOPE`/`NAMED`）、`configuration()`、`body()` |
+| [`ControlSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/ControlSpec.java) | 作用域级策略控制 | `kind()`（`TIMEOUT`/`POLICY`/`RETRY`/`SCOPE`/`NAMED`）、`symbol()`（治理策略符号）、`key()`（路由键符号）、`configuration()`、`body()` |
 
 ---
 
 ## 步骤修饰器与洋葱圈模型
 
-单个业务步骤（[`StepSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/StepSpec.java)）可以通过修饰器列表（[`ModifierSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/ModifierSpec.java)）叠加治理能力：
+单个业务步骤（[`StepSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/StepSpec.java)）或子流程调用（[`CallSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/CallSpec.java)）直接支持通过 `projectSpec()` 与 `mergeSpec()` 进行入参提取与结果合并；在此基础之上，可通过修饰器列表（[`ModifierSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/ModifierSpec.java)）叠加治理切面能力：
 
 ```mermaid
 graph TD
@@ -273,22 +275,23 @@ graph TD
         T["timeout (超时控制)"]
         P["policy / retry (限流与重试切面)"]
         O["optional (可选弃权保护)"]
-        M["merge / project (数据转换)"]
-        OP["operation (业务核心执行)"]
+        OP["operation (业务核心执行与入参提取/结果合并)"]
 
-        N --> T --> P --> O --> M --> OP
+        N --> T --> P --> O --> OP
     end
 ```
 
 ### 内置修饰器一览
 
-- **入参提取 (`project`)** ：从上游复合上下文大对象中提取当前步骤需要的字段入参（$I \to P$），支持注册表符号或 `$.path` 属性表达式；
-- **结果合并 (`merge`)** ：将步骤执行返回的局部结果合并回主状态流水线（$(I, R) \to O$），支持注册表符号或 `$.path` 属性表达式；
-- **可选步骤 (`optional`)** ：声明该步骤为可选；当步骤弃权返回 `Skipped` 时，自动透传步骤入口原值继续执行后续流程；
 - **业务标签 (`named`)** ：为步骤赋予中文展示名称，用于日志追踪与 Mermaid 流程图可视化；
 - **超时控制 (`timeout`)** ：指定该步骤的最大允许耗时（如 `500ms`, `2s`）；
 - **策略切面 (`policy`)** ：绑定限流、鉴权等治理切面，支持指定路由 Key 提取器与配置字典；
-- **重试切面 (`retry`)** ：绑定重试策略，支持动态配置最大重试次数与退避时长。
+- **重试切面 (`retry`)** ：绑定重试策略，支持动态配置最大重试次数与退避时长；
+- **可选步骤 (`optional`)** ：声明该步骤为可选；当步骤弃权返回 `Skipped` 时，自动透传步骤入口原值继续执行后续流程。
+
+> [!NOTE]
+> **数据投影与合并规范** ：
+> 入参提取（`projectSpec`，支持符号或 `$.path`）与结果合并（`mergeSpec`，支持符号或 `$.path`）属于步骤模型的核心契约属性，直接作用于底层核心执行（`Flow.identity().use(...)`），在进入修饰器外层前完成输入投影与结果组装。
 
 ---
 
@@ -298,6 +301,18 @@ graph TD
 
 ```java
 public class MyRateLimitProvider implements PolicyProvider {
+
+    private final PolicyDescriptor descriptor = PolicyDescriptor.builder()
+            .id("rate-limit")
+            .contract(RateLimitPolicy.class)
+            .persistent(false)
+            .build();
+
+    @Override
+    public PolicyDescriptor descriptor() {
+        return descriptor;
+    }
+
     @Override
     public PolicyBinding create(Map<String, Object> configuration) {
         MapReader reader = MapReader.of(configuration);
@@ -314,6 +329,23 @@ public class MyRateLimitProvider implements PolicyProvider {
     }
 }
 ```
+
+> [!TIP]
+> **编程式快速注册** ：
+> 除显式声明提供者类外，`FlowDefinitionRegistry.builder()` 还支持直接通过函数式重载登记动态策略，无需手写提供者样板类：
+> ```java
+> FlowDefinitionRegistry.builder()
+>         .policyProvider("rate-limit", RateLimitPolicy.class, config -> {
+>             MapReader reader = MapReader.of(config);
+>             int permits = reader.getInt("permits", 1, "limit-count");
+>             Duration timeout = reader.getDuration("timeout", Duration.ofSeconds(1));
+>             return PolicyBinding.builder()
+>                     .instance(new RateLimitPolicy(permits, timeout, Action.REJECT))
+>                     .persistent(false)
+>                     .build();
+>         })
+>         .build();
+> ```
 
 ---
 

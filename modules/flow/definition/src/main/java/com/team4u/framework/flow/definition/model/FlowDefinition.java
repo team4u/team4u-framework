@@ -47,6 +47,14 @@ public final class FlowDefinition implements Serializable {
         this.span = span != null ? span : SourceSpan.UNKNOWN;
     }
 
+    public FlowDefinition(int schema, String id, String version, FlowSpec root) {
+        this(schema, id, version, root, null, SourceSpan.UNKNOWN);
+    }
+
+    public FlowDefinition(String id, String version, FlowSpec root) {
+        this(1, id, version, root, null, SourceSpan.UNKNOWN);
+    }
+
     /**
      * 获取元数据。
      *

@@ -337,4 +337,26 @@ public class FlowDefinitionRegistryTest {
             Assert.assertEquals("MISSING_BINDING", ex.problems().get(0).code());
         }
     }
+
+    @Test
+    public void testFunctionalPolicyProviderRegistration() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .policyProvider("dynamic.limit", OrderPolicy.class, config -> {
+                    return com.team4u.framework.flow.definition.registry.PolicyBinding.builder()
+                            .instance(new OrderPolicy())
+                            .persistent(false)
+                            .build();
+                })
+                .build();
+
+        com.team4u.framework.flow.definition.registry.PolicyProvider provider = registry.policyProvider("dynamic.limit");
+        Assert.assertNotNull(provider);
+        Assert.assertEquals("dynamic.limit", provider.descriptor().id());
+        Assert.assertEquals(OrderPolicy.class, provider.descriptor().contract());
+        Assert.assertFalse(provider.descriptor().persistent());
+
+        com.team4u.framework.flow.definition.registry.PolicyBinding binding = provider.create(Collections.emptyMap());
+        Assert.assertNotNull(binding);
+        Assert.assertTrue(binding.instance() instanceof OrderPolicy);
+    }
 }

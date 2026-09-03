@@ -87,6 +87,51 @@ public abstract class FlowResult<O> {
     }
 
     /**
+     * 当前流程是否已执行完成（Completed）。
+     *
+     * @return 若当前为 Completed 态返回 true，否则返回 false
+     */
+    public boolean isCompleted() {
+        return this instanceof Completed;
+    }
+
+    /**
+     * 当前流程是否处于异步挂起等待外部唤醒状态（Suspended）。
+     *
+     * @return 若当前为 Suspended 态返回 true，否则返回 false
+     */
+    public boolean isSuspended() {
+        return this instanceof Suspended;
+    }
+
+    /**
+     * 当前流程是否已被取消（Cancelled）。
+     *
+     * @return 若当前为 Cancelled 态返回 true，否则返回 false
+     */
+    public boolean isCancelled() {
+        return this instanceof Cancelled;
+    }
+
+    /**
+     * 当前流程是否已执行完成且业务结果为成功态（Accepted）。
+     *
+     * @return 若执行完成且为 Accepted 返回 true，否则返回 false
+     */
+    public boolean isAccepted() {
+        return this instanceof Completed && ((Completed<O>) this).outcome().isAccepted();
+    }
+
+    /**
+     * 获取最终的四态业务结果（若当前未完成则返回 null）。
+     *
+     * @return 业务结果实例（若当前为 Completed 态则非 null）
+     */
+    public Outcome<O> outcome() {
+        return this instanceof Completed ? ((Completed<O>) this).outcome() : null;
+    }
+
+    /**
      * 正常完成态：携带流程最终四态结果 {@link Outcome}。
      *
      * @param <O> 输出载荷类型

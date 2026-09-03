@@ -847,6 +847,40 @@ public final class FlowDefinitionRegistry {
             return this;
         }
 
+        public Builder policyProvider(
+                String id,
+                Class<?> contract,
+                boolean persistent,
+                Function<Map<String, Object>, PolicyBinding> factory) {
+            Objects.requireNonNull(id, "policy id must not be null");
+            Objects.requireNonNull(contract, "policy contract must not be null");
+            Objects.requireNonNull(factory, "policy factory must not be null");
+            return policyProvider(new PolicyProvider() {
+                private final PolicyDescriptor descriptor = PolicyDescriptor.builder()
+                        .id(id)
+                        .contract(contract)
+                        .persistent(persistent)
+                        .build();
+
+                @Override
+                public PolicyDescriptor descriptor() {
+                    return descriptor;
+                }
+
+                @Override
+                public PolicyBinding create(Map<String, Object> configuration) {
+                    return factory.apply(configuration);
+                }
+            });
+        }
+
+        public Builder policyProvider(
+                String id,
+                Class<?> contract,
+                Function<Map<String, Object>, PolicyBinding> factory) {
+            return policyProvider(id, contract, false, factory);
+        }
+
         public Builder projector(ProjectorDescriptor descriptor) {
             Objects.requireNonNull(descriptor, "projector descriptor must not be null");
             if (this.projectors.containsKey(descriptor.id())) {
