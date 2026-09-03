@@ -63,7 +63,7 @@ Flow<Order, CombinedReport> parallelFlow = Flow.<Order>parallel(riskBranch, stoc
 | **全量成功** | `Joins.allAccepted()` / `Joins.allAcceptedBarrier()` | `join all`（执行栅栏汇聚） | 全部分支均为 `Accepted` 时通过 | 若有任意分支非 Accepted，按声明顺序返回首个非 Accepted 状态 |
 | **首选成功** | `Joins.firstAccepted()` | `join first` | 按声明顺序返回首个 `Accepted` 分支的输出值 | 若全部分支均未 Accepted，返回 `Skipped(NO_APPLICABLE_BRANCH)` |
 | **法定票数仲裁** | `Joins.quorum(n)` / `Joins.quorumBarrier(n)` | `join quorum <n>` | 达到或超过法定门槛 $n$ 个 `Accepted` 时即为成功 | 若成功分支数不足 $n$，返回 `Failed(QUORUM_NOT_REACHED)` |
-| **同质结果收集** | `Joins.collectAccepted()` | `join collect` | 同质类型分支全为 Accepted 时收集为 `List<T>` | 若有任意分支非 Accepted，返回首个非 Accepted 状态 |
+| **同质结果收集** | `Joins.collect()` | `join collect` | 同质类型分支全为 Accepted 时收集为 `List<T>` | 若有任意分支非 Accepted，按声明顺序返回首个非 Accepted 状态 |
 
 ### 全成功汇聚
 
@@ -78,7 +78,7 @@ Flow<Order, ParallelResults.Values> allCheckFlow = Flow.<Order>parallel(branchA,
 
 ```java
 // 5 个询价节点中，至少需要 3 个节点返回有效报价
-Flow<QuoteRequest, List<Price>> quorumFlow = Flow.<QuoteRequest>parallel(b1, b2, b3, b4, b5)
+Flow<QuoteRequest, ParallelResults.Values> quorumFlow = Flow.<QuoteRequest>parallel(b1, b2, b3, b4, b5)
         .join(Joins.quorum(3));
 ```
 

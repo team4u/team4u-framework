@@ -17,6 +17,8 @@ import com.team4u.framework.flow.api.PolicyContext;
 import com.team4u.framework.flow.compiler.PlanNode;
 import com.team4u.framework.flow.model.Cancellation;
 import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.Failures;
+import com.team4u.framework.flow.model.FlowDiagnosticCodes;
 import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.spi.NodeDescriptor;
 
@@ -322,9 +324,7 @@ public final class SerialMachine {
     }
 
     Outcome<?> policyFailure(Throwable error) {
-        String message = error.getMessage();
-        return Outcome.failed(Failure.of("POLICY_EXCEPTION", error.getClass().getName()
-                + (message == null || message.trim().isEmpty() ? "" : ": " + message)));
+        return Outcome.failed(Failures.from(error, FlowDiagnosticCodes.POLICY_EXCEPTION));
     }
 
     static Outcome<?> timeoutFailure() {

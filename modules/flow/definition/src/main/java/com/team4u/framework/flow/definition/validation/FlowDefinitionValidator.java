@@ -140,39 +140,7 @@ public final class FlowDefinitionValidator {
 
         if (call.modifiers() != null) {
             for (ModifierSpec mod : call.modifiers()) {
-                if (mod instanceof TimeoutModifierSpec) {
-                    Duration d = ((TimeoutModifierSpec) mod).duration();
-                    if (d == null || d.isNegative() || d.isZero()) {
-                        diagnostics.add(new Diagnostic(
-                                DiagnosticCodes.INVALID_CONTROL,
-                                "Timeout modifier must specify a positive duration",
-                                mod.span()));
-                    }
-                } else if (mod instanceof NamedModifierSpec) {
-                    String name = ((NamedModifierSpec) mod).name();
-                    if (name == null || name.trim().isEmpty()) {
-                        diagnostics.add(new Diagnostic(
-                                DiagnosticCodes.INVALID_CONTROL,
-                                "Named modifier must specify a non-blank label",
-                                mod.span()));
-                    }
-                } else if (mod instanceof PolicyModifierSpec) {
-                    PolicyModifierSpec p = (PolicyModifierSpec) mod;
-                    if (p.policy() == null || p.policy().id() == null || p.policy().id().trim().isEmpty()) {
-                        diagnostics.add(new Diagnostic(
-                                DiagnosticCodes.INVALID_CONTROL,
-                                "Policy modifier must specify a policy reference",
-                                mod.span()));
-                    }
-                } else if (mod instanceof RetryModifierSpec) {
-                    RetryModifierSpec r = (RetryModifierSpec) mod;
-                    if (r.retry() == null || r.retry().id() == null || r.retry().id().trim().isEmpty()) {
-                        diagnostics.add(new Diagnostic(
-                                DiagnosticCodes.INVALID_CONTROL,
-                                "Retry modifier must specify a retry policy reference",
-                                mod.span()));
-                    }
-                }
+                validateModifier(mod, call.span(), diagnostics);
             }
         }
     }
@@ -187,40 +155,59 @@ public final class FlowDefinitionValidator {
 
         if (step.modifiers() != null) {
             for (ModifierSpec mod : step.modifiers()) {
-                if (mod instanceof TimeoutModifierSpec) {
-                    Duration d = ((TimeoutModifierSpec) mod).duration();
-                    if (d == null || d.isNegative() || d.isZero()) {
-                        diagnostics.add(new Diagnostic(
-                                DiagnosticCodes.INVALID_CONTROL,
-                                "Timeout modifier must specify a positive duration",
-                                mod.span()));
-                    }
-                } else if (mod instanceof NamedModifierSpec) {
-                    String name = ((NamedModifierSpec) mod).name();
-                    if (name == null || name.trim().isEmpty()) {
-                        diagnostics.add(new Diagnostic(
-                                DiagnosticCodes.INVALID_CONTROL,
-                                "Named modifier must specify a non-blank label",
-                                mod.span()));
-                    }
-                } else if (mod instanceof PolicyModifierSpec) {
-                    PolicyModifierSpec p = (PolicyModifierSpec) mod;
-                    if (p.policy() == null || p.policy().id() == null || p.policy().id().trim().isEmpty()) {
-                        diagnostics.add(new Diagnostic(
-                                DiagnosticCodes.INVALID_CONTROL,
-                                "Policy modifier must specify a policy reference",
-                                mod.span()));
-                    }
-                } else if (mod instanceof RetryModifierSpec) {
-                    RetryModifierSpec r = (RetryModifierSpec) mod;
-                    if (r.retry() == null || r.retry().id() == null || r.retry().id().trim().isEmpty()) {
-                        diagnostics.add(new Diagnostic(
-                                DiagnosticCodes.INVALID_CONTROL,
-                                "Retry modifier must specify a retry policy reference",
-                                mod.span()));
-                    }
-                }
+                validateModifier(mod, step.span(), diagnostics);
             }
+        }
+    }
+
+    private static void validateModifier(ModifierSpec mod, SourceSpan parentSpan, List<Diagnostic> diagnostics) {
+        if (mod == null) {
+            diagnostics.add(new Diagnostic(
+                    DiagnosticCodes.INVALID_DEFINITION,
+                    "Modifier must not be null",
+                    parentSpan != null ? parentSpan : SourceSpan.UNKNOWN));
+            return;
+        }
+
+        if (mod instanceof TimeoutModifierSpec) {
+            Duration d = ((TimeoutModifierSpec) mod).duration();
+            if (d == null || d.isNegative() || d.isZero()) {
+                diagnostics.add(new Diagnostic(
+                        DiagnosticCodes.INVALID_CONTROL,
+                        "Timeout modifier must specify a positive duration",
+                        mod.span()));
+            }
+        } else if (mod instanceof NamedModifierSpec) {
+            String name = ((NamedModifierSpec) mod).name();
+            if (name == null || name.trim().isEmpty()) {
+                diagnostics.add(new Diagnostic(
+                        DiagnosticCodes.INVALID_CONTROL,
+                        "Named modifier must specify a non-blank label",
+                        mod.span()));
+            }
+        } else if (mod instanceof PolicyModifierSpec) {
+            PolicyModifierSpec p = (PolicyModifierSpec) mod;
+            if (p.policy() == null || p.policy().id() == null || p.policy().id().trim().isEmpty()) {
+                diagnostics.add(new Diagnostic(
+                        DiagnosticCodes.INVALID_CONTROL,
+                        "Policy modifier must specify a policy reference",
+                        mod.span()));
+            }
+        } else if (mod instanceof RetryModifierSpec) {
+            RetryModifierSpec r = (RetryModifierSpec) mod;
+            if (r.retry() == null || r.retry().id() == null || r.retry().id().trim().isEmpty()) {
+                diagnostics.add(new Diagnostic(
+                        DiagnosticCodes.INVALID_CONTROL,
+                        "Retry modifier must specify a retry policy reference",
+                        mod.span()));
+            }
+        } else if (mod instanceof OptionalModifierSpec) {
+            // OptionalModifierSpec has no nested fields
+        } else {
+            diagnostics.add(new Diagnostic(
+                    DiagnosticCodes.UNSUPPORTED_MODIFIER_SPEC,
+                    "Unsupported modifier spec: " + mod.getClass().getName(),
+                    mod.span() != null ? mod.span() : parentSpan));
         }
     }
 

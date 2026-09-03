@@ -70,7 +70,7 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                 }
                 currClass = acc.propertyType();
             }
-            if (dynamicTail || Map.class.isAssignableFrom(currClass)) {
+            if (dynamicTail) {
                 currentType = TypeRef.ANY;
             } else {
                 currentType = TypeRef.of(currClass);
@@ -238,13 +238,15 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                                     "Intermediate property '" + seg + "' is not readable on " + current.getClass().getName(),
                                     path.span()));
                         }
-                        current = acc.get(current);
-                        if (current == null) {
+                        Class<?> ownerType = current.getClass();
+                        Object next = acc.get(current);
+                        if (next == null) {
                             throw new FlowDiagnosticException(new Diagnostic(
                                     DiagnosticCodes.PROPERTY_NULL_VALUE,
-                                    "Intermediate property '" + seg + "' is null on " + current.getClass().getName(),
+                                    "Intermediate property '" + seg + "' is null on " + ownerType.getName(),
                                     path.span()));
                         }
+                        current = next;
                     }
                 }
 

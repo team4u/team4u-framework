@@ -85,6 +85,11 @@ public final class SpecBinders {
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         private Flow applyModifier(Flow flow, ModifierSpec mod, BindingContext context) {
+            if (mod == null) {
+                throw new FlowDiagnosticException(
+                        DiagnosticCodes.INVALID_DEFINITION,
+                        "Modifier must not be null");
+            }
             if (mod instanceof OptionalModifierSpec) {
                 return Flow.firstApplicable(flow, Flow.identity());
             } else if (mod instanceof PolicyModifierSpec) {
@@ -98,7 +103,10 @@ public final class SpecBinders {
             } else if (mod instanceof NamedModifierSpec) {
                 return flow.named(((NamedModifierSpec) mod).name());
             }
-            return flow;
+            throw new FlowDiagnosticException(
+                    DiagnosticCodes.UNSUPPORTED_MODIFIER_SPEC,
+                    "Unsupported modifier spec: " + mod.getClass().getName(),
+                    mod.span());
         }
     }
 
@@ -115,23 +123,9 @@ public final class SpecBinders {
             ProjectionSpec projectSpec = call.projectSpec();
             MergeSpec mergeSpec = call.mergeSpec();
 
-            Function<Object, Object> projectFn = context.compileProjector(projectSpec, stateType);
-
-            TypeRef callActualInputType = stateType;
-            if (projectSpec != null) {
-                if (projectSpec instanceof PropertyProjectionSpec) {
-                    try {
-                        CompiledReader reader = context.registry().propertyAccessCompiler()
-                                .compileReader(stateType, ((PropertyProjectionSpec) projectSpec).path());
-                        callActualInputType = reader.resultType();
-                    } catch (Exception ignored) { }
-                } else if (call.project() != null) {
-                    ProjectorDescriptor projector = context.registry().projector(call.project().id());
-                    if (projector != null && projector.outputType() != null && projector.outputType() != TypeRef.ANY) {
-                        callActualInputType = projector.outputType();
-                    }
-                }
-            }
+            BindingContext.CompiledProjection compiledProj = context.compileCompiledProjection(projectSpec, stateType);
+            Function<Object, Object> projectFn = compiledProj.projector();
+            TypeRef callActualInputType = compiledProj.resultType();
 
             FlowDefinition subflowDef = context.subflow(call.flow().id());
             Flow subflow;
@@ -173,6 +167,11 @@ public final class SpecBinders {
 
         @SuppressWarnings({"unchecked", "rawtypes"})
         private Flow applyModifier(Flow flow, ModifierSpec mod, BindingContext context) {
+            if (mod == null) {
+                throw new FlowDiagnosticException(
+                        DiagnosticCodes.INVALID_DEFINITION,
+                        "Modifier must not be null");
+            }
             if (mod instanceof OptionalModifierSpec) {
                 return Flow.firstApplicable(flow, Flow.identity());
             } else if (mod instanceof PolicyModifierSpec) {
@@ -186,7 +185,10 @@ public final class SpecBinders {
             } else if (mod instanceof NamedModifierSpec) {
                 return flow.named(((NamedModifierSpec) mod).name());
             }
-            return flow;
+            throw new FlowDiagnosticException(
+                    DiagnosticCodes.UNSUPPORTED_MODIFIER_SPEC,
+                    "Unsupported modifier spec: " + mod.getClass().getName(),
+                    mod.span());
         }
     }
 

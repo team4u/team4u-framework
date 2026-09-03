@@ -13,6 +13,7 @@ import com.team4u.framework.flow.definition.registry.ProjectorDescriptor;
 import com.team4u.framework.flow.definition.type.TypeRef;
 
 import java.util.Map;
+import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Function;
 
@@ -91,15 +92,44 @@ public interface BindingContext {
      * @param rootType   根输入类型
      * @return 提取函数
      */
-    default Function<Object, Object> compileProjector(ProjectionSpec projection, TypeRef rootType) {
+    /**
+     * 已编译的投影描述符，封装提取函数与产出类型。
+     */
+    final class CompiledProjection {
+        private final Function<Object, Object> projector;
+        private final TypeRef resultType;
+
+        public CompiledProjection(Function<Object, Object> projector, TypeRef resultType) {
+            this.projector = Objects.requireNonNull(projector, "projector must not be null");
+            this.resultType = resultType != null ? resultType : TypeRef.ANY;
+        }
+
+        public Function<Object, Object> projector() {
+            return projector;
+        }
+
+        public TypeRef resultType() {
+            return resultType;
+        }
+    }
+
+    /**
+     * 编译投影规范为投影描述符（含提取函数与产出类型）。
+     *
+     * @param projection 投影规范
+     * @param rootType   根输入类型
+     * @return 投影描述符
+     */
+    default CompiledProjection compileCompiledProjection(ProjectionSpec projection, TypeRef rootType) {
         if (projection == null) {
-            return Function.identity();
+            TypeRef actualRootType = rootType != null ? rootType : currentType();
+            return new CompiledProjection(Function.identity(), actualRootType != null ? actualRootType : TypeRef.ANY);
         }
         TypeRef actualRootType = rootType != null ? rootType : currentType();
         if (projection instanceof PropertyProjectionSpec) {
             PropertyPath path = ((PropertyProjectionSpec) projection).path();
             CompiledReader reader = registry().propertyAccessCompiler().compileReader(actualRootType, path);
-            return reader::read;
+            return new CompiledProjection(reader::read, reader.resultType());
         }
         if (projection instanceof SymbolRef || projection instanceof SymbolProjectionSpec) {
             SymbolRef symbol = projection instanceof SymbolRef
@@ -112,12 +142,24 @@ public interface BindingContext {
                         "Unknown projector: " + symbol.id(),
                         symbol.span()));
             }
-            return desc.function();
+            TypeRef outType = desc.outputType() != null ? desc.outputType() : TypeRef.ANY;
+            return new CompiledProjection(desc.function(), outType);
         }
         throw new FlowDiagnosticException(new Diagnostic(
                 DiagnosticCodes.UNSUPPORTED_PROJECTION_SPEC,
                 "Unsupported projection specification: " + projection.getClass().getName(),
                 projection.span()));
+    }
+
+    /**
+     * 编译投影规范为输入提取函数（显式指定根输入类型）。
+     *
+     * @param projection 投影规范
+     * @param rootType   根输入类型
+     * @return 提取函数
+     */
+    default Function<Object, Object> compileProjector(ProjectionSpec projection, TypeRef rootType) {
+        return compileCompiledProjection(projection, rootType).projector();
     }
 
     /**

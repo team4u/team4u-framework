@@ -156,7 +156,7 @@ public final class FlowBinder {
         try {
             flow = (Flow<Object, Object>) session.bindSpec(definition.root());
             sourceMap = SourceMapBuilder.build(flow.root(), definition.root());
-            Compiler.compile(flow, resolver);
+            Compiler.validate(flow);
         } catch (FlowBuildException ex) {
             List<Diagnostic> diagnostics = new ArrayList<Diagnostic>();
             for (FlowBuildException.Problem problem : ex.problems()) {

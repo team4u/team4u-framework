@@ -22,6 +22,8 @@ import org.junit.Test;
 
 import java.time.Duration;
 import java.util.*;
+import java.util.concurrent.atomic.AtomicInteger;
+import com.team4u.framework.flow.spi.OperationResolver;
 
 public class FlowBinderTest {
 
@@ -336,5 +338,90 @@ public class FlowBinderTest {
         LocalExecutable<String, String> exec = bound.compileLocal(String.class, String.class);
         FlowResult<String> result = exec.run("pass_through");
         Assert.assertEquals("pass_through", result.requireAccepted());
+    }
+
+    public interface MyLifecycleOp extends Operation<String, String> { }
+
+    @Test
+    public void testFlowBinderDoesNotResolveBeansUntilCompileLocal() {
+        final AtomicInteger resolutions = new AtomicInteger(0);
+        OperationResolver countingResolver = new OperationResolver() {
+            @Override
+            public Object resolve(Class<?> contract, String qualifier) {
+                resolutions.incrementAndGet();
+                return (MyLifecycleOp) (ctx, in) -> Outcome.accepted("ok:" + in);
+            }
+        };
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("lifecycle.op", MyLifecycleOp.class)
+                .build();
+        FlowDefinition def = new FlowDefinition(
+                1, "lifecycle.flow", "1",
+                new StepSpec(SymbolRef.of("lifecycle.op"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN),
+                "lifecycle.flow", SourceSpan.UNKNOWN
+        );
+
+        // 1. FlowBinder.bind only validates topology and does NOT call resolver
+        BoundFlow bound = FlowBinder.bind(def, registry, countingResolver);
+        Assert.assertEquals(0, resolutions.get());
+
+        // 2. BoundFlow.compileLocal calls resolver exactly once
+        LocalExecutable<String, String> exec = bound.compileLocal(String.class, String.class);
+        Assert.assertEquals(1, resolutions.get());
+        Assert.assertEquals("ok:hello", exec.run("hello").requireAccepted());
+    }
+
+    @Test
+    public void testMalformedAstFailsClosedWithFlowDiagnosticExceptionWithoutNpe() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.empty();
+
+        // Malformed RouteSpec with a null case
+        List<CaseSpec> cases = new ArrayList<CaseSpec>();
+        cases.add(null);
+        RouteSpec malformedRoute = new RouteSpec(SymbolRef.of("sel"), cases, null, SourceSpan.UNKNOWN);
+        FlowDefinition def1 = new FlowDefinition(1, "malformed.route", "1", malformedRoute, "test", SourceSpan.UNKNOWN);
+
+        try {
+            FlowBinder.bind(def1, registry);
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertTrue(ex.diagnostics().stream().anyMatch(d -> DiagnosticCodes.INVALID_ROUTE_CASE.equals(d.code())));
+        }
+
+        // Malformed SequenceSpec with null element
+        SequenceSpec malformedSeq = new SequenceSpec(Collections.<FlowSpec>singletonList(null), SourceSpan.UNKNOWN);
+        FlowDefinition def2 = new FlowDefinition(1, "malformed.seq", "1", malformedSeq, "test", SourceSpan.UNKNOWN);
+
+        try {
+            FlowBinder.bind(def2, registry);
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertTrue(ex.diagnostics().stream().anyMatch(d -> DiagnosticCodes.INVALID_DEFINITION.equals(d.code())));
+        }
+    }
+
+    @Test
+    public void testUnknownModifierSpecInFlowBinderThrowsUnsupportedModifierSpec() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.empty();
+        ModifierSpec unknownMod = new ModifierSpec() {
+            @Override
+            public SourceSpan span() {
+                return SourceSpan.UNKNOWN;
+            }
+        };
+
+        FlowDefinition def = new FlowDefinition(
+                1, "unknown.mod.flow", "1",
+                new StepSpec(SymbolRef.of("any.op"), null, null, Collections.singletonList(unknownMod), SourceSpan.UNKNOWN),
+                "test", SourceSpan.UNKNOWN
+        );
+
+        try {
+            FlowBinder.bind(def, registry);
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertTrue(ex.diagnostics().stream().anyMatch(d -> DiagnosticCodes.UNSUPPORTED_MODIFIER_SPEC.equals(d.code())));
+        }
     }
 }

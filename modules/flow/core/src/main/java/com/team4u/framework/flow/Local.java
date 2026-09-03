@@ -67,10 +67,10 @@ public final class Local {
     /**
      * 以弱缓存复用编译产物编译逻辑流程。
      *
-     * <p>缓存以 {@code flow} 实例为身份键（identity key，不使用 equals），值为弱引用的
-     * {@link Compiler.Compiled} 产物；当外部不再持有 flow 引用时缓存条目可被 GC 回收，
-     * 不会阻止流程定义的释放。并发安全：基于 ConcurrentHashMap，同 一 flow 的并发首次
-     * 编译可能重复执行一次，但返回的产物一致且线程安全。</p>
+     * <p>缓存以 {@code (flow, resolver)} 实例为双身份键（identity key，不使用 equals），
+     * 值为弱引用的 {@link Compiler.Compiled} 产物；当外部不再持有 flow 或 resolver 引用时缓存条目可被 GC 回收，
+     * 不会阻止流程定义与解析器的释放。一个 resolver 在被用作 compile cache key 的生命周期内，其 binding 映射必须稳定。
+     * 并发安全：基于 ConcurrentHashMap，同一 (flow, resolver) 的并发首次编译可能重复执行一次，但返回的产物一致且线程安全。</p>
      *
      * <p>注意：缓存的仅是静态编译产物（拓扑与绑定解析结果），不含任何运行期状态；
      * observer 与线程池每次调用时重新绑定，不参与缓存键。</p>
@@ -79,7 +79,7 @@ public final class Local {
      * @param resolver 组件解析器，不能为 null
      * @param <I>      流程输入类型
      * @param <O>      流程输出类型
-     * @return 编译就绪的 {@link LocalExecutable} 实例（同一 flow 实例返回复用产物的执行器）
+     * @return 编译就绪的 {@link LocalExecutable} 实例（同一 flow 和 resolver 实例返回复用产物的执行器）
      * @throws FlowBuildException 当流程定义存在拓扑冲突或无法解析的组件时抛出
      */
     public static <I, O> LocalExecutable<I, O> compileCached(
@@ -212,23 +212,30 @@ public final class Local {
     }
 
     /**
-     * 基于 flow 身份键的编译产物弱缓存。
+     * 基于 flow 与 resolver 身份键的编译产物弱缓存。
      *
-     * <p>键为 flow 实例的弱引用（identity 语义），值为编译产物；并发首次编译可能重复执行，
-     * 但返回一致产物。产物不含运行期状态，线程安全可并发复用。</p>
+     * <p>键为 (flow, resolver) 实例的弱引用（identity 语义），值为编译产物；并发首次编译可能重复执行，
+     * 但返回一致产物。产物不含运行期状态，线程安全可并发复用。
+     * 一个 resolver 在被用作 compile cache key 的生命周期内，其 binding 映射必须稳定。</p>
      */
     static final class CompileCache {
         private static final Map<Key, Compiler.Compiled> CACHE =
                 new ConcurrentHashMap<Key, Compiler.Compiled>();
-        private static final ReferenceQueue<Flow<?, ?>> QUEUE =
-                new ReferenceQueue<Flow<?, ?>>();
+        private static final ReferenceQueue<Object> QUEUE =
+                new ReferenceQueue<Object>();
 
         private static final class Key extends WeakReference<Flow<?, ?>> {
+            private final ResolverRef resolverRef;
             private final int hash;
 
-            Key(Flow<?, ?> referent, ReferenceQueue<Flow<?, ?>> queue) {
-                super(referent, queue);
-                this.hash = System.identityHashCode(referent);
+            Key(Flow<?, ?> flow, OperationResolver resolver, ReferenceQueue<Object> queue) {
+                super(flow, queue != null ? (ReferenceQueue<? super Flow<?, ?>>) (ReferenceQueue<?>) queue : null);
+                this.resolverRef = new ResolverRef(
+                        resolver,
+                        queue != null ? (ReferenceQueue<? super OperationResolver>) (ReferenceQueue<?>) queue : null,
+                        this
+                );
+                this.hash = 31 * System.identityHashCode(flow) + System.identityHashCode(resolver);
             }
 
             @Override
@@ -240,22 +247,37 @@ public final class Local {
             public boolean equals(Object other) {
                 if (this == other) return true;
                 if (!(other instanceof Key)) return false;
-                Flow<?, ?> mine = get();
-                Flow<?, ?> theirs = ((Key) other).get();
-                return mine != null && mine == theirs;
+                Key o = (Key) other;
+                Flow<?, ?> mineFlow = get();
+                Flow<?, ?> theirsFlow = o.get();
+                if (mineFlow == null || mineFlow != theirsFlow) return false;
+                OperationResolver mineResolver = resolverRef.get();
+                OperationResolver theirsResolver = o.resolverRef.get();
+                return mineResolver != null && mineResolver == theirsResolver;
+            }
+        }
+
+        private static final class ResolverRef extends WeakReference<OperationResolver> {
+            final Key key;
+
+            ResolverRef(OperationResolver referent, ReferenceQueue<? super OperationResolver> queue, Key key) {
+                super(referent, queue);
+                this.key = key;
             }
         }
 
         static Compiler.Compiled obtain(Flow<?, ?> flow, OperationResolver resolver) {
             Objects.requireNonNull(flow, "flow must not be null");
+            Objects.requireNonNull(resolver, "resolver must not be null");
             expunge();
-            Key key = new Key(flow, QUEUE);
-            Compiler.Compiled existing = CACHE.get(key);
+            Key lookupKey = new Key(flow, resolver, null);
+            Compiler.Compiled existing = CACHE.get(lookupKey);
             if (existing != null) {
                 return existing;
             }
             Compiler.Compiled compiled = Compiler.compile(flow, resolver);
-            Compiler.Compiled raced = CACHE.putIfAbsent(key, compiled);
+            Key registeredKey = new Key(flow, resolver, QUEUE);
+            Compiler.Compiled raced = CACHE.putIfAbsent(registeredKey, compiled);
             if (raced != null) {
                 return raced;
             }
@@ -268,6 +290,8 @@ public final class Local {
             while ((polled = QUEUE.poll()) != null) {
                 if (polled instanceof Key) {
                     CACHE.remove(polled);
+                } else if (polled instanceof ResolverRef) {
+                    CACHE.remove(((ResolverRef) polled).key);
                 }
             }
         }

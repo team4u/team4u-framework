@@ -357,4 +357,37 @@ public class DurablePersistentPolicyTest {
         assertEquals(Integer.valueOf(1), attempts.get(0));
         assertEquals("attempt 必须跨恢复递增", Integer.valueOf(2), attempts.get(1));
     }
+
+    @Test
+    public void persistentPolicyThrowingFlowExecutionExceptionPreservesFailureCode() {
+        PersistentPolicy<String, Integer> policy = new PersistentPolicy<String, Integer>() {
+            @Override
+            public Integer initialState(String key) {
+                return 0;
+            }
+
+            @Override
+            public Before<Integer> before(PolicyContext context, String key, Integer state) {
+                throw new com.team4u.framework.flow.model.FlowExecutionException(
+                        "DURABLE_POLICY_FAIL", "Custom durable policy failed");
+            }
+
+            @Override
+            public After<Integer> after(PolicyContext context, String key, Integer state, Completion completion) {
+                return PersistentPolicy.returning(state);
+            }
+        };
+
+        Flow<String, String> flow = Flow.<String, String>step(new RecordingOp("body"))
+                .persistentPolicy(policy, input -> "K");
+        InMemoryDurableStore store = new InMemoryDurableStore();
+        DurableExecutable<String, String> executable = compile(flow, store);
+        DurableResult<String> result = executable.start("p-fail", "in");
+        assertTrue(result instanceof DurableResult.Completed<?>);
+        Outcome<String> outcome = ((DurableResult.Completed<String>) result).outcome();
+        assertTrue(outcome instanceof Outcome.Failed<?>);
+        Failure failure = ((Outcome.Failed<?>) outcome).failure();
+        assertEquals("DURABLE_POLICY_FAIL", failure.code());
+        assertEquals("Custom durable policy failed", failure.message());
+    }
 }

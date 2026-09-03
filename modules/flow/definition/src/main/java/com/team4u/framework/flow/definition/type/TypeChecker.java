@@ -132,6 +132,15 @@ public final class TypeChecker {
             context.addDiagnostic(d);
         }
 
+        if (!structuralDiagnostics.isEmpty()) {
+            return TypeCheckResult.builder()
+                    .success(false)
+                    .diagnostics(context.diagnostics())
+                    .inputType(initialInputType != null ? initialInputType : TypeRef.ANY)
+                    .outputType(TypeRef.ANY)
+                    .build();
+        }
+
         boolean topLevel = visitingFlows == null || visitingFlows.isEmpty();
         if (topLevel) {
             List<Diagnostic> cycleDiagnostics = FlowCallGraphValidator.validate(definition, registry);

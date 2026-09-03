@@ -478,4 +478,32 @@ public class DefaultPropertyAccessCompilerTest {
         // MUST be ANY, NOT narrowed to String!
         Assert.assertEquals(TypeRef.ANY, boundFirst.outputType());
     }
+
+    @Test
+    public void writeIntermediatePropertyNullOnPojoThrowsPropertyNullValue() {
+        DefaultPropertyAccessCompiler compiler = new DefaultPropertyAccessCompiler();
+        Order order = new Order();
+        order.setItem(null); // intermediate item is null
+        CompiledWriter writer = compiler.compileWriter(TypeRef.of(Order.class), PropertyPath.parse("$.item.sku"), TypeRef.of(String.class));
+        try {
+            writer.write(order, "SKU-999");
+            Assert.fail("Should throw FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(1, ex.diagnostics().size());
+            Assert.assertEquals(DiagnosticCodes.PROPERTY_NULL_VALUE, ex.diagnostics().get(0).code());
+            Assert.assertTrue(ex.diagnostics().get(0).message().contains("Intermediate property 'item' is null"));
+        }
+    }
+
+    @Test
+    public void directMapPropertyProjectionPreservesMapType() {
+        DefaultPropertyAccessCompiler compiler = new DefaultPropertyAccessCompiler();
+        CompiledReader readerMap = compiler.compileReader(
+                TypeRef.of(OrderWithMapAttributes.class), PropertyPath.of("$.attributes"));
+        Assert.assertEquals(TypeRef.of(Map.class), readerMap.resultType());
+
+        CompiledReader readerTail = compiler.compileReader(
+                TypeRef.of(OrderWithMapAttributes.class), PropertyPath.of("$.attributes.userId"));
+        Assert.assertEquals(TypeRef.ANY, readerTail.resultType());
+    }
 }

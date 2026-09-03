@@ -264,4 +264,22 @@ public class LocalAsyncApiTest {
         assertEquals(Collections.nCopies(threads, "c"), outputs);
         for (Thread thread : workers) thread.join();
     }
+
+    public interface MyTestOp extends com.team4u.framework.flow.api.Operation<String, String> { }
+
+    @Test
+    public void compileCachedDistinguishesDifferentResolversForSameFlow() {
+        OperationResolver resolverA = (contract, qualifier) ->
+                (MyTestOp) (context, input) -> Outcome.accepted("A:" + input);
+        OperationResolver resolverB = (contract, qualifier) ->
+                (MyTestOp) (context, input) -> Outcome.accepted("B:" + input);
+
+        Flow<String, String> flow = Flow.step(MyTestOp.class);
+
+        LocalExecutable<String, String> execA = Local.compileCached(flow, resolverA);
+        LocalExecutable<String, String> execB = Local.compileCached(flow, resolverB);
+
+        assertEquals("A:test", execA.run("test").requireAccepted());
+        assertEquals("B:test", execB.run("test").requireAccepted());
+    }
 }

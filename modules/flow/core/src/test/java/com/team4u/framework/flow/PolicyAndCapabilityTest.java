@@ -250,4 +250,26 @@ public class PolicyAndCapabilityTest {
             assertTrue(expected.problems().stream().anyMatch(problem -> problem.code().equals(code)));
         }
     }
+
+    @Test
+    public void policyThrowingFlowExecutionExceptionPreservesFailureCode() {
+        Policy<String> customExceptionPolicy = new Policy<String>() {
+            @Override
+            public Gate before(PolicyContext context, String key) {
+                throw new com.team4u.framework.flow.model.FlowExecutionException(
+                        "CUSTOM_RATE_LIMIT", "Custom rate limit exceeded");
+            }
+        };
+
+        Flow<String, String> flow = Flow.<String>identity()
+                .policy(customExceptionPolicy, value -> value);
+
+        FlowResult<String> result = Local.compile(flow).run("test");
+        assertTrue(result instanceof FlowResult.Completed<?>);
+        Outcome<String> outcome = ((FlowResult.Completed<String>) result).outcome();
+        assertTrue(outcome instanceof Outcome.Failed<?>);
+        Failure failure = ((Outcome.Failed<?>) outcome).failure();
+        assertEquals("CUSTOM_RATE_LIMIT", failure.code());
+        assertEquals("Custom rate limit exceeded", failure.message());
+    }
 }

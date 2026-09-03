@@ -196,7 +196,22 @@ public final class Compiler implements LoweringContext {
     private final ArrayDeque<Set<String>> parallelBranchScopes = new ArrayDeque<Set<String>>();
 
     private Compiler(OperationResolver resolver) {
-        this.resolver = Objects.requireNonNull(resolver, "resolver must not be null");
+        this.resolver = resolver;
+    }
+
+    /**
+     * 拓扑静态校验入口：仅校验流程结构约束（拓扑、分支名唯一性、挂起点等），不解析运行时组件绑定。
+     *
+     * @param flow 逻辑流程定义，不能为 null
+     * @throws FlowBuildException 当流程定义存在拓扑冲突时抛出
+     */
+    public static void validate(Flow<?, ?> flow) {
+        Objects.requireNonNull(flow, "flow must not be null");
+        Compiler compiler = new Compiler(null);
+        compiler.lower(flow.root());
+        if (!compiler.problems.isEmpty()) {
+            throw new FlowBuildException(compiler.problems);
+        }
     }
 
     /** 编译入口：下降 root 后若发现任何 Problem 则抛出 FlowBuildException。 */
@@ -311,6 +326,9 @@ public final class Compiler implements LoweringContext {
             Object instance = binding.instance();
             resolved = new Resolved(instance, implementation(instance, path));
         } else {
+            if (resolver == null) {
+                return null;
+            }
             BindingKey key = new BindingKey(binding.contract(), binding.qualifier(), binding.kind());
             String previousFailure = resolutionFailures.get(key);
             if (previousFailure != null) {
@@ -352,6 +370,9 @@ public final class Compiler implements LoweringContext {
 
     /** 由 resolver 获取实现类描述；失败时回退为实例的实际类。 */
     private Class<?> implementation(Object instance, String path) {
+        if (resolver == null) {
+            return instance.getClass();
+        }
         try {
             return Objects.requireNonNull(resolver.implementationClass(instance),
                     "implementation class");

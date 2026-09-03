@@ -39,6 +39,7 @@ import com.team4u.framework.flow.api.OperationContext;
 import com.team4u.framework.flow.api.PolicyContext;
 import com.team4u.framework.flow.model.Cancellation;
 import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.Failures;
 import com.team4u.framework.flow.model.FlowDiagnosticCodes;
 import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.model.ParallelResults;
@@ -658,13 +659,7 @@ public final class DurableMachine {
     }
 
     public static Outcome<?> policyFailure(Throwable error) {
-        return failed(FlowDiagnosticCodes.POLICY_EXCEPTION, describe(error));
-    }
-
-    private static String describe(Throwable error) {
-        String message = error.getMessage();
-        return error.getClass().getName()
-                + (message == null || message.trim().isEmpty() ? "" : ": " + message);
+        return Outcome.failed(Failures.from(error, FlowDiagnosticCodes.POLICY_EXCEPTION));
     }
 
     private static Object acceptedValue(Outcome<?> outcome) {

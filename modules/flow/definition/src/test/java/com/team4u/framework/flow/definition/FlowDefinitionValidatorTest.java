@@ -122,4 +122,34 @@ public class FlowDefinitionValidatorTest {
             Assert.assertEquals(DiagnosticCodes.UNSUPPORTED_MERGE_SPEC, ex.diagnostics().get(0).code());
         }
     }
+
+    @Test
+    public void modifierSpecNullOrUnknownProducesDiagnostics() {
+        ModifierSpec unknownMod = new ModifierSpec() {
+            @Override
+            public SourceSpan span() {
+                return SourceSpan.UNKNOWN;
+            }
+        };
+
+        // 1. Validator checks for StepSpec
+        FlowDefinition defWithNullMod = new FlowDefinition(1, "test.flow", "1",
+                new StepSpec(SymbolRef.of("op1"), null, null, Collections.singletonList(null), SourceSpan.UNKNOWN),
+                "test", SourceSpan.UNKNOWN);
+        List<Diagnostic> d1 = FlowDefinitionValidator.validate(defWithNullMod);
+        Assert.assertTrue(d1.stream().anyMatch(d -> DiagnosticCodes.INVALID_DEFINITION.equals(d.code())));
+
+        FlowDefinition defWithUnknownMod = new FlowDefinition(1, "test.flow", "1",
+                new StepSpec(SymbolRef.of("op1"), null, null, Collections.singletonList(unknownMod), SourceSpan.UNKNOWN),
+                "test", SourceSpan.UNKNOWN);
+        List<Diagnostic> d2 = FlowDefinitionValidator.validate(defWithUnknownMod);
+        Assert.assertTrue(d2.stream().anyMatch(d -> DiagnosticCodes.UNSUPPORTED_MODIFIER_SPEC.equals(d.code())));
+
+        // 2. Validator checks for CallSpec
+        FlowDefinition defWithUnknownCallMod = new FlowDefinition(1, "test.flow", "1",
+                new CallSpec(SymbolRef.of("flow1"), null, null, Collections.singletonList(unknownMod), SourceSpan.UNKNOWN),
+                "test", SourceSpan.UNKNOWN);
+        List<Diagnostic> d3 = FlowDefinitionValidator.validate(defWithUnknownCallMod);
+        Assert.assertTrue(d3.stream().anyMatch(d -> DiagnosticCodes.UNSUPPORTED_MODIFIER_SPEC.equals(d.code())));
+    }
 }

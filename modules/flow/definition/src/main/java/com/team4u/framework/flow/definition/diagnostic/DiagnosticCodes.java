@@ -51,6 +51,7 @@ public final class DiagnosticCodes {
     public static final String UNSUPPORTED_SPEC = "UNSUPPORTED_SPEC";
     public static final String UNSUPPORTED_PROJECTION_SPEC = "UNSUPPORTED_PROJECTION_SPEC";
     public static final String UNSUPPORTED_MERGE_SPEC = "UNSUPPORTED_MERGE_SPEC";
+    public static final String UNSUPPORTED_MODIFIER_SPEC = "UNSUPPORTED_MODIFIER_SPEC";
 
     // Compiler 阶段错误码
     public static final String DUPLICATE_SCOPE = "DUPLICATE_SCOPE";
