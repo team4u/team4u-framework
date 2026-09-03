@@ -64,15 +64,7 @@ public final class StepSpec implements FlowSpec {
      * @return 投影规范（若未配置则返回 null）
      */
     public ProjectionSpec projectSpec() {
-        if (projectSpec != null) {
-            return projectSpec;
-        }
-        for (ModifierSpec mod : modifiers) {
-            if (mod instanceof ProjectModifierSpec) {
-                return ((ProjectModifierSpec) mod).projection();
-            }
-        }
-        return null;
+        return projectSpec;
     }
 
     /**
@@ -81,15 +73,7 @@ public final class StepSpec implements FlowSpec {
      * @return 合并规范（若未配置则返回 null）
      */
     public MergeSpec mergeSpec() {
-        if (mergeSpec != null) {
-            return mergeSpec;
-        }
-        for (ModifierSpec mod : modifiers) {
-            if (mod instanceof MergeModifierSpec) {
-                return ((MergeModifierSpec) mod).merge();
-            }
-        }
-        return null;
+        return mergeSpec;
     }
 
     /**

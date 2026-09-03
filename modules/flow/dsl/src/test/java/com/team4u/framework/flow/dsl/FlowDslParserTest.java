@@ -1,5 +1,6 @@
 package com.team4u.framework.flow.dsl;
 
+import com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes;
 import com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException;
 import com.team4u.framework.flow.definition.model.*;
 import org.junit.Assert;
@@ -492,5 +493,17 @@ public class FlowDslParserTest {
         ParallelSpec pQuorum = (ParallelSpec) parse(dslQuorum).root();
         Assert.assertEquals(BuiltinJoinSpec.Kind.QUORUM, ((BuiltinJoinSpec) pQuorum.joinSpec()).kind());
         Assert.assertEquals(2, ((BuiltinJoinSpec) pQuorum.joinSpec()).quorumRequired());
+    }
+
+    @Test
+    public void testParallelQuorumIntegerOverflow() {
+        String dslQuorumOverflow = "flow test { parallel { branch b1 { step s1 } branch b2 { step s2 } join quorum 9999999999 } }";
+        try {
+            parse(dslQuorumOverflow);
+            Assert.fail("Expected FlowDiagnosticException for out-of-range quorum integer literal");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(DiagnosticCodes.DSL_SYNTAX_ERROR, ex.getDiagnostics().get(0).code());
+            Assert.assertTrue(ex.getDiagnostics().get(0).message().contains("out of 32-bit range"));
+        }
     }
 }

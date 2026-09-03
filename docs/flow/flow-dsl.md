@@ -150,6 +150,9 @@ step inventory.reserve {
 ```
 
 > [!NOTE]
+> **属性访问与编译期元数据缓存** ：
+> 当使用 `project $.path` 或 `merge $.path` 进行属性级数据提取与合并时，属性结构在 `bind` 阶段完成合法性检查与反射元数据缓存，运行时避免重复属性发现。
+>
 > **洋葱圈嵌套规则** ：
 > 在单个 `step` 内声明多个修饰器时，框架严格由外向内包裹执行：`named -> timeout -> policy / retry -> optional -> merge/project(operation)`。
 

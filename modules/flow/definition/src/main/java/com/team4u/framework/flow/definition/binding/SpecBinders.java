@@ -137,7 +137,7 @@ public final class SpecBinders {
             Flow subflow;
             TypeRef subflowOutputType = TypeRef.ANY;
             if (subflowDef != null) {
-                BoundFlow boundSubflow = FlowBinder.bind(subflowDef, context.registry(), context.resolver(), callActualInputType);
+                BoundSubflow boundSubflow = context.bindSubflow(subflowDef, callActualInputType);
                 subflow = boundSubflow.flow();
                 subflowOutputType = boundSubflow.outputType();
             } else {

@@ -160,6 +160,23 @@ public class DurableParallelTest {
     }
 
     @Test
+    public void joinFlowExecutionExceptionPreservesStructuredCode() {
+        Flow<String, String> flow = Flow.<String>parallel(
+                Branch.of("l", fixed("l", null)),
+                Branch.of("r", fixed("r", null))
+        ).join(new JoinStrategy<String>() {
+            @Override
+            public Outcome<String> join(ParallelResults results) {
+                throw new com.team4u.framework.flow.model.FlowExecutionException("CUSTOM_JOIN_ERR", "custom join error");
+            }
+        });
+        DurableResult<String> result = compile(flow, new InMemoryDurableStore()).start("e", "in");
+        Outcome.Failed<String> failedOutcome = (Outcome.Failed<String>) outcome(result);
+        assertEquals("CUSTOM_JOIN_ERR", failedOutcome.failure().code());
+        assertEquals("custom join error", failedOutcome.failure().message());
+    }
+
+    @Test
     public void crashAfterPartialBranchesRunsOnlyRemainingOnRecover() {
         // alpha 首次崩溃：由于分支完成即 checkpoint，recover 后 alpha 重放、
         // 已完成的 beta 不再执行（计数 Operation 验证）

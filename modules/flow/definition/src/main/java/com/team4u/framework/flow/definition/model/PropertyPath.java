@@ -33,8 +33,20 @@ public final class PropertyPath implements Serializable {
 
     public PropertyPath(String expression, List<String> segments, SourceSpan span) {
         this.expression = Objects.requireNonNull(expression, "expression must not be null");
-        this.segments = Collections.unmodifiableList(new ArrayList<String>(
-                Objects.requireNonNull(segments, "segments must not be null")));
+        Objects.requireNonNull(segments, "segments must not be null");
+        if (segments.isEmpty()) {
+            throw new IllegalArgumentException("Property path segments must not be empty");
+        }
+        for (String seg : segments) {
+            if (seg == null || seg.isEmpty()) {
+                throw new IllegalArgumentException("Property path segment must not be null or empty");
+            }
+        }
+        String expected = "$." + String.join(".", segments);
+        if (!expression.trim().equals(expected)) {
+            throw new IllegalArgumentException("Property path expression '" + expression + "' does not match segments: " + segments);
+        }
+        this.segments = Collections.unmodifiableList(new ArrayList<String>(segments));
         this.span = span != null ? span : SourceSpan.UNKNOWN;
     }
 
@@ -58,7 +70,7 @@ public final class PropertyPath implements Serializable {
                     "Property path cannot be empty after '$.'",
                     span != null ? span : SourceSpan.UNKNOWN));
         }
-        String[] parts = pathBody.split("\\.");
+        String[] parts = pathBody.split("\\.", -1);
         List<String> segs = new ArrayList<String>();
         for (String part : parts) {
             if (part.isEmpty()) {

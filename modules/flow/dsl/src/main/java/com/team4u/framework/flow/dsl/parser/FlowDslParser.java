@@ -46,13 +46,12 @@ public final class FlowDslParser {
 
         // 可选全局头部 schema 1
         if (match(TokenType.SCHEMA)) {
-            Token schemaToken = consumeIntegerToken("Expected schema version number after 'schema'");
-            schema = ((Number) schemaToken.value()).intValue();
+            schema = consumeIntegerLiteral("Expected schema version number after 'schema'");
             if (schema != 1) {
                 throw new FlowDiagnosticException(new Diagnostic(
                         DiagnosticCodes.DSL_UNSUPPORTED_SCHEMA,
                         "Unsupported DSL schema version: " + schema + " (currently only schema 1 is supported)",
-                        schemaToken.span()));
+                        previous().span()));
             }
         }
 
@@ -60,13 +59,12 @@ public final class FlowDslParser {
         while (!isAtEnd()) {
             Token startToken = peek();
             if (match(TokenType.SCHEMA)) {
-                Token schemaToken = consumeIntegerToken("Expected schema version number after 'schema'");
-                schema = ((Number) schemaToken.value()).intValue();
+                schema = consumeIntegerLiteral("Expected schema version number after 'schema'");
                 if (schema != 1) {
                     throw new FlowDiagnosticException(new Diagnostic(
                             DiagnosticCodes.DSL_UNSUPPORTED_SCHEMA,
                             "Unsupported DSL schema version: " + schema + " (currently only schema 1 is supported)",
-                            schemaToken.span()));
+                            previous().span()));
                 }
                 startToken = peek();
             }
@@ -414,9 +412,8 @@ public final class FlowDslParser {
                     joinSpec = BuiltinJoinSpec.collect(span(token, joinToken));
                 } else if ("quorum".equalsIgnoreCase(joinToken.text())) {
                     advance();
-                    Token nToken = consumeIntegerToken("Expected quorum number after 'quorum'");
-                    int n = ((Number) nToken.value()).intValue();
-                    joinSpec = BuiltinJoinSpec.quorum(n, span(token, nToken));
+                    int n = consumeIntegerLiteral("Expected quorum number after 'quorum'");
+                    joinSpec = BuiltinJoinSpec.quorum(n, span(token, previous()));
                 } else {
                     Token customToken = consumeIdentifier("Expected join strategy ID after 'join'");
                     joinSpec = SymbolRef.of(customToken.text(), customToken.span());

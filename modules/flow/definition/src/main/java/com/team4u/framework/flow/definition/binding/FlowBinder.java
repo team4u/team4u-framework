@@ -20,6 +20,7 @@ import com.team4u.framework.flow.spi.OperationResolver;
 
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -33,7 +34,7 @@ import java.util.function.Function;
  *
  * @author jay.wu
  */
-public final class FlowBinder implements BindingContext {
+public final class FlowBinder {
 
     private final FlowDefinitionRegistry registry;
     private final OperationResolver resolver;
@@ -123,19 +124,12 @@ public final class FlowBinder implements BindingContext {
         return new FlowBinder(registry, resolver, SpecBinderRegistry.global(), initialInputType).bind(definition);
     }
 
-    @Override
-    public TypeRef currentType() {
-        return initialInputType != null ? initialInputType : TypeRef.ANY;
+    public FlowDefinitionRegistry registry() {
+        return registry;
     }
 
-    @Override
-    public TypeRef inputTypeOf(FlowSpec spec) {
-        return currentType();
-    }
-
-    @Override
-    public TypeRef outputTypeOf(FlowSpec spec) {
-        return TypeRef.ANY;
+    public OperationResolver resolver() {
+        return resolver;
     }
 
     /**
@@ -158,9 +152,9 @@ public final class FlowBinder implements BindingContext {
         // 2. 递归绑定 AST 并执行编译器拓扑校验
         Flow<Object, Object> flow;
         Map<String, SourceSpan> sourceMap = Collections.emptyMap();
-        TypedBindingContext context = new TypedBindingContext(registry, resolver, binderRegistry, initialInputType, typeCheckResult);
+        BindingSession session = new BindingSession(registry, resolver, binderRegistry, initialInputType, typeCheckResult);
         try {
-            flow = (Flow<Object, Object>) context.bindSpec(definition.root());
+            flow = (Flow<Object, Object>) session.bindSpec(definition.root());
             sourceMap = SourceMapBuilder.build(flow.root(), definition.root());
             Compiler.compile(flow, resolver);
         } catch (FlowBuildException ex) {
@@ -182,52 +176,39 @@ public final class FlowBinder implements BindingContext {
                 .build();
     }
 
-    @Override
-    public FlowDefinitionRegistry registry() {
-        return registry;
-    }
-
-    @Override
-    public OperationResolver resolver() {
-        return resolver;
-    }
-
-    @Override
-    public Flow<?, ?> bindSpec(FlowSpec spec) {
-        return new TypedBindingContext(registry, resolver, binderRegistry, initialInputType, null).bindSpec(spec);
-    }
-
-    @Override
-    public Flow<?, ?> applyPolicy(
-            Flow<?, ?> flow,
-            String policyId,
-            SymbolRef keyRef,
-            Map<String, Object> configuration) {
-        return new TypedBindingContext(registry, resolver, binderRegistry, initialInputType, null)
-                .applyPolicy(flow, policyId, keyRef, configuration);
-    }
-
     /**
-     * 单次绑定作用域的类型化绑定上下文实现。
+     * 单次绑定会话的类型化绑定上下文实现（内部维护类型事实与子流程缓存，避免重复编译）。
      */
-    public static final class TypedBindingContext implements BindingContext {
+    static final class BindingSession implements BindingContext {
         private final FlowDefinitionRegistry registry;
         private final OperationResolver resolver;
         private final SpecBinderRegistry binderRegistry;
         private final TypeRef initialInputType;
         private final TypeCheckResult typeCheckResult;
+        private final Map<SubflowCacheKey, BoundSubflow> subflowCache;
 
-        public TypedBindingContext(
+        public BindingSession(
                 FlowDefinitionRegistry registry,
                 OperationResolver resolver,
                 SpecBinderRegistry binderRegistry,
                 TypeRef initialInputType,
-                TypeCheckResult typeCheckResult) {
+                TypeCheckResult typeCheckResult,
+                Map<SubflowCacheKey, BoundSubflow> subflowCache) {
             this.registry = Objects.requireNonNull(registry, "registry must not be null");
             this.resolver = resolver;
             this.binderRegistry = binderRegistry != null ? binderRegistry : SpecBinderRegistry.global();
             this.initialInputType = initialInputType;
             this.typeCheckResult = typeCheckResult;
+            this.subflowCache = subflowCache != null ? subflowCache : new HashMap<SubflowCacheKey, BoundSubflow>();
+        }
+
+        public BindingSession(
+                FlowDefinitionRegistry registry,
+                OperationResolver resolver,
+                SpecBinderRegistry binderRegistry,
+                TypeRef initialInputType,
+                TypeCheckResult typeCheckResult) {
+            this(registry, resolver, binderRegistry, initialInputType, typeCheckResult, null);
         }
 
         @Override
@@ -265,6 +246,35 @@ public final class FlowBinder implements BindingContext {
                 }
             }
             return TypeRef.ANY;
+        }
+
+        @Override
+        public BoundSubflow bindSubflow(FlowDefinition subflowDef, TypeRef inputType) {
+            Objects.requireNonNull(subflowDef, "subflow definition must not be null");
+            TypeRef actualInputType = inputType != null ? inputType : TypeRef.ANY;
+            SubflowCacheKey cacheKey = new SubflowCacheKey(subflowDef, actualInputType);
+            BoundSubflow cached = subflowCache.get(cacheKey);
+            if (cached != null) {
+                return cached;
+            }
+
+            TypeCheckResult subflowTypeResult = TypeChecker.check(subflowDef, registry, actualInputType);
+            if (!subflowTypeResult.success()) {
+                throw new FlowDiagnosticException(subflowTypeResult.diagnostics());
+            }
+
+            BindingSession childSession = new BindingSession(
+                    registry,
+                    resolver,
+                    binderRegistry,
+                    actualInputType,
+                    subflowTypeResult,
+                    subflowCache);
+
+            Flow<?, ?> subflow = childSession.bindSpec(subflowDef.root());
+            BoundSubflow result = new BoundSubflow(subflow, subflowTypeResult.outputType());
+            subflowCache.put(cacheKey, result);
+            return result;
         }
 
         @Override
@@ -344,6 +354,30 @@ public final class FlowBinder implements BindingContext {
                 } else {
                     return flow.policy((Class) policyDesc.contract(), policyDesc.qualifier(), keyFn);
                 }
+            }
+        }
+
+        private static final class SubflowCacheKey {
+            private final FlowDefinition definition;
+            private final TypeRef inputType;
+
+            SubflowCacheKey(FlowDefinition definition, TypeRef inputType) {
+                this.definition = definition;
+                this.inputType = inputType;
+            }
+
+            @Override
+            public boolean equals(Object o) {
+                if (this == o) return true;
+                if (o == null || getClass() != o.getClass()) return false;
+                SubflowCacheKey that = (SubflowCacheKey) o;
+                return (definition == that.definition || Objects.equals(definition.id(), that.definition.id()))
+                        && Objects.equals(inputType, that.inputType);
+            }
+
+            @Override
+            public int hashCode() {
+                return Objects.hash(definition.id() != null ? definition.id() : definition, inputType);
             }
         }
     }

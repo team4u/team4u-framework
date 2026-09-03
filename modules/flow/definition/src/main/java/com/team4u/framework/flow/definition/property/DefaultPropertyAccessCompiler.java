@@ -49,7 +49,12 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
         TypeRef currentType = rootType;
         if (raw != null && !Map.class.isAssignableFrom(raw) && !Object.class.equals(raw)) {
             Class<?> currClass = raw;
+            boolean dynamicTail = false;
             for (String seg : segments) {
+                if (Map.class.isAssignableFrom(currClass)) {
+                    dynamicTail = true;
+                    break;
+                }
                 PropertyAccessor acc = resolveAccessor(currClass, seg);
                 if (acc == null) {
                     throw new FlowDiagnosticException(new Diagnostic(
@@ -65,7 +70,11 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                 }
                 currClass = acc.propertyType();
             }
-            currentType = TypeRef.of(currClass);
+            if (dynamicTail || Map.class.isAssignableFrom(currClass)) {
+                currentType = TypeRef.ANY;
+            } else {
+                currentType = TypeRef.of(currClass);
+            }
         } else {
             currentType = TypeRef.ANY;
         }
@@ -141,6 +150,10 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
         if (raw != null && !Map.class.isAssignableFrom(raw) && !Object.class.equals(raw)) {
             Class<?> currClass = raw;
             for (int i = 0; i < segments.size(); i++) {
+                if (Map.class.isAssignableFrom(currClass)) {
+                    // POJO -> Map dynamic tail: runtime handles Map keys
+                    break;
+                }
                 String seg = segments.get(i);
                 PropertyAccessor acc = resolveAccessor(currClass, seg);
                 if (acc == null) {

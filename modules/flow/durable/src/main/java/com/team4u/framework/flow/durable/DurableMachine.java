@@ -205,11 +205,7 @@ public final class DurableMachine {
     }
 
     private Outcome<?> failure(Throwable error) {
-        if (error instanceof com.team4u.framework.flow.model.FlowExecutionException) {
-            com.team4u.framework.flow.model.FlowExecutionException fee = (com.team4u.framework.flow.model.FlowExecutionException) error;
-            return failed(fee.code(), fee.getMessage());
-        }
-        return failed(FlowDiagnosticCodes.OPERATION_EXCEPTION, describe(error));
+        return Outcome.failed(com.team4u.framework.flow.model.Failures.from(error, FlowDiagnosticCodes.OPERATION_EXCEPTION));
     }
 
     private DurableState.MachineOutcome toMachineOutcome(DurablePlanNode.Invoke node,
@@ -387,7 +383,7 @@ public final class DurableMachine {
                         "parallel join returned null");
             }
         } catch (Exception error) {
-            joined = failed(FlowDiagnosticCodes.JOIN_EXCEPTION, describe(error));
+            joined = Outcome.failed(com.team4u.framework.flow.model.Failures.from(error, FlowDiagnosticCodes.JOIN_EXCEPTION));
         }
         event(FlowObserver.Type.PARALLEL_JOINED, node.descriptor(),
                 singleton("outcome", joined.kind().name()));

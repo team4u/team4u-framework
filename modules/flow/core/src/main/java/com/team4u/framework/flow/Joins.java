@@ -60,6 +60,9 @@ public final class Joins {
      * @return 法定配额聚合策略
      */
     public static JoinStrategy<ParallelResults.Values> quorum(int required) {
+        if (required < 1) {
+            throw new IllegalArgumentException("required must be at least 1, got: " + required);
+        }
         return results -> results.quorum(required);
     }
 
@@ -93,7 +96,13 @@ public final class Joins {
      * @return 法定配额上下文屏障策略
      */
     public static <I> com.team4u.framework.flow.api.ContextualJoinStrategy<I, I> quorumBarrier(int required) {
+        if (required < 1) {
+            throw new IllegalArgumentException("required must be at least 1, got: " + required);
+        }
         return (initialInput, results) -> {
+            if (required > results.branches().size()) {
+                throw new IllegalArgumentException("required quorum " + required + " exceeds branch count " + results.branches().size());
+            }
             int acceptedCount = 0;
             for (com.team4u.framework.flow.api.Branch<?, ?> branch : results.branches()) {
                 if (results.outcome(branch) instanceof Outcome.Accepted) {

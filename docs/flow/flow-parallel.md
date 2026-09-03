@@ -60,16 +60,16 @@ Flow<Order, CombinedReport> parallelFlow = Flow.<Order>parallel(riskBranch, stoc
 
 | 汇聚策略 | Java 调用方式 | DSL 调用方式 | 成功判定规则 | 失败/弃权处理 |
 | :--- | :--- | :--- | :--- | :--- |
-| **全量成功** | `Joins.all()` | `join all` | 全部分支均为 `Accepted` 时返回包含所有分支结果的 `ParallelResults.Values` | 若有任意分支非 Accepted，按声明顺序返回首个非 Accepted 状态 |
-| **首选成功** | `Joins.first()` | `join first` | 按声明顺序返回首个 `Accepted` 分支的输出值 | 若全部分支均未 Accepted，返回 `Skipped(NO_APPLICABLE_BRANCH)` |
-| **法定票数仲裁** | `Joins.quorum(n)` | `join quorum <n>` | 达到或超过法定门槛 $n$ 个 `Accepted` 时即为成功并返回成功列表 | 若成功分支数不足 $n$，返回 `Failed(QUORUM_NOT_REACHED)` |
-| **同质结果收集** | `Joins.collect()` | `join collect` | 同质类型分支全为 Accepted 时收集为 `List<T>` | 若有任意分支非 Accepted，返回首个非 Accepted 状态 |
+| **全量成功** | `Joins.allAccepted()` / `Joins.allAcceptedBarrier()` | `join all`（执行栅栏汇聚） | 全部分支均为 `Accepted` 时通过 | 若有任意分支非 Accepted，按声明顺序返回首个非 Accepted 状态 |
+| **首选成功** | `Joins.firstAccepted()` | `join first` | 按声明顺序返回首个 `Accepted` 分支的输出值 | 若全部分支均未 Accepted，返回 `Skipped(NO_APPLICABLE_BRANCH)` |
+| **法定票数仲裁** | `Joins.quorum(n)` / `Joins.quorumBarrier(n)` | `join quorum <n>` | 达到或超过法定门槛 $n$ 个 `Accepted` 时即为成功 | 若成功分支数不足 $n$，返回 `Failed(QUORUM_NOT_REACHED)` |
+| **同质结果收集** | `Joins.collectAccepted()` | `join collect` | 同质类型分支全为 Accepted 时收集为 `List<T>` | 若有任意分支非 Accepted，返回首个非 Accepted 状态 |
 
 ### 全成功汇聚
 
 ```java
 Flow<Order, ParallelResults.Values> allCheckFlow = Flow.<Order>parallel(branchA, branchB, branchC)
-        .join(Joins.all());
+        .join(Joins.allAccepted());
 ```
 
 ### 法定票数仲裁
@@ -92,7 +92,7 @@ Flow<OrderContext, OrderContext> enrichedFlow = Flow.<OrderContext>identity()
         .fork(OrderContext::getUserId, fetchUserOp, (ctx, user) -> { ctx.setUser(user); return ctx; })
         .fork(OrderContext::getAmount, fetchPromotionOp, (ctx, promo) -> { ctx.setPromo(promo); return ctx; })
         .timeout(Duration.ofSeconds(2))
-        .build();
+        .end();
 ```
 
 > [!NOTE]

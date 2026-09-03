@@ -694,6 +694,11 @@ public final class Flow<I, O> {
      *                                  {@code Instant.now().plus(duration)} 溢出）时抛出
      */
     public Flow<I, O> timeout(Duration duration) {
+        duration = requireValidTimeout(duration);
+        return control(Logical.Control.Kind.TIMEOUT, null, Function.identity(), duration);
+    }
+
+    static Duration requireValidTimeout(Duration duration) {
         Objects.requireNonNull(duration, "duration must not be null");
         if (duration.isZero() || duration.isNegative()) {
             throw new IllegalArgumentException("duration must be positive");
@@ -704,7 +709,7 @@ public final class Flow<I, O> {
             throw new IllegalArgumentException(
                     "duration is too large to represent a deadline: " + duration, overflow);
         }
-        return control(Logical.Control.Kind.TIMEOUT, null, Function.identity(), duration);
+        return duration;
     }
 
     /**
@@ -1217,9 +1222,9 @@ public final class Flow<I, O> {
 
         @Override
         public UseMergeStage<I, O, P, R> timeout(Duration duration) {
-            Objects.requireNonNull(duration, "duration must not be null");
+            final Duration validDuration = requireValidTimeout(duration);
             List<Function<Logical, Logical>> copy = new ArrayList<Function<Logical, Logical>>(modifiers);
-            copy.add(logical -> new Logical.Control(Logical.Control.Kind.TIMEOUT, logical, null, Function.identity(), duration));
+            copy.add(logical -> new Logical.Control(Logical.Control.Kind.TIMEOUT, logical, null, Function.identity(), validDuration));
             return new UseMergeStageImpl<I, O, P, R>(parent, binding, projector, Collections.unmodifiableList(copy));
         }
 
@@ -1418,7 +1423,7 @@ public final class Flow<I, O> {
          * @return 附加超时后的构建器
          */
         public ParallelFillBuilder<I, O> timeout(Duration duration) {
-            Objects.requireNonNull(duration, "duration must not be null");
+            duration = requireValidTimeout(duration);
             return new ParallelFillBuilder<I, O>(parent, forks, duration);
         }
 

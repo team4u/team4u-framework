@@ -9,6 +9,7 @@ import com.team4u.framework.flow.definition.property.CompiledReader;
 import com.team4u.framework.flow.definition.property.CompiledWriter;
 import com.team4u.framework.flow.definition.registry.*;
 
+import java.util.ArrayList;
 import java.util.HashSet;
 import java.util.List;
 import java.util.Set;
@@ -116,11 +117,14 @@ public final class SpecTypeCheckers {
             String constructName,
             SourceSpan span,
             TypeCheckContext context) {
-        if (currentOutput == null || currentOutput == TypeRef.ANY) {
+        if (currentOutput == null) {
             return branchOutput != null ? branchOutput : TypeRef.ANY;
         }
-        if (branchOutput == null || branchOutput == TypeRef.ANY) {
-            return currentOutput;
+        if (branchOutput == null) {
+            branchOutput = TypeRef.ANY;
+        }
+        if (currentOutput == TypeRef.ANY || branchOutput == TypeRef.ANY) {
+            return TypeRef.ANY;
         }
         if (currentOutput.isAssignableFrom(branchOutput)) {
             return currentOutput;
@@ -598,7 +602,7 @@ public final class SpecTypeCheckers {
                         parallel.span()));
             }
 
-            TypeRef unifiedBranchOutput = null;
+            List<TypeRef> branchOutputTypes = new ArrayList<TypeRef>();
             if (parallel.branches() != null) {
                 Set<String> seenBranchNames = new HashSet<String>();
                 for (BranchSpec branch : parallel.branches()) {
@@ -610,12 +614,7 @@ public final class SpecTypeCheckers {
                                     branch.span()));
                         }
                         TypeRef branchOut = context.checkSpec(branch.flow(), currentType);
-                        unifiedBranchOutput = unifyBranchOutput(
-                                unifiedBranchOutput,
-                                branchOut,
-                                "Parallel branch",
-                                branch.flow() != null && branch.flow().span() != null ? branch.flow().span() : branch.span(),
-                                context);
+                        branchOutputTypes.add(branchOut);
                     }
                 }
             }
@@ -638,12 +637,46 @@ public final class SpecTypeCheckers {
                         }
                         joinOutputType = currentType != null ? currentType : TypeRef.ANY;
                         break;
-                    case FIRST:
+                    case FIRST: {
+                        TypeRef unifiedBranchOutput = null;
+                        int idx = 0;
+                        for (BranchSpec branch : parallel.branches()) {
+                            if (branch != null && idx < branchOutputTypes.size()) {
+                                TypeRef branchOut = branchOutputTypes.get(idx);
+                                SourceSpan span = branch.flow() != null && branch.flow().span() != null && branch.flow().span() != SourceSpan.UNKNOWN
+                                        ? branch.flow().span() : branch.span();
+                                unifiedBranchOutput = unifyBranchOutput(
+                                        unifiedBranchOutput,
+                                        branchOut,
+                                        "Parallel branch",
+                                        span,
+                                        context);
+                                idx++;
+                            }
+                        }
                         joinOutputType = unifiedBranchOutput != null ? unifiedBranchOutput : TypeRef.ANY;
                         break;
-                    case COLLECT:
+                    }
+                    case COLLECT: {
+                        TypeRef unifiedElement = null;
+                        int idx = 0;
+                        for (BranchSpec branch : parallel.branches()) {
+                            if (branch != null && idx < branchOutputTypes.size()) {
+                                TypeRef branchOut = branchOutputTypes.get(idx);
+                                SourceSpan span = branch.flow() != null && branch.flow().span() != null && branch.flow().span() != SourceSpan.UNKNOWN
+                                        ? branch.flow().span() : branch.span();
+                                unifiedElement = unifyBranchOutput(
+                                        unifiedElement,
+                                        branchOut,
+                                        "Parallel collect",
+                                        span,
+                                        context);
+                                idx++;
+                            }
+                        }
                         joinOutputType = TypeRef.of(java.util.List.class);
                         break;
+                    }
                 }
             } else if (joinSpec instanceof SymbolRef || joinSpec instanceof SymbolJoinSpec) {
                 SymbolRef symbol = joinSpec instanceof SymbolRef

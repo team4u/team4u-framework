@@ -46,6 +46,14 @@ public class DefaultPropertyAccessCompilerTest {
         public String publicField;
     }
 
+    @Data
+    @NoArgsConstructor
+    @AllArgsConstructor
+    public static class OrderWithMapAttributes {
+        private String orderId;
+        private Map<String, Object> attributes;
+    }
+
     public static class ReadOnlyBean {
         private final String code = "READ_ONLY";
 
@@ -343,5 +351,131 @@ public class DefaultPropertyAccessCompilerTest {
         FlowResult resQuorum = Local.compile(flowQuorum).run("input");
         Assert.assertTrue(resQuorum instanceof FlowResult.Completed);
         Assert.assertEquals("input", ((Outcome.Accepted<?>) ((FlowResult.Completed) resQuorum).outcome()).value());
+    }
+
+    @Test
+    public void propertyPathInvariantsAndTrailingDot() {
+        try {
+            PropertyPath.parse("$.foo.");
+            Assert.fail("Expected FlowDiagnosticException for trailing dot");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(DiagnosticCodes.INVALID_PROPERTY_PATH, ex.getDiagnostics().get(0).code());
+        }
+
+        try {
+            new PropertyPath("$.foo", Collections.emptyList(), SourceSpan.UNKNOWN);
+            Assert.fail("Expected IAE for empty segments");
+        } catch (IllegalArgumentException expected) {
+            // pass
+        }
+
+        try {
+            new PropertyPath("$.foo", Arrays.asList("foo", ""), SourceSpan.UNKNOWN);
+            Assert.fail("Expected IAE for empty segment");
+        } catch (IllegalArgumentException expected) {
+            // pass
+        }
+
+        try {
+            new PropertyPath("$.foo", Collections.singletonList("bar"), SourceSpan.UNKNOWN);
+            Assert.fail("Expected IAE for expression mismatch with segments");
+        } catch (IllegalArgumentException expected) {
+            // pass
+        }
+    }
+
+    @Test
+    public void pojoToMapDynamicTailReaderAndWriter() {
+        DefaultPropertyAccessCompiler compiler = new DefaultPropertyAccessCompiler();
+        Map<String, Object> attrs = new HashMap<String, Object>();
+        attrs.put("userId", "u-100");
+        OrderWithMapAttributes order = new OrderWithMapAttributes("order-1", attrs);
+
+        // Reader
+        CompiledReader reader = compiler.compileReader(
+                TypeRef.of(OrderWithMapAttributes.class), PropertyPath.parse("$.attributes.userId"));
+        Assert.assertEquals(TypeRef.ANY, reader.resultType());
+        Assert.assertEquals("u-100", reader.read(order));
+
+        // Writer
+        CompiledWriter writer = compiler.compileWriter(
+                TypeRef.of(OrderWithMapAttributes.class), PropertyPath.parse("$.attributes.userId"), TypeRef.of(String.class));
+        Assert.assertEquals(TypeRef.of(OrderWithMapAttributes.class), writer.resultType());
+        OrderWithMapAttributes updated = (OrderWithMapAttributes) writer.write(order, "u-200");
+        Assert.assertSame(order, updated);
+        Assert.assertEquals("u-200", order.getAttributes().get("userId"));
+    }
+
+    @Test
+    public void parallelHeterogeneousBranchesJoinAllAndQuorumAndCustomJoin() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("strOp", (OperationContext ctx, Object in) -> Outcome.accepted("STR"), Object.class, String.class)
+                .operation("intOp", (OperationContext ctx, Object in) -> Outcome.accepted(123), Object.class, Integer.class)
+                .join("customJoin", results -> Outcome.accepted(99.9), Double.class)
+                .build();
+
+        // 1. join all with heterogeneous branches (String + Integer) -> should bind successfully!
+        ParallelSpec pAll = new ParallelSpec(
+                Arrays.asList(
+                        new BranchSpec("b1", new StepSpec(SymbolRef.of("strOp"))),
+                        new BranchSpec("b2", new StepSpec(SymbolRef.of("intOp")))
+                ),
+                BuiltinJoinSpec.all(SourceSpan.UNKNOWN),
+                SourceSpan.UNKNOWN
+        );
+        com.team4u.framework.flow.definition.binding.BoundFlow boundAll = FlowBinder.bind(
+                new FlowDefinition(1, "p.all.hetero", "1", pAll, "test", SourceSpan.UNKNOWN),
+                registry, TypeRef.of(String.class));
+        Assert.assertEquals(TypeRef.of(String.class), boundAll.outputType());
+
+        // 2. join quorum with heterogeneous branches -> should bind successfully!
+        ParallelSpec pQuorum = new ParallelSpec(
+                Arrays.asList(
+                        new BranchSpec("b1", new StepSpec(SymbolRef.of("strOp"))),
+                        new BranchSpec("b2", new StepSpec(SymbolRef.of("intOp")))
+                ),
+                BuiltinJoinSpec.quorum(1, SourceSpan.UNKNOWN),
+                SourceSpan.UNKNOWN
+        );
+        com.team4u.framework.flow.definition.binding.BoundFlow boundQuorum = FlowBinder.bind(
+                new FlowDefinition(1, "p.quorum.hetero", "1", pQuorum, "test", SourceSpan.UNKNOWN),
+                registry, TypeRef.of(String.class));
+        Assert.assertEquals(TypeRef.of(String.class), boundQuorum.outputType());
+
+        // 3. custom join with heterogeneous branches -> should bind successfully!
+        ParallelSpec pCustom = new ParallelSpec(
+                Arrays.asList(
+                        new BranchSpec("b1", new StepSpec(SymbolRef.of("strOp"))),
+                        new BranchSpec("b2", new StepSpec(SymbolRef.of("intOp")))
+                ),
+                SymbolRef.of("customJoin"),
+                SourceSpan.UNKNOWN
+        );
+        com.team4u.framework.flow.definition.binding.BoundFlow boundCustom = FlowBinder.bind(
+                new FlowDefinition(1, "p.custom.hetero", "1", pCustom, "test", SourceSpan.UNKNOWN),
+                registry, TypeRef.of(String.class));
+        Assert.assertEquals(TypeRef.of(Double.class), boundCustom.outputType());
+    }
+
+    @Test
+    public void parallelJoinFirstWithAnyDoesNotNarrowToConcreteType() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("anyOp", (OperationContext ctx, Object in) -> Outcome.accepted("val"))
+                .operation("strOp", (OperationContext ctx, Object in) -> Outcome.accepted("val"), Object.class, String.class)
+                .build();
+
+        ParallelSpec pFirst = new ParallelSpec(
+                Arrays.asList(
+                        new BranchSpec("b1", new StepSpec(SymbolRef.of("anyOp"))),
+                        new BranchSpec("b2", new StepSpec(SymbolRef.of("strOp")))
+                ),
+                BuiltinJoinSpec.first(SourceSpan.UNKNOWN),
+                SourceSpan.UNKNOWN
+        );
+        com.team4u.framework.flow.definition.binding.BoundFlow boundFirst = FlowBinder.bind(
+                new FlowDefinition(1, "p.first.any", "1", pFirst, "test", SourceSpan.UNKNOWN),
+                registry, TypeRef.of(String.class));
+        // MUST be ANY, NOT narrowed to String!
+        Assert.assertEquals(TypeRef.ANY, boundFirst.outputType());
     }
 }

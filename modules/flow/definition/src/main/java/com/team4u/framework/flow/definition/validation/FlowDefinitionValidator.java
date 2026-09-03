@@ -139,26 +139,8 @@ public final class FlowDefinitionValidator {
         }
 
         if (call.modifiers() != null) {
-            int projectCount = 0;
-            int mergeCount = 0;
             for (ModifierSpec mod : call.modifiers()) {
-                if (mod instanceof ProjectModifierSpec) {
-                    projectCount++;
-                    if (projectCount > 1) {
-                        diagnostics.add(new Diagnostic(
-                                DiagnosticCodes.DUPLICATE_STEP_PROJECT,
-                                "Duplicate 'project' declaration in call",
-                                mod.span()));
-                    }
-                } else if (mod instanceof MergeModifierSpec) {
-                    mergeCount++;
-                    if (mergeCount > 1) {
-                        diagnostics.add(new Diagnostic(
-                                DiagnosticCodes.DUPLICATE_STEP_MERGE,
-                                "Duplicate 'merge' declaration in call",
-                                mod.span()));
-                    }
-                } else if (mod instanceof TimeoutModifierSpec) {
+                if (mod instanceof TimeoutModifierSpec) {
                     Duration d = ((TimeoutModifierSpec) mod).duration();
                     if (d == null || d.isNegative() || d.isZero()) {
                         diagnostics.add(new Diagnostic(
@@ -204,26 +186,8 @@ public final class FlowDefinitionValidator {
         }
 
         if (step.modifiers() != null) {
-            int projectCount = 0;
-            int mergeCount = 0;
             for (ModifierSpec mod : step.modifiers()) {
-                if (mod instanceof ProjectModifierSpec) {
-                    projectCount++;
-                    if (projectCount > 1) {
-                        diagnostics.add(new Diagnostic(
-                                DiagnosticCodes.DUPLICATE_STEP_PROJECT,
-                                "Duplicate 'project' declaration in step",
-                                mod.span()));
-                    }
-                } else if (mod instanceof MergeModifierSpec) {
-                    mergeCount++;
-                    if (mergeCount > 1) {
-                        diagnostics.add(new Diagnostic(
-                                DiagnosticCodes.DUPLICATE_STEP_MERGE,
-                                "Duplicate 'merge' declaration in step",
-                                mod.span()));
-                    }
-                } else if (mod instanceof TimeoutModifierSpec) {
+                if (mod instanceof TimeoutModifierSpec) {
                     Duration d = ((TimeoutModifierSpec) mod).duration();
                     if (d == null || d.isNegative() || d.isZero()) {
                         diagnostics.add(new Diagnostic(

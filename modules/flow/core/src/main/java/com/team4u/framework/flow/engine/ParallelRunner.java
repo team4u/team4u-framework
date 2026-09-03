@@ -280,7 +280,8 @@ public final class ParallelRunner {
             if (cancellation.isCancelled()) {
                 throw new CancellationException("flow execution was cancelled");
             }
-            joined = Outcome.failed(Failure.of("JOIN_EXCEPTION", join.failure().toString()));
+            joined = Outcome.failed(com.team4u.framework.flow.model.Failures.from(
+                    join.failure(), com.team4u.framework.flow.model.FlowDiagnosticCodes.JOIN_EXCEPTION));
         } else {
             joined = join.value();
         }

@@ -302,7 +302,7 @@ Flow<State, State> enriched = Flow.<State>identity().use(
 );
 ```
 
-### 子流程适配与只读旁路 (thenAdapt / tap / peek)
+### 子流程适配与只读旁路
 
 组合嵌套子流程与只读旁路监听：
 
@@ -315,10 +315,10 @@ Flow<OrderContext, OrderContext> adaptedFlow = Flow.<OrderContext>identity()
                 OrderContext::withPaymentResponse     // merge: 合并出参
         );
 
-// 2. tap / peek：只读消费与透视（执行结果保持接受态，不影响主流水线数据）
+// 2. tap：只读消费（执行结果保持接受态，不影响主流水线数据）
 Flow<OrderContext, OrderContext> monitoredFlow = Flow.<OrderContext>identity()
         .tap(order -> metricsLogger.record(order))
-        .peek(order -> traceCollector.track(order));
+        .tap(order -> traceCollector.track(order));
 ```
 
 ---

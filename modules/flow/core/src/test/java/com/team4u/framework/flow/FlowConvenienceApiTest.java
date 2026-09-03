@@ -20,6 +20,7 @@ import com.team4u.framework.flow.model.Reason;
 import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertFalse;
 import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.fail;
 
 /**
  * 流程核心便捷 API 单元测试（UseBuilder、when/otherwise、tap、adapt、parallelFill 与 Joins）。
@@ -407,5 +408,83 @@ public class FlowConvenienceApiTest {
                 Local.from(flow).compile().run("start").requireAccepted();
         assertEquals(Integer.valueOf(10), vals.get(b1));
         assertEquals(Integer.valueOf(20), vals.get(b2));
+    }
+
+    @Test
+    public void joinsQuorumAndQuorumBarrierInvariants() {
+        try {
+            Joins.quorum(0);
+            fail("Expected IAE for Joins.quorum(0)");
+        } catch (IllegalArgumentException expected) {
+            // pass
+        }
+        try {
+            Joins.quorum(-1);
+            fail("Expected IAE for Joins.quorum(-1)");
+        } catch (IllegalArgumentException expected) {
+            // pass
+        }
+        try {
+            Joins.quorumBarrier(0);
+            fail("Expected IAE for Joins.quorumBarrier(0)");
+        } catch (IllegalArgumentException expected) {
+            // pass
+        }
+        try {
+            Joins.quorumBarrier(-1);
+            fail("Expected IAE for Joins.quorumBarrier(-1)");
+        } catch (IllegalArgumentException expected) {
+            // pass
+        }
+
+        Branch<String, String> b1 = Branch.of("b1", (ctx, in) -> Outcome.accepted("ok1"));
+        Branch<String, String> b2 = Branch.of("b2", (ctx, in) -> Outcome.accepted("ok2"));
+        Flow<String, String> flow = Flow.parallel(b1, b2).join(Joins.quorumBarrier(5));
+        FlowResult<String> res = Local.from(flow).compile().run("start");
+        Outcome<String> outcome = ((FlowResult.Completed<String>) res).outcome();
+        assertTrue(outcome instanceof Outcome.Failed<?>);
+        assertEquals(FlowDiagnosticCodes.JOIN_EXCEPTION, ((Outcome.Failed<?>) outcome).failure().code());
+        assertTrue(((Outcome.Failed<?>) outcome).failure().message().contains("exceeds branch count"));
+    }
+
+    @Test
+    public void useBuilderAndParallelFillTimeoutInvariants() {
+        try {
+            Flow.<String>identity().use(AuditOp.class).project(s -> s).timeout(Duration.ZERO);
+            fail("Expected IAE for timeout(0)");
+        } catch (IllegalArgumentException expected) {
+            // pass
+        }
+        try {
+            Flow.<String>identity().use(AuditOp.class).project(s -> s).timeout(Duration.ofSeconds(-1));
+            fail("Expected IAE for timeout(-1)");
+        } catch (IllegalArgumentException expected) {
+            // pass
+        }
+        try {
+            Flow.<String>identity().parallelFill().timeout(Duration.ZERO);
+            fail("Expected IAE for parallelFill timeout(0)");
+        } catch (IllegalArgumentException expected) {
+            // pass
+        }
+        try {
+            Flow.<String>identity().parallelFill().timeout(Duration.ofSeconds(-1));
+            fail("Expected IAE for parallelFill timeout(-1)");
+        } catch (IllegalArgumentException expected) {
+            // pass
+        }
+    }
+
+    @Test
+    public void joinPropagatesFlowExecutionExceptionStructuredCode() {
+        Branch<String, String> b1 = Branch.of("b1", (ctx, in) -> Outcome.accepted("ok"));
+        Flow<String, String> flow = Flow.parallel(b1).join(results -> {
+            throw new com.team4u.framework.flow.model.FlowExecutionException("CUSTOM_JOIN_ERR", "custom join error");
+        });
+        FlowResult<String> res = Local.from(flow).compile().run("start");
+        Outcome<String> outcome = ((FlowResult.Completed<String>) res).outcome();
+        assertTrue(outcome instanceof Outcome.Failed<?>);
+        assertEquals("CUSTOM_JOIN_ERR", ((Outcome.Failed<?>) outcome).failure().code());
+        assertEquals("custom join error", ((Outcome.Failed<?>) outcome).failure().message());
     }
 }

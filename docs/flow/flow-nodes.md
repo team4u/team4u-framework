@@ -21,7 +21,7 @@ graph TD
         L6["flow.await(ResumePoint)"]
         L7["flow.policy / persistentPolicy / timeout"]
         L8["Flow.identity / accepted / rejected / ..."]
-        L9["flow.thenAdapt / tap / peek"]
+        L9["flow.thenAdapt / tap"]
     end
 
     subgraph "编译期降级校验 (Compiler Lowering)"
