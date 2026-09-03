@@ -12,6 +12,7 @@ import java.util.function.BiFunction;
 import java.util.function.Function;
 import java.util.function.Predicate;
 import com.team4u.framework.flow.api.Branch;
+import com.team4u.framework.flow.api.ContextualJoinStrategy;
 import com.team4u.framework.flow.api.JoinStrategy;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.PersistentPolicy;
@@ -29,6 +30,7 @@ import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.model.Reason;
 import com.team4u.framework.flow.model.Recovery;
 import com.team4u.framework.flow.model.Resumed;
+import com.team4u.framework.flow.spi.BindingResolver;
 import com.team4u.framework.flow.spi.ExecutableFlowVisitor;
 import com.team4u.framework.flow.spi.OperationResolver;
 
@@ -884,6 +886,8 @@ public final class Flow<I, O> {
             marker = PersistentPolicy.class;
         } else if (kind == Logical.BindingKind.JOIN) {
             marker = JoinStrategy.class;
+        } else if (kind == Logical.BindingKind.CONTEXTUAL_JOIN) {
+            marker = ContextualJoinStrategy.class;
         } else {
             throw new IllegalStateException("Unknown BindingKind: " + kind);
         }
@@ -1052,7 +1056,10 @@ public final class Flow<I, O> {
             for (Branch<I, ?> branch : branches) {
                 logical.add(new Logical.ParallelBranch(branch, branch.flow().root));
             }
-            return new Flow<I, O>(new Logical.Parallel(logical, binding(join, Logical.BindingKind.JOIN)));
+            Logical.BindingKind kind = join instanceof ContextualJoinStrategy
+                    ? Logical.BindingKind.CONTEXTUAL_JOIN
+                    : Logical.BindingKind.JOIN;
+            return new Flow<I, O>(new Logical.Parallel(logical, binding(join, kind)));
         }
 
         /**
@@ -1093,8 +1100,43 @@ public final class Flow<I, O> {
          * @return 完整的并行 {@link Flow} 实例
          * @throws NullPointerException 当 {@code join} 为 null 时抛出
          */
-        public <O> Flow<I, O> join(com.team4u.framework.flow.api.ContextualJoinStrategy<? super I, O> join) {
-            return join((JoinStrategy<O>) join);
+        public <O> Flow<I, O> join(ContextualJoinStrategy<? super I, O> join) {
+            Objects.requireNonNull(join, "join must not be null");
+            List<Logical.ParallelBranch> logical = new ArrayList<Logical.ParallelBranch>();
+            for (Branch<I, ?> branch : branches) {
+                logical.add(new Logical.ParallelBranch(branch, branch.flow().root));
+            }
+            return new Flow<I, O>(new Logical.Parallel(logical, binding(join, Logical.BindingKind.CONTEXTUAL_JOIN)));
+        }
+
+        /**
+         * 指定基于组件契约类型的带父节点输入上下文的并行汇聚归约策略，延迟至运行期通过解析器解析单例 Bean 实例。
+         *
+         * @param joinClass 上下文汇聚策略契约接口或实现类，不能为 null
+         * @param <O>       汇聚输出类型
+         * @return 完整的并行 {@link Flow} 实例
+         * @throws NullPointerException 当 {@code joinClass} 为 null 时抛出
+         */
+        public <O> Flow<I, O> joinContextual(Class<? extends ContextualJoinStrategy<? super I, O>> joinClass) {
+            return joinContextual(joinClass, null);
+        }
+
+        /**
+         * 指定基于组件契约类型与限定符的带父节点输入上下文的并行汇聚归约策略，延迟至运行期通过解析器解析单例 Bean 实例。
+         *
+         * @param joinClass 上下文汇聚策略契约接口或实现类，不能为 null
+         * @param qualifier 目标 Bean 限定符（如 Spring Bean 名称），可为 null
+         * @param <O>       汇聚输出类型
+         * @return 完整的并行 {@link Flow} 实例
+         * @throws NullPointerException 当 {@code joinClass} 为 null 时抛出
+         */
+        public <O> Flow<I, O> joinContextual(Class<? extends ContextualJoinStrategy<? super I, O>> joinClass, String qualifier) {
+            Objects.requireNonNull(joinClass, "joinClass must not be null");
+            List<Logical.ParallelBranch> logical = new ArrayList<Logical.ParallelBranch>();
+            for (Branch<I, ?> branch : branches) {
+                logical.add(new Logical.ParallelBranch(branch, branch.flow().root));
+            }
+            return new Flow<I, O>(new Logical.Parallel(logical, binding(joinClass, qualifier, Logical.BindingKind.CONTEXTUAL_JOIN)));
         }
     }
 
@@ -1108,28 +1150,28 @@ public final class Flow<I, O> {
     }
 
     /**
-     * 导出带有指定流程标识的结构化只读描述模型（常用于生成可视化 Mermaid 图或文本拓扑结构）。
+     * 导出当前逻辑流程的结构化只读描述模型。
      *
-     * @param flowId 流程标识，可为 null
+     * @param flowId 可选的流程唯一标识，可为 null
      * @return 流程结构描述模型 {@link FlowDescription}
      */
     public FlowDescription describe(String flowId) {
-        return new FlowDescription(flowId, FlowDescriptionBuilder.describe(root, FlowPaths.root()));
+        return new FlowDescription(flowId, com.team4u.framework.flow.desc.FlowDescriptionBuilder.describe(root, com.team4u.framework.flow.compiler.FlowPaths.root()));
     }
 
     /**
-     * 使用默认拒绝解析器将当前流程校验并解析后，通过 {@link ExecutableFlowVisitor} 投影为目标运行时拓扑结构。
+     * 使用默认的拒绝解析器（{@link OperationResolver#rejecting()}）将当前流程校验并投影为目标运行时拓扑结构。
      *
      * @param visitor 可执行流访问者 SPI，不能为 null
      * @param <R>     投影结果类型
      * @return 访问者投影生成的实例
      */
     public <R> R project(ExecutableFlowVisitor<R> visitor) {
-        return project(OperationResolver.rejecting(), visitor);
+        return project(BindingResolver.rejecting(), visitor);
     }
 
     /**
-     * 使用指定的 {@link OperationResolver} 将当前流程校验并解析后，通过 {@link ExecutableFlowVisitor} 投影为目标运行时拓扑结构。
+     * 使用指定的 {@link BindingResolver} 将当前流程校验并解析后，通过 {@link ExecutableFlowVisitor} 投影为目标运行时拓扑结构。
      *
      * @param resolver 组件解析器，不能为 null
      * @param visitor  可执行流访问者 SPI，不能为 null
@@ -1138,7 +1180,7 @@ public final class Flow<I, O> {
      * @throws NullPointerException 当参数为 null 时抛出
      * @throws FlowBuildException   当流程结构校验失败时抛出
      */
-    public <R> R project(OperationResolver resolver, ExecutableFlowVisitor<R> visitor) {
+    public <R> R project(BindingResolver resolver, ExecutableFlowVisitor<R> visitor) {
         Objects.requireNonNull(visitor, "visitor must not be null");
         Objects.requireNonNull(resolver, "resolver must not be null");
         Compiler.Compiled compiled = Compiler.compile(this, resolver);

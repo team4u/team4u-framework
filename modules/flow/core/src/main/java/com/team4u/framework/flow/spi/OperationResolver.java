@@ -1,14 +1,15 @@
 package com.team4u.framework.flow.spi;
 
-import java.lang.reflect.Proxy;
-import java.util.Objects;
 import com.team4u.framework.flow.Local;
+import com.team4u.framework.flow.api.JoinStrategy;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.Policy;
 
 /**
  * 延迟绑定组件解析器 SPI（用于在流程编译/投影期将 {@code Class} 与可选 {@code qualifier} 解析为实际的 Spring Bean 或组件单例）。
+ *
+ * <p>支持统一解析 {@link Operation}、{@link Policy}、{@link PersistentPolicy} 以及 {@link JoinStrategy}。</p>
  *
  * <p>核心职责与规范：
  * <ul>
@@ -21,48 +22,18 @@ import com.team4u.framework.flow.api.Policy;
  * @author jay.wu
  */
 @FunctionalInterface
-public interface OperationResolver {
+public interface OperationResolver extends BindingResolver {
 
     /**
-     * 根据契约类型与限定符解析目标组件实例（Operation/Policy/PersistentPolicy）。
+     * 根据契约类型与限定符解析目标组件实例（Operation/Policy/PersistentPolicy/JoinStrategy）。
      *
      * @param contract  契约 Class（接口或实现类），保证非 null
      * @param qualifier 可选的限定符名称（如 Spring Bean 名称），可为 null
      * @return 解析得到的组件实例，不能返回 null
      * @throws RuntimeException 当解析失败（如 Bean 不存在或冲突）时抛出
      */
+    @Override
     Object resolve(Class<?> contract, String qualifier);
-
-    /**
-     * 根据全局唯一标识符或 Bean 名称解析目标组件实例（约定优于配置自动发现）。
-     *
-     * @param identifier 标识符或 Bean 名称，可为 null
-     * @return 解析得到的组件实例；若不存在或不支持则返回 null
-     */
-    default Object resolve(String identifier) {
-        return null;
-    }
-
-    /**
-     * 提取已解析实例的真实实现类型 Class（支持智能解包 JDK 动态代理）。
-     *
-     * @param resolved 已解析的组件实例，不能为 null
-     * @return 实际的实现类型 Class
-     * @throws NullPointerException 当 {@code resolved} 为 null 时抛出
-     */
-    default Class<?> implementationClass(Object resolved) {
-        Objects.requireNonNull(resolved, "resolved must not be null");
-        Class<?> type = resolved.getClass();
-        if (Proxy.isProxyClass(type)) {
-            for (Class<?> candidate : type.getInterfaces()) {
-                if (candidate != Operation.class && candidate != Policy.class
-                        && candidate != PersistentPolicy.class) {
-                    return candidate;
-                }
-            }
-        }
-        return type;
-    }
 
     /**
      * 获取全局默认组件解析器（优先通过 SPI 自动发现，若无实现则回退为 {@link #rejecting()} 拒绝解析器）。
@@ -70,8 +41,11 @@ public interface OperationResolver {
      * @return 全局默认解析器实例
      */
     static OperationResolver defaultResolver() {
-        OperationResolver spi = com.team4u.framework.base.util.ServiceLoaderUtil.loadFirstAvailable(OperationResolver.class);
-        return spi != null ? spi : rejecting();
+        BindingResolver resolver = BindingResolver.defaultResolver();
+        if (resolver instanceof OperationResolver) {
+            return (OperationResolver) resolver;
+        }
+        return resolver::resolve;
     }
 
     /**
@@ -80,12 +54,9 @@ public interface OperationResolver {
      * @return 拒绝解析器实例
      */
     static OperationResolver rejecting() {
-        return new OperationResolver() {
-            @Override
-            public Object resolve(Class<?> contract, String qualifier) {
-                throw new IllegalStateException("No resolver for " + contract.getName()
-                        + (qualifier == null ? "" : "[" + qualifier + "]"));
-            }
+        return (contract, qualifier) -> {
+            throw new IllegalStateException("No resolver for " + contract.getName()
+                    + (qualifier == null ? "" : "[" + qualifier + "]"));
         };
     }
 }

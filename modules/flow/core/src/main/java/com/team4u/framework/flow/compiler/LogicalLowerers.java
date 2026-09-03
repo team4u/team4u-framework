@@ -163,9 +163,8 @@ public final class LogicalLowerers {
                 context.endParallelBlock();
             }
             PlanNode.BoundTarget target = context.resolve(parallel.join(), work.path());
-            JoinStrategy<?> joinStrategy = target != null ? (JoinStrategy<?>) target.instance() : null;
             return new PlanNode.Parallel(Compiler.descriptor(work, NodeDescriptor.Kind.PARALLEL),
-                    branches, joinStrategy);
+                    branches, target);
         }
     }
 

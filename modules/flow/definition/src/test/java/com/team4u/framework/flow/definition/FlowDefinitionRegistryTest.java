@@ -232,26 +232,17 @@ public class FlowDefinitionRegistryTest {
     }
 
     @Test
-    public void testJoinProviderRegistrationAndIoCResolution() {
-        com.team4u.framework.flow.api.JoinStrategy<String> dynamicJoin = results -> Outcome.accepted("RESOLVED_BY_PROVIDER");
-
-        com.team4u.framework.flow.definition.registry.JoinProvider joinProvider = new com.team4u.framework.flow.definition.registry.JoinProvider() {
-            @Override
-            public com.team4u.framework.flow.definition.registry.JoinDescriptor descriptor() {
-                return com.team4u.framework.flow.definition.registry.JoinDescriptor.builder()
-                        .id("dynamic.join")
-                        .outputType(TypeRef.of(String.class))
-                        .build();
-            }
-
-            @Override
-            public com.team4u.framework.flow.api.JoinStrategy<?> provide(OperationResolver resolver) {
-                return dynamicJoin;
-            }
-        };
+    public void testContextualJoinRegistrationAndExecution() {
+        com.team4u.framework.flow.api.ContextualJoinStrategy<String, String> contextualJoin =
+                (input, results) -> Outcome.accepted(input + ":" + ((Outcome.Accepted<?>) results.firstAccepted()).value());
 
         FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
-                .join(joinProvider)
+                .join(com.team4u.framework.flow.definition.registry.JoinDescriptor.builder()
+                        .id("dynamic.join")
+                        .strategy(contextualJoin)
+                        .contextInputType(TypeRef.of(String.class))
+                        .outputType(TypeRef.of(String.class))
+                        .build())
                 .operation("step1", (OperationContext ctx, String in) -> Outcome.accepted(in), String.class, String.class)
                 .build();
 
@@ -270,7 +261,7 @@ public class FlowDefinitionRegistryTest {
         BoundFlow bound = FlowBinder.bind(def, registry);
         LocalExecutable<String, String> exec = bound.compileLocal(String.class, String.class);
         FlowResult<String> result = exec.run("data");
-        Assert.assertEquals("RESOLVED_BY_PROVIDER", result.requireAccepted());
+        Assert.assertEquals("data:data", result.requireAccepted());
     }
 
     public interface MyContractJoin extends com.team4u.framework.flow.api.JoinStrategy<String> { }
@@ -334,7 +325,14 @@ public class FlowDefinitionRegistryTest {
         OperationResolver failingResolver = (contract, qualifier) -> null;
         try {
             bound.compileLocal(String.class, String.class, failingResolver);
-            Assert.fail("Expected FlowBuildException when join cannot be resolved");
+            Assert.fail("Expected FlowDiagnosticException when join cannot be resolved");
+        } catch (com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException ex) {
+            Assert.assertEquals("MISSING_BINDING", ex.diagnostics().get(0).code());
+        }
+
+        try {
+            bound.compileLocalRaw(String.class, String.class, failingResolver);
+            Assert.fail("Expected FlowBuildException when join cannot be resolved via compileLocalRaw");
         } catch (com.team4u.framework.flow.model.FlowBuildException ex) {
             Assert.assertEquals("MISSING_BINDING", ex.problems().get(0).code());
         }

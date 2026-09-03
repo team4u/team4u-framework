@@ -59,4 +59,8 @@ public final class FlowDiagnosticCodes {
     public static final String BINDING_TYPE = "BINDING_TYPE";
     /** 无法获取组件实现类。 */
     public static final String IMPLEMENTATION_CLASS = "IMPLEMENTATION_CLASS";
+    /** 运行时强类型校验不匹配。 */
+    public static final String TYPE_MISMATCH = "TYPE_MISMATCH";
+    /** 上下文汇聚策略必须通过上下文 API 绑定。 */
+    public static final String CONTEXTUAL_JOIN_REQUIRES_CONTEXTUAL_API = "CONTEXTUAL_JOIN_REQUIRES_CONTEXTUAL_API";
 }

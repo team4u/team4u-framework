@@ -170,8 +170,9 @@ public final class PlanNodeProjectors {
                 R branchPlanResult = pop(resultStack);
                 branchResults.set(i, new ExecutableParallelBranch<R>(parallel.branches().get(i).token(), branchPlanResult));
             }
+            ExecutableBinding joinBinding = toExecutableBinding(parallel.join(), ExecutableBinding.Kind.JOIN);
             return visitor.visitParallel(parallel.descriptor(),
-                    Collections.unmodifiableList(branchResults), parallel.join());
+                    Collections.unmodifiableList(branchResults), joinBinding);
         }
     }
 

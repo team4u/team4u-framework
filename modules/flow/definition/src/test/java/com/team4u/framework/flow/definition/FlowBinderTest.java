@@ -334,10 +334,15 @@ public class FlowBinderTest {
                 "test.flow", SourceSpan.UNKNOWN
         );
 
-        BoundFlow bound = FlowBinder.bind(def, registry);
+        BoundFlow bound = FlowBinder.bind(def, registry, TypeRef.of(String.class));
         LocalExecutable<String, String> exec = bound.compileLocal(String.class, String.class);
         FlowResult<String> result = exec.run("pass_through");
         Assert.assertEquals("pass_through", result.requireAccepted());
+
+        // Also verify untyped bound flow can compile via compileLocalUnchecked
+        BoundFlow untypedBound = FlowBinder.bind(def, registry);
+        LocalExecutable<String, String> uncheckedExec = untypedBound.compileLocalUnchecked(String.class, String.class);
+        Assert.assertEquals("pass_through", uncheckedExec.run("pass_through").requireAccepted());
     }
 
     public interface MyLifecycleOp extends Operation<String, String> { }

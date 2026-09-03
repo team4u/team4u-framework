@@ -31,11 +31,11 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
 
     public static final DefaultPropertyAccessCompiler INSTANCE = new DefaultPropertyAccessCompiler();
 
-    private static final ClassValue<Map<String, Optional<PropertyAccessor>>> ACCESSOR_CACHE =
-            new ClassValue<Map<String, Optional<PropertyAccessor>>>() {
+    private static final ClassValue<Map<String, AccessorResolution>> ACCESSOR_CACHE =
+            new ClassValue<Map<String, AccessorResolution>>() {
                 @Override
-                protected Map<String, Optional<PropertyAccessor>> computeValue(Class<?> type) {
-                    return new ConcurrentHashMap<String, Optional<PropertyAccessor>>();
+                protected Map<String, AccessorResolution> computeValue(Class<?> type) {
+                    return new ConcurrentHashMap<String, AccessorResolution>();
                 }
             };
 
@@ -57,7 +57,7 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                     dynamicTail = true;
                     break;
                 }
-                PropertyAccessor acc = resolveAccessor(currClass, seg);
+                PropertyAccessor acc = resolveAccessor(currClass, seg, path.span());
                 if (acc == null) {
                     throw new FlowDiagnosticException(new Diagnostic(
                             DiagnosticCodes.UNKNOWN_PROPERTY,
@@ -118,7 +118,7 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                         }
                         current = map.get(seg);
                     } else {
-                        PropertyAccessor acc = resolveAccessor(current.getClass(), seg);
+                        PropertyAccessor acc = resolveAccessor(current.getClass(), seg, path.span());
                         if (acc == null) {
                             throw new FlowDiagnosticException(new Diagnostic(
                                     DiagnosticCodes.PROPERTY_NOT_FOUND,
@@ -157,7 +157,7 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                     break;
                 }
                 String seg = segments.get(i);
-                PropertyAccessor acc = resolveAccessor(currClass, seg);
+                PropertyAccessor acc = resolveAccessor(currClass, seg, path.span());
                 if (acc == null) {
                     throw new FlowDiagnosticException(new Diagnostic(
                             DiagnosticCodes.UNKNOWN_PROPERTY,
@@ -227,7 +227,7 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                         }
                         current = next;
                     } else {
-                        PropertyAccessor acc = resolveAccessor(current.getClass(), seg);
+                        PropertyAccessor acc = resolveAccessor(current.getClass(), seg, path.span());
                         if (acc == null) {
                             throw new FlowDiagnosticException(new Diagnostic(
                                     DiagnosticCodes.PROPERTY_NOT_FOUND,
@@ -256,7 +256,7 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                 if (current instanceof Map) {
                     ((Map) current).put(lastSeg, value);
                 } else {
-                    PropertyAccessor acc = resolveAccessor(current.getClass(), lastSeg);
+                    PropertyAccessor acc = resolveAccessor(current.getClass(), lastSeg, path.span());
                     if (acc == null) {
                         throw new FlowDiagnosticException(new Diagnostic(
                                 DiagnosticCodes.PROPERTY_NOT_FOUND,
@@ -277,19 +277,47 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
         };
     }
 
-    private static PropertyAccessor resolveAccessor(Class<?> clazz, String propertyName) {
-        Map<String, Optional<PropertyAccessor>> map = ACCESSOR_CACHE.get(clazz);
-        Optional<PropertyAccessor> cached = map.get(propertyName);
-        if (cached != null) {
-            return cached.orElse(null);
+    private static final class AccessorResolution {
+        private final PropertyAccessor accessor;
+        private final String failureCode;
+        private final String failureMessage;
+
+        private AccessorResolution(PropertyAccessor accessor, String failureCode, String failureMessage) {
+            this.accessor = accessor;
+            this.failureCode = failureCode;
+            this.failureMessage = failureMessage;
         }
 
-        PropertyAccessor accessor = findAccessor(clazz, propertyName);
-        map.put(propertyName, Optional.ofNullable(accessor));
-        return accessor;
+        static AccessorResolution success(PropertyAccessor accessor) {
+            return new AccessorResolution(accessor, null, null);
+        }
+
+        static AccessorResolution failure(String failureCode, String failureMessage) {
+            return new AccessorResolution(null, failureCode, failureMessage);
+        }
+
+        boolean isSuccess() {
+            return failureCode == null;
+        }
     }
 
-    private static PropertyAccessor findAccessor(Class<?> clazz, String propertyName) {
+    private static PropertyAccessor resolveAccessor(Class<?> clazz, String propertyName, SourceSpan span) {
+        Map<String, AccessorResolution> map = ACCESSOR_CACHE.get(clazz);
+        AccessorResolution resolution = map.get(propertyName);
+        if (resolution == null) {
+            resolution = findAccessor(clazz, propertyName);
+            map.put(propertyName, resolution);
+        }
+        if (!resolution.isSuccess()) {
+            throw new FlowDiagnosticException(new Diagnostic(
+                    resolution.failureCode,
+                    resolution.failureMessage,
+                    span));
+        }
+        return resolution.accessor;
+    }
+
+    private static AccessorResolution findAccessor(Class<?> clazz, String propertyName) {
         String capitalized = Character.toUpperCase(propertyName.charAt(0)) + propertyName.substring(1);
         Method getter = null;
         Method setter = null;
@@ -327,11 +355,11 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                     if (m.getName().equals("set" + capitalized)
                             && !Modifier.isStatic(m.getModifiers())
                             && m.getParameterTypes().length == 1) {
-                        throw new FlowDiagnosticException(new Diagnostic(
+                        return AccessorResolution.failure(
                                 DiagnosticCodes.PROPERTY_INCONSISTENT,
                                 "Inconsistent getter return type " + propType.getName()
                                         + " and setter parameter type " + m.getParameterTypes()[0].getName()
-                                        + " for property '" + propertyName + "' on " + clazz.getName()));
+                                        + " for property '" + propertyName + "' on " + clazz.getName());
                     }
                 }
             }
@@ -349,9 +377,9 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
             if (count == 1) {
                 setter = candidate;
             } else if (count > 1) {
-                throw new FlowDiagnosticException(new Diagnostic(
+                return AccessorResolution.failure(
                         DiagnosticCodes.PROPERTY_AMBIGUOUS,
-                        "Ambiguous overloaded setters for property '" + propertyName + "' on " + clazz.getName()));
+                        "Ambiguous overloaded setters for property '" + propertyName + "' on " + clazz.getName());
             }
         }
 
@@ -368,10 +396,10 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
         }
 
         if (getter == null && field == null && setter == null) {
-            return null;
+            return AccessorResolution.success(null);
         }
 
-        return new PropertyAccessor(propertyName, getter, setter, field);
+        return AccessorResolution.success(new PropertyAccessor(propertyName, getter, setter, field));
     }
 
     private static final class PropertyAccessor {

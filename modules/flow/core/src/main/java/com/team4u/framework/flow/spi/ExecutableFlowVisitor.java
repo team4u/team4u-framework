@@ -79,6 +79,23 @@ public interface ExecutableFlowVisitor<R> {
                     List<R> branches);
 
     /**
+     * 投影并行并发节点（带汇聚绑定元数据）。
+     *
+     * @param descriptor  节点静态描述符
+     * @param branches    已投影的并行分支列表
+     * @param joinBinding 并行汇聚绑定（包含契约、实现类与限定符等元数据）
+     * @return 投影结果
+     */
+    default R visitParallel(NodeDescriptor descriptor,
+                            List<ExecutableParallelBranch<R>> branches,
+                            ExecutableBinding joinBinding) {
+        return visitParallel(descriptor, branches,
+                joinBinding != null && joinBinding.instance() instanceof JoinStrategy
+                        ? (JoinStrategy<?>) joinBinding.instance()
+                        : null);
+    }
+
+    /**
      * 投影并行并发节点。
      *
      * @param descriptor 节点静态描述符

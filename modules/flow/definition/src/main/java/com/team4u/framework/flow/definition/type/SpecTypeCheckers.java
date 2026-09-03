@@ -690,6 +690,16 @@ public final class SpecTypeCheckers {
                             symbol.span()));
                 } else {
                     joinOutputType = joinDesc.outputType();
+                    if (joinDesc.contextInputType() != null
+                            && currentType != null
+                            && !TypeRef.ANY.equals(currentType)
+                            && !joinDesc.contextInputType().isAssignableFrom(currentType)) {
+                        context.addDiagnostic(new Diagnostic(
+                                DiagnosticCodes.TYPE_MISMATCH,
+                                "Contextual join strategy '" + symbol.id() + "' expects context input type "
+                                        + joinDesc.contextInputType().typeName() + " but was provided " + currentType.typeName(),
+                                symbol.span()));
+                    }
                 }
             } else if (parallel.join() != null) {
                 JoinDescriptor joinDesc = context.registry().join(parallel.join().id());
@@ -700,6 +710,16 @@ public final class SpecTypeCheckers {
                             parallel.join().span()));
                 } else {
                     joinOutputType = joinDesc.outputType();
+                    if (joinDesc.contextInputType() != null
+                            && currentType != null
+                            && !TypeRef.ANY.equals(currentType)
+                            && !joinDesc.contextInputType().isAssignableFrom(currentType)) {
+                        context.addDiagnostic(new Diagnostic(
+                                DiagnosticCodes.TYPE_MISMATCH,
+                                "Contextual join strategy '" + parallel.join().id() + "' expects context input type "
+                                        + joinDesc.contextInputType().typeName() + " but was provided " + currentType.typeName(),
+                                parallel.join().span()));
+                    }
                 }
             }
 

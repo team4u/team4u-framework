@@ -227,7 +227,7 @@ public interface BindingContext {
      *
      * @return 组件解析器
      */
-    default com.team4u.framework.flow.spi.OperationResolver resolver() {
+    default com.team4u.framework.flow.spi.BindingResolver resolver() {
         return null;
     }
 

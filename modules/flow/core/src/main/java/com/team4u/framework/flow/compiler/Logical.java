@@ -37,7 +37,9 @@ public interface Logical {
         /** 持久化有状态策略。 */
         PERSISTENT_POLICY,
         /** 并行汇聚策略。 */
-        JOIN
+        JOIN,
+        /** 并行上下文汇聚策略。 */
+        CONTEXTUAL_JOIN
     }
 
     /** 编排期声明的组件绑定模型（包含实例、契约 Class、限定符与绑定种类）。 */
@@ -134,7 +136,10 @@ public interface Logical {
 
         public Parallel(List<ParallelBranch> branches, JoinStrategy<?> join) {
             this(branches, new Binding(Objects.requireNonNull(join, "join must not be null"),
-                    findContract(join), null, BindingKind.JOIN));
+                    findContract(join), null,
+                    join instanceof com.team4u.framework.flow.api.ContextualJoinStrategy
+                            ? BindingKind.CONTEXTUAL_JOIN
+                            : BindingKind.JOIN));
         }
 
         private static Class<?> findContract(JoinStrategy<?> join) {

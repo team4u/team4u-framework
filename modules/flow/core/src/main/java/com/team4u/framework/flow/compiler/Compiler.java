@@ -17,12 +17,15 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import com.team4u.framework.flow.Flow;
+import com.team4u.framework.flow.api.ContextualJoinStrategy;
 import com.team4u.framework.flow.api.JoinStrategy;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.Policy;
 import com.team4u.framework.flow.api.ResumePoint;
 import com.team4u.framework.flow.model.FlowBuildException;
+import com.team4u.framework.flow.model.FlowDiagnosticCodes;
+import com.team4u.framework.flow.spi.BindingResolver;
 import com.team4u.framework.flow.spi.NodeDescriptor;
 import com.team4u.framework.flow.spi.OperationResolver;
 
@@ -186,7 +189,7 @@ public final class Compiler implements LoweringContext {
         private final String label;
     }
 
-    private final OperationResolver resolver;
+    private final BindingResolver resolver;
     private final List<FlowBuildException.Problem> problems = new ArrayList<FlowBuildException.Problem>();
     private final Map<BindingKey, Resolved> resolutions = new HashMap<BindingKey, Resolved>();
     private final Map<BindingKey, String> resolutionFailures = new HashMap<BindingKey, String>();
@@ -196,7 +199,7 @@ public final class Compiler implements LoweringContext {
     /** 并行块分支名作用域栈：每个并行块独立校验块内唯一，不同块允许同名。 */
     private final ArrayDeque<Set<String>> parallelBranchScopes = new ArrayDeque<Set<String>>();
 
-    private Compiler(OperationResolver resolver) {
+    private Compiler(BindingResolver resolver) {
         this.resolver = resolver;
     }
 
@@ -216,7 +219,7 @@ public final class Compiler implements LoweringContext {
     }
 
     /** 编译入口：下降 root 后若发现任何 Problem 则抛出 FlowBuildException。 */
-    public static Compiled compile(Flow<?, ?> flow, OperationResolver resolver) {
+    public static Compiled compile(Flow<?, ?> flow, BindingResolver resolver) {
         Objects.requireNonNull(flow, "flow must not be null");
         Objects.requireNonNull(resolver, "resolver must not be null");
         Compiler compiler = new Compiler(resolver);
@@ -316,6 +319,8 @@ public final class Compiler implements LoweringContext {
             marker = PersistentPolicy.class;
         } else if (binding.kind() == Logical.BindingKind.JOIN) {
             marker = JoinStrategy.class;
+        } else if (binding.kind() == Logical.BindingKind.CONTEXTUAL_JOIN) {
+            marker = ContextualJoinStrategy.class;
         } else {
             throw new IllegalStateException("Unknown BindingKind: " + binding.kind());
         }
@@ -365,6 +370,11 @@ public final class Compiler implements LoweringContext {
                 && !binding.contract().isInstance(resolved.instance())) {
             problem("BINDING_TYPE", path, "Resolved object does not implement "
                     + binding.contract().getName());
+            return null;
+        }
+        if (binding.kind() == Logical.BindingKind.JOIN && resolved.instance() instanceof ContextualJoinStrategy) {
+            problem(FlowDiagnosticCodes.CONTEXTUAL_JOIN_REQUIRES_CONTEXTUAL_API, path,
+                    "Resolved join strategy implements ContextualJoinStrategy but was bound via non-contextual join(Class); use joinContextual(...) instead");
             return null;
         }
         return new PlanNode.BoundTarget(resolved.instance(), binding.contract(),

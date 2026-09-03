@@ -3,17 +3,23 @@ package com.team4u.framework.flow.definition.binding;
 import com.team4u.framework.flow.Flow;
 import com.team4u.framework.flow.Local;
 import com.team4u.framework.flow.LocalExecutable;
+import com.team4u.framework.flow.definition.diagnostic.Diagnostic;
+import com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException;
 import com.team4u.framework.flow.definition.model.FlowDefinitionMetadata;
-import com.team4u.framework.parser.SourceSpan;
 import com.team4u.framework.flow.definition.type.TypeRef;
 import com.team4u.framework.flow.desc.FlowDescription;
+import com.team4u.framework.flow.model.FlowBuildException;
+import com.team4u.framework.flow.spi.BindingResolver;
 import com.team4u.framework.flow.spi.OperationResolver;
+import com.team4u.framework.parser.SourceSpan;
 import lombok.Builder;
 import lombok.Getter;
 import lombok.experimental.Accessors;
 
+import java.util.ArrayList;
 import java.util.Collections;
 import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 
@@ -34,7 +40,7 @@ public final class BoundFlow {
     private final FlowDefinitionMetadata metadata;
     private final TypeRef inputType;
     private final TypeRef outputType;
-    private final OperationResolver resolver;
+    private final BindingResolver resolver;
 
     @Builder(toBuilder = true)
     public BoundFlow(
@@ -43,7 +49,7 @@ public final class BoundFlow {
             FlowDefinitionMetadata metadata,
             TypeRef inputType,
             TypeRef outputType,
-            OperationResolver resolver) {
+            BindingResolver resolver) {
         this.flow = Objects.requireNonNull(flow, "flow must not be null");
         this.sourceMap = sourceMap != null
                 ? Collections.unmodifiableMap(new LinkedHashMap<String, SourceSpan>(sourceMap))
@@ -60,7 +66,7 @@ public final class BoundFlow {
      * @return 本地执行器
      */
     public LocalExecutable<Object, Object> compileLocal() {
-        return compileLocal(this.resolver != null ? this.resolver : OperationResolver.defaultResolver());
+        return compileLocal(this.resolver != null ? this.resolver : BindingResolver.defaultResolver());
     }
 
     /**
@@ -69,8 +75,37 @@ public final class BoundFlow {
      * @param resolver 组件解析器
      * @return 本地执行器
      */
-    @SuppressWarnings("unchecked")
+    public LocalExecutable<Object, Object> compileLocal(BindingResolver resolver) {
+        try {
+            return compileLocalRaw(resolver);
+        } catch (FlowBuildException ex) {
+            throw toDiagnosticException(ex);
+        }
+    }
+
     public LocalExecutable<Object, Object> compileLocal(OperationResolver resolver) {
+        return compileLocal((BindingResolver) resolver);
+    }
+
+    /**
+     * 原始编译为默认的通用本地执行器（不进行 FlowBuildException 到 SourceSpan 的映射拦截）。
+     *
+     * @return 本地执行器
+     * @throws FlowBuildException 当流程定义存在拓扑冲突或非法节点时抛出
+     */
+    public LocalExecutable<Object, Object> compileLocalRaw() {
+        return compileLocalRaw(this.resolver != null ? this.resolver : BindingResolver.defaultResolver());
+    }
+
+    /**
+     * 以指定的组件解析器原始编译为通用本地执行器。
+     *
+     * @param resolver 组件解析器
+     * @return 本地执行器
+     * @throws FlowBuildException 当流程定义存在拓扑冲突或无法解析的组件时抛出
+     */
+    @SuppressWarnings("unchecked")
+    public LocalExecutable<Object, Object> compileLocalRaw(BindingResolver resolver) {
         return Local.compile((Flow<Object, Object>) flow, resolver);
     }
 
@@ -85,7 +120,7 @@ public final class BoundFlow {
      * @throws IllegalArgumentException 当请求的类型与 Flow 定义的静态类型不兼容时抛出
      */
     public <I, O> LocalExecutable<I, O> compileLocal(Class<I> inputType, Class<O> outputType) {
-        return compileLocal(inputType, outputType, this.resolver != null ? this.resolver : OperationResolver.defaultResolver());
+        return compileLocal(inputType, outputType, this.resolver != null ? this.resolver : BindingResolver.defaultResolver());
     }
 
     /**
@@ -99,13 +134,92 @@ public final class BoundFlow {
      * @return 强类型本地执行器
      * @throws IllegalArgumentException 当请求的类型与 Flow 定义的静态类型不兼容时抛出
      */
-    @SuppressWarnings("unchecked")
+    public <I, O> LocalExecutable<I, O> compileLocal(
+            Class<I> inputType,
+            Class<O> outputType,
+            BindingResolver resolver) {
+        validateTypes(inputType, outputType);
+        try {
+            return compileLocalRaw(inputType, outputType, resolver);
+        } catch (FlowBuildException ex) {
+            throw toDiagnosticException(ex);
+        }
+    }
+
     public <I, O> LocalExecutable<I, O> compileLocal(
             Class<I> inputType,
             Class<O> outputType,
             OperationResolver resolver) {
+        return compileLocal(inputType, outputType, (BindingResolver) resolver);
+    }
+
+    /**
+     * 校验请求的输入与输出类型，并原始编译为强类型本地执行器（保留原始 FlowBuildException）。
+     *
+     * @param inputType  期望的输入类型 Class
+     * @param outputType 期望的输出类型 Class
+     * @param <I>        输入类型
+     * @param <O>        输出类型
+     * @return 强类型本地执行器
+     * @throws FlowBuildException 当底层校验失败时抛出
+     */
+    public <I, O> LocalExecutable<I, O> compileLocalRaw(Class<I> inputType, Class<O> outputType) {
+        return compileLocalRaw(inputType, outputType, this.resolver != null ? this.resolver : BindingResolver.defaultResolver());
+    }
+
+    /**
+     * 以指定的组件解析器校验请求类型并原始编译为强类型本地执行器（保留原始 FlowBuildException）。
+     *
+     * @param inputType  期望的输入类型 Class
+     * @param outputType 期望的输出类型 Class
+     * @param resolver   组件解析器
+     * @param <I>        输入类型
+     * @param <O>        输出类型
+     * @return 强类型本地执行器
+     * @throws FlowBuildException 当底层校验失败时抛出
+     */
+    @SuppressWarnings("unchecked")
+    public <I, O> LocalExecutable<I, O> compileLocalRaw(
+            Class<I> inputType,
+            Class<O> outputType,
+            BindingResolver resolver) {
         validateTypes(inputType, outputType);
         return Local.compile((Flow<I, O>) flow, resolver);
+    }
+
+    /**
+     * 绕过静态类型兼容性校验，强制编译为目标泛型本地执行器（仍进行 FlowBuildException 到 SourceSpan 的映射）。
+     *
+     * @param inputType  期望的输入类型 Class
+     * @param outputType 期望的输出类型 Class
+     * @param <I>        输入类型
+     * @param <O>        输出类型
+     * @return 目标泛型本地执行器
+     */
+    public <I, O> LocalExecutable<I, O> compileLocalUnchecked(Class<I> inputType, Class<O> outputType) {
+        return compileLocalUnchecked(inputType, outputType, this.resolver != null ? this.resolver : BindingResolver.defaultResolver());
+    }
+
+    /**
+     * 以指定的组件解析器绕过静态类型兼容性校验，强制编译为目标泛型本地执行器。
+     *
+     * @param inputType  期望的输入类型 Class
+     * @param outputType 期望的输出类型 Class
+     * @param resolver   组件解析器
+     * @param <I>        输入类型
+     * @param <O>        输出类型
+     * @return 目标泛型本地执行器
+     */
+    @SuppressWarnings("unchecked")
+    public <I, O> LocalExecutable<I, O> compileLocalUnchecked(
+            Class<I> inputType,
+            Class<O> outputType,
+            BindingResolver resolver) {
+        try {
+            return Local.compile((Flow<I, O>) flow, resolver);
+        } catch (FlowBuildException ex) {
+            throw toDiagnosticException(ex);
+        }
     }
 
     /**
@@ -119,7 +233,20 @@ public final class BoundFlow {
      */
     public <I, O> TypedBoundFlow<I, O> as(Class<I> inputType, Class<O> outputType) {
         validateTypes(inputType, outputType);
-        return new TypedBoundFlow<I, O>(this, inputType, outputType);
+        return new TypedBoundFlow<I, O>(this, inputType, outputType, false);
+    }
+
+    /**
+     * 转换为非受检的强类型绑定视图句柄（绕过静态类型匹配检查）。
+     *
+     * @param inputType  输入类型 Class
+     * @param outputType 输出类型 Class
+     * @param <I>        输入类型
+     * @param <O>        输出类型
+     * @return 强类型绑定句柄
+     */
+    public <I, O> TypedBoundFlow<I, O> asUnchecked(Class<I> inputType, Class<O> outputType) {
+        return new TypedBoundFlow<I, O>(this, inputType, outputType, true);
     }
 
     private void validateTypes(Class<?> requestedInput, Class<?> requestedOutput) {
@@ -131,14 +258,31 @@ public final class BoundFlow {
                                 + " is incompatible with flow input type " + this.inputType.typeName());
             }
         }
-        if (requestedOutput != null && this.outputType != TypeRef.ANY) {
-            TypeRef requestedRef = TypeRef.of(requestedOutput);
-            if (!requestedRef.isAssignableFrom(this.outputType)) {
-                throw new IllegalArgumentException(
-                        "Requested output type " + requestedOutput.getName()
-                                + " is incompatible with flow output type " + this.outputType.typeName());
+        if (requestedOutput != null) {
+            if (this.outputType.equals(TypeRef.ANY)) {
+                if (!Object.class.equals(requestedOutput)) {
+                    throw new IllegalArgumentException(
+                            "Cannot narrow untyped flow output type ANY to " + requestedOutput.getName()
+                                    + "; use compileLocalUnchecked(...) or asUnchecked(...) if intended");
+                }
+            } else {
+                TypeRef requestedRef = TypeRef.of(requestedOutput);
+                if (!requestedRef.isAssignableFrom(this.outputType)) {
+                    throw new IllegalArgumentException(
+                            "Requested output type " + requestedOutput.getName()
+                                    + " is incompatible with flow output type " + this.outputType.typeName());
+                }
             }
         }
+    }
+
+    private FlowDiagnosticException toDiagnosticException(FlowBuildException ex) {
+        List<Diagnostic> diagnostics = new ArrayList<Diagnostic>();
+        for (FlowBuildException.Problem problem : ex.problems()) {
+            SourceSpan span = sourceMap.get(problem.path());
+            diagnostics.add(new Diagnostic(problem.code(), problem.message(), span));
+        }
+        return new FlowDiagnosticException(diagnostics, ex);
     }
 
     /**
@@ -153,19 +297,35 @@ public final class BoundFlow {
         private final BoundFlow delegate;
         private final Class<I> inputType;
         private final Class<O> outputType;
+        private final boolean unchecked;
 
-        TypedBoundFlow(BoundFlow delegate, Class<I> inputType, Class<O> outputType) {
+        TypedBoundFlow(BoundFlow delegate, Class<I> inputType, Class<O> outputType, boolean unchecked) {
             this.delegate = delegate;
             this.inputType = inputType;
             this.outputType = outputType;
+            this.unchecked = unchecked;
         }
 
         public LocalExecutable<I, O> compileLocal() {
-            return delegate.compileLocal(inputType, outputType);
+            return compileLocal(delegate.resolver() != null ? delegate.resolver() : BindingResolver.defaultResolver());
+        }
+
+        public LocalExecutable<I, O> compileLocal(BindingResolver resolver) {
+            return unchecked
+                    ? delegate.compileLocalUnchecked(inputType, outputType, resolver)
+                    : delegate.compileLocal(inputType, outputType, resolver);
         }
 
         public LocalExecutable<I, O> compileLocal(OperationResolver resolver) {
-            return delegate.compileLocal(inputType, outputType, resolver);
+            return compileLocal((BindingResolver) resolver);
+        }
+
+        public LocalExecutable<I, O> compileLocalRaw() {
+            return compileLocalRaw(delegate.resolver() != null ? delegate.resolver() : BindingResolver.defaultResolver());
+        }
+
+        public LocalExecutable<I, O> compileLocalRaw(BindingResolver resolver) {
+            return delegate.compileLocalRaw(inputType, outputType, resolver);
         }
 
         @SuppressWarnings("unchecked")

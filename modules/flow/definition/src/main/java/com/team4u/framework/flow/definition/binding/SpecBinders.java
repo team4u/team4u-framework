@@ -332,6 +332,7 @@ public final class SpecBinders {
             JoinStrategy<?> strategy = null;
             Class<? extends JoinStrategy<?>> strategyClass = null;
             String qualifier = null;
+            JoinDescriptor joinDesc = null;
             if (joinSpec instanceof BuiltinJoinSpec) {
                 BuiltinJoinSpec builtin = (BuiltinJoinSpec) joinSpec;
                 int branchCount = parallel.branches() != null ? parallel.branches().size() : 0;
@@ -364,7 +365,7 @@ public final class SpecBinders {
                 SymbolRef symbol = joinSpec instanceof SymbolRef
                         ? (SymbolRef) joinSpec
                         : ((SymbolJoinSpec) joinSpec).symbol();
-                JoinDescriptor joinDesc = context.registry().join(symbol.id());
+                joinDesc = context.registry().join(symbol.id());
                 if (joinDesc == null) {
                     throw new FlowDiagnosticException(
                             DiagnosticCodes.UNKNOWN_JOIN, "Join strategy not found: " + symbol.id(),
@@ -376,14 +377,6 @@ public final class SpecBinders {
                 } else if (joinDesc.contract() != null) {
                     strategyClass = joinDesc.contract();
                     qualifier = joinDesc.qualifier();
-                } else if (joinDesc.provider() != null) {
-                    strategy = joinDesc.provider().provide(context.resolver());
-                    if (strategy == null) {
-                        throw new FlowDiagnosticException(
-                                DiagnosticCodes.MISSING_BINDING,
-                                "Cannot resolve join strategy for: " + symbol.id(),
-                                symbol.span());
-                    }
                 } else {
                     throw new FlowDiagnosticException(
                             DiagnosticCodes.MISSING_BINDING,
@@ -398,8 +391,15 @@ public final class SpecBinders {
             }
 
             if (strategy != null) {
+                if (strategy instanceof com.team4u.framework.flow.api.ContextualJoinStrategy) {
+                    return Flow.parallel(branches.toArray(new Branch[0])).join((com.team4u.framework.flow.api.ContextualJoinStrategy) strategy);
+                }
                 return Flow.parallel(branches.toArray(new Branch[0])).join((JoinStrategy) strategy);
             } else {
+                if ((joinDesc != null && joinDesc.isContextual())
+                        || com.team4u.framework.flow.api.ContextualJoinStrategy.class.isAssignableFrom(strategyClass)) {
+                    return Flow.parallel(branches.toArray(new Branch[0])).joinContextual((Class) strategyClass, qualifier);
+                }
                 return Flow.parallel(branches.toArray(new Branch[0])).join((Class) strategyClass, qualifier);
             }
         }

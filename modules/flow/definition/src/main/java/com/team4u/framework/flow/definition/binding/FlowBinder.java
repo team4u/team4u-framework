@@ -16,6 +16,7 @@ import com.team4u.framework.flow.definition.type.TypeCheckResult;
 import com.team4u.framework.flow.definition.type.TypeChecker;
 import com.team4u.framework.flow.definition.type.TypeRef;
 import com.team4u.framework.flow.model.FlowBuildException;
+import com.team4u.framework.flow.spi.BindingResolver;
 import com.team4u.framework.flow.spi.OperationResolver;
 
 import java.util.ArrayList;
@@ -37,28 +38,28 @@ import java.util.function.Function;
 public final class FlowBinder {
 
     private final FlowDefinitionRegistry registry;
-    private final OperationResolver resolver;
+    private final BindingResolver resolver;
     private final SpecBinderRegistry binderRegistry;
     private final TypeRef initialInputType;
 
     public FlowBinder(
             FlowDefinitionRegistry registry,
-            OperationResolver resolver,
+            BindingResolver resolver,
             SpecBinderRegistry binderRegistry,
             TypeRef initialInputType) {
         this.registry = Objects.requireNonNull(registry, "registry must not be null");
         this.resolver = resolver != null
                 ? resolver
-                : (registry.fallbackResolver() != null ? registry.fallbackResolver() : OperationResolver.defaultResolver());
+                : (registry.fallbackResolver() != null ? registry.fallbackResolver() : BindingResolver.defaultResolver());
         this.binderRegistry = binderRegistry != null ? binderRegistry : SpecBinderRegistry.global();
         this.initialInputType = initialInputType != null ? initialInputType : registry.initialInputType();
     }
 
-    public FlowBinder(FlowDefinitionRegistry registry, OperationResolver resolver, SpecBinderRegistry binderRegistry) {
+    public FlowBinder(FlowDefinitionRegistry registry, BindingResolver resolver, SpecBinderRegistry binderRegistry) {
         this(registry, resolver, binderRegistry, null);
     }
 
-    public FlowBinder(FlowDefinitionRegistry registry, OperationResolver resolver) {
+    public FlowBinder(FlowDefinitionRegistry registry, BindingResolver resolver) {
         this(registry, resolver, SpecBinderRegistry.global(), null);
     }
 
@@ -103,8 +104,15 @@ public final class FlowBinder {
     public static BoundFlow bind(
             FlowDefinition definition,
             FlowDefinitionRegistry registry,
-            OperationResolver resolver) {
+            BindingResolver resolver) {
         return new FlowBinder(registry, resolver).bind(definition);
+    }
+
+    public static BoundFlow bind(
+            FlowDefinition definition,
+            FlowDefinitionRegistry registry,
+            OperationResolver resolver) {
+        return bind(definition, registry, (BindingResolver) resolver);
     }
 
     /**
@@ -119,16 +127,24 @@ public final class FlowBinder {
     public static BoundFlow bind(
             FlowDefinition definition,
             FlowDefinitionRegistry registry,
-            OperationResolver resolver,
+            BindingResolver resolver,
             TypeRef initialInputType) {
         return new FlowBinder(registry, resolver, SpecBinderRegistry.global(), initialInputType).bind(definition);
+    }
+
+    public static BoundFlow bind(
+            FlowDefinition definition,
+            FlowDefinitionRegistry registry,
+            OperationResolver resolver,
+            TypeRef initialInputType) {
+        return bind(definition, registry, (BindingResolver) resolver, initialInputType);
     }
 
     public FlowDefinitionRegistry registry() {
         return registry;
     }
 
-    public OperationResolver resolver() {
+    public BindingResolver resolver() {
         return resolver;
     }
 
@@ -181,7 +197,7 @@ public final class FlowBinder {
      */
     static final class BindingSession implements BindingContext {
         private final FlowDefinitionRegistry registry;
-        private final OperationResolver resolver;
+        private final BindingResolver resolver;
         private final SpecBinderRegistry binderRegistry;
         private final TypeRef initialInputType;
         private final TypeCheckResult typeCheckResult;
@@ -189,7 +205,7 @@ public final class FlowBinder {
 
         public BindingSession(
                 FlowDefinitionRegistry registry,
-                OperationResolver resolver,
+                BindingResolver resolver,
                 SpecBinderRegistry binderRegistry,
                 TypeRef initialInputType,
                 TypeCheckResult typeCheckResult,
@@ -204,7 +220,7 @@ public final class FlowBinder {
 
         public BindingSession(
                 FlowDefinitionRegistry registry,
-                OperationResolver resolver,
+                BindingResolver resolver,
                 SpecBinderRegistry binderRegistry,
                 TypeRef initialInputType,
                 TypeCheckResult typeCheckResult) {
@@ -217,7 +233,7 @@ public final class FlowBinder {
         }
 
         @Override
-        public OperationResolver resolver() {
+        public BindingResolver resolver() {
             return resolver;
         }
 

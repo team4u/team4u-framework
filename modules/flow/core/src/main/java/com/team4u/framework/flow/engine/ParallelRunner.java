@@ -258,13 +258,14 @@ public final class ParallelRunner {
                 ignored -> {
                     ParallelResults results = new ParallelResults(tokens, orderedOutcomes);
                     Outcome<?> res;
-                    if (node.join() instanceof com.team4u.framework.flow.api.ContextualJoinStrategy) {
+                    JoinStrategy<?> joinStrategy = node.joinStrategy();
+                    if (joinStrategy instanceof com.team4u.framework.flow.api.ContextualJoinStrategy) {
                         @SuppressWarnings("unchecked")
                         com.team4u.framework.flow.api.ContextualJoinStrategy<Object, Object> contextual =
-                                (com.team4u.framework.flow.api.ContextualJoinStrategy<Object, Object>) node.join();
+                                (com.team4u.framework.flow.api.ContextualJoinStrategy<Object, Object>) joinStrategy;
                         res = contextual.join(input, results);
                     } else {
-                        res = node.join().join(results);
+                        res = joinStrategy.join(results);
                     }
                     return Objects.requireNonNull(res, "parallel join returned null");
                 }, deadline);

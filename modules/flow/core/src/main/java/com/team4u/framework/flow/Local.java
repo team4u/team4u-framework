@@ -10,6 +10,7 @@ import java.util.concurrent.ForkJoinPool;
 import com.team4u.framework.flow.api.FlowObserver;
 import com.team4u.framework.flow.compiler.Compiler;
 import com.team4u.framework.flow.model.FlowBuildException;
+import com.team4u.framework.flow.spi.BindingResolver;
 import com.team4u.framework.flow.spi.OperationResolver;
 
 /**
@@ -50,7 +51,7 @@ public final class Local {
      * <p><b>编译产物复用指南</b>：Flow 定义不可变且可复用，对同一 {@code flow} 实例的重复
      * {@code compile} 调用建议在外部缓存 {@link LocalExecutable}（或 {@link Compiler.Compiled}）
      * 并复用，避免每次调用重复降级编译与组件解析；编译产物本身线程安全，可并发驱动多次执行。
-     * 若确需在库内缓存，参见 {@link #compileCached(Flow, OperationResolver)}。</p>
+     * 若确需在库内缓存，参见 {@link #compileCached(Flow, BindingResolver)}。</p>
      *
      * @param flow     逻辑流程定义，不能为 null
      * @param resolver 组件解析器（如 Spring Bean 查找器），不能为 null
@@ -60,7 +61,7 @@ public final class Local {
      * @throws FlowBuildException 当流程定义存在拓扑冲突或无法解析的组件时抛出
      */
     public static <I, O> LocalExecutable<I, O> compile(
-            Flow<I, O> flow, OperationResolver resolver) {
+            Flow<I, O> flow, BindingResolver resolver) {
         return from(flow).resolver(resolver).compile();
     }
 
@@ -82,7 +83,7 @@ public final class Local {
      * @throws FlowBuildException 当流程定义存在拓扑冲突或无法解析的组件时抛出
      */
     public static <I, O> LocalExecutable<I, O> compileCached(
-            Flow<I, O> flow, OperationResolver resolver) {
+            Flow<I, O> flow, BindingResolver resolver) {
         return from(flow).resolver(resolver).cached().compile();
     }
 
@@ -109,7 +110,7 @@ public final class Local {
         private final Flow<I, O> flow;
         private String flowId = "local";
         private int flowVersion = 0;
-        private OperationResolver resolver = OperationResolver.defaultResolver();
+        private BindingResolver resolver = BindingResolver.defaultResolver();
         private FlowObserver observer = FlowObserver.noop();
         private ExecutorService executor = ForkJoinPool.commonPool();
         private boolean cached = false;
@@ -149,8 +150,8 @@ public final class Local {
          * @param resolver 组件解析器（为 null 时回退为 defaultResolver）
          * @return 当前构建器
          */
-        public Builder<I, O> resolver(OperationResolver resolver) {
-            this.resolver = resolver != null ? resolver : OperationResolver.defaultResolver();
+        public Builder<I, O> resolver(BindingResolver resolver) {
+            this.resolver = resolver != null ? resolver : BindingResolver.defaultResolver();
             return this;
         }
 
@@ -227,11 +228,11 @@ public final class Local {
             private final ResolverRef resolverRef;
             private final int hash;
 
-            Key(Flow<?, ?> flow, OperationResolver resolver, ReferenceQueue<Object> queue) {
+            Key(Flow<?, ?> flow, BindingResolver resolver, ReferenceQueue<Object> queue) {
                 super(flow, queue != null ? (ReferenceQueue<? super Flow<?, ?>>) (ReferenceQueue<?>) queue : null);
                 this.resolverRef = new ResolverRef(
                         resolver,
-                        queue != null ? (ReferenceQueue<? super OperationResolver>) (ReferenceQueue<?>) queue : null,
+                        queue != null ? (ReferenceQueue<? super BindingResolver>) (ReferenceQueue<?>) queue : null,
                         this
                 );
                 this.hash = 31 * System.identityHashCode(flow) + System.identityHashCode(resolver);
@@ -250,22 +251,22 @@ public final class Local {
                 Flow<?, ?> mineFlow = get();
                 Flow<?, ?> theirsFlow = o.get();
                 if (mineFlow == null || mineFlow != theirsFlow) return false;
-                OperationResolver mineResolver = resolverRef.get();
-                OperationResolver theirsResolver = o.resolverRef.get();
+                BindingResolver mineResolver = resolverRef.get();
+                BindingResolver theirsResolver = o.resolverRef.get();
                 return mineResolver != null && mineResolver == theirsResolver;
             }
         }
 
-        private static final class ResolverRef extends WeakReference<OperationResolver> {
+        private static final class ResolverRef extends WeakReference<BindingResolver> {
             final Key key;
 
-            ResolverRef(OperationResolver referent, ReferenceQueue<? super OperationResolver> queue, Key key) {
+            ResolverRef(BindingResolver referent, ReferenceQueue<? super BindingResolver> queue, Key key) {
                 super(referent, queue);
                 this.key = key;
             }
         }
 
-        static Compiler.Compiled obtain(Flow<?, ?> flow, OperationResolver resolver) {
+        static Compiler.Compiled obtain(Flow<?, ?> flow, BindingResolver resolver) {
             Objects.requireNonNull(flow, "flow must not be null");
             Objects.requireNonNull(resolver, "resolver must not be null");
             expunge();

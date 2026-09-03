@@ -2,6 +2,7 @@ package com.team4u.framework.flow;
 
 import com.team4u.framework.flow.api.JoinStrategy;
 import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.FlowDiagnosticCodes;
 import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.model.ParallelResults;
 
@@ -19,6 +20,26 @@ import java.util.Objects;
 public final class Joins {
 
     private Joins() { }
+
+    private static boolean isTypeCompatible(Class<?> expected, Object value) {
+        if (value == null) {
+            return true;
+        }
+        if (expected.isInstance(value)) {
+            return true;
+        }
+        if (expected.isPrimitive()) {
+            if (expected == int.class) return value instanceof Integer;
+            if (expected == long.class) return value instanceof Long;
+            if (expected == double.class) return value instanceof Double;
+            if (expected == boolean.class) return value instanceof Boolean;
+            if (expected == byte.class) return value instanceof Byte;
+            if (expected == short.class) return value instanceof Short;
+            if (expected == float.class) return value instanceof Float;
+            if (expected == char.class) return value instanceof Character;
+        }
+        return false;
+    }
 
     /**
      * 全票成功聚合策略：所有分支必须均 Accepted，输出包含各分支值的 {@link ParallelResults.Values}；
@@ -55,8 +76,8 @@ public final class Joins {
             Outcome<?> outcome = results.firstAccepted();
             if (outcome instanceof Outcome.Accepted) {
                 Object val = ((Outcome.Accepted<?>) outcome).value();
-                if (val != null && !type.isInstance(val)) {
-                    return Outcome.failed(Failure.of("TYPE_MISMATCH",
+                if (val != null && !isTypeCompatible(type, val)) {
+                    return Outcome.failed(Failure.of(FlowDiagnosticCodes.TYPE_MISMATCH,
                             "Expected accepted value of type " + type.getName() + " but got " + val.getClass().getName()));
                 }
                 @SuppressWarnings("unchecked")
@@ -85,7 +106,7 @@ public final class Joins {
      *
      * @param elementType 预期的元素类型，不能为 null
      * @param <T>         元素类型
-     * @return 强类型列表收集聚合策略
+     * @return 强类型列表收集聚合聚合策略
      */
     public static <T> JoinStrategy<List<T>> collectAs(Class<T> elementType) {
         Objects.requireNonNull(elementType, "elementType must not be null");
@@ -95,8 +116,8 @@ public final class Joins {
                 @SuppressWarnings("unchecked")
                 List<?> list = ((Outcome.Accepted<List<?>>) outcome).value();
                 for (Object item : list) {
-                    if (item != null && !elementType.isInstance(item)) {
-                        return Outcome.failed(Failure.of("TYPE_MISMATCH",
+                    if (item != null && !isTypeCompatible(elementType, item)) {
+                        return Outcome.failed(Failure.of(FlowDiagnosticCodes.TYPE_MISMATCH,
                                 "Expected list element of type " + elementType.getName() + " but got " + item.getClass().getName()));
                     }
                 }

@@ -32,7 +32,9 @@ public final class ExecutableBinding {
         /** 内存无状态策略。 */
         POLICY,
         /** 持久化有状态策略。 */
-        PERSISTENT_POLICY
+        PERSISTENT_POLICY,
+        /** 并行汇聚策略。 */
+        JOIN
     }
 
     /** 已解析的目标组件实例。 */

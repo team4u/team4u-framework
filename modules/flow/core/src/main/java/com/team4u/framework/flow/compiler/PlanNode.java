@@ -133,12 +133,22 @@ public interface PlanNode {
     public static final class Parallel implements PlanNode {
         private final NodeDescriptor descriptor;
         private final List<ParallelBranch> branches;
-        private final JoinStrategy<?> join;
+        private final BoundTarget join;
 
-        public Parallel(NodeDescriptor descriptor, List<ParallelBranch> branches, JoinStrategy<?> join) {
+        public Parallel(NodeDescriptor descriptor, List<ParallelBranch> branches, BoundTarget join) {
             this.descriptor = descriptor;
             this.branches = Collections.unmodifiableList(new ArrayList<ParallelBranch>(branches));
             this.join = join;
+        }
+
+        public Parallel(NodeDescriptor descriptor, List<ParallelBranch> branches, JoinStrategy<?> join) {
+            this(descriptor, branches, join != null
+                    ? new BoundTarget(join, join.getClass(), join.getClass(), null)
+                    : null);
+        }
+
+        public JoinStrategy<?> joinStrategy() {
+            return join != null ? (JoinStrategy<?>) join.instance() : null;
         }
     }
 

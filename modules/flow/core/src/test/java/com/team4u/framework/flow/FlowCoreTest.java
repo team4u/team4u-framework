@@ -156,4 +156,42 @@ public class FlowCoreTest {
             return Outcome.accepted(input.toUpperCase());
         }
     }
+
+    public static final class TestContextualJoin implements com.team4u.framework.flow.api.ContextualJoinStrategy<String, String> {
+        @Override
+        public Outcome<String> join(String input, com.team4u.framework.flow.model.ParallelResults results) {
+            return Outcome.accepted(input + ":" + ((Outcome.Accepted<?>) results.firstAccepted()).value());
+        }
+    }
+
+    @Test
+    public void contextualJoinStrategyViaJoinContextualSucceeds() {
+        com.team4u.framework.flow.spi.BindingResolver resolver = (contract, qualifier) ->
+                contract == TestContextualJoin.class ? new TestContextualJoin() : null;
+        com.team4u.framework.flow.api.Branch<String, String> b1 = com.team4u.framework.flow.api.Branch.of("b1", (c, in) -> Outcome.accepted(in));
+        Flow<String, String> flow = Flow.<String>identity()
+                .then(Flow.parallel(b1).joinContextual(TestContextualJoin.class));
+
+        LocalExecutable<String, String> exec = Local.compile(flow, resolver);
+        assertEquals("test:test", exec.run("test").requireAccepted());
+    }
+
+    @Test
+    public void contextualJoinStrategyViaRegularJoinFailsClosed() {
+        com.team4u.framework.flow.spi.BindingResolver resolver = (contract, qualifier) ->
+                contract == TestContextualJoin.class ? new TestContextualJoin() : null;
+        com.team4u.framework.flow.api.Branch<String, String> b1 = com.team4u.framework.flow.api.Branch.of("b1", (c, in) -> Outcome.accepted(in));
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        Class joinClass = TestContextualJoin.class;
+        @SuppressWarnings("unchecked")
+        Flow<String, String> flow = Flow.<String>identity()
+                .then(Flow.parallel(b1).join((Class<? extends com.team4u.framework.flow.api.JoinStrategy<String>>) joinClass));
+
+        try {
+            Local.compile(flow, resolver);
+            org.junit.Assert.fail("Expected FlowBuildException");
+        } catch (com.team4u.framework.flow.model.FlowBuildException ex) {
+            assertEquals(com.team4u.framework.flow.model.FlowDiagnosticCodes.CONTEXTUAL_JOIN_REQUIRES_CONTEXTUAL_API, ex.problems().get(0).code());
+        }
+    }
 }

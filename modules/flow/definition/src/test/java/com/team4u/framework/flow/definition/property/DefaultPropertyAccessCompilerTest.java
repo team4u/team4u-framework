@@ -548,11 +548,13 @@ public class DefaultPropertyAccessCompilerTest {
     @Test
     public void testAmbiguousSetterThrowsPropertyAmbiguous() {
         DefaultPropertyAccessCompiler compiler = DefaultPropertyAccessCompiler.INSTANCE;
+        SourceSpan customSpan = new SourceSpan("test.flow", 0, 1, 1, 5, 1, 6);
         try {
-            compiler.compileWriter(TypeRef.of(AmbiguousSetterBean.class), PropertyPath.parse("$.value"), TypeRef.of(String.class));
+            compiler.compileWriter(TypeRef.of(AmbiguousSetterBean.class), PropertyPath.parse("$.value", customSpan), TypeRef.of(String.class));
             Assert.fail("Expected PROPERTY_AMBIGUOUS");
         } catch (FlowDiagnosticException ex) {
             Assert.assertEquals(DiagnosticCodes.PROPERTY_AMBIGUOUS, ex.diagnostic().code());
+            Assert.assertEquals(customSpan, ex.diagnostic().span());
         }
     }
 
@@ -567,11 +569,13 @@ public class DefaultPropertyAccessCompilerTest {
     @Test
     public void testInconsistentGetterSetterThrowsPropertyInconsistent() {
         DefaultPropertyAccessCompiler compiler = DefaultPropertyAccessCompiler.INSTANCE;
+        SourceSpan customSpan = new SourceSpan("test.flow", 0, 2, 1, 5, 2, 6);
         try {
-            compiler.compileReader(TypeRef.of(InconsistentGetterSetterBean.class), PropertyPath.parse("$.value"));
+            compiler.compileReader(TypeRef.of(InconsistentGetterSetterBean.class), PropertyPath.parse("$.value", customSpan));
             Assert.fail("Expected PROPERTY_INCONSISTENT");
         } catch (FlowDiagnosticException ex) {
             Assert.assertEquals(DiagnosticCodes.PROPERTY_INCONSISTENT, ex.diagnostic().code());
+            Assert.assertEquals(customSpan, ex.diagnostic().span());
         }
     }
 

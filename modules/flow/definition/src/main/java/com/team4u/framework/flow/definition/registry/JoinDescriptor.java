@@ -1,5 +1,6 @@
 package com.team4u.framework.flow.definition.registry;
 
+import com.team4u.framework.flow.api.ContextualJoinStrategy;
 import com.team4u.framework.flow.api.JoinStrategy;
 import com.team4u.framework.flow.definition.type.TypeRef;
 import lombok.Builder;
@@ -23,27 +24,33 @@ public final class JoinDescriptor {
 
     private final String id;
     private final TypeRef outputType;
+    private final TypeRef contextInputType;
     private final JoinStrategy<?> strategy;
     private final Class<? extends JoinStrategy<?>> contract;
     private final String qualifier;
-    private final JoinProvider provider;
 
     @Builder(toBuilder = true)
     @SuppressWarnings("unchecked")
     public JoinDescriptor(
             String id,
             TypeRef outputType,
+            TypeRef contextInputType,
             JoinStrategy<?> strategy,
             Class<? extends JoinStrategy<?>> contract,
-            String qualifier,
-            JoinProvider provider) {
+            String qualifier) {
         this.id = Objects.requireNonNull(id, "join id must not be null");
         this.outputType = outputType != null ? outputType : TypeRef.ANY;
+        this.contextInputType = contextInputType;
         this.strategy = strategy;
         this.contract = contract != null
                 ? contract
                 : (strategy != null ? (Class<? extends JoinStrategy<?>>) strategy.getClass() : null);
         this.qualifier = qualifier;
-        this.provider = provider;
+    }
+
+    public boolean isContextual() {
+        return contextInputType != null
+                || strategy instanceof ContextualJoinStrategy
+                || (contract != null && ContextualJoinStrategy.class.isAssignableFrom(contract));
     }
 }

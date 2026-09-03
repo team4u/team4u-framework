@@ -1,5 +1,6 @@
 package com.team4u.framework.flow.definition.registry;
 
+import com.team4u.framework.flow.api.ContextualJoinStrategy;
 import com.team4u.framework.flow.api.JoinStrategy;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.PersistentPolicy;
@@ -10,6 +11,7 @@ import com.team4u.framework.flow.definition.type.GenericTypeResolver;
 import com.team4u.framework.flow.definition.type.TypeCodec;
 import com.team4u.framework.flow.definition.type.TypeCodecs;
 import com.team4u.framework.flow.definition.type.TypeRef;
+import com.team4u.framework.flow.spi.BindingResolver;
 import com.team4u.framework.flow.spi.OperationResolver;
 import com.team4u.framework.flow.definition.property.DefaultPropertyAccessCompiler;
 import com.team4u.framework.flow.definition.property.PropertyAccessCompiler;
@@ -50,7 +52,7 @@ public final class FlowDefinitionRegistry {
     private final Map<String, JoinDescriptor> joins;
     private final Map<String, ResumeDescriptor> resumePoints;
     private final Map<TypeRef, TypeCodec<?>> typeCodecs;
-    private final OperationResolver fallbackResolver;
+    private final BindingResolver fallbackResolver;
     private final PropertyAccessCompiler propertyAccessCompiler;
     private final Map<String, TypeRef> typeAliases;
     private final TypeRef initialInputType;
@@ -292,7 +294,7 @@ public final class FlowDefinitionRegistry {
         private final Map<String, JoinDescriptor> joins = new LinkedHashMap<String, JoinDescriptor>();
         private final Map<String, ResumeDescriptor> resumePoints = new LinkedHashMap<String, ResumeDescriptor>();
         private final Map<TypeRef, TypeCodec<?>> typeCodecs = new LinkedHashMap<TypeRef, TypeCodec<?>>();
-        private OperationResolver fallbackResolver = OperationResolver.defaultResolver();
+        private BindingResolver fallbackResolver = BindingResolver.defaultResolver();
         private PropertyAccessCompiler propertyAccessCompiler = DefaultPropertyAccessCompiler.INSTANCE;
         private final Map<String, TypeRef> typeAliases = new LinkedHashMap<String, TypeRef>();
         private TypeRef initialInputType = null;
@@ -314,6 +316,11 @@ public final class FlowDefinitionRegistry {
         }
 
         public Builder fallbackResolver(OperationResolver fallbackResolver) {
+            this.fallbackResolver = fallbackResolver;
+            return this;
+        }
+
+        public Builder fallbackResolver(BindingResolver fallbackResolver) {
             this.fallbackResolver = fallbackResolver;
             return this;
         }
@@ -970,14 +977,32 @@ public final class FlowDefinitionRegistry {
             return this;
         }
 
-        public Builder join(JoinProvider provider) {
-            Objects.requireNonNull(provider, "join provider must not be null");
-            return join(provider.descriptor().toBuilder().provider(provider).build());
+        public <I, O> Builder joinContextual(String id, Class<? extends ContextualJoinStrategy<I, O>> contract, Class<I> contextInputType, Class<O> outputType) {
+            return joinContextual(id, contract, null, contextInputType, outputType);
         }
 
-        public Builder overrideJoin(JoinProvider provider) {
-            Objects.requireNonNull(provider, "join provider must not be null");
-            return overrideJoin(provider.descriptor().toBuilder().provider(provider).build());
+        public <I, O> Builder joinContextual(String id, Class<? extends ContextualJoinStrategy<I, O>> contract, String qualifier, Class<I> contextInputType, Class<O> outputType) {
+            return join(JoinDescriptor.builder()
+                    .id(id)
+                    .contract(contract)
+                    .qualifier(qualifier)
+                    .contextInputType(TypeRef.of(contextInputType))
+                    .outputType(TypeRef.of(outputType))
+                    .build());
+        }
+
+        public <I, O> Builder overrideJoinContextual(String id, Class<? extends ContextualJoinStrategy<I, O>> contract, Class<I> contextInputType, Class<O> outputType) {
+            return overrideJoinContextual(id, contract, null, contextInputType, outputType);
+        }
+
+        public <I, O> Builder overrideJoinContextual(String id, Class<? extends ContextualJoinStrategy<I, O>> contract, String qualifier, Class<I> contextInputType, Class<O> outputType) {
+            return overrideJoin(JoinDescriptor.builder()
+                    .id(id)
+                    .contract(contract)
+                    .qualifier(qualifier)
+                    .contextInputType(TypeRef.of(contextInputType))
+                    .outputType(TypeRef.of(outputType))
+                    .build());
         }
 
         public <O> Builder join(String id, JoinStrategy<O> strategy, Class<O> outputType) {
