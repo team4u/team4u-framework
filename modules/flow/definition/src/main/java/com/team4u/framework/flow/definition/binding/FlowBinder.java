@@ -123,9 +123,33 @@ public final class FlowBinder implements BindingContext {
         return new FlowBinder(registry, resolver, SpecBinderRegistry.global(), initialInputType).bind(definition);
     }
 
+    private TypeCheckResult currentTypeCheckResult;
+
     @Override
     public TypeRef currentType() {
         return initialInputType != null ? initialInputType : TypeRef.ANY;
+    }
+
+    @Override
+    public TypeRef inputTypeOf(FlowSpec spec) {
+        if (currentTypeCheckResult != null && spec != null) {
+            TypeRef t = currentTypeCheckResult.specInputTypes().get(spec);
+            if (t != null) {
+                return t;
+            }
+        }
+        return currentType();
+    }
+
+    @Override
+    public TypeRef outputTypeOf(FlowSpec spec) {
+        if (currentTypeCheckResult != null && spec != null) {
+            TypeRef t = currentTypeCheckResult.specOutputTypes().get(spec);
+            if (t != null) {
+                return t;
+            }
+        }
+        return TypeRef.ANY;
     }
 
     /**
@@ -148,6 +172,7 @@ public final class FlowBinder implements BindingContext {
         // 2. 递归绑定 AST 并执行编译器拓扑校验
         Flow<Object, Object> flow;
         Map<String, SourceSpan> sourceMap = Collections.emptyMap();
+        this.currentTypeCheckResult = typeCheckResult;
         try {
             flow = (Flow<Object, Object>) bindSpec(definition.root());
             sourceMap = SourceMapBuilder.build(flow.root(), definition.root());
@@ -159,6 +184,8 @@ public final class FlowBinder implements BindingContext {
                 diagnostics.add(new Diagnostic(problem.code(), problem.message(), span, problem.path()));
             }
             throw new FlowDiagnosticException(diagnostics);
+        } finally {
+            this.currentTypeCheckResult = null;
         }
 
         return BoundFlow.builder()

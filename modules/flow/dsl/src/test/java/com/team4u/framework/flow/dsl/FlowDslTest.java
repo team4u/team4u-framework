@@ -462,11 +462,11 @@ public class FlowDslTest {
                 .build();
 
         BoundFlow bound = FlowDsl.bind(dsl, registry, TypeRef.of(OrderContext.class));
-        LocalExecutable<OrderContext, ParallelResults.Values> exec = bound.compileLocal(OrderContext.class, ParallelResults.Values.class);
+        LocalExecutable<OrderContext, OrderContext> exec = bound.compileLocal(OrderContext.class, OrderContext.class);
 
         OrderContext ctx = new OrderContext("O1", 1, false);
-        FlowResult<ParallelResults.Values> result = exec.run(ctx);
-        Assert.assertNotNull(result.requireAccepted());
+        FlowResult<OrderContext> result = exec.run(ctx);
+        Assert.assertSame(ctx, result.requireAccepted());
         Assert.assertEquals(2, ctx.logs.size());
     }
 
@@ -493,5 +493,50 @@ public class FlowDslTest {
         Assert.assertEquals(2, list.size());
         Assert.assertTrue(list.contains("res1"));
         Assert.assertTrue(list.contains("res2"));
+    }
+
+    @Test
+    public void testBuiltinJoinQuorumExecution() {
+        String dsl = "flow parallel.quorum {\n" +
+                "    parallel {\n" +
+                "        branch b1 { step s1 }\n" +
+                "        branch b2 { step s2 }\n" +
+                "        join quorum 1\n" +
+                "    }\n" +
+                "}";
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("s1", (OperationContext ctx, String in) -> Outcome.accepted("res1"), String.class, String.class)
+                .operation("s2", (OperationContext ctx, String in) -> Outcome.rejected(com.team4u.framework.flow.model.Reason.of("REJECT", "s2")), String.class, String.class)
+                .build();
+
+        BoundFlow bound = FlowDsl.bind(dsl, registry, TypeRef.of(String.class));
+        LocalExecutable<String, String> exec = bound.compileLocal(String.class, String.class);
+
+        FlowResult<String> result = exec.run("init");
+        Assert.assertEquals("init", result.requireAccepted());
+    }
+
+    @Test
+    public void testBuiltinJoinQuorumOutOfBounds() {
+        String dsl = "flow parallel.quorum.bad {\n" +
+                "    parallel {\n" +
+                "        branch b1 { step s1 }\n" +
+                "        branch b2 { step s2 }\n" +
+                "        join quorum 3\n" +
+                "    }\n" +
+                "}";
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("s1", (OperationContext ctx, String in) -> Outcome.accepted("res1"), String.class, String.class)
+                .operation("s2", (OperationContext ctx, String in) -> Outcome.accepted("res2"), String.class, String.class)
+                .build();
+
+        try {
+            FlowDsl.bind(dsl, registry, TypeRef.of(String.class));
+            Assert.fail("Expected FlowDiagnosticException for quorum > branches");
+        } catch (com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException ex) {
+            Assert.assertTrue(ex.hasCode(com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.INVALID_QUORUM));
+        }
     }
 }

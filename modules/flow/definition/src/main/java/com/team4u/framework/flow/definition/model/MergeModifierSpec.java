@@ -30,10 +30,13 @@ public final class MergeModifierSpec implements ModifierSpec {
     }
 
     public MergeModifierSpec(SymbolRef merger, SourceSpan span) {
-        this(new SymbolMergeSpec(merger, span), span);
+        this((MergeSpec) merger, span);
     }
 
     public SymbolRef merger() {
+        if (merge instanceof SymbolRef) {
+            return (SymbolRef) merge;
+        }
         return merge instanceof SymbolMergeSpec
                 ? ((SymbolMergeSpec) merge).symbol()
                 : null;

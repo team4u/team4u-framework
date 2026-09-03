@@ -283,54 +283,11 @@ public final class SpecTypeCheckers {
 
         @Override
         public TypeRef check(CallSpec call, TypeRef currentType, TypeCheckContext context) {
-            FlowDefinition subflow = context.registry().subflow(call.flow().id());
-            TypeRef subInputType = TypeRef.ANY;
-            TypeRef subOutputType = TypeRef.ANY;
-
-            if (subflow != null) {
-                if (context.isVisiting(call.flow().id())) {
-                    SourceSpan span = call.span() != null && call.span() != SourceSpan.UNKNOWN
-                            ? call.span()
-                            : (call.flow().span() != null ? call.flow().span() : SourceSpan.UNKNOWN);
-                    context.addDiagnostic(new Diagnostic(
-                            DiagnosticCodes.CYCLIC_FLOW_CALL,
-                            "Cyclic flow call detected: " + call.flow().id(),
-                            span));
-                    return currentType;
-                }
-                context.pushVisiting(call.flow().id());
-                try {
-                    TypeCheckResult subResult = TypeChecker.check(subflow, context.registry(), null, context.visitingFlows());
-                    if (!subResult.success()) {
-                        for (Diagnostic d : subResult.diagnostics()) {
-                            context.addDiagnostic(d);
-                        }
-                    }
-                    subInputType = subResult.inputType();
-                    subOutputType = subResult.outputType();
-                } finally {
-                    context.popVisiting(call.flow().id());
-                }
-            } else {
-                OperationDescriptor op = context.registry().operation(call.flow().id());
-                if (op != null) {
-                    subInputType = op.inputType();
-                    subOutputType = op.outputType();
-                } else {
-                    context.addDiagnostic(new Diagnostic(
-                            DiagnosticCodes.UNKNOWN_FLOW,
-                            "Unknown flow: " + call.flow().id(),
-                            call.flow().span()));
-                    return currentType;
-                }
-            }
-
             ProjectionSpec projectSpec = call.projectSpec();
             MergeSpec mergeSpec = call.mergeSpec();
             boolean isOptional = call.isOptional();
 
             TypeRef callActualInputType = currentType;
-            TypeRef callOutputType = subOutputType;
 
             // 校验 Projector
             if (projectSpec != null) {
@@ -367,6 +324,50 @@ public final class SpecTypeCheckers {
                     }
                 }
             }
+
+            FlowDefinition subflow = context.registry().subflow(call.flow().id());
+            TypeRef subInputType = TypeRef.ANY;
+            TypeRef subOutputType = TypeRef.ANY;
+
+            if (subflow != null) {
+                if (context.isVisiting(call.flow().id())) {
+                    SourceSpan span = call.span() != null && call.span() != SourceSpan.UNKNOWN
+                            ? call.span()
+                            : (call.flow().span() != null ? call.flow().span() : SourceSpan.UNKNOWN);
+                    context.addDiagnostic(new Diagnostic(
+                            DiagnosticCodes.CYCLIC_FLOW_CALL,
+                            "Cyclic flow call detected: " + call.flow().id(),
+                            span));
+                    return currentType;
+                }
+                context.pushVisiting(call.flow().id());
+                try {
+                    TypeCheckResult subResult = TypeChecker.check(subflow, context.registry(), callActualInputType, context.visitingFlows());
+                    if (!subResult.success()) {
+                        for (Diagnostic d : subResult.diagnostics()) {
+                            context.addDiagnostic(d);
+                        }
+                    }
+                    subInputType = subResult.inputType();
+                    subOutputType = subResult.outputType();
+                } finally {
+                    context.popVisiting(call.flow().id());
+                }
+            } else {
+                OperationDescriptor op = context.registry().operation(call.flow().id());
+                if (op != null) {
+                    subInputType = op.inputType();
+                    subOutputType = op.outputType();
+                } else {
+                    context.addDiagnostic(new Diagnostic(
+                            DiagnosticCodes.UNKNOWN_FLOW,
+                            "Unknown flow: " + call.flow().id(),
+                            call.flow().span()));
+                    return currentType;
+                }
+            }
+
+            TypeRef callOutputType = subOutputType;
 
             // 校验 Flow 入参类型
             if (callActualInputType != TypeRef.ANY && subInputType != TypeRef.ANY
@@ -601,10 +602,19 @@ public final class SpecTypeCheckers {
             JoinSpec joinSpec = parallel.joinSpec();
             if (joinSpec instanceof BuiltinJoinSpec) {
                 BuiltinJoinSpec builtin = (BuiltinJoinSpec) joinSpec;
+                int branchCount = parallel.branches() != null ? parallel.branches().size() : 0;
                 switch (builtin.kind()) {
                     case ALL:
+                        joinOutputType = currentType != null ? currentType : TypeRef.ANY;
+                        break;
                     case QUORUM:
-                        joinOutputType = TypeRef.of(com.team4u.framework.flow.model.ParallelResults.Values.class);
+                        if (builtin.quorumRequired() < 1 || builtin.quorumRequired() > branchCount) {
+                            context.addDiagnostic(new Diagnostic(
+                                    DiagnosticCodes.INVALID_QUORUM,
+                                    "quorum required must be between 1 and " + branchCount + ", got: " + builtin.quorumRequired(),
+                                    builtin.span()));
+                        }
+                        joinOutputType = currentType != null ? currentType : TypeRef.ANY;
                         break;
                     case FIRST:
                         joinOutputType = TypeRef.ANY;

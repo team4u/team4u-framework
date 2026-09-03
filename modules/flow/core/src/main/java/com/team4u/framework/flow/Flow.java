@@ -332,7 +332,7 @@ public final class Flow<I, O> {
 
     /**
      * 基于条件谓词判定执行分支流程（when/otherwise 便捷 API）：
-     * 当满足谓词条件时执行 {@code branch}，不满足时若未配置 otherwise 则默认按恒等透传处理。
+     * 当满足谓词条件时执行 {@code branch}，不满足时转入 {@link WhenBuilder#otherwise(Flow)} 兜底流程。
      *
      * @param predicate 条件谓词，不能为 null
      * @param branch    条件满足时执行的目标子流程，不能为 null
@@ -1284,30 +1284,15 @@ public final class Flow<I, O> {
         /**
          * 显式指定全部条件均不满足时的兜底分支流程。
          *
+         * <p>若需要未命中时按恒等透传（保持输入原样透传），可显式传入 {@code otherwise(Flow.identity())}，
+         * 此时编译器将通过泛型强类型约束确保分支输出类型 {@code N} 与输入类型 {@code O} 严格一致，消除泛型不安全漏洞。</p>
+         *
          * @param branch 兜底分支流程，不能为 null
          * @return 绑定兜底分支后的 Flow 实例
          */
         public Flow<I, N> otherwise(Flow<O, N> branch) {
             Objects.requireNonNull(branch, "otherwise branch must not be null");
             return new Flow<I, N>(buildLogical(branch.root));
-        }
-
-        /**
-         * 省略兜底分支（默认退化为恒等透传 Flow.identity()，要求输出类型 N 与输入 O 兼容）。
-         *
-         * @return 默认透传兜底的 Flow 实例
-         */
-        public Flow<I, N> otherwise() {
-            return new Flow<I, N>(buildLogical(Logical.Complete.identityNode()));
-        }
-
-        /**
-         * 获取构建完成的 Flow 实例（语义同 {@link #otherwise()}）。
-         *
-         * @return Flow 实例
-         */
-        public Flow<I, N> flow() {
-            return otherwise();
         }
     }
 
@@ -1323,6 +1308,10 @@ public final class Flow<I, O> {
 
     /**
      * 基于结构化并行与保序上下文汇聚的状态填充流水线构建器（parallelFill 便捷 API）。
+     *
+     * <p><strong>Merger 契约约束（Durable 重放安全）：</strong>
+     * 各分支的 {@code merge} 函数必须是纯函数（无外部副作用、确定性计算），允许状态赋值或不可变拷贝，
+     * 严禁在此执行发外部消息、写外部存储等产生外部副作用的操作，以确保在 Durable 模式下重放安全。</p>
      *
      * @param <I> 流程根输入类型
      * @param <O> 当前待填充的状态数据类型
@@ -1360,7 +1349,7 @@ public final class Flow<I, O> {
             Objects.requireNonNull(operation, "operation must not be null");
             Objects.requireNonNull(merge, "merge must not be null");
             List<ForkEntry<O, ?>> copy = new ArrayList<ForkEntry<O, ?>>(forks);
-            copy.add(new ForkEntry<O, R>(project, Flow.step(operation), merge));
+            copy.add(new ForkEntry<O, R>(project, binding(operation, Logical.BindingKind.OPERATION), merge));
             return new ParallelFillBuilder<I, O>(parent, Collections.unmodifiableList(copy), timeout);
         }
 
@@ -1401,7 +1390,7 @@ public final class Flow<I, O> {
             Objects.requireNonNull(operationClass, "operationClass must not be null");
             Objects.requireNonNull(merge, "merge must not be null");
             List<ForkEntry<O, ?>> copy = new ArrayList<ForkEntry<O, ?>>(forks);
-            copy.add(new ForkEntry<O, R>(project, Flow.step(operationClass, qualifier), merge));
+            copy.add(new ForkEntry<O, R>(project, binding(operationClass, qualifier, Logical.BindingKind.OPERATION), merge));
             return new ParallelFillBuilder<I, O>(parent, Collections.unmodifiableList(copy), timeout);
         }
 
@@ -1464,9 +1453,8 @@ public final class Flow<I, O> {
         private static <O, P, R> Branch<O, ?> createForkBranch(int index, ForkEntry<O, ?> fork) {
             ForkEntry<O, R> typed = (ForkEntry<O, R>) fork;
             Function<O, P> project = (Function<O, P>) typed.project;
-            Flow<P, R> step = (Flow<P, R>) typed.flow;
             Flow<O, R> branchFlow = Flow.<O, P, R, R>invoke(
-                    ((Logical.Invoke) step.root).binding(),
+                    typed.binding,
                     project,
                     (ignored, r) -> r
             );
@@ -1475,12 +1463,12 @@ public final class Flow<I, O> {
 
         private static final class ForkEntry<O, R> {
             final Function<? super O, ?> project;
-            final Flow<?, R> flow;
+            final Logical.Binding binding;
             final BiFunction<? super O, ? super R, ? extends O> merger;
 
-            ForkEntry(Function<? super O, ?> project, Flow<?, R> flow, BiFunction<? super O, ? super R, ? extends O> merger) {
+            ForkEntry(Function<? super O, ?> project, Logical.Binding binding, BiFunction<? super O, ? super R, ? extends O> merger) {
                 this.project = project;
-                this.flow = flow;
+                this.binding = binding;
                 this.merger = merger;
             }
         }

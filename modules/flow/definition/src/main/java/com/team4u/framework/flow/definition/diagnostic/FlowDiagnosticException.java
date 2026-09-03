@@ -2,6 +2,7 @@ package com.team4u.framework.flow.definition.diagnostic;
 
 import com.team4u.framework.parser.SourceSpan;
 
+import com.team4u.framework.flow.model.FlowExecutionException;
 import lombok.Getter;
 
 import java.util.ArrayList;
@@ -14,13 +15,14 @@ import java.util.List;
  * @author jay.wu
  */
 @Getter
-public class FlowDiagnosticException extends RuntimeException {
+public class FlowDiagnosticException extends FlowExecutionException {
     private static final long serialVersionUID = 1L;
 
     private final List<Diagnostic> diagnostics;
 
     public FlowDiagnosticException(List<Diagnostic> diagnostics) {
-        super(formatMessage(diagnostics));
+        super(diagnostics != null && !diagnostics.isEmpty() ? diagnostics.get(0).code() : "DIAGNOSTIC_ERROR",
+                formatMessage(diagnostics));
         this.diagnostics = diagnostics != null
                 ? Collections.unmodifiableList(new ArrayList<Diagnostic>(diagnostics))
                 : Collections.<Diagnostic>emptyList();
@@ -44,6 +46,21 @@ public class FlowDiagnosticException extends RuntimeException {
 
     public List<Diagnostic> diagnostics() {
         return diagnostics;
+    }
+
+    public boolean hasCode(String targetCode) {
+        if (targetCode == null) {
+            return false;
+        }
+        if (targetCode.equals(code())) {
+            return true;
+        }
+        for (Diagnostic d : diagnostics) {
+            if (targetCode.equals(d.code())) {
+                return true;
+            }
+        }
+        return false;
     }
 
     private static String formatMessage(List<Diagnostic> diagnostics) {

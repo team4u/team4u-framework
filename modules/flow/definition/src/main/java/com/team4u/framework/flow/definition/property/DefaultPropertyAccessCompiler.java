@@ -14,6 +14,7 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
+import java.util.Optional;
 import java.util.concurrent.ConcurrentHashMap;
 
 /**
@@ -28,7 +29,13 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
 
     public static final DefaultPropertyAccessCompiler INSTANCE = new DefaultPropertyAccessCompiler();
 
-    private static final Map<String, PropertyAccessor> ACCESSOR_CACHE = new ConcurrentHashMap<String, PropertyAccessor>();
+    private static final ClassValue<Map<String, Optional<PropertyAccessor>>> ACCESSOR_CACHE =
+            new ClassValue<Map<String, Optional<PropertyAccessor>>>() {
+                @Override
+                protected Map<String, Optional<PropertyAccessor>> computeValue(Class<?> type) {
+                    return new ConcurrentHashMap<String, Optional<PropertyAccessor>>();
+                }
+            };
 
     @Override
     public CompiledReader compileReader(TypeRef rootType, PropertyPath path) {
@@ -183,10 +190,18 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                     String seg = segments.get(i);
                     if (current instanceof Map) {
                         Map map = (Map) current;
+                        if (!map.containsKey(seg)) {
+                            throw new FlowDiagnosticException(new Diagnostic(
+                                    DiagnosticCodes.PROPERTY_NOT_FOUND,
+                                    "Intermediate key '" + seg + "' not found in map for path: " + path.expression(),
+                                    path.span()));
+                        }
                         Object next = map.get(seg);
                         if (next == null) {
-                            next = new LinkedHashMap<String, Object>();
-                            map.put(seg, next);
+                            throw new FlowDiagnosticException(new Diagnostic(
+                                    DiagnosticCodes.PROPERTY_NULL_VALUE,
+                                    "Intermediate property '" + seg + "' is null in map for path: " + path.expression(),
+                                    path.span()));
                         }
                         current = next;
                     } else {
@@ -233,12 +248,18 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
     }
 
     private static PropertyAccessor resolveAccessor(Class<?> clazz, String propertyName) {
-        String cacheKey = clazz.getName() + "#" + propertyName;
-        PropertyAccessor cached = ACCESSOR_CACHE.get(cacheKey);
+        Map<String, Optional<PropertyAccessor>> map = ACCESSOR_CACHE.get(clazz);
+        Optional<PropertyAccessor> cached = map.get(propertyName);
         if (cached != null) {
-            return cached;
+            return cached.orElse(null);
         }
 
+        PropertyAccessor accessor = findAccessor(clazz, propertyName);
+        map.put(propertyName, Optional.ofNullable(accessor));
+        return accessor;
+    }
+
+    private static PropertyAccessor findAccessor(Class<?> clazz, String propertyName) {
         String capitalized = Character.toUpperCase(propertyName.charAt(0)) + propertyName.substring(1);
         Method getter = null;
         Method setter = null;
@@ -289,9 +310,7 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
             return null;
         }
 
-        PropertyAccessor accessor = new PropertyAccessor(propertyName, getter, setter, field);
-        ACCESSOR_CACHE.put(cacheKey, accessor);
-        return accessor;
+        return new PropertyAccessor(propertyName, getter, setter, field);
     }
 
     private static final class PropertyAccessor {

@@ -177,8 +177,12 @@ public final class InvocationRunner {
     }
 
     private Outcome<?> failure(Throwable throwable) {
+        if (throwable instanceof com.team4u.framework.flow.model.FlowExecutionException) {
+            com.team4u.framework.flow.model.FlowExecutionException fee = (com.team4u.framework.flow.model.FlowExecutionException) throwable;
+            return failed(fee.code(), fee.getMessage());
+        }
         String message = throwable.getMessage();
-        return failed("OPERATION_EXCEPTION", throwable.getClass().getName()
+        return failed(com.team4u.framework.flow.model.FlowDiagnosticCodes.OPERATION_EXCEPTION, throwable.getClass().getName()
                 + (message == null || message.trim().isEmpty() ? "" : ": " + message));
     }
 

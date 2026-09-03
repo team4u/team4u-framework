@@ -154,8 +154,12 @@ public final class NodeExecutionHandlers {
             try {
                 projected = Objects.requireNonNull(adapter.project().apply(frame.entry),
                         "projected input must not be null");
+            } catch (com.team4u.framework.flow.model.FlowExecutionException fee) {
+                machine.finish(Outcome.failed(com.team4u.framework.flow.model.Failure.of(fee.code(), fee.getMessage())));
+                return null;
             } catch (Exception e) {
-                machine.finish(Outcome.failed(com.team4u.framework.flow.model.Failure.of("OPERATION_EXCEPTION",
+                machine.finish(Outcome.failed(com.team4u.framework.flow.model.Failure.of(
+                        com.team4u.framework.flow.model.FlowDiagnosticCodes.ADAPTER_PROJECT_EXCEPTION,
                         e.getClass().getName() + (e.getMessage() == null ? "" : ": " + e.getMessage()))));
                 return null;
             }

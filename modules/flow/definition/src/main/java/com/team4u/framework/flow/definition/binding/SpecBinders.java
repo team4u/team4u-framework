@@ -10,7 +10,10 @@ import com.team4u.framework.flow.api.ResumePoint;
 import com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes;
 import com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException;
 import com.team4u.framework.flow.definition.model.*;
+import com.team4u.framework.flow.definition.property.CompiledReader;
 import com.team4u.framework.flow.definition.registry.*;
+import com.team4u.framework.flow.definition.type.TypeCheckResult;
+import com.team4u.framework.flow.definition.type.TypeChecker;
 import com.team4u.framework.flow.definition.type.TypeCodec;
 import com.team4u.framework.flow.Joins;
 import com.team4u.framework.flow.definition.type.TypeRef;
@@ -50,11 +53,12 @@ public final class SpecBinders {
                         DiagnosticCodes.UNKNOWN_OPERATION, "Operation not found: " + step.operation().id());
             }
 
+            TypeRef stateType = context.inputTypeOf(step);
             ProjectionSpec projectSpec = step.projectSpec();
             MergeSpec mergeSpec = step.mergeSpec();
 
-            Function<Object, Object> projectFn = context.compileProjector(projectSpec);
-            BiFunction<Object, Object, Object> mergeFn = context.compileMerger(mergeSpec, op.outputType());
+            Function<Object, Object> projectFn = context.compileProjector(projectSpec, stateType);
+            BiFunction<Object, Object, Object> mergeFn = context.compileMerger(mergeSpec, stateType, op.outputType());
 
             Flow flow;
             if (projectSpec != null || mergeSpec != null) {
@@ -107,16 +111,44 @@ public final class SpecBinders {
         @Override
         @SuppressWarnings({"unchecked", "rawtypes"})
         public Flow<?, ?> bind(CallSpec call, BindingContext context) {
+            TypeRef stateType = context.inputTypeOf(call);
+            ProjectionSpec projectSpec = call.projectSpec();
+            MergeSpec mergeSpec = call.mergeSpec();
+
+            Function<Object, Object> projectFn = context.compileProjector(projectSpec, stateType);
+
+            TypeRef callActualInputType = stateType;
+            if (projectSpec != null) {
+                if (projectSpec instanceof PropertyProjectionSpec) {
+                    try {
+                        CompiledReader reader = context.registry().propertyAccessCompiler()
+                                .compileReader(stateType, ((PropertyProjectionSpec) projectSpec).path());
+                        callActualInputType = reader.resultType();
+                    } catch (Exception ignored) { }
+                } else if (call.project() != null) {
+                    ProjectorDescriptor projector = context.registry().projector(call.project().id());
+                    if (projector != null && projector.outputType() != null && projector.outputType() != TypeRef.ANY) {
+                        callActualInputType = projector.outputType();
+                    }
+                }
+            }
+
             FlowDefinition subflowDef = context.subflow(call.flow().id());
             Flow subflow;
+            TypeRef subflowOutputType = TypeRef.ANY;
             if (subflowDef != null) {
-                subflow = context.bindSpec(subflowDef.root());
+                subflow = FlowBinder.bind(subflowDef, context.registry(), context.resolver(), callActualInputType).flow();
+                try {
+                    TypeCheckResult subResult = TypeChecker.check(subflowDef, context.registry(), callActualInputType);
+                    subflowOutputType = subResult.outputType();
+                } catch (Exception ignored) { }
             } else {
                 OperationDescriptor op = context.registry().operation(call.flow().id());
                 if (op == null) {
                     throw new FlowDiagnosticException(
                             DiagnosticCodes.UNKNOWN_FLOW, "Flow not found: " + call.flow().id());
                 }
+                subflowOutputType = op.outputType();
                 if (op.instance() != null) {
                     subflow = Flow.step((Operation) op.instance());
                 } else {
@@ -124,11 +156,7 @@ public final class SpecBinders {
                 }
             }
 
-            ProjectionSpec projectSpec = call.projectSpec();
-            MergeSpec mergeSpec = call.mergeSpec();
-
-            Function<Object, Object> projectFn = context.compileProjector(projectSpec);
-            BiFunction<Object, Object, Object> mergeFn = context.compileMerger(mergeSpec, TypeRef.ANY);
+            BiFunction<Object, Object, Object> mergeFn = context.compileMerger(mergeSpec, stateType, subflowOutputType);
 
             Flow flow;
             if (projectSpec != null || mergeSpec != null) {
@@ -304,9 +332,10 @@ public final class SpecBinders {
             JoinStrategy<?> strategy = null;
             if (joinSpec instanceof BuiltinJoinSpec) {
                 BuiltinJoinSpec builtin = (BuiltinJoinSpec) joinSpec;
+                int branchCount = parallel.branches() != null ? parallel.branches().size() : 0;
                 switch (builtin.kind()) {
                     case ALL:
-                        strategy = Joins.allAccepted();
+                        strategy = (JoinStrategy) Joins.allAcceptedBarrier();
                         break;
                     case FIRST:
                         strategy = Joins.firstAccepted();
@@ -315,13 +344,13 @@ public final class SpecBinders {
                         strategy = Joins.collect();
                         break;
                     case QUORUM:
-                        if (builtin.quorumRequired() < 1) {
+                        if (builtin.quorumRequired() < 1 || builtin.quorumRequired() > branchCount) {
                             throw new FlowDiagnosticException(
                                     DiagnosticCodes.INVALID_QUORUM,
-                                    "quorum required must be at least 1, got: " + builtin.quorumRequired(),
+                                    "quorum required must be between 1 and " + branchCount + ", got: " + builtin.quorumRequired(),
                                     builtin.span());
                         }
-                        strategy = Joins.quorum(builtin.quorumRequired());
+                        strategy = (JoinStrategy) Joins.quorumBarrier(builtin.quorumRequired());
                         break;
                     default:
                         throw new FlowDiagnosticException(

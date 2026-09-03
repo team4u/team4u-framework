@@ -300,8 +300,13 @@ public final class DurableMachine {
         try {
             projected = Objects.requireNonNull(node.project().apply(frame.entry),
                     "projected input must not be null");
+        } catch (com.team4u.framework.flow.model.FlowExecutionException fee) {
+            finish(DurableState.MachineOutcome.of(Outcome.failed(com.team4u.framework.flow.model.Failure.of(fee.code(), fee.getMessage()))),
+                    CheckpointReasons.boundary("adapter", node.descriptor().path()));
+            return;
         } catch (Exception e) {
-            finish(DurableState.MachineOutcome.of(Outcome.failed(com.team4u.framework.flow.model.Failure.of("OPERATION_EXCEPTION",
+            finish(DurableState.MachineOutcome.of(Outcome.failed(com.team4u.framework.flow.model.Failure.of(
+                    com.team4u.framework.flow.model.FlowDiagnosticCodes.ADAPTER_PROJECT_EXCEPTION,
                     e.getClass().getName() + (e.getMessage() == null ? "" : ": " + e.getMessage())))),
                     CheckpointReasons.boundary("adapter", node.descriptor().path()));
             return;

@@ -127,7 +127,7 @@ public class FlowConvenienceApiTest {
 
         Flow<Integer, Integer> flow = Flow.<Integer>identity()
                 .when(i -> i > 10, doubleFlow)
-                .otherwise();
+                .otherwise(Flow.identity());
 
         assertEquals(Integer.valueOf(24), Local.from(flow).compile().run(12).requireAccepted());
         assertEquals(Integer.valueOf(7), Local.from(flow).compile().run(7).requireAccepted());
@@ -196,7 +196,8 @@ public class FlowConvenienceApiTest {
         FlowResult<String> res = Local.from(flow).compile().run("abc");
         Outcome<String> outcome = ((FlowResult.Completed<String>) res).outcome();
         assertTrue(outcome instanceof Outcome.Failed<?>);
-        assertEquals("OPERATION_EXCEPTION", ((Outcome.Failed<?>) outcome).failure().code());
+        assertEquals(com.team4u.framework.flow.model.FlowDiagnosticCodes.ADAPTER_PROJECT_EXCEPTION,
+                ((Outcome.Failed<?>) outcome).failure().code());
     }
 
     @Test
@@ -210,6 +211,35 @@ public class FlowConvenienceApiTest {
         Outcome<String> outcome = ((FlowResult.Completed<String>) res).outcome();
         assertTrue(outcome instanceof Outcome.Rejected<?>);
         assertEquals("SUB_REJECT", ((Outcome.Rejected<?>) outcome).reason().code());
+    }
+
+    @Test
+    public void adaptPropagatesMergeExceptionAsFailure() {
+        Flow<Integer, Integer> subflow = Flow.step((ctx, i) -> Outcome.accepted(i * 10));
+
+        Flow<String, String> flow = Flow.<String>identity()
+                .thenAdapt(subflow, Integer::parseInt, (s, r) -> { throw new IllegalStateException("merge boom"); });
+
+        FlowResult<String> res = Local.from(flow).compile().run("10");
+        Outcome<String> outcome = ((FlowResult.Completed<String>) res).outcome();
+        assertTrue(outcome instanceof Outcome.Failed<?>);
+        assertEquals(com.team4u.framework.flow.model.FlowDiagnosticCodes.ADAPTER_MERGE_EXCEPTION,
+                ((Outcome.Failed<?>) outcome).failure().code());
+    }
+
+    @Test
+    public void adaptPropagatesFlowExecutionExceptionStructuredCode() {
+        Flow<Integer, Integer> subflow = Flow.step((ctx, i) -> Outcome.accepted(i * 10));
+
+        Flow<String, String> flow = Flow.<String>identity()
+                .thenAdapt(subflow, s -> {
+                    throw new com.team4u.framework.flow.model.FlowExecutionException("CUSTOM_PROJECT_CODE", "custom err");
+                }, (s, r) -> s + "=" + r);
+
+        FlowResult<String> res = Local.from(flow).compile().run("10");
+        Outcome<String> outcome = ((FlowResult.Completed<String>) res).outcome();
+        assertTrue(outcome instanceof Outcome.Failed<?>);
+        assertEquals("CUSTOM_PROJECT_CODE", ((Outcome.Failed<?>) outcome).failure().code());
     }
 
     // ------------------------------------------------------------------

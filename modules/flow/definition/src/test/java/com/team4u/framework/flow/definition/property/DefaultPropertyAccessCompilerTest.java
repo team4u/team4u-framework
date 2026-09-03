@@ -99,6 +99,33 @@ public class DefaultPropertyAccessCompilerTest {
     }
 
     @Test
+    public void testMapWriteIntermediateMissingThrowsPropertyNotFound() {
+        DefaultPropertyAccessCompiler compiler = DefaultPropertyAccessCompiler.INSTANCE;
+        CompiledWriter writer = compiler.compileWriter(TypeRef.of(Map.class), PropertyPath.parse("$.intermediate.leaf"), TypeRef.of(String.class));
+        Map<String, Object> map = new HashMap<>();
+        try {
+            writer.write(map, "val");
+            Assert.fail("Expected PROPERTY_NOT_FOUND");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(DiagnosticCodes.PROPERTY_NOT_FOUND, ex.diagnostics().get(0).code());
+        }
+    }
+
+    @Test
+    public void testMapWriteIntermediateNullThrowsPropertyNullValue() {
+        DefaultPropertyAccessCompiler compiler = DefaultPropertyAccessCompiler.INSTANCE;
+        CompiledWriter writer = compiler.compileWriter(TypeRef.of(Map.class), PropertyPath.parse("$.intermediate.leaf"), TypeRef.of(String.class));
+        Map<String, Object> map = new HashMap<>();
+        map.put("intermediate", null);
+        try {
+            writer.write(map, "val");
+            Assert.fail("Expected PROPERTY_NULL_VALUE");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(DiagnosticCodes.PROPERTY_NULL_VALUE, ex.diagnostics().get(0).code());
+        }
+    }
+
+    @Test
     public void testPojoPropertyReadAndWrite() {
         DefaultPropertyAccessCompiler compiler = DefaultPropertyAccessCompiler.INSTANCE;
         TypeRef orderType = TypeRef.of(Order.class);
@@ -234,8 +261,7 @@ public class DefaultPropertyAccessCompilerTest {
                 registry, TypeRef.of(String.class)).flow();
         FlowResult resAll = Local.compile(flowAll).run("input");
         Assert.assertTrue(resAll instanceof FlowResult.Completed);
-        ParallelResults.Values values = (ParallelResults.Values) ((Outcome.Accepted<?>) ((FlowResult.Completed) resAll).outcome()).value();
-        Assert.assertNotNull(values);
+        Assert.assertEquals("input", ((Outcome.Accepted<?>) ((FlowResult.Completed) resAll).outcome()).value());
 
         // 2. join first
         ParallelSpec pFirst = new ParallelSpec(
@@ -284,5 +310,6 @@ public class DefaultPropertyAccessCompilerTest {
                 registry, TypeRef.of(String.class)).flow();
         FlowResult resQuorum = Local.compile(flowQuorum).run("input");
         Assert.assertTrue(resQuorum instanceof FlowResult.Completed);
+        Assert.assertEquals("input", ((Outcome.Accepted<?>) ((FlowResult.Completed) resQuorum).outcome()).value());
     }
 }

@@ -62,4 +62,49 @@ public final class Joins {
     public static JoinStrategy<ParallelResults.Values> quorum(int required) {
         return results -> results.quorum(required);
     }
+
+    /**
+     * 全票成功屏障策略（透传并行原输入）：所有分支必须均 Accepted，输出保留原始输入上下文；
+     * 存在任一非 Accepted 分支时，按分支声明顺序返回首个非 Accepted 结果。
+     *
+     * @param <I> 输入类型
+     * @return 全票成功上下文屏障策略
+     */
+    public static <I> com.team4u.framework.flow.api.ContextualJoinStrategy<I, I> allAcceptedBarrier() {
+        return (initialInput, results) -> {
+            for (com.team4u.framework.flow.api.Branch<?, ?> branch : results.branches()) {
+                Outcome<?> outcome = results.outcome(branch);
+                if (!(outcome instanceof Outcome.Accepted)) {
+                    @SuppressWarnings("unchecked")
+                    Outcome<I> nonAccepted = (Outcome<I>) outcome;
+                    return nonAccepted;
+                }
+            }
+            return Outcome.accepted(initialInput);
+        };
+    }
+
+    /**
+     * 法定配额成功屏障策略（透传并行原输入）：当 Accepted 的分支数量达到或超过 {@code required} 阈值时返回原始输入上下文；
+     * 否则返回错误码为 {@code QUORUM_NOT_REACHED} 的 Failed 结果。
+     *
+     * @param required 要求的最小成功分支数
+     * @param <I>      输入类型
+     * @return 法定配额上下文屏障策略
+     */
+    public static <I> com.team4u.framework.flow.api.ContextualJoinStrategy<I, I> quorumBarrier(int required) {
+        return (initialInput, results) -> {
+            int acceptedCount = 0;
+            for (com.team4u.framework.flow.api.Branch<?, ?> branch : results.branches()) {
+                if (results.outcome(branch) instanceof Outcome.Accepted) {
+                    acceptedCount++;
+                }
+            }
+            if (acceptedCount >= required) {
+                return Outcome.accepted(initialInput);
+            }
+            return Outcome.failed(com.team4u.framework.flow.model.Failure.of("QUORUM_NOT_REACHED",
+                    "Required quorum of " + required + " not reached, actual: " + acceptedCount));
+        };
+    }
 }

@@ -37,7 +37,7 @@ public final class ParallelSpec implements FlowSpec {
     }
 
     public ParallelSpec(List<BranchSpec> branches, SymbolRef join, SourceSpan span) {
-        this(branches, new SymbolJoinSpec(join, span), span);
+        this(branches, (JoinSpec) join, span);
     }
 
     public SymbolRef join() {

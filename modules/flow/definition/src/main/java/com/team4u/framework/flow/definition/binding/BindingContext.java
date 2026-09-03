@@ -42,6 +42,26 @@ public interface BindingContext {
     }
 
     /**
+     * 获取指定 FlowSpec 节点的输入类型（由静态类型检查推导）。
+     *
+     * @param spec 流程规范节点
+     * @return 节点输入类型引用
+     */
+    default TypeRef inputTypeOf(FlowSpec spec) {
+        return currentType();
+    }
+
+    /**
+     * 获取指定 FlowSpec 节点的输出类型（由静态类型检查推导）。
+     *
+     * @param spec 流程规范节点
+     * @return 节点输出类型引用
+     */
+    default TypeRef outputTypeOf(FlowSpec spec) {
+        return TypeRef.ANY;
+    }
+
+    /**
      * 递归绑定子 Spec 节点。
      *
      * @param spec 子 Spec 节点
@@ -65,18 +85,20 @@ public interface BindingContext {
             Map<String, Object> configuration);
 
     /**
-     * 编译投影规范为输入提取函数。
+     * 编译投影规范为输入提取函数（显式指定根输入类型）。
      *
      * @param projection 投影规范
+     * @param rootType   根输入类型
      * @return 提取函数
      */
-    default Function<Object, Object> compileProjector(ProjectionSpec projection) {
+    default Function<Object, Object> compileProjector(ProjectionSpec projection, TypeRef rootType) {
         if (projection == null) {
             return Function.identity();
         }
+        TypeRef actualRootType = rootType != null ? rootType : currentType();
         if (projection instanceof PropertyProjectionSpec) {
             PropertyPath path = ((PropertyProjectionSpec) projection).path();
-            CompiledReader reader = registry().propertyAccessCompiler().compileReader(currentType(), path);
+            CompiledReader reader = registry().propertyAccessCompiler().compileReader(actualRootType, path);
             return reader::read;
         }
         if (projection instanceof SymbolRef || projection instanceof SymbolProjectionSpec) {
@@ -96,20 +118,32 @@ public interface BindingContext {
     }
 
     /**
-     * 编译合并规范为结果合并函数。
+     * 编译投影规范为输入提取函数。
+     *
+     * @param projection 投影规范
+     * @return 提取函数
+     */
+    default Function<Object, Object> compileProjector(ProjectionSpec projection) {
+        return compileProjector(projection, currentType());
+    }
+
+    /**
+     * 编译合并规范为结果合并函数（显式指定根输入类型）。
      *
      * @param merge      合并规范
+     * @param rootType   根输入类型
      * @param resultType 结果输出类型
      * @return 合并函数
      */
-    default BiFunction<Object, Object, Object> compileMerger(MergeSpec merge, TypeRef resultType) {
+    default BiFunction<Object, Object, Object> compileMerger(MergeSpec merge, TypeRef rootType, TypeRef resultType) {
         if (merge == null) {
             return (state, res) -> res;
         }
+        TypeRef actualRootType = rootType != null ? rootType : currentType();
         if (merge instanceof PropertyMergeSpec) {
             PropertyPath path = ((PropertyMergeSpec) merge).path();
             CompiledWriter writer = registry().propertyAccessCompiler().compileWriter(
-                    currentType(), path, resultType != null ? resultType : TypeRef.ANY);
+                    actualRootType, path, resultType != null ? resultType : TypeRef.ANY);
             return writer::write;
         }
         if (merge instanceof SymbolRef || merge instanceof SymbolMergeSpec) {
@@ -126,6 +160,17 @@ public interface BindingContext {
             return desc.function();
         }
         return (state, res) -> res;
+    }
+
+    /**
+     * 编译合并规范为结果合并函数。
+     *
+     * @param merge      合并规范
+     * @param resultType 结果输出类型
+     * @return 合并函数
+     */
+    default BiFunction<Object, Object, Object> compileMerger(MergeSpec merge, TypeRef resultType) {
+        return compileMerger(merge, currentType(), resultType);
     }
 
 

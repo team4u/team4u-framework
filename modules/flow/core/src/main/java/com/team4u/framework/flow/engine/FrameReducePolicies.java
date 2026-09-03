@@ -135,8 +135,11 @@ public final class FrameReducePolicies {
                             adapter.merge().apply(frame.entry, accepted.value()),
                             "merged output must not be null");
                     return Outcome.accepted(merged);
+                } catch (com.team4u.framework.flow.model.FlowExecutionException fee) {
+                    return Outcome.failed(com.team4u.framework.flow.model.Failure.of(fee.code(), fee.getMessage()));
                 } catch (Exception e) {
-                    return Outcome.failed(com.team4u.framework.flow.model.Failure.of("OPERATION_EXCEPTION",
+                    return Outcome.failed(com.team4u.framework.flow.model.Failure.of(
+                            com.team4u.framework.flow.model.FlowDiagnosticCodes.ADAPTER_MERGE_EXCEPTION,
                             e.getClass().getName() + (e.getMessage() == null ? "" : ": " + e.getMessage())));
                 }
             }

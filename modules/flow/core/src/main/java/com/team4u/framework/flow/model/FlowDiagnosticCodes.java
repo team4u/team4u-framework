@@ -17,6 +17,10 @@ public final class FlowDiagnosticCodes {
     public static final String OPERATION_INTERRUPTED = "OPERATION_INTERRUPTED";
     /** 操作执行抛出未受检异常。 */
     public static final String OPERATION_EXCEPTION = "OPERATION_EXCEPTION";
+    /** 适配器节点输入投影执行异常。 */
+    public static final String ADAPTER_PROJECT_EXCEPTION = "ADAPTER_PROJECT_EXCEPTION";
+    /** 适配器节点结果合并执行异常。 */
+    public static final String ADAPTER_MERGE_EXCEPTION = "ADAPTER_MERGE_EXCEPTION";
     /** 线程池拒绝执行任务。 */
     public static final String EXECUTOR_REJECTED = "EXECUTOR_REJECTED";
 

@@ -30,10 +30,13 @@ public final class ProjectModifierSpec implements ModifierSpec {
     }
 
     public ProjectModifierSpec(SymbolRef projector, SourceSpan span) {
-        this(new SymbolProjectionSpec(projector, span), span);
+        this((ProjectionSpec) projector, span);
     }
 
     public SymbolRef projector() {
+        if (projection instanceof SymbolRef) {
+            return (SymbolRef) projection;
+        }
         return projection instanceof SymbolProjectionSpec
                 ? ((SymbolProjectionSpec) projection).symbol()
                 : null;

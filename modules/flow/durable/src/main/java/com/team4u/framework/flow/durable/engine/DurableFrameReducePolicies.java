@@ -158,8 +158,11 @@ public final class DurableFrameReducePolicies {
                             "merged output must not be null");
                     return DurableState.MachineOutcome.accepted(merged,
                             DurableState.SlotRole.user(DurablePlanCompiler.nodeRole(adapter.descriptor().path())));
+                } catch (com.team4u.framework.flow.model.FlowExecutionException fee) {
+                    return DurableState.MachineOutcome.of(Outcome.failed(com.team4u.framework.flow.model.Failure.of(fee.code(), fee.getMessage())));
                 } catch (Exception e) {
-                    return DurableState.MachineOutcome.of(Outcome.failed(com.team4u.framework.flow.model.Failure.of("OPERATION_EXCEPTION",
+                    return DurableState.MachineOutcome.of(Outcome.failed(com.team4u.framework.flow.model.Failure.of(
+                            com.team4u.framework.flow.model.FlowDiagnosticCodes.ADAPTER_MERGE_EXCEPTION,
                             e.getClass().getName() + (e.getMessage() == null ? "" : ": " + e.getMessage()))));
                 }
             }
