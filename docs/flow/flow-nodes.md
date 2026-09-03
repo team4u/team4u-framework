@@ -2,9 +2,9 @@
 
 `team4u-flow` 采用“**不可变声明（Logical AST） -> 编译期降级校验（Compiler Lowering） -> 运行时封闭节点（PlanNode）**”的三层架构。
 
-在 DSL 构建阶段，开发者使用丰富流畅的语义方法组装流程；在编译阶段，这些结构经过静态校验、扁平化优化与降级，统一规范化为八种封闭的运行时核心节点。
+在 DSL 构建阶段，开发者使用丰富流畅的语义方法组装流程；在编译阶段，这些结构经过静态校验、扁平化优化与降级，统一规范化为九种封闭的运行时核心节点。
 
-本文将深入剖析这八种核心节点的运行时状态机、DSL 声明形式、节点路径（Path）规范以及内部执行机制。
+本文将深入剖析这九种核心节点的运行时状态机、DSL 声明形式、节点路径（Path）规范以及内部执行机制。
 
 ---
 
@@ -21,11 +21,12 @@ graph TD
         L6["flow.await(ResumePoint)"]
         L7["flow.policy / persistentPolicy / timeout"]
         L8["Flow.identity / accepted / rejected / ..."]
+        L9["flow.thenAdapt / tap / peek"]
     end
 
     subgraph "编译期降级校验 (Compiler Lowering)"
         COMP["Compiler.compile<br/>1. 静态拓扑校验<br/>2. 匿名 Sequence 扁平化<br/>3. thenOptional 降级为 Fallback<br/>4. Bean 容器依赖解析与绑定"]
-        L1 & L2 & L3 & L4 & L5 & L6 & L7 & L8 --> COMP
+        L1 & L2 & L3 & L4 & L5 & L6 & L7 & L8 & L9 --> COMP
     end
 
     subgraph "运行时封闭执行计划 (PlanNode)"
@@ -37,13 +38,14 @@ graph TD
         COMP --> N6["AWAIT (挂起等待外部信号节点)"]
         COMP --> N7["CONTROL (治理控制与策略切面节点)"]
         COMP --> N8["COMPLETE (常数终态与透传节点)"]
+        COMP --> N9["ADAPTER (适配器双向投影节点)"]
     end
 ```
 
 > [!IMPORTANT]
-> **运行时节点封闭原则（Closed PlanNode Set）**：
-> 框架的运行时节点类型（`NodeDescriptor.Kind`）是严格封闭的闭集（仅 8 种），**绝不开放自定义节点类型**。
-> 所有高级业务编排语义均通过这八种基础节点进行正交组合。封闭性使得执行器内核（`SerialMachine`）、持久化状态机（`DurableMachine`）、Mermaid 渲染器（`FlowDiagrams`）与调试工具具备了 100% 的确定性与可靠性。
+> **运行时节点封闭原则（Closed PlanNode Set）** ：
+> 框架的运行时节点类型（`NodeDescriptor.Kind`）是严格封闭的闭集（共 9 种），**绝不开放自定义节点类型**。
+> 所有高级业务编排语义均通过这九种基础节点进行正交组合。封闭性使得执行器内核（`SerialMachine`）、持久化状态机（`DurableMachine`）、Mermaid 渲染器（`FlowDiagrams`）与调试工具具备了 100% 的确定性与可靠性。
 
 ---
 
@@ -262,6 +264,24 @@ Flow<Void, String> rejectedFlow = Flow.rejected(Reason.of("ACCESS_DENIED", "无�
 Flow<Void, String> skippedFlow  = Flow.skipped(Reason.of("NOT_CONFIGURED", "未配置"));
 Flow<Void, String> failedFlow   = Flow.failed(Failure.of("SYSTEM_ERROR", "系统错误"));
 ```
+
+---
+
+## ADAPTER 节点（适配器节点）
+
+`ADAPTER` 节点专为嵌套子流程的编排适配而设计，具有双向数据投影与合并能力。它在不侵入子流程内部契约的前提下，将当前上下文裁剪投影为子流程的入参类型，并在子流程执行完成后将其出参融合回主状态：
+
+```java
+Flow<OrderContext, OrderContext> flow = Flow.<OrderContext>identity()
+        .thenAdapt(
+                paymentFlow,                          // 独立的子流程 Flow<PayReq, PayResp>
+                OrderContext::toPaymentRequest,       // 入参投影函数：OrderContext -> PayReq
+                OrderContext::withPaymentResponse     // 出参合并函数：(OrderContext, PayResp) -> OrderContext
+        );
+```
+
+- **统一双执行引擎兼容** ：在 Local 内存引擎与 Durable 持久化引擎中，`ADAPTER` 均作为原生节点执行，并保持一致的断点恢复与边界语义；
+- **只读旁路扩展** ：结合 `Flow.tap` 与 `Flow.peek`，可在不改变原数据流的前提下进行只读消费与透视观察，结果稳定保持接受态。
 
 ---
 

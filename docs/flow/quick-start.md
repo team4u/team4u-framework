@@ -239,9 +239,9 @@ executable.runAsync("framework")
 Branch<OrderRequest, RiskReport> riskBranch = Branch.of("risk", riskFlow);
 Branch<OrderRequest, StockReport> stockBranch = Branch.of("stock", stockFlow);
 
-Flow<OrderRequest, String> parallelFlow = Flow.<OrderRequest>parallel(riskBranch, stockBranch)
-        .join(results -> results.allAccepted()
-                .map(values -> values.get(riskBranch).summary() + "/" + values.get(stockBranch).summary()));
+// 既可使用 Joins.all() / Joins.first() / Joins.collect() / Joins.quorum(n) 内置策略，也可自定义结果解包
+Flow<OrderRequest, ParallelResults.Values> parallelFlow = Flow.<OrderRequest>parallel(riskBranch, stockBranch)
+        .join(Joins.all());
 ```
 
 ### 挂起与恢复 (await 与 resume)
@@ -300,6 +300,25 @@ Flow<State, State> enriched = Flow.<State>identity().use(
         State::toRiskRequest,      // project: 派生入参
         (state, score) -> state.withScore(score) // merge: 合并结果
 );
+```
+
+### 子流程适配与只读旁路 (thenAdapt / tap / peek)
+
+组合嵌套子流程与只读旁路监听：
+
+```java
+// 1. thenAdapt：双向投影与合并外部完整子流程
+Flow<OrderContext, OrderContext> adaptedFlow = Flow.<OrderContext>identity()
+        .thenAdapt(
+                paymentFlow,                          // 独立子流程 Flow<PaymentReq, PaymentResp>
+                OrderContext::toPaymentRequest,       // project: 提取入参
+                OrderContext::withPaymentResponse     // merge: 合并出参
+        );
+
+// 2. tap / peek：只读消费与透视（执行结果保持接受态，不影响主流水线数据）
+Flow<OrderContext, OrderContext> monitoredFlow = Flow.<OrderContext>identity()
+        .tap(order -> metricsLogger.record(order))
+        .peek(order -> traceCollector.track(order));
 ```
 
 ---

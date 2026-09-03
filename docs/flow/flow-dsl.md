@@ -84,7 +84,7 @@ FlowResult<OrderContext> result = executable.run(new OrderContext("ORD-1001"));
 | **声明流程** | `flow <flowId> [version <ver>] { ... }` | 声明一个具有全局唯一标识与版本号的流程 |
 | **单步执行** | `step <operation-id>` | 执行一个业务原子操作 |
 | **子流程调用** | `call <subflow-id> [ { ... } ]` | 调用同脚本或注册表中的模块化子流程 |
-| **数据投影与合并** | `step op { project p; merge m; }` | 步骤入参提取（$I \to P$）与结果合并（$(I, R) \to O$） |
+| **数据投影与合并** | `step op { project p; merge m; }` | 步骤入参提取（$I \to P$）与结果合并（$(I, R) \to O$），支持注册符号或 `$.path` 属性表达式 |
 | **单步超时** | `step op { timeout 1s; }` | 限制步骤最长执行时间（支持 `ms`, `s`, `m`, `h`） |
 | **策略治理切面** | `step op { policy p key k { ... } }` | 附加限流、鉴权等治理策略 |
 | **重试与退避** | `step op { retry r { maxAttempts: 3 } }` | 附加失败重试策略与动态参数 |
@@ -92,7 +92,7 @@ FlowResult<OrderContext> result = executable.run(new OrderContext("ORD-1001"));
 | **条件路由** | `route selector { case A { ... } otherwise { ... } }` | 根据选择器返回值多路分流 |
 | **优先级候选** | `firstApplicable { step c1; step c2; }` | 遇到 `Skipped` 自动尝试下一个，首个成功即采纳 |
 | **失败补偿** | `recover { body { ... } onFailure { ... } }` | 主流程发生失败时的逆向补偿流水线 |
-| **结构化并行** | `parallel { branch b1 { ... } join j; }` | 多分支并发执行与汇聚治理 |
+| **结构化并行** | `parallel { branch b1 { ... } join all; }` | 多分支并发执行，支持内置汇聚策略（`all`、`first`、`collect`、`quorum <n>`）或自定义符号 |
 | **异步挂起** | `await resumePoint` | 流程在此暂停并释放计算线程，等待外部信号唤醒 |
 | **显式结果** | `accepted` / `rejected` / `skipped` / `failed` | 显式返回四态结果并终止当前分支 |
 | **全局作用域** | `timeout 10s { ... }` / `scope "name" { ... }` | 对一组连续语句应用全局时限或划分逻辑边界 |
@@ -120,11 +120,11 @@ flow order.fulfillment version 1.0 {
 
 ```dsl
 step inventory.reserve {
-    # 1. 入参提取：从大对象中提取当前步骤所需的入参 (I -> P)
-    project order.items
+    # 1. 入参提取：支持符号引用（如 order.items）或 $.path 属性路径表达式（如 $.items）
+    project $.items
     
-    # 2. 结果合并：将步骤返回值合并回主状态 ((I, R) -> O)
-    merge order.withReservation
+    # 2. 结果合并：支持符号引用或 $.path 属性路径表达式回写主状态
+    merge $.inventoryResult
     
     # 3. 可选跳过：步骤若弃权返回 Skipped，自动使用步骤入口原值继续执行
     optional
@@ -216,7 +216,7 @@ recover {
 
 ### 结构化并行与汇聚
 
-使用 `parallel` 声明多分支并发执行，并通过 `join <join-id>` 指定结果汇合策略：
+使用 `parallel` 声明多分支并发执行，并通过 `join` 指定结果汇合策略：
 
 ```dsl
 parallel {
@@ -229,7 +229,9 @@ parallel {
     branch couponVerify {
         step coupon.validate
     }
-    join order.parallelSummary
+    # 汇聚策略：支持内置汇聚算子（join all、join first、join collect、join quorum <n>）
+    # 或指定注册表中的自定义汇聚器标识（如 join order.parallelSummary）
+    join all
 }
 ```
 

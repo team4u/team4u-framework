@@ -54,34 +54,45 @@ Flow<Order, CombinedReport> parallelFlow = Flow.<Order>parallel(riskBranch, stoc
 
 ---
 
-## 四大内置汇聚策略 (`JoinStrategy`)
+## 内置汇聚策略与 Joins 工具类
 
-框架在 `ParallelResults` 中内置了四种开箱即用的高频汇聚策略：
+框架在 `Joins` 工具类与 `ParallelResults` 中内置了四种开箱即用的高频汇聚策略：
 
-| 汇聚策略 | 调用方式 | 成功判定规则 | 失败/弃权处理 |
-| :--- | :--- | :--- | :--- |
-| **`allAccepted`** | `results.allAccepted()` | 全部分支均为 `Accepted` 时返回包含所有结果的类型安全映射表 | 若有任意分支非 Accepted，按声明顺序返回**首个非 Accepted 状态** |
-| **`firstAccepted`** | `results.firstAccepted()` | 按声明顺序返回**首个 `Accepted` 分支**的输出值 | 若全部分支均未 Accepted，返回 `Skipped(NO_APPLICABLE_BRANCH)` |
-| **`quorum(n)`** | `results.quorum(n)` | 达到或超过法定门槛 $n$ 个 `Accepted` 时即为成功 | 若成功分支数不足 $n$，返回 `Failed(QUORUM_NOT_REACHED)` |
-| **`homogeneousCollect`** | `results.homogeneousCollect()` | 同质类型分支全为 Accepted 时收集为 `List<T>` | 若有任意分支非 Accepted，返回首个非 Accepted 状态 |
+| 汇聚策略 | Java 调用方式 | DSL 调用方式 | 成功判定规则 | 失败/弃权处理 |
+| :--- | :--- | :--- | :--- | :--- |
+| **全量成功** | `Joins.all()` | `join all` | 全部分支均为 `Accepted` 时返回包含所有分支结果的 `ParallelResults.Values` | 若有任意分支非 Accepted，按声明顺序返回首个非 Accepted 状态 |
+| **首选成功** | `Joins.first()` | `join first` | 按声明顺序返回首个 `Accepted` 分支的输出值 | 若全部分支均未 Accepted，返回 `Skipped(NO_APPLICABLE_BRANCH)` |
+| **法定票数仲裁** | `Joins.quorum(n)` | `join quorum <n>` | 达到或超过法定门槛 $n$ 个 `Accepted` 时即为成功并返回成功列表 | 若成功分支数不足 $n$，返回 `Failed(QUORUM_NOT_REACHED)` |
+| **同质结果收集** | `Joins.collect()` | `join collect` | 同质类型分支全为 Accepted 时收集为 `List<T>` | 若有任意分支非 Accepted，返回首个非 Accepted 状态 |
 
-### 示例 1：全成功校验 (`allAccepted`)
+### 全成功汇聚
 
 ```java
-Flow<Order, Boolean> allCheckFlow = Flow.<Order>parallel(branchA, branchB, branchC)
-        .join(results -> results.allAccepted()
-                .map(map -> true)); // 全成功时产出 true，否则原样透传首个非成功分支的 Outcome
+Flow<Order, ParallelResults.Values> allCheckFlow = Flow.<Order>parallel(branchA, branchB, branchC)
+        .join(Joins.all());
 ```
 
-### 示例 2：法定票数仲裁 (`quorum`)
+### 法定票数仲裁
 
 在多节点分布式投票、多渠道并发比价中：
 
 ```java
 // 5 个询价节点中，至少需要 3 个节点返回有效报价
-Flow<QuoteRequest, PriceSummary> quorumFlow = Flow.<QuoteRequest>parallel(b1, b2, b3, b4, b5)
-        .join(results -> results.quorum(3)
-                .map(validQuotes -> calculateAveragePrice(validQuotes)));
+Flow<QuoteRequest, List<Price>> quorumFlow = Flow.<QuoteRequest>parallel(b1, b2, b3, b4, b5)
+        .join(Joins.quorum(3));
+```
+
+### 上下文保序并行填充
+
+针对大上下文对象的多数据源并发丰富场景，`Flow.parallelFill` 原生支持将多个步骤并发执行，并在全部成功后将变动保序合并回主上下文：
+
+```java
+Flow<OrderContext, OrderContext> enrichedFlow = Flow.<OrderContext>identity()
+        .parallelFill(
+                Flow.step(FetchUserOp.class),
+                Flow.step(FetchPromotionOp.class),
+                Flow.step(FetchCouponOp.class)
+        );
 ```
 
 ---

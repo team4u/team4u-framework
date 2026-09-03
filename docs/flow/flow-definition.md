@@ -81,7 +81,7 @@ graph TD
 
     subgraph "4. 运行时执行与驱动层"
         LOG["Flow&lt;I, O&gt; 逻辑编排树"]
-        PLAN["PlanNode 物理执行计划 (8 种封闭节点)"]
+        PLAN["PlanNode 物理执行计划 (9 种封闭节点)"]
         FB --> LOG --> PLAN
         PLAN --> LOC["LocalExecutable 内存极速流水线"]
         PLAN --> DUR["DurableExecutable 持久化断点续跑状态机"]
@@ -253,12 +253,12 @@ public interface FlowDefinitionReader {
 
 | 语法节点模型 | 表达的业务语义 | 核心属性与方法 |
 | :--- | :--- | :--- |
-| [`StepSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/StepSpec.java) | 单个原子业务步骤 | `operation()`（业务符号）、`project()`（入参提取）、`merge()`（结果合并）、`modifiers()`（修饰器列表） |
+| [`StepSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/StepSpec.java) | 单个原子业务步骤 | `operation()`（业务符号）、`projectSpec()`（入参提取规范，支持符号或 `$.path`）、`mergeSpec()`（结果合并规范）、`modifiers()`（修饰器列表） |
 | [`SequenceSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/SequenceSpec.java) | 顺序执行流水线 | `elements()`（按序执行的子节点只读列表）、`scopeName()`（命名作用域） |
 | [`RouteSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/RouteSpec.java) | 多路条件分支路由 | `selector()`（选择器符号）、`cases()`（Case 分支列表）、`otherwise()`（兜底分支） |
 | [`FirstApplicableSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/FirstApplicableSpec.java) | 按优先级尝试候选分支 | `branches()`（候选分支列表，遇 `Skipped` 自动尝试下一个，首个 `Accepted` 即终止） |
 | [`RecoverSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/RecoverSpec.java) | 失败降级与补偿 | `body()`（主执行流）、`onFailure()`（主流程发生 `Failed` 时的补偿流） |
-| [`ParallelSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/ParallelSpec.java) | 结构化多分支并发 | `branches()`（多命名并发分支）、`join()`（汇聚策略符号，如 `allAccepted`） |
+| [`ParallelSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/ParallelSpec.java) | 结构化多分支并发 | `branches()`（多命名并发分支）、`joinSpec()`（汇聚策略规范，支持内置策略或自定义符号） |
 | [`AwaitSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/AwaitSpec.java) | 异步外部挂起等待 | `resumePoint()`（挂起点符号，等待外部异步信号唤醒） |
 | [`CompleteSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/CompleteSpec.java) | 显式返回终态结果 | `kind()`（`ACCEPTED`/`REJECTED`/`SKIPPED`/`FAILED`）、`literal()`（原因码/描述） |
 | [`ControlSpec`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/model/ControlSpec.java) | 作用域级策略控制 | `kind()`（`TIMEOUT`/`POLICY`/`RETRY`/`SCOPE`/`NAMED`）、`configuration()`、`body()` |
@@ -285,8 +285,8 @@ graph TD
 
 ### 内置修饰器一览
 
-- **入参提取 (`project`)** ：从上游复合上下文大对象中只提取当前步骤需要的字段入参（$I \to P$）；
-- **结果合并 (`merge`)** ：将步骤执行返回的局部结果合并回主状态流水线（$(I, R) \to O$）；
+- **入参提取 (`project`)** ：从上游复合上下文大对象中提取当前步骤需要的字段入参（$I \to P$），支持注册表符号或 `$.path` 属性表达式；
+- **结果合并 (`merge`)** ：将步骤执行返回的局部结果合并回主状态流水线（$(I, R) \to O$），支持注册表符号或 `$.path` 属性表达式；
 - **可选步骤 (`optional`)** ：声明该步骤为可选；当步骤弃权返回 `Skipped` 时，自动透传步骤入口原值继续执行后续流程；
 - **业务标签 (`named`)** ：为步骤赋予中文展示名称，用于日志追踪与 Mermaid 流程图可视化；
 - **超时控制 (`timeout`)** ：指定该步骤的最大允许耗时（如 `500ms`, `2s`）；
