@@ -191,9 +191,8 @@ RateLimitPolicy<OrderRequest> customPolicy = RateLimitPolicy.<OrderRequest>build
 public ResponseEntity<?> handleCharge(@RequestBody OrderRequest request) {
     FlowResult<Receipt> result = orderExecutable.run(request);
 
-    if (result instanceof FlowResult.Completed) {
-        Outcome<Receipt> outcome = ((FlowResult.Completed<Receipt>) result).outcome();
-        
+    Outcome<Receipt> outcome = result.outcome();
+    if (outcome != null) {
         if (outcome instanceof Outcome.Accepted) {
             return ResponseEntity.ok(((Outcome.Accepted<Receipt>) outcome).value());
         }

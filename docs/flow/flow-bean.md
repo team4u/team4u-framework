@@ -159,8 +159,8 @@ public class OrderServiceImpl implements OrderService {
     public OrderResponse handleOrder(OrderRequest request) {
         FlowResult<Receipt> result = orderExecutable.run(request);
 
-        if (result instanceof FlowResult.Completed) {
-            Outcome<Receipt> outcome = ((FlowResult.Completed<Receipt>) result).outcome();
+        Outcome<Receipt> outcome = result.outcome();
+        if (outcome != null) {
             if (outcome instanceof Outcome.Accepted) {
                 return OrderResponse.success(((Outcome.Accepted<Receipt>) outcome).value());
             } else if (outcome instanceof Outcome.Rejected) {

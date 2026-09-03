@@ -124,17 +124,21 @@ Operation<OrderRequest, Receipt> checkout = (context, order) -> {
 ```java
 FlowResult<Receipt> result = Local.compile(Flow.step(checkout)).run(order);
 
-if (result instanceof FlowResult.Completed) {
-    Outcome<Receipt> outcome = ((FlowResult.Completed<Receipt>) result).outcome();
-    if (outcome instanceof Outcome.Accepted) {
-        handleSuccess(((Outcome.Accepted<Receipt>) outcome).value());
-    } else if (outcome instanceof Outcome.Rejected) {
-        handleReject(((Outcome.Rejected<Receipt>) outcome).reason());
-    } else if (outcome instanceof Outcome.Skipped) {
-        handleSkip(((Outcome.Skipped<Receipt>) outcome).reason());
-    } else if (outcome instanceof Outcome.Failed) {
-        handleFailure(((Outcome.Failed<Receipt>) outcome).failure());
-    }
+// 完整按四态分流消费（result.outcome() 直接返回 Outcome，无需外层向下转型）
+Outcome<Receipt> outcome = result.outcome();
+if (outcome instanceof Outcome.Accepted) {
+    handleSuccess(((Outcome.Accepted<Receipt>) outcome).value());
+} else if (outcome instanceof Outcome.Rejected) {
+    handleReject(((Outcome.Rejected<Receipt>) outcome).reason());
+} else if (outcome instanceof Outcome.Skipped) {
+    handleSkip(((Outcome.Skipped<Receipt>) outcome).reason());
+} else if (outcome instanceof Outcome.Failed) {
+    handleFailure(((Outcome.Failed<Receipt>) outcome).failure());
+}
+
+// 仅关注成功分支（使用 isAccepted 快速判断并通过 requireAccepted 提取有效值）
+if (result.isAccepted()) {
+    handleSuccess(result.requireAccepted());
 }
 ```
 
