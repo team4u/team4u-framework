@@ -62,6 +62,14 @@ public class DefaultPropertyAccessCompilerTest {
         }
     }
 
+    public static class IntermediateWriteOnlyRoot {
+        private WriteOnlyBean child;
+
+        public void setChild(WriteOnlyBean child) {
+            this.child = child;
+        }
+    }
+
     @Test
     public void testMapPropertyReadAndWrite() {
         DefaultPropertyAccessCompiler compiler = DefaultPropertyAccessCompiler.INSTANCE;
@@ -178,6 +186,30 @@ public class DefaultPropertyAccessCompilerTest {
             Assert.fail("Expected PROPERTY_NOT_READABLE");
         } catch (FlowDiagnosticException ex) {
             Assert.assertEquals(DiagnosticCodes.PROPERTY_NOT_READABLE, ex.diagnostics().get(0).code());
+        }
+    }
+
+    @Test
+    public void testNestedWriterIntermediateNotReadable() {
+        DefaultPropertyAccessCompiler compiler = DefaultPropertyAccessCompiler.INSTANCE;
+        try {
+            compiler.compileWriter(TypeRef.of(IntermediateWriteOnlyRoot.class), PropertyPath.parse("$.child.secret"), TypeRef.of(String.class));
+            Assert.fail("Expected PROPERTY_NOT_READABLE");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(DiagnosticCodes.PROPERTY_NOT_READABLE, ex.diagnostics().get(0).code());
+        }
+    }
+
+    @Test
+    public void testFinalPropertyNullYieldsPropertyNullValue() {
+        DefaultPropertyAccessCompiler compiler = DefaultPropertyAccessCompiler.INSTANCE;
+        CompiledReader reader = compiler.compileReader(TypeRef.of(Order.class), PropertyPath.parse("$.item"));
+        Order order = new Order("O-3", null, "NEW", null);
+        try {
+            reader.read(order);
+            Assert.fail("Expected PROPERTY_NULL_VALUE");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(DiagnosticCodes.PROPERTY_NULL_VALUE, ex.diagnostics().get(0).code());
         }
     }
 

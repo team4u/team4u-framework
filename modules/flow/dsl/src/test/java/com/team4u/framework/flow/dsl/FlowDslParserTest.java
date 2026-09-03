@@ -273,6 +273,44 @@ public class FlowDslParserTest {
     }
 
     @Test
+    public void testSchema2Supported() {
+        String dsl = "schema 2\nflow test { step op }";
+        FlowDefinition def = parse(dsl, "test.flow");
+        Assert.assertNotNull(def);
+        Assert.assertEquals(2, def.schema());
+    }
+
+    @Test
+    public void testFloatSchemaThrowsDiagnostic() {
+        String dsl = "schema 1.9\nflow test { step op }";
+        try {
+            parse(dsl, "test.flow");
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(1, ex.getDiagnostics().size());
+            Assert.assertEquals("DSL_SYNTAX_ERROR", ex.getDiagnostics().get(0).code());
+        }
+    }
+
+    @Test
+    public void testFloatQuorumThrowsDiagnostic() {
+        String dsl = "flow test {\n" +
+                "    parallel {\n" +
+                "        branch b1 { step op1 }\n" +
+                "        branch b2 { step op2 }\n" +
+                "        join quorum 1.9\n" +
+                "    }\n" +
+                "}";
+        try {
+            parse(dsl, "test.flow");
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(1, ex.getDiagnostics().size());
+            Assert.assertEquals("DSL_SYNTAX_ERROR", ex.getDiagnostics().get(0).code());
+        }
+    }
+
+    @Test
     public void testUnsupportedSchemaThrowsDiagnostic() {
         String dsl = "schema 99\nflow test { step op }";
         try {

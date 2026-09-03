@@ -1,5 +1,7 @@
 package com.team4u.framework.flow.model;
 
+import java.util.Objects;
+
 /**
  * 携带结构化错误码的流程执行异常（如属性访问失败、校验失败等）。
  *
@@ -13,13 +15,21 @@ public class FlowExecutionException extends RuntimeException {
     private final String code;
 
     public FlowExecutionException(String code, String message) {
-        super(message);
-        this.code = code;
+        this(code, message, null);
     }
 
     public FlowExecutionException(String code, String message, Throwable cause) {
-        super(message, cause);
-        this.code = code;
+        super(checkText(message, "message"), cause);
+        this.code = checkText(code, "code");
+    }
+
+    private static String checkText(String value, String field) {
+        Objects.requireNonNull(value, field + " must not be null");
+        String trimmed = value.trim();
+        if (trimmed.isEmpty()) {
+            throw new IllegalArgumentException(field + " must not be blank");
+        }
+        return trimmed;
     }
 
     /**

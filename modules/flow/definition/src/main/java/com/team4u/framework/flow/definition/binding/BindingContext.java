@@ -114,7 +114,10 @@ public interface BindingContext {
             }
             return desc.function();
         }
-        return Function.identity();
+        throw new FlowDiagnosticException(new Diagnostic(
+                DiagnosticCodes.UNSUPPORTED_PROJECTION_SPEC,
+                "Unsupported projection specification: " + projection.getClass().getName(),
+                projection.span()));
     }
 
     /**
@@ -159,7 +162,10 @@ public interface BindingContext {
             }
             return desc.function();
         }
-        return (state, res) -> res;
+        throw new FlowDiagnosticException(new Diagnostic(
+                DiagnosticCodes.UNSUPPORTED_MERGE_SPEC,
+                "Unsupported merge specification: " + merge.getClass().getName(),
+                merge.span()));
     }
 
     /**

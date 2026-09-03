@@ -114,17 +114,16 @@ sequenceDiagram
     Note over R: 2. 登记 Java Operation / Bean 符号
     B->>R: 结合 Registry 对 FlowSpec 进行类型检查与绑定
     B-->>P: 产出 BoundFlow
-    P->>P: 3. 校验并发布版本 (不可变隔离)
+    P->>P: 3. 校验并发布版本
     P->>E: 4. 编译为执行器
     E->>E: 执行业务入参并产出结果
 ```
 
-### 定义纯数据流程蓝图 (FlowSpec)
+### 定义纯数据流程蓝图
 
-在不依赖任何 Java 业务类的前提下，构建一个包含“参数校验 -> 锁定库存 -> 扣减支付”的顺序流水线蓝图：
+使用纯数据 AST 组装流程结构。以下示例构建一个包含“参数校验 -> 锁定库存 -> 扣减支付”的顺序流水线：
 
 ```java
-// 声明三个原子业务步骤的符号引用
 StepSpec validateStep = new StepSpec(SymbolRef.of("order.validate"), null, null);
 StepSpec inventoryStep = new StepSpec(SymbolRef.of("inventory.reserve"), null, null);
 StepSpec paymentStep = new StepSpec(SymbolRef.of("payment.charge"), null, null);
@@ -141,7 +140,7 @@ FlowDefinition definition = new FlowDefinition(
 );
 ```
 
-### 在符号表中登记真实的 Java 组件 (FlowDefinitionRegistry)
+### 在符号表中登记真实的 Java 组件
 
 将上述蓝图中引用的字符串标识（`order.validate` 等），映射到具体的 Java 实例、方法引用或 Spring Bean 契约上。
 
@@ -149,26 +148,24 @@ FlowDefinition definition = new FlowDefinition(
 
 ```java
 FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
-        // 自动反射推导 ValidateOrderOp 的入参 OrderContext 与出参 OrderContext
-        .operation("order.validate", new ValidateOrderOp())
-        
-        // 自动反射推导 Spring 契约接口的泛型类型，并在运行时从 Spring 容器解析
-        .operation("inventory.reserve", InventoryService.class, "defaultInventory")
-        
-        // 自动反射推导契约 Class
-        .operation("payment.charge", ChargePaymentOp.class)
+        // 1. 注册普通单例 Operation 实例（自动提取 OrderContext -> OrderContext 类型）
+        .operation("order.validate", new OrderValidateOp())
+        // 2. 注册 Lambda / 方法引用（对于泛型擦除的场景，可显式指定类型）
+        .operation("inventory.reserve", (ctx, req) -> Outcome.accepted(req), OrderContext.class, OrderContext.class)
+        // 3. 注册 Class 契约（执行期交由 Spring 容器或组件解析器实例化）
+        .operation("payment.charge", PaymentChargeOp.class)
         .build();
 ```
 
 > [!TIP]
-> **约定优于配置（Convention Fallback）**：
+> **约定优于配置** ：
 > 如果 Spring 容器中已经存在与 DSL 符号同名的 Bean（如 `@Component("order.validate")`），`FlowDefinitionRegistry` 默认会通过 `BeanOperationResolver` 进行回退查找并自动推导其泛型类型。这意味着在标准 Spring Boot 项目中，**即使不在 Registry 中显式登记该符号，也能直接零代码解析并执行**！
 
 > [!TIP]
-> **SPI 自动发现**：
+> **SPI 自动发现** ：
 > `FlowDefinitionRegistry.builder()` 默认会自动通过 `ServiceLoaderUtil` 扫描 classpath 下的所有扩展（如 `team4u-flow-retry`、`team4u-flow-ratelimiter`），无需手动编写策略注册代码即可自动获得开箱即用的重试与限流能力。
 
-### 静态类型检查与符号绑定 (FlowBinder)
+### 静态类型检查与符号绑定
 
 使用 `FlowBinder` 进行一键编译绑定。绑定器会自动完成：
 1. 校验流程中引用的每个符号是否存在（先查显式注册表，未命中则自动回退到 Spring 容器）；
@@ -184,7 +181,7 @@ System.out.println("输出类型: " + boundFlow.outputType().typeName());
 ```
 
 > [!TIP]
-> **Spring Bean 自动解析**：
+> **Spring Bean 自动解析** ：
 > 只要项目中引入了 `team4u-flow-bean`（配合 `team4u-bean-spring`），`FlowBinder` 默认会通过 SPI 自动加载 [`BeanOperationResolver`](file:///root/code/team4u-framework/modules/flow/bean/src/main/java/com/team4u/framework/flow/bean/BeanOperationResolver.java)，自动完成 Spring 单例 Bean 与限定符的依赖注入，无需在代码中手动传递任何 resolver 参数。
 
 若配置中存在类型不兼容（例如上游输出 `OrderContext`，下游步骤却需要 `PaymentRequest`），编译器将在启动时立即报错并精确指出问题节点：
@@ -193,7 +190,7 @@ System.out.println("输出类型: " + boundFlow.outputType().typeName());
 [TYPE_MISMATCH] ($/2) Operation 'payment.charge' expects input PaymentRequest but received OrderContext
 ```
 
-### 原子发布与并发执行 (FlowPublisher)
+### 原子发布与并发执行
 
 通过 `FlowPublisher` 进行版本发布。发布器保障同一个 `(flowId, version)` 一旦发布即全局不可变，并支持随时获取已编译好的极速执行器：
 

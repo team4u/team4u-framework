@@ -8,7 +8,7 @@ import lombok.experimental.Accessors;
 
 import java.util.ArrayList;
 import java.util.Collections;
-import java.util.LinkedHashMap;
+import java.util.IdentityHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -43,10 +43,10 @@ public final class TypeCheckResult {
         this.inputType = inputType != null ? inputType : TypeRef.ANY;
         this.outputType = outputType != null ? outputType : TypeRef.ANY;
         this.specInputTypes = specInputTypes != null
-                ? Collections.unmodifiableMap(new LinkedHashMap<FlowSpec, TypeRef>(specInputTypes))
+                ? Collections.unmodifiableMap(new IdentityHashMap<FlowSpec, TypeRef>(specInputTypes))
                 : Collections.<FlowSpec, TypeRef>emptyMap();
         this.specOutputTypes = specOutputTypes != null
-                ? Collections.unmodifiableMap(new LinkedHashMap<FlowSpec, TypeRef>(specOutputTypes))
+                ? Collections.unmodifiableMap(new IdentityHashMap<FlowSpec, TypeRef>(specOutputTypes))
                 : Collections.<FlowSpec, TypeRef>emptyMap();
     }
 }

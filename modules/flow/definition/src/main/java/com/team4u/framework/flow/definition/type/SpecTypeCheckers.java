@@ -598,6 +598,28 @@ public final class SpecTypeCheckers {
                         parallel.span()));
             }
 
+            TypeRef unifiedBranchOutput = null;
+            if (parallel.branches() != null) {
+                Set<String> seenBranchNames = new HashSet<String>();
+                for (BranchSpec branch : parallel.branches()) {
+                    if (branch != null) {
+                        if (!seenBranchNames.add(branch.name())) {
+                            context.addDiagnostic(new Diagnostic(
+                                    DiagnosticCodes.DUPLICATE_BRANCH,
+                                    "Duplicate parallel branch name: " + branch.name(),
+                                    branch.span()));
+                        }
+                        TypeRef branchOut = context.checkSpec(branch.flow(), currentType);
+                        unifiedBranchOutput = unifyBranchOutput(
+                                unifiedBranchOutput,
+                                branchOut,
+                                "Parallel branch",
+                                branch.flow() != null && branch.flow().span() != null ? branch.flow().span() : branch.span(),
+                                context);
+                    }
+                }
+            }
+
             TypeRef joinOutputType = TypeRef.ANY;
             JoinSpec joinSpec = parallel.joinSpec();
             if (joinSpec instanceof BuiltinJoinSpec) {
@@ -617,7 +639,7 @@ public final class SpecTypeCheckers {
                         joinOutputType = currentType != null ? currentType : TypeRef.ANY;
                         break;
                     case FIRST:
-                        joinOutputType = TypeRef.ANY;
+                        joinOutputType = unifiedBranchOutput != null ? unifiedBranchOutput : TypeRef.ANY;
                         break;
                     case COLLECT:
                         joinOutputType = TypeRef.of(java.util.List.class);
@@ -645,21 +667,6 @@ public final class SpecTypeCheckers {
                             parallel.join().span()));
                 } else {
                     joinOutputType = joinDesc.outputType();
-                }
-            }
-
-            if (parallel.branches() != null) {
-                Set<String> seenBranchNames = new HashSet<String>();
-                for (BranchSpec branch : parallel.branches()) {
-                    if (branch != null) {
-                        if (!seenBranchNames.add(branch.name())) {
-                            context.addDiagnostic(new Diagnostic(
-                                    DiagnosticCodes.DUPLICATE_BRANCH,
-                                    "Duplicate parallel branch name: " + branch.name(),
-                                    branch.span()));
-                        }
-                        context.checkSpec(branch.flow(), currentType);
-                    }
                 }
             }
 

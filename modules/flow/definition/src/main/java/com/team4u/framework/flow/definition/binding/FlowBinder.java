@@ -123,8 +123,6 @@ public final class FlowBinder implements BindingContext {
         return new FlowBinder(registry, resolver, SpecBinderRegistry.global(), initialInputType).bind(definition);
     }
 
-    private TypeCheckResult currentTypeCheckResult;
-
     @Override
     public TypeRef currentType() {
         return initialInputType != null ? initialInputType : TypeRef.ANY;
@@ -132,23 +130,11 @@ public final class FlowBinder implements BindingContext {
 
     @Override
     public TypeRef inputTypeOf(FlowSpec spec) {
-        if (currentTypeCheckResult != null && spec != null) {
-            TypeRef t = currentTypeCheckResult.specInputTypes().get(spec);
-            if (t != null) {
-                return t;
-            }
-        }
         return currentType();
     }
 
     @Override
     public TypeRef outputTypeOf(FlowSpec spec) {
-        if (currentTypeCheckResult != null && spec != null) {
-            TypeRef t = currentTypeCheckResult.specOutputTypes().get(spec);
-            if (t != null) {
-                return t;
-            }
-        }
         return TypeRef.ANY;
     }
 
@@ -172,9 +158,9 @@ public final class FlowBinder implements BindingContext {
         // 2. 递归绑定 AST 并执行编译器拓扑校验
         Flow<Object, Object> flow;
         Map<String, SourceSpan> sourceMap = Collections.emptyMap();
-        this.currentTypeCheckResult = typeCheckResult;
+        TypedBindingContext context = new TypedBindingContext(registry, resolver, binderRegistry, initialInputType, typeCheckResult);
         try {
-            flow = (Flow<Object, Object>) bindSpec(definition.root());
+            flow = (Flow<Object, Object>) context.bindSpec(definition.root());
             sourceMap = SourceMapBuilder.build(flow.root(), definition.root());
             Compiler.compile(flow, resolver);
         } catch (FlowBuildException ex) {
@@ -184,8 +170,6 @@ public final class FlowBinder implements BindingContext {
                 diagnostics.add(new Diagnostic(problem.code(), problem.message(), span, problem.path()));
             }
             throw new FlowDiagnosticException(diagnostics);
-        } finally {
-            this.currentTypeCheckResult = null;
         }
 
         return BoundFlow.builder()
@@ -209,81 +193,157 @@ public final class FlowBinder implements BindingContext {
     }
 
     @Override
-    @SuppressWarnings("unchecked")
     public Flow<?, ?> bindSpec(FlowSpec spec) {
-        if (spec == null) {
-            return Flow.identity();
-        }
-        SpecBinder<FlowSpec> binder = (SpecBinder<FlowSpec>) binderRegistry.get(spec.getClass()).orElse(null);
-        if (binder != null) {
-            return binder.bind(spec, this);
-        }
-        throw new FlowDiagnosticException(
-                DiagnosticCodes.UNSUPPORTED_SPEC,
-                "No binder registered for " + spec.getClass().getName());
+        return new TypedBindingContext(registry, resolver, binderRegistry, initialInputType, null).bindSpec(spec);
     }
 
     @Override
-    @SuppressWarnings({"unchecked", "rawtypes"})
     public Flow<?, ?> applyPolicy(
             Flow<?, ?> flow,
             String policyId,
             SymbolRef keyRef,
             Map<String, Object> configuration) {
-        PolicyProvider provider = registry.policyProvider(policyId);
-        Function<Object, Object> keyFn = Function.identity();
-        if (keyRef != null) {
-            KeyProjectionDescriptor keyDesc = registry.keyProjection(keyRef.id());
-            if (keyDesc != null) {
-                keyFn = keyDesc.function();
-            } else {
-                ProjectorDescriptor projDesc = registry.projector(keyRef.id());
-                if (projDesc != null) {
-                    keyFn = projDesc.function();
-                }
-            }
+        return new TypedBindingContext(registry, resolver, binderRegistry, initialInputType, null)
+                .applyPolicy(flow, policyId, keyRef, configuration);
+    }
+
+    /**
+     * 单次绑定作用域的类型化绑定上下文实现。
+     */
+    public static final class TypedBindingContext implements BindingContext {
+        private final FlowDefinitionRegistry registry;
+        private final OperationResolver resolver;
+        private final SpecBinderRegistry binderRegistry;
+        private final TypeRef initialInputType;
+        private final TypeCheckResult typeCheckResult;
+
+        public TypedBindingContext(
+                FlowDefinitionRegistry registry,
+                OperationResolver resolver,
+                SpecBinderRegistry binderRegistry,
+                TypeRef initialInputType,
+                TypeCheckResult typeCheckResult) {
+            this.registry = Objects.requireNonNull(registry, "registry must not be null");
+            this.resolver = resolver;
+            this.binderRegistry = binderRegistry != null ? binderRegistry : SpecBinderRegistry.global();
+            this.initialInputType = initialInputType;
+            this.typeCheckResult = typeCheckResult;
         }
 
-        if (provider != null) {
-            PolicyBinding binding = provider.create(configuration);
-            Function<Object, Object> actualKeyFn = binding.keyProjection() != null
-                    ? binding.keyProjection()
-                    : keyFn;
-            if (actualKeyFn == null) {
-                actualKeyFn = Function.identity();
-            }
-            if (binding.persistent()) {
-                if (binding.instance() != null) {
-                    return flow.persistentPolicy((PersistentPolicy) binding.instance(), actualKeyFn);
-                } else {
-                    return flow.persistentPolicy((Class) binding.contract(), binding.qualifier(), actualKeyFn);
-                }
-            } else {
-                if (binding.instance() != null) {
-                    return flow.policy((Policy) binding.instance(), actualKeyFn);
-                } else {
-                    return flow.policy((Class) binding.contract(), binding.qualifier(), actualKeyFn);
-                }
-            }
+        @Override
+        public FlowDefinitionRegistry registry() {
+            return registry;
         }
 
-        PolicyDescriptor policyDesc = registry.policy(policyId);
-        if (policyDesc == null) {
+        @Override
+        public OperationResolver resolver() {
+            return resolver;
+        }
+
+        @Override
+        public TypeRef currentType() {
+            return initialInputType != null ? initialInputType : TypeRef.ANY;
+        }
+
+        @Override
+        public TypeRef inputTypeOf(FlowSpec spec) {
+            if (typeCheckResult != null && spec != null) {
+                TypeRef t = typeCheckResult.specInputTypes().get(spec);
+                if (t != null) {
+                    return t;
+                }
+            }
+            return currentType();
+        }
+
+        @Override
+        public TypeRef outputTypeOf(FlowSpec spec) {
+            if (typeCheckResult != null && spec != null) {
+                TypeRef t = typeCheckResult.specOutputTypes().get(spec);
+                if (t != null) {
+                    return t;
+                }
+            }
+            return TypeRef.ANY;
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public Flow<?, ?> bindSpec(FlowSpec spec) {
+            if (spec == null) {
+                return Flow.identity();
+            }
+            SpecBinder<FlowSpec> binder = (SpecBinder<FlowSpec>) binderRegistry.get(spec.getClass()).orElse(null);
+            if (binder != null) {
+                return binder.bind(spec, this);
+            }
             throw new FlowDiagnosticException(
-                    DiagnosticCodes.UNKNOWN_POLICY, "Policy not found: " + policyId);
+                    DiagnosticCodes.UNSUPPORTED_SPEC,
+                    "No binder registered for " + spec.getClass().getName());
         }
 
-        if (policyDesc.persistent()) {
-            if (policyDesc.instance() != null) {
-                return flow.persistentPolicy((PersistentPolicy) policyDesc.instance(), keyFn);
-            } else {
-                return flow.persistentPolicy((Class) policyDesc.contract(), policyDesc.qualifier(), keyFn);
+        @Override
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        public Flow<?, ?> applyPolicy(
+                Flow<?, ?> flow,
+                String policyId,
+                SymbolRef keyRef,
+                Map<String, Object> configuration) {
+            PolicyProvider provider = registry.policyProvider(policyId);
+            Function<Object, Object> keyFn = Function.identity();
+            if (keyRef != null) {
+                KeyProjectionDescriptor keyDesc = registry.keyProjection(keyRef.id());
+                if (keyDesc != null) {
+                    keyFn = keyDesc.function();
+                } else {
+                    ProjectorDescriptor projDesc = registry.projector(keyRef.id());
+                    if (projDesc != null) {
+                        keyFn = projDesc.function();
+                    }
+                }
             }
-        } else {
-            if (policyDesc.instance() != null) {
-                return flow.policy((Policy) policyDesc.instance(), keyFn);
+
+            if (provider != null) {
+                PolicyBinding binding = provider.create(configuration);
+                Function<Object, Object> actualKeyFn = binding.keyProjection() != null
+                        ? binding.keyProjection()
+                        : keyFn;
+                if (actualKeyFn == null) {
+                    actualKeyFn = Function.identity();
+                }
+                if (binding.persistent()) {
+                    if (binding.instance() != null) {
+                        return flow.persistentPolicy((PersistentPolicy) binding.instance(), actualKeyFn);
+                    } else {
+                        return flow.persistentPolicy((Class) binding.contract(), binding.qualifier(), actualKeyFn);
+                    }
+                } else {
+                    if (binding.instance() != null) {
+                        return flow.policy((Policy) binding.instance(), actualKeyFn);
+                    } else {
+                        return flow.policy((Class) binding.contract(), binding.qualifier(), actualKeyFn);
+                    }
+                }
+            }
+
+            PolicyDescriptor policyDesc = registry.policy(policyId);
+            if (policyDesc == null) {
+                throw new FlowDiagnosticException(
+                        DiagnosticCodes.UNKNOWN_POLICY, "Policy not found: " + policyId);
+            }
+
+            if (policyDesc.persistent()) {
+                if (policyDesc.instance() != null) {
+                    return flow.persistentPolicy((PersistentPolicy) policyDesc.instance(), keyFn);
+                } else {
+                    return flow.persistentPolicy((Class) policyDesc.contract(), policyDesc.qualifier(), keyFn);
+                }
             } else {
-                return flow.policy((Class) policyDesc.contract(), policyDesc.qualifier(), keyFn);
+                if (policyDesc.instance() != null) {
+                    return flow.policy((Policy) policyDesc.instance(), keyFn);
+                } else {
+                    return flow.policy((Class) policyDesc.contract(), policyDesc.qualifier(), keyFn);
+                }
             }
         }
     }

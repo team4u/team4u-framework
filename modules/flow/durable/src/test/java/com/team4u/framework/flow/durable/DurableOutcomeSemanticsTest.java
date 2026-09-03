@@ -285,4 +285,33 @@ public class DurableOutcomeSemanticsTest {
                 failedOutcome.failure().message().contains("IllegalStateException"));
         assertTrue(failedOutcome.failure().message().contains("kaboom"));
     }
+
+    @Test
+    public void flowExecutionExceptionParityBetweenLocalAndDurable() {
+        com.team4u.framework.flow.api.Operation<String, String> structuredErrOp =
+                (context, input) -> {
+                    throw new com.team4u.framework.flow.model.FlowExecutionException("STRUCTURED_ERR_CODE", "structured error detail");
+                };
+
+        Flow<String, String> flow = Flow.step(structuredErrOp);
+
+        // 1. Local execution
+        Outcome<String> localOutcome = ((com.team4u.framework.flow.model.FlowResult.Completed<String>) Local.from(flow).compile().run("test-in")).outcome();
+        assertTrue(localOutcome instanceof Outcome.Failed);
+        Outcome.Failed<String> localFailed = (Outcome.Failed<String>) localOutcome;
+        assertEquals("STRUCTURED_ERR_CODE", localFailed.failure().code());
+        assertEquals("structured error detail", localFailed.failure().message());
+
+        // 2. Durable execution
+        DurableResult<String> durableResult = compile(flow, new InMemoryDurableStore()).start("exec-parity", "test-in");
+        Outcome<String> durableOutcome = outcome(durableResult);
+        assertTrue(durableOutcome instanceof Outcome.Failed);
+        Outcome.Failed<String> durableFailed = (Outcome.Failed<String>) durableOutcome;
+        assertEquals("STRUCTURED_ERR_CODE", durableFailed.failure().code());
+        assertEquals("structured error detail", durableFailed.failure().message());
+
+        // 3. Parity assertion
+        assertEquals(localFailed.failure().code(), durableFailed.failure().code());
+        assertEquals(localFailed.failure().message(), durableFailed.failure().message());
+    }
 }

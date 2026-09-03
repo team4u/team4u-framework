@@ -8,7 +8,10 @@ import com.team4u.framework.flow.definition.model.*;
 
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.IdentityHashMap;
 import java.util.List;
+import java.util.Set;
 
 /**
  * 流程定义静态结构校验器（Flow Definition Validator）。
@@ -21,7 +24,12 @@ import java.util.List;
  */
 public final class FlowDefinitionValidator {
 
-    public static final int SUPPORTED_SCHEMA = 1;
+    public static final int CURRENT_SCHEMA = 2;
+    public static final int SUPPORTED_SCHEMA = 2;
+
+    public static boolean isSupportedSchema(int schema) {
+        return schema == 1 || schema == 2;
+    }
 
     private FlowDefinitionValidator() {
     }
@@ -45,10 +53,10 @@ public final class FlowDefinitionValidator {
         SourceSpan span = definition.span() != null ? definition.span() : SourceSpan.UNKNOWN;
 
         // 1. Schema 校验
-        if (definition.schema() != SUPPORTED_SCHEMA) {
+        if (!isSupportedSchema(definition.schema())) {
             diagnostics.add(new Diagnostic(
                     DiagnosticCodes.DSL_UNSUPPORTED_SCHEMA,
-                    "Unsupported schema version: " + definition.schema() + " (supported: " + SUPPORTED_SCHEMA + ")",
+                    "Unsupported schema version: " + definition.schema() + " (supported: 1, 2)",
                     span));
         }
 
@@ -77,11 +85,12 @@ public final class FlowDefinitionValidator {
             return diagnostics;
         }
 
-        validateSpec(definition.root(), diagnostics);
+        Set<FlowSpec> visited = Collections.newSetFromMap(new IdentityHashMap<FlowSpec, Boolean>());
+        validateSpec(definition.root(), diagnostics, visited);
         return diagnostics;
     }
 
-    private static void validateSpec(FlowSpec spec, List<Diagnostic> diagnostics) {
+    private static void validateSpec(FlowSpec spec, List<Diagnostic> diagnostics, Set<FlowSpec> visited) {
         if (spec == null) {
             diagnostics.add(new Diagnostic(
                     DiagnosticCodes.INVALID_DEFINITION,
@@ -90,26 +99,34 @@ public final class FlowDefinitionValidator {
             return;
         }
 
+        if (!visited.add(spec)) {
+            diagnostics.add(new Diagnostic(
+                    DiagnosticCodes.INVALID_DEFINITION,
+                    "Duplicate AST node detected: the same FlowSpec instance must not be reused across multiple positions in the AST",
+                    spec.span() != null ? spec.span() : SourceSpan.UNKNOWN));
+            return;
+        }
+
         if (spec instanceof StepSpec) {
             validateStep((StepSpec) spec, diagnostics);
         } else if (spec instanceof CallSpec) {
             validateCall((CallSpec) spec, diagnostics);
         } else if (spec instanceof SequenceSpec) {
-            validateSequence((SequenceSpec) spec, diagnostics);
+            validateSequence((SequenceSpec) spec, diagnostics, visited);
         } else if (spec instanceof RouteSpec) {
-            validateRoute((RouteSpec) spec, diagnostics);
+            validateRoute((RouteSpec) spec, diagnostics, visited);
         } else if (spec instanceof FirstApplicableSpec) {
-            validateFirstApplicable((FirstApplicableSpec) spec, diagnostics);
+            validateFirstApplicable((FirstApplicableSpec) spec, diagnostics, visited);
         } else if (spec instanceof ParallelSpec) {
-            validateParallel((ParallelSpec) spec, diagnostics);
+            validateParallel((ParallelSpec) spec, diagnostics, visited);
         } else if (spec instanceof RecoverSpec) {
-            validateRecover((RecoverSpec) spec, diagnostics);
+            validateRecover((RecoverSpec) spec, diagnostics, visited);
         } else if (spec instanceof AwaitSpec) {
             validateAwait((AwaitSpec) spec, diagnostics);
         } else if (spec instanceof CompleteSpec) {
             validateComplete((CompleteSpec) spec, diagnostics);
         } else if (spec instanceof ControlSpec) {
-            validateControl((ControlSpec) spec, diagnostics);
+            validateControl((ControlSpec) spec, diagnostics, visited);
         }
     }
 
@@ -243,7 +260,7 @@ public final class FlowDefinitionValidator {
         }
     }
 
-    private static void validateSequence(SequenceSpec sequence, List<Diagnostic> diagnostics) {
+    private static void validateSequence(SequenceSpec sequence, List<Diagnostic> diagnostics, Set<FlowSpec> visited) {
         if (sequence.elements() == null) {
             diagnostics.add(new Diagnostic(
                     DiagnosticCodes.INVALID_DEFINITION,
@@ -252,11 +269,11 @@ public final class FlowDefinitionValidator {
             return;
         }
         for (FlowSpec child : sequence.elements()) {
-            validateSpec(child, diagnostics);
+            validateSpec(child, diagnostics, visited);
         }
     }
 
-    private static void validateRoute(RouteSpec route, List<Diagnostic> diagnostics) {
+    private static void validateRoute(RouteSpec route, List<Diagnostic> diagnostics, Set<FlowSpec> visited) {
         if (route.selector() == null || route.selector().id() == null || route.selector().id().trim().isEmpty()) {
             diagnostics.add(new Diagnostic(
                     DiagnosticCodes.UNKNOWN_OPERATION,
@@ -290,15 +307,15 @@ public final class FlowDefinitionValidator {
                         "Route case branch must not be null",
                         caseSpec.span()));
             } else {
-                validateSpec(caseSpec.branch(), diagnostics);
+                validateSpec(caseSpec.branch(), diagnostics, visited);
             }
         }
         if (route.otherwise() != null) {
-            validateSpec(route.otherwise(), diagnostics);
+            validateSpec(route.otherwise(), diagnostics, visited);
         }
     }
 
-    private static void validateFirstApplicable(FirstApplicableSpec spec, List<Diagnostic> diagnostics) {
+    private static void validateFirstApplicable(FirstApplicableSpec spec, List<Diagnostic> diagnostics, Set<FlowSpec> visited) {
         if (spec.branches() == null || spec.branches().isEmpty()) {
             diagnostics.add(new Diagnostic(
                     DiagnosticCodes.EMPTY_FIRST_APPLICABLE,
@@ -307,11 +324,11 @@ public final class FlowDefinitionValidator {
             return;
         }
         for (FlowSpec branch : spec.branches()) {
-            validateSpec(branch, diagnostics);
+            validateSpec(branch, diagnostics, visited);
         }
     }
 
-    private static void validateParallel(ParallelSpec parallel, List<Diagnostic> diagnostics) {
+    private static void validateParallel(ParallelSpec parallel, List<Diagnostic> diagnostics, Set<FlowSpec> visited) {
         if (parallel.branches() == null || parallel.branches().isEmpty()) {
             diagnostics.add(new Diagnostic(
                     DiagnosticCodes.EMPTY_PARALLEL,
@@ -338,7 +355,7 @@ public final class FlowDefinitionValidator {
                             "Parallel branch flow must not be null",
                             branch.span()));
                 } else {
-                    validateSpec(branch.flow(), diagnostics);
+                    validateSpec(branch.flow(), diagnostics, visited);
                 }
             }
         }
@@ -361,14 +378,14 @@ public final class FlowDefinitionValidator {
     }
 
 
-    private static void validateRecover(RecoverSpec recover, List<Diagnostic> diagnostics) {
+    private static void validateRecover(RecoverSpec recover, List<Diagnostic> diagnostics, Set<FlowSpec> visited) {
         if (recover.body() == null) {
             diagnostics.add(new Diagnostic(
                     DiagnosticCodes.INVALID_DEFINITION,
                     "Recover body must not be null",
                     recover.span()));
         } else {
-            validateSpec(recover.body(), diagnostics);
+            validateSpec(recover.body(), diagnostics, visited);
         }
 
         if (recover.onFailure() == null) {
@@ -377,7 +394,7 @@ public final class FlowDefinitionValidator {
                     "Recover onFailure must not be null",
                     recover.span()));
         } else {
-            validateSpec(recover.onFailure(), diagnostics);
+            validateSpec(recover.onFailure(), diagnostics, visited);
         }
     }
 
@@ -399,7 +416,7 @@ public final class FlowDefinitionValidator {
         }
     }
 
-    private static void validateControl(ControlSpec control, List<Diagnostic> diagnostics) {
+    private static void validateControl(ControlSpec control, List<Diagnostic> diagnostics, Set<FlowSpec> visited) {
         if (control.kind() == null) {
             diagnostics.add(new Diagnostic(
                     DiagnosticCodes.INVALID_CONTROL,
@@ -413,7 +430,7 @@ public final class FlowDefinitionValidator {
                     "Control body must not be null",
                     control.span()));
         } else {
-            validateSpec(control.body(), diagnostics);
+            validateSpec(control.body(), diagnostics, visited);
         }
 
         if (control.kind() == ControlSpec.ControlKind.POLICY || control.kind() == ControlSpec.ControlKind.RETRY) {

@@ -125,7 +125,7 @@ public final class SourceMapBuilder {
             buildRecursive(namedNode.body(), path, spec, sourceMap);
         } else if (node instanceof Logical.Adapter) {
             Logical.Adapter adapterNode = (Logical.Adapter) node;
-            buildRecursive(adapterNode.body(), path, spec, sourceMap);
+            buildRecursive(adapterNode.body(), FlowPaths.adapterBody(path), spec, sourceMap);
         }
     }
 }

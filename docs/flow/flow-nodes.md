@@ -49,7 +49,7 @@ graph TD
 
 ---
 
-## 节点路径命名规范 (AST Node Path)
+## 节点路径命名规范
 
 每个运行时节点在 AST 树中都分配有严格唯一的层级路径（`path`），格式如下：
 
@@ -208,7 +208,8 @@ Flow<Order, CheckoutResult> parallelFlow = Flow.<Order>parallel(riskBranch, stoc
                 .map(map -> new CheckoutResult(map.get(riskBranch), map.get(stockBranch))));
 ```
 
-### 静态约束校验（Static Constraints）
+### 静态约束校验
+
 为了防止并发环境下的状态竞争与死锁，编译期实施严格校验：
 - **`PARALLEL_AWAIT`** ：严禁在并行分支内部使用 `await` 挂起点；
 - **`PARALLEL_PERSISTENT_POLICY`** ：严禁在并行分支内部挂载持久化策略；
@@ -216,7 +217,7 @@ Flow<Order, CheckoutResult> parallelFlow = Flow.<Order>parallel(riskBranch, stoc
 
 ---
 
-## AWAIT 节点（挂起等待）
+## AWAIT 节点
 
 `AWAIT` 节点显式将当前执行挂起，等待外部系统注入恢复信号（Signal）。
 
@@ -227,7 +228,7 @@ ResumePoint<ApprovalSignal> approvalPoint = ResumePoint.named("managerApproval")
 
 Flow<ExpenseRequest, ExpenseReport> flow = Flow.<ExpenseRequest>identity()
         .then(submitExpenseOp)
-        .await(approvalPoint) // 流程在此挂起！
+        .await(approvalPoint) // 流程在此挂起
         .then((context, resumed) -> {
             ExpenseRequest req = resumed.state();    // 挂起前的原值
             ApprovalSignal sig = resumed.signal();   // 外部注入的信号
@@ -240,19 +241,19 @@ Flow<ExpenseRequest, ExpenseReport> flow = Flow.<ExpenseRequest>identity()
 
 ---
 
-## CONTROL 节点（治理控制）
+## CONTROL 节点
 
-`CONTROL` 节点包裹在业务子流程外部，提供洋葱圈式的横切治理能力。包含三种纯粹控制形态（`ControlKind`）：
+治理控制切面节点，为子流程提供超时约束、单机重试、限流及持久化状态机策略：
 
-| 控制类型 | DSL 声明方法 | 核心作用与行为 |
+| 控制类型 | 声明形式 | 语义说明 |
 | :--- | :--- | :--- |
-| **POLICY** | `flow.policy(policy, keyFn)` | 无状态准入网关：在 `before` 执行放行/拒绝/失败判定，在 `after` 收集完成指标 |
+| **POLICY** | `flow.policy(policy, keyFn)` | 单机内存策略（如重试、限流）：跨执行生命周期维护轻量状态 |
 | **PERSISTENT_POLICY** | `flow.persistentPolicy(policy, keyFn)` | 有状态持久化策略：维护不可变状态 `S`，支持 `WaitUntil` 定时挂起与 `RetryAt` 故障退避重试 |
 | **TIMEOUT** | `flow.timeout(Duration.ofSeconds(3))` | 施加最大执行时限：超时向执行线程发送中断信号并产出 `TIMEOUT` 失败 |
 
 ---
 
-## COMPLETE 节点（常数终态）
+## COMPLETE 节点
 
 `COMPLETE` 节点用于快速构建静态常量结果或恒等透传节点，无需编写单独的 `Operation`：
 
@@ -267,7 +268,7 @@ Flow<Void, String> failedFlow   = Flow.failed(Failure.of("SYSTEM_ERROR", "系统
 
 ---
 
-## ADAPTER 节点（适配器节点）
+## ADAPTER 节点
 
 `ADAPTER` 节点专为嵌套子流程的编排适配而设计，具有双向数据投影与合并能力。它在不侵入子流程内部契约的前提下，将当前上下文裁剪投影为子流程的入参类型，并在子流程执行完成后将其出参融合回主状态：
 
@@ -281,11 +282,11 @@ Flow<OrderContext, OrderContext> flow = Flow.<OrderContext>identity()
 ```
 
 - **统一双执行引擎兼容** ：在 Local 内存引擎与 Durable 持久化引擎中，`ADAPTER` 均作为原生节点执行，并保持一致的断点恢复与边界语义；
-- **只读旁路扩展** ：结合 `Flow.tap` 与 `Flow.peek`，可在不改变原数据流的前提下进行只读消费与透视观察，结果稳定保持接受态。
+- **只读旁路扩展** ：`Flow.tap` 支持传入 `Operation`、`Consumer` 或 `Class<? extends Operation>`。在不改变原数据流的前提下进行只读旁路消费与透视观察，执行成功后稳定保持接受态；注意若涉及持久化外部副作用（如写库、发消息），应使用 `tap(Operation)` 或 `tap(Class)`，通过 `OperationContext.invocationId()` 达成执行幂等。
 
 ---
 
-## 编译期静态校验诊断码 (FlowBuildException)
+## 编译期静态校验诊断码
 
 在 `Compiler.compile(flow)` 阶段，框架会对整个 AST 树进行静态完整性校验，违规时聚合抛出 `FlowBuildException`：
 

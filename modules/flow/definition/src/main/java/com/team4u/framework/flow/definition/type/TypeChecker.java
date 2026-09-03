@@ -286,8 +286,8 @@ public final class TypeChecker {
         private final FlowDefinitionRegistry registry;
         private final SpecTypeCheckerRegistry checkerRegistry;
         private final List<Diagnostic> diagnostics = new ArrayList<Diagnostic>();
-        private final Map<FlowSpec, TypeRef> specInputTypes = new LinkedHashMap<FlowSpec, TypeRef>();
-        private final Map<FlowSpec, TypeRef> specOutputTypes = new LinkedHashMap<FlowSpec, TypeRef>();
+        private final Map<FlowSpec, TypeRef> specInputTypes = new IdentityHashMap<FlowSpec, TypeRef>();
+        private final Map<FlowSpec, TypeRef> specOutputTypes = new IdentityHashMap<FlowSpec, TypeRef>();
         private final Set<String> visitingFlows = new HashSet<String>();
 
         TypeCheckContextImpl(

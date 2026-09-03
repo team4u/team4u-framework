@@ -44,14 +44,14 @@ public final class FlowDslParser {
     public List<FlowDefinition> parseDefinitions() {
         int schema = 1;
 
-        // 可选全局头部 schema 1
+        // 可选全局头部 schema 1 或 2
         if (match(TokenType.SCHEMA)) {
-            Token schemaToken = consume(TokenType.NUMBER, "Expected schema version number after 'schema'");
+            Token schemaToken = consumeIntegerToken("Expected schema version number after 'schema'");
             schema = ((Number) schemaToken.value()).intValue();
-            if (schema != 1) {
+            if (schema != 1 && schema != 2) {
                 throw new FlowDiagnosticException(new Diagnostic(
                         DiagnosticCodes.DSL_UNSUPPORTED_SCHEMA,
-                        "Unsupported DSL schema version: " + schema + " (currently only schema 1 is supported)",
+                        "Unsupported DSL schema version: " + schema + " (currently schema 1 and 2 are supported)",
                         schemaToken.span()));
             }
         }
@@ -60,12 +60,12 @@ public final class FlowDslParser {
         while (!isAtEnd()) {
             Token startToken = peek();
             if (match(TokenType.SCHEMA)) {
-                Token schemaToken = consume(TokenType.NUMBER, "Expected schema version number after 'schema'");
+                Token schemaToken = consumeIntegerToken("Expected schema version number after 'schema'");
                 schema = ((Number) schemaToken.value()).intValue();
-                if (schema != 1) {
+                if (schema != 1 && schema != 2) {
                     throw new FlowDiagnosticException(new Diagnostic(
                             DiagnosticCodes.DSL_UNSUPPORTED_SCHEMA,
-                            "Unsupported DSL schema version: " + schema + " (currently only schema 1 is supported)",
+                            "Unsupported DSL schema version: " + schema + " (currently schema 1 and 2 are supported)",
                             schemaToken.span()));
                 }
                 startToken = peek();
@@ -414,7 +414,7 @@ public final class FlowDslParser {
                     joinSpec = BuiltinJoinSpec.collect(span(token, joinToken));
                 } else if ("quorum".equalsIgnoreCase(joinToken.text())) {
                     advance();
-                    Token nToken = consume(TokenType.NUMBER, "Expected quorum number after 'quorum'");
+                    Token nToken = consumeIntegerToken("Expected quorum number after 'quorum'");
                     int n = ((Number) nToken.value()).intValue();
                     joinSpec = BuiltinJoinSpec.quorum(n, span(token, nToken));
                 } else {
@@ -567,6 +567,30 @@ public final class FlowDslParser {
         }
         Token token = peek();
         throw error(token, message + " (expected " + type + ", got '" + token.text() + "')");
+    }
+
+    private Token consumeIntegerToken(String message) {
+        Token token = consume(TokenType.NUMBER, message);
+        Object val = token.value();
+        if (!(val instanceof Long) && !(val instanceof Integer)) {
+            throw new FlowDiagnosticException(new Diagnostic(
+                    DiagnosticCodes.DSL_SYNTAX_ERROR,
+                    message + ": expected integer literal but got '" + token.text() + "'",
+                    token.span()));
+        }
+        return token;
+    }
+
+    private int consumeIntegerLiteral(String message) {
+        Token token = consumeIntegerToken(message);
+        long longVal = ((Number) token.value()).longValue();
+        if (longVal > Integer.MAX_VALUE || longVal < Integer.MIN_VALUE) {
+            throw new FlowDiagnosticException(new Diagnostic(
+                    DiagnosticCodes.DSL_SYNTAX_ERROR,
+                    "Integer literal out of 32-bit range: " + longVal,
+                    token.span()));
+        }
+        return (int) longVal;
     }
 
     private boolean match(TokenType type) {

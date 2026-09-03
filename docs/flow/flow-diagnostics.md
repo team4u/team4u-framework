@@ -45,7 +45,7 @@ graph TD
 
 ---
 
-## 编译期静态校验诊断码 (`FlowBuildException`)
+## 编译期静态校验诊断码
 
 当调用 `Local.compile(flow)` 或 `Durable.compile(flow, ...)` 时，框架对拓扑结构与 Bean 契约进行严格静态扫描。若存在违规项，将聚合所有违规路径并抛出 `FlowBuildException`（非受检异常，直接继承自 `RuntimeException`，不会被针对参数校验异常 `IllegalArgumentException` 的通用捕获逻辑误伤），可通过 `exception.problems()` 获取全部诊断明细：
 
@@ -64,7 +64,7 @@ graph TD
 
 ---
 
-## 运行时 Failed 失败诊断码 (`Failure.code()`)
+## 运行时失败诊断码
 
 当流程执行产生 `Outcome.Failed` 时，可通过 `failure.code()` 获取标准失败码：
 
@@ -84,7 +84,7 @@ graph TD
 
 ---
 
-## 运行时 Skipped 弃权诊断码 (`Reason.code()`)
+## 运行时弃权诊断码
 
 | 弃权码 | 触发场景 | 业务含义与处理建议 |
 | :--- | :--- | :--- |
@@ -93,14 +93,14 @@ graph TD
 
 ---
 
-## Durable 持久化异常 (`DurableException.Error`)
+## Durable 持久化异常
 
 `DurableException` 为运行时异常（`extends RuntimeException`），携带固定错误码枚举 `Error`。完整码表如下：
 
 | 错误码 | 严重级别 | 根本原因 | 运维处理指引 |
 | :--- | :--- | :--- | :--- |
 | **`INVALID_DEFINITION`** | 严重 (Error) | 流程定义非法（如快照恢复时拓扑校验失败、编译期结构违规） | 检查 Flow 定义结构，确认与落库快照的拓扑版本一致 |
-| **`INVALID_CONFIGURATION`**** | 错误 (Error) | 运行时配置非法 | 核对 `Durable` 装配参数（如 store、stateMapper 等） |
+| **`INVALID_CONFIGURATION`** | 错误 (Error) | 运行时配置非法 | 核对 `Durable` 装配参数（如 store、stateMapper 等） |
 | **`REVISION_CONFLICT`** | 警告 (Warn) | 多个分布式节点并发驱动同一个 `executionId` 导致 CAS 冲突 | 正常并发竞争保护。客户端稍后重新读取最新快照重试 |
 | **`FLOW_MISMATCH`** | 严重 (Error) | 尝试恢复的快照其 `flowId` 或 `flowVersion` 与当前代码不一致 | 确认是否发生了流程定义拓扑变更；使用与快照版本匹配的 Flow 运行时进行恢复 |
 | **`FORMAT_MISMATCH`** | 严重 (Error) | 快照格式 ID 或格式版本与当前运行时不兼容 | 检查快照 `formatId`/`formatVersion`，确认集群内框架版本一致后重试 |
@@ -116,14 +116,14 @@ graph TD
 
 ---
 
-## 外部定义与 DSL 诊断码 (`FlowDiagnosticException`)
+## 外部定义与 DSL 诊断码
 
 当使用 `team4u-flow-definition` 或 `team4u-flow-dsl` 对外部纯数据 AST 进行词法扫描、语法解析、静态类型检查或符号绑定时，发现的所有错误均被封装为带源码行列号坐标的 [`Diagnostic`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/diagnostic/Diagnostic.java) 对象并由 [`FlowDiagnosticException`](file:///root/code/team4u-framework/modules/flow/definition/src/main/java/com/team4u/framework/flow/definition/diagnostic/FlowDiagnosticException.java) 抛出：
 
 | 诊断码 | 所属阶段 | 根本原因 | 修复指引 |
 | :--- | :--- | :--- | :--- |
 | **`DSL_SYNTAX_ERROR`** | Parser | DSL 文本语法错误、非预期记号或未闭合大括号 | 检查报错行号列号，修正 DSL 语法结构 |
-| **`DSL_UNSUPPORTED_SCHEMA`** | Parser | DSL 声明的 `schema` 版本不受支持 | 当前仅支持 `schema 1` |
+| **`DSL_UNSUPPORTED_SCHEMA`** | Parser | DSL 声明的 `schema` 版本不受支持 | 当前支持 `schema 1` 与 `schema 2` |
 | **`UNKNOWN_OPERATION`** | Symbol | DSL 中引用的步骤符号未在 `FlowDefinitionRegistry` 中注册 | 在 Registry 中通过 `.operation(id, ...)` 进行登记 |
 | **`UNKNOWN_POLICY`** | Symbol | 引用的治理策略符号未在 Registry 中注册 | 在 Registry 中通过 `.policy(id, ...)` 或引入对应 SPI 模块 |
 | **`UNKNOWN_PROJECTOR`** | Symbol | 引用的入参提取函数 `project` 符号未注册 | 在 Registry 中通过 `.projector(id, ...)` 注册对应映射函数 |
@@ -135,6 +135,11 @@ graph TD
 | **`INVALID_OPTIONAL_STEP`** | Type | 可选步骤的输入与输出类型不一致（无法在 Skipped 时透传原值） | 保证可选步骤的入参与出参类型对称 |
 | **`INVALID_PROJECTOR`** | Type | Projector 的入参出参类型与流水线上下文或 Operation 不匹配 | 检查投影函数的入参是否兼容上游状态 |
 | **`INVALID_MERGER`** | Type | Merger 的参数类型与主状态或 Operation 返回值不匹配 | 检查合并函数的签名是否匹配 |
+| **`UNSUPPORTED_PROJECTION_SPEC`** | Binding | 投影规范类型不受当前绑定上下文支持 | 使用受支持的 `PropertyProjectionSpec` 或 `SymbolProjectionSpec` |
+| **`UNSUPPORTED_MERGE_SPEC`** | Binding | 合并规范类型不受当前绑定上下文支持 | 使用受支持的 `PropertyMergeSpec` 或 `SymbolMergeSpec` |
+| **`PROPERTY_NOT_READABLE`** | Property | 属性路径中属性缺少读取方法（无 getter 或不可读） | 补充属性读取方法或排查路径拼写 |
+| **`PROPERTY_NOT_WRITABLE`** | Property | 属性路径中属性缺少写入方法（无 setter 或不可写） | 补充属性写入方法或排查路径拼写 |
+| **`PROPERTY_NULL_VALUE`** | Property | 读取属性路径时遇到了 null 属性值 | 确保读取路径前置对象非空，或避免向 null 对象提取嵌套属性 |
 
 ---
 

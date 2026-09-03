@@ -49,6 +49,8 @@ public final class DiagnosticCodes {
     public static final String INVALID_OPTIONAL_STEP = "INVALID_OPTIONAL_STEP";
     public static final String NO_TYPE_CODEC = "NO_TYPE_CODEC";
     public static final String UNSUPPORTED_SPEC = "UNSUPPORTED_SPEC";
+    public static final String UNSUPPORTED_PROJECTION_SPEC = "UNSUPPORTED_PROJECTION_SPEC";
+    public static final String UNSUPPORTED_MERGE_SPEC = "UNSUPPORTED_MERGE_SPEC";
 
     // Compiler 阶段错误码
     public static final String DUPLICATE_SCOPE = "DUPLICATE_SCOPE";

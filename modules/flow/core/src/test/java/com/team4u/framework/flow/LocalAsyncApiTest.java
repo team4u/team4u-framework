@@ -156,10 +156,10 @@ public class LocalAsyncApiTest {
             final String input = "input-" + index;
             Thread runner = new Thread(() -> {
                 FlowResult<String> result = local.run(input);
-                allStarted.countDown();
                 if (result instanceof FlowResult.Suspended) {
                     suspensions.add((FlowResult.Suspended<String>) result);
                 }
+                allStarted.countDown();
             });
             runners.add(runner);
             runner.start();

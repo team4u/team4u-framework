@@ -115,12 +115,12 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                                     path.span()));
                         }
                         current = acc.get(current);
-                        if (current == null && i < segments.size() - 1) {
-                            throw new FlowDiagnosticException(new Diagnostic(
-                                    DiagnosticCodes.PROPERTY_NULL_VALUE,
-                                    "Intermediate property '" + seg + "' is null in path: " + path.expression(),
-                                    path.span()));
-                        }
+                    }
+                    if (current == null) {
+                        throw new FlowDiagnosticException(new Diagnostic(
+                                DiagnosticCodes.PROPERTY_NULL_VALUE,
+                                (i < segments.size() - 1 ? "Intermediate property '" : "Property '") + seg + "' is null in path: " + path.expression(),
+                                path.span()));
                     }
                 }
                 return current;
@@ -149,7 +149,14 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                             "Property '" + seg + "' not found on type: " + currClass.getName(),
                             path.span()));
                 }
-                if (i == segments.size() - 1) {
+                if (i < segments.size() - 1) {
+                    if (!acc.isReadable()) {
+                        throw new FlowDiagnosticException(new Diagnostic(
+                                DiagnosticCodes.PROPERTY_NOT_READABLE,
+                                "Intermediate property '" + seg + "' is not readable on type: " + currClass.getName(),
+                                path.span()));
+                    }
+                } else {
                     if (!acc.isWritable()) {
                         throw new FlowDiagnosticException(new Diagnostic(
                                 DiagnosticCodes.PROPERTY_NOT_WRITABLE,
@@ -210,6 +217,12 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                             throw new FlowDiagnosticException(new Diagnostic(
                                     DiagnosticCodes.PROPERTY_NOT_FOUND,
                                     "Intermediate property '" + seg + "' not found on " + current.getClass().getName(),
+                                    path.span()));
+                        }
+                        if (!acc.isReadable()) {
+                            throw new FlowDiagnosticException(new Diagnostic(
+                                    DiagnosticCodes.PROPERTY_NOT_READABLE,
+                                    "Intermediate property '" + seg + "' is not readable on " + current.getClass().getName(),
                                     path.span()));
                         }
                         current = acc.get(current);

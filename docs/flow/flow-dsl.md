@@ -106,8 +106,8 @@ FlowResult<OrderContext> result = executable.run(new OrderContext("ORD-1001"));
 每个 DSL 文本以可选的 `schema` 头部开头，随后使用 `flow` 声明根流程块：
 
 ```dsl
-# 语法版本标识（当前为 schema 1）
-schema 1
+# 语法版本标识（支持 schema 1 与 schema 2）
+schema 2
 
 flow order.fulfillment version 1.0 {
     # 流程正文语句

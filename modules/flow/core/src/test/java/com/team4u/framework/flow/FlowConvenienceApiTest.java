@@ -10,6 +10,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
 import com.team4u.framework.flow.api.Branch;
 import com.team4u.framework.flow.api.Operation;
+import com.team4u.framework.flow.api.OperationContext;
 import com.team4u.framework.flow.model.Failure;
 import com.team4u.framework.flow.model.FlowDiagnosticCodes;
 import com.team4u.framework.flow.model.FlowResult;
@@ -169,6 +170,55 @@ public class FlowConvenienceApiTest {
         String result = Local.from(flow).compile().run("message").requireAccepted();
         assertEquals("message", result);
         assertEquals(Collections.singletonList("message"), logs);
+    }
+
+    public static class AuditOp implements Operation<String, String> {
+        static final List<String> AUDIT_LOGS = new ArrayList<String>();
+
+        @Override
+        public Outcome<String> execute(OperationContext ctx, String input) {
+            AUDIT_LOGS.add(input);
+            return Outcome.accepted("audit_done");
+        }
+    }
+
+    @Test
+    public void tapClassOperationInvoked() {
+        AuditOp.AUDIT_LOGS.clear();
+        Flow<String, String> flow = Flow.<String>identity().tap(AuditOp.class);
+        com.team4u.framework.flow.spi.OperationResolver resolver = (contract, qualifier) -> new AuditOp();
+
+        String result = Local.compile(flow, resolver).run("hello").requireAccepted();
+        assertEquals("hello", result);
+        assertEquals(Collections.singletonList("hello"), AuditOp.AUDIT_LOGS);
+    }
+
+    @Test
+    public void flowExecutionExceptionEnforcesInvariants() {
+        try {
+            new com.team4u.framework.flow.model.FlowExecutionException(null, "msg");
+            org.junit.Assert.fail("Expected NPE");
+        } catch (NullPointerException expected) {
+            // pass
+        }
+        try {
+            new com.team4u.framework.flow.model.FlowExecutionException("   ", "msg");
+            org.junit.Assert.fail("Expected IAE");
+        } catch (IllegalArgumentException expected) {
+            // pass
+        }
+        try {
+            new com.team4u.framework.flow.model.FlowExecutionException("CODE", null);
+            org.junit.Assert.fail("Expected NPE");
+        } catch (NullPointerException expected) {
+            // pass
+        }
+        try {
+            new com.team4u.framework.flow.model.FlowExecutionException("CODE", "  ");
+            org.junit.Assert.fail("Expected IAE");
+        } catch (IllegalArgumentException expected) {
+            // pass
+        }
     }
 
     // ------------------------------------------------------------------

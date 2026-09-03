@@ -334,6 +334,9 @@ public final class Flow<I, O> {
      * 基于条件谓词判定执行分支流程（when/otherwise 便捷 API）：
      * 当满足谓词条件时执行 {@code branch}，不满足时转入 {@link WhenBuilder#otherwise(Flow)} 兜底流程。
      *
+     * <p><strong>约束：</strong>
+     * 条件谓词应当是确定性的（deterministic）且无副作用（side-effect-free），以确保在持久化重算时行为一致。</p>
+     *
      * @param predicate 条件谓词，不能为 null
      * @param branch    条件满足时执行的目标子流程，不能为 null
      * @param <N>       分支输出数据类型
@@ -362,6 +365,7 @@ public final class Flow<I, O> {
      *
      * @param operationClass 旁路操作契约 Class，不能为 null
      * @return 增强串联后的新 {@link Flow} 实例
+     */
     @SuppressWarnings({"unchecked", "rawtypes"})
     public Flow<I, O> tap(Class<? extends Operation<O, ?>> operationClass) {
         return tap(operationClass, null);
@@ -381,6 +385,10 @@ public final class Flow<I, O> {
 
     /**
      * 旁路消费当前流程输出（主要用于内存监控、指标统计或轻量观察）。
+     *
+     * <p><strong>Durable 注意事项：</strong>
+     * {@code tap(Consumer)} 不应用于持久化模式（Durable）下的外部业务副作用（如发送 MQ、扣款或审计）。
+     * 外部业务副作用应使用 {@link #tap(Operation)}，以便利用 {@link OperationContext#invocationId()} 实现幂等重放安全。</p>
      *
      * @param consumer 输出数据消费函数，不能为 null
      * @return 增强串联后的新 {@link Flow} 实例
@@ -764,6 +772,9 @@ public final class Flow<I, O> {
     /**
      * 结构化并行分支起点（Parallel）：
      * 声明若干并行执行的 {@link Branch}，后续通过 {@link ParallelBuilder#join} 指定汇合归约策略。
+     *
+     * <p><strong>输入只读约定：</strong>
+     * 各并行分支必须将父级输入视为只读。若需要并发计算并就地丰富/合并上下文状态，应使用 {@link #parallelFill()}。</p>
      *
      * @param branches 并行分支令牌数组，至少包含一个分支
      * @param <I>      并行流程的输入类型
@@ -1309,9 +1320,15 @@ public final class Flow<I, O> {
     /**
      * 基于结构化并行与保序上下文汇聚的状态填充流水线构建器（parallelFill 便捷 API）。
      *
-     * <p><strong>Merger 契约约束（Durable 重放安全）：</strong>
-     * 各分支的 {@code merge} 函数必须是纯函数（无外部副作用、确定性计算），允许状态赋值或不可变拷贝，
-     * 严禁在此执行发外部消息、写外部存储等产生外部副作用的操作，以确保在 Durable 模式下重放安全。</p>
+     * <p><strong>Merger 契约约束（确定性与重放安全）：</strong>
+     * 各分支的 {@code merge} 函数应当满足：
+     * <ul>
+     *   <li>确定性计算（deterministic）且重放安全（replay-safe）；</li>
+     *   <li>严禁执行发外部消息、写外部数据库等产生外部副作用的操作；</li>
+     *   <li>推荐使用不可变状态拷贝，但允许就地变更（in-place mutation）；注意当后置 merge 发生异常时，
+     *   流程虽返回 Failed 失败状态，但无法提供跨属性的事务性回滚保证。</li>
+     * </ul>
+     * </p>
      *
      * @param <I> 流程根输入类型
      * @param <O> 当前待填充的状态数据类型

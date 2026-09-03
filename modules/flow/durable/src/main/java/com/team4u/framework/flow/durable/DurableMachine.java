@@ -172,7 +172,7 @@ public final class DurableMachine {
             if (cause instanceof Error) {
                 throw (Error) cause;
             }
-            return failed(FlowDiagnosticCodes.OPERATION_EXCEPTION, describe(cause));
+            return failure(cause);
         } catch (RuntimeException rejected) {
             task.cancel(true);
             return failed(FlowDiagnosticCodes.EXECUTOR_REJECTED,
@@ -200,8 +200,16 @@ public final class DurableMachine {
         } catch (CancellationException cancelled) {
             return failed(FlowDiagnosticCodes.OPERATION_CANCELLED, "Operation was cancelled");
         } catch (Exception error) {
-            return failed(FlowDiagnosticCodes.OPERATION_EXCEPTION, describe(error));
+            return failure(error);
         }
+    }
+
+    private Outcome<?> failure(Throwable error) {
+        if (error instanceof com.team4u.framework.flow.model.FlowExecutionException) {
+            com.team4u.framework.flow.model.FlowExecutionException fee = (com.team4u.framework.flow.model.FlowExecutionException) error;
+            return failed(fee.code(), fee.getMessage());
+        }
+        return failed(FlowDiagnosticCodes.OPERATION_EXCEPTION, describe(error));
     }
 
     private DurableState.MachineOutcome toMachineOutcome(DurablePlanNode.Invoke node,

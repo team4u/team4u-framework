@@ -84,16 +84,19 @@ Flow<QuoteRequest, List<Price>> quorumFlow = Flow.<QuoteRequest>parallel(b1, b2,
 
 ### 上下文保序并行填充
 
-针对大上下文对象的多数据源并发丰富场景，`Flow.parallelFill` 原生支持将多个步骤并发执行，并在全部成功后将变动保序合并回主上下文：
+各并行分支必须将父级输入视为只读。针对大上下文对象的多数据源并发丰富场景，`Flow.parallelFill` 原生支持以流水线方式声明各个计算分支，并在全部成功后将变动保序合并回主上下文：
 
 ```java
 Flow<OrderContext, OrderContext> enrichedFlow = Flow.<OrderContext>identity()
-        .parallelFill(
-                Flow.step(FetchUserOp.class),
-                Flow.step(FetchPromotionOp.class),
-                Flow.step(FetchCouponOp.class)
-        );
+        .parallelFill()
+        .fork(OrderContext::getUserId, fetchUserOp, (ctx, user) -> { ctx.setUser(user); return ctx; })
+        .fork(OrderContext::getAmount, fetchPromotionOp, (ctx, promo) -> { ctx.setPromo(promo); return ctx; })
+        .timeout(Duration.ofSeconds(2))
+        .build();
 ```
+
+> [!NOTE]
+> **合并函数契约约束**：各分支的合并函数（`merge`）应当保持纯粹的确定性计算且重放安全，严禁执行发送外部消息或写入外部存储等副作用操作；注意当后置合并函数发生异常时，流程虽返回 Failed 失败状态，但无法提供跨属性的事务性回滚保证。
 
 ---
 
