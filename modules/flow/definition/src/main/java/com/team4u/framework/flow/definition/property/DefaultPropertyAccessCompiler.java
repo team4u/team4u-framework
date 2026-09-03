@@ -5,9 +5,11 @@ import com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes;
 import com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException;
 import com.team4u.framework.flow.definition.model.PropertyPath;
 import com.team4u.framework.flow.definition.type.TypeRef;
+import com.team4u.framework.flow.model.FlowExecutionException;
 import com.team4u.framework.parser.SourceSpan;
 
 import java.lang.reflect.Field;
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.lang.reflect.Modifier;
 import java.util.LinkedHashMap;
@@ -123,7 +125,7 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                                     "Property '" + seg + "' not found on instance of " + current.getClass().getName(),
                                     path.span()));
                         }
-                        current = acc.get(current);
+                        current = acc.get(current, path.span());
                     }
                     if (current == null) {
                         throw new FlowDiagnosticException(new Diagnostic(
@@ -239,7 +241,7 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                                     path.span()));
                         }
                         Class<?> ownerType = current.getClass();
-                        Object next = acc.get(current);
+                        Object next = acc.get(current, path.span());
                         if (next == null) {
                             throw new FlowDiagnosticException(new Diagnostic(
                                     DiagnosticCodes.PROPERTY_NULL_VALUE,
@@ -267,7 +269,7 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                                 "Property '" + lastSeg + "' is not writable on " + current.getClass().getName(),
                                 path.span()));
                     }
-                    acc.set(current, value);
+                    acc.set(current, value, path.span());
                 }
 
                 return root;
@@ -292,11 +294,17 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
         Method getter = null;
         Method setter = null;
 
-        // 尝试寻找 getter
+        // 尝试寻找 getter：isXxx 仅支持 boolean 或 Boolean 类型
         for (String prefix : new String[]{"get", "is"}) {
             try {
                 Method m = clazz.getMethod(prefix + capitalized);
                 if (!Modifier.isStatic(m.getModifiers()) && m.getParameterTypes().length == 0) {
+                    if ("is".equals(prefix)) {
+                        Class<?> returnType = m.getReturnType();
+                        if (!boolean.class.equals(returnType) && !Boolean.class.equals(returnType)) {
+                            continue;
+                        }
+                    }
                     getter = m;
                     break;
                 }
@@ -314,24 +322,49 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                 }
             } catch (NoSuchMethodException ignored) {
             }
+            if (setter == null) {
+                for (Method m : clazz.getMethods()) {
+                    if (m.getName().equals("set" + capitalized)
+                            && !Modifier.isStatic(m.getModifiers())
+                            && m.getParameterTypes().length == 1) {
+                        throw new FlowDiagnosticException(new Diagnostic(
+                                DiagnosticCodes.PROPERTY_INCONSISTENT,
+                                "Inconsistent getter return type " + propType.getName()
+                                        + " and setter parameter type " + m.getParameterTypes()[0].getName()
+                                        + " for property '" + propertyName + "' on " + clazz.getName()));
+                    }
+                }
+            }
         } else {
+            Method candidate = null;
+            int count = 0;
             for (Method m : clazz.getMethods()) {
                 if (m.getName().equals("set" + capitalized)
                         && !Modifier.isStatic(m.getModifiers())
                         && m.getParameterTypes().length == 1) {
-                    setter = m;
-                    break;
+                    candidate = m;
+                    count++;
                 }
+            }
+            if (count == 1) {
+                setter = candidate;
+            } else if (count > 1) {
+                throw new FlowDiagnosticException(new Diagnostic(
+                        DiagnosticCodes.PROPERTY_AMBIGUOUS,
+                        "Ambiguous overloaded setters for property '" + propertyName + "' on " + clazz.getName()));
             }
         }
 
         Field field = null;
-        try {
-            Field f = clazz.getField(propertyName);
-            if (!Modifier.isStatic(f.getModifiers())) {
-                field = f;
+        if (getter == null && setter == null) {
+            // 遵循 JavaBean 优先级：仅在既无 getter 也无 setter 时回退至公共字段
+            try {
+                Field f = clazz.getField(propertyName);
+                if (!Modifier.isStatic(f.getModifiers())) {
+                    field = f;
+                }
+            } catch (NoSuchFieldException ignored) {
             }
-        } catch (NoSuchFieldException ignored) {
         }
 
         if (getter == null && field == null && setter == null) {
@@ -376,7 +409,7 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
             return setter != null || (field != null && !Modifier.isFinal(field.getModifiers()));
         }
 
-        Object get(Object target) {
+        Object get(Object target, SourceSpan span) {
             try {
                 if (getter != null) {
                     return getter.invoke(target);
@@ -385,15 +418,30 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                     return field.get(target);
                 }
                 throw new IllegalStateException("Property has no getter or field: " + name);
-            } catch (Exception e) {
+            } catch (InvocationTargetException ex) {
+                Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+                if (cause instanceof Error) {
+                    throw (Error) cause;
+                }
+                if (cause instanceof FlowExecutionException) {
+                    throw (FlowExecutionException) cause;
+                }
                 throw new FlowDiagnosticException(new Diagnostic(
                         DiagnosticCodes.PROPERTY_ACCESS_ERROR,
-                        "Error reading property '" + name + "': " + e.getMessage(),
-                        SourceSpan.UNKNOWN));
+                        "Error reading property '" + name + "': " + (cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName()),
+                        span), cause);
+            } catch (Exception e) {
+                if (e instanceof FlowDiagnosticException) {
+                    throw (FlowDiagnosticException) e;
+                }
+                throw new FlowDiagnosticException(new Diagnostic(
+                        DiagnosticCodes.PROPERTY_ACCESS_ERROR,
+                        "Error reading property '" + name + "': " + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()),
+                        span), e);
             }
         }
 
-        void set(Object target, Object value) {
+        void set(Object target, Object value, SourceSpan span) {
             try {
                 if (setter != null) {
                     setter.invoke(target, value);
@@ -404,11 +452,26 @@ public final class DefaultPropertyAccessCompiler implements PropertyAccessCompil
                     return;
                 }
                 throw new IllegalStateException("Property has no setter or field: " + name);
-            } catch (Exception e) {
+            } catch (InvocationTargetException ex) {
+                Throwable cause = ex.getCause() != null ? ex.getCause() : ex;
+                if (cause instanceof Error) {
+                    throw (Error) cause;
+                }
+                if (cause instanceof FlowExecutionException) {
+                    throw (FlowExecutionException) cause;
+                }
                 throw new FlowDiagnosticException(new Diagnostic(
                         DiagnosticCodes.PROPERTY_ACCESS_ERROR,
-                        "Error writing property '" + name + "': " + e.getMessage(),
-                        SourceSpan.UNKNOWN));
+                        "Error writing property '" + name + "': " + (cause.getMessage() != null ? cause.getMessage() : cause.getClass().getSimpleName()),
+                        span), cause);
+            } catch (Exception e) {
+                if (e instanceof FlowDiagnosticException) {
+                    throw (FlowDiagnosticException) e;
+                }
+                throw new FlowDiagnosticException(new Diagnostic(
+                        DiagnosticCodes.PROPERTY_ACCESS_ERROR,
+                        "Error writing property '" + name + "': " + (e.getMessage() != null ? e.getMessage() : e.getClass().getSimpleName()),
+                        span), e);
             }
         }
     }

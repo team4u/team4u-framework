@@ -248,13 +248,5 @@ public interface BindingContext {
      * @param inputType  子流程输入类型
      * @return 绑定的子流程结果（包含 Flow 与输出类型）
      */
-    default BoundSubflow bindSubflow(com.team4u.framework.flow.definition.model.FlowDefinition subflowDef, TypeRef inputType) {
-        com.team4u.framework.flow.definition.type.TypeCheckResult typeResult =
-                com.team4u.framework.flow.definition.type.TypeChecker.check(subflowDef, registry(), inputType);
-        if (!typeResult.success()) {
-            throw new FlowDiagnosticException(typeResult.diagnostics());
-        }
-        Flow<?, ?> subflow = bindSpec(subflowDef.root());
-        return new BoundSubflow(subflow, typeResult.outputType());
-    }
+    BoundSubflow bindSubflow(com.team4u.framework.flow.definition.model.FlowDefinition subflowDef, TypeRef inputType);
 }

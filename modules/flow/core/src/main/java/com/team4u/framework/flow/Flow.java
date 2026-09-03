@@ -882,6 +882,8 @@ public final class Flow<I, O> {
             marker = Policy.class;
         } else if (kind == Logical.BindingKind.PERSISTENT_POLICY) {
             marker = PersistentPolicy.class;
+        } else if (kind == Logical.BindingKind.JOIN) {
+            marker = JoinStrategy.class;
         } else {
             throw new IllegalStateException("Unknown BindingKind: " + kind);
         }
@@ -1050,7 +1052,37 @@ public final class Flow<I, O> {
             for (Branch<I, ?> branch : branches) {
                 logical.add(new Logical.ParallelBranch(branch, branch.flow().root));
             }
-            return new Flow<I, O>(new Logical.Parallel(logical, join));
+            return new Flow<I, O>(new Logical.Parallel(logical, binding(join, Logical.BindingKind.JOIN)));
+        }
+
+        /**
+         * 指定基于组件契约类型的并行汇聚归约策略，延迟至运行期通过解析器解析单例 Bean 实例。
+         *
+         * @param joinClass 汇聚策略契约接口或实现类，不能为 null
+         * @param <O>       汇聚输出类型
+         * @return 完整的并行 {@link Flow} 实例
+         * @throws NullPointerException 当 {@code joinClass} 为 null 时抛出
+         */
+        public <O> Flow<I, O> join(Class<? extends JoinStrategy<O>> joinClass) {
+            return join(joinClass, null);
+        }
+
+        /**
+         * 指定基于组件契约类型与限定符的并行汇聚归约策略，延迟至运行期通过解析器解析单例 Bean 实例。
+         *
+         * @param joinClass 汇聚策略契约接口或实现类，不能为 null
+         * @param qualifier 目标 Bean 限定符（如 Spring Bean 名称），可为 null
+         * @param <O>       汇聚输出类型
+         * @return 完整的并行 {@link Flow} 实例
+         * @throws NullPointerException 当 {@code joinClass} 为 null 时抛出
+         */
+        public <O> Flow<I, O> join(Class<? extends JoinStrategy<O>> joinClass, String qualifier) {
+            Objects.requireNonNull(joinClass, "joinClass must not be null");
+            List<Logical.ParallelBranch> logical = new ArrayList<Logical.ParallelBranch>();
+            for (Branch<I, ?> branch : branches) {
+                logical.add(new Logical.ParallelBranch(branch, branch.flow().root));
+            }
+            return new Flow<I, O>(new Logical.Parallel(logical, binding(joinClass, qualifier, Logical.BindingKind.JOIN)));
         }
 
         /**

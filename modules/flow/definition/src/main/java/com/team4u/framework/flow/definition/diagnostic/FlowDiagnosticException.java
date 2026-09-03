@@ -21,8 +21,12 @@ public class FlowDiagnosticException extends FlowExecutionException {
     private final List<Diagnostic> diagnostics;
 
     public FlowDiagnosticException(List<Diagnostic> diagnostics) {
+        this(diagnostics, null);
+    }
+
+    public FlowDiagnosticException(List<Diagnostic> diagnostics, Throwable cause) {
         super(diagnostics != null && !diagnostics.isEmpty() ? diagnostics.get(0).code() : "DIAGNOSTIC_ERROR",
-                formatMessage(diagnostics));
+                formatMessage(diagnostics), cause);
         this.diagnostics = diagnostics != null
                 ? Collections.unmodifiableList(new ArrayList<Diagnostic>(diagnostics))
                 : Collections.<Diagnostic>emptyList();
@@ -32,12 +36,20 @@ public class FlowDiagnosticException extends FlowExecutionException {
         this(Collections.singletonList(diagnostic));
     }
 
+    public FlowDiagnosticException(Diagnostic diagnostic, Throwable cause) {
+        this(Collections.singletonList(diagnostic), cause);
+    }
+
     public FlowDiagnosticException(String code, String message) {
         this(new Diagnostic(code, message));
     }
 
     public FlowDiagnosticException(String code, String message, SourceSpan span) {
         this(new Diagnostic(code, message, span));
+    }
+
+    public FlowDiagnosticException(String code, String message, SourceSpan span, Throwable cause) {
+        this(new Diagnostic(code, message, span), cause);
     }
 
     public Diagnostic diagnostic() {

@@ -282,4 +282,42 @@ public class LocalAsyncApiTest {
         assertEquals("A:test", execA.run("test").requireAccepted());
         assertEquals("B:test", execB.run("test").requireAccepted());
     }
+
+    @Test
+    public void compileCachedResolvesClassBoundOperationOnceAndReuses() {
+        final AtomicInteger resolutions = new AtomicInteger();
+        OperationResolver resolver = (contract, qualifier) -> {
+            resolutions.incrementAndGet();
+            return (MyTestOp) (context, input) -> Outcome.accepted("handled:" + input);
+        };
+        Flow<String, String> flow = Flow.step(MyTestOp.class);
+
+        LocalExecutable<String, String> first = Local.compileCached(flow, resolver);
+        LocalExecutable<String, String> second = Local.compileCached(flow, resolver);
+
+        assertEquals("handled:data", first.run("data").requireAccepted());
+        assertEquals("handled:data", second.run("data").requireAccepted());
+        assertEquals(1, resolutions.get());
+    }
+
+    public interface MyTestJoin extends com.team4u.framework.flow.api.JoinStrategy<String> { }
+
+    @Test
+    public void compileCachedResolvesClassBoundJoinOnceAndReuses() {
+        final AtomicInteger resolutions = new AtomicInteger();
+        OperationResolver resolver = (contract, qualifier) -> {
+            resolutions.incrementAndGet();
+            return (MyTestJoin) results -> Outcome.accepted("joined:" + results.branches().size());
+        };
+        com.team4u.framework.flow.api.Branch<String, String> b1 = com.team4u.framework.flow.api.Branch.of(
+                "b1", (ctx, in) -> Outcome.accepted("1"));
+        Flow<String, String> flow = Flow.parallel(b1).join(MyTestJoin.class);
+
+        LocalExecutable<String, String> first = Local.compileCached(flow, resolver);
+        LocalExecutable<String, String> second = Local.compileCached(flow, resolver);
+
+        assertEquals("joined:1", first.run("data").requireAccepted());
+        assertEquals("joined:1", second.run("data").requireAccepted());
+        assertEquals(1, resolutions.get());
+    }
 }

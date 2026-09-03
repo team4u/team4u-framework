@@ -272,4 +272,71 @@ public class FlowDefinitionRegistryTest {
         FlowResult<String> result = exec.run("data");
         Assert.assertEquals("RESOLVED_BY_PROVIDER", result.requireAccepted());
     }
+
+    public interface MyContractJoin extends com.team4u.framework.flow.api.JoinStrategy<String> { }
+
+    @Test
+    public void testClassBoundJoinDeferredIoCResolution() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .join("contract.join", MyContractJoin.class, String.class)
+                .operation("step1", (OperationContext ctx, String in) -> Outcome.accepted(in), String.class, String.class)
+                .build();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "parallel.contract", "1",
+                new ParallelSpec(
+                        Collections.singletonList(
+                                new BranchSpec("b1", new StepSpec(SymbolRef.of("step1"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN), SourceSpan.UNKNOWN)
+                        ),
+                        SymbolRef.of("contract.join"),
+                        SourceSpan.UNKNOWN
+                ),
+                "test.flow", SourceSpan.UNKNOWN
+        );
+
+        // 绑定期完全不需要 Resolver
+        BoundFlow bound = FlowBinder.bind(def, registry);
+
+        // 运行期通过不同的 Resolver 解析各自的 Join 实例
+        OperationResolver resolverA = (contract, qualifier) ->
+                (MyContractJoin) results -> Outcome.accepted("JOINED_A");
+        LocalExecutable<String, String> execA = bound.compileLocal(String.class, String.class, resolverA);
+        Assert.assertEquals("JOINED_A", execA.run("data").requireAccepted());
+
+        OperationResolver resolverB = (contract, qualifier) ->
+                (MyContractJoin) results -> Outcome.accepted("JOINED_B");
+        LocalExecutable<String, String> execB = bound.compileLocal(String.class, String.class, resolverB);
+        Assert.assertEquals("JOINED_B", execB.run("data").requireAccepted());
+    }
+
+    @Test
+    public void testClassBoundJoinResolverFailureFailsClosed() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .join("contract.join", MyContractJoin.class, String.class)
+                .operation("step1", (OperationContext ctx, String in) -> Outcome.accepted(in), String.class, String.class)
+                .build();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "parallel.contract.fail", "1",
+                new ParallelSpec(
+                        Collections.singletonList(
+                                new BranchSpec("b1", new StepSpec(SymbolRef.of("step1"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN), SourceSpan.UNKNOWN)
+                        ),
+                        SymbolRef.of("contract.join"),
+                        SourceSpan.UNKNOWN
+                ),
+                "test.flow", SourceSpan.UNKNOWN
+        );
+
+        BoundFlow bound = FlowBinder.bind(def, registry);
+
+        // Resolver 无法解析时严格 fail-closed，严禁静默反射 newInstance
+        OperationResolver failingResolver = (contract, qualifier) -> null;
+        try {
+            bound.compileLocal(String.class, String.class, failingResolver);
+            Assert.fail("Expected FlowBuildException when join cannot be resolved");
+        } catch (com.team4u.framework.flow.model.FlowBuildException ex) {
+            Assert.assertEquals("MISSING_BINDING", ex.problems().get(0).code());
+        }
+    }
 }

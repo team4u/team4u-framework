@@ -28,14 +28,16 @@ import com.team4u.framework.flow.model.Outcome;
  */
 public interface Logical {
 
-    /** 绑定目标类型：Operation、Policy 或 PersistentPolicy。 */
+    /** 绑定目标类型：Operation、Policy、PersistentPolicy 或 JoinStrategy。 */
     public enum BindingKind {
         /** 原子业务步骤。 */
         OPERATION,
         /** 内存无状态策略。 */
         POLICY,
         /** 持久化有状态策略。 */
-        PERSISTENT_POLICY
+        PERSISTENT_POLICY,
+        /** 并行汇聚策略。 */
+        JOIN
     }
 
     /** 编排期声明的组件绑定模型（包含实例、契约 Class、限定符与绑定种类）。 */
@@ -123,11 +125,40 @@ public interface Logical {
     @Accessors(fluent = true)
     public static final class Parallel implements Logical {
         private final List<ParallelBranch> branches;
-        private final JoinStrategy<?> join;
+        private final Binding join;
+
+        public Parallel(List<ParallelBranch> branches, Binding join) {
+            this.branches = Collections.unmodifiableList(new ArrayList<ParallelBranch>(branches));
+            this.join = Objects.requireNonNull(join, "join must not be null");
+        }
 
         public Parallel(List<ParallelBranch> branches, JoinStrategy<?> join) {
-            this.branches = Collections.unmodifiableList(new ArrayList<ParallelBranch>(branches));
-            this.join = join;
+            this(branches, new Binding(Objects.requireNonNull(join, "join must not be null"),
+                    findContract(join), null, BindingKind.JOIN));
+        }
+
+        private static Class<?> findContract(JoinStrategy<?> join) {
+            Class<?> type = join.getClass();
+            if (type.isSynthetic() || java.lang.reflect.Proxy.isProxyClass(type)) {
+                for (Class<?> candidate : type.getInterfaces()) {
+                    if (JoinStrategy.class.isAssignableFrom(candidate) && candidate != JoinStrategy.class) {
+                        return candidate;
+                    }
+                }
+                return JoinStrategy.class;
+            }
+            return type;
+        }
+
+        /**
+         * 若底层为常量实例绑定，返回汇聚策略实例；若为类延迟绑定则返回 null。
+         *
+         * @return 汇聚策略实例或 null
+         */
+        public JoinStrategy<?> joinStrategy() {
+            return join != null && join.instance() instanceof JoinStrategy
+                    ? (JoinStrategy<?>) join.instance()
+                    : null;
         }
     }
 

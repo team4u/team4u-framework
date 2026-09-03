@@ -17,6 +17,7 @@ import java.util.Objects;
 import java.util.Optional;
 import java.util.Set;
 import com.team4u.framework.flow.Flow;
+import com.team4u.framework.flow.api.JoinStrategy;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.Policy;
@@ -313,6 +314,8 @@ public final class Compiler implements LoweringContext {
             marker = Policy.class;
         } else if (binding.kind() == Logical.BindingKind.PERSISTENT_POLICY) {
             marker = PersistentPolicy.class;
+        } else if (binding.kind() == Logical.BindingKind.JOIN) {
+            marker = JoinStrategy.class;
         } else {
             throw new IllegalStateException("Unknown BindingKind: " + binding.kind());
         }

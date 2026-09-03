@@ -92,6 +92,12 @@ public class FlowDefinitionValidatorTest {
                     java.util.Map<String, Object> configuration) {
                 return null;
             }
+
+            @Override
+            public com.team4u.framework.flow.definition.binding.BoundSubflow bindSubflow(
+                    com.team4u.framework.flow.definition.model.FlowDefinition subflowDef, TypeRef inputType) {
+                return null;
+            }
         };
 
         ProjectionSpec unknownProj = new ProjectionSpec() {

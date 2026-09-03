@@ -4,6 +4,7 @@ import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
 import com.team4u.framework.flow.api.Branch;
+import com.team4u.framework.flow.api.JoinStrategy;
 import com.team4u.framework.flow.api.PersistentPolicy;
 import com.team4u.framework.flow.api.ResumePoint;
 import com.team4u.framework.flow.spi.NodeDescriptor;
@@ -161,8 +162,10 @@ public final class LogicalLowerers {
             } finally {
                 context.endParallelBlock();
             }
+            PlanNode.BoundTarget target = context.resolve(parallel.join(), work.path());
+            JoinStrategy<?> joinStrategy = target != null ? (JoinStrategy<?>) target.instance() : null;
             return new PlanNode.Parallel(Compiler.descriptor(work, NodeDescriptor.Kind.PARALLEL),
-                    branches, parallel.join());
+                    branches, joinStrategy);
         }
     }
 

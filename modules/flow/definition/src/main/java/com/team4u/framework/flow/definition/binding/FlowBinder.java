@@ -281,7 +281,9 @@ public final class FlowBinder {
         @SuppressWarnings("unchecked")
         public Flow<?, ?> bindSpec(FlowSpec spec) {
             if (spec == null) {
-                return Flow.identity();
+                throw new FlowDiagnosticException(
+                        DiagnosticCodes.INVALID_DEFINITION,
+                        "FlowSpec must not be null");
             }
             SpecBinder<FlowSpec> binder = (SpecBinder<FlowSpec>) binderRegistry.get(spec.getClass()).orElse(null);
             if (binder != null) {

@@ -1,10 +1,12 @@
 package com.team4u.framework.flow;
 
 import com.team4u.framework.flow.api.JoinStrategy;
+import com.team4u.framework.flow.model.Failure;
 import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.model.ParallelResults;
 
 import java.util.List;
+import java.util.Objects;
 
 /**
  * 常见通用并行汇聚归约策略工具与工厂类。
@@ -32,24 +34,80 @@ public final class Joins {
      * 首选成功聚合策略：按分支声明顺序检索并返回首个为 Accepted 的分支输出；
      * 若全部分支均未成功，则返回携带 {@code NO_APPLICABLE_BRANCH} 的 Skipped 结果。
      *
-     * @param <O> 分支输出类型
      * @return 首选成功聚合策略
      */
     @SuppressWarnings("unchecked")
-    public static <O> JoinStrategy<O> firstAccepted() {
-        return results -> (Outcome<O>) results.firstAccepted();
+    public static JoinStrategy<Object> firstAccepted() {
+        return results -> (Outcome<Object>) (Outcome<?>) results.firstAccepted();
     }
 
     /**
-     * 同质列表收集策略：所有分支均 Accepted 时，按声明顺序将其输出载荷收集为只读列表返回；
+     * 强类型首选成功聚合策略：按分支声明顺序检索并返回首个为 Accepted 的分支输出，
+     * 并在运行时校验其载荷类型是否符合 {@code type} 契约；若不匹配则返回 {@code TYPE_MISMATCH} 失败。
+     *
+     * @param type 预期的载荷类型，不能为 null
+     * @param <T>  输出类型
+     * @return 强类型首选成功聚合策略
+     */
+    public static <T> JoinStrategy<T> firstAcceptedAs(Class<T> type) {
+        Objects.requireNonNull(type, "type must not be null");
+        return results -> {
+            Outcome<?> outcome = results.firstAccepted();
+            if (outcome instanceof Outcome.Accepted) {
+                Object val = ((Outcome.Accepted<?>) outcome).value();
+                if (val != null && !type.isInstance(val)) {
+                    return Outcome.failed(Failure.of("TYPE_MISMATCH",
+                            "Expected accepted value of type " + type.getName() + " but got " + val.getClass().getName()));
+                }
+                @SuppressWarnings("unchecked")
+                T typed = (T) val;
+                return Outcome.accepted(typed);
+            }
+            @SuppressWarnings("unchecked")
+            Outcome<T> nonAccepted = (Outcome<T>) outcome;
+            return nonAccepted;
+        };
+    }
+
+    /**
+     * 列表收集策略：所有分支均 Accepted 时，按声明顺序将其输出载荷收集为只读列表返回；
      * 只要存在任一非 Accepted 分支，则原样返回首个非 Accepted 结果。
      *
-     * @param <T> 元素类型
      * @return 列表收集聚合策略
      */
-    @SuppressWarnings("unchecked")
-    public static <T> JoinStrategy<List<T>> collect() {
-        return results -> (Outcome<List<T>>) (Outcome<?>) results.homogeneousCollect();
+    public static JoinStrategy<List<?>> collect() {
+        return ParallelResults::homogeneousCollect;
+    }
+
+    /**
+     * 强类型列表收集策略：所有分支均 Accepted 时，按声明顺序将其输出载荷收集为只读列表返回，
+     * 并在运行时校验各元素载荷类型是否符合 {@code elementType} 契约；若存在不匹配则返回 {@code TYPE_MISMATCH} 失败。
+     *
+     * @param elementType 预期的元素类型，不能为 null
+     * @param <T>         元素类型
+     * @return 强类型列表收集聚合策略
+     */
+    public static <T> JoinStrategy<List<T>> collectAs(Class<T> elementType) {
+        Objects.requireNonNull(elementType, "elementType must not be null");
+        return results -> {
+            Outcome<List<?>> outcome = results.homogeneousCollect();
+            if (outcome instanceof Outcome.Accepted) {
+                @SuppressWarnings("unchecked")
+                List<?> list = ((Outcome.Accepted<List<?>>) outcome).value();
+                for (Object item : list) {
+                    if (item != null && !elementType.isInstance(item)) {
+                        return Outcome.failed(Failure.of("TYPE_MISMATCH",
+                                "Expected list element of type " + elementType.getName() + " but got " + item.getClass().getName()));
+                    }
+                }
+                @SuppressWarnings("unchecked")
+                List<T> typedList = (List<T>) list;
+                return Outcome.accepted(typedList);
+            }
+            @SuppressWarnings("unchecked")
+            Outcome<List<T>> nonAccepted = (Outcome<List<T>>) (Outcome<?>) outcome;
+            return nonAccepted;
+        };
     }
 
     /**

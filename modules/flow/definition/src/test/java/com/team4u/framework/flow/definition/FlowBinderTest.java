@@ -424,4 +424,42 @@ public class FlowBinderTest {
             Assert.assertTrue(ex.diagnostics().stream().anyMatch(d -> DiagnosticCodes.UNSUPPORTED_MODIFIER_SPEC.equals(d.code())));
         }
     }
+
+    @Test
+    public void testBindSpecNullThrowsInvalidDefinition() {
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("any", (OperationContext ctx, Object in) -> Outcome.accepted(in))
+                .build();
+        com.team4u.framework.flow.definition.binding.SpecBinder<StepSpec> callingNullBinder =
+                new com.team4u.framework.flow.definition.binding.SpecBinder<StepSpec>() {
+                    @Override
+                    public Class<StepSpec> key() {
+                        return StepSpec.class;
+                    }
+
+                    @Override
+                    public com.team4u.framework.flow.Flow<?, ?> bind(
+                            StepSpec spec,
+                            com.team4u.framework.flow.definition.binding.BindingContext context) {
+                        return context.bindSpec(null);
+                    }
+                };
+        com.team4u.framework.flow.definition.binding.SpecBinderRegistry customRegistry =
+                new com.team4u.framework.flow.definition.binding.SpecBinderRegistry();
+        customRegistry.register(callingNullBinder);
+        customRegistry.freeze();
+
+        FlowDefinition def = new FlowDefinition(
+                1, "null.spec.flow", "1",
+                new StepSpec(SymbolRef.of("any"), null, null, Collections.emptyList(), SourceSpan.UNKNOWN),
+                "test", SourceSpan.UNKNOWN
+        );
+        try {
+            new FlowBinder(registry, null, customRegistry).bind(def);
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(DiagnosticCodes.INVALID_DEFINITION, ex.diagnostic().code());
+            Assert.assertTrue(ex.diagnostic().message().contains("FlowSpec must not be null"));
+        }
+    }
 }

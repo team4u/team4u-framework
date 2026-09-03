@@ -67,9 +67,8 @@ public final class Local {
     /**
      * 以弱缓存复用编译产物编译逻辑流程。
      *
-     * <p>缓存以 {@code (flow, resolver)} 实例为双身份键（identity key，不使用 equals），
-     * 值为弱引用的 {@link Compiler.Compiled} 产物；当外部不再持有 flow 或 resolver 引用时缓存条目可被 GC 回收，
-     * 不会阻止流程定义与解析器的释放。一个 resolver 在被用作 compile cache key 的生命周期内，其 binding 映射必须稳定。
+     * <p>{@code (flow, resolver)} 使用弱身份键；Compiled value 在缓存条目存活期间保持强引用，任一 key referent 被回收后由 ReferenceQueue 清理条目。
+     * 一个 resolver 在被用作 compile cache key 的生命周期内，其 binding 映射必须稳定。
      * 并发安全：基于 ConcurrentHashMap，同一 (flow, resolver) 的并发首次编译可能重复执行一次，但返回的产物一致且线程安全。</p>
      *
      * <p>注意：缓存的仅是静态编译产物（拓扑与绑定解析结果），不含任何运行期状态；

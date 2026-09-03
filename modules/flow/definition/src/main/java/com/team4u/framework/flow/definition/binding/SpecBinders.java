@@ -330,6 +330,8 @@ public final class SpecBinders {
             }
 
             JoinStrategy<?> strategy = null;
+            Class<? extends JoinStrategy<?>> strategyClass = null;
+            String qualifier = null;
             if (joinSpec instanceof BuiltinJoinSpec) {
                 BuiltinJoinSpec builtin = (BuiltinJoinSpec) joinSpec;
                 int branchCount = parallel.branches() != null ? parallel.branches().size() : 0;
@@ -369,32 +371,20 @@ public final class SpecBinders {
                             symbol.span());
                 }
 
-                strategy = joinDesc.strategy();
-                if (strategy == null && joinDesc.provider() != null) {
+                if (joinDesc.strategy() != null) {
+                    strategy = joinDesc.strategy();
+                } else if (joinDesc.contract() != null) {
+                    strategyClass = joinDesc.contract();
+                    qualifier = joinDesc.qualifier();
+                } else if (joinDesc.provider() != null) {
                     strategy = joinDesc.provider().provide(context.resolver());
-                }
-                if (strategy == null && joinDesc.contract() != null) {
-                    if (context.resolver() != null) {
-                        try {
-                            Object resolved = context.resolver().resolve(joinDesc.contract(), joinDesc.qualifier());
-                            if (resolved instanceof JoinStrategy) {
-                                strategy = (JoinStrategy<?>) resolved;
-                            }
-                        } catch (Exception ignored) {
-                        }
-                    }
                     if (strategy == null) {
-                        try {
-                            strategy = joinDesc.contract().getDeclaredConstructor().newInstance();
-                        } catch (Exception ex) {
-                            throw new FlowDiagnosticException(
-                                    DiagnosticCodes.BINDING_TYPE,
-                                    "Failed to instantiate join strategy " + joinDesc.contract().getName() + ": " + ex.getMessage(),
-                                    symbol.span());
-                        }
+                        throw new FlowDiagnosticException(
+                                DiagnosticCodes.MISSING_BINDING,
+                                "Cannot resolve join strategy for: " + symbol.id(),
+                                symbol.span());
                     }
-                }
-                if (strategy == null) {
+                } else {
                     throw new FlowDiagnosticException(
                             DiagnosticCodes.MISSING_BINDING,
                             "Cannot resolve join strategy for: " + symbol.id(),
@@ -407,7 +397,11 @@ public final class SpecBinders {
                 branches.add(Branch.of(branchSpec.name(), context.bindSpec(branchSpec.flow())));
             }
 
-            return Flow.parallel(branches.toArray(new Branch[0])).join((JoinStrategy) strategy);
+            if (strategy != null) {
+                return Flow.parallel(branches.toArray(new Branch[0])).join((JoinStrategy) strategy);
+            } else {
+                return Flow.parallel(branches.toArray(new Branch[0])).join((Class) strategyClass, qualifier);
+            }
         }
     }
 

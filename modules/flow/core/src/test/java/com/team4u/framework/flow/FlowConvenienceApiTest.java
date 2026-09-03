@@ -381,9 +381,21 @@ public class FlowConvenienceApiTest {
         Branch<String, String> b2 = Branch.of("b2", (ctx, in) -> Outcome.accepted("first-accepted"));
         Branch<String, String> b3 = Branch.of("b3", (ctx, in) -> Outcome.accepted("second-accepted"));
 
-        Flow<String, String> flow = Flow.parallel(b1, b2, b3).join(Joins.firstAccepted());
-        String val = Local.from(flow).compile().run("start").requireAccepted();
+        Flow<String, Object> flowUntyped = Flow.parallel(b1, b2, b3).join(Joins.firstAccepted());
+        Object valUntyped = Local.from(flowUntyped).compile().run("start").requireAccepted();
+        assertEquals("first-accepted", valUntyped);
+
+        Flow<String, String> flowTyped = Flow.parallel(b1, b2, b3).join(Joins.firstAcceptedAs(String.class));
+        String val = Local.from(flowTyped).compile().run("start").requireAccepted();
         assertEquals("first-accepted", val);
+
+        Branch<String, Integer> bInt = Branch.of("bInt", (ctx, in) -> Outcome.accepted(123));
+        Flow<String, String> mismatchFlow = Flow.parallel(bInt).join(Joins.firstAcceptedAs(String.class));
+        com.team4u.framework.flow.model.FlowResult<String> mismatchResult = Local.from(mismatchFlow).compile().run("start");
+        assertTrue(mismatchResult instanceof com.team4u.framework.flow.model.FlowResult.Completed);
+        Outcome<String> mismatchOutcome = ((com.team4u.framework.flow.model.FlowResult.Completed<String>) mismatchResult).outcome();
+        assertTrue(mismatchOutcome instanceof Outcome.Failed);
+        assertEquals("TYPE_MISMATCH", ((Outcome.Failed<String>) mismatchOutcome).failure().code());
     }
 
     @Test
@@ -391,9 +403,21 @@ public class FlowConvenienceApiTest {
         Branch<String, String> b1 = Branch.of("b1", (ctx, in) -> Outcome.accepted("ok"));
         Branch<String, String> b2 = Branch.of("b2", (ctx, in) -> Outcome.accepted("fine"));
 
-        Flow<String, List<String>> flow = Flow.parallel(b1, b2).join(Joins.collect());
+        Flow<String, List<?>> flowUntyped = Flow.parallel(b1, b2).join(Joins.collect());
+        List<?> untypedList = Local.from(flowUntyped).compile().run("start").requireAccepted();
+        assertEquals(Arrays.asList("ok", "fine"), untypedList);
+
+        Flow<String, List<String>> flow = Flow.parallel(b1, b2).join(Joins.collectAs(String.class));
         List<String> list = Local.from(flow).compile().run("start").requireAccepted();
         assertEquals(Arrays.asList("ok", "fine"), list);
+
+        Branch<String, Integer> bInt = Branch.of("bInt", (ctx, in) -> Outcome.accepted(999));
+        Flow<String, List<String>> mismatchFlow = Flow.parallel(b1, bInt).join(Joins.collectAs(String.class));
+        com.team4u.framework.flow.model.FlowResult<List<String>> mismatchResult = Local.from(mismatchFlow).compile().run("start");
+        assertTrue(mismatchResult instanceof com.team4u.framework.flow.model.FlowResult.Completed);
+        Outcome<List<String>> mismatchOutcome = ((com.team4u.framework.flow.model.FlowResult.Completed<List<String>>) mismatchResult).outcome();
+        assertTrue(mismatchOutcome instanceof Outcome.Failed);
+        assertEquals("TYPE_MISMATCH", ((Outcome.Failed<List<String>>) mismatchOutcome).failure().code());
     }
 
     @Test

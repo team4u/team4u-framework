@@ -506,4 +506,148 @@ public class DefaultPropertyAccessCompilerTest {
                 TypeRef.of(OrderWithMapAttributes.class), PropertyPath.of("$.attributes.userId"));
         Assert.assertEquals(TypeRef.ANY, readerTail.resultType());
     }
+
+    public static class NonBooleanIsBean {
+        public String isStatus() {
+            return "active";
+        }
+    }
+
+    public static class BooleanIsBean {
+        public boolean isPrimitive() {
+            return true;
+        }
+
+        public Boolean isBoxed() {
+            return Boolean.TRUE;
+        }
+    }
+
+    @Test
+    public void testIsPrefixRestrictedToBoolean() {
+        DefaultPropertyAccessCompiler compiler = DefaultPropertyAccessCompiler.INSTANCE;
+        try {
+            compiler.compileReader(TypeRef.of(NonBooleanIsBean.class), PropertyPath.parse("$.status"));
+            Assert.fail("Expected UNKNOWN_PROPERTY for non-boolean isStatus");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(DiagnosticCodes.UNKNOWN_PROPERTY, ex.diagnostic().code());
+        }
+
+        CompiledReader primReader = compiler.compileReader(TypeRef.of(BooleanIsBean.class), PropertyPath.parse("$.primitive"));
+        Assert.assertEquals(true, primReader.read(new BooleanIsBean()));
+
+        CompiledReader boxedReader = compiler.compileReader(TypeRef.of(BooleanIsBean.class), PropertyPath.parse("$.boxed"));
+        Assert.assertEquals(Boolean.TRUE, boxedReader.read(new BooleanIsBean()));
+    }
+
+    public static class AmbiguousSetterBean {
+        public void setValue(String s) { }
+        public void setValue(Integer i) { }
+    }
+
+    @Test
+    public void testAmbiguousSetterThrowsPropertyAmbiguous() {
+        DefaultPropertyAccessCompiler compiler = DefaultPropertyAccessCompiler.INSTANCE;
+        try {
+            compiler.compileWriter(TypeRef.of(AmbiguousSetterBean.class), PropertyPath.parse("$.value"), TypeRef.of(String.class));
+            Assert.fail("Expected PROPERTY_AMBIGUOUS");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(DiagnosticCodes.PROPERTY_AMBIGUOUS, ex.diagnostic().code());
+        }
+    }
+
+    public static class InconsistentGetterSetterBean {
+        public String getValue() {
+            return "str";
+        }
+
+        public void setValue(Integer i) { }
+    }
+
+    @Test
+    public void testInconsistentGetterSetterThrowsPropertyInconsistent() {
+        DefaultPropertyAccessCompiler compiler = DefaultPropertyAccessCompiler.INSTANCE;
+        try {
+            compiler.compileReader(TypeRef.of(InconsistentGetterSetterBean.class), PropertyPath.parse("$.value"));
+            Assert.fail("Expected PROPERTY_INCONSISTENT");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(DiagnosticCodes.PROPERTY_INCONSISTENT, ex.diagnostic().code());
+        }
+    }
+
+    public static class GetterAndFieldBean {
+        public Integer value = 100;
+
+        public String getValue() {
+            return "str-val";
+        }
+    }
+
+    @Test
+    public void testGetterTakesPrecedenceOverFieldAndDoesNotFallBackToMismatchedFieldForSetter() {
+        DefaultPropertyAccessCompiler compiler = DefaultPropertyAccessCompiler.INSTANCE;
+        CompiledReader reader = compiler.compileReader(TypeRef.of(GetterAndFieldBean.class), PropertyPath.parse("$.value"));
+        Assert.assertEquals("str-val", reader.read(new GetterAndFieldBean()));
+
+        try {
+            compiler.compileWriter(TypeRef.of(GetterAndFieldBean.class), PropertyPath.parse("$.value"), TypeRef.of(String.class));
+            Assert.fail("Expected PROPERTY_NOT_WRITABLE");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(DiagnosticCodes.PROPERTY_NOT_WRITABLE, ex.diagnostic().code());
+        }
+    }
+
+    public static class ThrowingAccessorBean {
+        public String getBoom() {
+            throw new IllegalStateException("read boom");
+        }
+
+        public String getFlowExecutionBoom() {
+            throw new com.team4u.framework.flow.model.FlowExecutionException("ERR_CUSTOM", "custom flow execution failure");
+        }
+
+        public void setBoom(String s) {
+            throw new IllegalStateException("write boom");
+        }
+    }
+
+    @Test
+    public void testPropertyExceptionUnwrapsCauseAndPreservesSpan() {
+        DefaultPropertyAccessCompiler compiler = DefaultPropertyAccessCompiler.INSTANCE;
+        SourceSpan span = new SourceSpan("test", 0, 1, 1, 10, 1, 11);
+        PropertyPath readPath = PropertyPath.parse("$.boom", span);
+        CompiledReader reader = compiler.compileReader(TypeRef.of(ThrowingAccessorBean.class), readPath);
+
+        try {
+            reader.read(new ThrowingAccessorBean());
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(DiagnosticCodes.PROPERTY_ACCESS_ERROR, ex.diagnostic().code());
+            Assert.assertTrue(ex.getCause() instanceof IllegalStateException);
+            Assert.assertEquals("read boom", ex.getCause().getMessage());
+            Assert.assertEquals(span, ex.diagnostic().span());
+        }
+
+        PropertyPath flowExecPath = PropertyPath.parse("$.flowExecutionBoom", span);
+        CompiledReader flowExecReader = compiler.compileReader(TypeRef.of(ThrowingAccessorBean.class), flowExecPath);
+        try {
+            flowExecReader.read(new ThrowingAccessorBean());
+            Assert.fail("Expected FlowExecutionException");
+        } catch (com.team4u.framework.flow.model.FlowExecutionException ex) {
+            Assert.assertEquals("ERR_CUSTOM", ex.code());
+            Assert.assertEquals("custom flow execution failure", ex.getMessage());
+        }
+
+        PropertyPath writePath = PropertyPath.parse("$.boom", span);
+        CompiledWriter writer = compiler.compileWriter(TypeRef.of(ThrowingAccessorBean.class), writePath, TypeRef.of(String.class));
+        try {
+            writer.write(new ThrowingAccessorBean(), "val");
+            Assert.fail("Expected FlowDiagnosticException");
+        } catch (FlowDiagnosticException ex) {
+            Assert.assertEquals(DiagnosticCodes.PROPERTY_ACCESS_ERROR, ex.diagnostic().code());
+            Assert.assertTrue(ex.getCause() instanceof IllegalStateException);
+            Assert.assertEquals("write boom", ex.getCause().getMessage());
+            Assert.assertEquals(span, ex.diagnostic().span());
+        }
+    }
 }

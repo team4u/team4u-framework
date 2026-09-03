@@ -73,6 +73,8 @@ public final class DiagnosticCodes {
     public static final String PROPERTY_NULL_VALUE = "PROPERTY_NULL_VALUE";
     public static final String PROPERTY_ACCESS_ERROR = "PROPERTY_ACCESS_ERROR";
     public static final String PROPERTY_TYPE_MISMATCH = "PROPERTY_TYPE_MISMATCH";
+    public static final String PROPERTY_AMBIGUOUS = "PROPERTY_AMBIGUOUS";
+    public static final String PROPERTY_INCONSISTENT = "PROPERTY_INCONSISTENT";
 
     // Builtin Join 阶段错误码
     public static final String UNSUPPORTED_BUILTIN_JOIN = "UNSUPPORTED_BUILTIN_JOIN";
