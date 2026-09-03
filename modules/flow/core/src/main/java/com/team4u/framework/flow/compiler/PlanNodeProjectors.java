@@ -243,4 +243,22 @@ public final class PlanNodeProjectors {
             return visitor.visitComplete(complete.descriptor(), complete.outcome(), complete.identity());
         }
     }
+
+    static final class AdapterProjector implements PlanNodeProjector<PlanNode.Adapter> {
+        @Override
+        public Class<? extends PlanNode> key() {
+            return PlanNode.Adapter.class;
+        }
+
+        @Override
+        public void pushChildren(PlanNode.Adapter node, ArrayDeque<ExecutableProjector.WorkItem> workStack) {
+            workStack.addLast(new ExecutableProjector.WorkItem(node.body(), false));
+        }
+
+        @Override
+        public <R> R build(PlanNode.Adapter adapter, ArrayList<R> resultStack, ExecutableFlowVisitor<R> visitor) {
+            R bodyResult = pop(resultStack);
+            return visitor.visitAdapter(adapter.descriptor(), bodyResult, adapter.project(), adapter.merge());
+        }
+    }
 }

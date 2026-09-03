@@ -22,6 +22,7 @@ public final class DurableFrameReducePolicyRegistry extends KeyedPolicyRegistry<
         GLOBAL.register(new DurableFrameReducePolicies.RouteReducePolicy());
         GLOBAL.register(new DurableFrameReducePolicies.FallbackReducePolicy());
         GLOBAL.register(new DurableFrameReducePolicies.ControlReducePolicy());
+        GLOBAL.register(new DurableFrameReducePolicies.AdapterReducePolicy());
         GLOBAL.freeze();
     }
 

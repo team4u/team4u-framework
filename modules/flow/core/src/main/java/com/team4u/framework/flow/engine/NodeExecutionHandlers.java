@@ -1,5 +1,6 @@
 package com.team4u.framework.flow.engine;
 
+import java.util.Objects;
 import java.util.concurrent.CancellationException;
 import com.team4u.framework.flow.api.Operation;
 import com.team4u.framework.flow.compiler.PlanNode;
@@ -133,6 +134,32 @@ public final class NodeExecutionHandlers {
             Outcome<?> outcome = complete.identity()
                     ? Outcome.accepted(frame.entry) : complete.outcome();
             machine.finish(outcome);
+            return null;
+        }
+    }
+
+    static final class AdapterExecutionHandler implements NodeExecutionHandler<PlanNode.Adapter> {
+        @Override
+        public Class<? extends PlanNode> key() {
+            return PlanNode.Adapter.class;
+        }
+
+        @Override
+        public MachineResult execute(PlanNode.Adapter adapter, RuntimeFrame frame, SerialMachine machine) {
+            if (frame.phase != 0) {
+                throw new IllegalStateException("Adapter child frame is missing at " + adapter.descriptor().path());
+            }
+            frame.phase = 1;
+            Object projected;
+            try {
+                projected = Objects.requireNonNull(adapter.project().apply(frame.entry),
+                        "projected input must not be null");
+            } catch (Exception e) {
+                machine.finish(Outcome.failed(com.team4u.framework.flow.model.Failure.of("OPERATION_EXCEPTION",
+                        e.getClass().getName() + (e.getMessage() == null ? "" : ": " + e.getMessage()))));
+                return null;
+            }
+            machine.push(adapter.body(), projected);
             return null;
         }
     }

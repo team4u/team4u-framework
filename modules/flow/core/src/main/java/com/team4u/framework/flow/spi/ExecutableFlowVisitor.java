@@ -129,5 +129,19 @@ public interface ExecutableFlowVisitor<R> {
     R visitComplete(NodeDescriptor descriptor,
                     Outcome<?> outcome,
                     boolean identity);
+
+    /**
+     * 投影结构化子流适配节点。
+     *
+     * @param descriptor 节点静态描述符
+     * @param body       适配体执行子计划
+     * @param project    输入投影函数
+     * @param merge      输出合并函数
+     * @return 投影结果
+     */
+    R visitAdapter(NodeDescriptor descriptor,
+                   R body,
+                   java.util.function.Function<Object, Object> project,
+                   java.util.function.BiFunction<Object, Object, Object> merge);
 }
 

@@ -37,7 +37,26 @@ public final class ClassTypeRef implements TypeRef {
         if (clazz == Object.class) {
             return true;
         }
-        return clazz.isAssignableFrom(targetType.rawType());
+        Class<?> targetRaw = targetType.rawType();
+        if (targetRaw == null) {
+            return false;
+        }
+        if (clazz.isAssignableFrom(targetRaw)) {
+            return true;
+        }
+        return isBoxingCompatible(clazz, targetRaw);
+    }
+
+    public static boolean isBoxingCompatible(Class<?> a, Class<?> b) {
+        if (a == int.class && b == Integer.class || a == Integer.class && b == int.class) return true;
+        if (a == boolean.class && b == Boolean.class || a == Boolean.class && b == boolean.class) return true;
+        if (a == long.class && b == Long.class || a == Long.class && b == long.class) return true;
+        if (a == double.class && b == Double.class || a == Double.class && b == double.class) return true;
+        if (a == float.class && b == Float.class || a == Float.class && b == float.class) return true;
+        if (a == byte.class && b == Byte.class || a == Byte.class && b == byte.class) return true;
+        if (a == short.class && b == Short.class || a == Short.class && b == short.class) return true;
+        if (a == char.class && b == Character.class || a == Character.class && b == char.class) return true;
+        return false;
     }
 
     @Override

@@ -111,6 +111,12 @@ public final class RestoredStateValidator {
             }
             return;
         }
+        if (node instanceof DurablePlanNode.Adapter) {
+            if (frame.phase != 0 && frame.phase != 1) {
+                throw frame("Adapter frame phase invalid at " + path);
+            }
+            return;
+        }
         if (node instanceof DurablePlanNode.Invoke
                 || node instanceof DurablePlanNode.Complete
                 || node instanceof DurablePlanNode.Await) {
@@ -199,6 +205,16 @@ public final class RestoredStateValidator {
             boolean waiting = parent.phase == 2 || parent.phase == 3;
             if (waiting && parent.wake == null) {
                 throw frame("Waiting control frame requires an absolute wake at " + path);
+            }
+            return;
+        }
+        if (node instanceof DurablePlanNode.Adapter) {
+            DurablePlanNode.Adapter adapter = (DurablePlanNode.Adapter) node;
+            if (parent.phase != 1) {
+                throw frame("Parent Adapter phase must be 1 at " + path);
+            }
+            if (child.node != adapter.body()) {
+                throw frame("Restored child is not Adapter body at " + path);
             }
             return;
         }

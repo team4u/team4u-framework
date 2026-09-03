@@ -25,6 +25,7 @@ public final class LogicalDescriberRegistry extends FrozenKeyedPolicyRegistry<Cl
         GLOBAL.register(new LogicalDescribers.AwaitDescriber());
         GLOBAL.register(new LogicalDescribers.ControlDescriber());
         GLOBAL.register(new LogicalDescribers.CompleteDescriber());
+        GLOBAL.register(new LogicalDescribers.AdapterDescriber());
         GLOBAL.freeze();
     }
 

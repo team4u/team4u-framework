@@ -209,5 +209,16 @@ public interface PlanNode {
             this.identity = identity;
         }
     }
+
+    /** 结构化子流适配执行计划节点。 */
+    @Getter
+    @Accessors(fluent = true)
+    @AllArgsConstructor
+    public static final class Adapter implements PlanNode {
+        private final NodeDescriptor descriptor;
+        private final PlanNode body;
+        private final Function<Object, Object> project;
+        private final BiFunction<Object, Object, Object> merge;
+    }
 }
 

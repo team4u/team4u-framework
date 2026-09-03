@@ -26,6 +26,7 @@ public final class DurableNodeExecutionHandlerRegistry extends KeyedPolicyRegist
         GLOBAL.register(new DurableNodeExecutionHandlers.AwaitExecutionHandler());
         GLOBAL.register(new DurableNodeExecutionHandlers.ControlExecutionHandler());
         GLOBAL.register(new DurableNodeExecutionHandlers.CompleteExecutionHandler());
+        GLOBAL.register(new DurableNodeExecutionHandlers.AdapterExecutionHandler());
         GLOBAL.freeze();
     }
 

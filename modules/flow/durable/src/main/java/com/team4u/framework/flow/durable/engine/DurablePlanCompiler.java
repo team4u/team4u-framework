@@ -202,6 +202,16 @@ public final class DurablePlanCompiler implements ExecutableFlowVisitor<DurableP
         return register(new DurablePlanNode.Complete(descriptor, outcome, identity));
     }
 
+    @Override
+    public DurablePlanNode visitAdapter(NodeDescriptor descriptor,
+                                        DurablePlanNode body,
+                                        Function<Object, Object> project,
+                                        BiFunction<Object, Object, Object> merge) {
+        slotRoles.add(nodeRole(descriptor.path() + "/projected"));
+        slotRoles.add(nodeRole(descriptor.path()));
+        return register(new DurablePlanNode.Adapter(descriptor, body, project, merge));
+    }
+
     private <T extends DurablePlanNode> T register(T node) {
         String path = node.descriptor().path();
         if (byPath.put(path, node) != null) {

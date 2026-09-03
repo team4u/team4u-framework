@@ -1,6 +1,7 @@
 package com.team4u.framework.flow.engine;
 
 import java.util.Collections;
+import java.util.Objects;
 import com.team4u.framework.flow.api.FlowObserver;
 import com.team4u.framework.flow.compiler.PlanNode;
 import com.team4u.framework.flow.model.Outcome;
@@ -113,6 +114,33 @@ public final class FrameReducePolicies {
         public Outcome<?> reduce(PlanNode.Control control, SerialMachine machine, RuntimeFrame frame, Outcome<?> child) {
             return machine.controlKindHandler(control.kind())
                     .reduce(control, frame, machine, child);
+        }
+    }
+
+    static final class AdapterReducePolicy implements FrameReducePolicy<PlanNode.Adapter> {
+        @Override
+        public Class<? extends PlanNode> key() {
+            return PlanNode.Adapter.class;
+        }
+
+        @Override
+        public Outcome<?> reduce(PlanNode.Adapter adapter, SerialMachine machine, RuntimeFrame frame, Outcome<?> child) {
+            if (frame.phase == 1) {
+                if (!(child instanceof Outcome.Accepted)) {
+                    return child;
+                }
+                Outcome.Accepted<?> accepted = (Outcome.Accepted<?>) child;
+                try {
+                    Object merged = Objects.requireNonNull(
+                            adapter.merge().apply(frame.entry, accepted.value()),
+                            "merged output must not be null");
+                    return Outcome.accepted(merged);
+                } catch (Exception e) {
+                    return Outcome.failed(com.team4u.framework.flow.model.Failure.of("OPERATION_EXCEPTION",
+                            e.getClass().getName() + (e.getMessage() == null ? "" : ": " + e.getMessage())));
+                }
+            }
+            throw new IllegalStateException("Invalid Adapter phase at " + adapter.descriptor().path());
         }
     }
 }

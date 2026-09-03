@@ -245,6 +245,21 @@ public final class NodeDescription {
     }
 
     /**
+     * 构造 ADAPTER（结构化子流适配）节点描述。
+     *
+     * @param path  节点路径，不能为 null
+     * @param label 可选标签，可为 null
+     * @param body  适配体子节点描述，不能为 null
+     * @return ADAPTER 节点描述
+     */
+    public static NodeDescription adapter(String path, String label, NodeDescription body) {
+        Objects.requireNonNull(body, "body must not be null");
+        return new NodeDescription(path, Optional.ofNullable(label), NodeDescriptor.Kind.ADAPTER,
+                Optional.empty(), Collections.singletonList(body), null, null, null, null, null,
+                null, null, null, null, false);
+    }
+
+    /**
      * 接受访问者遍历并导出视图结果。
      *
      * @param visitor 流程描述访问者，不能为 null
@@ -271,6 +286,8 @@ public final class NodeDescription {
                 return visitor.visitControl(this);
             case COMPLETE:
                 return visitor.visitComplete(this);
+            case ADAPTER:
+                return visitor.visitAdapter(this);
             default:
                 throw new IllegalStateException("Unknown node kind: " + kind);
         }

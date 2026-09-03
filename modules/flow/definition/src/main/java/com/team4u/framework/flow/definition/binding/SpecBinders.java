@@ -12,7 +12,10 @@ import com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException;
 import com.team4u.framework.flow.definition.model.*;
 import com.team4u.framework.flow.definition.registry.*;
 import com.team4u.framework.flow.definition.type.TypeCodec;
+import com.team4u.framework.flow.Joins;
+import com.team4u.framework.flow.definition.type.TypeRef;
 import com.team4u.framework.flow.model.Failure;
+import com.team4u.framework.flow.model.Outcome;
 import com.team4u.framework.flow.model.Reason;
 
 import java.time.Duration;
@@ -47,27 +50,14 @@ public final class SpecBinders {
                         DiagnosticCodes.UNKNOWN_OPERATION, "Operation not found: " + step.operation().id());
             }
 
-            SymbolRef projectRef = step.project();
-            SymbolRef mergeRef = step.merge();
+            ProjectionSpec projectSpec = step.projectSpec();
+            MergeSpec mergeSpec = step.mergeSpec();
 
-            Function<Object, Object> projectFn = Function.identity();
-            if (projectRef != null) {
-                ProjectorDescriptor projDesc = context.registry().projector(projectRef.id());
-                if (projDesc != null) {
-                    projectFn = projDesc.function();
-                }
-            }
-
-            BiFunction<Object, Object, Object> mergeFn = (state, result) -> result;
-            if (mergeRef != null) {
-                MergerDescriptor mergeDesc = context.registry().merger(mergeRef.id());
-                if (mergeDesc != null) {
-                    mergeFn = mergeDesc.function();
-                }
-            }
+            Function<Object, Object> projectFn = context.compileProjector(projectSpec);
+            BiFunction<Object, Object, Object> mergeFn = context.compileMerger(mergeSpec, op.outputType());
 
             Flow flow;
-            if (projectRef != null || mergeRef != null) {
+            if (projectSpec != null || mergeSpec != null) {
                 if (op.instance() != null) {
                     flow = Flow.identity().use((Operation) op.instance(), projectFn, mergeFn);
                 } else {
@@ -134,41 +124,15 @@ public final class SpecBinders {
                 }
             }
 
-            SymbolRef projectRef = call.project();
-            SymbolRef mergeRef = call.merge();
+            ProjectionSpec projectSpec = call.projectSpec();
+            MergeSpec mergeSpec = call.mergeSpec();
 
-            Function<Object, Object> projectFn = Function.identity();
-            if (projectRef != null) {
-                ProjectorDescriptor projDesc = context.registry().projector(projectRef.id());
-                if (projDesc != null) {
-                    projectFn = projDesc.function();
-                }
-            }
-
-            BiFunction<Object, Object, Object> mergeFn = (state, result) -> result;
-            if (mergeRef != null) {
-                MergerDescriptor mergeDesc = context.registry().merger(mergeRef.id());
-                if (mergeDesc != null) {
-                    mergeFn = mergeDesc.function();
-                }
-            }
+            Function<Object, Object> projectFn = context.compileProjector(projectSpec);
+            BiFunction<Object, Object, Object> mergeFn = context.compileMerger(mergeSpec, TypeRef.ANY);
 
             Flow flow;
-            if (projectRef != null || mergeRef != null) {
-                LocalExecutable subExec = Local.compile(subflow, context.resolver());
-                Operation subflowOp = (opCtx, input) -> {
-                    com.team4u.framework.flow.model.FlowResult res = subExec.run(input);
-                    if (res instanceof com.team4u.framework.flow.model.FlowResult.Completed) {
-                        return ((com.team4u.framework.flow.model.FlowResult.Completed) res).outcome();
-                    } else if (res instanceof com.team4u.framework.flow.model.FlowResult.Suspended) {
-                        return com.team4u.framework.flow.model.Outcome.failed(
-                                com.team4u.framework.flow.model.Failure.of("SUBFLOW_SUSPENDED", "Subflow suspended unexpectedly"));
-                    } else {
-                        return com.team4u.framework.flow.model.Outcome.failed(
-                                com.team4u.framework.flow.model.Failure.of("CANCELLED", "Subflow was cancelled"));
-                    }
-                };
-                flow = Flow.identity().use(subflowOp, projectFn, mergeFn);
+            if (projectSpec != null || mergeSpec != null) {
+                flow = Flow.adapt(subflow, projectFn, mergeFn);
             } else {
                 flow = subflow;
             }
@@ -329,18 +293,84 @@ public final class SpecBinders {
                         "parallel requires at least one branch",
                         parallel.span());
             }
-            if (parallel.join() == null) {
+            JoinSpec joinSpec = parallel.joinSpec();
+            if (joinSpec == null) {
                 throw new FlowDiagnosticException(
                         DiagnosticCodes.UNKNOWN_JOIN,
                         "Parallel join strategy must be specified",
                         parallel.span());
             }
 
-            JoinDescriptor joinDesc = context.registry().join(parallel.join().id());
-            if (joinDesc == null) {
-                throw new FlowDiagnosticException(
-                        DiagnosticCodes.UNKNOWN_JOIN, "Join strategy not found: " + parallel.join().id(),
-                        parallel.join().span());
+            JoinStrategy<?> strategy = null;
+            if (joinSpec instanceof BuiltinJoinSpec) {
+                BuiltinJoinSpec builtin = (BuiltinJoinSpec) joinSpec;
+                switch (builtin.kind()) {
+                    case ALL:
+                        strategy = Joins.allAccepted();
+                        break;
+                    case FIRST:
+                        strategy = Joins.firstAccepted();
+                        break;
+                    case COLLECT:
+                        strategy = Joins.collect();
+                        break;
+                    case QUORUM:
+                        if (builtin.quorumRequired() < 1) {
+                            throw new FlowDiagnosticException(
+                                    DiagnosticCodes.INVALID_QUORUM,
+                                    "quorum required must be at least 1, got: " + builtin.quorumRequired(),
+                                    builtin.span());
+                        }
+                        strategy = Joins.quorum(builtin.quorumRequired());
+                        break;
+                    default:
+                        throw new FlowDiagnosticException(
+                                DiagnosticCodes.UNSUPPORTED_BUILTIN_JOIN,
+                                "Unsupported builtin join kind: " + builtin.kind(),
+                                builtin.span());
+                }
+            } else if (joinSpec instanceof SymbolRef || joinSpec instanceof SymbolJoinSpec) {
+                SymbolRef symbol = joinSpec instanceof SymbolRef
+                        ? (SymbolRef) joinSpec
+                        : ((SymbolJoinSpec) joinSpec).symbol();
+                JoinDescriptor joinDesc = context.registry().join(symbol.id());
+                if (joinDesc == null) {
+                    throw new FlowDiagnosticException(
+                            DiagnosticCodes.UNKNOWN_JOIN, "Join strategy not found: " + symbol.id(),
+                            symbol.span());
+                }
+
+                strategy = joinDesc.strategy();
+                if (strategy == null && joinDesc.provider() != null) {
+                    strategy = joinDesc.provider().provide(context.resolver());
+                }
+                if (strategy == null && joinDesc.contract() != null) {
+                    if (context.resolver() != null) {
+                        try {
+                            Object resolved = context.resolver().resolve(joinDesc.contract(), joinDesc.qualifier());
+                            if (resolved instanceof JoinStrategy) {
+                                strategy = (JoinStrategy<?>) resolved;
+                            }
+                        } catch (Exception ignored) {
+                        }
+                    }
+                    if (strategy == null) {
+                        try {
+                            strategy = joinDesc.contract().getDeclaredConstructor().newInstance();
+                        } catch (Exception ex) {
+                            throw new FlowDiagnosticException(
+                                    DiagnosticCodes.BINDING_TYPE,
+                                    "Failed to instantiate join strategy " + joinDesc.contract().getName() + ": " + ex.getMessage(),
+                                    symbol.span());
+                        }
+                    }
+                }
+                if (strategy == null) {
+                    throw new FlowDiagnosticException(
+                            DiagnosticCodes.MISSING_BINDING,
+                            "Cannot resolve join strategy for: " + symbol.id(),
+                            symbol.span());
+                }
             }
 
             List<Branch> branches = new ArrayList<Branch>();
@@ -348,42 +378,10 @@ public final class SpecBinders {
                 branches.add(Branch.of(branchSpec.name(), context.bindSpec(branchSpec.flow())));
             }
 
-            JoinStrategy<?> strategy = joinDesc.strategy();
-            if (strategy == null && joinDesc.provider() != null) {
-                strategy = joinDesc.provider().provide(context.resolver());
-            }
-            if (strategy == null && joinDesc.contract() != null) {
-                if (context.resolver() != null) {
-                    try {
-                        Object resolved = context.resolver().resolve(joinDesc.contract(), joinDesc.qualifier());
-                        if (resolved instanceof JoinStrategy) {
-                            strategy = (JoinStrategy<?>) resolved;
-                        }
-                    } catch (Exception ignored) {
-                    }
-                }
-                if (strategy == null) {
-                    try {
-                        strategy = joinDesc.contract().getDeclaredConstructor().newInstance();
-                    } catch (Exception ex) {
-                        throw new FlowDiagnosticException(
-                                DiagnosticCodes.BINDING_TYPE,
-                                "Failed to instantiate join strategy " + joinDesc.contract().getName() + ": " + ex.getMessage(),
-                                parallel.join().span());
-                    }
-                }
-            }
-
-            if (strategy == null) {
-                throw new FlowDiagnosticException(
-                        DiagnosticCodes.MISSING_BINDING,
-                        "Cannot resolve join strategy for: " + parallel.join().id(),
-                        parallel.join().span());
-            }
-
             return Flow.parallel(branches.toArray(new Branch[0])).join((JoinStrategy) strategy);
         }
     }
+
 
     public static final class AwaitSpecBinder implements SpecBinder<AwaitSpec> {
         @Override

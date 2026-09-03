@@ -74,5 +74,13 @@ public interface FlowVisitor<R> {
      * @return 访问结果
      */
     R visitComplete(NodeDescription node);
+
+    /**
+     * 访问结构化子流适配节点。
+     *
+     * @param node 节点描述
+     * @return 访问结果
+     */
+    R visitAdapter(NodeDescription node);
 }
 

@@ -26,20 +26,20 @@ public final class StepSpec implements FlowSpec {
     private static final long serialVersionUID = 1L;
 
     private final SymbolRef operation;
-    private final SymbolRef project;
-    private final SymbolRef merge;
+    private final ProjectionSpec projectSpec;
+    private final MergeSpec mergeSpec;
     private final List<ModifierSpec> modifiers;
     private final SourceSpan span;
 
     public StepSpec(
             SymbolRef operation,
-            SymbolRef project,
-            SymbolRef merge,
+            ProjectionSpec projectSpec,
+            MergeSpec mergeSpec,
             List<ModifierSpec> modifiers,
             SourceSpan span) {
         this.operation = Objects.requireNonNull(operation, "operation must not be null");
-        this.project = project;
-        this.merge = merge;
+        this.projectSpec = projectSpec;
+        this.mergeSpec = mergeSpec;
         this.modifiers = modifiers != null
                 ? Collections.unmodifiableList(new ArrayList<ModifierSpec>(modifiers))
                 : Collections.<ModifierSpec>emptyList();
@@ -47,30 +47,63 @@ public final class StepSpec implements FlowSpec {
     }
 
     public StepSpec(SymbolRef operation, List<ModifierSpec> modifiers, SourceSpan span) {
-        this(operation, null, null, modifiers, span);
+        this(operation, (ProjectionSpec) null, null, modifiers, span);
     }
 
     public StepSpec(SymbolRef operation, SourceSpan span) {
-        this(operation, null, null, Collections.<ModifierSpec>emptyList(), span);
+        this(operation, (ProjectionSpec) null, null, Collections.<ModifierSpec>emptyList(), span);
     }
 
     public StepSpec(SymbolRef operation) {
-        this(operation, null, null, Collections.<ModifierSpec>emptyList(), SourceSpan.UNKNOWN);
+        this(operation, (ProjectionSpec) null, null, Collections.<ModifierSpec>emptyList(), SourceSpan.UNKNOWN);
+    }
+
+    /**
+     * 获取输入提取投影规范。
+     *
+     * @return 投影规范（若未配置则返回 null）
+     */
+    public ProjectionSpec projectSpec() {
+        if (projectSpec != null) {
+            return projectSpec;
+        }
+        for (ModifierSpec mod : modifiers) {
+            if (mod instanceof ProjectModifierSpec) {
+                return ((ProjectModifierSpec) mod).projection();
+            }
+        }
+        return null;
+    }
+
+    /**
+     * 获取结果合并规范。
+     *
+     * @return 合并规范（若未配置则返回 null）
+     */
+    public MergeSpec mergeSpec() {
+        if (mergeSpec != null) {
+            return mergeSpec;
+        }
+        for (ModifierSpec mod : modifiers) {
+            if (mod instanceof MergeModifierSpec) {
+                return ((MergeModifierSpec) mod).merge();
+            }
+        }
+        return null;
     }
 
     /**
      * 获取输入提取投影符号引用。
      *
-     * @return 投影符号引用（若未配置则返回 null）
+     * @return 投影符号引用（若未配置或为属性路径投影则返回 null）
      */
     public SymbolRef project() {
-        if (project != null) {
-            return project;
+        ProjectionSpec spec = projectSpec();
+        if (spec instanceof SymbolRef) {
+            return (SymbolRef) spec;
         }
-        for (ModifierSpec mod : modifiers) {
-            if (mod instanceof ProjectModifierSpec) {
-                return ((ProjectModifierSpec) mod).projector();
-            }
+        if (spec instanceof SymbolProjectionSpec) {
+            return ((SymbolProjectionSpec) spec).symbol();
         }
         return null;
     }
@@ -78,16 +111,15 @@ public final class StepSpec implements FlowSpec {
     /**
      * 获取结果合并符号引用。
      *
-     * @return 合并符号引用（若未配置则返回 null）
+     * @return 合并符号引用（若未配置或为属性路径合并则返回 null）
      */
     public SymbolRef merge() {
-        if (merge != null) {
-            return merge;
+        MergeSpec spec = mergeSpec();
+        if (spec instanceof SymbolRef) {
+            return (SymbolRef) spec;
         }
-        for (ModifierSpec mod : modifiers) {
-            if (mod instanceof MergeModifierSpec) {
-                return ((MergeModifierSpec) mod).merger();
-            }
+        if (spec instanceof SymbolMergeSpec) {
+            return ((SymbolMergeSpec) spec).symbol();
         }
         return null;
     }

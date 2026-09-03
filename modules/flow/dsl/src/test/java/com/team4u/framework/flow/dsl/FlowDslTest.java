@@ -9,8 +9,10 @@ import com.team4u.framework.flow.definition.binding.BoundFlow;
 import com.team4u.framework.flow.definition.registry.FlowDefinitionRegistry;
 import com.team4u.framework.flow.model.FlowResult;
 import com.team4u.framework.flow.model.Outcome;
+import com.team4u.framework.flow.model.ParallelResults;
 import com.team4u.framework.flow.model.Reason;
 import com.team4u.framework.flow.model.Resumed;
+import com.team4u.framework.flow.definition.type.TypeRef;
 import org.junit.Assert;
 import org.junit.Test;
 
@@ -19,17 +21,31 @@ import java.util.List;
 
 public class FlowDslTest {
 
-    static class OrderContext {
-        String orderId;
-        int itemsCount;
-        boolean paid;
-        List<String> logs = new ArrayList<String>();
+    public static class OrderContext {
+        private String orderId;
+        private int itemsCount;
+        private boolean paid;
+        private List<String> logs = new java.util.concurrent.CopyOnWriteArrayList<String>();
 
-        OrderContext(String orderId, int itemsCount, boolean paid) {
+        public OrderContext() {}
+
+        public OrderContext(String orderId, int itemsCount, boolean paid) {
             this.orderId = orderId;
             this.itemsCount = itemsCount;
             this.paid = paid;
         }
+
+        public String getOrderId() { return orderId; }
+        public void setOrderId(String orderId) { this.orderId = orderId; }
+
+        public int getItemsCount() { return itemsCount; }
+        public void setItemsCount(int itemsCount) { this.itemsCount = itemsCount; }
+
+        public boolean isPaid() { return paid; }
+        public void setPaid(boolean paid) { this.paid = paid; }
+
+        public List<String> getLogs() { return logs; }
+        public void setLogs(List<String> logs) { this.logs = logs; }
     }
 
     enum OrderState {
@@ -400,5 +416,82 @@ public class FlowDslTest {
             Assert.assertTrue(ex.diagnostics().stream().anyMatch(d ->
                     com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.CYCLIC_FLOW_CALL.equals(d.code())));
         }
+    }
+
+
+    @Test
+    public void testPropertyProjectionAndMergeExecution() {
+        String dsl = "flow prop.demo {\n" +
+                "    step checkCount {\n" +
+                "        project $.itemsCount\n" +
+                "        merge $.paid\n" +
+                "    }\n" +
+                "}";
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("checkCount", (OperationContext ctx, Integer count) -> Outcome.accepted(count > 2), Integer.class, Boolean.class)
+                .build();
+
+        BoundFlow bound = FlowDsl.bind(dsl, registry, TypeRef.of(OrderContext.class));
+        LocalExecutable<OrderContext, OrderContext> exec = bound.compileLocal(OrderContext.class, OrderContext.class);
+
+        OrderContext ctx = new OrderContext("O1", 5, false);
+        FlowResult<OrderContext> result = exec.run(ctx);
+        Assert.assertTrue(result.requireAccepted().isPaid());
+    }
+
+    @Test
+    public void testBuiltinJoinAllExecution() {
+        String dsl = "flow parallel.all {\n" +
+                "    parallel {\n" +
+                "        branch b1 { step s1 }\n" +
+                "        branch b2 { step s2 }\n" +
+                "        join all\n" +
+                "    }\n" +
+                "}";
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("s1", (OperationContext ctx, OrderContext in) -> {
+                    in.logs.add("s1");
+                    return Outcome.accepted(in);
+                }, OrderContext.class, OrderContext.class)
+                .operation("s2", (OperationContext ctx, OrderContext in) -> {
+                    in.logs.add("s2");
+                    return Outcome.accepted(in);
+                }, OrderContext.class, OrderContext.class)
+                .build();
+
+        BoundFlow bound = FlowDsl.bind(dsl, registry, TypeRef.of(OrderContext.class));
+        LocalExecutable<OrderContext, ParallelResults.Values> exec = bound.compileLocal(OrderContext.class, ParallelResults.Values.class);
+
+        OrderContext ctx = new OrderContext("O1", 1, false);
+        FlowResult<ParallelResults.Values> result = exec.run(ctx);
+        Assert.assertNotNull(result.requireAccepted());
+        Assert.assertEquals(2, ctx.logs.size());
+    }
+
+    @Test
+    public void testBuiltinJoinCollectExecution() {
+        String dsl = "flow parallel.collect {\n" +
+                "    parallel {\n" +
+                "        branch b1 { step s1 }\n" +
+                "        branch b2 { step s2 }\n" +
+                "        join collect\n" +
+                "    }\n" +
+                "}";
+
+        FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
+                .operation("s1", (OperationContext ctx, String in) -> Outcome.accepted("res1"), String.class, String.class)
+                .operation("s2", (OperationContext ctx, String in) -> Outcome.accepted("res2"), String.class, String.class)
+                .build();
+
+        BoundFlow bound = FlowDsl.bind(dsl, registry, TypeRef.of(String.class));
+        LocalExecutable<String, List> exec = bound.compileLocal(String.class, List.class);
+
+        FlowResult<List> result = exec.run("init");
+        List list = result.requireAccepted();
+        Assert.assertEquals(2, list.size());
+        Assert.assertTrue(list.contains("res1"));
+        Assert.assertTrue(list.contains("res2"));
     }
 }

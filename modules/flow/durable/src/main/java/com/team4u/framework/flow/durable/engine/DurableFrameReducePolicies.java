@@ -2,6 +2,7 @@ package com.team4u.framework.flow.durable.engine;
 
 
 import java.util.Collections;
+import java.util.Objects;
 import com.team4u.framework.flow.durable.DurableMachine;
 import com.team4u.framework.flow.spi.FallbackTrigger;
 import com.team4u.framework.flow.api.FlowObserver;
@@ -134,6 +135,35 @@ public final class DurableFrameReducePolicies {
             DurableControlKindHandler handler = DurableControlKindRegistry.global().get(control.kind())
                     .orElseThrow(() -> new IllegalStateException("Unknown control kind: " + control.kind()));
             return handler.reduce(control, frame, child, machine);
+        }
+    }
+
+    static final class AdapterReducePolicy implements DurableFrameReducePolicy<DurablePlanNode.Adapter> {
+        @Override
+        public Class<? extends DurablePlanNode> key() {
+            return DurablePlanNode.Adapter.class;
+        }
+
+        @Override
+        public DurableState.MachineOutcome reduce(DurablePlanNode.Adapter adapter, DurableState.RuntimeFrame frame,
+                                                  DurableState.MachineOutcome child, DurableMachine machine) {
+            if (frame.phase == 1) {
+                if (!(child.outcome() instanceof Outcome.Accepted)) {
+                    return child;
+                }
+                Outcome.Accepted<?> accepted = (Outcome.Accepted<?>) child.outcome();
+                try {
+                    Object merged = Objects.requireNonNull(
+                            adapter.merge().apply(frame.entry, accepted.value()),
+                            "merged output must not be null");
+                    return DurableState.MachineOutcome.accepted(merged,
+                            DurableState.SlotRole.user(DurablePlanCompiler.nodeRole(adapter.descriptor().path())));
+                } catch (Exception e) {
+                    return DurableState.MachineOutcome.of(Outcome.failed(com.team4u.framework.flow.model.Failure.of("OPERATION_EXCEPTION",
+                            e.getClass().getName() + (e.getMessage() == null ? "" : ": " + e.getMessage()))));
+                }
+            }
+            throw new IllegalStateException("Invalid Adapter phase at " + adapter.descriptor().path());
         }
     }
 }

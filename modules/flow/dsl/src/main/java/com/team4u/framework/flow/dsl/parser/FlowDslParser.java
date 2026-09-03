@@ -177,126 +177,145 @@ public final class FlowDslParser {
         Token opToken = consumeIdentifier("Expected operation ID after 'step'");
         SymbolRef operation = SymbolRef.of(opToken.text(), opToken.span());
 
-        SymbolRef project = null;
-        SymbolRef merge = null;
+        ProjectionSpec projectSpec = null;
+        MergeSpec mergeSpec = null;
         List<ModifierSpec> modifiers = new ArrayList<ModifierSpec>();
         Token endToken = opToken;
 
+        // 2. 如果存在块级修饰符 { ... }
         if (match(TokenType.LBRACE)) {
             while (!check(TokenType.RBRACE) && !isAtEnd()) {
                 Token modStart = peek();
                 if (match(TokenType.PROJECT)) {
-                    if (project != null) {
+                    if (projectSpec != null) {
                         throw new FlowDiagnosticException(new Diagnostic(
                                 DiagnosticCodes.DUPLICATE_STEP_PROJECT,
                                 "Duplicate 'project' declaration in step",
                                 modStart.span()));
                     }
-                    Token projToken = consumeIdentifier("Expected projector ID after 'project'");
-                    project = SymbolRef.of(projToken.text(), projToken.span());
+                    projectSpec = parseProjectionTarget();
                 } else if (match(TokenType.MERGE)) {
-                    if (merge != null) {
+                    if (mergeSpec != null) {
                         throw new FlowDiagnosticException(new Diagnostic(
                                 DiagnosticCodes.DUPLICATE_STEP_MERGE,
                                 "Duplicate 'merge' declaration in step",
                                 modStart.span()));
                     }
-                    Token mergeToken = consumeIdentifier("Expected merger ID after 'merge'");
-                    merge = SymbolRef.of(mergeToken.text(), mergeToken.span());
-                } else if (match(TokenType.OPTIONAL)) {
-                    modifiers.add(new OptionalModifierSpec(modStart.span()));
-                } else if (match(TokenType.NAMED)) {
-                    Token nameToken = consume(TokenType.STRING, "Expected string label after 'named'");
-                    modifiers.add(new NamedModifierSpec(nameToken.text(), span(modStart, nameToken)));
-                } else if (match(TokenType.TIMEOUT)) {
-                    Token durToken = consume(TokenType.DURATION, "Expected duration literal after 'timeout'");
-                    modifiers.add(new TimeoutModifierSpec((Duration) durToken.value(), span(modStart, durToken)));
-                } else if (match(TokenType.POLICY)) {
-                    Token policyToken = consumeIdentifier("Expected policy ID after 'policy'");
-                    SymbolRef policyRef = SymbolRef.of(policyToken.text(), policyToken.span());
-                    SymbolRef keyRef = parseOptionalKey();
-                    Map<String, Object> config = parseOptionalConfigBlock("Expected '}' after policy configuration");
-                    if (keyRef == null && config.containsKey("key")) {
-                        Object keyVal = config.get("key");
-                        keyRef = SymbolRef.of(String.valueOf(keyVal));
-                    }
-                    modifiers.add(new PolicyModifierSpec(policyRef, keyRef, config, span(modStart, previous())));
-                } else if (match(TokenType.RETRY)) {
-                    Token retryToken = consumeIdentifier("Expected retry policy ID after 'retry'");
-                    SymbolRef retryRef = SymbolRef.of(retryToken.text(), retryToken.span());
-                    Map<String, Object> config = parseOptionalConfigBlock("Expected '}' after retry configuration");
-                    modifiers.add(new RetryModifierSpec(retryRef, config, span(modStart, previous())));
+                    mergeSpec = parseMergeTarget();
                 } else {
-                    throw error(modStart, "Unexpected step modifier: " + modStart.text());
+                    ModifierSpec mod = parseSingleModifier();
+                    modifiers.add(mod);
                 }
             }
             endToken = consume(TokenType.RBRACE, "Expected '}' to close step modifier block");
         }
 
-        return new StepSpec(operation, project, merge, modifiers, span(startToken, endToken));
+        return new StepSpec(operation, projectSpec, mergeSpec, modifiers, span(startToken, endToken));
     }
 
     private FlowSpec parseCall(Token startToken) {
         Token flowToken = consumeIdentifierOrString("Expected flow ID after 'call'");
         SymbolRef flow = SymbolRef.of(flowToken.text(), flowToken.span());
 
-        SymbolRef project = null;
-        SymbolRef merge = null;
+        ProjectionSpec projectSpec = null;
+        MergeSpec mergeSpec = null;
         List<ModifierSpec> modifiers = new ArrayList<ModifierSpec>();
         Token endToken = flowToken;
 
+        // 2. 块级修饰符
         if (match(TokenType.LBRACE)) {
             while (!check(TokenType.RBRACE) && !isAtEnd()) {
                 Token modStart = peek();
                 if (match(TokenType.PROJECT)) {
-                    if (project != null) {
+                    if (projectSpec != null) {
                         throw new FlowDiagnosticException(new Diagnostic(
                                 DiagnosticCodes.DUPLICATE_STEP_PROJECT,
                                 "Duplicate 'project' declaration in call",
                                 modStart.span()));
                     }
-                    Token projToken = consumeIdentifier("Expected projector ID after 'project'");
-                    project = SymbolRef.of(projToken.text(), projToken.span());
+                    projectSpec = parseProjectionTarget();
                 } else if (match(TokenType.MERGE)) {
-                    if (merge != null) {
+                    if (mergeSpec != null) {
                         throw new FlowDiagnosticException(new Diagnostic(
                                 DiagnosticCodes.DUPLICATE_STEP_MERGE,
                                 "Duplicate 'merge' declaration in call",
                                 modStart.span()));
                     }
-                    Token mergeToken = consumeIdentifier("Expected merger ID after 'merge'");
-                    merge = SymbolRef.of(mergeToken.text(), mergeToken.span());
-                } else if (match(TokenType.OPTIONAL)) {
-                    modifiers.add(new OptionalModifierSpec(modStart.span()));
-                } else if (match(TokenType.NAMED)) {
-                    Token nameToken = consume(TokenType.STRING, "Expected string label after 'named'");
-                    modifiers.add(new NamedModifierSpec(nameToken.text(), span(modStart, nameToken)));
-                } else if (match(TokenType.TIMEOUT)) {
-                    Token durToken = consume(TokenType.DURATION, "Expected duration literal after 'timeout'");
-                    modifiers.add(new TimeoutModifierSpec((Duration) durToken.value(), span(modStart, durToken)));
-                } else if (match(TokenType.POLICY)) {
-                    Token policyToken = consumeIdentifier("Expected policy ID after 'policy'");
-                    SymbolRef policyRef = SymbolRef.of(policyToken.text(), policyToken.span());
-                    SymbolRef keyRef = parseOptionalKey();
-                    Map<String, Object> config = parseOptionalConfigBlock("Expected '}' after policy configuration");
-                    if (keyRef == null && config.containsKey("key")) {
-                        Object keyVal = config.get("key");
-                        keyRef = SymbolRef.of(String.valueOf(keyVal));
-                    }
-                    modifiers.add(new PolicyModifierSpec(policyRef, keyRef, config, span(modStart, previous())));
-                } else if (match(TokenType.RETRY)) {
-                    Token retryToken = consumeIdentifier("Expected retry policy ID after 'retry'");
-                    SymbolRef retryRef = SymbolRef.of(retryToken.text(), retryToken.span());
-                    Map<String, Object> config = parseOptionalConfigBlock("Expected '}' after retry configuration");
-                    modifiers.add(new RetryModifierSpec(retryRef, config, span(modStart, previous())));
+                    mergeSpec = parseMergeTarget();
                 } else {
-                    throw error(modStart, "Unexpected call modifier: " + modStart.text());
+                    ModifierSpec mod = parseSingleModifier();
+                    modifiers.add(mod);
                 }
             }
             endToken = consume(TokenType.RBRACE, "Expected '}' to close call modifier block");
         }
 
-        return new CallSpec(flow, project, merge, modifiers, span(startToken, endToken));
+        return new CallSpec(flow, projectSpec, mergeSpec, modifiers, span(startToken, endToken));
+    }
+
+    private ProjectionSpec parseProjectionTarget() {
+        Token token = advance();
+        if (token.type() != TokenType.IDENTIFIER && token.type() != TokenType.STRING) {
+            throw error(token, "Expected projector ID or property path (e.g. $.items)");
+        }
+        String text = token.text();
+        if (text.startsWith("$.")) {
+            return new PropertyProjectionSpec(PropertyPath.parse(text, token.span()), token.span());
+        }
+        return SymbolRef.of(text, token.span());
+    }
+
+    private MergeSpec parseMergeTarget() {
+        Token token = advance();
+        if (token.type() != TokenType.IDENTIFIER && token.type() != TokenType.STRING) {
+            throw error(token, "Expected merger ID or property path (e.g. $.result)");
+        }
+        String text = token.text();
+        if (text.startsWith("$.")) {
+            return new PropertyMergeSpec(PropertyPath.parse(text, token.span()), token.span());
+        }
+        return SymbolRef.of(text, token.span());
+    }
+
+    private boolean isModifierStart(Token token) {
+        TokenType type = token.type();
+        return type == TokenType.PROJECT
+                || type == TokenType.MERGE
+                || type == TokenType.OPTIONAL
+                || type == TokenType.NAMED
+                || type == TokenType.TIMEOUT
+                || type == TokenType.POLICY
+                || type == TokenType.RETRY;
+    }
+
+    private ModifierSpec parseSingleModifier() {
+        Token modStart = advance();
+        if (modStart.type() == TokenType.OPTIONAL) {
+            return new OptionalModifierSpec(modStart.span());
+        } else if (modStart.type() == TokenType.NAMED) {
+            Token nameToken = consume(TokenType.STRING, "Expected string label after 'named'");
+            return new NamedModifierSpec(nameToken.text(), span(modStart, nameToken));
+        } else if (modStart.type() == TokenType.TIMEOUT) {
+            Token durToken = consume(TokenType.DURATION, "Expected duration literal after 'timeout'");
+            return new TimeoutModifierSpec((Duration) durToken.value(), span(modStart, durToken));
+        } else if (modStart.type() == TokenType.POLICY) {
+            Token policyToken = consumeIdentifier("Expected policy ID after 'policy'");
+            SymbolRef policyRef = SymbolRef.of(policyToken.text(), policyToken.span());
+            SymbolRef keyRef = parseOptionalKey();
+            Map<String, Object> config = parseOptionalConfigBlock("Expected '}' after policy configuration");
+            if (keyRef == null && config.containsKey("key")) {
+                Object keyVal = config.get("key");
+                keyRef = SymbolRef.of(String.valueOf(keyVal));
+            }
+            return new PolicyModifierSpec(policyRef, keyRef, config, span(modStart, previous()));
+        } else if (modStart.type() == TokenType.RETRY) {
+            Token retryToken = consumeIdentifier("Expected retry policy ID after 'retry'");
+            SymbolRef retryRef = SymbolRef.of(retryToken.text(), retryToken.span());
+            Map<String, Object> config = parseOptionalConfigBlock("Expected '}' after retry configuration");
+            return new RetryModifierSpec(retryRef, config, span(modStart, previous()));
+        } else {
+            throw error(modStart, "Unexpected modifier: " + modStart.text());
+        }
     }
 
     private FlowSpec parseRoute(Token startToken) {
@@ -368,7 +387,7 @@ public final class FlowDslParser {
     private FlowSpec parseParallel(Token startToken) {
         consume(TokenType.LBRACE, "Expected '{' after 'parallel'");
         List<BranchSpec> branches = new ArrayList<BranchSpec>();
-        SymbolRef join = null;
+        JoinSpec joinSpec = null;
 
         while (!check(TokenType.RBRACE) && !isAtEnd()) {
             Token token = peek();
@@ -377,25 +396,42 @@ public final class FlowDslParser {
                 FlowSpec flow = parseBracedBody(token, "Expected '{' after branch name", "Expected '}' to close branch");
                 branches.add(new BranchSpec(nameToken.text(), flow, span(token, previous())));
             } else if (match(TokenType.JOIN)) {
-                if (join != null) {
+                if (joinSpec != null) {
                     throw new FlowDiagnosticException(new Diagnostic(
                             DiagnosticCodes.DUPLICATE_JOIN,
                             "Duplicate 'join' declaration in parallel block",
                             token.span()));
                 }
-                Token joinToken = consumeIdentifier("Expected join strategy ID after 'join'");
-                join = SymbolRef.of(joinToken.text(), joinToken.span());
+                Token joinToken = peek();
+                if ("all".equalsIgnoreCase(joinToken.text())) {
+                    advance();
+                    joinSpec = BuiltinJoinSpec.all(span(token, joinToken));
+                } else if ("first".equalsIgnoreCase(joinToken.text())) {
+                    advance();
+                    joinSpec = BuiltinJoinSpec.first(span(token, joinToken));
+                } else if ("collect".equalsIgnoreCase(joinToken.text())) {
+                    advance();
+                    joinSpec = BuiltinJoinSpec.collect(span(token, joinToken));
+                } else if ("quorum".equalsIgnoreCase(joinToken.text())) {
+                    advance();
+                    Token nToken = consume(TokenType.NUMBER, "Expected quorum number after 'quorum'");
+                    int n = ((Number) nToken.value()).intValue();
+                    joinSpec = BuiltinJoinSpec.quorum(n, span(token, nToken));
+                } else {
+                    Token customToken = consumeIdentifier("Expected join strategy ID after 'join'");
+                    joinSpec = SymbolRef.of(customToken.text(), customToken.span());
+                }
             } else {
                 throw error(token, "Expected 'branch' or 'join' in parallel block");
             }
         }
 
-        if (join == null) {
-            throw error(startToken, "Parallel block must specify a 'join <join-id>' strategy");
+        if (joinSpec == null) {
+            throw error(startToken, "Parallel block must specify a 'join <strategy>' declaration");
         }
 
         Token endToken = consume(TokenType.RBRACE, "Expected '}' after parallel block");
-        return new ParallelSpec(branches, join, span(startToken, endToken));
+        return new ParallelSpec(branches, joinSpec, span(startToken, endToken));
     }
 
     private FlowSpec parseAwait(Token startToken) {

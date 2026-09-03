@@ -25,6 +25,7 @@ public final class NodeExecutionHandlerRegistry extends FrozenKeyedPolicyRegistr
         GLOBAL.register(new NodeExecutionHandlers.AwaitExecutionHandler());
         GLOBAL.register(new NodeExecutionHandlers.ControlExecutionHandler());
         GLOBAL.register(new NodeExecutionHandlers.CompleteExecutionHandler());
+        GLOBAL.register(new NodeExecutionHandlers.AdapterExecutionHandler());
         GLOBAL.freeze();
     }
 

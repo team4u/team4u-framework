@@ -84,7 +84,9 @@ public final class NodeDescriptor {
         /** 环绕治理控制节点。 */
         CONTROL,
         /** 常量/恒等终态节点。 */
-        COMPLETE
+        COMPLETE,
+        /** 结构化子流适配节点。 */
+        ADAPTER
     }
 
     /** 构造无绑定的结构节点描述符（Invoke 之外的节点）。 */

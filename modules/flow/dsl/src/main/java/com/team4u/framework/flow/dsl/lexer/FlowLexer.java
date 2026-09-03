@@ -223,11 +223,11 @@ public final class FlowLexer {
     }
 
     private boolean isIdentifierStart(char ch) {
-        return Character.isLetter(ch) || ch == '_';
+        return Character.isLetter(ch) || ch == '_' || ch == '$';
     }
 
     private boolean isIdentifierPart(char ch) {
-        return Character.isLetterOrDigit(ch) || ch == '_' || ch == '.' || ch == '-';
+        return Character.isLetterOrDigit(ch) || ch == '_' || ch == '.' || ch == '-' || ch == '$';
     }
 
     private boolean isLineBreak(char ch) {

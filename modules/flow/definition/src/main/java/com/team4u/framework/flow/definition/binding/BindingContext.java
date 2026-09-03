@@ -1,11 +1,20 @@
 package com.team4u.framework.flow.definition.binding;
 
 import com.team4u.framework.flow.Flow;
-import com.team4u.framework.flow.definition.model.FlowSpec;
-import com.team4u.framework.flow.definition.model.SymbolRef;
+import com.team4u.framework.flow.definition.diagnostic.Diagnostic;
+import com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes;
+import com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException;
+import com.team4u.framework.flow.definition.model.*;
+import com.team4u.framework.flow.definition.property.CompiledReader;
+import com.team4u.framework.flow.definition.property.CompiledWriter;
 import com.team4u.framework.flow.definition.registry.FlowDefinitionRegistry;
+import com.team4u.framework.flow.definition.registry.MergerDescriptor;
+import com.team4u.framework.flow.definition.registry.ProjectorDescriptor;
+import com.team4u.framework.flow.definition.type.TypeRef;
 
 import java.util.Map;
+import java.util.function.BiFunction;
+import java.util.function.Function;
 
 /**
  * 流程规范绑定上下文接口。
@@ -20,6 +29,17 @@ public interface BindingContext {
      * @return 符号注册表
      */
     FlowDefinitionRegistry registry();
+
+    /**
+     * 获取当前上下文输入类型。
+     *
+     * @return 当前输入类型引用
+     */
+    default TypeRef currentType() {
+        return registry() != null && registry().initialInputType() != null
+                ? registry().initialInputType()
+                : TypeRef.ANY;
+    }
 
     /**
      * 递归绑定子 Spec 节点。
@@ -43,6 +63,71 @@ public interface BindingContext {
             String policyId,
             SymbolRef keyRef,
             Map<String, Object> configuration);
+
+    /**
+     * 编译投影规范为输入提取函数。
+     *
+     * @param projection 投影规范
+     * @return 提取函数
+     */
+    default Function<Object, Object> compileProjector(ProjectionSpec projection) {
+        if (projection == null) {
+            return Function.identity();
+        }
+        if (projection instanceof PropertyProjectionSpec) {
+            PropertyPath path = ((PropertyProjectionSpec) projection).path();
+            CompiledReader reader = registry().propertyAccessCompiler().compileReader(currentType(), path);
+            return reader::read;
+        }
+        if (projection instanceof SymbolRef || projection instanceof SymbolProjectionSpec) {
+            SymbolRef symbol = projection instanceof SymbolRef
+                    ? (SymbolRef) projection
+                    : ((SymbolProjectionSpec) projection).symbol();
+            ProjectorDescriptor desc = registry().projector(symbol.id());
+            if (desc == null) {
+                throw new FlowDiagnosticException(new Diagnostic(
+                        DiagnosticCodes.UNKNOWN_PROJECTOR,
+                        "Unknown projector: " + symbol.id(),
+                        symbol.span()));
+            }
+            return desc.function();
+        }
+        return Function.identity();
+    }
+
+    /**
+     * 编译合并规范为结果合并函数。
+     *
+     * @param merge      合并规范
+     * @param resultType 结果输出类型
+     * @return 合并函数
+     */
+    default BiFunction<Object, Object, Object> compileMerger(MergeSpec merge, TypeRef resultType) {
+        if (merge == null) {
+            return (state, res) -> res;
+        }
+        if (merge instanceof PropertyMergeSpec) {
+            PropertyPath path = ((PropertyMergeSpec) merge).path();
+            CompiledWriter writer = registry().propertyAccessCompiler().compileWriter(
+                    currentType(), path, resultType != null ? resultType : TypeRef.ANY);
+            return writer::write;
+        }
+        if (merge instanceof SymbolRef || merge instanceof SymbolMergeSpec) {
+            SymbolRef symbol = merge instanceof SymbolRef
+                    ? (SymbolRef) merge
+                    : ((SymbolMergeSpec) merge).symbol();
+            MergerDescriptor desc = registry().merger(symbol.id());
+            if (desc == null) {
+                throw new FlowDiagnosticException(new Diagnostic(
+                        DiagnosticCodes.UNKNOWN_MERGER,
+                        "Unknown merger: " + symbol.id(),
+                        symbol.span()));
+            }
+            return desc.function();
+        }
+        return (state, res) -> res;
+    }
+
 
     /**
      * 获取组件解析器。

@@ -93,6 +93,9 @@ final class TextFlowDiagramRenderer implements FlowDiagramRenderer {
                 output.append(" complete=").append(node.identity()
                         ? "IDENTITY" : node.outcome().kind().name());
                 break;
+            case ADAPTER:
+                output.append(" adapter=structured");
+                break;
             case INVOKE:
                 break;
             default:

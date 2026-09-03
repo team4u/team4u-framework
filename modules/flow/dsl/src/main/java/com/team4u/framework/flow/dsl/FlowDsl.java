@@ -7,6 +7,7 @@ import com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException;
 import com.team4u.framework.flow.definition.engine.FlowDefinitionEngine;
 import com.team4u.framework.flow.definition.model.FlowDefinition;
 import com.team4u.framework.flow.definition.registry.FlowDefinitionRegistry;
+import com.team4u.framework.flow.definition.type.TypeRef;
 import com.team4u.framework.flow.dsl.reader.TextFlowDefinitionReader;
 import com.team4u.framework.flow.spi.OperationResolver;
 import com.team4u.framework.parser.SourceSpan;
@@ -93,6 +94,18 @@ public final class FlowDsl {
      */
     public static BoundFlow bind(String dsl, FlowDefinitionRegistry registry) {
         return DEFAULT_ENGINE.bind(dsl, registry);
+    }
+
+    /**
+     * 将文本 DSL 解析并与符号注册表及初始输入类型绑定为 {@link BoundFlow}。
+     *
+     * @param dsl              DSL 文本内容
+     * @param registry         符号注册表
+     * @param initialInputType 初始输入类型
+     * @return 绑定后的 BoundFlow
+     */
+    public static BoundFlow bind(String dsl, FlowDefinitionRegistry registry, TypeRef initialInputType) {
+        return DEFAULT_ENGINE.bind(dsl, registry, initialInputType);
     }
 
     /**

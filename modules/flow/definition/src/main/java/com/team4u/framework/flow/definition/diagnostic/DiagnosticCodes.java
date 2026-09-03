@@ -60,4 +60,23 @@ public final class DiagnosticCodes {
     public static final String BINDING_TYPE = "BINDING_TYPE";
     public static final String ARRAY_ROUTE_KEY = "ARRAY_ROUTE_KEY";
     public static final String DUPLICATE_ROUTE_CASE = "DUPLICATE_ROUTE_CASE";
+
+    // Property 阶段错误码
+    public static final String INVALID_PROPERTY_PATH = "INVALID_PROPERTY_PATH";
+    public static final String UNKNOWN_PROPERTY = "UNKNOWN_PROPERTY";
+    public static final String PROPERTY_NOT_READABLE = "PROPERTY_NOT_READABLE";
+    public static final String PROPERTY_NOT_WRITABLE = "PROPERTY_NOT_WRITABLE";
+    public static final String PROPERTY_NOT_FOUND = "PROPERTY_NOT_FOUND";
+    public static final String PROPERTY_NULL_VALUE = "PROPERTY_NULL_VALUE";
+    public static final String PROPERTY_ACCESS_ERROR = "PROPERTY_ACCESS_ERROR";
+    public static final String PROPERTY_TYPE_MISMATCH = "PROPERTY_TYPE_MISMATCH";
+
+    // Builtin Join 阶段错误码
+    public static final String UNSUPPORTED_BUILTIN_JOIN = "UNSUPPORTED_BUILTIN_JOIN";
+    public static final String INVALID_QUORUM = "INVALID_QUORUM";
+
+    // Parallel Fill 与 Structured Adapter 错误码
+    public static final String INVALID_PARALLEL_FILL = "INVALID_PARALLEL_FILL";
+    public static final String NON_DETERMINISTIC_FILL_MERGER = "NON_DETERMINISTIC_FILL_MERGER";
+    public static final String STRUCTURED_CALL_ADAPTER_REQUIRED = "STRUCTURED_CALL_ADAPTER_REQUIRED";
 }

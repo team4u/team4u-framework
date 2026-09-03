@@ -17,7 +17,7 @@ import java.util.Objects;
 @Getter
 @Accessors(fluent = true)
 @EqualsAndHashCode
-public final class SymbolRef implements Serializable {
+public final class SymbolRef implements ProjectionSpec, MergeSpec, JoinSpec, Serializable {
     private static final long serialVersionUID = 1L;
 
     private final String id;

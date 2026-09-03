@@ -11,6 +11,8 @@ import com.team4u.framework.flow.definition.type.TypeCodec;
 import com.team4u.framework.flow.definition.type.TypeCodecs;
 import com.team4u.framework.flow.definition.type.TypeRef;
 import com.team4u.framework.flow.spi.OperationResolver;
+import com.team4u.framework.flow.definition.property.DefaultPropertyAccessCompiler;
+import com.team4u.framework.flow.definition.property.PropertyAccessCompiler;
 import lombok.Getter;
 import lombok.experimental.Accessors;
 
@@ -49,6 +51,9 @@ public final class FlowDefinitionRegistry {
     private final Map<String, ResumeDescriptor> resumePoints;
     private final Map<TypeRef, TypeCodec<?>> typeCodecs;
     private final OperationResolver fallbackResolver;
+    private final PropertyAccessCompiler propertyAccessCompiler;
+    private final Map<String, TypeRef> typeAliases;
+    private final TypeRef initialInputType;
 
     private final ConcurrentMap<String, OperationDescriptor> dynamicOperations =
             new ConcurrentHashMap<String, OperationDescriptor>();
@@ -67,6 +72,9 @@ public final class FlowDefinitionRegistry {
         this.resumePoints = Collections.unmodifiableMap(new LinkedHashMap<String, ResumeDescriptor>(builder.resumePoints));
         this.typeCodecs = Collections.unmodifiableMap(new LinkedHashMap<TypeRef, TypeCodec<?>>(builder.typeCodecs));
         this.fallbackResolver = builder.fallbackResolver;
+        this.propertyAccessCompiler = builder.propertyAccessCompiler;
+        this.typeAliases = Collections.unmodifiableMap(new LinkedHashMap<String, TypeRef>(builder.typeAliases));
+        this.initialInputType = builder.initialInputType;
     }
 
     public static Builder builder() {
@@ -97,7 +105,28 @@ public final class FlowDefinitionRegistry {
         builder.resumePoints(this.resumePoints);
         builder.typeCodecs(this.typeCodecs);
         builder.fallbackResolver(this.fallbackResolver);
+        builder.propertyAccessCompiler(this.propertyAccessCompiler);
+        for (Map.Entry<String, TypeRef> entry : this.typeAliases.entrySet()) {
+            builder.type(entry.getKey(), entry.getValue());
+        }
+        builder.initialInputType(this.initialInputType);
         return builder;
+    }
+
+    public PropertyAccessCompiler propertyAccessCompiler() {
+        return propertyAccessCompiler;
+    }
+
+    public TypeRef typeAlias(String alias) {
+        return typeAliases.get(alias);
+    }
+
+    public Map<String, TypeRef> typeAliases() {
+        return typeAliases;
+    }
+
+    public TypeRef initialInputType() {
+        return initialInputType;
     }
 
     public static FlowDefinitionRegistry empty() {
@@ -264,6 +293,25 @@ public final class FlowDefinitionRegistry {
         private final Map<String, ResumeDescriptor> resumePoints = new LinkedHashMap<String, ResumeDescriptor>();
         private final Map<TypeRef, TypeCodec<?>> typeCodecs = new LinkedHashMap<TypeRef, TypeCodec<?>>();
         private OperationResolver fallbackResolver = OperationResolver.defaultResolver();
+        private PropertyAccessCompiler propertyAccessCompiler = DefaultPropertyAccessCompiler.INSTANCE;
+        private final Map<String, TypeRef> typeAliases = new LinkedHashMap<String, TypeRef>();
+        private TypeRef initialInputType = null;
+
+        public Builder propertyAccessCompiler(PropertyAccessCompiler compiler) {
+            this.propertyAccessCompiler = compiler != null ? compiler : DefaultPropertyAccessCompiler.INSTANCE;
+            return this;
+        }
+
+        public Builder type(String alias, TypeRef typeRef) {
+            this.typeAliases.put(Objects.requireNonNull(alias, "alias must not be null"),
+                    Objects.requireNonNull(typeRef, "typeRef must not be null"));
+            return this;
+        }
+
+        public Builder initialInputType(TypeRef initialInputType) {
+            this.initialInputType = initialInputType;
+            return this;
+        }
 
         public Builder fallbackResolver(OperationResolver fallbackResolver) {
             this.fallbackResolver = fallbackResolver;

@@ -14,6 +14,7 @@ import com.team4u.framework.flow.definition.model.SymbolRef;
 import com.team4u.framework.flow.definition.registry.*;
 import com.team4u.framework.flow.definition.type.TypeCheckResult;
 import com.team4u.framework.flow.definition.type.TypeChecker;
+import com.team4u.framework.flow.definition.type.TypeRef;
 import com.team4u.framework.flow.model.FlowBuildException;
 import com.team4u.framework.flow.spi.OperationResolver;
 
@@ -37,21 +38,31 @@ public final class FlowBinder implements BindingContext {
     private final FlowDefinitionRegistry registry;
     private final OperationResolver resolver;
     private final SpecBinderRegistry binderRegistry;
+    private final TypeRef initialInputType;
 
-    public FlowBinder(FlowDefinitionRegistry registry, OperationResolver resolver, SpecBinderRegistry binderRegistry) {
+    public FlowBinder(
+            FlowDefinitionRegistry registry,
+            OperationResolver resolver,
+            SpecBinderRegistry binderRegistry,
+            TypeRef initialInputType) {
         this.registry = Objects.requireNonNull(registry, "registry must not be null");
         this.resolver = resolver != null
                 ? resolver
                 : (registry.fallbackResolver() != null ? registry.fallbackResolver() : OperationResolver.defaultResolver());
         this.binderRegistry = binderRegistry != null ? binderRegistry : SpecBinderRegistry.global();
+        this.initialInputType = initialInputType != null ? initialInputType : registry.initialInputType();
+    }
+
+    public FlowBinder(FlowDefinitionRegistry registry, OperationResolver resolver, SpecBinderRegistry binderRegistry) {
+        this(registry, resolver, binderRegistry, null);
     }
 
     public FlowBinder(FlowDefinitionRegistry registry, OperationResolver resolver) {
-        this(registry, resolver, SpecBinderRegistry.global());
+        this(registry, resolver, SpecBinderRegistry.global(), null);
     }
 
     public FlowBinder(FlowDefinitionRegistry registry) {
-        this(registry, null, SpecBinderRegistry.global());
+        this(registry, null, SpecBinderRegistry.global(), null);
     }
 
     /**
@@ -63,6 +74,21 @@ public final class FlowBinder implements BindingContext {
      */
     public static BoundFlow bind(FlowDefinition definition, FlowDefinitionRegistry registry) {
         return new FlowBinder(registry).bind(definition);
+    }
+
+    /**
+     * 带初始输入类型的静态便捷绑定方法。
+     *
+     * @param definition       流程定义
+     * @param registry         符号注册表
+     * @param initialInputType 初始输入类型
+     * @return 绑定后的 BoundFlow
+     */
+    public static BoundFlow bind(
+            FlowDefinition definition,
+            FlowDefinitionRegistry registry,
+            TypeRef initialInputType) {
+        return new FlowBinder(registry, null, SpecBinderRegistry.global(), initialInputType).bind(definition);
     }
 
     /**
@@ -81,6 +107,28 @@ public final class FlowBinder implements BindingContext {
     }
 
     /**
+     * 带组件解析器及初始输入类型的静态便捷绑定方法。
+     *
+     * @param definition       流程定义
+     * @param registry         符号注册表
+     * @param resolver         组件解析器
+     * @param initialInputType 初始输入类型
+     * @return 绑定后的 BoundFlow
+     */
+    public static BoundFlow bind(
+            FlowDefinition definition,
+            FlowDefinitionRegistry registry,
+            OperationResolver resolver,
+            TypeRef initialInputType) {
+        return new FlowBinder(registry, resolver, SpecBinderRegistry.global(), initialInputType).bind(definition);
+    }
+
+    @Override
+    public TypeRef currentType() {
+        return initialInputType != null ? initialInputType : TypeRef.ANY;
+    }
+
+    /**
      * 执行类型检查、AST 绑定与编译器拓扑校验。
      *
      * @param definition 流程定义
@@ -92,7 +140,7 @@ public final class FlowBinder implements BindingContext {
         Objects.requireNonNull(definition, "flow definition must not be null");
 
         // 1. 执行静态类型检查
-        TypeCheckResult typeCheckResult = TypeChecker.check(definition, registry);
+        TypeCheckResult typeCheckResult = TypeChecker.check(definition, registry, initialInputType);
         if (!typeCheckResult.success()) {
             throw new FlowDiagnosticException(typeCheckResult.diagnostics());
         }

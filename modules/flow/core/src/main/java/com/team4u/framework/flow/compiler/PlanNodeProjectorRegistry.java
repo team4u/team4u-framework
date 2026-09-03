@@ -22,6 +22,7 @@ public final class PlanNodeProjectorRegistry extends FrozenKeyedPolicyRegistry<C
         GLOBAL.register(new PlanNodeProjectors.AwaitProjector());
         GLOBAL.register(new PlanNodeProjectors.ControlProjector());
         GLOBAL.register(new PlanNodeProjectors.CompleteProjector());
+        GLOBAL.register(new PlanNodeProjectors.AdapterProjector());
         GLOBAL.freeze();
     }
 

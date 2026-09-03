@@ -339,6 +339,8 @@ final class MermaidFlowDiagramRenderer implements FlowDiagramRenderer {
                 return renderComplete(node, safeBadges, inheritedLabel, state);
             case CONTROL:
                 return renderControl(node, blocks, state);
+            case ADAPTER:
+                return renderAdapter(node, blocks, state);
             default:
                 throw new IllegalStateException("Unknown node kind: " + node.kind());
         }
@@ -722,6 +724,19 @@ final class MermaidFlowDiagramRenderer implements FlowDiagramRenderer {
         String id = state.nextId();
         String badge = formatControlBadge(node);
         state.emitNode(id, "[", "]", badge.isEmpty() ? "CONTROL" : badge);
+        return new Block(id, Collections.singletonList(id),
+                Collections.<Section>emptyList(), Collections.singletonList(id));
+    }
+
+    private static Block renderAdapter(NodeDescription node,
+                                       Map<NodeDescription, Block> blocks,
+                                       RenderState state) {
+        if (!node.children().isEmpty()) {
+            Block child = blocks.get(node.children().get(0));
+            if (child != null) return child;
+        }
+        String id = state.nextId();
+        state.emitNode(id, "[", "]", "ADAPTER");
         return new Block(id, Collections.singletonList(id),
                 Collections.<Section>emptyList(), Collections.singletonList(id));
     }

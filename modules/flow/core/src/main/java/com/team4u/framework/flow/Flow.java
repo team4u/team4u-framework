@@ -10,6 +10,7 @@ import java.util.List;
 import java.util.Objects;
 import java.util.function.BiFunction;
 import java.util.function.Function;
+import java.util.function.Predicate;
 import com.team4u.framework.flow.api.Branch;
 import com.team4u.framework.flow.api.JoinStrategy;
 import com.team4u.framework.flow.api.Operation;
@@ -287,6 +288,164 @@ public final class Flow<I, O> {
             BiFunction<? super O, ? super R, ? extends N> merge) {
         return then(invoke(binding(operationClass, qualifier, Logical.BindingKind.OPERATION),
                 project, merge));
+    }
+
+    /**
+     * 开启链式投影调用构建器（UseBuilder 模式）：
+     * 支持分阶段声明入参投影、步骤修饰器（如 named、timeout 等）以及结果合并策略，
+     * 避免多类型泛型参数在单个方法中互相干扰。
+     *
+     * @param operation 目标操作实例，不能为 null
+     * @param <P>       操作的输入参数类型
+     * @param <R>       操作的输出返回值类型
+     * @return 投影阶段构建器 {@link UseProjectStage}
+     */
+    public <P, R> UseProjectStage<I, O, P, R> use(Operation<P, R> operation) {
+        return new UseProjectStageImpl<I, O, P, R>(this, binding(operation, Logical.BindingKind.OPERATION));
+    }
+
+    /**
+     * 开启链式投影调用构建器（延迟解析操作 Class）。
+     *
+     * @param operationClass 目标操作契约 Class，不能为 null
+     * @param <P>            操作的输入参数类型
+     * @param <R>            操作的输出返回值类型
+     * @return 投影阶段构建器 {@link UseProjectStage}
+     */
+    public <P, R> UseProjectStage<I, O, P, R> use(Class<? extends Operation<P, R>> operationClass) {
+        return use(operationClass, null);
+    }
+
+    /**
+     * 开启链式投影调用构建器（延迟解析操作 Class 与限定符）。
+     *
+     * @param operationClass 目标操作契约 Class，不能为 null
+     * @param qualifier      Spring/Bean 限定符名称，可为 null
+     * @param <P>            操作的输入参数类型
+     * @param <R>            操作的输出返回值类型
+     * @return 投影阶段构建器 {@link UseProjectStage}
+     */
+    public <P, R> UseProjectStage<I, O, P, R> use(
+            Class<? extends Operation<P, R>> operationClass, String qualifier) {
+        return new UseProjectStageImpl<I, O, P, R>(this, binding(operationClass, qualifier, Logical.BindingKind.OPERATION));
+    }
+
+    /**
+     * 基于条件谓词判定执行分支流程（when/otherwise 便捷 API）：
+     * 当满足谓词条件时执行 {@code branch}，不满足时若未配置 otherwise 则默认按恒等透传处理。
+     *
+     * @param predicate 条件谓词，不能为 null
+     * @param branch    条件满足时执行的目标子流程，不能为 null
+     * @param <N>       分支输出数据类型
+     * @return 条件分支构建器 {@link WhenBuilder}
+     */
+    public <N> WhenBuilder<I, O, N> when(Predicate<? super O> predicate, Flow<O, N> branch) {
+        Objects.requireNonNull(predicate, "predicate must not be null");
+        Objects.requireNonNull(branch, "branch must not be null");
+        return new WhenBuilder<I, O, N>(this, Collections.singletonList(new WhenBranch<O, N>(predicate, branch)));
+    }
+
+    /**
+     * 旁路执行业务操作（tap 便捷 API）：
+     * 使用当前流程输出作为入参调用目标操作；当操作执行结果为 Accepted 时，保留并透传当前原输入继续后续流程；
+     * 当操作产生 Rejected/Skipped/Failed 等非 Accepted 结果时，原样向上传播短路。
+     *
+     * @param operation 旁路操作实例，不能为 null
+     * @return 增强串联后的新 {@link Flow} 实例
+     */
+    public Flow<I, O> tap(Operation<O, ?> operation) {
+        return use(operation).project(Function.identity()).discardResult();
+    }
+
+    /**
+     * 旁路执行业务操作（延迟解析 Class）。
+     *
+     * @param operationClass 旁路操作契约 Class，不能为 null
+     * @return 增强串联后的新 {@link Flow} 实例
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public Flow<I, O> tap(Class<? extends Operation<O, ?>> operationClass) {
+        return tap(operationClass, null);
+    }
+
+    /**
+     * 旁路执行业务操作（延迟解析 Class 与限定符）。
+     *
+     * @param operationClass 旁路操作契约 Class，不能为 null
+     * @param qualifier      限定符名称，可为 null
+     * @return 增强串联后的新 {@link Flow} 实例
+     */
+    @SuppressWarnings({"unchecked", "rawtypes"})
+    public Flow<I, O> tap(Class<? extends Operation<O, ?>> operationClass, String qualifier) {
+        return ((UseProjectStage) use((Class) operationClass, qualifier)).project(Function.identity()).discardResult();
+    }
+
+    /**
+     * 旁路消费当前流程输出（主要用于内存监控、指标统计或轻量观察）。
+     *
+     * @param consumer 输出数据消费函数，不能为 null
+     * @return 增强串联后的新 {@link Flow} 实例
+     */
+    public Flow<I, O> tap(java.util.function.Consumer<? super O> consumer) {
+        Objects.requireNonNull(consumer, "consumer must not be null");
+        Operation<O, Boolean> op = (ctx, in) -> {
+            consumer.accept(in);
+            return Outcome.accepted(Boolean.TRUE);
+        };
+        return tap(op);
+    }
+
+    /**
+     * 结构化适配并转换子流程输入输出（Adapter 核心原语）：
+     * 将任意独立子流程嵌入当前流程上下文，从父输入提取投影入参，并在子流程产生 Accepted 结果后合并回父状态。
+     *
+     * @param body    被适配的目标子流程，不能为 null
+     * @param project 输入投影函数，不能为 null
+     * @param merge   结果合并函数，不能为 null
+     * @param <S>     外部状态类型
+     * @param <P>     子流程输入类型
+     * @param <R>     子流程输出类型
+     * @param <N>     合并后输出类型
+     * @return 适配后的 Flow 实例
+     */
+    public static <S, P, R, N> Flow<S, N> adapt(
+            Flow<P, R> body,
+            Function<? super S, ? extends P> project,
+            BiFunction<? super S, ? super R, ? extends N> merge) {
+        Objects.requireNonNull(body, "body must not be null");
+        Objects.requireNonNull(project, "project must not be null");
+        Objects.requireNonNull(merge, "merge must not be null");
+        @SuppressWarnings("unchecked")
+        Function<Object, Object> erasedProject = value -> project.apply((S) value);
+        @SuppressWarnings("unchecked")
+        BiFunction<Object, Object, Object> erasedMerge = (state, res) -> merge.apply((S) state, (R) res);
+        return new Flow<S, N>(new Logical.Adapter(body.root, erasedProject, erasedMerge));
+    }
+
+    /**
+     * 顺序串联结构化适配子流程（Adapter 实例模式）。
+     *
+     * @param body    被适配的目标子流程，不能为 null
+     * @param project 输入投影函数，不能为 null
+     * @param merge   结果合并函数，不能为 null
+     * @param <P>     子流程输入类型
+     * @param <R>     子流程输出类型
+     * @param <N>     合并后输出类型
+     * @return 串联后的 Flow 实例
+     */
+    public <P, R, N> Flow<I, N> thenAdapt(
+            Flow<P, R> body,
+            Function<? super O, ? extends P> project,
+            BiFunction<? super O, ? super R, ? extends N> merge) {
+        return then(adapt(body, project, merge));
+    }
+
+    /**
+     * 创建基于结构化并行与保序上下文汇聚的状态填充流水线构建器（parallelFill 便捷 API）。
+     *
+     * @return parallelFill 构建器
+     */
+    public ParallelFillBuilder<I, O> parallelFill() {
+        return new ParallelFillBuilder<I, O>(this);
     }
 
     /**
@@ -877,6 +1036,18 @@ public final class Flow<I, O> {
             }
             return new Flow<I, O>(new Logical.Parallel(logical, join));
         }
+
+        /**
+         * 指定带父节点输入上下文的并行汇聚归约策略（ContextualJoinStrategy）并完成并行节点构造。
+         *
+         * @param join 上下文汇聚策略，不能为 null
+         * @param <O>  汇聚输出类型
+         * @return 完整的并行 {@link Flow} 实例
+         * @throws NullPointerException 当 {@code join} 为 null 时抛出
+         */
+        public <O> Flow<I, O> join(com.team4u.framework.flow.api.ContextualJoinStrategy<? super I, O> join) {
+            return join((JoinStrategy<O>) join);
+        }
     }
 
     /**
@@ -924,6 +1095,395 @@ public final class Flow<I, O> {
         Objects.requireNonNull(resolver, "resolver must not be null");
         Compiler.Compiled compiled = Compiler.compile(this, resolver);
         return ExecutableProjector.project(compiled.root(), visitor);
+    }
+
+    /**
+     * Use 链式构建器的投影阶段（Project Stage）。
+     *
+     * @param <I> 流程根输入类型
+     * @param <O> 当前流程输出类型
+     * @param <P> 步骤操作入参类型
+     * @param <R> 步骤操作返回值类型
+     */
+    public interface UseProjectStage<I, O, P, R> {
+        /**
+         * 声明从当前流程输出中提取入参的投影函数。
+         *
+         * @param projector 入参投影函数，不能为 null
+         * @return 合并阶段构建器 {@link UseMergeStage}
+         */
+        UseMergeStage<I, O, P, R> project(Function<? super O, ? extends P> projector);
+    }
+
+    /**
+     * Use 链式构建器的合并与修饰阶段（Merge Stage）。
+     *
+     * @param <I> 流程根输入类型
+     * @param <O> 当前流程输出类型
+     * @param <P> 步骤操作入参类型
+     * @param <R> 步骤操作返回值类型
+     */
+    public interface UseMergeStage<I, O, P, R> {
+        /**
+         * 以合并函数终结当前步骤，将当前状态与步骤 Accepted 返回值合并为新的输出类型。
+         *
+         * @param merger 结果合并函数，不能为 null
+         * @param <N>    合并后的新输出类型
+         * @return 串联当前步骤后的新 {@link Flow} 实例
+         */
+        <N> Flow<I, N> merge(BiFunction<? super O, ? super R, ? extends N> merger);
+
+        /**
+         * 丢弃步骤返回值终结当前步骤：执行该步骤并校验其四态，在 Accepted 时继续保留原输入状态向前传递。
+         *
+         * @return 串联当前步骤后的新 {@link Flow} 实例
+         */
+        Flow<I, O> discardResult();
+
+        /**
+         * 以步骤返回值完全替代原状态终结当前步骤：步骤 Accepted 返回值成为后续流程的新输入。
+         *
+         * @return 串联当前步骤后的新 {@link Flow} 实例
+         */
+        Flow<I, R> replaceWithResult();
+
+        /**
+         * 为当前步骤附加命名修饰器。
+         *
+         * @param name 步骤名称，不能为 null
+         * @return 附加修饰器后的新不可变构建阶段
+         */
+        UseMergeStage<I, O, P, R> named(String name);
+
+        /**
+         * 为当前步骤附加超时修饰器。
+         *
+         * @param duration 超时时长，不能为 null
+         * @return 附加修饰器后的新不可变构建阶段
+         */
+        UseMergeStage<I, O, P, R> timeout(Duration duration);
+    }
+
+    private static final class UseProjectStageImpl<I, O, P, R> implements UseProjectStage<I, O, P, R> {
+        private final Flow<I, O> parent;
+        private final Logical.Binding binding;
+
+        UseProjectStageImpl(Flow<I, O> parent, Logical.Binding binding) {
+            this.parent = parent;
+            this.binding = binding;
+        }
+
+        @Override
+        public UseMergeStage<I, O, P, R> project(Function<? super O, ? extends P> projector) {
+            Objects.requireNonNull(projector, "projector must not be null");
+            return new UseMergeStageImpl<I, O, P, R>(parent, binding, projector, Collections.<Function<Logical, Logical>>emptyList());
+        }
+    }
+
+    private static final class UseMergeStageImpl<I, O, P, R> implements UseMergeStage<I, O, P, R> {
+        private final Flow<I, O> parent;
+        private final Logical.Binding binding;
+        private final Function<? super O, ? extends P> projector;
+        private final List<Function<Logical, Logical>> modifiers;
+
+        UseMergeStageImpl(Flow<I, O> parent,
+                          Logical.Binding binding,
+                          Function<? super O, ? extends P> projector,
+                          List<Function<Logical, Logical>> modifiers) {
+            this.parent = parent;
+            this.binding = binding;
+            this.projector = projector;
+            this.modifiers = modifiers;
+        }
+
+        @Override
+        public UseMergeStage<I, O, P, R> named(String name) {
+            Objects.requireNonNull(name, "name must not be null");
+            List<Function<Logical, Logical>> copy = new ArrayList<Function<Logical, Logical>>(modifiers);
+            copy.add(logical -> new Logical.Named(text(name, "label"), logical));
+            return new UseMergeStageImpl<I, O, P, R>(parent, binding, projector, Collections.unmodifiableList(copy));
+        }
+
+        @Override
+        public UseMergeStage<I, O, P, R> timeout(Duration duration) {
+            Objects.requireNonNull(duration, "duration must not be null");
+            List<Function<Logical, Logical>> copy = new ArrayList<Function<Logical, Logical>>(modifiers);
+            copy.add(logical -> new Logical.Control(Logical.Control.Kind.TIMEOUT, logical, null, Function.identity(), duration));
+            return new UseMergeStageImpl<I, O, P, R>(parent, binding, projector, Collections.unmodifiableList(copy));
+        }
+
+        @Override
+        public Flow<I, O> discardResult() {
+            return merge((state, ignored) -> state);
+        }
+
+        @Override
+        public Flow<I, R> replaceWithResult() {
+            return merge((ignored, result) -> result);
+        }
+
+        @Override
+        @SuppressWarnings("unchecked")
+        public <N> Flow<I, N> merge(BiFunction<? super O, ? super R, ? extends N> merger) {
+            Objects.requireNonNull(merger, "merger must not be null");
+            Function<Object, Object> erasedProject = value -> projector.apply((O) value);
+            BiFunction<Object, Object, Object> erasedMerge = (state, res) -> merger.apply((O) state, (R) res);
+            Logical node = new Logical.Invoke(binding, erasedProject, erasedMerge);
+            for (Function<Logical, Logical> mod : modifiers) {
+                node = mod.apply(node);
+            }
+            return new Flow<I, N>(sequence(parent.root, node));
+        }
+    }
+
+    /**
+     * 条件分支构建器（when/otherwise 便捷 API）。
+     *
+     * @param <I> 流程根输入类型
+     * @param <O> 当前流程输入类型
+     * @param <N> 条件分支输出类型
+     */
+    public static final class WhenBuilder<I, O, N> {
+        private final Flow<I, O> parent;
+        private final List<WhenBranch<O, N>> branches;
+
+        WhenBuilder(Flow<I, O> parent, List<WhenBranch<O, N>> branches) {
+            this.parent = parent;
+            this.branches = branches;
+        }
+
+        private Logical buildLogical(Logical otherwiseNode) {
+            Logical currentOtherwise = otherwiseNode;
+            for (int i = branches.size() - 1; i >= 0; i--) {
+                WhenBranch<O, N> wb = branches.get(i);
+                Predicate<? super O> pred = wb.predicate;
+                @SuppressWarnings("unchecked")
+                Operation<O, Boolean> selectorOp = (ctx, in) -> Outcome.accepted(pred.test(in));
+                Logical.Binding selectorBinding = binding(selectorOp, Logical.BindingKind.OPERATION);
+                Logical.Route.Case trueCase = new Logical.Route.Case(Boolean.TRUE, wb.branch.root);
+                currentOtherwise = new Logical.Route(selectorBinding, Collections.singletonList(trueCase), currentOtherwise);
+            }
+            return sequence(parent.root, currentOtherwise);
+        }
+
+        /**
+         * 追加新的备选条件分支（按声明顺序匹配，首个命中者执行）。
+         *
+         * @param predicate 判定谓词，不能为 null
+         * @param branch    命中执行的分支流程，不能为 null
+         * @return 包含新分支的构建器
+         */
+        public WhenBuilder<I, O, N> when(Predicate<? super O> predicate, Flow<O, N> branch) {
+            Objects.requireNonNull(predicate, "predicate must not be null");
+            Objects.requireNonNull(branch, "branch must not be null");
+            List<WhenBranch<O, N>> copy = new ArrayList<WhenBranch<O, N>>(branches);
+            copy.add(new WhenBranch<O, N>(predicate, branch));
+            return new WhenBuilder<I, O, N>(parent, Collections.unmodifiableList(copy));
+        }
+
+        /**
+         * 显式指定全部条件均不满足时的兜底分支流程。
+         *
+         * @param branch 兜底分支流程，不能为 null
+         * @return 绑定兜底分支后的 Flow 实例
+         */
+        public Flow<I, N> otherwise(Flow<O, N> branch) {
+            Objects.requireNonNull(branch, "otherwise branch must not be null");
+            return new Flow<I, N>(buildLogical(branch.root));
+        }
+
+        /**
+         * 省略兜底分支（默认退化为恒等透传 Flow.identity()，要求输出类型 N 与输入 O 兼容）。
+         *
+         * @return 默认透传兜底的 Flow 实例
+         */
+        public Flow<I, N> otherwise() {
+            return new Flow<I, N>(buildLogical(Logical.Complete.identityNode()));
+        }
+
+        /**
+         * 获取构建完成的 Flow 实例（语义同 {@link #otherwise()}）。
+         *
+         * @return Flow 实例
+         */
+        public Flow<I, N> flow() {
+            return otherwise();
+        }
+    }
+
+    private static final class WhenBranch<O, N> {
+        final Predicate<? super O> predicate;
+        final Flow<O, N> branch;
+
+        WhenBranch(Predicate<? super O> predicate, Flow<O, N> branch) {
+            this.predicate = predicate;
+            this.branch = branch;
+        }
+    }
+
+    /**
+     * 基于结构化并行与保序上下文汇聚的状态填充流水线构建器（parallelFill 便捷 API）。
+     *
+     * @param <I> 流程根输入类型
+     * @param <O> 当前待填充的状态数据类型
+     */
+    public static final class ParallelFillBuilder<I, O> {
+        private final Flow<I, O> parent;
+        private final List<ForkEntry<O, ?>> forks;
+        private final Duration timeout;
+
+        private ParallelFillBuilder(Flow<I, O> parent) {
+            this(parent, Collections.<ForkEntry<O, ?>>emptyList(), null);
+        }
+
+        private ParallelFillBuilder(Flow<I, O> parent, List<ForkEntry<O, ?>> forks, Duration timeout) {
+            this.parent = parent;
+            this.forks = forks;
+            this.timeout = timeout;
+        }
+
+        /**
+         * 追加一个并发填充计算分支。
+         *
+         * @param project   从状态提取入参的投影函数，不能为 null
+         * @param operation 并发执行的业务操作实例，不能为 null
+         * @param merge     保序合并计算结果到状态的合并函数，不能为 null
+         * @param <P>       操作入参类型
+         * @param <R>       操作返回值类型
+         * @return 包含新分支的构建器
+         */
+        public <P, R> ParallelFillBuilder<I, O> fork(
+                Function<? super O, ? extends P> project,
+                Operation<P, R> operation,
+                BiFunction<? super O, ? super R, ? extends O> merge) {
+            Objects.requireNonNull(project, "project must not be null");
+            Objects.requireNonNull(operation, "operation must not be null");
+            Objects.requireNonNull(merge, "merge must not be null");
+            List<ForkEntry<O, ?>> copy = new ArrayList<ForkEntry<O, ?>>(forks);
+            copy.add(new ForkEntry<O, R>(project, Flow.step(operation), merge));
+            return new ParallelFillBuilder<I, O>(parent, Collections.unmodifiableList(copy), timeout);
+        }
+
+        /**
+         * 追加一个并发填充计算分支（延迟解析操作 Class）。
+         *
+         * @param project        从状态提取入参的投影函数，不能为 null
+         * @param operationClass 并发执行的业务操作契约 Class，不能为 null
+         * @param merge          保序合并计算结果到状态的合并函数，不能为 null
+         * @param <P>            操作入参类型
+         * @param <R>            操作返回值类型
+         * @return 包含新分支的构建器
+         */
+        public <P, R> ParallelFillBuilder<I, O> fork(
+                Function<? super O, ? extends P> project,
+                Class<? extends Operation<P, R>> operationClass,
+                BiFunction<? super O, ? super R, ? extends O> merge) {
+            return fork(project, operationClass, null, merge);
+        }
+
+        /**
+         * 追加一个并发填充计算分支（延迟解析操作 Class 与限定符）。
+         *
+         * @param project        从状态提取入参的投影函数，不能为 null
+         * @param operationClass 并发执行的业务操作契约 Class，不能为 null
+         * @param qualifier      Spring/Bean 限定符名称，可为 null
+         * @param merge          保序合并计算结果到状态的合并函数，不能为 null
+         * @param <P>            操作入参类型
+         * @param <R>            操作返回值类型
+         * @return 包含新分支的构建器
+         */
+        public <P, R> ParallelFillBuilder<I, O> fork(
+                Function<? super O, ? extends P> project,
+                Class<? extends Operation<P, R>> operationClass,
+                String qualifier,
+                BiFunction<? super O, ? super R, ? extends O> merge) {
+            Objects.requireNonNull(project, "project must not be null");
+            Objects.requireNonNull(operationClass, "operationClass must not be null");
+            Objects.requireNonNull(merge, "merge must not be null");
+            List<ForkEntry<O, ?>> copy = new ArrayList<ForkEntry<O, ?>>(forks);
+            copy.add(new ForkEntry<O, R>(project, Flow.step(operationClass, qualifier), merge));
+            return new ParallelFillBuilder<I, O>(parent, Collections.unmodifiableList(copy), timeout);
+        }
+
+        /**
+         * 为整个并发填充节点配置全局超时约束。
+         *
+         * @param duration 超时时长，不能为 null
+         * @return 附加超时后的构建器
+         */
+        public ParallelFillBuilder<I, O> timeout(Duration duration) {
+            Objects.requireNonNull(duration, "duration must not be null");
+            return new ParallelFillBuilder<I, O>(parent, forks, duration);
+        }
+
+        /**
+         * 终结并发分支声明，基于 Parallel 与 ContextualJoinStrategy 合成状态填充流水线。
+         *
+         * @return 串联状态填充后的 Flow 实例
+         * @throws FlowBuildException 当未声明任何 fork 分支时抛出
+         */
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        public Flow<I, O> end() {
+            if (forks.isEmpty()) {
+                throw new FlowBuildException(Collections.singletonList(new FlowBuildException.Problem(
+                        "INVALID_PARALLEL_FILL", "$", "parallelFill requires at least one fork")));
+            }
+            List<Branch<O, ?>> branches = new ArrayList<Branch<O, ?>>(forks.size());
+            for (int i = 0; i < forks.size(); i++) {
+                ForkEntry<O, ?> fork = forks.get(i);
+                Branch<O, ?> branch = createForkBranch(i, fork);
+                branches.add(branch);
+            }
+            com.team4u.framework.flow.api.ContextualJoinStrategy<O, O> contextualJoin = (initialInput, results) -> {
+                // 四态保序检查：按声明顺序检查各分支
+                for (int i = 0; i < branches.size(); i++) {
+                    Outcome<?> outcome = results.outcome(branches.get(i));
+                    if (!(outcome instanceof Outcome.Accepted)) {
+                        return (Outcome<O>) outcome;
+                    }
+                }
+                // 保序状态折叠
+                O current = initialInput;
+                for (int i = 0; i < forks.size(); i++) {
+                    ForkEntry<O, Object> fork = (ForkEntry<O, Object>) forks.get(i);
+                    Outcome.Accepted<Object> accepted = (Outcome.Accepted<Object>) results.outcome(branches.get(i));
+                    current = fork.merger.apply(current, accepted.value());
+                }
+                return Outcome.accepted(current);
+            };
+
+            Branch<O, ?>[] branchArray = branches.toArray(new Branch[0]);
+            Flow<O, O> parallelFlow = Flow.parallel(branchArray).join(contextualJoin);
+            if (timeout != null) {
+                parallelFlow = parallelFlow.timeout(timeout);
+            }
+            return parent.then(parallelFlow);
+        }
+
+        @SuppressWarnings({"unchecked", "rawtypes"})
+        private static <O, P, R> Branch<O, ?> createForkBranch(int index, ForkEntry<O, ?> fork) {
+            ForkEntry<O, R> typed = (ForkEntry<O, R>) fork;
+            Function<O, P> project = (Function<O, P>) typed.project;
+            Flow<P, R> step = (Flow<P, R>) typed.flow;
+            Flow<O, R> branchFlow = Flow.<O, P, R, R>invoke(
+                    ((Logical.Invoke) step.root).binding(),
+                    project,
+                    (ignored, r) -> r
+            );
+            return Branch.of("fork:" + index, branchFlow);
+        }
+
+        private static final class ForkEntry<O, R> {
+            final Function<? super O, ?> project;
+            final Flow<?, R> flow;
+            final BiFunction<? super O, ? super R, ? extends O> merger;
+
+            ForkEntry(Function<? super O, ?> project, Flow<?, R> flow, BiFunction<? super O, ? super R, ? extends O> merger) {
+                this.project = project;
+                this.flow = flow;
+                this.merger = merger;
+            }
+        }
     }
 }
 

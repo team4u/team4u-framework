@@ -56,6 +56,7 @@ public class ObserverContractTest {
                 .policy(policy, value -> value)
                 .timeout(Duration.ofSeconds(2));
         Flow<String, String> flow = Flow.scope("observed", controlled)
+                .thenAdapt(Flow.<String>identity(), s -> s, (s, r) -> s)
                 .await(point)
                 .then((context, resumed) -> Outcome.accepted(
                         resumed.state() + ":" + resumed.signal()));

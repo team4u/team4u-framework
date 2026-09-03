@@ -1,13 +1,16 @@
 package com.team4u.framework.flow.definition.type;
 
 import com.team4u.framework.parser.SourceSpan;
-
 import com.team4u.framework.flow.definition.diagnostic.Diagnostic;
 import com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes;
+import com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException;
 import com.team4u.framework.flow.definition.model.*;
+import com.team4u.framework.flow.definition.property.CompiledReader;
+import com.team4u.framework.flow.definition.property.CompiledWriter;
 import com.team4u.framework.flow.definition.registry.*;
 
 import java.util.HashSet;
+import java.util.List;
 import java.util.Set;
 
 /**
@@ -150,31 +153,46 @@ public final class SpecTypeCheckers {
                 return currentType;
             }
 
-            SymbolRef projectRef = step.project();
-            SymbolRef mergeRef = step.merge();
+            ProjectionSpec projectSpec = step.projectSpec();
+            MergeSpec mergeSpec = step.mergeSpec();
             boolean isOptional = step.isOptional();
 
             TypeRef opActualInputType = currentType;
             TypeRef stepOutputType = op.outputType();
 
             // 校验 Projector
-            if (projectRef != null) {
-                ProjectorDescriptor projector = context.registry().projector(projectRef.id());
-                if (projector == null) {
-                    context.addDiagnostic(new Diagnostic(
-                            DiagnosticCodes.UNKNOWN_PROJECTOR,
-                            "Unknown projector: " + projectRef.id(),
-                            projectRef.span()));
-                } else {
-                    if (currentType != TypeRef.ANY && projector.inputType() != TypeRef.ANY
-                            && !projector.inputType().isAssignableFrom(currentType)) {
-                        context.addDiagnostic(new Diagnostic(
-                                DiagnosticCodes.INVALID_PROJECTOR,
-                                "Projector '" + projectRef.id() + "' expects input " + projector.inputType().typeName()
-                                        + " but current type is " + currentType.typeName(),
-                                projectRef.span()));
+            if (projectSpec != null) {
+                if (projectSpec instanceof PropertyProjectionSpec) {
+                    PropertyPath path = ((PropertyProjectionSpec) projectSpec).path();
+                    try {
+                        CompiledReader reader = context.registry().propertyAccessCompiler().compileReader(currentType, path);
+                        opActualInputType = reader.resultType();
+                    } catch (FlowDiagnosticException diagEx) {
+                        for (Diagnostic diag : diagEx.diagnostics()) {
+                            context.addDiagnostic(diag);
+                        }
                     }
-                    opActualInputType = projector.outputType();
+                } else if (projectSpec instanceof SymbolRef || projectSpec instanceof SymbolProjectionSpec) {
+                    SymbolRef projectRef = projectSpec instanceof SymbolRef
+                            ? (SymbolRef) projectSpec
+                            : ((SymbolProjectionSpec) projectSpec).symbol();
+                    ProjectorDescriptor projector = context.registry().projector(projectRef.id());
+                    if (projector == null) {
+                        context.addDiagnostic(new Diagnostic(
+                                DiagnosticCodes.UNKNOWN_PROJECTOR,
+                                "Unknown projector: " + projectRef.id(),
+                                projectRef.span()));
+                    } else {
+                        if (currentType != TypeRef.ANY && projector.inputType() != TypeRef.ANY
+                                && !projector.inputType().isAssignableFrom(currentType)) {
+                            context.addDiagnostic(new Diagnostic(
+                                    DiagnosticCodes.INVALID_PROJECTOR,
+                                    "Projector '" + projectRef.id() + "' expects input " + projector.inputType().typeName()
+                                            + " but current type is " + currentType.typeName(),
+                                    projectRef.span()));
+                        }
+                        opActualInputType = projector.outputType();
+                    }
                 }
             }
 
@@ -189,31 +207,46 @@ public final class SpecTypeCheckers {
             }
 
             // 校验 Merger
-            if (mergeRef != null) {
-                MergerDescriptor merger = context.registry().merger(mergeRef.id());
-                if (merger == null) {
-                    context.addDiagnostic(new Diagnostic(
-                            DiagnosticCodes.UNKNOWN_MERGER,
-                            "Unknown merger: " + mergeRef.id(),
-                            mergeRef.span()));
-                } else {
-                    if (currentType != TypeRef.ANY && merger.stateType() != TypeRef.ANY
-                            && !merger.stateType().isAssignableFrom(currentType)) {
-                        context.addDiagnostic(new Diagnostic(
-                                DiagnosticCodes.INVALID_MERGER,
-                                "Merger '" + mergeRef.id() + "' expects state type " + merger.stateType().typeName()
-                                        + " but current type is " + currentType.typeName(),
-                                mergeRef.span()));
+            if (mergeSpec != null) {
+                if (mergeSpec instanceof PropertyMergeSpec) {
+                    PropertyPath path = ((PropertyMergeSpec) mergeSpec).path();
+                    try {
+                        CompiledWriter writer = context.registry().propertyAccessCompiler().compileWriter(currentType, path, op.outputType());
+                        stepOutputType = writer.resultType();
+                    } catch (FlowDiagnosticException diagEx) {
+                        for (Diagnostic diag : diagEx.diagnostics()) {
+                            context.addDiagnostic(diag);
+                        }
                     }
-                    if (op.outputType() != TypeRef.ANY && merger.resultType() != TypeRef.ANY
-                            && !merger.resultType().isAssignableFrom(op.outputType())) {
+                } else if (mergeSpec instanceof SymbolRef || mergeSpec instanceof SymbolMergeSpec) {
+                    SymbolRef mergeRef = mergeSpec instanceof SymbolRef
+                            ? (SymbolRef) mergeSpec
+                            : ((SymbolMergeSpec) mergeSpec).symbol();
+                    MergerDescriptor merger = context.registry().merger(mergeRef.id());
+                    if (merger == null) {
                         context.addDiagnostic(new Diagnostic(
-                                DiagnosticCodes.INVALID_MERGER,
-                                "Merger '" + mergeRef.id() + "' expects result type " + merger.resultType().typeName()
-                                        + " but operation outputs " + op.outputType().typeName(),
+                                DiagnosticCodes.UNKNOWN_MERGER,
+                                "Unknown merger: " + mergeRef.id(),
                                 mergeRef.span()));
+                    } else {
+                        if (currentType != TypeRef.ANY && merger.stateType() != TypeRef.ANY
+                                && !merger.stateType().isAssignableFrom(currentType)) {
+                            context.addDiagnostic(new Diagnostic(
+                                    DiagnosticCodes.INVALID_MERGER,
+                                    "Merger '" + mergeRef.id() + "' expects state type " + merger.stateType().typeName()
+                                            + " but current type is " + currentType.typeName(),
+                                    mergeRef.span()));
+                        }
+                        if (op.outputType() != TypeRef.ANY && merger.resultType() != TypeRef.ANY
+                                && !merger.resultType().isAssignableFrom(op.outputType())) {
+                            context.addDiagnostic(new Diagnostic(
+                                    DiagnosticCodes.INVALID_MERGER,
+                                    "Merger '" + mergeRef.id() + "' expects result type " + merger.resultType().typeName()
+                                            + " but operation outputs " + op.outputType().typeName(),
+                                    mergeRef.span()));
+                        }
+                        stepOutputType = merger.outputType();
                     }
-                    stepOutputType = merger.outputType();
                 }
             }
 
@@ -292,31 +325,46 @@ public final class SpecTypeCheckers {
                 }
             }
 
-            SymbolRef projectRef = call.project();
-            SymbolRef mergeRef = call.merge();
+            ProjectionSpec projectSpec = call.projectSpec();
+            MergeSpec mergeSpec = call.mergeSpec();
             boolean isOptional = call.isOptional();
 
             TypeRef callActualInputType = currentType;
             TypeRef callOutputType = subOutputType;
 
             // 校验 Projector
-            if (projectRef != null) {
-                ProjectorDescriptor projector = context.registry().projector(projectRef.id());
-                if (projector == null) {
-                    context.addDiagnostic(new Diagnostic(
-                            DiagnosticCodes.UNKNOWN_PROJECTOR,
-                            "Unknown projector: " + projectRef.id(),
-                            projectRef.span()));
-                } else {
-                    if (currentType != TypeRef.ANY && projector.inputType() != TypeRef.ANY
-                            && !projector.inputType().isAssignableFrom(currentType)) {
-                        context.addDiagnostic(new Diagnostic(
-                                DiagnosticCodes.INVALID_PROJECTOR,
-                                "Projector '" + projectRef.id() + "' expects input " + projector.inputType().typeName()
-                                        + " but current type is " + currentType.typeName(),
-                                projectRef.span()));
+            if (projectSpec != null) {
+                if (projectSpec instanceof PropertyProjectionSpec) {
+                    PropertyPath path = ((PropertyProjectionSpec) projectSpec).path();
+                    try {
+                        CompiledReader reader = context.registry().propertyAccessCompiler().compileReader(currentType, path);
+                        callActualInputType = reader.resultType();
+                    } catch (FlowDiagnosticException diagEx) {
+                        for (Diagnostic diag : diagEx.diagnostics()) {
+                            context.addDiagnostic(diag);
+                        }
                     }
-                    callActualInputType = projector.outputType();
+                } else if (projectSpec instanceof SymbolRef || projectSpec instanceof SymbolProjectionSpec) {
+                    SymbolRef projectRef = projectSpec instanceof SymbolRef
+                            ? (SymbolRef) projectSpec
+                            : ((SymbolProjectionSpec) projectSpec).symbol();
+                    ProjectorDescriptor projector = context.registry().projector(projectRef.id());
+                    if (projector == null) {
+                        context.addDiagnostic(new Diagnostic(
+                                DiagnosticCodes.UNKNOWN_PROJECTOR,
+                                "Unknown projector: " + projectRef.id(),
+                                projectRef.span()));
+                    } else {
+                        if (currentType != TypeRef.ANY && projector.inputType() != TypeRef.ANY
+                                && !projector.inputType().isAssignableFrom(currentType)) {
+                            context.addDiagnostic(new Diagnostic(
+                                    DiagnosticCodes.INVALID_PROJECTOR,
+                                    "Projector '" + projectRef.id() + "' expects input " + projector.inputType().typeName()
+                                            + " but current type is " + currentType.typeName(),
+                                    projectRef.span()));
+                        }
+                        callActualInputType = projector.outputType();
+                    }
                 }
             }
 
@@ -331,31 +379,46 @@ public final class SpecTypeCheckers {
             }
 
             // 校验 Merger
-            if (mergeRef != null) {
-                MergerDescriptor merger = context.registry().merger(mergeRef.id());
-                if (merger == null) {
-                    context.addDiagnostic(new Diagnostic(
-                            DiagnosticCodes.UNKNOWN_MERGER,
-                            "Unknown merger: " + mergeRef.id(),
-                            mergeRef.span()));
-                } else {
-                    if (currentType != TypeRef.ANY && merger.stateType() != TypeRef.ANY
-                            && !merger.stateType().isAssignableFrom(currentType)) {
-                        context.addDiagnostic(new Diagnostic(
-                                DiagnosticCodes.INVALID_MERGER,
-                                "Merger '" + mergeRef.id() + "' expects state type " + merger.stateType().typeName()
-                                        + " but current type is " + currentType.typeName(),
-                                mergeRef.span()));
+            if (mergeSpec != null) {
+                if (mergeSpec instanceof PropertyMergeSpec) {
+                    PropertyPath path = ((PropertyMergeSpec) mergeSpec).path();
+                    try {
+                        CompiledWriter writer = context.registry().propertyAccessCompiler().compileWriter(currentType, path, subOutputType);
+                        callOutputType = writer.resultType();
+                    } catch (FlowDiagnosticException diagEx) {
+                        for (Diagnostic diag : diagEx.diagnostics()) {
+                            context.addDiagnostic(diag);
+                        }
                     }
-                    if (subOutputType != TypeRef.ANY && merger.resultType() != TypeRef.ANY
-                            && !merger.resultType().isAssignableFrom(subOutputType)) {
+                } else if (mergeSpec instanceof SymbolRef || mergeSpec instanceof SymbolMergeSpec) {
+                    SymbolRef mergeRef = mergeSpec instanceof SymbolRef
+                            ? (SymbolRef) mergeSpec
+                            : ((SymbolMergeSpec) mergeSpec).symbol();
+                    MergerDescriptor merger = context.registry().merger(mergeRef.id());
+                    if (merger == null) {
                         context.addDiagnostic(new Diagnostic(
-                                DiagnosticCodes.INVALID_MERGER,
-                                "Merger '" + mergeRef.id() + "' expects result type " + merger.resultType().typeName()
-                                        + " but subflow outputs " + subOutputType.typeName(),
+                                DiagnosticCodes.UNKNOWN_MERGER,
+                                "Unknown merger: " + mergeRef.id(),
                                 mergeRef.span()));
+                    } else {
+                        if (currentType != TypeRef.ANY && merger.stateType() != TypeRef.ANY
+                                && !merger.stateType().isAssignableFrom(currentType)) {
+                            context.addDiagnostic(new Diagnostic(
+                                    DiagnosticCodes.INVALID_MERGER,
+                                    "Merger '" + mergeRef.id() + "' expects state type " + merger.stateType().typeName()
+                                            + " but current type is " + currentType.typeName(),
+                                    mergeRef.span()));
+                        }
+                        if (subOutputType != TypeRef.ANY && merger.resultType() != TypeRef.ANY
+                                && !merger.resultType().isAssignableFrom(subOutputType)) {
+                            context.addDiagnostic(new Diagnostic(
+                                    DiagnosticCodes.INVALID_MERGER,
+                                    "Merger '" + mergeRef.id() + "' expects result type " + merger.resultType().typeName()
+                                            + " but subflow outputs " + subOutputType.typeName(),
+                                    mergeRef.span()));
+                        }
+                        callOutputType = merger.outputType();
                     }
-                    callOutputType = merger.outputType();
                 }
             }
 
@@ -534,14 +597,45 @@ public final class SpecTypeCheckers {
                         parallel.span()));
             }
 
-            JoinDescriptor joinDesc = parallel.join() != null
-                    ? context.registry().join(parallel.join().id())
-                    : null;
-            if (joinDesc == null && parallel.join() != null) {
-                context.addDiagnostic(new Diagnostic(
-                        DiagnosticCodes.UNKNOWN_JOIN,
-                        "Unknown join strategy: " + parallel.join().id(),
-                        parallel.join().span()));
+            TypeRef joinOutputType = TypeRef.ANY;
+            JoinSpec joinSpec = parallel.joinSpec();
+            if (joinSpec instanceof BuiltinJoinSpec) {
+                BuiltinJoinSpec builtin = (BuiltinJoinSpec) joinSpec;
+                switch (builtin.kind()) {
+                    case ALL:
+                    case QUORUM:
+                        joinOutputType = TypeRef.of(com.team4u.framework.flow.model.ParallelResults.Values.class);
+                        break;
+                    case FIRST:
+                        joinOutputType = TypeRef.ANY;
+                        break;
+                    case COLLECT:
+                        joinOutputType = TypeRef.of(java.util.List.class);
+                        break;
+                }
+            } else if (joinSpec instanceof SymbolRef || joinSpec instanceof SymbolJoinSpec) {
+                SymbolRef symbol = joinSpec instanceof SymbolRef
+                        ? (SymbolRef) joinSpec
+                        : ((SymbolJoinSpec) joinSpec).symbol();
+                JoinDescriptor joinDesc = context.registry().join(symbol.id());
+                if (joinDesc == null) {
+                    context.addDiagnostic(new Diagnostic(
+                            DiagnosticCodes.UNKNOWN_JOIN,
+                            "Unknown join strategy: " + symbol.id(),
+                            symbol.span()));
+                } else {
+                    joinOutputType = joinDesc.outputType();
+                }
+            } else if (parallel.join() != null) {
+                JoinDescriptor joinDesc = context.registry().join(parallel.join().id());
+                if (joinDesc == null) {
+                    context.addDiagnostic(new Diagnostic(
+                            DiagnosticCodes.UNKNOWN_JOIN,
+                            "Unknown join strategy: " + parallel.join().id(),
+                            parallel.join().span()));
+                } else {
+                    joinOutputType = joinDesc.outputType();
+                }
             }
 
             if (parallel.branches() != null) {
@@ -559,9 +653,10 @@ public final class SpecTypeCheckers {
                 }
             }
 
-            return joinDesc != null ? joinDesc.outputType() : TypeRef.ANY;
+            return joinOutputType != null ? joinOutputType : TypeRef.ANY;
         }
     }
+
 
     public static final class AwaitSpecTypeChecker implements SpecTypeChecker<AwaitSpec> {
         @Override

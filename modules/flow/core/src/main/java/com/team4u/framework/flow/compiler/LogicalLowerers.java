@@ -235,4 +235,24 @@ public final class LogicalLowerers {
                     complete.outcome(), complete.identity());
         }
     }
+
+    static final class AdapterLowerer implements LogicalLowerer<Logical.Adapter> {
+        @Override
+        public Class<? extends Logical> key() {
+            return Logical.Adapter.class;
+        }
+
+        @Override
+        public List<Compiler.Child> children(Logical.Adapter adapter, Compiler.Work work) {
+            return Collections.singletonList(new Compiler.Child(adapter.body(),
+                    FlowPaths.adapterBody(work.path()), work.parallel()));
+        }
+
+        @Override
+        public PlanNode build(Logical.Adapter adapter, Compiler.Work work, LoweringContext context) {
+            return new PlanNode.Adapter(Compiler.descriptor(work, NodeDescriptor.Kind.ADAPTER),
+                    context.required(FlowPaths.adapterBody(work.path())),
+                    adapter.project(), adapter.merge());
+        }
+    }
 }

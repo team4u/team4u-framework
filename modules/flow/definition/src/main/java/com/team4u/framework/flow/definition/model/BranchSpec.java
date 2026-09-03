@@ -31,4 +31,8 @@ public final class BranchSpec implements Serializable {
         this.flow = Objects.requireNonNull(flow, "branch flow must not be null");
         this.span = span != null ? span : SourceSpan.UNKNOWN;
     }
+
+    public BranchSpec(String name, FlowSpec flow) {
+        this(name, flow, SourceSpan.UNKNOWN);
+    }
 }

@@ -63,6 +63,7 @@ public class FlowStructureTest {
             @Override public Void visitAwait(NodeDescription node) { visitedKinds.add("AWAIT:" + node.path()); return null; }
             @Override public Void visitControl(NodeDescription node) { visitedKinds.add("CONTROL:" + node.path()); return null; }
             @Override public Void visitComplete(NodeDescription node) { visitedKinds.add("COMPLETE:" + node.path()); return null; }
+            @Override public Void visitAdapter(NodeDescription node) { visitedKinds.add("ADAPTER:" + node.path()); return null; }
         };
 
         traverse(root, visitor);

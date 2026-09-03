@@ -21,11 +21,21 @@ import java.util.Objects;
 public final class MergeModifierSpec implements ModifierSpec {
     private static final long serialVersionUID = 1L;
 
-    private final SymbolRef merger;
+    private final MergeSpec merge;
     private final SourceSpan span;
 
-    public MergeModifierSpec(SymbolRef merger, SourceSpan span) {
-        this.merger = Objects.requireNonNull(merger, "merger must not be null");
+    public MergeModifierSpec(MergeSpec merge, SourceSpan span) {
+        this.merge = Objects.requireNonNull(merge, "merge must not be null");
         this.span = span != null ? span : SourceSpan.UNKNOWN;
+    }
+
+    public MergeModifierSpec(SymbolRef merger, SourceSpan span) {
+        this(new SymbolMergeSpec(merger, span), span);
+    }
+
+    public SymbolRef merger() {
+        return merge instanceof SymbolMergeSpec
+                ? ((SymbolMergeSpec) merge).symbol()
+                : null;
     }
 }

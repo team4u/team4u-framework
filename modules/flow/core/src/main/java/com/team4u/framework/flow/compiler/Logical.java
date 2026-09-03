@@ -216,5 +216,15 @@ public interface Logical {
         private final String label;
         private final Logical body;
     }
+
+    /** 结构化子流程输入输出适配逻辑节点。 */
+    @Getter
+    @Accessors(fluent = true)
+    @AllArgsConstructor
+    public static final class Adapter implements Logical {
+        private final Logical body;
+        private final Function<Object, Object> project;
+        private final BiFunction<Object, Object, Object> merge;
+    }
 }
 

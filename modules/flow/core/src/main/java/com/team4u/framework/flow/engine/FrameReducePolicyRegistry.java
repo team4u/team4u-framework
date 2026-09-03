@@ -21,6 +21,7 @@ public final class FrameReducePolicyRegistry extends FrozenKeyedPolicyRegistry<C
         GLOBAL.register(new FrameReducePolicies.RouteReducePolicy());
         GLOBAL.register(new FrameReducePolicies.FallbackReducePolicy());
         GLOBAL.register(new FrameReducePolicies.ControlReducePolicy());
+        GLOBAL.register(new FrameReducePolicies.AdapterReducePolicy());
         GLOBAL.freeze();
     }
 

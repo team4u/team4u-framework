@@ -413,4 +413,42 @@ public class FlowDslParserTest {
             Assert.assertEquals(com.team4u.framework.flow.definition.diagnostic.DiagnosticCodes.DUPLICATE_STEP_MERGE, ex.getDiagnostics().get(0).code());
         }
     }
+
+    @Test
+    public void testPropertyProjectionAndMerge() {
+        String dsl = "flow test {\n" +
+                "    step order.process {\n" +
+                "        project $.items\n" +
+                "        merge $.result\n" +
+                "    }\n" +
+                "}";
+        FlowDefinition def = parse(dsl);
+        Assert.assertTrue(def.root() instanceof StepSpec);
+        StepSpec step = (StepSpec) def.root();
+        Assert.assertTrue(step.projectSpec() instanceof PropertyProjectionSpec);
+        Assert.assertEquals("$.items", ((PropertyProjectionSpec) step.projectSpec()).path().expression());
+        Assert.assertTrue(step.mergeSpec() instanceof PropertyMergeSpec);
+        Assert.assertEquals("$.result", ((PropertyMergeSpec) step.mergeSpec()).path().expression());
+    }
+
+    @Test
+    public void testParallelBuiltinJoins() {
+        String dslAll = "flow test { parallel { branch b1 { step s1 } branch b2 { step s2 } join all } }";
+        ParallelSpec pAll = (ParallelSpec) parse(dslAll).root();
+        Assert.assertTrue(pAll.joinSpec() instanceof BuiltinJoinSpec);
+        Assert.assertEquals(BuiltinJoinSpec.Kind.ALL, ((BuiltinJoinSpec) pAll.joinSpec()).kind());
+
+        String dslFirst = "flow test { parallel { branch b1 { step s1 } branch b2 { step s2 } join first } }";
+        ParallelSpec pFirst = (ParallelSpec) parse(dslFirst).root();
+        Assert.assertEquals(BuiltinJoinSpec.Kind.FIRST, ((BuiltinJoinSpec) pFirst.joinSpec()).kind());
+
+        String dslCollect = "flow test { parallel { branch b1 { step s1 } branch b2 { step s2 } join collect } }";
+        ParallelSpec pCollect = (ParallelSpec) parse(dslCollect).root();
+        Assert.assertEquals(BuiltinJoinSpec.Kind.COLLECT, ((BuiltinJoinSpec) pCollect.joinSpec()).kind());
+
+        String dslQuorum = "flow test { parallel { branch b1 { step s1 } branch b2 { step s2 } join quorum 2 } }";
+        ParallelSpec pQuorum = (ParallelSpec) parse(dslQuorum).root();
+        Assert.assertEquals(BuiltinJoinSpec.Kind.QUORUM, ((BuiltinJoinSpec) pQuorum.joinSpec()).kind());
+        Assert.assertEquals(2, ((BuiltinJoinSpec) pQuorum.joinSpec()).quorumRequired());
+    }
 }

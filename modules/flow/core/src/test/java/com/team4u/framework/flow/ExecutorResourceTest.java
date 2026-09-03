@@ -465,6 +465,7 @@ public class ExecutorResourceTest {
     @Test(timeout = 5000)
     public void timedOperationCancellationInterruptsWorkerAndUnlinksChildTokens() throws Exception {
         final CountDownLatch opStarted = new CountDownLatch(1);
+        final CountDownLatch opInterruptedLatch = new CountDownLatch(1);
         final AtomicBoolean opInterrupted = new AtomicBoolean(false);
 
         Flow<String, String> flow = Flow.<String, String>step((context, input) -> {
@@ -474,6 +475,7 @@ public class ExecutorResourceTest {
                 Thread.sleep(3000);
             } catch (InterruptedException e) {
                 opInterrupted.set(true);
+                opInterruptedLatch.countDown();
                 Thread.currentThread().interrupt();
             }
             return Outcome.accepted("done");
@@ -490,7 +492,7 @@ public class ExecutorResourceTest {
         FlowResult<String> result = future.get(2, TimeUnit.SECONDS);
         assertTrue(result instanceof FlowResult.Cancelled);
         assertTrue("Worker thread running timed Operation should be interrupted on parent cancellation",
-                opInterrupted.get());
+                opInterruptedLatch.await(2, TimeUnit.SECONDS));
 
         // 验证重复 timed 执行后，父 token 下没有残留子 token 强引用（childCount == 0）
         Cancellation root = Cancellation.create();

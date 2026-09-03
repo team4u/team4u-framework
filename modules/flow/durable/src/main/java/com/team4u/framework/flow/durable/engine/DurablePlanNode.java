@@ -193,6 +193,24 @@ public interface DurablePlanNode {
         }
     }
 
+    @Getter
+    @Accessors(fluent = true)
+    public static final class Adapter implements DurablePlanNode {
+        private final NodeDescriptor descriptor;
+        private final DurablePlanNode body;
+        private final Function<Object, Object> project;
+        private final BiFunction<Object, Object, Object> merge;
+
+        public Adapter(NodeDescriptor descriptor, DurablePlanNode body,
+                       Function<Object, Object> project,
+                       BiFunction<Object, Object, Object> merge) {
+            this.descriptor = Objects.requireNonNull(descriptor, "descriptor must not be null");
+            this.body = Objects.requireNonNull(body, "body must not be null");
+            this.project = Objects.requireNonNull(project, "project must not be null");
+            this.merge = Objects.requireNonNull(merge, "merge must not be null");
+        }
+    }
+
     static <T> List<T> immutable(List<T> source, String name) {
         Objects.requireNonNull(source, name + " must not be null");
         ArrayList<T> copy = new ArrayList<T>(source.size());

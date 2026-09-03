@@ -290,6 +290,25 @@ public final class DurableMachine {
                 singleton("resumePoint", node.point().name()));
     }
 
+    public void enterAdapter(DurableState.RuntimeFrame frame, DurablePlanNode.Adapter node) {
+        if (frame.phase != 0) {
+            throw new IllegalStateException(
+                    "Adapter child frame missing at " + node.descriptor().path());
+        }
+        frame.phase = 1;
+        Object projected;
+        try {
+            projected = Objects.requireNonNull(node.project().apply(frame.entry),
+                    "projected input must not be null");
+        } catch (Exception e) {
+            finish(DurableState.MachineOutcome.of(Outcome.failed(com.team4u.framework.flow.model.Failure.of("OPERATION_EXCEPTION",
+                    e.getClass().getName() + (e.getMessage() == null ? "" : ": " + e.getMessage())))),
+                    CheckpointReasons.boundary("adapter", node.descriptor().path()));
+            return;
+        }
+        push(node.body(), projected, DurableState.SlotRole.user(DurablePlanCompiler.nodeRole(node.descriptor().path() + "/projected")));
+    }
+
     // ------------------------------------------------------------------
     // Parallel 调度支持
     // ------------------------------------------------------------------
@@ -343,8 +362,17 @@ public final class DurableMachine {
         JoinStrategy<?> join = node.join();
         Outcome<?> joined;
         try {
-            joined = Objects.requireNonNull(join.join(ParallelResults.of(tokens, outcomes)),
-                    "parallel join returned null");
+            ParallelResults results = ParallelResults.of(tokens, outcomes);
+            if (join instanceof com.team4u.framework.flow.api.ContextualJoinStrategy) {
+                @SuppressWarnings("unchecked")
+                com.team4u.framework.flow.api.ContextualJoinStrategy<Object, Object> contextual =
+                        (com.team4u.framework.flow.api.ContextualJoinStrategy<Object, Object>) join;
+                joined = Objects.requireNonNull(contextual.join(frame.entry, results),
+                        "parallel join returned null");
+            } else {
+                joined = Objects.requireNonNull(join.join(results),
+                        "parallel join returned null");
+            }
         } catch (Exception error) {
             joined = failed(FlowDiagnosticCodes.JOIN_EXCEPTION, describe(error));
         }

@@ -22,6 +22,7 @@ public final class LogicalLowererRegistry extends FrozenKeyedPolicyRegistry<Clas
         GLOBAL.register(new LogicalLowerers.AwaitLowerer());
         GLOBAL.register(new LogicalLowerers.ControlLowerer());
         GLOBAL.register(new LogicalLowerers.CompleteLowerer());
+        GLOBAL.register(new LogicalLowerers.AdapterLowerer());
         GLOBAL.freeze();
     }
 

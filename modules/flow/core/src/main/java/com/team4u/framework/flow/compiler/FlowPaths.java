@@ -112,4 +112,14 @@ public final class FlowPaths {
     public static String controlBody(String parentPath) {
         return parentPath + "/body";
     }
+
+    /**
+     * 生成 Adapter 适配体路径段。
+     *
+     * @param parentPath 父节点路径
+     * @return 路径 {@code <parent>/body}
+     */
+    public static String adapterBody(String parentPath) {
+        return parentPath + "/body";
+    }
 }

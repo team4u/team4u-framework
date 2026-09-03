@@ -242,6 +242,17 @@ public class ExternalFlowBoundaryTest {
                 visitedNodes.add("Complete:" + descriptor.path() + ":id=" + identity);
                 return "Complete(" + identity + ")";
             }
+
+            @Override
+            public String visitAdapter(NodeDescriptor descriptor, String body,
+                                       Function<Object, Object> project, BiFunction<Object, Object, Object> merge) {
+                assertNotNull(descriptor);
+                assertNotNull(body);
+                assertNotNull(project);
+                assertNotNull(merge);
+                visitedNodes.add("Adapter:" + descriptor.path());
+                return "Adapter(" + body + ")";
+            }
         });
 
         assertNotNull(summary);
@@ -301,6 +312,7 @@ public class ExternalFlowBoundaryTest {
             @Override public String visitAwait(NodeDescriptor d, ResumePoint<?> r) { return "await"; }
             @Override public String visitControl(NodeDescriptor d, ControlKind k, String b, Optional<ExecutableBinding> bi, Function<Object, Object> kp, Object c) { return "control"; }
             @Override public String visitComplete(NodeDescriptor d, Outcome<?> o, boolean i) { return "complete"; }
+            @Override public String visitAdapter(NodeDescriptor d, String b, Function<Object, Object> p, BiFunction<Object, Object, Object> m) { return "adapter"; }
         });
 
         // 验证 resolve 仅调用一次，且每次投影中拿到的都是同一个实例引用
@@ -332,6 +344,7 @@ public class ExternalFlowBoundaryTest {
             @Override public Integer visitAwait(NodeDescriptor d, ResumePoint<?> r) { return 0; }
             @Override public Integer visitControl(NodeDescriptor d, ControlKind k, Integer b, Optional<ExecutableBinding> bi, Function<Object, Object> kp, Object c) { return 0; }
             @Override public Integer visitComplete(NodeDescriptor d, Outcome<?> o, boolean i) { return 0; }
+            @Override public Integer visitAdapter(NodeDescriptor d, Integer b, Function<Object, Object> p, BiFunction<Object, Object, Object> m) { return b; }
         });
 
         assertEquals(1500, sequenceCount.get());

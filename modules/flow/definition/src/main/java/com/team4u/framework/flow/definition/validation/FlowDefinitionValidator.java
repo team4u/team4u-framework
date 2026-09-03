@@ -343,13 +343,23 @@ public final class FlowDefinitionValidator {
             }
         }
 
-        if (parallel.join() == null || parallel.join().id() == null || parallel.join().id().trim().isEmpty()) {
+        JoinSpec joinSpec = parallel.joinSpec();
+        if (joinSpec instanceof BuiltinJoinSpec) {
+            BuiltinJoinSpec b = (BuiltinJoinSpec) joinSpec;
+            if (b.kind() == BuiltinJoinSpec.Kind.QUORUM && b.quorumRequired() < 1) {
+                diagnostics.add(new Diagnostic(
+                        DiagnosticCodes.INVALID_QUORUM,
+                        "Quorum join required must be at least 1, got: " + b.quorumRequired(),
+                        b.span()));
+            }
+        } else if (parallel.join() == null || parallel.join().id() == null || parallel.join().id().trim().isEmpty()) {
             diagnostics.add(new Diagnostic(
                     DiagnosticCodes.UNKNOWN_JOIN,
                     "Parallel join strategy identifier must not be blank",
                     parallel.span()));
         }
     }
+
 
     private static void validateRecover(RecoverSpec recover, List<Diagnostic> diagnostics) {
         if (recover.body() == null) {

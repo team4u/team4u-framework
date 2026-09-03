@@ -255,4 +255,27 @@ public final class LogicalDescribers {
                     : NodeDescription.complete(path, label, complete.outcome());
         }
     }
+
+    static final class AdapterDescriber implements LogicalDescriber<Logical.Adapter> {
+        @Override
+        public Class<? extends Logical> key() {
+            return Logical.Adapter.class;
+        }
+
+        @Override
+        public boolean isLeaf() {
+            return false;
+        }
+
+        @Override
+        public void pushChildren(Logical.Adapter adapter, String path, ArrayDeque<FlowDescriptionBuilder.WorkItem> workStack) {
+            workStack.addLast(new FlowDescriptionBuilder.WorkItem(adapter.body(), FlowPaths.adapterBody(path), null, false));
+        }
+
+        @Override
+        public NodeDescription build(Logical.Adapter adapter, String path, String label, ArrayList<NodeDescription> resultStack) {
+            NodeDescription body = pop(resultStack);
+            return NodeDescription.adapter(path, label, body);
+        }
+    }
 }

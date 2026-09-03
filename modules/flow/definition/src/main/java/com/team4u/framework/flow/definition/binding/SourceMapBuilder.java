@@ -123,6 +123,9 @@ public final class SourceMapBuilder {
         } else if (node instanceof Logical.Named) {
             Logical.Named namedNode = (Logical.Named) node;
             buildRecursive(namedNode.body(), path, spec, sourceMap);
+        } else if (node instanceof Logical.Adapter) {
+            Logical.Adapter adapterNode = (Logical.Adapter) node;
+            buildRecursive(adapterNode.body(), path, spec, sourceMap);
         }
     }
 }

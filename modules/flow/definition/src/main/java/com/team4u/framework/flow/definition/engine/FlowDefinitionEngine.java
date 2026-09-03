@@ -8,6 +8,7 @@ import com.team4u.framework.flow.definition.diagnostic.FlowDiagnosticException;
 import com.team4u.framework.flow.definition.model.FlowDefinition;
 import com.team4u.framework.flow.definition.reader.FlowDefinitionReader;
 import com.team4u.framework.flow.definition.registry.FlowDefinitionRegistry;
+import com.team4u.framework.flow.definition.type.TypeRef;
 import com.team4u.framework.flow.spi.OperationResolver;
 import com.team4u.framework.parser.SourceSpan;
 
@@ -264,9 +265,31 @@ public final class FlowDefinitionEngine {
             FlowDefinition definition,
             FlowDefinitionRegistry registry,
             OperationResolver resolver) {
+        return bind(definition, registry, resolver, null);
+    }
+
+    public BoundFlow bind(
+            FlowDefinition definition,
+            FlowDefinitionRegistry registry,
+            TypeRef initialInputType) {
+        return bind(definition, registry, this.resolver, initialInputType);
+    }
+
+    public BoundFlow bind(
+            FlowDefinition definition,
+            FlowDefinitionRegistry registry,
+            OperationResolver resolver,
+            TypeRef initialInputType) {
         FlowDefinitionRegistry effectiveRegistry = registry != null ? registry : this.registry;
         OperationResolver effectiveResolver = resolver != null ? resolver : this.resolver;
-        return FlowBinder.bind(definition, effectiveRegistry, effectiveResolver);
+        return FlowBinder.bind(definition, effectiveRegistry, effectiveResolver, initialInputType);
+    }
+
+    public BoundFlow bind(
+            String source,
+            FlowDefinitionRegistry registry,
+            TypeRef initialInputType) {
+        return bind(source, null, null, registry, null, initialInputType);
     }
 
     /**
@@ -285,6 +308,16 @@ public final class FlowDefinitionEngine {
             String targetFlowId,
             FlowDefinitionRegistry registry,
             OperationResolver resolver) {
+        return bind(source, sourceName, targetFlowId, registry, resolver, null);
+    }
+
+    public BoundFlow bind(
+            String source,
+            String sourceName,
+            String targetFlowId,
+            FlowDefinitionRegistry registry,
+            OperationResolver resolver,
+            TypeRef initialInputType) {
         List<FlowDefinition> definitions = readAll(source, sourceName);
 
         if (definitions.isEmpty()) {
@@ -344,7 +377,7 @@ public final class FlowDefinitionEngine {
         }
 
         OperationResolver effectiveResolver = resolver != null ? resolver : this.resolver;
-        return FlowBinder.bind(targetDef, effectiveRegistry, effectiveResolver);
+        return FlowBinder.bind(targetDef, effectiveRegistry, effectiveResolver, initialInputType);
     }
 
     /**

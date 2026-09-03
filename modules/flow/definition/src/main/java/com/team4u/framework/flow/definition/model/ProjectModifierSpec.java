@@ -21,11 +21,21 @@ import java.util.Objects;
 public final class ProjectModifierSpec implements ModifierSpec {
     private static final long serialVersionUID = 1L;
 
-    private final SymbolRef projector;
+    private final ProjectionSpec projection;
     private final SourceSpan span;
 
-    public ProjectModifierSpec(SymbolRef projector, SourceSpan span) {
-        this.projector = Objects.requireNonNull(projector, "projector must not be null");
+    public ProjectModifierSpec(ProjectionSpec projection, SourceSpan span) {
+        this.projection = Objects.requireNonNull(projection, "projection must not be null");
         this.span = span != null ? span : SourceSpan.UNKNOWN;
+    }
+
+    public ProjectModifierSpec(SymbolRef projector, SourceSpan span) {
+        this(new SymbolProjectionSpec(projector, span), span);
+    }
+
+    public SymbolRef projector() {
+        return projection instanceof SymbolProjectionSpec
+                ? ((SymbolProjectionSpec) projection).symbol()
+                : null;
     }
 }

@@ -106,4 +106,16 @@ public final class DurableNodeExecutionHandlers {
             machine.complete(frame, complete);
         }
     }
+
+    static final class AdapterExecutionHandler implements DurableNodeExecutionHandler<DurablePlanNode.Adapter> {
+        @Override
+        public Class<? extends DurablePlanNode> key() {
+            return DurablePlanNode.Adapter.class;
+        }
+
+        @Override
+        public void execute(DurablePlanNode.Adapter adapter, DurableState.RuntimeFrame frame, DurableMachine machine) {
+            machine.enterAdapter(frame, adapter);
+        }
+    }
 }
