@@ -57,7 +57,9 @@ graph LR
 | `SnapshotAware` | `com.team4u.framework.config.core.proxy.SnapshotAware` | 快照感知接口，通过 `SnapshotAware.pin(proxy)` 将实时代理锁定为固定版本的快照代理 |
 | `ConfigSource` | `com.team4u.framework.config.core.spi.ConfigSource` | 配置源 SPI 接口（`name()`, `priority()`, `load()`），支持 Tombstone 墓碑失效机制 |
 | `ConfigWatcher` | `com.team4u.framework.config.core.spi.ConfigWatcher` | 配置变更监听器 SPI 接口，负责探测原始数据源变动并向 `HotReloadManager` 发送重载信号 |
-| `ConfigDrivenRegistry<T>` | `com.team4u.framework.config.core.support.ConfigDrivenRegistry` | 配置驱动的对象注册表，统一管理“配置变更 -> 实例热构建 -> 优雅关闭” |
+| `ConfigDrivenRegistry<T>` | `com.team4u.framework.config.core.support.ConfigDrivenRegistry` | 配置驱动的对象注册表，统一管理“配置变更 -> 实例热构建 -> 优雅关闭”，提供 forKey/forKeys/forPrefix/forPrefixes 四象限工厂与 forStrategy 自定义策略入口 |
+| `InstanceResolutionStrategy<T>` | `com.team4u.framework.config.core.spi.InstanceResolutionStrategy` | 实例解析策略 SPI 接口，封装单键文档型与扁平键前缀树两种内置模式的解析、构建与变更分发差异，支持第三方扩展 |
+| `ConfigDrivenRegistryListener<T>` | `com.team4u.framework.config.core.support.ConfigDrivenRegistryListener` | 实例生命周期监听接口，提供创建、替换、替换失败与下线四类事件回调 |
 | `ConfigBootstrap` | `com.team4u.framework.config.core.ConfigBootstrap` | 全局引导配置类，支持全局源注册与 `lock()` 防篡改保护 |
 | `DbConfigSource` / `DbConfigWatcher` | `com.team4u.framework.config.db.*` | `team4u-config-db` 模块提供的数据库配置源与最大时间戳轮询监听器 |
 | `TestConfigContext` | `com.team4u.framework.config.test.TestConfigContext` | `team4u-config-test` 模块提供的零延迟同步测试上下文工具 |
@@ -88,8 +90,8 @@ com.team4u.framework.config
 │   ├── convert                      # 属性类型转换器 (PropertyConverter, JsonPropertyConverter, PropertyConverterRegistry)
 │   ├── domain                       # 领域模型与异常 (ConfigSnapshot, ConfigEntry, ConfigMissingException, ConfigConversionException)
 │   ├── internal                         # 核心内部实现 (DefaultConfigManager, DefaultConfigBinder, PlaceholderResolver, HotReloadManager, SnapshotAggregator)
-│   ├── spi                              # SPI 接口与内置源 (ConfigSource, ConfigSourceRegistry, ConfigWatcher, ConfigWatcherRegistry, ConfigBinder, InMemoryConfigSource, PropertiesConfigSource, SystemEnvConfigSource)
-│   ├── support                          # 配置驱动支持 (ConfigDrivenRegistry)
+│   ├── spi                              # SPI 接口与内置源 (ConfigSource, ConfigSourceRegistry, ConfigWatcher, ConfigWatcherRegistry, ConfigBinder, InstanceResolutionStrategy, InMemoryConfigSource, PropertiesConfigSource, SystemEnvConfigSource)
+│   ├── support                          # 配置驱动支持 (ConfigDrivenRegistry, SingleKeyResolutionStrategy, PrefixResolutionStrategy, ConfigDrivenRegistryListener, AbstractJsonConfigRepository)
 │   ├── ConfigBootstrap.java             # 全局引导与锁定控制
 │   ├── ConfigChangeListener.java        # 变更监听函数式接口
 │   └── ConfigManager.java               # 配置管理器门面与 Builder
