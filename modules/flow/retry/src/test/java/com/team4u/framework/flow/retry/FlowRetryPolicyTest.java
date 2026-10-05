@@ -289,7 +289,7 @@ public class FlowRetryPolicyTest {
     public void testDynamicRetryPolicyRegistryLookup() {
         TestConfigContext config = TestConfigContext.create();
         try {
-            DynamicRetryPolicyRegistry.setRegistry(new ConfigDrivenRegistry<>(
+            DynamicRetryPolicyRegistry.setRegistry(ConfigDrivenRegistry.forKeys(
                     config.getConfigManager(),
                     "retry.policy.*",
                     RetryPolicyParser::create));

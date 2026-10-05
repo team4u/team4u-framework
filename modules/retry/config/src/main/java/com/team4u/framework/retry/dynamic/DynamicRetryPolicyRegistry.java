@@ -21,7 +21,7 @@ public class DynamicRetryPolicyRegistry {
      * 注册表实例
      */
     @Getter
-    private static ConfigDrivenRegistry<RetryPolicy> registry = new ConfigDrivenRegistry<>(
+    private static ConfigDrivenRegistry<RetryPolicy> registry = ConfigDrivenRegistry.forKeys(
             ConfigManager.global(),
             DEFAULT_PREFIX,
             RetryPolicyParser::create
@@ -41,7 +41,7 @@ public class DynamicRetryPolicyRegistry {
      * 重置注册表，仅用于测试
      */
     public static void reset() {
-        registry = new ConfigDrivenRegistry<>(
+        registry = ConfigDrivenRegistry.forKeys(
                 ConfigManager.global(),
                 DEFAULT_PREFIX,
                 RetryPolicyParser::create

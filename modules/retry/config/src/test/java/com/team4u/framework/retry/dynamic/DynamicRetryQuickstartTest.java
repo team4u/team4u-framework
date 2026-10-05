@@ -16,7 +16,7 @@ public class DynamicRetryQuickstartTest {
     @Before
     public void setUp() {
         context = TestConfigContext.create();
-        DynamicRetryPolicyRegistry.setRegistry(new ConfigDrivenRegistry<>(
+        DynamicRetryPolicyRegistry.setRegistry(ConfigDrivenRegistry.forKeys(
                 context.getConfigManager(),
                 "retry.policy.*",
                 RetryPolicyParser::create));

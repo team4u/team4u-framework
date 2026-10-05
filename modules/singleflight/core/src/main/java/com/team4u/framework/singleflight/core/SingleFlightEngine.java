@@ -85,7 +85,7 @@ public class SingleFlightEngine implements AutoCloseable {
         Objects.requireNonNull(clock, "clock");
         this.ruleCompiler = new RuleCompiler(defaultStore, clock);
         this.coordinator = new SessionCoordinator(clock);
-        this.rules = new ConfigDrivenRegistry<>(configManager, DEFAULT_CONFIG_PATTERN,
+        this.rules = ConfigDrivenRegistry.forKeys(configManager, DEFAULT_CONFIG_PATTERN,
                 ruleCompiler::compile);
     }
 

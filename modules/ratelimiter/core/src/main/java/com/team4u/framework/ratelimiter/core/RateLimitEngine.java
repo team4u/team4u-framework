@@ -91,7 +91,7 @@ public class RateLimitEngine implements AutoCloseable {
         this.clock = Objects.requireNonNull(clock, "clock");
         this.algorithms = new KeyedPolicyRegistry<>(RateLimitAlgorithm.class);
         algorithms.addAll(defaultAlgorithms());
-        this.rules = new ConfigDrivenRegistry<>(configManager, DEFAULT_CONFIG_PATTERN,
+        this.rules = ConfigDrivenRegistry.forKeys(configManager, DEFAULT_CONFIG_PATTERN,
                 json -> parseRules(json, algorithms, defaultStore));
     }
 

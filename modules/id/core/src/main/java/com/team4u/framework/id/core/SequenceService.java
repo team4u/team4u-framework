@@ -103,7 +103,7 @@ public class SequenceService implements Sequences {
         this.groupPolicies = groupPolicies;
         this.clock = clock;
         this.segments = CacheUtil.newLRUCache(segmentCacheSize);
-        this.rules = new ConfigDrivenRegistry<>(configManager, configPattern, SequenceService::parseRule);
+        this.rules = ConfigDrivenRegistry.forKeys(configManager, configPattern, SequenceService::parseRule);
     }
 
     // ------------------------------------------------- 取号
