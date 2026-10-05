@@ -4,4 +4,5 @@
 * [多源配置与数据库扩展](config-source.md)
 * [热重载与变更监听](config-reload.md)
 * [配置驱动实例生命周期](config-instance.md)
+* [轻量级配置仓库](config-repository.md)
 * [实战案例与测试支持](config-sample.md)

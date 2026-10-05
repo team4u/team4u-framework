@@ -367,54 +367,10 @@ listenerHandle.close();
 
 ## 轻量级配置仓库 AbstractJsonConfigRepository<T>
 
-`ConfigDrivenRegistry` 面向“重建持有着底层资源的重型运行时组件”的场景；若要管理的只是一份**纯数据快照** （规则表、开关集、名单映射），则应使用同在 `team4u-config` 的抽象模板 `AbstractJsonConfigRepository<T>`（`com.team4u.framework.config.core.support` 包）。
-
-它收编了“从 `ConfigManager` 读单个 JSON Key -> 反序列化为 T -> 原子替换内存引用”的同构骨架，子类最少只需提供一个配置键：
-
-```java
-import com.team4u.framework.base.util.TypeReference;
-import java.util.Collections;
-import java.util.Map;
-
-public class FeatureRuleRepository extends AbstractJsonConfigRepository<Map<String, FeatureRule>> {
-
-    @Override
-    protected String configKey() {
-        return "app.feature.rules"; // 必须实现：该仓库绑定的配置键
-    }
-
-    @Override
-    protected TypeReference<Map<String, FeatureRule>> typeReference() {
-        // 提供后自动走 JsonUtil 反序列化；不提供则需覆写 parseJson
-        return new TypeReference<Map<String, FeatureRule>>() { };
-    }
-
-    @Override
-    protected Map<String, FeatureRule> emptyConfig() {
-        // 可选：配置为空/被删除时的缺省值（默认 null）
-        return Collections.emptyMap();
-    }
-
-    @Override
-    protected void onConfigLoaded(Map<String, FeatureRule> oldValue,
-                                  Map<String, FeatureRule> newValue) {
-        // 可选：变更回调（首次加载/热更新/stop 重置均触发）
-    }
-}
-```
-
-生命周期：`init(configManager)` 挂载监听并完成首次加载，`stop()` 幂等注销；运行期用 `get()` 无锁读 volatile 引用。
-
-**统一降级语义** ：
-
-| 场景 | 行为 |
-| :--- | :--- |
-| 首次 `init()` 加载失败 | 抛 `IllegalStateException`，启动期快速失败 |
-| 运行期热更新失败 | 保留旧配置并记录警告日志，业务不中断 |
-| 配置被删除或置空 | 回退 `emptyConfig()` 缺省值 |
+`ConfigDrivenRegistry` 面向“重建持有着底层资源的重型运行时组件”的场景；若要管理的只是一份**纯数据快照** （规则表、开关集、名单映射），则应使用同在 `team4u-config` 的抽象模板 `AbstractJsonConfigRepository<T>`，详见 [轻量级配置仓库](config-repository.md)。
 
 > [!TIP]
-> **选型建议** ：配置变更是“换零件”（连接池、客户端）用 `ConfigDrivenRegistry` ；只是“换参数表”（规则、名单、阈值）用 `AbstractJsonConfigRepository` ；纯属性绑定读取用动态代理 `createProxy` 。
+> **选型建议** ：配置变更是“换零件”（连接池、客户端）用 `ConfigDrivenRegistry` ；只是“换参数表”（规则、名单、阈值）用 [AbstractJsonConfigRepository](config-repository.md) ；纯属性绑定读取用动态代理 `createProxy` 。
 
 ---
 

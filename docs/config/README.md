@@ -119,4 +119,5 @@ com.team4u.framework.config
 - [多源配置与数据库扩展](config-source.md)：多源优先级聚合、Tombstone 墓碑机制与 DB 插件配置
 - [热重载与变更监听](config-reload.md)：ConfigWatcher 机制、防抖窗口、Fail-Fast 与配置溯源
 - [配置驱动实例生命周期](config-instance.md)：ConfigDrivenRegistry、Safe Swap 与资源优雅关闭
+- [轻量级配置仓库](config-repository.md)：AbstractJsonConfigRepository、统一降级语义与纯数据快照热更新
 - [实战案例与测试支持](config-sample.md)：微服务配置实战、Spring 集成与 TestConfigContext 测试
