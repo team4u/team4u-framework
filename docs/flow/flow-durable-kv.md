@@ -151,19 +151,19 @@ Durable runtime = Durable.builder(durableStore)
 | `KvDurableStore(store, space, terminalTtlMillis, activeTtlMillis)` | 按生命周期分流 TTL（推荐） |
 | `KvDurableStore(store, space, terminalTtlMillis, activeTtlMillis, clock)` | 完整参数，额外指定计算过期时间戳的时钟源 |
 
-- **`space`（存储空间名）**：作为 `SpaceKey` 的命名空间部分，用于在同一个 `KvStore` 中隔离不同业务
+- **`space`（存储空间名）** ：作为 `SpaceKey` 的命名空间部分，用于在同一个 `KvStore` 中隔离不同业务
   或不同应用的快照数据（如 `flow_durable`、`payment-flow`）；要求非空且不得包含 `':'` 或任何空白
   字符（构造期真实校验，违反抛 `IllegalArgumentException`）。它不是 Redis Key 前缀拼接参数，
   底层键的具体编码由 `KvStore` 实现决定；
-- **`terminalTtlMillis`（终态 TTL）**：写入 COMPLETED/CANCELLED 快照时附带的存活时长，到期后由
+- **`terminalTtlMillis`（终态 TTL）** ：写入 COMPLETED/CANCELLED 快照时附带的存活时长，到期后由
   存储后端自动淘汰，实现历史归档数据清理；小于等于 0 表示永不过期；
-- **`activeTtlMillis`（非终态 TTL）**：写入 ACTIVE/SUSPENDED 快照时附带的存活时长，**默认 0 表示
+- **`activeTtlMillis`（非终态 TTL）** ：写入 ACTIVE/SUSPENDED 快照时附带的存活时长，**默认 0 表示
   永不过期（推荐）**。挂起等待人工审批等长周期流程可能停留 SUSPENDED 数天甚至数月，若对非终态
   设置较短 TTL 会静默删除仍在推进中的执行状态，导致后续 resume/recover 直接
   `EXECUTION_NOT_FOUND`；若确要设置，必须确保远大于业务最长挂起时长；
 - **CAS 能力要求**：底层 `KvStore` 必须实现（或通过装饰链提供）`CasCapable` 能力，否则构造时抛出
   `IllegalArgumentException`；
-- **到期扫描（scanDue）**：已实现基于 `ScanCapable` 能力的到期扫描（详见上文「到期扫描与定时
+- **到期扫描（scanDue）** ：已实现基于 `ScanCapable` 能力的到期扫描（详见上文「到期扫描与定时
   唤醒调度」）；底层不支持扫描能力的后端返回 `empty`，需维护外部到期索引或延迟队列。
 
 ### Spring Boot 生产完整装配类示例
@@ -211,11 +211,11 @@ public class DurableFlowAutoConfiguration {
 
 | 后端方案 | 适用场景 | 架构优势 | 运维注意事项 |
 | :--- | :--- | :--- | :--- |
-| **`RedisKvStore`** | 高并发短/中周期流程、微秒级状态机 | 极高的读写吞吐，原生支持 TTL 自动过期淘汰 | 需开启 AOF / RDB 持久化防止机房断电丢状态 |
-| **`JdbcKvStore`** | 金融交易、长事务审批、永久审计归档 | 严格 ACID、支持 SQL 复杂条件查询与报表统计 | 需建立 `execution_id` 唯一索引与 `revision` 乐观锁字段 |
-| **`TieredKvStore`** | 超高频读取流程 | L1 本地内存 + L2 Redis，极大降低网络 I/O | 写操作自动广播同步，适用于读多写少场景 |
+| `RedisKvStore` | 高并发短/中周期流程、微秒级状态机 | 极高的读写吞吐，原生支持 TTL 自动过期淘汰 | 需开启 AOF / RDB 持久化防止机房断电丢状态 |
+| `JdbcKvStore` | 金融交易、长事务审批、永久审计归档 | 严格 ACID、支持 SQL 复杂条件查询与报表统计 | 需建立 `execution_id` 唯一索引与 `revision` 乐观锁字段 |
+| `TieredKvStore` | 超高频读取流程 | L1 本地内存 + L2 Redis，极大降低网络 I/O | 写操作自动广播同步，适用于读多写少场景 |
 
-### 关系型数据库 (JDBC) 推荐表结构
+### 关系型数据库推荐表结构
 
 ```sql
 CREATE TABLE `flow_durable_snapshot` (

@@ -15,7 +15,7 @@
 
 ---
 
-## 精准映射路由器 (MapRouter)
+## 精准映射路由器
 
 ### 特性说明
 - **类型标识**：`type: "map" (常量 `RouterType.MAP`)
@@ -48,7 +48,7 @@ if (result.isRuleMatch()) {
 
 ---
 
-## 规则表达式路由器 (ExpressionRouter)
+## 规则表达式路由器
 
 ### 特性说明
 - **类型标识**：`type: "expression" (常量 `RouterType.EXPRESSION`)
@@ -124,16 +124,16 @@ if (result.isMatch()) {
 
 ---
 
-## 权重比例路由器 (WeightRouter)
+## 权重比例路由器
 
 ### 特性说明
 - **类型标识**：`type: "weight" (常量 `RouterType.WEIGHT`)
 - **算法原理**：
-  1. 规则的 `condition` 必须为非负整数字符串（如 "20", "30", "50"）。若非数字或小于 0，初始化时抛出 `RouteConfigException.validationError`。
-  2. 框架在初始化时按顺序累加权重生成连续区间，并使用 `TreeMap<Integer, Object>` 保存区间终点与目标值的映射。
-  3. 对请求路由键进行 **MurmurHash32** 运算取模：
+  - 规则的 `condition` 必须为非负整数字符串（如 "20", "30", "50"）。若非数字或小于 0，初始化时抛出 `RouteConfigException.validationError`。
+  - 框架在初始化时按顺序累加权重生成连续区间，并使用 `TreeMap<Integer, Object>` 保存区间终点与目标值的映射。
+  - 对请求路由键进行 **MurmurHash32** 运算取模：
      $$\text{hashValue} = (\text{HashUtil.murmur32}(\text{routingKey}) \ \& \ \text{Integer.MAX\_VALUE}) \pmod{\text{totalWeight}}$$
-  4. 使用 `TreeMap.ceilingEntry(hashValue + 1)` 以 $O(\log N)$ 时间复杂度精准命中区间。
+  - 使用 `TreeMap.ceilingEntry(hashValue + 1)` 以 $O(\log N)$ 时间复杂度精准命中区间。
 - **确定性与粘性路由**：相同入参在规则未变更的情况下，哈希结果恒定，保证同一用户/设备在灰度期间策略稳定不漂移。
 
 ### JSON 配置示例
@@ -160,15 +160,15 @@ System.out.println("命中权重规则: " + result.getMatchedCondition()); // �
 
 ---
 
-## 组合代理路由器 (CompositeRouter)
+## 组合代理路由器
 
 ### 特性说明
 - **类型标识**：`type: "composite" (常量 `RouterType.COMPOSITE`)
 - **匹配逻辑**：在 `ext.delegates` 中按优先级配置子路由器 ID 列表（支持混合多种不同类型的子路由器）。
 - **瀑布流与短路机制**：
-  1. 依次委托给各个子路由器执行。
-  2. 一旦某个子路由器产生 **规则命中**(`RULE_MATCH`) 或 **拦截器短路** (`SHORT_CIRCUITED`)，立即短路中断并返回该结果。
-  3. 若子路由器仅命中其自身的兜底值 (`FALLBACK_MATCH`)，组合路由**不会立即终止**，而是收集该兜底值作为候选，并继续尝试后续委托项，直到找到真实规则命中或以最终收集的兜底值收口。
+  - 依次委托给各个子路由器执行。
+  - 一旦某个子路由器产生 **规则命中**(`RULE_MATCH`) 或 **拦截器短路** (`SHORT_CIRCUITED`)，立即短路中断并返回该结果。
+  - 若子路由器仅命中其自身的兜底值 (`FALLBACK_MATCH`)，组合路由**不会立即终止**，而是收集该兜底值作为候选，并继续尝试后续委托项，直到找到真实规则命中或以最终收集的兜底值收口。
 
 ### JSON 配置示例
 ```json
@@ -191,7 +191,7 @@ System.out.println("命中权重规则: " + result.getMatchedCondition()); // �
 
 ---
 
-## 编程式构建路由策略 (RoutePolicyBuilder)
+## 编程式构建路由策略
 
 `team4u-router` 提供了流畅的强类型 Fluent Builder，支持无配置文件的纯 Java 代码构建：
 

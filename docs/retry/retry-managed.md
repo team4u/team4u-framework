@@ -15,12 +15,12 @@ MANAGED 把“还要继续重试”这件事记录到任务队列：前台先执
 
 一个任务的正常流程：
 
-1. 提交时，框架先按幂等键创建持久化记录。新记录默认给前台保留 5 分钟。
-2. 前台执行业务动作。
-3. 前台成功：记录改为成功，返回 `Completed(value)`。
-4. 前台预算耗尽且仍可重试：写入真实下次执行时间，返回 `Accepted(taskId)`。
-5. 后台 Worker 到时间后取任务、执行对应的 `StringRecoveryHandler`。
-6. 后台成功则记录成功；仍失败则继续按退避时间重试；次数耗尽或不可重试则记录终态失败。
+- 提交时，框架先按幂等键创建持久化记录。新记录默认给前台保留 5 分钟。
+- 前台执行业务动作。
+- 前台成功：记录改为成功，返回 `Completed(value)`。
+- 前台预算耗尽且仍可重试：写入真实下次执行时间，返回 `Accepted(taskId)`。
+- 后台 Worker 到时间后取任务、执行对应的 `StringRecoveryHandler`。
+- 后台成功则记录成功；仍失败则继续按退避时间重试；次数耗尽或不可重试则记录终态失败。
 
 如果提交时幂等键已存在，前台不会重复建档，返回 `Existing`。
 
@@ -216,7 +216,7 @@ Lease 队列对外有五个状态：
 - `state` 保存总尝试次数、状态、下次执行时间、最近错误和终态时间。
 - 内置退避策略只保存 `type + params`，例如 `exponentialJitter` 保存 `initialDelay`、`multiplier`、`maxDelay`。
 - 不写入业务对象 Java 类名，也不反序列化任意对象图。
-- 旧版本 Lease payload 没有 `version=1`，不做兼容迁移。
+- Lease payload 以 `version=1` 标识当前格式，不做跨版本兼容迁移。
 
 自定义 Backoff 必须提供稳定的 `Backoff.toConfig()`，并在同一个 `BackoffRegistry` 中注册能重建实例的 `BackoffFactory`。无法表达成配置的策略会在序列化时快速失败。
 

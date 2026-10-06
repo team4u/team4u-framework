@@ -135,8 +135,8 @@ retryAfter 后再次执行：2
 
 多个任务都到达 `visibleAt` 后，Worker 按以下顺序选择：
 
-1. `priority` 降序，数字越大越先；
-2. `createdAt` 升序，越早创建越先；
-3. `taskId` 升序，作为稳定排序。
+- `priority` 降序，数字越大越先；
+- `createdAt` 升序，越早创建越先；
+- `taskId` 升序，作为稳定排序。
 
 `visibleAt` 只是资格条件，不参与排序。一个后创建但优先级更高的任务，到达可见时间后可以排在更早创建的低优先级任务前面。

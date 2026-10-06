@@ -1,4 +1,4 @@
-# 时长校验与租约心跳 (DurationUtil / Expiry / ScheduledHeartbeat)
+# 时长校验与租约心跳
 
 租约、TTL、心跳间隔这类时间参数散落在各个模块（lease、kv、retry、id），它们对「时长怎么校验、时间戳怎么算、心跳怎么跳」的需求高度一致，却各自长出了私有实现。`team4u-base` 把这三件事收敛为三个小而明确的工具：
 
@@ -48,7 +48,7 @@ Expiry.NEVER                                 // 永不过期哨兵；remainingMi
 | 校验层 | `DurationUtil`（及各模块入口校验，如 lease 的 `LeaseTimes`） | 拒绝会让语义漂移的极端配置，入口即失败 | 用户可配置项（租约、超时、间隔） |
 | 运行期 | `Expiry` | 已合法时间戳的增量计算饱和封顶，不因罕见边界抛异常 | 存储与运行期已持有合法值的运算 |
 
-一句话记忆：**配置错了要炸得早（校验层），运行期边界要炸不了（饱和层）**。lease 模块保留的 `LeaseTimes.plusMillis` 即「校验层」在该模块的入口约束——巨大的提交延迟/租约时长以 `IllegalArgumentException` 拒绝且不产生副作用。
+一句话记忆：**配置错了要炸得早，运行期边界要炸不了** ：校验层负责前者，饱和层负责后者。lease 模块保留的 `LeaseTimes.plusMillis` 即「校验层」在该模块的入口约束——巨大的提交延迟/租约时长以 `IllegalArgumentException` 拒绝且不产生副作用。
 
 `Expiry` 不感知「0 表示永不过期」等模块私有哨兵语义（如 KvRecord 以 `expireAt=0` 表示永不过期）——它的哨兵是 `NEVER = Long.MAX_VALUE`，模块如需 0 哨兵请在自身边界转换。
 

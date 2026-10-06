@@ -1,8 +1,8 @@
 # 重试与退避治理策略：`team4u-flow-retry`
 
-在分布式流水线中，网络抖动、偶发超时、下游负载突增与服务短暂不可用等临时性故障（Transient Failures）是常态。
+在分布式流水线中，网络抖动、偶发超时、下游负载突增与服务短暂不可用等临时性故障是常态。
 
-`team4u-flow-retry` 模块将成熟的重试退避算法引擎 [`team4u-retry`](../retry/README.md) 与流程引擎的持久化策略契约 [`PersistentPolicy<K, FlowRetryState>`](flow-governance.md#核心治理契约) 深度整合，为业务提供抗重试风暴、条件快速短路、稳定幂等键注入与跨进程断点恢复的企业级重试治理能力。
+`team4u-flow-retry` 模块将成熟的重试退避算法引擎 [`team4u-retry`](../retry/README.md) 与流程引擎的持久化策略契约 [`PersistentPolicy<K, FlowRetryState>`](flow-governance.md#核心治理契约对比) 深度整合，为业务提供抗重试风暴、条件快速短路、稳定幂等键注入与跨进程断点恢复的企业级重试治理能力。
 
 ---
 
@@ -53,17 +53,17 @@ graph TD
 
 ## 多算法退避数学模型
 
-为了有效防止高并发下的**重试雪崩（Thundering Herd Problem）**与对下游服务的二次打垮，模块完整继承了 `team4u-retry` 强大的退避算法：
+为了有效防止高并发下的**重试雪崩**与对下游服务的二次打垮，模块完整继承了 `team4u-retry` 强大的退避算法：
 
 | 退避算法 | 便捷工厂方法 | 数学计算模型 | 适用场景 |
 | :--- | :--- | :--- | :--- |
-| **固定延迟 (Fixed)** | `FlowRetryPolicy.fixed(maxAttempts, delayMillis)` | $$D(a) = \text{delay}$$ | 重试成本低、故障恢复快的内部基础调用 |
-| **指数退避 (Exponential)** | `FlowRetryPolicy.exponential(maxAttempts, initialDelay, multiplier, maxDelay)` | $$D(a) = \min(\text{maxDelay}, \text{initial} \times \text{multiplier}^{a - 1})$$ | 下游过载时的流量削峰平滑恢复 |
-| **随机抖动退避 (Jitter)** | `FlowRetryPolicy.jitter(maxAttempts, initialDelay, multiplier, maxDelay)` | $$D(a) = \text{random}(0, \min(\text{maxDelay}, \text{initial} \times \text{multiplier}^{a - 1}))$$ | **生产核心推荐：彻底打散集群并发重试请求** |
-| **等差递增 (Increment)** | `FlowRetryPolicy.increment(maxAttempts, initialDelay, stepMillis)` | $$D(a) = \text{initial} + (a - 1) \times \text{step}$$ | 排队等待耗时线性增加的异步任务 |
+| **固定延迟** | `FlowRetryPolicy.fixed(maxAttempts, delayMillis)` | $$D(a) = \text{delay}$$ | 重试成本低、故障恢复快的内部基础调用 |
+| **指数退避** | `FlowRetryPolicy.exponential(maxAttempts, initialDelay, multiplier, maxDelay)` | $$D(a) = \min(\text{maxDelay}, \text{initial} \times \text{multiplier}^{a - 1})$$ | 下游过载时的流量削峰平滑恢复 |
+| **随机抖动退避** | `FlowRetryPolicy.jitter(maxAttempts, initialDelay, multiplier, maxDelay)` | $$D(a) = \text{random}(0, \min(\text{maxDelay}, \text{initial} \times \text{multiplier}^{a - 1}))$$ | **生产核心推荐：彻底打散集群并发重试请求** |
+| **等差递增** | `FlowRetryPolicy.increment(maxAttempts, initialDelay, stepMillis)` | $$D(a) = \text{initial} + (a - 1) \times \text{step}$$ | 排队等待耗时线性增加的异步任务 |
 
 > [!TIP]
-> **生产最佳实践**：在微服务集群环境下，强烈推荐优先使用 **`FlowRetryPolicy.jitter`（随机抖动退避）**。纯指数退避在集群遭遇瞬时故障时，由于各节点计算出的退避时间完全相同，会导致所有节点在同一毫秒重试，形成脉冲式的重试风暴；引入 Jitter 后重试请求在时间轴上均匀分布，大幅提升下游自愈概率。
+> **生产最佳实践** ：在微服务集群环境下，强烈推荐优先使用随机抖动退避 `FlowRetryPolicy.jitter`。纯指数退避在集群遭遇瞬时故障时，由于各节点计算出的退避时间完全相同，会导致所有节点在同一毫秒重试，形成脉冲式的重试风暴；引入随机抖动后，重试请求在时间轴上均匀分布，大幅提升下游自愈概率。
 
 ---
 
@@ -123,19 +123,19 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
 
 | Builder 配置方法 | 参数类型 | 默认行为 | 核心作用与业务场景 |
 | :--- | :--- | :--- | :--- |
-| **`maxAttempts(int)`** | `Integer` | `3`（或由动态策略决定） | **最大尝试总次数（含首次执行）**。<br/>若设为 3，代表“1 次初试 + 最多 2 次重试”。超过此轮次后步骤以最终的 `Outcome.Failed` 退出。 |
-| **`backoff(Backoff)`** | `Backoff` | `Backoffs.fixed(1000)` | **退避算法实例**。<br/>指定每次重试之间的等待延迟计算器。支持 `fixed`（固定）、`exponential`（指数）、`exponentialJitter`（抖动）及 `increment`（等差）。 |
-| **`retryOnCodes(String...)`** | `String...` | 无限制（所有 Failed 均重试） | **错误码白名单匹配（推荐）**。<br/>仅当 `Failure.code()` 在指定清单中时才触发重试；遇到其他未列出的错误码直接快速失败短路（Fast-Fail）。 |
-| **`abortOnCodes(String...)`** | `String...` | 无限制 | **错误码黑名单匹配**。<br/>当命中业务参数错误、鉴权失败等确定性错误码时立即终止重试，向外透传失败。 |
-| **`retryOn(...)` / `retryPredicate(...)`** | `Predicate<Failure>` | `failure -> true` | **自定义条件谓词**。<br/>支持根据 `Failure` 中的错误码 `code()`、错误描述 `message()` 或结构化键值对 `details()` 进行深度定制判定。`Failure` 不持有 `Throwable` 引用，如需按异常类型判定，请在业务代码捕获异常时将异常类名写入 `details` 后在此读取。 |
-| **`policyName(String)`** | `String` | `null` | **动态策略规则标识**。<br/>指定策略名称后，框架会尝试从配置中心（`DynamicRetryPolicyRegistry`）或命名注册表动态拉取规则，实现线上免重启热更新。 |
-| **`namedRegistry(...)`** | `NamedRetryPolicyRegistry` | 全局单例注册表 | **自定义命名注册表**。<br/>用于多租户或隔离场景下查找指定名称的重试规则模板。 |
+| `maxAttempts(int)` | `Integer` | `3`（或由动态策略决定） | **最大尝试总次数（含首次执行）** 。<br/>若设为 3，代表“1 次初试 + 最多 2 次重试”。超过此轮次后步骤以最终的 `Outcome.Failed` 退出。 |
+| `backoff(Backoff)` | `Backoff` | `Backoffs.fixed(1000)` | **退避算法实例**。<br/>指定每次重试之间的等待延迟计算器。支持 `fixed`（固定）、`exponential`（指数）、`exponentialJitter`（抖动）及 `increment`（等差）。 |
+| `retryOnCodes(String...)` | `String...` | 无限制（所有 Failed 均重试） | **错误码白名单匹配（推荐）** 。<br/>仅当 `Failure.code()` 在指定清单中时才触发重试；遇到其他未列出的错误码直接快速失败短路。 |
+| `abortOnCodes(String...)` | `String...` | 无限制 | **错误码黑名单匹配**。<br/>当命中业务参数错误、鉴权失败等确定性错误码时立即终止重试，向外透传失败。 |
+| `retryOn(...)` / `retryPredicate(...)` | `Predicate<Failure>` | `failure -> true` | **自定义条件谓词**。<br/>支持根据 `Failure` 中的错误码 `code()`、错误描述 `message()` 或结构化键值对 `details()` 进行深度定制判定。`Failure` 不持有 `Throwable` 引用，如需按异常类型判定，请在业务代码捕获异常时将异常类名写入 `details` 后在此读取。 |
+| `policyName(String)` | `String` | `null` | **动态策略规则标识**。<br/>指定策略名称后，框架会尝试从配置中心（`DynamicRetryPolicyRegistry`）或命名注册表动态拉取规则，实现线上免重启热更新。 |
+| `namedRegistry(...)` | `NamedRetryPolicyRegistry` | 全局单例注册表 | **自定义命名注册表**。<br/>用于多租户或隔离场景下查找指定名称的重试规则模板。 |
 
 ---
 
 ## 动态配置规则与热重载实战
 
-在生产环境中，硬编码重试参数会导致遇到下游故障变更时必须重新打包发布代码。`team4u-flow-retry` 支持通过**策略名称（`policyName`）**从配置中心或内存注册表动态拉取重试规则，并在后台自动监听配置变更，实现**免重启秒级热生效**。
+在生产环境中，硬编码重试参数会导致遇到下游故障变更时必须重新打包发布代码。`team4u-flow-retry` 支持通过 **策略名称** `policyName` 从配置中心或内存注册表动态拉取重试规则，并在后台自动监听配置变更，实现**免重启秒级热生效**。
 
 ### 流程中声明绑定策略名称
 
@@ -154,13 +154,13 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
 
 框架基于 [`team4u-config`](../config/README.md) 配置中心组件动态解析规则。
 
-#### 配置键（Key）命名约定
+#### 配置键命名约定
 配置中心中的配置键遵循统一前缀规则：
 $$\text{Key} = \text{retry.policy.} + \text{policyName}$$
 
-例如针对 `order-charge-retry`，配置键为：**`retry.policy.order-charge-retry`** 。
+例如针对 `order-charge-retry`，配置键为：`retry.policy.order-charge-retry`。
 
-#### 配置值（Value）JSON 格式定义
+#### 配置值 JSON 格式定义
 
 ```json
 {
@@ -187,14 +187,14 @@ $$\text{Key} = \text{retry.policy.} + \text{policyName}$$
 
 | JSON 字段 | 类型 | 必填 | 说明 |
 | :--- | :--- | :--- | :--- |
-| **`maxRetries`** | `int` | 是 | **最大重试次数（不含首次执行）**。若设为 4，表示最多尝试 5 次。 |
-| **`backoff.type`** | `String` | 是 | 退避算法类型标识：<br/>• `fixed`：固定延迟<br/>• `exponential`：纯指数退避<br/>• `exponentialJitter`：带随机抖动的指数退避（推荐）<br/>• `increment`：等差递增 |
-| **`backoff.params`** | `Object` | 是 | 对应退避算法的数学参数（如 `initialDelay` 初始延迟、`multiplier` 倍数、`maxDelay` 上限毫秒数）。 |
-| **`retryOnExceptions`** | `Array<String>` | 否 | 仅对指定异常类及其子类触发重试（类名需在类路径中存在）。 |
-| **`abortOnExceptions`** | `Array<String>` | 否 | 遇到指定异常立即终止重试并快速失败。 |
+| `maxRetries` | `int` | 是 | **最大重试次数（不含首次执行）** 。若设为 4，表示最多尝试 5 次。 |
+| `backoff.type` | `String` | 是 | 退避算法类型标识：<br/>• `fixed`：固定延迟<br/>• `exponential`：纯指数退避<br/>• `exponentialJitter`：带随机抖动的指数退避（推荐）<br/>• `increment`：等差递增 |
+| `backoff.params` | `Object` | 是 | 对应退避算法的数学参数（如 `initialDelay` 初始延迟、`multiplier` 倍数、`maxDelay` 上限毫秒数）。 |
+| `retryOnExceptions` | `Array<String>` | 否 | 仅对指定异常类及其子类触发重试（类名需在类路径中存在）。 |
+| `abortOnExceptions` | `Array<String>` | 否 | 遇到指定异常立即终止重试并快速失败。 |
 
 > [!TIP]
-> 详细的动态重试规则 JSON 格式定义与扩展说明，请参考 [重试策略配置规范 (docs/retry/retry-strategy.md#动态配置高级)](../retry/retry-strategy.md#动态配置高级)。
+> 详细的动态重试规则 JSON 格式定义与扩展说明，请参考[重试策略配置规范](../retry/retry-strategy.md#动态配置高级)。
 
 ---
 
@@ -224,7 +224,7 @@ NamedRetryPolicyRegistry.global().register("order-charge-retry", () ->
 
 ```mermaid
 graph TD
-    START["触发重试评估 (resolveRetryPolicy)"] --> S1{"1. 检查配置中心 DynamicRetryPolicyRegistry<br/>(retry.policy.order-charge-retry)"}
+    START["触发重试评估"] --> S1{"1. 检查配置中心 DynamicRetryPolicyRegistry<br/>(retry.policy.order-charge-retry)"}
     
     S1 -->|"命中动态配置"| USE_DYN["使用配置中心的最新动态规则 (热生效)"]
     S1 -->|"未配置或未引入 config"| S2{"2. 检查本地内存注册表<br/>NamedRetryPolicyRegistry.global()"}
@@ -241,8 +241,8 @@ graph TD
 
 | 维度 | Local 内存执行器 (`team4u-flow`) | Durable 持久化执行器 (`team4u-flow-durable`) |
 | :--- | :--- | :--- |
-| **退避等待机制** | 在当前 Java 线程内调用 `Thread.sleep` 式的同步休眠（`awaitWake`）。 | **将状态写入数据库快照并设定 `wakeAt` 时间戳，随后当前 Java 线程立即返回退出（Parked）！** |
-| **线程占用情况** | 整个退避期间**持续占用 1 个工作线程**。 | **零线程占用（0 CPU / 0 Thread）**。即使等待 10 天也不占任何线程资源。 |
+| **退避等待机制** | 在当前 Java 线程内调用 `Thread.sleep` 式的同步休眠（`awaitWake`）。 | 将状态写入数据库快照并设定 `wakeAt` 时间戳，随后当前 Java 线程立即返回并挂起！ |
+| **线程占用情况** | 整个退避期间**持续占用 1 个工作线程**。 | **零线程占用**（0 CPU / 0 线程）。即使等待 10 天也不占任何线程资源。 |
 | **宕机与重启自愈** | 若在等待期间机器重启或服务发版，**内存线程销毁，重试任务永久丢失**。 | **绝对可靠**。快照已落库，任何节点重启后，定时任务扫描到 `wakeAt` 到期自动拉起原位断点续跑。 |
 | **适用场景** | 毫秒级/秒级的短延迟重试（如网络偶发抖动重试 100ms）。 | 分钟级/小时级/长周期的业务重试（如 5 分钟后重试、等待外部对账）。 |
 
@@ -264,7 +264,7 @@ sequenceDiagram
 
     Note over Worker, DB: 阶段 1：首次执行失败，触发退避
     Worker->>Engine: start("order-001", req)
-    Engine->>Engine: 业务节点扣款失败 (Failed)
+    Engine->>Engine: 业务节点扣款失败（Failed 状态）
     Engine->>Engine: Retry 策略计算：需在 5 分钟后 (14:42:04) 重试
     
     Note over Worker, DB: 阶段 2：落库快照并释放工作线程
@@ -291,11 +291,11 @@ sequenceDiagram
 
 | `execution_id` | `lifecycle` | `wake_at` | `revision` | `slots` (业务槽位字典) |
 | :--- | :--- | :--- | :--- | :--- |
-| `ORD_20260831_001` | **`ACTIVE`** | **`2026-08-31 14:42:04`** | `2` | `policy:$/0` -> `{"attempt":2}`<br/>`input` -> `{"orderId":"1001", "amount":500}` |
+| `ORD_20260831_001` | `ACTIVE` | `2026-08-31 14:42:04` | `2` | `policy:$/0` -> `{"attempt":2}`<br/>`input` -> `{"orderId":"1001", "amount":500}` |
 
-- **`lifecycle = 'ACTIVE'`** ：表示该流程仍然处于生命周期进行中，并未终结；
-- **`wake_at`** ：记录了绝对的计划唤醒时刻；
-- **`slots['policy:$/0']`** ：记录了当前策略的状态是 `attempt = 2`，因此下次唤醒时框架知道是第 2 次尝试，绝不会重新从第 1 次算起。
+- `lifecycle = 'ACTIVE'`：表示该流程仍然处于生命周期进行中，并未终结；
+- `wake_at`：记录了绝对的计划唤醒时刻；
+- `slots['policy:$/0']`：记录了当前策略的状态是 `attempt = 2`，因此下次唤醒时框架知道是第 2 次尝试，绝不会重新从第 1 次算起。
 
 ---
 
@@ -369,7 +369,7 @@ public class DurableWakeScheduler {
 
 ---
 
-## 在文本 DSL 与动态流程定义中使用 (Flow DSL 集成)
+## 在文本 DSL 与动态流程定义中使用
 
 `team4u-flow-retry` 提供了开箱即用的 [`RetryFlowDefinitionExtension`](file:///root/code/team4u-framework/modules/flow/retry/src/main/java/com/team4u/framework/flow/retry/RetryFlowDefinitionExtension.java) SPI 扩展。只要引入该依赖，即可在 `.flow` 文本 DSL 中直接使用 `retry` 修饰器：
 
@@ -405,9 +405,9 @@ $$\text{invocationId} = \text{flowId} : \text{flowVersion} : \text{executionId} 
 ## 关联章节与进一步阅读
 
 - [流程治理概览与洋葱模型](flow-governance.md)
-- [限流治理策略 (team4u-flow-ratelimiter)](policy-ratelimiter.md)
-- [表达式规则门控策略 (team4u-flow-criterion)](policy-criterion.md)
-- [重试策略核心规范与配置详解 (docs/retry/retry-strategy.md)](../retry/retry-strategy.md)
-- [配置中心组件核心文档 (docs/config/README.md)](../config/README.md)
+- [限流治理策略](policy-ratelimiter.md)
+- [表达式规则门控策略](policy-criterion.md)
+- [重试策略核心规范与配置详解](../retry/retry-strategy.md)
+- [配置中心组件核心文档](../config/README.md)
 - [Durable 两段式恢复协议与 PersistentPolicy](flow-durable-resume.md)
 - [自定义 Policy 扩展开发](policy-custom.md)

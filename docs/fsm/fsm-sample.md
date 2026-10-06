@@ -7,11 +7,12 @@
 ## 业务需求与状态图
 
 ### 业务规则
-1. **员工提交申请（CREATED -> SUBMITTED）**；
-2. **请假天数 $\le 3$ 天**：直属主管审批通过即可进入 `APPROVED`；
-3. **请假天数 $> 3$ 天**：直属主管审批通过后进入 `HR_PENDING`，需 HR 最终审批通过方可 `APPROVED`；
-4. **任何审批人均可驳回（-> REJECTED）**；
-5. **在进入终态（APPROVED / REJECTED）前，员工可随时取消（-> CANCELLED）**。
+
+- **员工提交申请** ：状态从 CREATED 迁移至 SUBMITTED；
+- **请假天数 $\le 3$ 天**：直属主管审批通过即可进入 `APPROVED`；
+- **请假天数 $> 3$ 天**：直属主管审批通过后进入 `HR_PENDING`，需 HR 最终审批通过方可 `APPROVED`；
+- **任何审批人均可驳回** ：迁移至 REJECTED；
+- **在进入 APPROVED 或 REJECTED 终态前，员工可随时取消** ：迁移至 CANCELLED。
 
 ### Mermaid 状态图
 

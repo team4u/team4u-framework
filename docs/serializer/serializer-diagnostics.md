@@ -18,7 +18,7 @@
   ```
 
 ### Map 键顺序不确定性破坏散列比对
-- **现象**：在持久化快照（Durable Snapshot）比对中，内容相同的 Map 输出的 JSON 字符串字节散列不同；
+- **现象**：在持久化快照比对中，内容相同的 Map 输出的 JSON 字符串字节散列不同；
 - **解决**：开启 `SerializationFeature.ORDER_MAP_ENTRIES_BY_KEYS`，确保 Map 序列化时按键名字母序输出。
 
 ### 循环引用导致堆栈溢出 (`StackOverflowError`)

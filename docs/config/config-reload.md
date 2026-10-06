@@ -34,7 +34,7 @@ graph TD
 `ConfigSource` 专注于“读数据”，而 `ConfigWatcher` 专注于“感知变化”。两者清晰解耦：
 - `ConfigWatcher.watch(Runnable changeSignal)`：在配置中心启动时被调用，当 watcher 探测到外部变化后，只需调用 `changeSignal.run()`。
 
-### 防抖时间窗口 (Debounce Window) 与原子替换
+### 防抖时间窗口与原子替换
 当运维人员在配置中心批量提交修改（例如短时间内修改了数十个配置项）时，若每次变动都触发全量重载，将导致系统频繁抖动。
 
 `HotReloadManager` 提供了高度优化的防抖调度机制：
@@ -67,7 +67,7 @@ AutoCloseable handle = manager.registerChangeListener("datasource.*", (key, oldV
 ```
 
 ### 模式匹配规则 (`isMatch`)
-- **通配符模式（以 `*` 结尾）**：执行前缀匹配。例如 "server.*" 会匹配 `server.port`、`server.name`、`server.db.url`。
+- **通配符模式** ：以 `*` 结尾，执行前缀匹配。例如 "server.*" 会匹配 `server.port`、`server.name`、`server.db.url`。
 - **精确模式**：执行严格的字符串相等匹配。例如 "app.max-connections" 仅在该配置变动时触发。
 
 ### 异常隔离保障
@@ -106,7 +106,7 @@ current.db.host=${db.${env}.host}
 
 ## 可靠性设计与配置溯源
 
-### 启动期快速失败 (Fail-Fast)
+### 启动期快速失败
 在 `ConfigManager` 初始化加载阶段，若底层关键配置源拉取失败抛出异常，系统将立即阻断应用启动，杜绝服务带着半残缺的配置上线。
 
 ### 运行期故障隔离与优雅回退

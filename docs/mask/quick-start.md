@@ -73,7 +73,7 @@ public class MaskQuickStart {
 
 ## 注解式脱敏与 Jackson JSON 序列化
 
-### 步骤 1：在 JavaBean 字段上标注 `@Mask`
+### 在 JavaBean 字段上标注 `@Mask`
 
 ```java
 import com.team4u.framework.mask.Mask;
@@ -95,7 +95,7 @@ public class UserDto {
 }
 ```
 
-### 步骤 2：用 `MaskedJson` 序列化（观测向显式脱敏）
+### 用 `MaskedJson` 序列化做观测向显式脱敏
 
 **契约**：全局 `JsonUtil` / 共享 `ObjectMapper` 奉行「永远无损」——存库、缓存、重放载荷等存储向序列化必须拿到原文明文，脱敏模块**不注册全局**（否则 `@Mask` 字段会被静默写成掩码串，反序列化无任何报错信号）。需要脱敏输出（日志、审计、对外展示）时，显式使用 mask 模块的门面：
 

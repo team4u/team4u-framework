@@ -2,11 +2,11 @@
 
 在分布式异步工作流与长事务编排中，挂起等待外部信号（如人工审批、支付 Webhook、第三方 MQ 回调）以及跨节点定时延时调度（如 10 分钟后重试、等待次日凌晨执行）是核心场景。
 
-`team4u-flow-durable` 提出了**两段式 CAS 恢复协议（Two-Phase Resume Protocol）**与**持久化状态策略（`PersistentPolicy`）**，在遭遇任意时序的网络分区与机器崩溃时，仍能保证状态一致性与防冲突幂等。
+`team4u-flow-durable` 提出了**两段式 CAS 恢复协议**与**持久化状态策略（`PersistentPolicy`）** ，在遭遇任意时序的网络分区与机器崩溃时，仍能保证状态一致性与防冲突幂等。
 
 ---
 
-## 两段式 CAS 恢复协议 (Two-Phase Resume)
+## 两段式 CAS 恢复协议
 
 当外部系统向挂起中的流程（`SUSPENDED`）注入恢复信号时，如果在“持久化信号”与“驱动流程向前执行”之间发生机器宕机，单纯的单步提交可能导致信号丢失或重复驱动。为此，框架采用了严密的两段式 CAS 协议：
 
@@ -17,7 +17,7 @@ sequenceDiagram
     participant Engine as DurableExecutable
     participant Store as DurableStore (底层持久化)
 
-    Note over Client, Store: 阶段 1：恢复信号安全持久化 (Signal Persistence)
+    Note over Client, Store: 阶段 1：恢复信号安全持久化
     Client->>Engine: resume(executionId, "managerApproval", signal)
     Engine->>Store: 1. 读取当前快照 (校验状态必须为 SUSPENDED 且 awaitingPoint 匹配)
     Engine->>Engine: 2. 将 signal 确定性编码存入 slots["resume:managerApproval"]
@@ -25,7 +25,7 @@ sequenceDiagram
     Engine->>Store: 4. compareAndSet(executionId, expectedRev, newSnapshot)
     Store-->>Engine: CAS 成功，信号已永久落库！
 
-    Note over Client, Store: 阶段 2：状态机续接驱动 (Execution Drive)
+    Note over Client, Store: 阶段 2：状态机续接驱动
     Engine->>Store: 5. 重新加载最新快照
     Engine->>Engine: 6. 解码 pendingResume 信号，清除 pending 标志
     Engine->>Engine: 7. 驱动执行机向前推进至下一节点/终态
@@ -125,7 +125,7 @@ public class DurableOrderController {
 
 ## 持久化策略：`PersistentPolicy<K, S>`
 
-普通 `Policy<K>` 是无状态的，其状态在 JVM 内存中生命周期短暂。而 `PersistentPolicy<K, S>` 的状态 `S` 则由框架**完全持久化存储在快照的 `policy:<path>` 槽位中**，跨越进程重启仍能保留完整的计数器、窗口与历史状态。
+普通 `Policy<K>` 是无状态的，其状态在 JVM 内存中生命周期短暂。而 `PersistentPolicy<K, S>` 的状态 `S` 则由框架**完全持久化存储在快照的 `policy:<path>` 槽位中** ，跨越进程重启仍能保留完整的计数器、窗口与历史状态。
 
 ### 接口契约
 
@@ -174,7 +174,7 @@ graph LR
     M -->|"保存 slots['policy:...']=newState<br/>保存 wakeAt=wakeInstant<br/>设置 lifecycle=ACTIVE"| DS[("DurableStore")]
     DS --> RES["返回 DurableResult.Active(wakeAt)"]
     
-    RES -.->|"当前调用线程立即释放退出"| EXIT["线程释放 (Parked)"]
+    RES -.->|"当前调用线程立即释放退出"| EXIT["线程释放"]
     
     SCHED["外部定时调度器 (结合 team4u-kv-lock 分布式锁)"`] -->|"扫描到到达 wakeAt 的记录"`| REC["调用 executable.recover(executionId)"]
     REC --> NEXT["从快照恢复策略状态并继续执行"]
@@ -220,18 +220,18 @@ public class DailyQuotaPolicy implements PersistentPolicy<String, DailyQuotaStat
 
 ---
 
-## 定时唤醒调度集成（scanDue + firstWakeAt）
+## 定时唤醒调度集成
 
 生产环境中，`WaitUntil` / `RetryAt` 产生的定时唤醒由外部调度器扫描到期快照并调用
 `recover(executionId)` 拉起续跑。当前版本已提供以下存储层能力：
 
-- **`DurableSnapshot` 信封携带 `firstWakeAt` 字段**：记录本实例最近一次进入定时等待的
+- **`DurableSnapshot` 信封携带 `firstWakeAt` 字段** ：记录本实例最近一次进入定时等待的
   首个唤醒时刻（从帧栈的 wake/deadline 取最早到期者，仅 ACTIVE 快照非空），便于
   调度器直接扫描与水位线统计，无需解码帧栈；
-- **`DurableStore.scanDue(Instant, int)` 可选扫描接口**：按 `lifecycle = ACTIVE` 且
+- **`DurableStore.scanDue(Instant, int)` 可选扫描接口** ：按 `lifecycle = ACTIVE` 且
   `firstWakeAt` 已到期的条件批量返回待唤醒的快照，避免依赖各存储后端自建条件查询；
   不支持扫描的后端返回 `empty`；
-- **`KvDurableStore` TTL 按终态 / 非终态分流**：非终态（ACTIVE / SUSPENDED）快照默认
+- **`KvDurableStore` TTL 按终态 / 非终态分流** ：非终态（ACTIVE / SUSPENDED）快照默认
   永不过期，保证待唤醒实例不被存储层误淘汰；终态（COMPLETED / CANCELLED）快照按
   `terminalTtlMillis` 归档清理，构造器提供 `(store, space, terminalTtlMillis, activeTtlMillis[, clock])`
   参数形态。

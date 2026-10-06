@@ -1,4 +1,4 @@
-# 字典强类型读取器 (MapReader)
+# 字典强类型读取器
 
 在现代应用开发中，程序经常需要从弱类型、动态结构的字典（如 JSON 反序列化产物、YAML 配置、HTTP 请求参数、SPI 扩展参数或上下文环境变量）中读取参数。
 
@@ -13,7 +13,7 @@
 
 ## 核心特性
 
-- **多 Key 别名回退（Alias Fallback）**：支持传入多个候选 Key（如 `maxAttempts`, `max-attempts`, `max_attempts`），按顺序查找首个非 null 值；
+- **多键别名回退** ：支持传入多个候选 Key（如 `maxAttempts`, `max-attempts`, `max_attempts`），按顺序查找首个非 null 值；
 - **全类型安全提取**：内置 `getString`, `getInt`, `getLong`, `getDouble`, `getBoolean`, `getDuration`, `getEnum`, `get(Class<T>)` 等常用类型读取；
 - **POJO 对象转换 (toBean)** ：内置支持将 MapReader 转换为任意强类型 JavaBean，默认自动兼容 kebab-case、snake_case 等命名风格并忽略转换错误，亦支持自定义 CopyOptions；
 - **时长原生解析**：支持文本格式时长（`100ms`, `5s`, `10m`, `1h`, `2d`）、纯数字毫秒数及 ISO-8601 格式（`PT10S`）；
@@ -113,7 +113,7 @@ int redisPort = root.getReader("spring")
                     .getInt("port", 6379);
 ```
 
-### 字典转换为 POJO 对象 (toBean)
+### 字典转换为 POJO 对象
 
 支持一键将当前 `MapReader` 或嵌套子读取器转换为强类型 JavaBean，自动兼容 `kebab-case`、`snake_case` 等命名风格：
 
@@ -161,6 +161,6 @@ Duration timeout = redis.getDuration("timeout", Duration.ofSeconds(3));
 
 ## 关联章节与进一步阅读
 
-- [类型转换器体系 (ConvertUtil)](base-convert.md)
+- [类型转换器体系](base-convert.md)
 - [快速开始](quick-start.md)
 - [核心基础组件概览 (README.md)](README.md)

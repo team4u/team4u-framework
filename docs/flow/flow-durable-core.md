@@ -25,13 +25,13 @@ graph TD
 
 ### 四大核心设计原则
 
-1. **同一份 Flow 定义，零代码修改**：
+- **同一份 Flow 定义，零代码修改**：
    业务逻辑 `Flow<I, O>` 纯粹描述拓扑结构，既能交付给 `Local.compile` 作为微秒级同步执行器，也能交付给 `Durable.compile` 作为持久化状态机；
-2. **零 Lambda 与代码序列化**：
+- **零 Lambda 与代码序列化**：
    底层快照绝不序列化 Java 字节码、Lambda 闭包或 Bean 实例引用；快照中仅保存框架运行元数据与由 `StateMapper` 编码的业务槽位（`StoredValue`）；
-3. **节点边界 CAS 检查点（Revision 乐观锁）**：
+- **节点边界 CAS 检查点**（revision 乐观锁）：
    每前进一步都在节点边界以 CAS 乐观锁推进 `revision`，防止多实例并发写冲突与脏写；
-4. **版本强隔离 `(flowId, flowVersion)`** ：
+- **版本强隔离 `(flowId, flowVersion)`** ：
    以流标识与版本号作为快照的命名空间，杜绝代码更新后反序列化旧版本快照导致的数据错乱。
 
 ---
@@ -55,11 +55,11 @@ stateDiagram-v2
 
 | 命令方法 | 初始前置状态 | 动作行为 | 产出结果 |
 | :--- | :--- | :--- | :--- |
-| **`start(id, input)`** | 不存在（`expectedRevision = -1`） | 创建初始 `ACTIVE` 快照（`revision=1`），存入输入并驱动首段 | `DurableResult` |
-| **`resume(id, point, signal)`** | `SUSPENDED` | 执行两段式 CAS 提交：先落库信号并置为 ACTIVE，再驱动续接 | `DurableResult` |
-| **`recover(id)`** | `ACTIVE` | 从最后提交的快照反序列化状态，重构执行帧栈并断点续跑 | `DurableResult` |
-| **`cancel(id)`** | `ACTIVE` / `SUSPENDED` | 以 CAS 将生命周期强制翻转为 `CANCELLED` 并终止执行 | `DurableResult.Cancelled` |
-| **`snapshot(id)`** | 任意状态 | 只读查询当前快照元数据与槽位，无任何写副作用 | `Optional<DurableSnapshot>` |
+| `start(id, input)` | 不存在（`expectedRevision = -1`） | 创建初始 `ACTIVE` 快照（`revision=1`），存入输入并驱动首段 | `DurableResult` |
+| `resume(id, point, signal)` | `SUSPENDED` | 执行两段式 CAS 提交：先落库信号并置为 ACTIVE，再驱动续接 | `DurableResult` |
+| `recover(id)` | `ACTIVE` | 从最后提交的快照反序列化状态，重构执行帧栈并断点续跑 | `DurableResult` |
+| `cancel(id)` | `ACTIVE` / `SUSPENDED` | 以 CAS 将生命周期强制翻转为 `CANCELLED` 并终止执行 | `DurableResult.Cancelled` |
+| `snapshot(id)` | 任意状态 | 只读查询当前快照元数据与槽位，无任何写副作用 | `Optional<DurableSnapshot>` |
 
 ---
 
@@ -96,16 +96,16 @@ sequenceDiagram
 
 ## 稳定幂等键（`invocationId`）与 At-Least-Once 保证
 
-在分布式环境中，**网络分区、宕机重启与重试必然导致步骤可能被多次执行（At-Least-Once）**。如何保证外部写操作（如银行扣款、扣减库存）不被重复执行？
+在分布式环境中，**网络分区、宕机重启与重试必然导致步骤可能被多次执行（At-Least-Once）** 。如何保证外部写操作（如银行扣款、扣减库存）不被重复执行？
 
 框架为每一个执行节点计算了严格确定性的**稳定幂等键**：
 
 $$\text{invocationId} = \text{flowId} : \text{flowVersion} : \text{executionId} : \text{path}$$
 
-- **`flowId`** ：流程业务标识（如 `order-checkout`）；
-- **`flowVersion`** ：流程拓扑版本号（如 `1`）；
-- **`executionId`** ：本次流程执行流水号（如 `ORD20260831001`）；
-- **`path`** ：当前节点在 AST 树中的拓扑路径（如 `$/0/1`）。
+- `flowId` ：流程业务标识（如 `order-checkout`）；
+- `flowVersion` ：流程拓扑版本号（如 `1`）；
+- `executionId` ：本次流程执行流水号（如 `ORD20260831001`）；
+- `path` ：当前节点在 AST 树中的拓扑路径（如 `$/0/1`）。
 
 ### 幂等公式
 $$\text{At-Least-Once 框架驱动} + \text{invocationId 外部防重} = \text{Exactly-Once 业务效果}$$

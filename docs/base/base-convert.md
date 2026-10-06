@@ -1,4 +1,4 @@
-# 类型转换器体系 (ConvertUtil)
+# 类型转换器体系
 
 `ConvertUtil` 与 `TypeConverterRegistry` 提供了覆盖基础标量、时间日期、集合、数组、枚举以及 JavaBean 的全类型安全转换能力。
 

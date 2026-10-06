@@ -17,7 +17,7 @@
 
 ## 设计理念
 
-`team4u-translator` 采用 **三段式流水线架构（上下文组装 -> 规则路由决策 -> 责任链渲染输出）**，无缝联动 `team4u-router`（负责多模式规则匹配）与 `team4u-policy`（负责渲染链管理）：
+`team4u-translator` 采用 **三段式流水线架构（上下文组装 -> 规则路由决策 -> 责任链渲染输出）** ，无缝联动 `team4u-router`（负责多模式规则匹配）与 `team4u-policy`（负责渲染链管理）：
 
 ```mermaid
 graph LR
@@ -57,8 +57,8 @@ graph LR
 - **路由多模式解耦**：完全复用 `team4u-router`，无缝支持精准映射 (`Map`)、表达式判定 (`Expression`) 与多级级联 (`Composite`)。
 - **模板变量智能注入与容错**：文案模板不仅支持透传的 `args` 业务参数，还自动注入 `rawCode` 与 `rawMessage`；未解析的变量保留原样不报错。
 - **两级安全兜底**：
-  1. **路由未命中兜底**：若未命中任何路由规则，引擎默认原样返回原始 `code` 与 `message`，并保留 `traceId`。
-  2. **字段空值兜底**：若路由命中的 `ErrorDef` 字段为空，由 `FallbackRenderPolicy` 自动回填原始响应值。
+  - **路由未命中兜底**：若未命中任何路由规则，引擎默认原样返回原始 `code` 与 `message`，并保留 `traceId`。
+  - **字段空值兜底**：若路由命中的 `ErrorDef` 字段为空，由 `FallbackRenderPolicy` 自动回填原始响应值。
 - **链路标识无缝透传**：自动从 `args` 中提取 `traceId`，并在各种命中/未命中分支下始终透传回包。
 - **防污染安全执行顺序**：`TemplateRenderPolicy` 优先于 `FallbackRenderPolicy` 执行，防止原始异常中包含的 `${...}` 字符被意外作为模板二次渲染。
 - **责任链渲染扩展**：支持基于 SPI 或包扫描扩展自定义 `RenderPolicy`（如敏感词脱敏、多语言国际化 i18n、日志动态降级）。

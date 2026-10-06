@@ -21,7 +21,7 @@
 
 ```mermaid
 graph TD
-    subgraph "执行生命周期层 (Execution Lifecycle)"
+    subgraph "执行生命周期层"
         FR["FlowResult&lt;O&gt; (Local) / DurableResult&lt;O&gt; (Durable)<br/>描述执行器当前的运行与调度状态"]
         C["Completed<br/>流程已执行到达终点"]
         S["Suspended<br/>流程遇到挂起点，等待外部信号"]
@@ -30,7 +30,7 @@ graph TD
         FR --> C & S & A & X
     end
 
-    subgraph "业务结果层 (Business Outcome)"
+    subgraph "业务结果层"
         C --> OUT["Outcome&lt;O&gt;<br/>四态闭集，仅 Completed 终态持有"]
         AC["Accepted&lt;O&gt;<br/>业务成功：携带产出值 O"]
         RJ["Rejected&lt;O&gt;<br/>业务拒绝：携带 Reason（预期内短路）"]
@@ -44,9 +44,9 @@ graph TD
 
 | 结果类型 | 所属层次 | 状态闭集 | 携带载荷 |
 | :--- | :--- | :--- | :--- |
-| **`Outcome<T>`** | 业务层 | `Accepted` / `Rejected` / `Skipped` / `Failed` | 仅 `Accepted` 携带输出值；其余三态携带不可变诊断值对象 `Reason` 或 `Failure` |
-| **`FlowResult<O>`** | Local 执行层 | `Completed` / `Suspended` / `Cancelled` | `Completed` 携带最终 `Outcome`；`Suspended` 携带单次消费句柄 `Suspension`；`Cancelled` 携带 `executionId` |
-| **`DurableResult<O>`** | Durable 持久化层 | `Completed` / `Suspended` / `Active` / `Cancelled` | `Completed` 携带 `Outcome`；`Suspended` 携带挂起点名称；`Active` 携带 `wakeAt` 计划唤醒时间戳；`Cancelled` 携带快照 |
+| `Outcome<T>` | 业务层 | `Accepted` / `Rejected` / `Skipped` / `Failed` | 仅 `Accepted` 携带输出值；其余三态携带不可变诊断值对象 `Reason` 或 `Failure` |
+| `FlowResult<O>` | Local 执行层 | `Completed` / `Suspended` / `Cancelled` | `Completed` 携带最终 `Outcome`；`Suspended` 携带单次消费句柄 `Suspension`；`Cancelled` 携带 `executionId` |
+| `DurableResult<O>` | Durable 持久化层 | `Completed` / `Suspended` / `Active` / `Cancelled` | `Completed` 携带 `Outcome`；`Suspended` 携带挂起点名称；`Active` 携带 `wakeAt` 计划唤醒时间戳；`Cancelled` 携带快照 |
 
 ---
 
@@ -58,24 +58,24 @@ graph TD
 
 | 状态 | 载荷 | 语义说明与默认行为 |
 | :--- | :--- | :--- |
-| **`Accepted`** | `T value`（非 null） | 成功产出业务数据，**四态中唯一携带输出**。驱动后置节点推进。 |
-| **`Rejected(Reason)`** | 不可变业务原因 `Reason` | 业务拒绝（如黑名单、余额不足）；属于正常业务分支，**不触发重试与技术补偿**。 |
-| **`Skipped(Reason)`** | 不可变弃权原因 `Reason` | 弃权跳过（当前节点不适用）；**可被 `thenOptional` 或 `firstApplicable` 消费**。 |
-| **`Failed(Failure)`** | 不可变失败原因 `Failure` | 技术失败（网络超时、系统异常）；**可触发 `retry` 重试或 `recoverWith` 补偿**。 |
+| `Accepted` | `T value`（非 null） | 成功产出业务数据，**四态中唯一携带输出**。驱动后置节点推进。 |
+| `Rejected(Reason)` | 不可变业务原因 `Reason` | 业务拒绝（如黑名单、余额不足）；属于正常业务分支，**不触发重试与技术补偿**。 |
+| `Skipped(Reason)` | 不可变弃权原因 `Reason` | 弃权跳过（当前节点不适用）；可被 `thenOptional` 或 `firstApplicable` 消费。 |
+| `Failed(Failure)` | 不可变失败原因 `Failure` | 技术失败（网络超时、系统异常）；可触发 `retry` 重试或 `recoverWith` 补偿。 |
 
 ### 算子传播规则总表
 
 | 传播场景 | 行为规则 |
 | :--- | :--- |
-| **`then` (Sequence)** | **仅 Accepted 推进**：前置节点 Accepted 时其输出作为后置节点输入；Rejected / Skipped / Failed 直接短路终止当前序列 |
-| **`thenOptional`** | 仅用于同类型 `O -> O` 节点：Accepted 以新值推进；Skipped 消费弃权并以进入步骤前的原值推进；Rejected / Failed 仍短路 |
-| **`Rejected`** | 终止当前 Sequence 并逐层向外透传；不触发 `firstApplicable` 候选推进与 `recoverWith` 补偿 |
-| **`Skipped`** | 默认终止当前 Sequence；在 `firstApplicable` 或 `thenOptional` 边界被消费，否则向外透传 |
-| **`Failed`** | 终止当前 Sequence；触发同作用域内的 `retry` 重试或 `recoverWith` 恢复边界；否则向外透传 |
-| **`firstApplicable`** | 依次尝试各个候选分支，**以首个非 Skipped 结果作为整体结果**；全部 Skipped 则整体 Skipped |
-| **`recoverWith`** | 主流程 Failed 时，以 `Recovery<I>`（原始输入 + Failure）作为输入执行恢复流程；非 Failed 原样透传 |
-| **`route`** | selector 产出路由键（精确 `equals` 匹配）选中分支；未命中且未配置 `otherwise` 时整体 Skipped（`NO_ROUTE`） |
-| **`parallel`** | wait-all 等待全部分支完成后，由 `JoinStrategy` 合并为单个 Outcome |
+| `then`（顺序流水线） | **仅 Accepted 推进**：前置节点 Accepted 时其输出作为后置节点输入；Rejected / Skipped / Failed 直接短路终止当前序列 |
+| `thenOptional` | 仅用于同类型 `O -> O` 节点：Accepted 以新值推进；Skipped 消费弃权并以进入步骤前的原值推进；Rejected / Failed 仍短路 |
+| `Rejected` | 终止当前 Sequence 并逐层向外透传；不触发 `firstApplicable` 候选推进与 `recoverWith` 补偿 |
+| `Skipped` | 默认终止当前 Sequence；在 `firstApplicable` 或 `thenOptional` 边界被消费，否则向外透传 |
+| `Failed` | 终止当前 Sequence；触发同作用域内的 `retry` 重试或 `recoverWith` 恢复边界；否则向外透传 |
+| `firstApplicable` | 依次尝试各个候选分支，**以首个非 Skipped 结果作为整体结果**；全部 Skipped 则整体 Skipped |
+| `recoverWith` | 主流程 Failed 时，以 `Recovery<I>`（原始输入 + Failure）作为输入执行恢复流程；非 Failed 原样透传 |
+| `route` | selector 产出路由键（精确 `equals` 匹配）选中分支；未命中且未配置 `otherwise` 时整体 Skipped（`NO_ROUTE`） |
+| `parallel` | wait-all 等待全部分支完成后，由 `JoinStrategy` 合并为单个 Outcome |
 
 ---
 
@@ -96,24 +96,24 @@ graph TD
     COMP --> N8["COMPLETE (常数终态)"]
 ```
 
-1. **`INVOKE`** ：业务原子调用。支持 `use(op, project, merge)` 上下文投影合并；业务异常统一收敛为 `OPERATION_EXCEPTION`；
-2. **`SEQUENCE`** ：顺序流水线。连续匿名 `then` 步骤在编译期自动扁平化合并；`Flow.scope(name, body)` 创建具名作用域；
-3. **`ROUTE`** ：条件路由分发。按精确 `equals` 匹配 case 键；未匹配且无 otherwise 时输出 `Skipped(NO_ROUTE)`；
-4. **`FALLBACK`** ：降级与补偿节点。支持 SKIPPED 触发器（`firstApplicable` / `thenOptional`）与 FAILED 触发器（`recoverWith`）；
-5. **`PARALLEL`** ：并行分支。True Wait-All 合同，取消绕过 Join 逻辑；内置 `allAccepted`、`firstAccepted`、`quorum`、`homogeneousCollect` 策略；
-6. **`AWAIT`** ：挂起点。Local 返回 `Suspension` 句柄，Durable 快照落库等待外部注入信号；
-7. **`CONTROL`** ：治理切面。提供 `POLICY`（无状态网关）、`PERSISTENT_POLICY`（有状态策略）与 `TIMEOUT`（时限控制）；
-8. **`COMPLETE`** ：静态常量终点。`Flow.identity()`（原样透传）、`Flow.accepted`、`rejected`、`skipped`、`failed`。
+- `INVOKE`：业务原子调用。支持 `use(op, project, merge)` 上下文投影合并；业务异常统一收敛为 `OPERATION_EXCEPTION`；
+- `SEQUENCE`：顺序流水线。连续匿名 `then` 步骤在编译期自动扁平化合并；`Flow.scope(name, body)` 创建具名作用域；
+- `ROUTE`：条件路由分发。按精确 `equals` 匹配 case 键；未匹配且无 otherwise 时输出 `Skipped(NO_ROUTE)`；
+- `FALLBACK`：降级与补偿节点。支持 SKIPPED 触发器（`firstApplicable` / `thenOptional`）与 FAILED 触发器（`recoverWith`）；
+- `PARALLEL`：并行分支。True Wait-All 合同，取消绕过 Join 逻辑；内置 `allAccepted`、`firstAccepted`、`quorum`、`homogeneousCollect` 策略；
+- `AWAIT`：挂起点。Local 返回 `Suspension` 句柄，Durable 快照落库等待外部注入信号；
+- `CONTROL`：治理切面。提供 `POLICY`（无状态网关）、`PERSISTENT_POLICY`（有状态策略）与 `TIMEOUT`（时限控制）；
+- `COMPLETE`：静态常量终点。`Flow.identity()`（原样透传）、`Flow.accepted`、`rejected`、`skipped`、`failed`。
 
 ---
 
 ## 治理控制机制
 
 - **洋葱圈拦截模型**：后声明的治理策略在外层包裹业务主体；
-- **无状态切面（`Policy<K>`）**：在前置 `before` 进行 `Gate` 裁决（`proceed` / `reject` / `fail`），后置 `after` 接收完成摘要；
-- **有状态策略（`PersistentPolicy<K, S>`）**：维护不可变状态 `S`，支持 `WaitUntil` 延时挂起与 `RetryAt` 退避唤醒；
-- **超时控制（`Timeout`）**：执行器在栈帧边界监控绝对 Deadline，超时发送物理中断并截断栈帧产出 `TIMEOUT` 失败；
-- **稳定幂等键（`invocationId`）**：$$\text{invocationId} = \text{flowId} : \text{flowVersion} : \text{executionId} : \text{path}$$
+- **无状态切面** `Policy<K>`：在前置 `before` 进行 `Gate` 裁决（`proceed` / `reject` / `fail`），后置 `after` 接收完成摘要；
+- **有状态策略** `PersistentPolicy<K, S>`：维护不可变状态 `S`，支持 `WaitUntil` 延时挂起与 `RetryAt` 退避唤醒；
+- **超时控制** `Timeout`：执行器在栈帧边界监控绝对 Deadline，超时发送物理中断并截断栈帧产出 `TIMEOUT` 失败；
+- **稳定幂等键** `invocationId`：$$\text{invocationId} = \text{flowId} : \text{flowVersion} : \text{executionId} : \text{path}$$
   在 Retry 重试或崩溃恢复重放时保持恒定，为外部副作用提供绝对幂等防重保障。
 
 ---
@@ -124,8 +124,8 @@ graph TD
   - **Dispatcher 调度池**：负责 `runAsync` / `resumeAsync` 的顶层发起派发；
   - **Worker 工作池**：负责 `Flow.parallel` 分支并发执行与 `timeout` 超时监控（默认 `ForkJoinPool.commonPool()`）；
 - **两级静态死锁防御**：
-  - **规则 1（隔离校验）**：含 `parallel` 或 `timeout` 的流程，严禁将同一个非 ForkJoinPool 的有限线程池同时用作 Dispatcher 与 Worker；
-  - **规则 2（补偿校验）**：`parallel` 分支内部嵌套 `parallel` 或 `timeout` 时，Worker 必须是支持工作窃取与 `ManagedBlocker` 线程补偿的 `ForkJoinPool`。
+  - **规则 1（隔离校验）** ：含 `parallel` 或 `timeout` 的流程，严禁将同一个非 ForkJoinPool 的有限线程池同时用作 Dispatcher 与 Worker；
+  - **规则 2（补偿校验）** ：`parallel` 分支内部嵌套 `parallel` 或 `timeout` 时，Worker 必须是支持工作窃取与 `ManagedBlocker` 线程补偿的 `ForkJoinPool`。
 
 ---
 
@@ -140,10 +140,10 @@ graph TD
 
 ## 全链路诊断体系速查
 
-- **编译期静态校验（`FlowBuildException`）**：`DUPLICATE_LABEL`, `DUPLICATE_SCOPE`, `DUPLICATE_BRANCH`, `DUPLICATE_RESUME_POINT`, `PARALLEL_AWAIT`, `PARALLEL_PERSISTENT_POLICY`, `INVALID_BINDING`, `MISSING_BINDING`, `BINDING_TYPE`, `DUPLICATE_ROUTE_CASE`；
-- **运行时 Failed 失败码（`FlowDiagnosticCodes`）**：`OPERATION_EXCEPTION`, `OPERATION_INTERRUPTED`, `OPERATION_CANCELLED`, `TIMEOUT`, `EXECUTOR_REJECTED`, `WAIT_INTERRUPTED`, `POLICY_EXCEPTION`, `JOIN_EXCEPTION`, `PARALLEL_EXCEPTION`, `PARALLEL_INTERRUPTED`, `QUORUM_NOT_REACHED`；
+- **编译期静态校验** `FlowBuildException`：`DUPLICATE_LABEL`, `DUPLICATE_SCOPE`, `DUPLICATE_BRANCH`, `DUPLICATE_RESUME_POINT`, `PARALLEL_AWAIT`, `PARALLEL_PERSISTENT_POLICY`, `INVALID_BINDING`, `MISSING_BINDING`, `BINDING_TYPE`, `DUPLICATE_ROUTE_CASE`；
+- **运行时 Failed 失败码** `FlowDiagnosticCodes`：`OPERATION_EXCEPTION`, `OPERATION_INTERRUPTED`, `OPERATION_CANCELLED`, `TIMEOUT`, `EXECUTOR_REJECTED`, `WAIT_INTERRUPTED`, `POLICY_EXCEPTION`, `JOIN_EXCEPTION`, `PARALLEL_EXCEPTION`, `PARALLEL_INTERRUPTED`, `QUORUM_NOT_REACHED`；
 - **运行时 Skipped 弃权码**：`NO_ROUTE`, `NO_APPLICABLE_BRANCH`；
-- **Durable 状态机异常（`DurableException.Error`）**：`INVALID_DEFINITION`, `INVALID_CONFIGURATION`, `REVISION_CONFLICT`, `FLOW_MISMATCH`, `FORMAT_MISMATCH`, `RESUME_SIGNAL_CONFLICT`, `EXECUTION_EXISTS`, `EXECUTION_NOT_FOUND`, `CODEC_FAILURE`, `STORE_FAILURE`, `LIFECYCLE_MISMATCH`, `RESUME_POINT_MISMATCH`, `FRAME_MISMATCH`, `ASYNC_EXECUTOR_MISSING`。
+- **Durable 状态机异常** `DurableException.Error`：`INVALID_DEFINITION`, `INVALID_CONFIGURATION`, `REVISION_CONFLICT`, `FLOW_MISMATCH`, `FORMAT_MISMATCH`, `RESUME_SIGNAL_CONFLICT`, `EXECUTION_EXISTS`, `EXECUTION_NOT_FOUND`, `CODEC_FAILURE`, `STORE_FAILURE`, `LIFECYCLE_MISMATCH`, `RESUME_POINT_MISMATCH`, `FRAME_MISMATCH`, `ASYNC_EXECUTOR_MISSING`。
 
 ---
 

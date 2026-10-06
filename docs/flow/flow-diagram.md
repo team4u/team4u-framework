@@ -2,7 +2,7 @@
 
 `team4u-flow-diagram` 负责将流程结构渲染为直观的 Mermaid 流程图与紧凑文本树，适用于架构评审、开发文档自动化生成与日志排障。
 
-渲染器仅消费由 `flow.describe(flowId)` 导出的只读结构模型 **`FlowDescription`** ，不触及任何业务回调实例或执行状态，因此可在任何环境下安全调用而绝无副作用。
+渲染器仅消费由 `flow.describe(flowId)` 导出的只读结构模型 `FlowDescription`，不触及任何业务回调实例或执行状态，因此可在任何环境下安全调用而绝无副作用。
 
 ---
 
@@ -17,7 +17,7 @@
 
 ---
 
-## 双投影架构设计 (Dual Projection)
+## 双投影架构设计
 
 `Flow<I, O>` 对外提供两条职责严格隔离的投影通道：
 
@@ -25,13 +25,13 @@
 graph TD
     F["Flow&lt;I, O&gt;<br/>不可变逻辑拓扑（纯结构）"]
     
-    subgraph "结构描述通道 (Description Projection)"
+    subgraph "结构描述通道"
         F -->|"flow.describe(flowId)"| FD["FlowDescription<br/>冻结只读数据模型（无回调实例、零执行副作用）"]
         FD --> MM["MermaidFlowDiagramRenderer<br/>渲染直观清晰的 Mermaid 业务流程图"]
         FD --> TX["TextFlowDiagramRenderer<br/>渲染先序遍历紧凑文本树"]
     end
 
-    subgraph "可执行计划通道 (Executable Projection)"
+    subgraph "可执行计划通道"
         F -->|"flow.project(resolver, visitor)"| PE["ExecutableFlowVisitor&lt;R&gt;<br/>强类型执行计划编译器"]
         PE --> L["Local.compile (LocalExecutable)"]
         PE --> D["Durable.compile (DurableExecutable)"]
@@ -65,7 +65,7 @@ String textTree = FlowDiagrams.text().render(description);
 
 为了直观展示 `team4u-flow-diagram` 的渲染效果，下面以一个包含 **前置拦截、动态路由、人工审批挂起、并行资源锁定、超时治理与失败降级** 的典型复杂业务流程为例，演示从 DSL 编排到实际渲染输出的全过程。
 
-### 业务流程编排定义 (Java DSL)
+### 业务流程编排定义
 
 ```java
 package com.example.order;
@@ -155,7 +155,7 @@ public class OrderFulfillmentExample {
 }
 ```
 
-### 真实效果：Mermaid 流程图 (Live Graph)
+### 真实效果：Mermaid 流程图
 
 > [!TIP]
 > 上图由 `FlowDiagrams.mermaid().render(desc)` 生成的标准 Mermaid 脚本直接渲染呈现。
@@ -167,7 +167,7 @@ public class OrderFulfillmentExample {
 ```mermaid
 flowchart TD
     flow_start(["开始: order-fulfillment-flow"])
-    flow_end(["结束 (ACCEPTED)"])
+    flow_end(["结束：ACCEPTED"])
 
     subgraph sg_n16 ["作用域: order-checkout-process"]
         n1["前置风控拦截<br/>RiskCheckOperation (risk-checker)"]
@@ -177,12 +177,12 @@ flowchart TD
         n11{{"并行: 并行资源锁定"}}
         n9["库存预占 [timeout: 2s]<br/>LockInventoryOperation (stock-service)"]
         n10["卡券锁定<br/>LockCouponOperation (coupon-service)"]
-        n12["合并 (Join)"]
+        n12["合并"]
         n13["主通道支付扣款 [timeout: 5s]<br/>ChargePaymentOperation (main-gateway)"]
         n14["备用通道降级<br/>BackupPaymentOperation (backup-gateway)"]
         n15["生成出货单据<br/>IssueReceiptOperation (receipt-service)"]
         subgraph sg_n6 ["高风险人工审核"]
-            n3(["透传 (Identity)"])
+            n3(["透传：identity"])
             n4["挂起等待: manual-audit"]
             n5["PassAuditOperation<br/>(audit-handler)"]
         end
@@ -208,7 +208,7 @@ flowchart TD
     n15 --> flow_end
 ```
 
-### 真实效果：紧凑文本树 (Text Tree)
+### 真实效果：紧凑文本树
 
 `FlowDiagrams.text().render(desc)` 生成的先序遍历文本树，每一行代表 AST 中的一个只读节点。非常适合输出在生产环境控制台日志、排障工具或 CI/CD 自动化测试断言中：
 
@@ -293,11 +293,11 @@ public class FlowDiagramVisualizerController {
 
 | 结构 / 语义 | 图形表示 | 说明 |
 | :--- | :--- | :--- |
-| **主干推进** | `A --> B` (实线) | 正常业务成功推进通道（Happy Path） |
+| **主干推进** | `A --> B` (实线) | 正常业务成功推进通道 |
 | **异常 / 降级** | `A -.->|FAILED 降级| B` (虚线) | `recoverWith` 失败降级或 `otherwise` 分支 |
 | **控制策略徽章** | `[timeout: 2s]`, `[policy: rate-limit]` | 超时、限流等策略直接作为纯文本属性徽章显示在步骤上，不产生冗余 AST 方块 |
 | **路由决策** | 菱形 `{}` 节点 | 动态选择器与分支判定，条件清晰标注在出边上（`LOW`, `HIGH`, `otherwise`） |
-| **并行分发与合并** | 六边形 `{{}}` 与 `[合并 (Join)]` | 并行分支分发与汇聚点，自动折叠底层 Wait-All 胶水网关 |
+| **并行分发与合并** | 六边形 `{{}}` 与 `[合并]` | 并行分支分发与汇聚点，自动折叠底层 Wait-All 胶水网关 |
 | **挂起等待** | `挂起等待: point` | 人工审批或外部信号注入点 |
 | **作用域** | `subgraph` 容器框 | 具名 Scope 自动渲染为清晰的边界分组矩形，嵌套作用域按 Block 树物理嵌套输出（内层 `subgraph...end` 完整位于外层块内部，节点声明行只出现一次且归属最内层子图） |
 
@@ -306,7 +306,7 @@ public class FlowDiagramVisualizerController {
 ## 稳定渲染与 Opaque 机制
 
 为了确保图表渲染的安全与确定性：
-- **不透明路由键 (Opaque Keys)** ：无法安全确定性序列化的路由键（如匿名类、闭包等）统一渲染为 `<opaque>` 占位符，渲染器从不主动调用其 `toString()`，防止引发副作用或泄露敏感信息；
+- **不透明路由键** ：无法安全确定性序列化的路由键（如匿名类、闭包等）统一渲染为 `<opaque>` 占位符，渲染器从不主动调用其 `toString()`，防止引发副作用或泄露敏感信息；
 - **确定性输出**：同一 `FlowDescription` 的渲染结果逐字节确定，无随机生成的 ID，便于进行自动化测试断言与 Git 版本比对；
 - **特殊字符转义**：节点标签中的引号、换行符与管道符自动转义为标准 HTML 实体。
 

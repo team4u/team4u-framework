@@ -98,6 +98,6 @@ try {
 }
 ```
 
-- **`mark()`** ：直接捕获当前索引，开销极低；
-- **`reset(mark)`** ：将游标重置到指定标记，实现快速回滚；
-- **`previous()` / `lookbehind()`** ：支持安全回看前置已消费的记号。
+- **mark 方法** ：`mark()` 直接捕获当前索引，开销极低；
+- **reset 方法** ：`reset(mark)` 将游标重置到指定标记，实现快速回滚；
+- **previous 与 lookbehind 方法** ：`previous()` / `lookbehind()` 支持安全回看前置已消费的记号。

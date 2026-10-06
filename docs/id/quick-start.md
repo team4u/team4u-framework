@@ -118,7 +118,7 @@ seq.order={"segment":100}
 
 ## 本地号段加速
 
-每次取号都访问计数器（JDBC/Redis）存在网络与竞争开销。规则配置 `segment` 后，本地一次批量取 N 个序号，取号直接走本地内存：
+每次取号都访问计数器（JDBC 或 Redis）存在网络与竞争开销。规则配置 `segment` 后，本地一次批量取 N 个序号，取号直接走本地内存：
 
 ```properties
 seq.order={"segment":100}

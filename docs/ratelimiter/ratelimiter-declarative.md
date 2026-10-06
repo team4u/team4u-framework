@@ -1,6 +1,6 @@
 # 声明式注解与代理降级
 
-在 Spring / 企业开发中，侵入式地编写限流代码会污染核心业务逻辑。`team4u-ratelimiter` 提供了强大的声明式注解 **`@RateLimit`** 、动态代理拦截器与 **`@RateLimitReject` 降级兜底机制**。
+在 Spring / 企业开发中，侵入式地编写限流代码会污染核心业务逻辑。`team4u-ratelimiter` 提供了声明式注解 `@RateLimit`、动态代理拦截器与 `@RateLimitReject` 降级兜底机制。
 
 ---
 
@@ -29,11 +29,11 @@ public class OrderService {
 
 | 属性 | 类型 | 默认值 | 作用说明 |
 | :--- | :--- | :--- | :--- |
-| **`key`** | `String` | `""` | SpEL 表达式提取的限流 Key。留空时默认以 `方法全限定名` 作为限流 Key |
-| **`limit`** | `long` | 必填 | 周期内允许的最大请求数 |
-| **`period`** | `int` | `1` | 限流周期（单位：秒） |
-| **`algorithm`** | `String` | `"TOKEN_BUCKET"` | 限流算法：`TOKEN_BUCKET`、`SLIDING_WINDOW`、`FIXED_WINDOW` |
-| **`fallback`** | `String` | `""` | 被限流时调用的降级方法名（需与原方法参数及返回值兼容） |
+| `key` | `String` | `""` | SpEL 表达式提取的限流 Key。留空时默认以 `方法全限定名` 作为限流 Key |
+| `limit` | `long` | 必填 | 周期内允许的最大请求数 |
+| `period` | `int` | `1` | 限流周期（单位：秒） |
+| `algorithm` | `String` | `"TOKEN_BUCKET"` | 限流算法：`TOKEN_BUCKET`、`SLIDING_WINDOW`、`FIXED_WINDOW` |
+| `fallback` | `String` | `""` | 被限流时调用的降级方法名（需与原方法参数及返回值兼容） |
 
 ---
 

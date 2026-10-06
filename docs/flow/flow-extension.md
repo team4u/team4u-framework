@@ -2,8 +2,8 @@
 
 `team4u-flow` 遵循“**扩展点开放、运行时节点封闭**”的架构设计原则：
 
-- **运行时节点封闭（Closed PlanNode Set）**：编译后的执行计划仅由八种确定节点（`INVOKE`, `SEQUENCE`, `ROUTE`, `FALLBACK`, `PARALLEL`, `AWAIT`, `CONTROL`, `COMPLETE`）组成，保证内核语义的一致性与稳定性；
-- **扩展点开放（Open SPIs）**：业务逻辑收敛于 `Operation`，治理控制收敛于 `Policy` / `PersistentPolicy`，并行合并收敛于 `JoinStrategy`，容器依赖解析收敛于 `OperationResolver`，状态持久化收敛于 `StateMapper` 与 `DurableStore`，全链路监控收敛于 `FlowObserver` / `DurableObserver`，自定义执行引擎收敛于 `ExecutableFlowVisitor`。
+- **运行时节点封闭** ：编译后的执行计划仅由八种确定节点（`INVOKE`, `SEQUENCE`, `ROUTE`, `FALLBACK`, `PARALLEL`, `AWAIT`, `CONTROL`, `COMPLETE`）组成，保证内核语义的一致性与稳定性；
+- **扩展点开放** ：业务逻辑收敛于 `Operation`，治理控制收敛于 `Policy` / `PersistentPolicy`，并行合并收敛于 `JoinStrategy`，容器依赖解析收敛于 `OperationResolver`，状态持久化收敛于 `StateMapper` 与 `DurableStore`，全链路监控收敛于 `FlowObserver` / `DurableObserver`，自定义执行引擎收敛于 `ExecutableFlowVisitor`。
 
 ---
 
@@ -11,16 +11,16 @@
 
 | 扩展接口 | 核心方法签名 | 适用场景 |
 | :--- | :--- | :--- |
-| **`Operation<I, O>`** | `Outcome<O> execute(OperationContext ctx, I input)` | 业务转换、RPC 调用、数据库操作与外部副作用 |
-| **`Policy<K>`** | `Gate before(PolicyContext, K)` + `after(...)` | 无状态准入、租户限流、动态风控与权限鉴权 |
-| **`PersistentPolicy<K, S>`** | `initialState` + `before` + `after` | 有状态且需跨重启持久化的治理策略（如延时重试、配额窗口） |
-| **`JoinStrategy<O>`** | `Outcome<O> join(ParallelResults results)` | 并行分支执行结果的自定义合并、加权与仲裁 |
-| **`OperationResolver`** | `Object resolve(Class<?> contract, String qualifier)` | 容器依赖解析（Spring / Guice 或自定义 IoC 容器集成） |
-| **`FlowDefinitionExtension`** | `void contribute(FlowDefinitionRegistry.Builder)` | 外部定义符号注册表 SPI 扩展与 PolicyProvider 自动发现装配 |
-| **`StateMapper`** | `StoredValue encode(Object)` / `decode(StoredValue)` | Durable 持久化应用状态的确定性序列化与反序列化 |
-| **`DurableStore`** | `load(id)` + `compareAndSet(id, revision, snapshot)` | 快照存储适配（如 Redis、MySQL、PostgreSQL 等外部存储） |
-| **`FlowObserver` / `DurableObserver`** | `void onEvent(Event)` | 全链路执行追踪、监控指标收集与审计日志 |
-| **`ExecutableFlowVisitor<R>`** | `visitInvoke` / `visitSequence` / ... | 自建自定义执行器、静态分析工具或安全审计引擎 |
+| `Operation<I, O>` | `Outcome<O> execute(OperationContext ctx, I input)` | 业务转换、RPC 调用、数据库操作与外部副作用 |
+| `Policy<K>` | `Gate before(PolicyContext, K)` + `after(...)` | 无状态准入、租户限流、动态风控与权限鉴权 |
+| `PersistentPolicy<K, S>` | `initialState` + `before` + `after` | 有状态且需跨重启持久化的治理策略（如延时重试、配额窗口） |
+| `JoinStrategy<O>` | `Outcome<O> join(ParallelResults results)` | 并行分支执行结果的自定义合并、加权与仲裁 |
+| `OperationResolver` | `Object resolve(Class<?> contract, String qualifier)` | 容器依赖解析（Spring / Guice 或自定义 IoC 容器集成） |
+| `FlowDefinitionExtension` | `void contribute(FlowDefinitionRegistry.Builder)` | 外部定义符号注册表 SPI 扩展与 PolicyProvider 自动发现装配 |
+| `StateMapper` | `StoredValue encode(Object)` / `decode(StoredValue)` | Durable 持久化应用状态的确定性序列化与反序列化 |
+| `DurableStore` | `load(id)` + `compareAndSet(id, revision, snapshot)` | 快照存储适配（如 Redis、MySQL、PostgreSQL 等外部存储） |
+| `FlowObserver` / `DurableObserver` | `void onEvent(Event)` | 全链路执行追踪、监控指标收集与审计日志 |
+| `ExecutableFlowVisitor<R>` | `visitInvoke` / `visitSequence` / ... | 自建自定义执行器、静态分析工具或安全审计引擎 |
 
 ---
 
@@ -212,7 +212,7 @@ public class LoggingFlowObserver implements FlowObserver {
 ### 观察者契约要点
 
 - **异常隔离**：观察者回调中抛出的任何运行时异常都会被框架捕获并记录日志（首次 warn、后续按实例限流 debug），绝不影响主流程执行结果；`Error` 不被拦截，原样传播；
-- **无操作短路（`isNoop()`）**：`FlowObserver` 提供 `default boolean isNoop()`（默认 `false`），
+- **无操作短路** ：`FlowObserver` 提供 `default boolean isNoop()`（默认 `false`），
   引擎在热路径上据此短路事件对象与属性字典的构造分配；`FlowObserver.noop()` 返回的实例
   覆写返回 `true`，自定义空观察者若可安全跳过全部事件，建议覆写本方法返回 `true` 以获得更佳性能；
 - **组合广播**：`FlowObserver.composite(observers...)` 可将多个观察者按顺序广播（单个观察者异常不会中断其余观察者；仅当全部成员均为 noop 时复合观察者才报告 noop）；
@@ -222,7 +222,7 @@ public class LoggingFlowObserver implements FlowObserver {
   必须使用并发安全容器；
 - **事件配对性**：`NODE_STARTED` / `NODE_COMPLETED` 与 `POLICY_BEFORE` / `POLICY_AFTER` 事件
   在非取消、非超时、非重试轮次的正常路径上成对出现；当执行因取消、超时或
-  `PersistentPolicy` 声明重试轮次（RetryAt）而中断或循环时，事件可能不成对。
+  `PersistentPolicy` 声明重试轮次 `RetryAt` 而中断或循环时，事件可能不成对。
 
 ---
 
@@ -311,8 +311,8 @@ public class MyFlowDefinitionExtension implements FlowDefinitionExtension {
 
 ## 关联章节与进一步阅读
 
-- 外部流程定义与静态类型检查：[外部流程定义与符号注册 (team4u-flow-definition)](flow-definition.md)
-- 文本 DSL 语法与统一门面：[文本 DSL 语法与统一门面 (team4u-flow-dsl)](flow-dsl.md)
+- 外部流程定义与静态类型检查：[外部流程定义与符号注册](flow-definition.md)
+- 文本 DSL 语法与统一门面：[文本 DSL 语法与统一门面](flow-dsl.md)
 - 掌握综合业务场景实战：[实战案例库与生产模式](flow-sample.md)
 - 了解全链路诊断码体系：[诊断码体系与故障排查手册](flow-diagnostics.md)
 - 查阅单元测试与断言工具：[测试支持与测试套件](flow-test.md)

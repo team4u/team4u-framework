@@ -34,7 +34,7 @@ user.risk_4a1d0eaeeb3f7d58a1e16cfafcbf5eac5b6e32c0db9a5b2e5ee6b0a5cbab1f0f
 
 所有摘要算法实现 `SingleFlightKeyDigest` 接口（继承自 `KeyedPolicy<String>`）。
 
-### 步骤 1：编写算法实现类
+### 编写算法实现类
 
 ```java
 import com.team4u.framework.singleflight.policy.SingleFlightKeyDigest;
@@ -61,7 +61,7 @@ public class HmacSha256KeyDigest implements SingleFlightKeyDigest {
 }
 ```
 
-### 步骤 2：应用启动时注册
+### 应用启动时注册
 
 ```java
 import com.team4u.framework.singleflight.policy.SingleFlightKeyDigests;
@@ -72,7 +72,7 @@ SingleFlightKeyDigests.global().register(new HmacSha256KeyDigest(secret));
 - 同名后注册者覆盖先注册者——可以覆盖内置的 `sha256`，注册表行为与 `NamedKvStoreRegistry` 一致；
 - `register` 返回 `this`，支持链式注册多个算法。
 
-### 步骤 3：规则按名引用
+### 规则按名引用
 
 ```properties
 team4u.singleflight.user.risk={"id":"user.risk","key":"${idNumber}","cacheTtlMillis":60000,"keyDigest":"hmac-sha256"}

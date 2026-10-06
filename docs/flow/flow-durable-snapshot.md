@@ -2,7 +2,7 @@
 
 在 `team4u-flow-durable` 中，流程执行的完整上下文以不可变快照信封 `DurableSnapshot` 的形式持久化。
 
-底层状态数据绝不序列化任何 Java 字节码或 Lambda 闭包，而是通过 **`SnapshotCodec` 二进制元数据编码** 与 **`StateMapper` 确定性业务槽位编解码体系** 将其离散存储至标准化的槽位（Slots）中。
+底层状态数据绝不序列化任何 Java 字节码或 Lambda 闭包，而是通过 **`SnapshotCodec` 二进制元数据编码** 与 **`StateMapper` 确定性业务槽位编解码体系** 将其离散存储至标准化的槽位中。
 
 本文将详细剖析快照内部字段设计、二进制帧元数据布局、槽位命名规范、`StateMapper` 确定性契约以及 `RestoredStateValidator` 防御性校验。
 
@@ -16,7 +16,7 @@
 graph TD
     DS["DurableSnapshot (快照信封)"]
     
-    subgraph "框架运行元数据 (Framework Metadata)"
+    subgraph "框架运行元数据"
         M1["executionId: 执行实例流水号"]
         M2["flowId / flowVersion: 流程标识与版本"]
         M3["formatId / formatVersion: 存储格式版本"]
@@ -28,7 +28,7 @@ graph TD
         M9["firstWakeAt: 最早的定时唤醒时刻 (仅 ACTIVE 非空，供调度器扫描)"]
     end
     
-    subgraph "业务状态槽位 (Business Slots Map)"
+    subgraph "业务状态槽位"
         S1["slots['input'] → StoredValue (初始输入)"]
         S2["slots['node:$/0/1'] → StoredValue (节点中间产出)"]
         S3["slots[policy:$/0] → StoredValue (策略持久化状态)"]
@@ -43,7 +43,7 @@ graph TD
 
 ## 二进制帧元数据编码 (`SnapshotCodec`)
 
-框架将执行栈的拓扑关系、当前阶段（Phase）与时限时间戳压缩编码为紧凑的二进制字节数组 `frameMetadata`：
+框架将执行栈的拓扑关系、当前阶段与时限时间戳压缩编码为紧凑的二进制字节数组 `frameMetadata`：
 
 ```text
 [MAGIC: 0x54344644 (4 bytes)]
@@ -62,7 +62,7 @@ graph TD
 [Final Machine Outcome (Kind + Slot/Reason/Failure)]
 ```
 
-### 插槽引用标签 (Slot Reference Tags)
+### 插槽引用标签
 在二进制元数据中，不直接内联业务数据，而是通过标签引用 `slots` 字典中的具体槽位：
 - **Tag 1 (`User`)** ：引用具体的业务槽位名（如 `input`、`node:$/0`）；
 - **Tag 2 (`Resumed`)** ：引用 `Resumed<State, Signal>` 复合槽位；
@@ -70,17 +70,17 @@ graph TD
 
 ---
 
-## 槽位命名规范 (Slot Layout)
+## 槽位命名规范
 
 业务数据被确定性编码为 `StoredValue` 后，存入 `slots: Map<String, StoredValue>` 字典中。框架定义了标准化的槽位键前缀：
 
 | 槽位键格式 | 存储内容 | 生命周期与写入时机 |
 | :--- | :--- | :--- |
-| **`input`** | 流程启动时的初始输入参数 | `start` 命令初始化时写入，全程只读 |
-| **`node:<path>`** | 对应 AST 路径节点产生/消费的中间业务数据 | 节点执行完成并提交检查点时更新 |
-| **`policy:<path>`** | `PersistentPolicy` 的不可变状态 `S` | 策略前置/后置评估并提交检查点时更新 |
-| **`resume:<name>`** | 外部注入目标挂起点的恢复信号（Signal） | `resume` 第一阶段 CAS 成功时写入 |
-| **`key:<path>`** | 策略评估时提取的策略路由键 $K$ | 策略前置评估时写入 |
+| `input` | 流程启动时的初始输入参数 | `start` 命令初始化时写入，全程只读 |
+| `node:<path>` | 对应 AST 路径节点产生/消费的中间业务数据 | 节点执行完成并提交检查点时更新 |
+| `policy:<path>` | `PersistentPolicy` 的不可变状态 `S` | 策略前置/后置评估并提交检查点时更新 |
+| `resume:<name>` | 外部注入目标挂起点的恢复信号 | `resume` 第一阶段 CAS 成功时写入 |
+| `key:<path>` | 策略评估时提取的策略路由键 $K$ | 策略前置评估时写入 |
 
 ---
 
@@ -130,10 +130,10 @@ public interface StateMapper {
 }
 ```
 
-### 确定性契约（Deterministic Contract）的重要性
+### 确定性契约的重要性
 
 > [!IMPORTANT]
-> **确定性要求**：对于同一个业务对象（在 `equals` 意义下相同），多次调用 `encode` 生成的 `StoredValue` 载荷字节序列必须**逐字节完全一致（Bit-for-bit Equality）**。
+> **确定性要求**：对于同一个业务对象（在 `equals` 意义下相同），多次调用 `encode` 生成的 `StoredValue` 载荷字节序列必须**逐字节完全一致** 。
 
 **为什么确定性至关重要？**
 - 在两段式 CAS 恢复协议中，当外部重复发起 `resume` 时，框架通过比对新信号编码后的字节数组与已持久化信号是否一致来判定是否为幂等重放；
@@ -198,7 +198,7 @@ Durable runtime = Durable.builder(durableStore)
 
 在实际业务中，前端或管理后台经常需要查询长流程的当前执行进度（例如：“审批流处于哪一步”、“当前等待的是哪个挂起点”、“历史节点的计算结果是什么”）。
 
-通过 `executable.snapshot(executionId)` 可以进行**纯只读查询（零写入副作用、零 CAS 竞争）**，并结合 `StateMapper` 解码业务槽位：
+通过 `executable.snapshot(executionId)` 可以进行**纯只读查询（零写入副作用、零 CAS 竞争）** ，并结合 `StateMapper` 解码业务槽位：
 
 ```java
 @RestController
@@ -261,12 +261,12 @@ public class OrderProgressController {
 
 当调用 `recover(executionId)` 反序列化快照时，框架通过 `RestoredStateValidator` 对恢复后的状态机进行严格的拓扑与阶段自洽性校验：
 
-1. **根帧拓扑一致性**：恢复快照的根帧节点必须与当前代码编译出的 Definition 根节点完全一致；
-2. **父子帧游标匹配**：父帧声明的当前子步骤下标（`index`）对应的物理子节点必须与栈中的实际子帧完全匹配；
-3. **阶段自洽性（Phase Validation）**：
+- **根帧拓扑一致性**：恢复快照的根帧节点必须与当前代码编译出的 Definition 根节点完全一致；
+- **父子帧游标匹配**：父帧声明的当前子步骤下标（`index`）对应的物理子节点必须与栈中的实际子帧完全匹配；
+- **阶段自洽性**：
    - Sequence / Route / Fallback 各节点的 `phase` 必须处于合法区间；
    - 处于等待阶段（`phase = 2/3`）的 Control 帧必须具备有效的绝对唤醒时间点（`wake`）；
-4. **插槽引用完整性**：反序列化用到的插槽键集合必须与快照携带的插槽集合完全一致，防止孤立未引用的脏槽位或槽位遗漏。
+- **插槽引用完整性**：反序列化用到的插槽键集合必须与快照携带的插槽集合完全一致，防止孤立未引用的脏槽位或槽位遗漏。
 
 ---
 

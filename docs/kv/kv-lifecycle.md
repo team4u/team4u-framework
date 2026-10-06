@@ -1,6 +1,6 @@
 # 值生命周期
 
-`team4u-kv-lifecycle` 管理三类「随时间变化」的关注点：过期值续期（ExpiringValue）、变更订阅（PollingWatcher）、过期清理（KvCleaner）。
+`team4u-kv-lifecycle` 管理三类「随时间变化」的关注点：过期值续期 `ExpiringValue`、变更订阅 `PollingWatcher`、过期清理 `KvCleaner`。
 
 ## ExpiringValue：过期值源
 
@@ -94,7 +94,7 @@ try (PollingWatcher watcher = new PollingWatcher(jdbcStore, 200)) {  // 200ms �
 
 ## KvCleaner：过期清理
 
-惰性过期使「读取永不返回脏数据」，清理只是**回收存储空间**（写多读少的冷键）。实现 `NativeTtlCapable` 的存储（Redis）自动跳过：
+惰性过期使「读取永不返回脏数据」，清理只是**回收存储空间**（写多读少的冷键）。实现 `NativeTtlCapable` 的存储如 Redis 自动跳过：
 
 ```java
 // 完整构造（四参）：用于多实例共享存储时全局互斥

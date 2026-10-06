@@ -1,4 +1,4 @@
-# 调用链追踪与性能审计 (Tracker)
+# 调用链追踪与性能审计
 
 通过 `Tracker` 接口与 `TrackInterceptor`，无需引入庞大的 Spring AOP 或字节码 Instrumentation，即可快速为任意普通对象或接口挂载轻量级的方法生命周期监听、耗时审计与异常捕获。
 

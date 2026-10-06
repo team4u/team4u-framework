@@ -8,9 +8,9 @@
 
 思路分三步：
 
-1. 用户下单时提交一个延迟任务；
-2. 任务到期后 Worker 查询订单支付状态；
-3. 未支付就调用订单服务取消；取消操作必须以 `orderId` 幂等，因为任务可能被重复执行。
+- 用户下单时提交一个延迟任务；
+- 任务到期后 Worker 查询订单支付状态；
+- 未支付就调用订单服务取消；取消操作必须以 `orderId` 幂等，因为任务可能被重复执行。
 
 ```java
 TaskQueue orders = Leases.queue(new InMemoryLeaseBackend(), "orders");
@@ -56,9 +56,9 @@ try (TaskWorker worker = orders.worker()
 
 思路：
 
-1. 第一次执行发现结果未发布，返回 `retryAfter`；
-2. 到达新的可执行时间后，同一个任务再次被 Worker 取走；
-3. 第二次查到结果，写回成功 payload。
+- 第一次执行发现结果未发布，返回 `retryAfter`；
+- 到达新的可执行时间后，同一个任务再次被 Worker 取走；
+- 第二次查到结果，写回成功 payload。
 
 ```java
 TaskQueue payments = Leases.queue(new InMemoryLeaseBackend(), "payments");

@@ -8,10 +8,10 @@
 
 | 维度 | 原生 `ConcurrentHashMap<String, Policy>` | `KeyedPolicy` + `KeyedPolicyRegistry` |
 | :--- | :--- | :--- |
-| **自描述与内聚性** | Key 与 Policy 分离维护，策略对象在方法间传递时极易丢失身份标识 | 策略自身实现 `K key()`，身份与策略实体天然强绑定 |
-| **高并发读取性能**| 原生 Map 遍历或读取仍存在哈希计算、分段节点巡检与并发开销 | 基于**Copy-On-Write** 机制，写时更新不可变快照，读取操作无锁，直接返回缓存列表，不做拷贝 |
-| **注册自动化** | 必须在启动类中手写大量的 `map.put("KEY", new Policy())` 样板代码 | 深度融合 `PolicyScanner` 与 Spring，支持包扫描、SPI 与容器 Bean 零配置自动装配 |
-| **防御性校验** | 容易误注册不合规类型或 `null` 键，运行时难以及时发现 | 构造时绑定 `Class<P>`，注册时严格执行类型检查与非空断言，快速失败 |
+| 自描述与内聚性 | Key 与 Policy 分离维护，策略对象在方法间传递时极易丢失身份标识 | 策略自身实现 `K key()`，身份与策略实体天然强绑定 |
+| 高并发读取性能 | 原生 Map 遍历或读取仍存在哈希计算、分段节点巡检与并发开销 | 基于 Copy-On-Write 机制，写时更新不可变快照，读取操作无锁，直接返回缓存列表，不做拷贝 |
+| 注册自动化 | 必须在启动类中手写大量的 `map.put("KEY", new Policy())` 样板代码 | 深度融合 `PolicyScanner` 与 Spring，支持包扫描、SPI 与容器 Bean 零配置自动装配 |
+| 防御性校验 | 容易误注册不合规类型或 `null` 键，运行时难以及时发现 | 构造时绑定 `Class<P>`，注册时严格执行类型检查与非空断言，快速失败 |
 
 ---
 
@@ -80,19 +80,19 @@ public class KeyedPolicyRegistry<K, P extends KeyedPolicy<K>> implements PolicyR
 
 ---
 
-## 防御性校验与异常体系 (`PolicyException`)
+## 防御性校验与异常体系
 
 在调用 `register` 或 `addAll` 时，框架会自动执行严格的合规性校验：
 
-1. **类型匹配校验**：若传入的策略对象未实现注册表声明的 `policyClass`，抛出 `PolicyException`：
+- **类型匹配校验** ：若传入的策略对象未实现注册表声明的 `policyClass`，抛出 `PolicyException`：
    ```java
    // Policy type mismatch, expected: com.example.PaymentPolicy, got: com.example.WrongPolicy
    ```
-2. **非空 Key 校验**：策略的 `key()` 返回值不允许为 `null`，否则抛出 `PolicyException`：
+- **非空 Key 校验** ：策略的 `key()` 返回值不允许为 `null`，否则抛出 `PolicyException`：
    ```java
    // Policy key cannot be null for policy type: com.example.PaymentPolicy
    ```
-3. **注册表类型兼容校验**：调用 `addAll(registry)` 时，传入的注册表必须同为 `KeyedPolicyRegistry`，否则抛出 `PolicyException.unsupportedRegistry(...)`。
+- **注册表类型兼容校验** ：调用 `addAll(registry)` 时，传入的注册表必须同为 `KeyedPolicyRegistry`，否则抛出 `PolicyException.unsupportedRegistry(...)`。
 
 ---
 

@@ -62,24 +62,24 @@ graph LR
 
 ```mermaid
 graph TD
-    subgraph "1. 前端读取层"
+    subgraph "前端读取层"
         RDR["FlowDefinitionReader 统一读取器 SPI<br/>• 文本 DSL (TextFlowDefinitionReader)<br/>• ANTLR / JSON / YAML / 配置中心"]
     end
 
-    subgraph "2. 外部配置层"
+    subgraph "外部配置层"
         AST["FlowDefinition / FlowSpec AST<br/>• 纯数据模型，实现 Serializable<br/>• 集合完全不可变包装，防止原地篡改<br/>• 携带 SourceSpan 源码文件与行列号坐标"]
         RDR --> AST
     end
 
-    subgraph "3. 符号绑定与校验层"
+    subgraph "符号绑定与校验层"
         REG["FlowDefinitionRegistry 符号注册表"]
-        TC["TypeChecker 静态类型检查器 (SpecTypeCheckerRegistry)"]
-        FB["FlowBinder 符号绑定器 (SpecBinderRegistry)"]
+        TC["TypeChecker 静态类型检查器"]
+        FB["FlowBinder 符号绑定器"]
         SM["SourceMapBuilder 源码坐标映射器"]
         AST & REG --> TC --> FB --> SM
     end
 
-    subgraph "4. 运行时执行与驱动层"
+    subgraph "运行时执行与驱动层"
         LOG["Flow&lt;I, O&gt; 逻辑编排树"]
         PLAN["PlanNode 物理执行计划 (9 种封闭节点)"]
         FB --> LOG --> PLAN
@@ -104,9 +104,9 @@ graph TD
 ```mermaid
 sequenceDiagram
     autonumber
-    participant D as 外部配置 (FlowSpec)
-    participant R as 符号注册表 (Registry)
-    participant B as 绑定器 (FlowBinder)
+    participant D as 外部配置
+    participant R as 符号注册表
+    participant B as 绑定器
     participant P as 发布器 (FlowPublisher)
     participant E as 执行器 (LocalExecutable)
 
@@ -145,7 +145,7 @@ FlowDefinition definition = new FlowDefinition(
 
 将上述蓝图中引用的字符串标识（`order.validate` 等），映射到具体的 Java 实例、方法引用或 Spring Bean 契约上。
 
-框架内置了**泛型反射自动推导机制**，只要传入具体的组件实现类或实例，框架将自动分析接口签名提取入参和出参类型，**无需手动重复声明 `Class<I>, Class<O>`** ：
+框架内置了泛型反射自动推导机制，只要传入具体的组件实现类或实例，框架将自动分析接口签名提取入参和出参类型，无需手动重复声明 `Class<I>, Class<O>`：
 
 ```java
 FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
@@ -169,9 +169,9 @@ FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
 ### 静态类型检查与符号绑定
 
 使用 `FlowBinder` 进行一键编译绑定。绑定器会自动完成：
-1. 校验流程中引用的每个符号是否存在（先查显式注册表，未命中则自动回退到 Spring 容器）；
-2. 静态推导上游步骤的输出类型是否满足下游步骤的输入要求；
-3. 将纯数据 AST 转换为强类型 `Flow<I, O>` 并生成行列号坐标映射（`SourceMap`）。
+- 校验流程中引用的每个符号是否存在（先查显式注册表，未命中则自动回退到 Spring 容器）；
+- 静态推导上游步骤的输出类型是否满足下游步骤的输入要求；
+- 将纯数据 AST 转换为强类型 `Flow<I, O>` 并生成行列号坐标映射（`SourceMap`）。
 
 ```java
 // 执行绑定（如果类型不匹配或符号不存在，会即时抛出 FlowDiagnosticException）
@@ -283,11 +283,11 @@ graph TD
 
 ### 内置修饰器一览
 
-- **业务标签 (`named`)** ：为步骤赋予中文展示名称，用于日志追踪与 Mermaid 流程图可视化；
-- **超时控制 (`timeout`)** ：指定该步骤的最大允许耗时（如 `500ms`, `2s`）；
-- **策略切面 (`policy`)** ：绑定限流、鉴权等治理切面，支持指定路由 Key 提取器与配置字典；
-- **重试切面 (`retry`)** ：绑定重试策略，支持动态配置最大重试次数与退避时长；
-- **可选步骤 (`optional`)** ：声明该步骤为可选；当步骤弃权返回 `Skipped` 时，自动透传步骤入口原值继续执行后续流程。
+- **业务标签** `named`：为步骤赋予中文展示名称，用于日志追踪与 Mermaid 流程图可视化；
+- **超时控制** `timeout`：指定该步骤的最大允许耗时（如 `500ms`, `2s`）；
+- **策略切面** `policy`：绑定限流、鉴权等治理切面，支持指定路由 Key 提取器与配置字典；
+- **重试切面** `retry`：绑定重试策略，支持动态配置最大重试次数与退避时长；
+- **可选步骤** `optional`：声明该步骤为可选；当步骤弃权返回 `Skipped` 时，自动透传步骤入口原值继续执行后续流程。
 
 > [!NOTE]
 > **数据投影与合并规范** ：

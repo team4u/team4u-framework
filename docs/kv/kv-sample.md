@@ -24,7 +24,7 @@ sessions.put(userId, session.touch());
 sessions.remove(userId);
 ```
 
-## 接口幂等控制（SETNX）
+## 接口幂等控制
 
 支付回调可能重复推送，同一订单号只处理一次：
 
@@ -45,7 +45,7 @@ public void onPaymentCallback(String orderId) {
 
 `IF_ABSENT` 的原子性由存储保证（唯一索引 / SETNX），并发回调下仅一个请求成功。
 
-## 第三方 Token 续期（ExpiringValue + CLUSTER）
+## 第三方 Token 续期
 
 ```java
 ExpiringValue<Token> token = ExpiringValue.<Token>builder(Token.class)

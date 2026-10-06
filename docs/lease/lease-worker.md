@@ -16,8 +16,8 @@ TaskWorker worker = orders.worker()
 
 `handle(type, handler)` 做两件事：
 
-1. 告诉 Worker 遇到 `order.cancel` 时执行这个函数；
-2. 告诉后端这个 Worker 只抢占 `order.cancel`，不会抢占同队列里的其他任务类型。
+- 告诉 Worker 遇到 `order.cancel` 时执行这个函数；
+- 告诉后端这个 Worker 只抢占 `order.cancel`，不会抢占同队列里的其他任务类型。
 
 一个 Worker 可以注册多个类型：
 

@@ -7,10 +7,10 @@
 | 后端 | 模块 | `IF_ABSENT` | CAS | 计数 | 计分窗口 | 扫描 | 原生TTL | 互斥范围 |
 | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- | :--- |
 | `InMemoryKvStore` | kv-core | `compute` | `compute` | `AtomicLong` | 独立窗口结构 | 遍历 | 惰性判定 | 当前进程 |
-| `JdbcKvStore` | kv-store-jdbc | 唯一索引 | 条件 UPDATE | 行锁 | ❌ 未实现 | SQL | 惰性判定 | 连接该库的实例 |
-| `RedisKvStore` | kv-store-redis | SETNX | Lua 脚本 | `INCRBY` | ZSET + Lua | SCAN | ✅ | 连接该 Redis 的实例 |
+| `JdbcKvStore` | kv-store-jdbc | 唯一索引 | 条件 UPDATE | 行锁 | 未实现 | SQL | 惰性判定 | 连接该库的实例 |
+| `RedisKvStore` | kv-store-redis | SETNX | Lua 脚本 | `INCRBY` | ZSET + Lua | SCAN | 支持 | 连接该 Redis 的实例 |
 
-> 命名存储注册表 `NamedKvStoreRegistry` / `NamedKvStore` 不在 kv-core：它们位于 `team4u-kv-space`，FQCN 不变（`com.team4u.framework.kv.*`），详见[类型化键空间](kv-space.md#命名存储注册表namedkvstoreregistry)。
+> 命名存储注册表 `NamedKvStoreRegistry` / `NamedKvStore` 不在 kv-core：它们位于 `team4u-kv-space`，FQCN 不变（`com.team4u.framework.kv.*`），详见[类型化键空间](kv-space.md#命名存储注册表)。
 
 ## JDBC：JdbcKvStore
 

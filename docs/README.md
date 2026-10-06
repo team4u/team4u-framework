@@ -21,7 +21,7 @@
 | [**流程编排组件**](flow/README.md) | `team4u-flow` / `team4u-flow-definition` / `team4u-flow-dsl` / `team4u-flow-durable` / `team4u-flow-durable-kv` / `team4u-flow-diagram` / `team4u-flow-bean` / `team4u-flow-ratelimiter` / `team4u-flow-retry` / `team4u-flow-criterion` / `team4u-flow-log` / `team4u-flow-test` | 轻量化强类型流程编排组件。支持纯文本 DSL 与纯数据 FlowSpec 外部定义、解耦符号注册与静态类型检查、不可变拓扑经双投影编译为 Local 内存同步执行器或 Durable 持久化恢复执行器，支持四态 Outcome、挂起恢复、细粒度重试、Mermaid 渲染、结构化执行树日志与 `KvDurableStore` / Spring Bean 原生绑定。 | [概览](flow/README.md) · [快速开始](flow/quick-start.md) · [外部定义](flow/flow-definition.md) · [文本 DSL](flow/flow-dsl.md) · [核心语义](flow/flow-semantics.md) · [持久化](flow/flow-durable.md) · [治理策略](flow/flow-governance.md) · [日志观测](flow/flow-log.md) |
 | [**Criterion 表达式组件**](criterion/README.md) | `team4u-criterion` | 低开销业务规则 DSL 表达式引擎。支持类 SQL 自然语法、JIT 闭包直出、低分配数值宽容比较、白盒 Trace 执行树与外部属性延迟加载 (`LazyAttributeResolver`)。 | [概览](criterion/README.md) · [快速开始](criterion/quick-start.md) · [基准](../benchmarks/README.md) |
 | [**状态机组件**](fsm/README.md) | `team4u-fsm` | 强类型有限状态机。纯 Java 8 零依赖，不可变迁移定义、守卫与动作、精确/单边通配/全局兜底三层确定性匹配、语义化执行结果与 Mermaid 状态图渲染，状态持久化由调用方持有。 | [概览](fsm/README.md) · [快速开始](fsm/quick-start.md) · [语义手册](fsm/fsm-semantics.md) |
-| [**契约翻译组件**](translator/README.md) | `team4u-translator` | 统一契约与响应翻译框架。将上游/底层原始响应 (`RawResponse`) 经由路由规则映射并渲染为统一对外契约 (`TranslatedResponse`)，内置模板变量插值与多级降级策略。 | [概览](translator/README.md) · [快速开始](translator/quick-start.md) |
+| [**契约翻译组件**](translator/README.md) | `team4u-translator` | 统一契约与响应翻译框架。将上游原始响应 `RawResponse` 经由路由规则映射并渲染为统一对外契约 `TranslatedResponse`，内置模板变量插值与多级降级策略。 | [概览](translator/README.md) · [快速开始](translator/quick-start.md) |
 
 ---
 
@@ -32,7 +32,7 @@
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
 | [**配置组件**](config/README.md) | `team4u-config` / `team4u-config-proxy` / `team4u-config-spring` / `team4u-config-db` | 强类型安全配置框架。支持快照驱动 (`Snapshot`)、Live/Pinned 代理双模、环境变量/属性文件/数据库多源聚合、占位符嵌套解析与防抖热更新。core 可独立使用，代理 / Spring / DB 适配按需显式引入。 | [概览](config/README.md) · [快速开始](config/quick-start.md) |
-| [**策略模式组件**](policy/README.md) | `team4u-policy` | 高性能策略管理与责任链引擎。提供 O(1) 复杂度 Copy-On-Write 读写分离精准路由 (`KeyedPolicy`)、有序责任链 (`OrderedPolicyChain`)、中断流水线与 Spring 自动发现 (`@PolicyAutoRegister`)。 | [概览](policy/README.md) · [快速开始](policy/quick-start.md) |
+| [**策略模式组件**](policy/README.md) | `team4u-policy` | 高性能策略管理与责任链引擎。提供 O(1) 复杂度 Copy-On-Write 读写分离精准路由 `KeyedPolicy`、有序责任链 `OrderedPolicyChain`、中断流水线与 Spring 自动发现注解 `@PolicyAutoRegister`。 | [概览](policy/README.md) · [快速开始](policy/quick-start.md) |
 
 ---
 
@@ -57,7 +57,7 @@
 | 组件 | 对应模块 | 说明与核心场景 | 文档入口 |
 | :--- | :--- | :--- | :--- |
 | [**数据脱敏组件**](mask/README.md) | `team4u-mask` / `team4u-mask-jackson` / `team4u-mask-config` | 纯 Java 核心脱敏、Jackson 序列化适配与配置中心动态规则，按需显式引入。 | [概览](mask/README.md) · [快速开始](mask/quick-start.md) |
-| [**结构化日志组件**](log/README.md) | `team4u-log` / `team4u-log-governance` | 流式结构化日志核心默认明文输出；治理 artifact 显式集成 Jackson、配置热更新、脱敏、方法代理、染色与 FinOps 限流。 | [概览](log/README.md) · [快速开始](log/quick-start.md) |
+| [**结构化日志组件**](log/README.md) | `team4u-log` / `team4u-log-governance` | 流式结构化日志核心默认明文输出；治理产物显式集成 Jackson、配置热更新、脱敏、方法代理、染色与 FinOps 限流。 | [概览](log/README.md) · [快速开始](log/quick-start.md) |
 
 ---
 
@@ -175,8 +175,8 @@
 
 ## 设计哲学
 
-- **轻量与解耦（Lightweight & Decoupled）**：核心模块不强制绑定 Spring 或重量级中间件，既可在纯 Java / CLI 环境高效运行，又能与 Spring 生态无缝整合。
-- **配置即规则（Configuration as Rule）**：将变动频繁的业务规则（路由、策略、脱敏、重试、错误映射）外部化与配置化，支持运行时热更新与动态生效。
-- **策略可插拔（Extensible by Policy）**：核心扩展点均基于策略模式与统一注册器设计，支持 SPI、Spring Bean 与运行时手动注册。
-- **性能与低分配（High Performance & Low Allocation）**：关键路径采用无锁设计、Copy-On-Write 机制、JIT 闭包预编译与原生类型快速比较，降低高频调用的临时分配和 GC 压力；实测值与环境说明见 JMH 基准。
-- **白盒可观测（White-Box Observability）**：关键决策链路（如表达式判定、动态路由、重试接管、方法耗时）内置 Trace 诊断树，让复杂逻辑透明直观。
+- **轻量与解耦** ：核心模块不强制绑定 Spring 或重量级中间件，既可在纯 Java / CLI 环境高效运行，又能与 Spring 生态无缝整合。
+- **配置即规则** ：将变动频繁的业务规则（路由、策略、脱敏、重试、错误映射）外部化与配置化，支持运行时热更新与动态生效。
+- **策略可插拔** ：核心扩展点均基于策略模式与统一注册器设计，支持 SPI、Spring Bean 与运行时手动注册。
+- **性能与低分配** ：关键路径采用无锁设计、Copy-On-Write 机制、JIT 闭包预编译与原生类型快速比较，降低高频调用的临时分配和 GC 压力；实测值与环境说明见 JMH 基准。
+- **白盒可观测** ：关键决策链路（如表达式判定、动态路由、重试接管、方法耗时）内置 Trace 诊断树，让复杂逻辑透明直观。

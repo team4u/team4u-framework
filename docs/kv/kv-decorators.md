@@ -114,9 +114,9 @@ KvStore retryable = new RetryableStore(delegate, RetryPolicy.builder()
 
 | 情况 | 是否重试 | 原因 |
 | :--- | :--- | :--- |
-| 连接失败、超时（`KvStoreException`） | ✅ | 瞬时故障，重试通常可恢复 |
-| `put(IF_ABSENT)` 返回 `false` | ❌ | 键已存在是**业务语义**，不是故障 |
-| 值超过存储限制（如 JDBC 列长） | ❌ | 确定性失败，重试只会浪费——注意这类异常若以 `KvStoreException` 抛出仍会被重试，应依赖退避上限兜底 |
+| 连接失败、超时（`KvStoreException`） | 重试 | 瞬时故障，重试通常可恢复 |
+| `put(IF_ABSENT)` 返回 `false` | 不重试 | 键已存在是**业务语义**，不是故障 |
+| 值超过存储限制（如 JDBC 列长） | 不重试 | 确定性失败，重试只会浪费——注意这类异常若以 `KvStoreException` 抛出仍会被重试，应依赖退避上限兜底 |
 
 > 各存储实现把基础设施故障统一包装为 `KvStoreException`（异常契约），默认策略因此开箱即用。反过来，不包装异常的存储与 RetryableStore 组合会静默失效——异常不在重试白名单内，重试永远不会触发。
 
@@ -140,7 +140,7 @@ HotSwapStore.swap(kv, redisStore, 30_000);               // 宽限 30 秒后关�
 KvStore old = HotSwapStore.swap(kv, redisStore, false);  // 不关闭，调用方自行管理
 ```
 
-三条重载都返回被换下的旧存储；前两条返回的旧存储**已被（或将被）关闭**，不要再使用。
+三条重载都返回被换下的旧存储；前两条返回的旧存储**已被（或将被）关闭** ，不要再使用。
 
 需要绕过 Safe Swap 自行管理生命周期时，将代理强转为 KV 本地接口 `com.team4u.framework.kv.HotSwap`：
 
@@ -170,7 +170,7 @@ HotSwapStore.swap(kv, newStore, 30_000);
 
 ### 宽限期为什么存在
 
-交换瞬间，正在执行的调用仍持有**旧存储**的引用——立刻关闭它，这些调用可能带着连接一起失败。宽限期重载让旧存储延后关闭（由单线程守护调度器 `kv-hotswap-closer` 执行），给在途调用留出收尾窗口。内存实现关不关无所谓；连接池型后端（JDBC/Redis）建议始终带宽限。
+交换瞬间，正在执行的调用仍持有**旧存储**的引用——立刻关闭它，这些调用可能带着连接一起失败。宽限期重载让旧存储延后关闭（由单线程守护调度器 `kv-hotswap-closer` 执行），给在途调用留出收尾窗口。内存实现关不关无所谓；连接池型后端如 JDBC、Redis 建议始终带宽限。
 
 ### 与其他装饰器的位置关系
 
@@ -197,7 +197,7 @@ HotSwapStore.swap(kv, new ObservedStore(new TieredStore(redisStore, 30_000,
 
 ### 能力自动透传
 
-装饰器只实现 `KvStore` 接口，对装饰过的存储直接做 `instanceof CasCapable` 探测的是装饰器对象本身，永远为 false。因此装饰器（TieredStore/ObservedStore/RetryableStore）统一实现 `StoreWrapper` 暴露内层，`KvStores` 沿链解析出真正实现能力接口的存储：
+装饰器只实现 `KvStore` 接口，对装饰过的存储直接做 `instanceof CasCapable` 探测的是装饰器对象本身，永远为 false。因此装饰器（`TieredStore`、`ObservedStore`、`RetryableStore`）统一实现 `StoreWrapper` 暴露内层，`KvStores` 沿链解析出真正实现能力接口的存储：
 
 ```java
 // 以下都能直接工作——锁管理器、清理器、轮询订阅在构造期沿装饰链解析
@@ -215,7 +215,7 @@ PollingWatcher watcher = new PollingWatcher(tieredStore, 200);
 
 ### 关闭语义
 
-所有装饰器（TieredStore/ObservedStore/RetryableStore）与各存储实现均实现 `AutoCloseable`，**关闭最外层即级联释放整棵洋葱**——TieredStore 先清空 L1 再关 L2，ObservedStore/RetryableStore 直接关内层，底层连接/资源沿链直达释放，无需为关闭内层单独持有引用。
+所有装饰器（`TieredStore`、`ObservedStore`、`RetryableStore`）与各存储实现均实现 `AutoCloseable`，**关闭最外层即级联释放整棵洋葱**——TieredStore 先清空 L1 再关 L2，ObservedStore、RetryableStore 直接关内层，底层连接/资源沿链直达释放，无需为关闭内层单独持有引用。
 
 - 关闭均为**尽力而为**：异常记 warn 不抛出（统一走 `KvStores.closeQuietly`），重复调用安全；
 - HotSwapStore 代理的 `close()` 关闭**当前**存储（鸭子类型转发；初始委托实现 `AutoCloseable` 时代理才暴露该接口），换下的旧洋葱由 Safe Swap 的交换重载自动关闭；

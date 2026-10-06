@@ -79,21 +79,21 @@ DurableResult<Receipt> result = executable.start("order-0001", request);
 
 | 命令方法 | 初始前置状态 | 语义说明 | 异常行为 |
 | :--- | :--- | :--- | :--- |
-| **`start(id, input)`** | 不存在（`expectedRev = -1`） | 创建 `ACTIVE` 初始快照（`revision=1`）并驱动首段 | 重复 start 抛 `EXECUTION_EXISTS` |
-| **`resume(id, point, signal)`** | `SUSPENDED` | 向挂起执行注入信号并驱动续接（两段式 CAS 提交） | 状态不匹配抛 `LIFECYCLE_MISMATCH`；信号冲突抛 `RESUME_SIGNAL_CONFLICT` |
-| **`recover(id)`** | `ACTIVE` | 从最后提交的快照解码状态并继续驱动 | 状态不匹配抛 `LIFECYCLE_MISMATCH`；流版本不一致抛 `FLOW_MISMATCH` |
-| **`cancel(id)`** | `ACTIVE` / `SUSPENDED` | 将快照状态以 CAS 更新为 `CANCELLED` 终态并终止执行 | 已处于终态时抛 `LIFECYCLE_MISMATCH` |
-| **`snapshot(id)`** | 任意状态 | 只读查询当前快照元数据与槽位（无任何写副作用） | 记录不存在时返回 `Optional.empty()` |
-| **`startAsync` / `resumeAsync`** | 对应同步前置 | 异步版本命令，基于调用方配置的线程池返回 `CompletionStage` | 未配置 executor 时抛 `ASYNC_EXECUTOR_MISSING` |
+| `start(id, input)` | 不存在（`expectedRev = -1`） | 创建 `ACTIVE` 初始快照（`revision=1`）并驱动首段 | 重复 start 抛 `EXECUTION_EXISTS` |
+| `resume(id, point, signal)` | `SUSPENDED` | 向挂起执行注入信号并驱动续接（两段式 CAS 提交） | 状态不匹配抛 `LIFECYCLE_MISMATCH`；信号冲突抛 `RESUME_SIGNAL_CONFLICT` |
+| `recover(id)` | `ACTIVE` | 从最后提交的快照解码状态并继续驱动 | 状态不匹配抛 `LIFECYCLE_MISMATCH`；流版本不一致抛 `FLOW_MISMATCH` |
+| `cancel(id)` | `ACTIVE` / `SUSPENDED` | 将快照状态以 CAS 更新为 `CANCELLED` 终态并终止执行 | 已处于终态时抛 `LIFECYCLE_MISMATCH` |
+| `snapshot(id)` | 任意状态 | 只读查询当前快照元数据与槽位（无任何写副作用） | 记录不存在时返回 `Optional.empty()` |
+| `startAsync` / `resumeAsync` | 对应同步前置 | 异步版本命令，基于调用方配置的线程池返回 `CompletionStage` | 未配置 executor 时抛 `ASYNC_EXECUTOR_MISSING` |
 
 ### `DurableResult<O>` 四态生命周期闭集
 
 | 结果状态 | 携带载荷 | 语义说明 |
 | :--- | :--- | :--- |
-| **`Completed`** | `Outcome<O>` + snapshot | 执行完成，携带最终业务四态结果。可通过 `requireAccepted()` 解包成功值。 |
-| **`Suspended`** | `resumePoint` + snapshot | 流程处于挂起中，等待外部系统注入恢复信号。 |
-| **`Active`** | `wakeAt`（`Optional<Instant>`）+ snapshot | 流程处于退避等待中，到点后由外部调度器调用 `recover` 唤醒。 |
-| **`Cancelled`** | snapshot | 流程已被协作式令牌或显式命令取消。 |
+| `Completed` | `Outcome<O>` + snapshot | 执行完成，携带最终业务四态结果。可通过 `requireAccepted()` 解包成功值。 |
+| `Suspended` | `resumePoint` + snapshot | 流程处于挂起中，等待外部系统注入恢复信号。 |
+| `Active` | `wakeAt`（`Optional<Instant>`）+ snapshot | 流程处于退避等待中，到点后由外部调度器调用 `recover` 唤醒。 |
+| `Cancelled` | snapshot | 流程已被协作式令牌或显式命令取消。 |
 
 ---
 
@@ -114,9 +114,9 @@ $$\text{invocationId} = \text{flowId} : \text{flowVersion} : \text{executionId} 
 
 | 事件类型 (`DurableObserver.Type`) | 触发时机 | 扩展属性 (`attributes`) |
 | :--- | :--- | :--- |
-| **`CHECKPOINT_COMMITTED`** | 节点边界快照成功通过 CAS 提交入库 | `kind`（检查点类型）、`path`（节点路径） |
-| **`CHECKPOINT_RESTORED`** | 调用 `recover` 成功从底层存储恢复快照 | `revision`（恢复时的快照版本号） |
-| **`RESUME_SIGNAL_PERSISTED`** | resume 第一阶段完成，恢复信号成功入库 | `resumePoint`（目标挂起点名称） |
+| `CHECKPOINT_COMMITTED` | 节点边界快照成功通过 CAS 提交入库 | `kind`（检查点类型）、`path`（节点路径） |
+| `CHECKPOINT_RESTORED` | 调用 `recover` 成功从底层存储恢复快照 | `revision`（恢复时的快照版本号） |
+| `RESUME_SIGNAL_PERSISTED` | resume 第一阶段完成，恢复信号成功入库 | `resumePoint`（目标挂起点名称） |
 
 ---
 
@@ -126,20 +126,20 @@ $$\text{invocationId} = \text{flowId} : \text{flowVersion} : \text{executionId} 
 
 | 错误码 | 严重级别 | 根本原因 | 运维处理指引 |
 | :--- | :--- | :--- | :--- |
-| **`INVALID_DEFINITION`** | 严重 (Error) | 流程定义非法（如快照恢复时拓扑校验失败） | 检查 Flow 定义结构与快照拓扑版本 |
-| **`INVALID_CONFIGURATION`** | 错误 (Error) | 运行时配置非法（如流程含 TIMEOUT 作用域而未配置 executor） | 核对 `Durable` 装配参数，为含 timeout 的流程显式配置 executor |
-| **`REVISION_CONFLICT`** | 警告 (Warn) | 多个分布式节点并发驱动同一个 `executionId` 导致 CAS 冲突 | 正常并发竞争保护。客户端稍后重新读取最新快照重试 |
-| **`FLOW_MISMATCH`** | 严重 (Error) | 尝试恢复的快照其 `flowId` 或 `flowVersion` 与当前代码不一致 | 确认是否发生了流程定义拓扑变更；使用与快照版本匹配的 Flow 运行时进行恢复 |
-| **`FORMAT_MISMATCH`** | 严重 (Error) | 快照格式 ID 或版本与当前运行时不兼容 | 检查快照 `formatId`/`formatVersion`，确认集群内框架版本一致 |
-| **`RESUME_SIGNAL_CONFLICT`** | 严重 (Error) | 恢复信号落库后发生重启，外部重试时传入了**不同的信号载荷** | 检查外部回调网关的重试逻辑，确保幂等重试时注入完全相同的信号对象 |
-| **`EXECUTION_EXISTS`** | 错误 (Error) | `start` 时指定的 `executionId` 在存储中已存在 | 检查流水号生成器，避免重复生成相同的流水号 |
-| **`EXECUTION_NOT_FOUND`** | 错误 (Error) | 指定的 `executionId` 在存储中不存在 | 检查执行流水号是否正确，或确认数据库记录是否被过期清理 |
-| **`CODEC_FAILURE`** | 严重 (Error) | `StateMapper` 编解码业务状态槽位失败 | 检查业务 DTO 是否有默认无参构造器、字段类型是否发生不兼容变更 |
-| **`STORE_FAILURE`** | 严重 (Error) | 底层 `DurableStore` 发生数据库连接中断或 I/O 错误 | 检查底层 Redis / MySQL 存储连通性与网络状况 |
-| **`LIFECYCLE_MISMATCH`** | 错误 (Error) | 在非法的生命周期下调用命令（例如对已 COMPLETED 实例调用 recover） | 校验调用时序，避免对终态实例再次发起驱动 |
-| **`RESUME_POINT_MISMATCH`** | 错误 (Error) | resume 传入的挂起点名称与快照中实际等待的点不一致 | 核对外部回调注入的挂起点标识 |
-| **`FRAME_MISMATCH`** | 严重 (Error) | 快照帧栈元数据损坏或与当前拓扑不匹配 | 排查存储数据完整性或代码结构变更 |
-| **`ASYNC_EXECUTOR_MISSING`** | 错误 (Error) | 调用异步命令（`startAsync` / `resumeAsync`）但未配置 `executor` | 在 `Durable.builder` 中显式配置线程池 |
+| `INVALID_DEFINITION` | 严重 | 流程定义非法（如快照恢复时拓扑校验失败） | 检查 Flow 定义结构与快照拓扑版本 |
+| `INVALID_CONFIGURATION` | 错误 | 运行时配置非法（如流程含 TIMEOUT 作用域而未配置 executor） | 核对 `Durable` 装配参数，为含 timeout 的流程显式配置 executor |
+| `REVISION_CONFLICT` | 警告 | 多个分布式节点并发驱动同一个 `executionId` 导致 CAS 冲突 | 正常并发竞争保护。客户端稍后重新读取最新快照重试 |
+| `FLOW_MISMATCH` | 严重 | 尝试恢复的快照其 `flowId` 或 `flowVersion` 与当前代码不一致 | 确认是否发生了流程定义拓扑变更；使用与快照版本匹配的 Flow 运行时进行恢复 |
+| `FORMAT_MISMATCH` | 严重 | 快照格式 ID 或版本与当前运行时不兼容 | 检查快照 `formatId`/`formatVersion`，确认集群内框架版本一致 |
+| `RESUME_SIGNAL_CONFLICT` | 严重 | 恢复信号落库后发生重启，外部重试时传入了**不同的信号载荷** | 检查外部回调网关的重试逻辑，确保幂等重试时注入完全相同的信号对象 |
+| `EXECUTION_EXISTS` | 错误 | `start` 时指定的 `executionId` 在存储中已存在 | 检查流水号生成器，避免重复生成相同的流水号 |
+| `EXECUTION_NOT_FOUND` | 错误 | 指定的 `executionId` 在存储中不存在 | 检查执行流水号是否正确，或确认数据库记录是否被过期清理 |
+| `CODEC_FAILURE` | 严重 | `StateMapper` 编解码业务状态槽位失败 | 检查业务 DTO 是否有默认无参构造器、字段类型是否发生不兼容变更 |
+| `STORE_FAILURE` | 严重 | 底层 `DurableStore` 发生数据库连接中断或 I/O 错误 | 检查底层 Redis / MySQL 存储连通性与网络状况 |
+| `LIFECYCLE_MISMATCH` | 错误 | 在非法的生命周期下调用命令（例如对已 COMPLETED 实例调用 recover） | 校验调用时序，避免对终态实例再次发起驱动 |
+| `RESUME_POINT_MISMATCH` | 错误 | resume 传入的挂起点名称与快照中实际等待的点不一致 | 核对外部回调注入的挂起点标识 |
+| `FRAME_MISMATCH` | 严重 | 快照帧栈元数据损坏或与当前拓扑不匹配 | 排查存储数据完整性或代码结构变更 |
+| `ASYNC_EXECUTOR_MISSING` | 错误 | 调用异步命令（`startAsync` / `resumeAsync`）但未配置 `executor` | 在 `Durable.builder` 中显式配置线程池 |
 
 ---
 

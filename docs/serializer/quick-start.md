@@ -98,6 +98,6 @@ Object jsonTree = JsonUtil.parseObj("{\"code\":200,\"data\":{\"status\":\"OK\"}}
 
 ## 下一步
 
-- 深入门面方法与容错模式：[统一门面与泛型解析 (JsonUtil)](serializer-facade.md)
+- 深入门面方法与容错模式：[统一门面与泛型解析](serializer-facade.md)
 - 了解 Jackson 驱动配置与时间格式：[Jackson 驱动与性能优化](serializer-jackson.md)
 - 扩展自定义 FastJSON / Gson 策略：[SPI 扩展与引擎替换](serializer-spi.md)

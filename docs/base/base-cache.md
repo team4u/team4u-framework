@@ -33,8 +33,8 @@ public interface Cache<K, V> {
 
 | 缓存实现 | 淘汰机制 | 线程安全设计 | 适用场景 |
 | :--- | :--- | :--- | :--- |
-| `LRUCache<K, V>` | 最近最少使用淘汰 (Least Recently Used) | `synchronized` 保护 | 固定容量下的通用高频热点读写缓存 |
-| `LFUCache<K, V>` | 最少访问频次淘汰 (Least Frequently Used) | `ReentrantLock` 保护 | 针对访问频次具备长期倾斜性的场景（如单例池、规则匹配） |
+| `LRUCache<K, V>` | 最近最少使用淘汰 | `synchronized` 保护 | 固定容量下的通用高频热点读写缓存 |
+| `LFUCache<K, V>` | 最少访问频次淘汰 | `ReentrantLock` 保护 | 针对访问频次具备长期倾斜性的场景（如单例池、规则匹配） |
 | `TimedCache<K, V>` | TTL 存活时长过期淘汰 | 惰性检查 + `ConcurrentHashMap` | 临时 Token、动态验证码、限流计数器、限时缓存 |
 
 ---
@@ -70,7 +70,7 @@ policyCache.put("rule_order", new RulePolicy());
 ### `TimedCache<K, V>`
 - 基于 `ConcurrentHashMap<K, CacheObj<V>>` 实现；
 - 每个条目包装过期时间点 `expireTime = now + timeout`；
-- 采用**惰性删除（Lazy Expiration）**策略：在 `get(key)` 时检查若已过期则原子删除并返回 `null`；在调用 `size()` 时全量清理已过期的条目。
+- 采用惰性删除策略：在 `get(key)` 时检查若已过期则原子删除并返回 `null`；在调用 `size()` 时全量清理已过期的条目。
 
 #### 原子懒加载 `getOrCreate` 方法
 `TimedCache` 提供了基于 `ConcurrentHashMap.compute` 实现的原子查询或创建能力，彻底杜绝多线程并发穿透：

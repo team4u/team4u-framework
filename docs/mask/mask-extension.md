@@ -8,7 +8,7 @@
 
 所有脱敏算法均实现 `team4u-mask` 的 `MaskPolicy` 接口（继续继承 `team4u-policy` 的 `KeyedPolicy<String>`）。
 
-### 步骤 1：编写自定义策略实现类
+### 编写自定义策略实现类
 ```java
 import com.team4u.framework.mask.MaskPolicy;
 import com.team4u.framework.mask.MaskUtils;
@@ -28,7 +28,7 @@ public class PassportMaskPolicy implements MaskPolicy {
 }
 ```
 
-### 步骤 2：注册策略到系统中
+### 注册策略到系统中
 框架支持以下两种注册方式：
 
 #### 方式 A：编程式注册

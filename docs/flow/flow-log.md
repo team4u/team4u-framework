@@ -46,10 +46,10 @@ graph TD
 
 | 关联组件 | 模块坐标 | 核心职责 | 深度参考文档 |
 | :--- | :--- | :--- | :--- |
-| **`team4u-flow`** | `com.team4u:team4u-flow` | **流程状态机与事件广播**：在流程执行中发布包含节点路径 `path`、耗时、四态 `Outcome` 与数据载荷 `payload` 的原始事件。 | [流程编排核心文档](README.md) |
-| **`team4u-log`** | `com.team4u:team4u-log` | **统一结构化日志**：提供 `Loggers.of(...)` 链式构建器与 `LogEvent` 标准日志模型。 | [结构化日志引擎文档](../log/README.md) |
-| **`team4u-mask`** | `com.team4u:team4u-mask` | **敏感数据安全掩码**：提供基于 Jackson 序列化修饰符的动态脱敏，以及脱敏策略规则仓库。 | [数据安全脱敏文档](../mask/README.md) |
-| **`team4u-base`** | `com.team4u:team4u-base` | **通用底层工具**：提供带缓存的高性能反射 `ReflectUtil` 与注解继承查找 `AnnotationUtil`。 | [基础支撑库文档](../base/README.md) |
+| `team4u-flow` | `com.team4u:team4u-flow` | **流程状态机与事件广播**：在流程执行中发布包含节点路径 `path`、耗时、四态 `Outcome` 与数据载荷 `payload` 的原始事件。 | [流程编排核心文档](README.md) |
+| `team4u-log` | `com.team4u:team4u-log` | **统一结构化日志**：提供 `Loggers.of(...)` 链式构建器与 `LogEvent` 标准日志模型。 | [结构化日志引擎文档](../log/README.md) |
+| `team4u-mask` | `com.team4u:team4u-mask` | **敏感数据安全掩码**：提供基于 Jackson 序列化修饰符的动态脱敏，以及脱敏策略规则仓库。 | [数据安全脱敏文档](../mask/README.md) |
+| `team4u-base` | `com.team4u:team4u-base` | **通用底层工具**：提供带缓存的高性能反射 `ReflectUtil` 与注解继承查找 `AnnotationUtil`。 | [基础支撑库文档](../base/README.md) |
 
 ---
 
@@ -169,9 +169,9 @@ FlowLoggingObserver observer = FlowLoggingObserver.builder()
 
 | 注解 | 作用目标 | 核心语义 |
 | :--- | :--- | :--- |
-| **`@TraceContext`** | 类（`TYPE`） / 字段（`FIELD`） | • 标注在类上：该类所有业务字段默认输出至日志；<br/>• 标注在字段上：白名单输出该字段，支持别名。 |
-| **`@TraceIgnore`** | 字段（`FIELD`） / 方法（`METHOD`） | 当类标注了 `@TraceContext` 时，显式排除该字段。 |
-| **`@Mask(MaskType)`** | 字段（`FIELD`） | 对输出的敏感字段自动应用安全掩码（手机、身份证、银行卡等）。 |
+| `@TraceContext` | 类（`TYPE`） / 字段（`FIELD`） | • 标注在类上：该类所有业务字段默认输出至日志；<br/>• 标注在字段上：白名单输出该字段，支持别名。 |
+| `@TraceIgnore` | 字段（`FIELD`） / 方法（`METHOD`） | 当类标注了 `@TraceContext` 时，显式排除该字段。 |
+| `@Mask(MaskType)` | 字段（`FIELD`） | 对输出的敏感字段自动应用安全掩码（手机、身份证、银行卡等）。 |
 
 ```java
 package com.example.order;
@@ -279,7 +279,7 @@ MaskRuleRepository.getInstance().setRuleCache(rules);
 
 ---
 
-# 节点名称 (Label) 缺省回退展示机制
+# 节点名称缺省回退展示机制
 
 若在编排 DSL 时未显式通过 `.named("xxx")` 设置节点名称，`FlowLoggingObserver` 会依据 AST 描述符按以下优先级自动提取最直观的可读名称：
 

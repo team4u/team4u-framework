@@ -28,7 +28,7 @@
 
 - **规则与实现分离**：业务只声明 `point`（一个字符串）和加载函数；key 模板、缓存时长、竞争策略、降级值全部在 `team4u.singleflight.{point}` 规则 JSON 中。配置中心改完即热更新（先建新再替换、失败保旧）；
 - **基于 kv 锁协调**：谁先抢到锁谁执行，其余请求按策略收场。存储换成 Redis / JDBC，多个实例就自动共享同一个执行窗口——业务代码一行不改；
-- **执行有「回执」**：执行者抢到锁后写一条会话记录（SessionEnvelope），状态从「执行中」流转到「成功 / 不可缓存成功 / 失败」。等待者读回执拿结果，不靠猜；
+- **执行有「回执」**：执行者抢到锁后写一条会话记录 `SessionEnvelope`，状态从「执行中」流转到「成功 / 不可缓存成功 / 失败」。等待者读回执拿结果，不靠猜；
 - **token 防抢跑**：每次抢锁都带唯一 token（相当于这次执行的工号）。发布结果必须通过「回执还是我的工号」的 CAS 校验——丢了锁的旧执行者即使晚一步跑完，也无法把结果盖到新执行者头上；
 - **协调直连存储**：锁和会话的读写剥掉所有装饰层（`TieredStore` / `ObservedStore`），直达最内层真实存储。中间若有本地缓存，A 实例写入的新 token B 实例可能读到旧值，协调就乱了。
 
@@ -129,7 +129,7 @@ team4u.singleflight.on_rule_missing=ERROR
 
 ## 会话状态机与失败处理
 
-执行回执的状态流转（PENDING / SUCCESS_CACHEABLE / SUCCESS_NOT_CACHEABLE / FAILURE）、执行者崩溃后的接管流程、errorFallback 与 exceptionHandler 的优先级对照、存储选型与限制，均独立成篇：[会话与失败处理](session.md)。
+执行回执的状态流转（`PENDING` / `SUCCESS_CACHEABLE` / `SUCCESS_NOT_CACHEABLE` / `FAILURE`）、执行者崩溃后的接管流程、errorFallback 与 exceptionHandler 的优先级对照、存储选型与限制，均独立成篇：[会话与失败处理](session.md)。
 
 速查：
 
@@ -240,11 +240,11 @@ team4u-singleflight-spring         # Spring 自动装配（显式引入）
 | `team4u-policy` | core（传递） | 命名存储与命名摘要注册表使用的 `KeyedPolicyRegistry` | — |
 | `team4u-criterion` | core（传递） | `skipWhen` / `cacheWhen` 表达式 | — |
 | `team4u-serializer-json` | core（传递） | 规则与结果的 `JsonUtil` 门面（应用需显式提供 JSON 引擎，见下） | — |
-| `jackson-databind` | core（传递，直连） | **durable schema** 直连边界：会话信封（SessionEnvelope）按 Jackson 树模型读写、降级转换（FallbackConverter）经 `TypeFactory` 做类型自省——均为不携带序列化配置的稳定持久化 schema；降级值的 bean 转换本身走 `JsonUtil` provider 语义（见下行），不经 provider SPI，也 **不** 等于传递提供 `team4u-serializer-jackson` | — |
+| `jackson-databind` | core（传递，直连） | **durable schema** 直连边界：会话信封 `SessionEnvelope` 按 Jackson 树模型读写、降级转换 `FallbackConverter` 经 `TypeFactory` 做类型自省——均为不携带序列化配置的稳定持久化 schema；降级值的 bean 转换本身走 `JsonUtil` provider 语义（见下行），不经 provider SPI，也 **不** 等于传递提供 `team4u-serializer-jackson` | — |
 | `team4u-proxy` | proxy（传递） | `@SingleFlight` 注解代理 | 使用注解时引入 `team4u-singleflight-proxy` |
 | `team4u-proxy-spring` | spring（传递） | 注解代理的 Spring 装配公共模板 | Spring 环境引入 `team4u-singleflight-spring` |
 | `spring-context` | spring（传递） | `@EnableSingleFlight` 自动代理 | 同上 |
-| JSON 引擎（provider） | 应用显式提供 | 规则解析与结果编解码的 `JsonUtil` 路径：添加 `team4u-serializer-jackson` 或经 ServiceLoader 注册自定义 `JsonSerializerPolicy` | 必需（无传递 provider） |
+| JSON 引擎 provider | 应用显式提供 | 规则解析与结果编解码的 `JsonUtil` 路径：添加 `team4u-serializer-jackson` 或经 ServiceLoader 注册自定义 `JsonSerializerPolicy` | 必需（无传递 provider） |
 | `team4u-kv-store-redis` | 应用显式引入 | Redis 跨实例协调 | Redis 存储 |
 | `team4u-kv-store-jdbc` | 应用显式引入 | JDBC 跨实例协调 | 数据库存储 |
 

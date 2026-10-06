@@ -15,9 +15,9 @@
 
 # 核心特性
 
-- **多算法支持**：内置工业级令牌桶（Token Bucket）、滑动时间窗口（Sliding Window）、固定窗口（Fixed Window）与历史层级路径窗口（History Window）；
-- **声明式 `@RateLimit` 注解**：支持 SpEL 表达式动态提取参数 Key，支持指定时间周期与算法类型；
-- **`@RateLimitReject` 优雅降级**：方法级 fallback 降级支持，拒绝时无缝重定向至业务兜底逻辑；
+- **多算法支持**：内置工业级令牌桶、滑动时间窗口、固定窗口与历史层级路径窗口；
+- **声明式注解** ：`@RateLimit` 支持 SpEL 表达式动态提取参数 Key，支持指定时间周期与算法类型；
+- **优雅降级** ：`@RateLimitReject` 提供方法级 fallback 降级支持，拒绝时无缝重定向至业务兜底逻辑；
 - **动态上下文与层级限流**：通过 `ContextProperties` 与 `HistoryPaths` 支持复杂多维路径联动限流；
 - **Spring Boot 自动装配**：`@EnableRateLimit` 一键激活切面与单例引擎，零多余配置。
 

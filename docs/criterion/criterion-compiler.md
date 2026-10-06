@@ -15,9 +15,9 @@ graph TD
     MP -.-> Cache["DynamicInstanceProvider LRU 编译缓存"]
 ```
 
-1. **AST 预优化**：在解析阶段，静态常量、正则表达式等在编译期完成类型推断与预编译（例如 `Pattern.compile`、常量折叠与静态 Set 分拣）。
-2. **直出闭包函数**：AST 节点被转换为纯 Java `MatchPredicate`（函数式接口 `context -> boolean`），运行期直接调用函数式方法，不经过反射与字符串解析。
-3. **编译缓存**：内部基于 `DynamicInstanceProvider` 构建默认容量为 1000 的 LRU 编译缓存，同一个表达式文本仅在首次加载时编译一次。
+- **AST 预优化**：在解析阶段，静态常量、正则表达式等在编译期完成类型推断与预编译（例如 `Pattern.compile`、常量折叠与静态 Set 分拣）。
+- **直出闭包函数**：AST 节点被转换为纯 Java `MatchPredicate`（函数式接口 `context -> boolean`），运行期直接调用函数式方法，不经过反射与字符串解析。
+- **编译缓存**：内部基于 `DynamicInstanceProvider` 构建默认容量为 1000 的 LRU 编译缓存，同一个表达式文本仅在首次加载时编译一次。
 
 ---
 
@@ -30,7 +30,7 @@ graph TD
 - **静态常量优化** (`FixedValue`)：在编译期提前完成类型转换并常驻内存。生成的 `CompiledValue` 闭包在运行时直接返回常量引用，避免重复计算和对象分配。
 - **原生 Long 比较**：当预期值是整数常量（如 `18`），编译器直接生成 `buildStaticLongPredicate` 闭包。若运行时实际入参也是整数，直接执行 `Long.compare(actualNum.longValue(), constantLong)`，避免装箱和临时对象分配。
 - **原生 Double 比较**：当预期值是浮点数常量，编译器直接生成 `buildStaticDoublePredicate` 闭包执行 `Double.compare`。
-- **避免 `BigDecimal` 堆分配**：常用数值比较使用原生分支，而不是每次比较构造 `BigDecimal`。
+- **避免 BigDecimal 堆分配**：常用数值比较使用原生分支，而不是每次比较构造 `BigDecimal`。
 
 ### `LogicCriterionCompiler` 减少迭代器分配
 在编译 `&&` 与 `||` 组合逻辑时，编译器在编译期将子规则列表转换为原生数组 `MatchPredicate[]`。运行时遍历数组而不是 `List` 迭代器，减少常用组合逻辑的对象分配。
@@ -43,7 +43,7 @@ $$\text{scale} = \frac{(\text{HashUtil.murmur64}(\text{salt} + \text{actual}) \ 
 
 ---
 
-## 属性延迟加载 (Lazy Resolve)
+## 属性延迟加载
 
 在很多复杂业务规则中，某些属性需要发起昂贵的 RPC 调用或数据库查询（例如：查询用户的风控黑名单状态、查询累计积分）。
 
@@ -74,7 +74,7 @@ boolean match = Criteria.global().matches(
 
 ---
 
-## 容错模式与严格模式 (Strict Mode)
+## 容错模式与严格模式
 
 - **默认安全容错模式**：生产环境中，若入参缺少属性、发生 null 指针或格式转换异常，引擎会打印 warn 日志并安全返回 `false`，绝不会阻断业务主链路。
 - **严格模式** (`withStrictMode(true)`)：在开发测试或必须强校验的合规场景下，可以开启严格模式，遇到异常时直接抛出 `CriterionEvaluationException`：
@@ -85,7 +85,7 @@ MatchContext context = MatchContext.of(user).withStrictMode(true);
 
 ---
 
-## 表达式预热 (Pre-warming)
+## 表达式预热
 
 为了消除首次执行匹配时的毫秒级 JIT 编译抖动，建议在服务启动或配置更新推送时调用 `compileExpression` 预热缓存：
 

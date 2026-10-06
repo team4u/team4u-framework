@@ -66,13 +66,13 @@
 | `errorLimitPerSecond` | `10` | 每秒同类异常的最大允许输出次数。超过时自动抑制输出，防止异常堆栈打爆磁盘 |
 
 ### 成本防爆四大杀手锏：
-1. **单个字符串截断** (`TruncatingStringSerializer`)：
+- **单个字符串截断** (`TruncatingStringSerializer`)：
    在 Jackson 序列化字符串时直接截断超长内容，避免 Jackson 分配巨大底层字符缓冲区的内存开销。
-2. **字节数组防爆** (`ByteArrayLogSerializer`)：
+- **字节数组防爆** (`ByteArrayLogSerializer`)：
    当 `payload` 中不慎传入文件或图片等 `byte[]` 数据时，不进行 Base64 编码展开，而是直接输出 "[byte[] size: N bytes]"。
-3. **整条日志兜底截断** (`JacksonLogSerializer`)：
+- **整条日志兜底截断** (`JacksonLogSerializer`)：
    防止字段过多导致整条 JSON 膨胀，确保单条日志体积严格受控。
-4. **异常频控与限流** (`RateLimitInterceptor`)：
+- **异常频控与限流** (`RateLimitInterceptor`)：
    以 `loggerName + "|" + action + "|" + exceptionClass` 为特征签名，利用 1 秒滑动窗口 (`TimedCache`) 统计频次。超出 `errorLimitPerSecond` 阈值时将 `event.suppressed` 标为 `true` 并不予输出。在首次超出阈值时通过 `TEAM4U-LOG-LIMITER` 记录单次告警。
 
 ---

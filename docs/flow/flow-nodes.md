@@ -1,10 +1,10 @@
 # 运行时节点与 DSL 编排原语
 
-`team4u-flow` 采用“**不可变声明（Logical AST） -> 编译期降级校验（Compiler Lowering） -> 运行时封闭节点（PlanNode）**”的三层架构。
+`team4u-flow` 采用“**不可变声明 -> 编译期降级校验 -> 运行时封闭节点** ”的三层架构：逻辑声明层使用 `Logical AST` 模型，编译期降级校验由 `Compiler` 完成，运行时封闭节点统一为 `PlanNode` 体系。
 
 在 DSL 构建阶段，开发者使用丰富流畅的语义方法组装流程；在编译阶段，这些结构经过静态校验、扁平化优化与降级，统一规范化为九种封闭的运行时核心节点。
 
-本文将深入剖析这九种核心节点的运行时状态机、DSL 声明形式、节点路径（Path）规范以及内部执行机制。
+本文将深入剖析这九种核心节点的运行时状态机、DSL 声明形式、节点路径规范以及内部执行机制。
 
 ---
 
@@ -12,7 +12,7 @@
 
 ```mermaid
 graph TD
-    subgraph "DSL 声明层 (Logical AST)"
+    subgraph "DSL 声明层"
         L1["Flow.step / use"]
         L2["flow.then / scope"]
         L3["Flow.route / caseOf / otherwise"]
@@ -24,12 +24,12 @@ graph TD
         L9["flow.thenAdapt / tap"]
     end
 
-    subgraph "编译期降级校验 (Compiler Lowering)"
+    subgraph "编译期降级校验"
         COMP["Compiler.compile<br/>1. 静态拓扑校验<br/>2. 匿名 Sequence 扁平化<br/>3. thenOptional 降级为 Fallback<br/>4. Bean 容器依赖解析与绑定"]
         L1 & L2 & L3 & L4 & L5 & L6 & L7 & L8 & L9 --> COMP
     end
 
-    subgraph "运行时封闭执行计划 (PlanNode)"
+    subgraph "运行时封闭执行计划"
         COMP --> N1["INVOKE (业务调用原子节点)"]
         COMP --> N2["SEQUENCE (顺序流水线节点)"]
         COMP --> N3["ROUTE (条件路由分发节点)"]
@@ -43,8 +43,8 @@ graph TD
 ```
 
 > [!IMPORTANT]
-> **运行时节点封闭原则（Closed PlanNode Set）** ：
-> 框架的运行时节点类型（`NodeDescriptor.Kind`）是严格封闭的闭集（共 9 种），**绝不开放自定义节点类型**。
+> **运行时节点封闭原则** ：
+> 框架的运行时节点类型（`NodeDescriptor.Kind`）是严格封闭的闭集（共 9 种），绝不开放自定义节点类型。
 > 所有高级业务编排语义均通过这九种基础节点进行正交组合。封闭性使得执行器内核（`SerialMachine`）、持久化状态机（`DurableMachine`）、Mermaid 渲染器（`FlowDiagrams`）与调试工具具备了 100% 的确定性与可靠性。
 
 ---
@@ -114,10 +114,10 @@ Flow<OrderState, OrderState> flowWithGovernance = Flow.<OrderState>identity()
 ```
 
 #### 内核执行机制
-1. 执行 `project(entry)` 派生出局部入参；
-2. 调用绑定的 `Operation.execute(context, projectedInput)`；
-3. 若返回 `Accepted(value)`，调用 `merge(entry, value)` 合成新上下文，并封装为 `Accepted(merged)` 继续推进；
-4. 若返回 `Rejected`、`Skipped` 或 `Failed`，**不调用 merge**，直接将非 Accepted 状态向外短路。
+- 执行 `project(entry)` 派生出局部入参；
+- 调用绑定的 `Operation.execute(context, projectedInput)`；
+- 若返回 `Accepted(value)`，调用 `merge(entry, value)` 合成新上下文，并封装为 `Accepted(merged)` 继续推进；
+- 若返回 `Rejected`、`Skipped` 或 `Failed`，**不调用 merge**，直接将非 Accepted 状态向外短路。
 
 ---
 
@@ -142,7 +142,7 @@ Flow<Order, Order> scopedFlow = Flow.scope("inventory-scope",
 
 ### 扁平化优化与帧状态机
 - **编译期扁平化**：连续的匿名 `then` 步骤在编译期会被自动扁平化合并到同一个 `SEQUENCE` 的节点数组中，消除深层嵌套带来的调用栈与帧开销；
-- **状态机阶段（Phases）**：
+- **状态机阶段**：
   - `phase = 0`：初始进入序列；
   - `phase = 1`：当前正在执行第 `index` 个子步骤；
   - 当第 `index` 个子步骤返回 `Accepted(value)` 时，`index++` 并将新值作为下一子步骤的输入；
@@ -166,8 +166,8 @@ Flow<OrderRequest, Receipt> routedFlow = Flow
 ```
 
 ### 状态机阶段与契约
-- **`phase = 1`（选择器阶段）**：执行 `selector` 节点计算路由键；若选择器返回非 `Accepted`，直接短路退出；
-- **`phase = 2`（分支执行阶段）**：根据路由键匹配对应的 `caseOf` 分支；若未命中且配置了 `otherwise`，进入兜底分支；若未配置 `otherwise`（`withoutOtherwise()`），整体产出 `Skipped(NO_ROUTE)`；
+- `phase = 1` 选择器阶段：执行 `selector` 节点计算路由键；若选择器返回非 `Accepted`，直接短路退出；
+- `phase = 2` 分支执行阶段：根据路由键匹配对应的 `caseOf` 分支；若未命中且配置了 `otherwise`，进入兜底分支；若未配置 `otherwise`（`withoutOtherwise()`），整体产出 `Skipped(NO_ROUTE)`；
 - **编译期唯一性校验**：`caseOf` 中的路由键不能重复，否则在声明时立即抛出 `DUPLICATE_ROUTE_CASE`。
 
 ---
@@ -219,15 +219,15 @@ Flow<Order, CheckoutResult> parallelFlow = Flow.<Order>parallel(riskBranch, stoc
 ### 静态约束校验
 
 为了防止并发环境下的状态竞争与死锁，编译期实施严格校验：
-- **`PARALLEL_AWAIT`** ：严禁在并行分支内部使用 `await` 挂起点；
-- **`PARALLEL_PERSISTENT_POLICY`** ：严禁在并行分支内部挂载持久化策略；
-- **`DUPLICATE_BRANCH`** ：同一并行块内各分支名称必须全局唯一。
+- `PARALLEL_AWAIT`：严禁在并行分支内部使用 `await` 挂起点；
+- `PARALLEL_PERSISTENT_POLICY`：严禁在并行分支内部挂载持久化策略；
+- `DUPLICATE_BRANCH`：同一并行块内各分支名称必须全局唯一。
 
 ---
 
 ## AWAIT 节点
 
-`AWAIT` 节点显式将当前执行挂起，等待外部系统注入恢复信号（Signal）。
+`AWAIT` 节点显式将当前执行挂起，等待外部系统注入恢复信号。
 
 ### 声明形式
 

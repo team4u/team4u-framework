@@ -10,7 +10,7 @@
 
 # 核心特性
 
-- **统一容器门面**：`BeanManager` 统一了按类型（Type）、按名称（Name）获取 Bean 的 API；
+- **统一容器门面**：`BeanManager` 统一了按类型、按名称获取 Bean 的 API；
 - **多级容器自动路由**：按优先级依次遍历 `SpringBeanContainer`、自定义 SPI 容器以及 `LocalBeanContainer`；
 - **零反射直接调用**：解析完成后直接持有单例引用，运行期直接调用无性能损耗；
 - **生命周期事件总线**：`EventDispatcher` 支持广播 `BeanInitializedEvent` 等容器事件；

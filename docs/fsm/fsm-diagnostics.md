@@ -1,12 +1,12 @@
 # 状态机结果模型与异常诊断体系
 
-在业务状态流转过程中，准确区分“流转成功”、“业务规则拒绝”与“底层系统执行异常”对于上层调用方的错误处理与日志告警至关重要。`team4u-fsm` 提供了分层的**流转结果模型（`TransitionResult` / `TransitionOutcome`）**与**结构化异常诊断体系**。
+在业务状态流转过程中，准确区分“流转成功”、“业务规则拒绝”与“底层系统执行异常”对于上层调用方的错误处理与日志告警至关重要。`team4u-fsm` 提供了分层的流转结果模型（`TransitionResult` / `TransitionOutcome`）与结构化异常诊断体系。
 
 本文将详细解析结果状态分类、异常继承树与生产排查指引。
 
 ---
 
-## 结果模型与三态闭集 (`TransitionOutcome`)
+## 结果模型与三态闭集
 
 每次调用 `machine.fire(...)` 执行迁移时，产生对应的 `TransitionResult`：
 
@@ -20,9 +20,9 @@ graph TD
 
 | 状态类型 | 枚举值 | 业务含义 | 携带数据 | 是否发生状态变更 |
 | :--- | :--- | :--- | :--- | :--- |
-| **成功态** | `ACCEPTED` | 成功匹配到迁移规则且 Guard 放行，Action 执行成功 | `targetState`（新状态） | **是** |
-| **拒绝态** | `REJECTED` | 当前状态下该事件不合法，或所有候选 Guard 均返回 `false` | `reason`（拒绝原因） | **否** |
-| **失败态** | `FAILED` | Guard 或 Action 执行过程中抛出未捕获异常 | `cause`（根因异常） | **否** |
+| **成功态** | `ACCEPTED` | 成功匹配到迁移规则且 Guard 放行，Action 执行成功 | `targetState`（新状态） | 是 |
+| **拒绝态** | `REJECTED` | 当前状态下该事件不合法，或所有候选 Guard 均返回 `false` | `reason`（拒绝原因） | 否 |
+| **失败态** | `FAILED` | Guard 或 Action 执行过程中抛出未捕获异常 | `cause`（根因异常） | 否 |
 
 ---
 

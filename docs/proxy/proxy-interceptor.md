@@ -135,10 +135,10 @@ proxy.deleteUser("U1001");
 
 ## 拦截器链组装顺序
 
-通过 `ProxyBuilder` 组装拦截器链时，执行顺序遵循先进先出（FIFO）：
-1. 自定义拦截器（按 `addInterceptor` / `intercept` 添加的先后顺序）；
-2. 追踪拦截器（`withTracker` 添加的 `TrackInterceptor`）；
-3. 尾部收口拦截器：
-   - 若开启 `asEmptyObject()`，尾部为 `EmptyValueInterceptor`；
-   - 若开启 `enableHotswap()`，尾部为 `HotSwapInterceptor`；
-   - 否则尾部为 `DelegateInterceptor`。
+通过 `ProxyBuilder` 组装拦截器链时，执行顺序遵循先进先出：
+- 自定义拦截器（按 `addInterceptor` / `intercept` 添加的先后顺序）；
+- 追踪拦截器（`withTracker` 添加的 `TrackInterceptor`）；
+- 尾部收口拦截器：
+  - 若开启 `asEmptyObject()`，尾部为 `EmptyValueInterceptor`；
+  - 若开启 `enableHotswap()`，尾部为 `HotSwapInterceptor`；
+  - 否则尾部为 `DelegateInterceptor`。

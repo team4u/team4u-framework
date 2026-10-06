@@ -146,8 +146,8 @@ GlobalConfig c = config.get();   // 热路径：一次 volatile 读
 ## 下一步
 
 - 深入分段锁与双缓存流水线：[动态实例与单例工厂](base-instance.md)
-- 探索高性能预解析模板引擎：[文本模板解析器 (TextTemplate)](base-template.md)
+- 探索高性能预解析模板引擎：[文本模板解析器](base-template.md)
 - 查看本地缓存体系与淘汰策略：[通用轻量缓存体系](base-cache.md)
-- 了解单值影子刷新与并发契约：[可刷新值 (RefreshableValue)](base-refresh.md)
-- 深入强类型转换器注册表：[类型转换器体系 (ConvertUtil)](base-convert.md)
-- 了解流式 SQL 构造器与极简 CRUD：[极简 JDBC 构建工具 (JdbcUtil)](base-jdbc.md)
+- 了解单值影子刷新与并发契约：[可刷新值](base-refresh.md)
+- 深入强类型转换器注册表：[类型转换器体系](base-convert.md)
+- 了解流式 SQL 构造器与极简 CRUD：[极简 JDBC 构建工具](base-jdbc.md)

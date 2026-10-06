@@ -1,10 +1,10 @@
 # 策略自动扫描与 Spring 发现
 
-为了消除大量手写 `new` 策略对象的样板代码，`team4u-policy` 提供了 **反射包扫描**(Package Scan)、**Java 标准 SPI** 以及 **Spring 容器自动装配** 三种自动化发现机制。
+为了消除大量手写 `new` 策略对象的样板代码，`team4u-policy` 提供了反射包扫描、Java 标准 SPI 以及 Spring 容器自动装配三种自动化发现机制。
 
 ---
 
-## 反射包扫描注册 (`PolicyScanner`)
+## 反射包扫描注册
 
 `PolicyScanner` 支持扫描指定 ClassLoader / 包路径下所有实现指定策略接口的类，通过反射无参构造器实例化并注册到注册表中。
 
@@ -41,32 +41,33 @@ PolicyScanner.scanAndRegister(registry, "com.mycompany.app.payment", PaymentPoli
 
 基于 Java `ServiceLoader` 机制，在 `META-INF/services/` 中声明接口实现，解耦实现类与调用方：
 
-1. 创建 SPI 配置文件：`META-INF/services/com.mycompany.payment.PaymentPolicy`
-2. 写入具体实现类的全限定名：
+- 创建 SPI 配置文件：`META-INF/services/com.mycompany.payment.PaymentPolicy`
+- 写入具体实现类的全限定名：
    ```text
    com.mycompany.payment.impl.AlipayPolicy
    com.mycompany.payment.impl.WechatPolicy
    ```
-3. 代码中一行完成 SPI 加载与注册：
+- 代码中一行完成 SPI 加载与注册：
    ```java
    PolicyScanner.registerFromServiceLoader(registry);
    ```
 
 ---
 
-## Spring 容器自动集成 (`@PolicyAutoRegister`)
+## Spring 容器自动集成
 
 在 Spring Boot 或 Spring Framework 应用中，策略类往往需要依赖注入 Spring 的 `@Service`、`@Repository` 或 RPC 客户端。`team4u-policy` 提供了零侵入的自动化装配机制。
 
-### 核心工作原理 (`SpringPolicyAutoRegistrar`)
-1. `SpringPolicyAutoRegistrar` 实现了 Spring 的 `SmartInitializingSingleton` 接口；
-2. 当所有 Spring 单例 Bean 初始化完成后，自动巡检容器内所有的 `PolicyRegistry` Bean；
-3. 识别标注了 `@PolicyAutoRegister` 注解的注册表，获取其 `getPolicyClass()`；
-4. 从 Spring 容器中提取所有属于该策略类型的 Spring Bean，并调用 `registry.addAll(policyBeans.values())` 自动注入。
+### 核心工作原理
+
+- `SpringPolicyAutoRegistrar` 实现了 Spring 的 `SmartInitializingSingleton` 接口；
+- 当所有 Spring 单例 Bean 初始化完成后，自动巡检容器内所有的 `PolicyRegistry` Bean；
+- 识别标注了 `@PolicyAutoRegister` 注解的注册表，获取其 `getPolicyClass()`；
+- 从 Spring 容器中提取所有属于该策略类型的 Spring Bean，并调用 `registry.addAll(policyBeans.values())` 自动注入。
 
 ### 配置与使用步骤
 
-#### 步骤 1：配置注册表 Bean 与自动注册器
+#### 配置注册表 Bean 与自动注册器
 ```java
 import com.team4u.framework.policy.core.KeyedPolicyRegistry;
 import com.team4u.framework.policy.core.OrderedPolicyChain;
@@ -99,7 +100,7 @@ public class PolicyConfig {
 }
 ```
 
-#### 步骤 2：编写 Spring 托管的策略组件
+#### 编写 Spring 托管的策略组件
 ```java
 import com.team4u.framework.policy.api.KeyedPolicy;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -123,7 +124,7 @@ public class AlipayPolicy implements PaymentPolicy {
 }
 ```
 
-#### 步骤 3：业务层直接注入注册表使用
+#### 业务层直接注入注册表使用
 ```java
 @Service
 public class CheckoutService {

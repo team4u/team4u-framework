@@ -25,7 +25,7 @@ team4u-framework 是一组专注解决后端常见架构模式的基础组件库
 
 | 组件 | 对应模块 | 解决的典型问题 | 文档 |
 | :--- | :--- | :--- | :--- |
-| **流程编排** | `team4u-flow` / `team4u-flow-durable` | 强类型轻量化编排引擎：双投影编译（Local 内存同步 / Durable 崩溃恢复）、四态 Outcome、挂起恢复、细粒度重试与图表渲染。 | [文档](docs/flow/README.md) |
+| **流程编排** | `team4u-flow` / `team4u-flow-durable` | 强类型轻量化编排引擎：双投影编译（Local 内存同步执行与 Durable 崩溃恢复执行）、四态业务结果、挂起恢复、细粒度重试与图表渲染。 | [文档](docs/flow/README.md) |
 | **业务路由** | `team4u-router` | 多维条件分流、权重分流与复合决策，替代深层嵌套的 `if-else`。 | [文档](docs/router/README.md) |
 | **规则表达式** | `team4u-criterion` | 纯 Java 实现的类 SQL 语法 DSL 引擎，低分配且支持执行链路白盒追踪。 | [文档](docs/criterion/README.md) |
 | **状态机** | `team4u-fsm` | 强类型有限状态机：不可变迁移定义、守卫与动作、确定性分层匹配与 Mermaid 状态图。 | [文档](docs/fsm/README.md) |

@@ -118,7 +118,7 @@ T value = values.get(branch); // 仅 Accepted 分支存在
 ```
 
 > [!IMPORTANT]
-> **关键认知**：`results.outcome(branch)` 返回的不是原始数据 `T`，而是 **`Outcome<T>`** ！
+> **关键认知**：`results.outcome(branch)` 返回的不是原始数据 `T`，而是 `Outcome<T>` ！
 > 因为在并发执行中，某个分支可能成功（`Accepted`）、被风控拒绝（`Rejected`）、因不适用而弃权（`Skipped`）或抛出异常（`Failed`）。
 > 若传入不属于本并行块的令牌，将抛出 `IllegalArgumentException`；若需要直接解包成功值，
 > 可在流程最终结果上调用 `FlowResult.requireAccepted()` / `DurableResult.requireAccepted()`。
@@ -126,9 +126,9 @@ T value = values.get(branch); // 仅 Accepted 分支存在
 ### 生产实战：多分支异构结果强弱依赖智能合并
 
 以下是一个生产级订单结算聚合示例：
-- **风控分支（`riskBranch`）**：强依赖。被拒或报错立即阻断；
-- **库存分支（`stockBranch`）**：强依赖。必须成功；
-- **优惠券分支（`couponBranch`）**：弱依赖。若用户无可用优惠券（返回 `Skipped`），降级为使用 0 元优惠，绝不阻断结算：
+- **风控分支（`riskBranch`）** ：强依赖。被拒或报错立即阻断；
+- **库存分支（`stockBranch`）** ：强依赖。必须成功；
+- **优惠券分支（`couponBranch`）** ：弱依赖。若用户无可用优惠券（返回 `Skipped`），降级为使用 0 元优惠，绝不阻断结算：
 
 ```java
 Branch<Order, RiskResult> riskBranch = Branch.of("risk", riskFlow);
@@ -173,7 +173,7 @@ Flow<Order, CheckoutView> checkoutFlow = Flow.<Order>parallel(riskBranch, stockB
 
 ```mermaid
 sequenceDiagram
-    participant Main as 调用线程 (SerialMachine)
+    participant Main as 调用线程
     participant W1 as Worker 线程 1
     participant W2 as Worker 线程 2
     participant W3 as Worker 线程 3
@@ -182,7 +182,7 @@ sequenceDiagram
     Main->>W2: 派发 Branch 2
     Main->>W3: 派发 Branch 3
     
-    Note over W1: 快速失败 (Failed)
+    Note over W1: 快速失败
     Note over Main: 检测到失败 / 取消
     Note over Main: 发送中断信号给 W2, W3 (Thread.interrupt)
     
@@ -193,8 +193,8 @@ sequenceDiagram
     Main->>Main: 汇总结果并安全清理资源
 ```
 
-1. **绝对不泄漏后台线程**：即使某个分支提前抛出异常或流程被外部 `Cancellation` 取消，框架调度器**必定等待所有已启动分支的工作线程完全执行完毕或响应中断退出后**，方才解除阻塞返回；
-2. **取消绕过 Join 逻辑**：若流程在并行执行期间被外部取消，框架直接流向 `FlowResult.Cancelled`，**绝不会调用 `JoinStrategy`** ，避免在取消状态下产生脏数据。
+- **绝对不泄漏后台线程**：即使某个分支提前抛出异常或流程被外部 `Cancellation` 取消，框架调度器**必定等待所有已启动分支的工作线程完全执行完毕或响应中断退出后**，方才解除阻塞返回；
+- **取消绕过 Join 逻辑**：若流程在并行执行期间被外部取消，框架直接流向 `FlowResult.Cancelled`，**绝不会调用 `JoinStrategy`** ，避免在取消状态下产生脏数据。
 
 ---
 
@@ -202,11 +202,11 @@ sequenceDiagram
 
 在流程编译阶段（`Compiler.compile`），框架对 `parallel` 施加了严格的静态拓扑校验：
 
-1. **禁止分支内 `await`（`PARALLEL_AWAIT`）**：
+- **禁止分支内 await**（诊断码 `PARALLEL_AWAIT`）：
    并行分支内部严禁声明挂起点 `await`。因为并行分支的多实例异步恢复会打破状态机的单线推进因果律；
-2. **禁止分支内 `persistentPolicy`（`PARALLEL_PERSISTENT_POLICY`）**：
+- **禁止分支内挂载持久化策略**（诊断码 `PARALLEL_PERSISTENT_POLICY`）：
    并行分支内部禁止挂载持久化策略；
-3. **分支标识全局唯一（`DUPLICATE_BRANCH`）**：
+- **分支标识全局唯一**（诊断码 `DUPLICATE_BRANCH`）：
    同一 `parallel` 内的各个 `Branch` 名称必须全局唯一。
 
 ---

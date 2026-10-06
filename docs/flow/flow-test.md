@@ -1,6 +1,6 @@
 # 测试支持与测试套件
 
-`team4u-flow-test` 为流程编排提供开箱即用的测试套件（testkit），包含业务操作桩（`OperationStub`）、策略桩（`PolicyStub`）、事件轨迹收集器（`TraceCollector`）、双执行器断言库（`FlowAssertions`）、测试执行夹具（`LocalFixture` / `DurableFixture`）以及并发重叠验证屏障（`ParallelBarrier`）。
+`team4u-flow-test` 为流程编排提供开箱即用的测试套件，包含业务操作桩（`OperationStub`）、策略桩（`PolicyStub`）、事件轨迹收集器（`TraceCollector`）、双执行器断言库（`FlowAssertions`）、测试执行夹具（`LocalFixture` / `DurableFixture`）以及并发重叠验证屏障（`ParallelBarrier`）。
 
 ---
 
@@ -107,7 +107,7 @@ System.out.println(proceeding.afterCount());  // 1
 // proceeding.afterCalls().get(0).completion().kind();
 ```
 
-### 持久化策略打桩（PersistentPolicyStub）
+### 持久化策略打桩
 
 `PersistentPolicyStub<K>` 是固定次数重试的 `PersistentPolicy` 测试桩，通过
 `PersistentPolicyStub.counting(maxAttempts, backoff)` 创建。它以不可变 `Integer`（当前轮次，
@@ -138,7 +138,7 @@ org.junit.Assert.assertEquals(1, ok.callCount());
 
 `maxAttempts` 必须为正数（包含初试，>= 1），违反时构造期抛出 `IllegalArgumentException`。
 
-### 重试状态编解码（FlowRetryStateMapper）
+### 重试状态编解码
 
 `team4u-flow-retry` 模块提供 `FlowRetryStateMapper`：`FlowRetryState` 的手工
 `StateMapper` 实现（codecId 为 `flow-retry-attempt`、版本 1，单例 `INSTANCE`），
@@ -285,7 +285,7 @@ FlowAssertions.assertCompleted(recovered);
 
 ## 并行重叠验证屏障 (`ParallelBarrier`)
 
-`ParallelBarrier` 基于并发计数器与等待屏障，用于严格验证 Local 并行分支是否真正实现了**多线程并发执行（而非串行推进）**：
+`ParallelBarrier` 基于并发计数器与等待屏障，用于严格验证 Local 并行分支是否真正实现了多线程并发执行（而非串行推进）：
 
 ```java
 import com.team4u.framework.flow.test.ParallelBarrier;

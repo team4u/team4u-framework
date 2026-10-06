@@ -6,7 +6,7 @@
 - **类型不安全**：编译器无法约束只有成功状态才能提取产出值，运行时空指针异常频发；
 - **生命周期割裂**：无法在统一模型中协调“内存同步执行”、“异步挂起等待外部信号”与“持久化断点续跑”。
 
-`team4u-flow` 提出了**业务四态代数类型（`Outcome<T>`）**与**执行生命周期（`FlowResult<O>` / `DurableResult<O>`）**严格分层的架构模型。本文将深入剖析该模型的设计原理、代数操作、契约约束与底层实现。
+`team4u-flow` 提出了业务四态代数类型 `Outcome<T>` 与执行生命周期 `FlowResult<O>` / `DurableResult<O>` 严格分层的架构模型。本文将深入剖析该模型的设计原理、代数操作、契约约束与底层实现。
 
 ---
 
@@ -16,7 +16,7 @@
 
 ```mermaid
 graph TD
-    subgraph "执行生命周期层 (Execution Lifecycle)"
+    subgraph "执行生命周期层"
         FR["FlowResult&lt;O&gt; (Local) / DurableResult&lt;O&gt; (Durable)<br/>描述执行器当前的运行与调度状态"]
         C["Completed<br/>流程已执行到达终态"]
         S["Suspended<br/>流程遇到挂起点，等待外部信号"]
@@ -28,7 +28,7 @@ graph TD
         FR --> X
     end
 
-    subgraph "业务结果层 (Business Outcome)"
+    subgraph "业务结果层"
         C --> OUT["Outcome&lt;O&gt;<br/>四态闭集，仅 Completed 终态携带"]
         AC["Accepted&lt;O&gt;<br/>业务成功：携带产出值 O（唯一携带载荷）"]
         RJ["Rejected&lt;O&gt;<br/>业务拒绝：携带 Reason（预期内业务短路）"]
@@ -42,8 +42,8 @@ graph TD
 ```
 
 ### 职责边界解耦
-- **业务结果层（`Outcome<T>`）**：回答“**业务逻辑达成了何种业务结论**”。由业务步骤（`Operation`）、路由规则或治理策略产生；
-- **执行生命周期层（`FlowResult` / `DurableResult`）**：回答“**当前执行处于何种运行与调度状态**”。由执行器引擎（`SerialMachine` / `DurableMachine`）管理。
+- **业务结果层** ：回答“**业务逻辑达成了何种业务结论** ”，载体为 `Outcome<T>`，由业务步骤（`Operation`）、路由规则或治理策略产生；
+- **执行生命周期层** ：回答“**当前执行处于何种运行与调度状态** ”，载体为 `FlowResult` / `DurableResult`，由执行器引擎（`SerialMachine` / `DurableMachine`）管理。
 
 > [!IMPORTANT]
 > 只有当执行生命周期处于 `Completed` 时，才携带业务 `Outcome`；若流程处于 `Suspended`（挂起等待）或 `Cancelled`（已取消），流程尚未产出最终业务结论，因此不持有业务 `Outcome`。
@@ -56,10 +56,10 @@ graph TD
 
 | 状态类型 | 对应子类 | 携带载荷 | 语义定义 | 典型业务场景 | 框架默认行为 |
 | :--- | :--- | :--- | :--- | :--- | :--- |
-| **Accepted** | `Outcome.Accepted<T>` | `T value`（非 null） | **业务成功**：节点顺利完成并产出符合预期的业务数据。**四态中唯一携带输出值的状态**。 | 订单创建成功、支付扣款成功、优惠计算完毕 | 驱动后置节点继续推进 |
-| **Rejected** | `Outcome.Rejected<T>` | `Reason reason`（非 null） | **业务拒绝**：业务规则校验不通过或被风控拒绝。属于预期内的业务分支，**不属于系统故障**。 | 黑名单拦截、余额不足、账户被冻结、参数校验失败 | 终止序列并向外透传，**不触发重试与技术补偿** |
-| **Skipped** | `Outcome.Skipped<T>` | `Reason reason`（非 null） | **弃权跳过**：当前节点对于输入不适用或主动弃权。支持被外层算子消费以尝试后续分支。 | 用户未提供优惠券、非首单跳过新人礼包、无适用路由分支 | 终止序列；可在 `thenOptional` / `firstApplicable` 边界被捕获消费 |
-| **Failed** | `Outcome.Failed<T>` | `Failure failure`（非 null） | **技术失败**：系统故障、RPC 超时、未受检异常或不可恢复错误。 | 数据库连接超时、下游网关 502、线程池耗尽、序列化失败 | 终止序列；可触发 `retry` 重试或 `recoverWith` 补偿分支 |
+| Accepted | `Outcome.Accepted<T>` | `T value`（非 null） | **业务成功** ：节点顺利完成并产出符合预期的业务数据。**四态中唯一携带输出值的状态** 。 | 订单创建成功、支付扣款成功、优惠计算完毕 | 驱动后置节点继续推进 |
+| Rejected | `Outcome.Rejected<T>` | `Reason reason`（非 null） | **业务拒绝** ：业务规则校验不通过或被风控拒绝。属于预期内的业务分支，**不属于系统故障** 。 | 黑名单拦截、余额不足、账户被冻结、参数校验失败 | 终止序列并向外透传，**不触发重试与技术补偿** |
+| Skipped | `Outcome.Skipped<T>` | `Reason reason`（非 null） | **弃权跳过** ：当前节点对于输入不适用或主动弃权。支持被外层算子消费以尝试后续分支。 | 用户未提供优惠券、非首单跳过新人礼包、无适用路由分支 | 终止序列；可在 `thenOptional` / `firstApplicable` 边界被捕获消费 |
+| Failed | `Outcome.Failed<T>` | `Failure failure`（非 null） | **技术失败** ：系统故障、RPC 超时、未受检异常或不可恢复错误。 | 数据库连接超时、下游网关 502、线程池耗尽、序列化失败 | 终止序列；可触发 `retry` 重试或 `recoverWith` 补偿分支 |
 
 ---
 
@@ -149,7 +149,7 @@ try {
 
 ## Outcome 代数操作与映射法则
 
-`Outcome<T>` 具备严格的函子（Functor）代数性质，支持安全类型转换与函数映射。
+`Outcome<T>` 具备严格的函子代数性质，支持安全类型转换与函数映射。
 
 ### `map` 函子变换
 

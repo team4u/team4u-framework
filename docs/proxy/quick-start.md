@@ -100,6 +100,6 @@ proxy.sayHello("Jack");
 
 - 了解鸭子类型委托与反射缓存：[鸭子类型委托与反射缓存](proxy-delegate.md)
 - 探索方法执行追踪与审计：[调用链追踪与性能审计](proxy-track.md)
-- 在线替换目标实例：[运行时热交换 (HotSwap)](proxy-hotswap.md)
+- 在线替换目标实例：[运行时热交换](proxy-hotswap.md)
 - 消除级联调用空指针：[空对象模式防 NPE](proxy-empty.md)
 - 编写高级切面与职责链：[自定义 AOP 拦截器链](proxy-interceptor.md)

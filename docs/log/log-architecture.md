@@ -78,8 +78,8 @@ graph TD
 为了在编写业务单元测试时，能够可靠且零副作用地断言日志输出（如验证动作名、耗时、业务字段或脱敏结果），框架提供了 `TestLogHelper`。
 
 ### 原理与生命周期
-1. 调用 `TestLogHelper.start()` 时，会自动创建 `MemoryLogAppender` 并将其包装为 `CompositeLogAppender` 注入 `LogEngine`。这样既保留了控制台原有日志打印，又能在内存中捕获日志事件；
-2. 在测试结束时调用 `helper.stop()`，会自动解除挂载并安全恢复原有的 Appender，消除跨用例的状态泄漏。
+- 调用 `TestLogHelper.start()` 时，会自动创建 `MemoryLogAppender` 并将其包装为 `CompositeLogAppender` 注入 `LogEngine`。这样既保留了控制台原有日志打印，又能在内存中捕获日志事件；
+- 在测试结束时调用 `helper.stop()`，会自动解除挂载并安全恢复原有的 Appender，消除跨用例的状态泄漏。
 
 ### 单测使用示例
 ```java

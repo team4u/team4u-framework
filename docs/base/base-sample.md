@@ -40,9 +40,9 @@ public class DynamicTopicResolver {
 
 ### 业务场景
 从配置中心接收 JSON 格式的流控规则，并将其转换为可执行的 `RateLimitExecutor` 实例。要求：
-1. 相同 JSON 配置不重复反序列化与编译；
-2. 高并发 Cache Miss 时防并发穿透；
-3. 配置变更时能安全加载新规则实例。
+- 相同 JSON 配置不重复反序列化与编译；
+- 高并发 Cache Miss 时防并发穿透；
+- 配置变更时能安全加载新规则实例。
 
 ### 代码实现
 ```java

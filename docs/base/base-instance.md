@@ -30,7 +30,7 @@ graph TD
 - `ConfigKey` **空间**：通过 `getByConfig(C config)` 访问时，以 `new ConfigKey(config)` 缓存最终创建的实例 `T`；
 - 两个包装键使用不同的类型标签，彻底避免了具有相同 `hashCode` 的输入源与配置对象之间的键空间污染。
 
-### 分段锁并发控制 (Striped Lock)
+### 分段锁并发控制
 内部维护了固定长度为 128 的分段锁桶：
 ```java
 private final Object[] locks = new Object[128];
@@ -40,7 +40,7 @@ private Object getLock(Object key) {
 }
 ```
 - 在高并发 Cache Miss 情况下，将锁竞争分散至 128 个锁槽中；
-- 采用双重检查锁（DCL）设计，在获取锁后二次校验缓存，确保同一输入源的解析和实例化逻辑全局仅执行一次。
+- 采用双重检查锁设计，在获取锁后二次校验缓存，确保同一输入源的解析和实例化逻辑全局仅执行一次。
 
 ---
 

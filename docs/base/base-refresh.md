@@ -1,4 +1,4 @@
-# 可刷新值 (RefreshableValue)
+# 可刷新值
 
 很多数据的源头在远端（数据库、配置中心、第三方接口），读取却发生在进程内的高频路径上：全局配置、数据字典、黑白名单、第三方 token。每次读取都访问远端不可行，常见的做法是在本地保留一份副本并定期刷新。`RefreshableValue<T>` 是这份副本的标准化实现：业务声明值从哪来（loader）与多久算旧（刷新策略），加载、并发控制、失败冷却、变更通知由组件负责。
 
@@ -33,8 +33,8 @@ GlobalConfig c = config.get();   // 值未过期时为一次内存读
 
 | 时间戳 | 含义 | 计算 |
 | :--- | :--- | :--- |
-| **staleAfter**（软死期） | 值该刷新了 | `refreshEvery`：loadedAt + interval；`ttlOf`：loadedAt + max(ttl − refreshAhead, 0)；均未配置（MANUAL）时永不过期 |
-| **hardAfter**（硬死期） | 值不可再服务 | staleAfter + maxStale，未配置 maxStale 时无限 |
+| `staleAfter`（软死期） | 值该刷新了 | `refreshEvery`：loadedAt + interval；`ttlOf`：loadedAt + max(ttl − refreshAhead, 0)；均未配置（MANUAL）时永不过期 |
+| `hardAfter`（硬死期） | 值不可再服务 | staleAfter + maxStale，未配置 maxStale 时无限 |
 | **retryAt**（冷却至） | 失败后不再打源端 | now + min(cooldownInitial × 2^(k-1), cooldownMax)，第 k 次连续失败；成功后清零 |
 
 ### `get()` 决策算法
@@ -68,7 +68,7 @@ RefreshableValue<GlobalConfig> config = RefreshableValue.<GlobalConfig>builder()
 - 新值与旧值 `equals` 相同时不算变更：不触发 `onChange`、不输出变更日志，内存中的对象引用也不替换；
 - loader 返回 null 将抛出 `IllegalArgumentException`——null 无法与「尚未加载」区分。
 
-## 按值有效期刷新（token）
+## 按值有效期刷新
 
 有效期由远端响应决定时（如 `expiresIn=7200` 秒），用 `ttlOf` 代替固定周期：
 
@@ -119,14 +119,14 @@ Dict d = dict.get(); // 其余时刻直接返回当前快照，不触发重新�
 
 `refresh()` 同步执行加载，失败抛出异常，重试策略由调用方决定；与在途刷新并发时合并为同一次。config 组件的 `DbConfigWatcher` 即此用法：值为 `system_config` 表的 `MAX(update_time)`，`onChange` 触发时通知配置重载。
 
-## 变更通知（onChange）
+## 变更通知
 
 | 情况 | 是否触发 | 原因 |
 | :--- | :--- | :--- |
-| 值发生变化 | ✅ | 参数为 (旧值, 新值) |
-| 新值与旧值 `equals` 相同 | ❌ | 值未变化，无需通知 |
-| 加载失败 | ❌ | 值未变化，失败由冷却机制处理 |
-| 首次加载（null → 值） | ✅ | 旧值为 null |
+| 值发生变化 | 是 | 参数为（旧值，新值） |
+| 新值与旧值 `equals` 相同 | 否 | 值未变化，无需通知 |
+| 加载失败 | 否 | 值未变化，失败由冷却机制处理 |
+| 首次加载（null 至新值） | 是 | 旧值为 null |
 
 回调在独立的单线程守护线程池上执行，单个回调抛出异常仅记录 warn，不影响后续回调与刷新本身；同一值的回调按变更顺序执行。回调应保持轻量，耗时操作移交业务线程池。
 
@@ -137,7 +137,7 @@ Dict d = dict.get(); // 其余时刻直接返回当前快照，不触发重新�
 - `status()` 的各字段取自同一次原子读取，并发刷新下不会出现版本与计数不一致的快照；
 - 后台刷新任务的单次异常不会终止后续周期。
 
-## 状态观测（status）
+## 状态观测
 
 ```java
 Status s = config.status();

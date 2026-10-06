@@ -4,7 +4,7 @@
 
 ---
 
-## 核心接口契约 (ISP)
+## 核心接口契约
 
 `team4u-bean` 遵循接口隔离原则，严格分离读写权限：
 
@@ -70,6 +70,6 @@ MyHeavyService service = BeanManager.getInstance().loadBean(
 ```
 
 ### 执行逻辑：
-1. 优先调用 `getBean(type)` 遍历所有已注册的 `BeanFactory`（包括 Spring 容器）；
-2. 若已存在对应 Bean，直接返回现有实例，不触发 `Supplier`；
-3. 若容器中不存在，执行 `Supplier.get()` 创建新实例，并通过 `localContainer.registerBean(newBean)` 注册到本地容器中并返回。
+- 优先调用 `getBean(type)` 遍历所有已注册的 `BeanFactory`（包括 Spring 容器）；
+- 若已存在对应 Bean，直接返回现有实例，不触发 `Supplier`；
+- 若容器中不存在，执行 `Supplier.get()` 创建新实例，并通过 `localContainer.registerBean(newBean)` 注册到本地容器中并返回。

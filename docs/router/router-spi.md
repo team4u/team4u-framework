@@ -4,11 +4,11 @@
 
 ---
 
-## 扩展自定义路由器 (RouterFactory SPI)
+## 扩展自定义路由器
 
 当内置的 `map`、`expression`、`weight`、`composite` 无法满足特定算法场景（如一致性哈希分片、地理位置距离计算分发、机器学习在线预测路由）时，可通过实现 `RouterFactory` 接入自定义路由器。
 
-### 步骤 1：编写自定义路由器类
+### 编写自定义路由器类
 
 继承 `AbstractRouter`，实现核心匹配逻辑：
 
@@ -44,7 +44,7 @@ public class ShardingRouter extends AbstractRouter {
 }
 ```
 
-### 步骤 2：实现 RouterFactory 接口
+### 实现 RouterFactory 接口
 
 ```java
 package com.mycompany.router;
@@ -67,7 +67,7 @@ public class ShardingRouterFactory implements RouterFactory {
 }
 ```
 
-### 步骤 3：注册工厂
+### 注册工厂
 
 #### 方式 A：Java SPI 自动发现（推荐）
 在 `META-INF/services/com.team4u.framework.router.spi.RouterFactory` 文件中添加实现类全限定名：
@@ -89,7 +89,7 @@ RoutingManager manager = RoutingManager.builder()
 
 ---
 
-## 自定义配置解析器 (RoutePolicyParser SPI)
+## 自定义配置解析器
 
 默认情况下，`team4u-router` 使用 `DefaultRoutePolicyParser`（基于 `JsonUtil`）解析 JSON 格式的路由配置。如果你的系统统一采用 YAML、Properties 或自定义 DSL 配置，可实现 `RoutePolicyParser` 接口：
 
@@ -116,9 +116,9 @@ public class YamlRoutePolicyParser implements RoutePolicyParser {
 
 ### 注册与发现优先级
 解析器查找遵循三级优先级机制：
-1. **最高优先级**：`RoutingManager.builder().configParser(customParser)` 显式传入。
-2. **次高优先级**：通过 SPI `META-INF/services/com.team4u.framework.router.spi.RoutePolicyParser` 自动发现。
-3. **默认兜底**：使用框架内置的 `DefaultRoutePolicyParser`。
+- **最高优先级**：`RoutingManager.builder().configParser(customParser)` 显式传入。
+- **次高优先级**：通过 SPI `META-INF/services/com.team4u.framework.router.spi.RoutePolicyParser` 自动发现。
+- **默认兜底**：使用框架内置的 `DefaultRoutePolicyParser`。
 
 ---
 
@@ -156,7 +156,7 @@ graph TD
     S3 --> S4["4. 自动注入绑定当前 Manager 上下文的 CompositeRouterFactory"]
 ```
 
-1. **内置默认工厂**：包含 `MapRouterFactory`、`ExpressionRouterFactory`、`WeightRouterFactory`。
-2. **SPI 扩展工厂**：覆盖或补充第三方扩展。
-3. **手动指定工厂**：最高优先级，覆盖同名的已有工厂。
-4. **复合工厂隔离**：每个 `RoutingManager` 实例构建时都会创建绑定自身上下文的 `CompositeRouterFactory`，防止组合路由在多实例环境下跨上下文错乱。
+- **内置默认工厂**：包含 `MapRouterFactory`、`ExpressionRouterFactory`、`WeightRouterFactory`。
+- **SPI 扩展工厂**：覆盖或补充第三方扩展。
+- **手动指定工厂**：最高优先级，覆盖同名的已有工厂。
+- **复合工厂隔离**：每个 `RoutingManager` 实例构建时都会创建绑定自身上下文的 `CompositeRouterFactory`，防止组合路由在多实例环境下跨上下文错乱。

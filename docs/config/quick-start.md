@@ -85,7 +85,7 @@ public class ConfigQuickStart {
 
 ---
 
-## 流式强类型读取 (MapReader)
+## 流式强类型读取
 
 无需声明 JavaBean 类或引入代理模块，直接通过 `asReader()` 或 `asReader(prefix)` 进行流式类型安全提取，内置支持别名回退、Duration 时长解析与安全默认值：
 

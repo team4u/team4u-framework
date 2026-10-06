@@ -6,9 +6,9 @@
 
 ## 基本词法规则
 
-- **Subject（主语/属性）**：无 `$` 前缀（如 `age`、`user.name`），表示从 `MatchContext.getActual()` 入参对象中提取的属性。
-- **Variable（动态变量）**：强制以 `$` 开头（如 `$minAge`、`$whiteList`），表示从 `MatchContext.getAttribute(key)` 中提取的变量。
-- **Literal（字面量）**：
+- **主语与属性**：无 `$` 前缀（如 `age`、`user.name`），表示从 `MatchContext.getActual()` 入参对象中提取的属性。
+- **动态变量**：强制以 `$` 开头（如 `$minAge`、`$whiteList`），表示从 `MatchContext.getAttribute(key)` 中提取的变量。
+- **字面量**：
   - 数字与布尔：`18`, `3.14`, `true`, `false`, `null`
   - 带引号字符串：`'admin'`, `'VIP'`（支持转义字符 `\'`）
   - 无引号普通标识符：`ACTIVE`, `VIP`（引擎会自动解析识别）
@@ -42,7 +42,7 @@ age >= 18 && (userLevel in ['VIP', 'SVIP'] || totalAmount > 5000)
 
 ---
 
-## 空值与存在性检查 (Is / Is Not)
+## 空值与存在性检查
 
 | 语法 | 说明 | 示例 |
 | :--- | :--- | :--- |
@@ -55,26 +55,26 @@ age >= 18 && (userLevel in ['VIP', 'SVIP'] || totalAmount > 5000)
 
 ## 集合与容器操作
 
-### In / Not In (成员判定)
-- 常量集合：`status in ['PAID', 'SUCCESS']` 或 `status in [PAID, SUCCESS]`
+### 成员判定
+- 常量集合：`status in ['PAID', 'SUCCESS']` 或 `status in [PAID, SUCCESS]`，`in` 与 `not in` 为成员判定关键字
 - 排除集合：`id not in [1, 2, 3]`
 - 混合变量：`id in [1, 2, $specialId]`
 - 动态集合引用：`userRole in $allowedRoles`
 
-### Contains / ContainsAny / ContainsAll (容器包含)
+### 容器包含
 - `contains`：判断集合是否包含指定元素，或字符串是否包含子串
   - `roles contains 'ADMIN'` (roles 为 List/Set)
   - `description contains 'error'` (字符串包含)
-- **`containsAny` / `contains_any` / `contains any`** ：交集检查，实际集合中是否包含预期集合中的任一元素
+- `containsAny` / `contains_any` / `contains any`：交集检查，实际集合中是否包含预期集合中的任一元素
   - `tags containsAny ['VIP', 'KOL']`
   - `roles contains any ['ADMIN', 'MANAGER']`
-- **`containsAll` / `contains_all` / `contains all`** ：全集包含，实际集合是否完全包含预期集合的所有元素
+- `containsAll` / `contains_all` / `contains all`：全集包含，实际集合是否完全包含预期集合的所有元素
   - `userTags containsAll ['NEW_USER', 'PHONE_VERIFIED']`
   - `permissions contains all ['READ', 'WRITE']`
 
 ---
 
-## 区间范围 (Between)
+## 区间范围
 
 支持标准数学区间语法，`[` / `]` 表示闭区间（包含边界），`(` / `)` 表示开区间（不包含边界）：
 
@@ -86,39 +86,40 @@ age >= 18 && (userLevel in ['VIP', 'SVIP'] || totalAmount > 5000)
 
 ---
 
-## 正则匹配与通配符 (Regex / Like)
+## 正则匹配与通配符
 
-- **正则匹配 (`=~` 或 `regex`)** ：
+- **正则匹配** ：基于 `=~` 或 `regex` 运算符执行正则匹配：
   - `email =~ '^[a-zA-Z0-9_-]+@[a-zA-Z0-9_-]+(\\.[a-zA-Z0-9_-]+)+$'`
   - `phone regex '^1[3-9]\\d{9}$'`
-- **通配符匹配** (`like`)：基于 Team4u Ant 风格路径语义：`*` 匹配单个 `/` 分段内多个字符，`?` 匹配单个非 `/` 字符，只有完整的 `` 分段可跨越目录；`*` 等更长星号串仍是分段内通配符，`\` 为普通字符
+- **通配符匹配** ：基于 `like` 关键字，遵循 Team4u Ant 风格路径语义：`*` 匹配单个 `/` 分段内多个字符，`?` 匹配单个非 `/` 字符，只有完整的 `**` 分段可跨越目录；`**` 等更长星号串仍是分段内通配符，`\` 为普通字符
   - `name like 'John*'`
   - `code like 'ERR_???'`
   - `path like '/api/v1/**'`
+
 ---
 
 ## 概率灰度与 Hash 分流
 
-### 随机概率 (`prob` / `probability`)
-按指定浮点概率随机命中（`0.0 ~ 1.0`）：
+### 随机概率
+按指定浮点概率随机命中（`0.0 ~ 1.0`），关键字为 `prob` / `probability`：
 - `it prob 0.3` (30% 随机命中)
 - `it probability $grayRate` (基于上下文动态概率)
 
-### 一致性 Hash 分流 (`hash` / `hash_probability`)
-基于 **MurmurHash64** 算法，保证同一入参值（如 `userId`）结果稳定幂等：
+### 一致性 Hash 分流
+基于 **MurmurHash64** 算法，关键字为 `hash`，保证同一入参值（如 `userId`）结果稳定幂等：
 - `userId hash 0.2` (固定圈选 20% 用户)
-- **盐值正交性** (`salt`)：通过在上下文设置 `context.setAttribute("salt", "EXP_A")`，可保证不同实验之间的哈希分流彼此正交、流量均匀分散。
+- **盐值正交性** ：通过在上下文设置 `context.setAttribute("salt", "EXP_A")`，可保证不同实验之间的哈希分流彼此正交、流量均匀分散。
 
 ---
 
-## 显式类型转换器 (ValueConverter)
+## 显式类型转换器
 
 通过 `subject:converter` 后缀语法在比较前执行前置类型转换：
 
 | 转换器 | 说明 | 示例 |
 | :--- | :--- | :--- |
 | `:date` | 转换为日期进行比较，支持标准格式与 `'now'` 关键字 | `createTime:date > '2023-01-01'`<br/>`expireTime:date < 'now'`<br/>`birth:date between ['1990-01-01', '2000-01-01']` |
-| `:version` | 语义化版本号比较（Semantic Versioning） | `appVersion:version >= '2.1.0'`<br/>`clientVer:version between ['1.0.0', '2.0.0')` |
+| `:version` | 语义化版本号比较 | `appVersion:version >= '2.1.0'`<br/>`clientVer:version between ['1.0.0', '2.0.0')` |
 | `:number` | 转换为数值类型（优先进入原生数值快速路径） | `price:number > 100` |
 | `:size` | 获取集合、数组、Map 或字符串的长度/大小 | `followers:size > 1000`<br/>`items:size >= 5`<br/>`name:size < 10` |
 | `:string` | 调用 `String.valueOf(obj)` 转换为字符串 | `code:string == '1001'` |

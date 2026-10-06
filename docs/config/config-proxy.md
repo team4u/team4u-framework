@@ -33,7 +33,7 @@ public class MysqlConfig {
 用于显式指定某个属性或方法的配置键名，跳过默认根据 Getter 方法名推断的逻辑：
 
 - **相对路径**：`@ConfigKey("max-active")`，拼接到类前缀后（如 `datasource.mysql.max-active`）。
-- **绝对路径（以点号 `.` 开头）**：`@ConfigKey(".global.cluster-id")`，忽略类前缀，直接匹配根路径 `global.cluster-id`。
+- **绝对路径** ：以点号 `.` 开头，`@ConfigKey(".global.cluster-id")`，忽略类前缀，直接匹配根路径 `global.cluster-id`。
 
 ```java
 import com.team4u.framework.config.core.annotation.ConfigKey;
@@ -129,7 +129,7 @@ public class ThreadPoolConfig {
 
 ---
 
-## 智能松散绑定 (Relaxed Binding)
+## 智能松散绑定
 
 为了兼容各种命名风格（如环境变量的大写下划线、YAML 的中划线、Properties 的点号、Java 的驼峰），框架在 `ConfigSnapshot` 构造阶段自动构建了**归一化索引** (`looseIndex`)。
 
@@ -148,11 +148,11 @@ key -> key.toLowerCase().replace(".", "").replace("-", "").replace("_", "")
 
 ### 键名冲突仲裁优先级
 当多个原始键归一化后发生冲突时（例如同时存在 `app.max-connections` 与 `app_max_connections`），框架按照如下优先级仲裁获胜者：
-1. 点号分隔小写键（优先级最高，如 `app.max.connections`）
-2. 中划线小写键（如 `app.max-connections`）
-3. 下划线小写键（如 `app_max_connections`）
-4. 纯小写键
-5. 其他形式
+- 点号分隔小写键（优先级最高，如 `app.max.connections`）
+- 中划线小写键（如 `app.max-connections`）
+- 下划线小写键（如 `app_max_connections`）
+- 纯小写键
+- 其他形式
 
 ---
 
@@ -182,7 +182,7 @@ public class NodeConfig {
 
 ## 代理双模式：Live vs Pinned
 
-通过 `ConfigManager.createProxy()` 创建的代理默认工作在 **Live Mode（实时模式）**。通过接口 `SnapshotAware.pin()` 可以将其锚定为**Pinned Mode（快照模式）**。
+通过 `ConfigManager.createProxy()` 创建的代理默认工作在 **实时模式**。通过接口 `SnapshotAware.pin()` 可以将其锚定为**快照模式** 。
 
 | 特性维度 | Live Mode (实时代理，默认) | Pinned Mode (快照锚定代理) |
 | :--- | :--- | :--- |
@@ -236,5 +236,5 @@ graph TD
     PutCache --> ReturnVal
 ```
 
-1. **元数据静态缓存** (`METADATA_CACHE`)：全局缓存方法的返回类型、注解元数据与解析器，避免重复反射检索方法与字段。
-2. **版本化结果缓存** (`valueCache`)：以 `Method` 为键，存储 `(version, value)` 缓存节点。在快照未发生变更时，方法调用直接命中缓存，**不再重复字符串检索与类型转换**；当发生配置热重载时，快照版本号递增，缓存即时失效并重新计算。
+- **元数据静态缓存** ：`METADATA_CACHE` 全局缓存方法的返回类型、注解元数据与解析器，避免重复反射检索方法与字段。
+- **版本化结果缓存** ：`valueCache` 以 `Method` 为键，存储 `(version, value)` 缓存节点。在快照未发生变更时，方法调用直接命中缓存，**不再重复字符串检索与类型转换**；当发生配置热重载时，快照版本号递增，缓存即时失效并重新计算。

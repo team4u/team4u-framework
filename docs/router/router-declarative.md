@@ -61,9 +61,9 @@ public @interface RouteContext {
 | **异常分支校验**| 基本类型 / String / Long 等 | `routerId = "biz.${tenant}.${env}" |**严格校验**：当上下文为简单类型时，若模板中包含多于 1 个占位符，框架将抛出 `RouteConfigException.validationError` |
 
 ### 上下文参数提取规则
-1. **显式标注**：方法中被 `@RouteContext` 标注的参数作为上下文。
-2. **多注解校验**：单个方法内**严禁标注多个** `@RouteContext` 参数，否则在解析方法元数据时抛出 `RouteConfigException.validationError`。
-3. **默认兜底**：若方法内未标注任何 `@RouteContext`，框架默认将**第一个入参** (`args[0]`) 作为路由上下文。
+- **显式标注**：方法中被 `@RouteContext` 标注的参数作为上下文。
+- **多注解校验**：单个方法内**严禁标注多个** `@RouteContext` 参数，否则在解析方法元数据时抛出 `RouteConfigException.validationError`。
+- **默认兜底**：若方法内未标注任何 `@RouteContext`，框架默认将**第一个入参** (`args[0]`) 作为路由上下文。
 
 ---
 
@@ -164,7 +164,7 @@ System.out.println(result); // CN Alipay Success: 100.0
 
 ---
 
-## 手动定位 Bean (RoutedBeanLocator)
+## 手动定位 Bean
 
 如果你不想使用动态代理，也可以直接使用 `RoutedBeanLocator` 根据规则手动定位目标 Bean 实例：
 
@@ -194,13 +194,13 @@ service.pay(order);
 
 `RoutedBeanLocator` 内部包含完整的契约安全校验：
 
-1. **未命中规则且无兜底**：抛出 `RouteNotFoundException.ruleNotMatched(routerId)`（错误码 `RULE_NOT_MATCHED`）。
-2. **容器中未找到对应 Bean** ：抛出 `RouteNotFoundException.beanNotFound(routerId, targetBeanName)`（错误码 `BEAN_NOT_FOUND`）。
-3. **Bean 类型不匹配**：若从容器中获取的 Bean 并非 `expectedType` 的实例，抛出 `RouteException.typeMismatch(...)`（错误码 `TYPE_MISMATCH`）。
+- **未命中规则且无兜底**：抛出 `RouteNotFoundException.ruleNotMatched(routerId)`（错误码 `RULE_NOT_MATCHED`）。
+- **容器中未找到对应 Bean** ：抛出 `RouteNotFoundException.beanNotFound(routerId, targetBeanName)`（错误码 `BEAN_NOT_FOUND`）。
+- **Bean 类型不匹配**：若从容器中获取的 Bean 并非 `expectedType` 的实例，抛出 `RouteException.typeMismatch(...)`（错误码 `TYPE_MISMATCH`）。
 
 ---
 
-## 自定义 Bean 解析器 (BeanResolver)
+## 自定义 Bean 解析器
 
 默认情况下，框架使用 `BeanManager.getInstance().getBean(beanName)` 定位对象。在非默认容器或复杂 Spring 多上下文环境下，可实现 `BeanResolver` 接口：
 

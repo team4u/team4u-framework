@@ -62,9 +62,9 @@ RetryPolicy policy = RetryPolicy.builder()
 
 `exponentialJitter` 的计算方式：
 
-1. 先按指数公式算出本次理论等待：`initialDelay * multiplier^(attempt - 1)`。
-2. 用 `maxDelay` 封顶。
-3. 在 `[initialDelay, 理论等待]` 的闭区间内取随机值。
+- 先按指数公式算出本次理论等待：`initialDelay * multiplier^(attempt - 1)`。
+- 用 `maxDelay` 封顶。
+- 在 `[initialDelay, 理论等待]` 的闭区间内取随机值。
 
 因此它有一个固定下界：等待不会小于 `initialDelay`。如果理论上限不大于初始值，就直接返回上限。
 
@@ -102,7 +102,7 @@ MANAGED 会把 Backoff 保存成稳定的 `type + params`，当前记录格式�
 | `exponential` | `initialDelay`, `multiplier`, `maxDelay` |
 | `exponentialJitter` | `initialDelay`, `multiplier`, `maxDelay` |
 
-解析时参数必须类型正确、数量正确，不能多传未知参数。格式不写 Java 类名，旧版 Lease payload 不做兼容迁移。
+解析时参数必须类型正确、数量正确，不能多传未知参数。格式不写 Java 类名，Lease payload 不做跨版本兼容迁移。
 
 自定义 Backoff 需要提供稳定 type、可序列化 params、`toConfig()`，以及注册在同一个 `BackoffRegistry` 的 `BackoffFactory`。无法表达为配置的实现不适合默认持久化格式，应自定义 `RetryRecordSerializer`。
 

@@ -88,7 +88,7 @@ graph LR
 ## 文档导航
 
 - [快速开始](quick-start.md)：3 分钟完成模块启动与第一条结构化日志输出
-- [结构化流式日志 (Loggers)](log-loggers.md)：Loggers API、payload 规范、derive 模板派生与 LogSpan
+- [结构化流式日志](log-loggers.md)：Loggers API、payload 规范、derive 模板派生与 LogSpan
 - [方法切面追踪 (@AutoLogTrace)](log-auto-trace.md)：注解配置、Spring AOP 整合与第三方类动态代理
 - [动态治理与 FinOps 成本保护](log-governance.md)：条件染色提权、脱敏集成、字段截断与异常限流
 - [架构原理与模型设计](log-architecture.md)：LogEvent 模型设计、流水线管道与 TestLogHelper 测试支持

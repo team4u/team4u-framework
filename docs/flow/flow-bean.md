@@ -182,7 +182,7 @@ public class OrderServiceImpl implements OrderService {
 
 ```mermaid
 graph TD
-    subgraph "声明阶段 (Declaration)"
+    subgraph "声明阶段"
         D1["Flow.step(ValidateOp.class)"]
         D2["flow.then(PaymentOp.class, 'onlinePayment')"]
         AST["Flow&lt;I, O&gt; 不可变 AST<br/>（持有 Class 与 Qualifier 元数据）"]
@@ -190,7 +190,7 @@ graph TD
         D2 --> AST
     end
 
-    subgraph "编译阶段 (Compilation)"
+    subgraph "编译阶段"
         AST -->|"Local.compile / runtime.compile"| Compiler["Compiler 静态校验与解析"]
         Compiler -->|"SPI 自动发现 / resolve"| Resolver["BeanOperationResolver"]
         Resolver --> BM["BeanManager 门面"]
@@ -202,7 +202,7 @@ graph TD
         Bound --> Exec["Local / Durable Executable"]
     end
 
-    subgraph "执行阶段 (Execution)"
+    subgraph "执行阶段"
         Input["run(input) / start(execId, input)"] --> Exec
         Exec -->|"直接 Java 方法调用：零反射、零容器检索"| ProxyBean
     end
@@ -262,10 +262,10 @@ public class DurableFlowConfiguration {
 
 | 诊断码 | 错误场景 | 典型异常消息 | 运维自查与修复建议 |
 | :--- | :--- | :--- | :--- |
-| **`MISSING_BINDING`** | 容器中未找到 Bean | `No qualifying bean of type com.example.MyOperation` | 确认类上标注了 `@Component` / `@Service` 并在扫描范围内；确认已 `@Import(Team4uBeanConfiguration.class)`。 |
-| **`MISSING_BINDING`** | Qualifier 限定符未找到 | `No bean named 'strictValidator' for contract com.example.ValidateOp` | 检查限定符名称与 `@Component("strictValidator")` 声明是否一致。 |
-| **`INVALID_BINDING`** | 类未实现契约 | `Class com.example.Foo does not implement Operation, Policy or PersistentPolicy` | 确认绑定的 Class 实现了对应的扩展点接口。 |
-| **`BINDING_TYPE`** | Bean 类型不匹配 | `Resolved object does not implement Operation` | 检查 Spring 容器中同名 Bean 的实际实现类类型。 |
+| `MISSING_BINDING` | 容器中未找到 Bean | `No qualifying bean of type com.example.MyOperation` | 确认类上标注了 `@Component` / `@Service` 并在扫描范围内；确认已 `@Import(Team4uBeanConfiguration.class)`。 |
+| `MISSING_BINDING` | Qualifier 限定符未找到 | `No bean named 'strictValidator' for contract com.example.ValidateOp` | 检查限定符名称与 `@Component("strictValidator")` 声明是否一致。 |
+| `INVALID_BINDING` | 类未实现契约 | `Class com.example.Foo does not implement Operation, Policy or PersistentPolicy` | 确认绑定的 Class 实现了对应的扩展点接口。 |
+| `BINDING_TYPE` | Bean 类型不匹配 | `Resolved object does not implement Operation` | 检查 Spring 容器中同名 Bean 的实际实现类类型。 |
 
 ---
 

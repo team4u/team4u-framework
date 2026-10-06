@@ -1,6 +1,6 @@
 # Mermaid 状态机图表导出与可视化
 
-在系统设计、代码审查以及业务沟通中，状态机逻辑常常需要以直观的架构图进行展示。`team4u-fsm` 内置了原生 **`StateMachineMermaid`** 图表导出器，能够将不可变状态机实例一键渲染为符合 Mermaid 标准规范的 `stateDiagram-v2` 状态图源码。
+在系统设计、代码审查以及业务沟通中，状态机逻辑常常需要以直观的架构图进行展示。`team4u-fsm` 内置了原生 `StateMachineMermaid` 图表导出器，能够将不可变状态机实例一键渲染为符合 Mermaid 标准规范的 `stateDiagram-v2` 状态图源码。
 
 ---
 
@@ -41,14 +41,14 @@ stateDiagram-v2
 
 `StateMachineMermaid` 在生成图表时遵循以下映射规则：
 
-1. **初始状态生成**：根据 `initialState` 自动生成 `[*] --> INITIAL_STATE` 起点连线；
-2. **迁移连线标注**：
-   - 包含事件名称：`SOURCE --> TARGET: EVENT`；
-   - 若迁移配置了具名 Guard（`when("条件说明", ...)`），条件说明自动渲染在方括号内：`SOURCE --> TARGET: EVENT [条件说明]`；
-3. **通配来源与目标渲染**：
-   - `fromAny()` 规则会展开并为各个具体已注册的来源状态生成清晰的迁移连线；
-   - `toSelf()` 内部迁移渲染为指向自身的环形连线；
-4. **Markdown 与文档无缝集成**：生成的文本可以直接粘贴至 GitHub Markdown、Notion 或 Docsify 文档中以 ```mermaid 代码块直接呈现。
+- **初始状态生成**：根据 `initialState` 自动生成 `[*] --> INITIAL_STATE` 起点连线；
+- **迁移连线标注**：
+  - 包含事件名称：`SOURCE --> TARGET: EVENT`；
+  - 若迁移配置了具名 Guard（`when("条件说明", ...)`），条件说明自动渲染在方括号内：`SOURCE --> TARGET: EVENT [条件说明]`；
+- **通配来源与目标渲染**：
+  - `fromAny()` 规则会展开并为各个具体已注册的来源状态生成清晰的迁移连线；
+  - `toSelf()` 内部迁移渲染为指向自身的环形连线；
+- **Markdown 与文档无缝集成**：生成的文本可以直接粘贴至 GitHub Markdown、Notion 或 Docsify 文档中以 ```mermaid 代码块直接呈现。
 
 ---
 

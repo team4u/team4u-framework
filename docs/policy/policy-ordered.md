@@ -88,10 +88,11 @@ public interface OrderedPolicy extends ContextPolicy<Void> {
 
 ## `OrderedPolicyChain` 容器与重复注册控制
 
-`OrderedPolicyChain` 采用**手动写时复制** (Manual Copy-On-Write) 机制。写入时自动按照 `priority()` 执行稳定升序排序，读取时不加锁，直接返回缓存的只读列表，避免每次读取时的拷贝与临时对象分配。
+`OrderedPolicyChain` 采用手动写时复制机制。写入时自动按照 `priority()` 执行稳定升序排序，读取时不加锁，直接返回缓存的只读列表，避免每次读取时的拷贝与临时对象分配。
 
-### 重复策略处理模式 (`DuplicatePolicyMode`)
-在构造 `OrderedPolicyChain` 时，可指定重复策略注册模式：
+### 重复策略处理模式
+
+在构造 `OrderedPolicyChain` 时，可通过 `DuplicatePolicyMode` 指定重复策略注册模式：
 
 ```java
 public enum DuplicatePolicyMode {
@@ -114,16 +115,14 @@ OrderedPolicyChain<MyContext, MyPolicy> chain =
 ```
 
 ### 匹配查询方式
-- `firstMatch(context)`：遍历已排序的策略链，返回**第一个**满足 `supports(context)` 的策略（`Optional<P>`），用于路由定位场景。
-- `allMatches(context)`：返回**所有**满足条件的策略列表（`List<P>`），用于多级优惠叠加、全量风控过滤等场景。
+- `firstMatch(context)`：遍历已排序的策略链，返回第一个满足 `supports(context)` 的策略（`Optional<P>`），用于路由定位场景。
+- `allMatches(context)`：返回所有满足条件的策略列表（`List<P>`），用于多级优惠叠加、全量风控过滤等场景。
 
 ---
 
-## 策略执行流水线 (`PolicyPipeline`)
+## 策略执行流水线
 
-在复杂业务流程（如风控拦截、责任链校验、流水线审批）中，通常要求按顺序执行策略，并在某个节点校验失败时**立即短路中断**。
-
-`PolicyPipeline` 封装了流水线调度与短路控制逻辑：
+在复杂业务流程（如风控拦截、责任链校验、流水线审批）中，通常要求按顺序执行策略，并在某个节点校验失败时立即短路中断。`PolicyPipeline` 封装了流水线调度与短路控制逻辑：
 
 ```mermaid
 graph LR

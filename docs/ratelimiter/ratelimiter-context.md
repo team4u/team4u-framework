@@ -1,6 +1,6 @@
 # 动态上下文与分层路径限流
 
-在大型微服务架构中，单纯按单一字符串 Key 限流往往无法满足多维度、层级化（Hierarchical）的风控诉求。`team4u-ratelimiter` 提供了 **`ContextProperties`（动态属性提取）** 与 **`HistoryPaths`（分层路径限流）** 体系。
+在大型微服务架构中，单纯按单一字符串 Key 限流往往无法满足多维度、层级化的风控诉求。`team4u-ratelimiter` 提供了动态属性提取 `ContextProperties` 与分层路径限流 `HistoryPaths` 体系。
 
 ---
 

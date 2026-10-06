@@ -1,4 +1,4 @@
-# 统一门面与泛型解析 (JsonUtil)
+# 统一门面与泛型解析
 
 `JsonUtil` 是业务与 SDK 直接使用的统一门面静态工具类。在类加载时，它会自动通过 `PolicyScanner` 扫描当前类路径下可用的 `JsonSerializerPolicy` 实现，并选择优先级最高且支持当前运行环境的策略作为底层引擎。
 
@@ -35,7 +35,7 @@ public static <T> T toBean(String json, Type type);
 
 ---
 
-### 强类型泛型标记反序列化 (`TypeReference`)
+### 强类型泛型标记反序列化
 ```java
 public static <T> T toBean(String json, TypeReference<T> typeReference);
 ```
@@ -43,7 +43,7 @@ public static <T> T toBean(String json, TypeReference<T> typeReference);
 
 ---
 
-### 容错解析模式 (`ignoreError`)
+### 容错解析模式
 ```java
 public static <T> T toBean(String json, TypeReference<T> typeReference, boolean ignoreError);
 ```

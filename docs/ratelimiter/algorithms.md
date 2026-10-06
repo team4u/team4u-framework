@@ -4,9 +4,9 @@
 
 | 算法 | `key()` | 所需能力 | 能力的内存/Redis/JDBC 支持 |
 | :--- | :--- | :--- | :--- |
-| 固定窗口 | `fixed-window` | `CounterCapable` | ✅ / ✅（`INCRBY`）/ ✅（行锁） |
-| 令牌桶 | `token-bucket` | `CasCapable` | ✅ / ✅（Lua）/ ✅（条件 UPDATE） |
-| 滑动窗口 | `sliding-window` | `ScoredWindowCapable` | ✅ / ✅（ZSET + Lua）/ ❌（未实现） |
+| 固定窗口 | `fixed-window` | `CounterCapable` | 是 / 是（`INCRBY`）/ 是（行锁） |
+| 令牌桶 | `token-bucket` | `CasCapable` | 是 / 是（Lua 脚本）/ 是（条件 UPDATE） |
+| 滑动窗口 | `sliding-window` | `ScoredWindowCapable` | 是 / 是（ZSET + Lua）/ 不支持（未实现） |
 | 历史窗口 | `history-window` | 无（无状态） | 不使用存储 |
 
 `JdbcKvStore` 未实现 `ScoredWindowCapable`，因此 `sliding-window` 规则绑定 JDBC 存储会在加载期报错（`Rate limit store not capable`）；需要跨实例精确滑动窗口时使用 Redis 后端。
@@ -20,7 +20,7 @@
 - TTL 在键创建时设置、后续递增**不刷新**；存量无 TTL 键首次遇到 `ttlMillis > 0` 的递增时补充设置 TTL；
 - 过期后的首次递增从 0 重新开始（返回值等于 `delta`）。
 
-**浮动窗口（浮窗）锚定**：窗口 TTL 自**本窗口首次递增**起算，即窗口起算点是「本窗口第一个请求到达时刻」，而非墙钟对齐时刻。举例：阈值 5、窗口 60 秒，用户在第 0 秒发第 1 个请求则窗口覆盖第 0~60 秒；若用户 30 秒内无请求、第 61 秒重来，则新窗口自第 61 秒起算。由此带来两点：
+**浮动窗口（浮窗）锚定** ：窗口 TTL 自**本窗口首次递增**起算，即窗口起算点是「本窗口第一个请求到达时刻」，而非墙钟对齐时刻。举例：阈值 5、窗口 60 秒，用户在第 0 秒发第 1 个请求则窗口覆盖第 0~60 秒；若用户 30 秒内无请求、第 61 秒重来，则新窗口自第 61 秒起算。由此带来两点：
 
 - 窗口边缘可能双倍突发（相邻半窗各打满阈值），对精度不敏感的配额场景可接受；
 - 浮窗无法精确给出重试等待，`retryAfterMillis` 恒为 `null`。

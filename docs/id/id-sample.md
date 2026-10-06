@@ -57,7 +57,7 @@ seq.monthlyOrder={"group":{"format":"yyyyMM"},"start":1000,"segment":100}
 
 其中：
 
-- `group.format=yyyyMM` 使用[日期分组](id-group.md#内置策略-date-周期重置)，按月重置（默认 `yyyyMMdd` 按天）
+- `group.format=yyyyMM` 使用[日期分组](id-group.md#内置策略-date周期重置)，按月重置（默认 `yyyyMMdd` 按天）
 - `start=1000`，每个周期从 1000 开始
 - `segment=100`，本地号段加速；旧月份的号段实例随 LRU 自动淘汰，无需任何过期配置
 
@@ -199,4 +199,4 @@ public class OrderServiceTest {
 }
 ```
 
-内存计数与 JDBC/Redis 实现跑同一套契约测试（`AbstractSequencesContractTest`），行为一致，测试无需外部依赖。`TestConfigContext`/`TestKvContext` 由 `team4u-config-test`/`team4u-kv-test` 提供（test scope）。
+内存计数与 JDBC、Redis 实现跑同一套契约测试（`AbstractSequencesContractTest`），行为一致，测试无需外部依赖。`TestConfigContext`、`TestKvContext` 由 `team4u-config-test`、`team4u-kv-test` 提供（仅测试作用域引入）。

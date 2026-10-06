@@ -75,7 +75,7 @@ graph TD
 | **`OPERATION_CANCELLED`** | 操作在执行中主动检测到 `cancellation.isCancelled()` | 正常协作取消，无需额外处理 |
 | **`TIMEOUT`** | 子流程执行耗时超出了 `timeout(Duration)` 设定的时限 | 检查下游 RPC 耗时、数据库慢查询或网络延迟 |
 | **`EXECUTOR_REJECTED`** | 提交异步任务或并发分支时底层线程池饱和拒绝 (`RejectedExecutionException`) | 扩大 Worker 线程池容量或增加平滑降级策略 |
-| **`WAIT_INTERRUPTED`** | 策略在退避延时（Backoff Sleep）等待中被线程中断 | 流程正在被协作取消或容器正在平滑停机 |
+| **`WAIT_INTERRUPTED`** | 策略在退避延时等待中被线程中断 | 流程正在被协作取消或容器正在平滑停机 |
 | **`POLICY_EXCEPTION`** | `Policy` 的 `before` 或 `after` 回调中抛出未捕获异常 | 检查自定义 Policy 中的逻辑，避免切面逻辑自身抛出未捕获异常 |
 | **`JOIN_EXCEPTION`** | 自定义 `JoinStrategy.join()` 汇聚逻辑中抛出异常 | 检查汇聚函数中的空值判断与分支结果提取逻辑 |
 | **`PARALLEL_EXCEPTION`** | 并行分支执行发生严重未捕获异常 | 查看分支内的根因堆栈并增加分支内错误捕获 |
@@ -99,20 +99,20 @@ graph TD
 
 | 错误码 | 严重级别 | 根本原因 | 运维处理指引 |
 | :--- | :--- | :--- | :--- |
-| **`INVALID_DEFINITION`** | 严重 (Error) | 流程定义非法（如快照恢复时拓扑校验失败、编译期结构违规） | 检查 Flow 定义结构，确认与落库快照的拓扑版本一致 |
-| **`INVALID_CONFIGURATION`** | 错误 (Error) | 运行时配置非法 | 核对 `Durable` 装配参数（如 store、stateMapper 等） |
-| **`REVISION_CONFLICT`** | 警告 (Warn) | 多个分布式节点并发驱动同一个 `executionId` 导致 CAS 冲突 | 正常并发竞争保护。客户端稍后重新读取最新快照重试 |
-| **`FLOW_MISMATCH`** | 严重 (Error) | 尝试恢复的快照其 `flowId` 或 `flowVersion` 与当前代码不一致 | 确认是否发生了流程定义拓扑变更；使用与快照版本匹配的 Flow 运行时进行恢复 |
-| **`FORMAT_MISMATCH`** | 严重 (Error) | 快照格式 ID 或格式版本与当前运行时不兼容 | 检查快照 `formatId`/`formatVersion`，确认集群内框架版本一致后重试 |
-| **`RESUME_SIGNAL_CONFLICT`** | 严重 (Error) | 恢复信号落库后发生重启，外部重试时传入了**不同的信号载荷** | 检查外部回调网关的重试逻辑，确保幂等重试时注入完全相同的信号对象 |
-| **`EXECUTION_EXISTS`** | 错误 (Error) | `start` 时指定的 `executionId` 在存储中已存在 | 检查流水号生成器，避免重复生成相同的流水号 |
-| **`EXECUTION_NOT_FOUND`** | 错误 (Error) | 指定的 `executionId` 在存储中不存在 | 检查执行流水号是否正确，或确认数据库记录是否被过期清理 |
-| **`CODEC_FAILURE`** | 严重 (Error) | `StateMapper` 编解码业务状态槽位失败 | 检查业务 DTO 是否有默认无参构造器、字段类型是否发生不兼容变更 |
-| **`STORE_FAILURE`** | 严重 (Error) | 底层 `DurableStore` 发生数据库连接中断或 I/O 错误 | 检查底层 Redis / MySQL 存储连通性与网络状况 |
-| **`LIFECYCLE_MISMATCH`** | 错误 (Error) | 在非法的生命周期下调用命令（例如对已 COMPLETED 实例调用 recover） | 校验调用时序，避免对终态实例再次发起驱动 |
-| **`RESUME_POINT_MISMATCH`** | 错误 (Error) | resume 传入的挂起点名称与快照中实际等待的点不一致 | 核对外部回调注入的挂起点标识 |
-| **`FRAME_MISMATCH`** | 严重 (Error) | 快照帧栈元数据损坏或与当前拓扑不匹配 | 排查存储数据完整性或代码结构变更 |
-| **`ASYNC_EXECUTOR_MISSING`** | 错误 (Error) | 调用异步命令（`startAsync` / `resumeAsync`）但未配置 `executor` | 在 `Durable.builder` 中显式配置线程池 |
+| **`INVALID_DEFINITION`** | 严重 | 流程定义非法（如快照恢复时拓扑校验失败、编译期结构违规） | 检查 Flow 定义结构，确认与落库快照的拓扑版本一致 |
+| **`INVALID_CONFIGURATION`** | 错误 | 运行时配置非法 | 核对 `Durable` 装配参数（如 store、stateMapper 等） |
+| **`REVISION_CONFLICT`** | 警告 | 多个分布式节点并发驱动同一个 `executionId` 导致 CAS 冲突 | 正常并发竞争保护。客户端稍后重新读取最新快照重试 |
+| **`FLOW_MISMATCH`** | 严重 | 尝试恢复的快照其 `flowId` 或 `flowVersion` 与当前代码不一致 | 确认是否发生了流程定义拓扑变更；使用与快照版本匹配的 Flow 运行时进行恢复 |
+| **`FORMAT_MISMATCH`** | 严重 | 快照格式 ID 或格式版本与当前运行时不兼容 | 检查快照 `formatId`/`formatVersion`，确认集群内框架版本一致后重试 |
+| **`RESUME_SIGNAL_CONFLICT`** | 严重 | 恢复信号落库后发生重启，外部重试时传入了**不同的信号载荷** | 检查外部回调网关的重试逻辑，确保幂等重试时注入完全相同的信号对象 |
+| **`EXECUTION_EXISTS`** | 错误 | `start` 时指定的 `executionId` 在存储中已存在 | 检查流水号生成器，避免重复生成相同的流水号 |
+| **`EXECUTION_NOT_FOUND`** | 错误 | 指定的 `executionId` 在存储中不存在 | 检查执行流水号是否正确，或确认数据库记录是否被过期清理 |
+| **`CODEC_FAILURE`** | 严重 | `StateMapper` 编解码业务状态槽位失败 | 检查业务 DTO 是否有默认无参构造器、字段类型是否发生不兼容变更 |
+| **`STORE_FAILURE`** | 严重 | 底层 `DurableStore` 发生数据库连接中断或 I/O 错误 | 检查底层 Redis / MySQL 存储连通性与网络状况 |
+| **`LIFECYCLE_MISMATCH`** | 错误 | 在非法的生命周期下调用命令（例如对已 COMPLETED 实例调用 recover） | 校验调用时序，避免对终态实例再次发起驱动 |
+| **`RESUME_POINT_MISMATCH`** | 错误 | resume 传入的挂起点名称与快照中实际等待的点不一致 | 核对外部回调注入的挂起点标识 |
+| **`FRAME_MISMATCH`** | 严重 | 快照帧栈元数据损坏或与当前拓扑不匹配 | 排查存储数据完整性或代码结构变更 |
+| **`ASYNC_EXECUTOR_MISSING`** | 错误 | 调用异步命令（`startAsync` / `resumeAsync`）但未配置 `executor` | 在 `Durable.builder` 中显式配置线程池 |
 
 ---
 

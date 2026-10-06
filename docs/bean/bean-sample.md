@@ -10,9 +10,9 @@
 基础架构团队开发了一个通用的推送客户端 SDK（`push-client-sdk`），需要分发给各个业务线使用。部分业务线是传统的 Spring Boot Web 应用，部分业务线是简单的 CLI 批处理工具或纯 Java 守护进程。
 
 要求：
-1. SDK 内部不能强依赖 Spring 注解或 Spring 上下文；
-2. 在 Spring 环境下，能自动使用业务在 Spring 中配置的自定义推送通道；
-3. 在纯 Java / 测试环境下，自动回退至本地默认实现。
+- SDK 内部不能强依赖 Spring 注解或 Spring 上下文；
+- 在 Spring 环境下，能自动使用业务在 Spring 中配置的自定义推送通道；
+- 在纯 Java / 测试环境下，自动回退至本地默认实现。
 
 ---
 

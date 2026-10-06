@@ -3,12 +3,12 @@
 除了框架提供的开箱即用策略模块（限流 `team4u-flow-ratelimiter`、重试 `team4u-flow-retry`、规则门控 `team4u-flow-criterion`），开发者可以非常轻松地为特定业务定制专有的拦截与调度策略。
 
 `team4u-flow` 提供了两种不同生命周期维度的策略契约：
-- **`Policy<K>`（无状态切面拦截契约）**：适用于权限鉴权、动态开关、白名单校验、指标埋点、审计日志等纯切面场景；
-- **`PersistentPolicy<K, S>`（有状态持久化策略契约）**：适用于需要维护多轮状态、定时退避唤醒、Durable 状态机检查点存储与断点续跑等复杂场景。
+- **无状态切面拦截契约** ：`Policy<K>` 适用于权限鉴权、动态开关、白名单校验、指标埋点、审计日志等纯切面场景；
+- **有状态持久化策略契约** ：`PersistentPolicy<K, S>` 适用于需要维护多轮状态、定时退避唤醒、Durable 状态机检查点存储与断点续跑等复杂场景。
 
 ---
 
-## 无状态策略契约：`Policy<K>`
+## 无状态策略契约
 
 ### 接口契约与调用时序
 
@@ -40,7 +40,7 @@ public interface Policy<K> {
 sequenceDiagram
     participant Engine as 执行器 (SerialMachine)
     participant Policy as 自定义 Policy
-    participant Body as 业务子流程 (Body)
+    participant Body as 业务子流程
     
     Engine->>Policy: before(context, key)
     alt Gate.proceed() 放行
@@ -51,10 +51,10 @@ sequenceDiagram
         Engine-->>Engine: 输出最终 Outcome
     else Gate.reject(Reason) 业务拒绝
         Policy-->>Engine: Reject
-        Engine-->>Engine: 直接输出 Outcome.Rejected(Reason) (不执行 Body)
+        Engine-->>Engine: 直接输出 Outcome.Rejected(Reason)（不执行业务子流程）
     else Gate.fail(Failure) 系统故障
         Policy-->>Engine: Fail
-        Engine-->>Engine: 直接输出 Outcome.Failed(Failure) (不执行 Body)
+        Engine-->>Engine: 直接输出 Outcome.Failed(Failure)（不执行业务子流程）
     end
 ```
 
@@ -62,9 +62,9 @@ sequenceDiagram
 
 | 门控决策 | 构造方式 | 引擎执行动作 |
 | :--- | :--- | :--- |
-| **放行 (Proceed)** | `Gate.proceed()` | 继续向下推进执行目标业务步骤。 |
-| **业务拒绝 (Reject)** | `Gate.reject(Reason.of("CODE", "msg"))` | 立即以 `Outcome.Rejected` 短路退出，不执行业务步骤，**绝不触发重试**。 |
-| **系统故障 (Fail)** | `Gate.fail(Failure.of("CODE", "msg"))` | 立即以 `Outcome.Failed` 退出，可被外层重试策略捕获并触发退避重试。 |
+| **放行** | `Gate.proceed()` | 继续向下推进执行目标业务步骤。 |
+| **业务拒绝** | `Gate.reject(Reason.of("CODE", "msg"))` | 立即以 `Outcome.Rejected` 短路退出，不执行业务步骤，**绝不触发重试**。 |
+| **系统故障** | `Gate.fail(Failure.of("CODE", "msg"))` | 立即以 `Outcome.Failed` 退出，可被外层重试策略捕获并触发退避重试。 |
 
 ### 开发示例：用户权限鉴权与审计策略
 
@@ -105,9 +105,9 @@ public class UserAuthPolicy implements Policy<String> {
 
 ---
 
-## 有状态持久化策略契约：`PersistentPolicy<K, S>`
+## 有状态持久化策略契约
 
-当策略需要在多轮尝试之间**维护不可变状态（State）、计算唤醒时刻（`wakeAt`）、支持 Durable 检查点存储**时，实现 `PersistentPolicy<K, S>`。
+当策略需要在多轮尝试之间维护不可变状态、计算唤醒时刻 `wakeAt`、支持 Durable 检查点存储时，实现 `PersistentPolicy<K, S>`。
 
 ### 接口契约定义
 
@@ -143,9 +143,9 @@ graph LR
     end
 ```
 
-### 状态不可变性（State Immutability）要求
+### 状态不可变性要求
 > [!IMPORTANT]
-> 状态对象 `S` 必须设计为**不可变对象（Immutable Object）**，且满足 `StateMapper` 确定性编解码契约。在每次状态变迁时（如递增重试计数），必须创建新的状态实例返回，以便框架安全落库至快照的 `policy:<path>` 槽位。
+> 状态对象 `S` 必须设计为**不可变对象**，且满足 `StateMapper` 确定性编解码契约。在每次状态变迁时（如递增重试计数），必须创建新的状态实例返回，以便框架安全落库至快照的 `policy:<path>` 槽位。
 
 ### 开发示例：自定义指数退避重试策略
 
@@ -233,8 +233,8 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
 ## 关联章节与进一步阅读
 
 - [流程治理概览与洋葱模型](flow-governance.md)
-- [限流治理策略 (team4u-flow-ratelimiter)](policy-ratelimiter.md)
-- [重试与退避治理策略 (team4u-flow-retry)](policy-retry.md)
-- [表达式规则门控策略 (team4u-flow-criterion)](policy-criterion.md)
+- [限流治理策略](policy-ratelimiter.md)
+- [重试与退避治理策略](policy-retry.md)
+- [表达式规则门控策略](policy-criterion.md)
 - [Durable 状态机与 CAS 检查点](flow-durable-core.md)
 - [Bean 容器集成与 Spring 治理](flow-bean.md)

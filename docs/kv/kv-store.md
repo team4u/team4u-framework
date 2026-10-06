@@ -21,7 +21,7 @@ public interface KvStore {
 }
 ```
 
-为什么是这四个？它们恰好是锁（tryLock=`put(IF_ABSENT)`、unlock=`remove`）、幂等控制（SETNX）和 TTL 缓存的最小完备集，且每个操作都能无损映射到 Redis 原生命令与单条 SQL——没有一个是外部存储做不动的。（锁的心跳续约用的是能力接口 `CasCapable.compareAndExpire`——它需要连带令牌校验，裸 `expire` 做不到不误续他人的锁。）
+为什么是这四个？它们恰好是锁（tryLock=`put(IF_ABSENT)`、unlock=`remove`）、幂等控制 SETNX 和 TTL 缓存的最小完备集，且每个操作都能无损映射到 Redis 原生命令与单条 SQL——没有一个是外部存储做不动的。（锁的心跳续约用的是能力接口 `CasCapable.compareAndExpire`——它需要连带令牌校验，裸 `expire` 做不到不误续他人的锁。）
 
 `expire` 独立成一级操作（而非折叠进 `put`）是因为续期场景需要**原子改 TTL 而不读值**：折叠进 put 会迫使调用方读-改-写，引入竞争。锁心跳因为还要连带令牌校验，用的是 `CasCapable.compareAndExpire`（见下文能力协商）；裸 `expire` 服务于「值不变、仅改有效期」的普通 TTL 调整（如 `Space.expire` 门面）。
 
@@ -61,8 +61,8 @@ record.expire(60_000, now); // 续期后的新记录，原记录不变
 | 能力接口 | 方法 | 典型实现 | 用途 |
 | :--- | :--- | :--- | :--- |
 | `CasCapable` | `compareAndSet(key, expectedValue, update)`<br/>`compareAndRemove(key, expectedValue)`<br/>`compareAndExpire(key, expectedValue, newExpireAtMillis)` | memory（compute）、jdbc（条件 UPDATE）、redis（Lua） | 锁的 fencing 安全续期/释放、令牌桶状态提交 |
-| `CounterCapable` | `incrementAndGet(key, delta, ttlMillis)` | memory（`AtomicLong`）、jdbc（`SELECT FOR UPDATE` 行锁）、redis（`INCRBY` + 首次 `PEXPIRE`） | 序号生成（team4u-id）、固定窗口限流（team4u-ratelimiter） |
-| `ScoredWindowCapable` | `offer(key, offer)`：原子「裁剪 → 计数 → 条件添加」 | memory（独立窗口结构）、redis（ZSET + 单 Lua 脚本） | 精确滑动窗口限流（team4u-ratelimiter）；**JdbcKvStore 暂未实现** |
+| `CounterCapable` | `incrementAndGet(key, delta, ttlMillis)` | memory（`AtomicLong`）、jdbc（`SELECT FOR UPDATE` 行锁）、redis（`INCRBY` + 首次 `PEXPIRE`） | 序号生成 `team4u-id`、固定窗口限流 `team4u-ratelimiter` |
+| `ScoredWindowCapable` | `offer(key, offer)`：原子「裁剪 → 计数 → 条件添加」 | memory（独立窗口结构）、redis（ZSET + 单 Lua 脚本） | 精确滑动窗口限流 `team4u-ratelimiter`；**JdbcKvStore 暂未实现** |
 | `ScanCapable` | `scan(space)`<br/>`pruneExpired(space, maxBatch)` | memory、jdbc、redis（SCAN） | 轮询订阅、过期清理 |
 | `WatchCapable` | `watch(space, listener)` | memory（写入路径同步分发） | 变更订阅 |
 | `NativeTtlCapable` | 标记接口 | redis | 清理器跳过该存储 |

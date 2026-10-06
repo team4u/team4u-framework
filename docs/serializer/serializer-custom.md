@@ -2,7 +2,7 @@
 
 在微服务与领域驱动设计中，Java 8 时间类型（`java.time.Instant` / `LocalDateTime`）、Joda-Time、Google Guava 集合或业务自定义值对象（如货币、脱敏类型）往往需要向 Jackson 注册专用的序列化模块（`Module`）。
 
-`team4u-serializer-json-jackson` 提供了 **`JacksonModuleContributor` SPI 契约**，允许第三方模块通过 Java 标准 `ServiceLoader` 机制向全局 `ObjectMapper` 自动注入扩展模块，而无需侵入修改任何框架核心代码。
+`team4u-serializer-json-jackson` 提供了 `JacksonModuleContributor` SPI 契约，允许第三方模块通过 Java 标准 `ServiceLoader` 机制向全局 `ObjectMapper` 自动注入扩展模块，而无需侵入修改任何框架核心代码。
 
 ---
 

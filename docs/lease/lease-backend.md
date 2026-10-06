@@ -97,10 +97,10 @@ KEY idx_lease_task_query (queue_name, task_type, status, worker_id, created_at, 
 
 MySQL 方案不是先查再改，而是“候选查询 + 条件更新”：
 
-1. 查询当前队列、当前订阅类型下可见的 `PENDING` 任务，以及执行权已过期的 `RUNNING` 任务；
-2. 按 `priority DESC, created_at ASC, task_id ASC` 排序；
-3. 对候选执行条件 `UPDATE`，只有版本和状态仍满足时才写入新的执行权；
-4. 成功后 `attempt_count` 加 1，`version` 加 1。
+- 查询当前队列、当前订阅类型下可见的 `PENDING` 任务，以及执行权已过期的 `RUNNING` 任务；
+- 按 `priority DESC, created_at ASC, task_id ASC` 排序；
+- 对候选执行条件 `UPDATE`，只有版本和状态仍满足时才写入新的执行权；
+- 成功后 `attempt_count` 加 1，`version` 加 1。
 
 每个执行权都有新的 `lease_token`。心跳和结果写回必须带同一个 `taskId + workerId + leaseToken`，并且执行权未过期。这样即使旧 Worker 恢复，也不能覆盖新 Worker 的结果。
 
@@ -110,12 +110,12 @@ MySQL 方案不是先查再改，而是“候选查询 + 条件更新”：
 
 首次上生产前应至少完成：
 
-1. 在目标 MySQL 版本上执行 `lease_task_mysql.sql`；
-2. 用真实连接跑一次应用启动和任务执行；
-3. 观察抢占 SQL 的执行计划，确认索引被使用；
-4. 在多实例环境下验证发布、重启和任务接管。
+- 在目标 MySQL 版本上执行 `lease_task_mysql.sql`；
+- 用真实连接跑一次应用启动和任务执行；
+- 观察抢占 SQL 的执行计划，确认索引被使用；
+- 在多实例环境下验证发布、重启和任务接管。
 
-表结构是破坏性版本。旧版本 `lease_task` 表不能直接给新代码使用，需要按当前 schema 迁移或重建。
+按当前 schema 建表即可；更早的 `lease_task` 表结构需重建后使用。
 
 ## 自定义后端：SPI
 

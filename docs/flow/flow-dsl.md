@@ -1,6 +1,6 @@
 # 文本 DSL 语法与统一门面
 
-`team4u-flow-dsl` 提供了人类可读的流程声明式文本领域特定语言（Flow DSL）。通过极简、直观的类自然语言语法，开发者、业务人员与架构师可以轻松编排复杂的顺序流水线、条件路由、并行并发、超时限流、重试补偿与异步挂起流程，并由统一门面 `FlowDsl` 一键编译为强类型执行器。
+`team4u-flow-dsl` 提供了人类可读的流程声明式文本领域特定语言。通过极简、直观的类自然语言语法，开发者、业务人员与架构师可以轻松编排复杂的顺序流水线、条件路由、并行并发、超时限流、重试补偿与异步挂起流程，并由统一门面 `FlowDsl` 一键编译为强类型执行器。
 
 ---
 
@@ -677,7 +677,7 @@ flow order.fulfillment version 1.0 {
 
 ##### Bean / Class 注册模式（非 Lambda 推荐模式）
 
-当注册实现了 `Operation<I, O>` 或 `Policy<K>` 契约的 Bean 实例或 Class 时，注册表通过 `GenericTypeResolver` **自动从接口泛型中推导入参与出参类型，无需显式指定任何 Class 类型参数**：
+当注册实现了 `Operation<I, O>` 或 `Policy<K>` 契约的 Bean 实例或 Class 时，注册表通过 `GenericTypeResolver` 自动从接口泛型中推导入参与出参类型，无需显式指定任何 Class 类型参数：
 
 ```java
 public class DslOrderFulfillmentBeanRegistryTest {
@@ -740,7 +740,7 @@ public class DslOrderFulfillmentBeanRegistryTest {
 
 ##### Spring 容器约定自动发现模式（零手动注册）
 
-在 Spring 环境下（引入 `team4u-flow-bean`），所有标注了 `@Component("order.validate")` 等与 DSL 符号名同名的 Spring Bean，会被注册表的 `fallbackResolver` **自动发现并完成类型推导与实例绑定，无需在 Registry 中逐个手动注册**：
+在 Spring 环境下（引入 `team4u-flow-bean`），所有标注了 `@Component("order.validate")` 等与 DSL 符号名同名的 Spring Bean，会被注册表的 `fallbackResolver` 自动发现并完成类型推导与实例绑定，无需在 Registry 中逐个手动注册：
 
 ```java
 @RunWith(SpringRunner.class)
@@ -807,7 +807,7 @@ FlowDefinitionRegistry registry = FlowDefinitionRegistry.builder()
 
 ### Spring Bean 容器编排模式
 
-Spring Bean 编排模式通过 Java 强类型 Fluent API 构建流程拓扑，直接引用业务 Bean Class。**该模式在底层抽象语法树（AST）、执行语义、控制流拓扑与治理策略上与上述 DSL 文本保持 100% 严格等价**。编译期由 `BeanOperationResolver` 自动完成单例查找与契约校验，运行期享受零反射调用与 Spring 声明式事务（`@Transactional`）支持。
+Spring Bean 编排模式通过 Java 强类型 Fluent API 构建流程拓扑，直接引用业务 Bean Class。该模式在底层抽象语法树、执行语义、控制流拓扑与治理策略上与上述 DSL 文本保持 100% 严格等价。编译期由 `BeanOperationResolver` 自动完成单例查找与契约校验，运行期享受零反射调用与 Spring 声明式事务（`@Transactional`）支持。
 
 #### 语法与语义 1:1 等价映射对照
 

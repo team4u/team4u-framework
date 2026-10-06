@@ -16,7 +16,7 @@
 
 ---
 
-## 精准键值路由 (`KeyedPolicy`)
+## 精准键值路由
 
 根据明确的业务标识（如支付渠道代码 "ALIPAY", "WECHAT"）在 $O(1)$ 时间内直接定位目标策略：
 
@@ -64,7 +64,7 @@ public class KeyedPolicyQuickStart {
 
 ---
 
-## 有序责任链过滤 (`ContextPolicy`)
+## 有序责任链过滤
 
 根据业务上下文动态评估 `supports(context)`，并按照 `priority()` 升序自动排序执行：
 

@@ -1,6 +1,6 @@
 # 容器事件派发与生命周期监听
 
-在大型框架与模块化系统中，组件初始化完成、动态 Bean 注册与容器就绪需要向外发布生命周期通知。`team4u-bean` 提供了轻量级的 **`EventDispatcher`（事件分发中心）** 与 **`BeanInitializedEvent`（Bean 初始化事件）**。
+在大型框架与模块化系统中，组件初始化完成、动态 Bean 注册与容器就绪需要向外发布生命周期通知。`team4u-bean` 提供了轻量级的 `EventDispatcher`（事件分发中心）与 `BeanInitializedEvent`（Bean 初始化事件）。
 
 ---
 

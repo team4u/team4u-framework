@@ -2,14 +2,14 @@
 
 # 背景
 
-策略模式（Strategy Pattern）与责任链模式（Chain of Responsibility）是面向对象设计中最基础且高频使用的设计模式。然而在实际业务研发中，传统的实现方式往往存在如下痛点：
+策略模式与责任链模式是面向对象设计中最基础且高频使用的设计模式。然而在实际业务研发中，传统的实现方式往往存在如下痛点：
 
-- **简单 Map 查找的局限**：使用简单的 `Map<String, Handler>` 模式中，Key 与 Handler 是分离维护的；当策略需要在不同组件间流转时，极易丢失身份标识；且原生 `ConcurrentHashMap` 在超高并发读取下仍有哈希分段与 volatile 读开销。
-- **责任链排序与过滤繁琐**：传统的责任链需要手写链表或在每个 Handler 里维护下一节点的引用，新增策略时必须修改组装代码，侵入性大。
-- **策略注册缺乏自动化**：每新增一个策略实现类，都必须手动 `new` 并注入到注册表中，难以做到“**实现即注册、即插即用**”。
-- **Spring 容器与独立运行脱节**：底层 SDK 既希望能脱离 Spring 容器快速启动，又希望在 Spring 环境下自动发现容器内注册的策略 Bean。
+- **简单 Map 查找的局限** ：使用简单的 `Map<String, Handler>` 模式中，Key 与 Handler 是分离维护的；当策略需要在不同组件间流转时，极易丢失身份标识；且原生 `ConcurrentHashMap` 在超高并发读取下仍有哈希分段与 volatile 读开销。
+- **责任链排序与过滤繁琐** ：传统的责任链需要手写链表或在每个 Handler 里维护下一节点的引用，新增策略时必须修改组装代码，侵入性大。
+- **策略注册缺乏自动化** ：每新增一个策略实现类，都必须手动 `new` 并注入到注册表中，难以做到“实现即注册、即插即用”。
+- **Spring 容器与独立运行脱节** ：底层 SDK 既希望能脱离 Spring 容器快速启动，又希望在 Spring 环境下自动发现容器内注册的策略 Bean。
 
-`team4u-policy` 是一个专为高性能业务架构设计的策略管理与责任链组件。它提供了 **O(1) 复杂度 Copy-On-Write 读写分离精准路由**、**自排序与上下文自匹配的责任链**，以及基于**SPI / 包扫描 / Spring Bean 自动注册** 的完整解决方案。
+`team4u-policy` 是一个专为高性能业务架构设计的策略管理与责任链组件。它提供了 **O(1) 复杂度 Copy-On-Write 读写分离精准路由** 、**自排序与上下文自匹配的责任链** ，以及基于 **SPI / 包扫描 / Spring Bean 自动注册** 的完整解决方案。
 
 ---
 
@@ -21,12 +21,12 @@
 
 ```mermaid
 graph TD
-    subgraph Key_Value_精准路由模式__KeyedPolicy_ ["Key-Value 精准路由模式 (KeyedPolicy)"]
+    subgraph Key_Value_精准路由模式 ["Key-Value 精准路由模式"]
         KP["KeyedPolicy 自描述 Key"] --> KPR["KeyedPolicyRegistry 注册表<br/>Copy-On-Write 无锁极速读"]
         KPR -->|"get Key O 1 查找"| Exec1["精准执行目标策略"]
     end
 
-    subgraph Ordered_Chain_有序责任链模式__ContextPolicy_ ["Ordered Chain 有序责任链模式 (ContextPolicy)"]
+    subgraph Ordered_Chain_有序责任链模式 ["有序责任链模式"]
         CP["ContextPolicy 上下文自匹配 & 优先级"] --> OPC["OrderedPolicyChain 责任链<br/>按 priority 升序自动排序"]
         OPC -->|"allMatches / firstMatch"| PP["PolicyPipeline 流程中断执行"]
         PP --> Exec2["执行匹配策略链路"]
@@ -83,12 +83,12 @@ classDiagram
 
 ## 核心特性
 
-- **自描述策略身份** (`KeyedPolicy`)：策略对象通过 `key()` 接口自声明身份标识，实现 Key 与 Handler 的强内聚。
-- **Copy-On-Write 低开销读取**：`KeyedPolicyRegistry` 与 `OrderedPolicyChain` 在写入时维护不可变只读列表缓存（`unmodifiablePolicies`），读取路径无锁，直接返回缓存列表，避免逐次拷贝与临时对象分配。
-- **智能优先级与自动升序排序**：`ContextPolicy` 内置 `HIGHEST`、`HIGH`、`NORMAL`、`LOW`、`LOWEST` 优先级常量，`OrderedPolicyChain` 注册时自动完成稳定排序（数值越小越优先）。
-- **重复注册策略控制** (`DuplicatePolicyMode`)：支持 `APPEND`（多实例并存）与 `REPLACE_BY_CLASS`（同类新实例覆盖旧实例）两种模式。
-- **流程中断流水线** (`PolicyPipeline`)：支持在顺序遍历策略链时，根据策略执行结果即时决定继续或短路中断（用于风控拦截、参数校验链）。
-- **三位一体自动发现**：支持通过 `PolicyScanner` 进行包路径反射扫描、Java 标准 SPI (`ServiceLoader`) 装载，以及通过 `@PolicyAutoRegister` 实现 Spring 容器 Bean 的全自动注入。
+- **自描述策略身份** ：策略对象通过 `key()` 接口自声明身份标识，实现 Key 与 Handler 的强内聚。
+- **Copy-On-Write 低开销读取** ：`KeyedPolicyRegistry` 与 `OrderedPolicyChain` 在写入时维护不可变只读列表缓存（`unmodifiablePolicies`），读取路径无锁，直接返回缓存列表，避免逐次拷贝与临时对象分配。
+- **智能优先级与自动升序排序** ：`ContextPolicy` 内置 `HIGHEST`、`HIGH`、`NORMAL`、`LOW`、`LOWEST` 优先级常量，`OrderedPolicyChain` 注册时自动完成稳定排序（数值越小越优先）。
+- **重复注册策略控制** ：支持 `APPEND`（多实例并存）与 `REPLACE_BY_CLASS`（同类新实例覆盖旧实例）两种模式。
+- **流程中断流水线** ：支持在顺序遍历策略链时，根据策略执行结果即时决定继续或短路中断（用于风控拦截、参数校验链）。
+- **三位一体自动发现** ：支持通过 `PolicyScanner` 进行包路径反射扫描、Java 标准 SPI (`ServiceLoader`) 装载，以及通过 `@PolicyAutoRegister` 实现 Spring 容器 Bean 的全自动注入。
 
 ---
 

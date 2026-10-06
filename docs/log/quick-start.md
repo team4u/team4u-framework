@@ -116,7 +116,7 @@ try {
 
 ## 下一步
 
-- 掌握完整 Fluent API 与耗时区间统计：[结构化流式日志 (Loggers)](log-loggers.md)
+- 掌握完整 Fluent API 与耗时区间统计：[结构化流式日志](log-loggers.md)
 - 使用注解实现方法出入参全自动拦截：[方法切面追踪 (@AutoLogTrace)](log-auto-trace.md)
 - 动态排障染色与成本保护：[动态治理与 FinOps 成本保护](log-governance.md)
 - 深入底层流水线与单元测试断言：[架构原理与模型设计](log-architecture.md)

@@ -190,10 +190,10 @@ Memory 后端只适合演示和单进程测试。部署到多个进程时，把 
 </dependency>
 ```
 
-- **统一退避体系**：将 `Backoffs`（固定、等差递增、指数、随机抖动等）无缝带入 Flow 流程节点治理中；
-- **条件重试与快速失败**：通过 `Predicate<Failure>` 过滤可重试故障码，非重试异常触发 `Rejected` 快速退出；
-- **动态规则对接**：天然支持从 `NamedRetryPolicyRegistry` / `DynamicRetryPolicyRegistry` 按名称热加载重试配置；
-- **使用示例**：
+- **统一退避体系** ：将 `Backoffs`（固定、等差递增、指数、随机抖动等）无缝带入 Flow 流程节点治理中；
+- **条件重试与快速失败** ：通过 `Predicate<Failure>` 过滤可重试故障码，非重试异常触发 `Rejected` 快速退出；
+- **动态规则对接** ：天然支持从 `NamedRetryPolicyRegistry` / `DynamicRetryPolicyRegistry` 按名称热加载重试配置；
+- **使用示例** ：
   ```java
   FlowRetryPolicy<OrderRequest> policy = FlowRetryPolicy.exponential(3, 100, 2.0, 1000);
   Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)

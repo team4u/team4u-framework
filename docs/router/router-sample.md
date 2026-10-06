@@ -120,7 +120,7 @@ List<Item> recommendations = model.recommend(userId);
 
 ---
 
-## 多业务线私有规则覆盖系统全局规则 (CompositeRouter)
+## 多业务线私有规则覆盖系统全局规则
 
 ### 业务背景
 大型中台系统包含直播业务线和通用电商业务线。直播业务有独特的报错码与翻译策略，其余公共错误（如 DB 超时、限流）则统一使用中台基准规则。

@@ -18,7 +18,7 @@ graph LR
 
 ## 内置策略详解
 
-### `TemplateRenderPolicy` (变量模板渲染器)
+### `TemplateRenderPolicy`（变量模板渲染器）
 - **优先级**：`priority() = NORMAL (0)`
 - **触发条件**：`finalMessage` 非空且包含 `${` 标识。
 - **模板缓存**：内部维护容量为 256 的 LRU 缓存池（`TEMPLATE_CACHE`），避免频繁解析相同模板字符串。
@@ -26,7 +26,7 @@ graph LR
   - `${rawCode}`：上游原始错误码（对应 `source.getCode()`）。
   - `${rawMessage}`：上游原始错误描述（对应 `source.getMessage()`）。
 - **合并请求变量**：自动合并外部 `args` 传入的所有业务参数。
-- **宽容容错**：未在 `args` 中提供的占位符将**保留原样**（如 `${unknownVar}`），不会抛出异常。
+- **宽容容错**：未在 `args` 中提供的占位符将保留原样（如 `${unknownVar}`），不会抛出异常。
 
 #### 模板规则示例：
 ```json
@@ -38,7 +38,7 @@ graph LR
 
 ---
 
-### `FallbackRenderPolicy` (兜底安全渲染器)
+### `FallbackRenderPolicy`（兜底安全渲染器）
 - **优先级**：`priority() = LOWEST (Integer.MAX_VALUE)`，确保在管线最后一步执行。
 - **触发条件**：始终匹配 (`supports = true`)。
 - **回填机制**：
@@ -46,7 +46,7 @@ graph LR
   - 若 `finalMessage` 为空或 `null`，自动使用 `source.getMessage()` 回填。
 
 > [!IMPORTANT]
-> **防变量注入安全设计**：由于 `TemplateRenderPolicy` 优先于 `FallbackRenderPolicy` 执行，当路由静态规则未配置 `defaultMsg` 时，由 Fallback 策略回填的原始异常文本（即使内容中包含 `${...}` 字符）**绝对不会被二次当成模板渲染**，从而杜绝了原始数据污染与潜在的模板注入风险。
+> **防变量注入安全设计**：由于 `TemplateRenderPolicy` 优先于 `FallbackRenderPolicy` 执行，当路由静态规则未配置 `defaultMsg` 时，由 Fallback 策略回填的原始异常文本（即使内容中包含 `${...}` 字符）绝对不会被二次当成模板渲染，从而杜绝了原始数据污染与潜在的模板注入风险。
 
 ---
 
@@ -54,7 +54,7 @@ graph LR
 
 开发者可以实现 `RenderPolicy` 接口，在消息最终输出前执行敏感词脱敏、多语言国际化转换或动态安全审计。
 
-### 示例 1：敏感词与手机号脱敏渲染器
+### 敏感词与手机号脱敏渲染器
 ```java
 package com.mycompany.translator.render;
 
@@ -83,7 +83,7 @@ public class DataMaskingRenderPolicy implements RenderPolicy {
 }
 ```
 
-### 示例 2：多语言国际化渲染器 (i18n)
+### 多语言国际化渲染器
 ```java
 package com.mycompany.translator.render;
 

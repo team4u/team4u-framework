@@ -4,7 +4,7 @@
 
 ---
 
-## 多渠道聚合支付网关 (KeyedPolicy)
+## 多渠道聚合支付网关
 
 ### 业务场景
 聚合支付系统需要根据前端传入的支付方式代码（如 "ALIPAY", "WECHAT", "UNIONPAY"）分发到对应的支付渠道 SDK 执行统一统一下单。
@@ -90,13 +90,14 @@ public class PaymentGatewayService {
 
 ---
 
-## 多级营销优惠叠加计算链 (ContextPolicy)
+## 多级营销优惠叠加计算链
 
 ### 业务场景
 电商订单在结算时，需要按照固定顺序依次评估并叠加多种优惠规则：
-1. 新人首单直减（优先级最高，`priority = ContextPolicy.HIGH = -1000`）；
-2. 会员专属折扣（优先级中等，`priority = ContextPolicy.NORMAL = 0`）；
-3. 满减优惠券抵扣（优先级最低，`priority = ContextPolicy.LOW = 1000`）。
+
+- 新人首单直减（优先级最高，`priority = ContextPolicy.HIGH = -1000`）；
+- 会员专属折扣（优先级中等，`priority = ContextPolicy.NORMAL = 0`）；
+- 满减优惠券抵扣（优先级最低，`priority = ContextPolicy.LOW = 1000`）。
 
 ### 代码实现
 
@@ -194,10 +195,10 @@ public class PromotionEngine {
 
 ---
 
-## 金融交易风控拦截流水线 (PolicyPipeline)
+## 金融交易风控拦截流水线
 
 ### 业务场景
-在转账或大额交易前，必须经过多道风控规则检查（黑名单过滤 -> 单日限额检查 -> 异地登录校验）。任何一关未通过，必须**立即终止后续校验并阻断交易**。
+在转账或大额交易前，必须经过多道风控规则检查（黑名单过滤 -> 单日限额检查 -> 异地登录校验）。任何一关未通过，必须立即终止后续校验并阻断交易。
 
 ### 代码实现
 

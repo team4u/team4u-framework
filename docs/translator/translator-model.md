@@ -6,7 +6,7 @@
 
 ## 核心数据模型
 
-### `RawResponse` (上游原始响应)
+### `RawResponse`（上游原始响应）
 代表上游微服务或第三方依赖返回的原始数据：
 
 ```java
@@ -25,21 +25,21 @@ public class RawResponse {
 
 ---
 
-### `ErrorDef` (目标契约定义)
+### `ErrorDef`（目标契约定义）
 路由规则命中后从配置中心（如 JSON）反序列化得到的目标静态模板：
 
 ```java
 public class ErrorDef {
-    private String code;        // 暴露给外部的标准错误码 (如 "INVALID_PARAM")
-    private String defaultMsg;  // 默认文案模板 (如 "操作失败：${action}，原因：${rawMessage}")
-    private String logLevel;    // 动态日志级别管控 (如 "WARN", "ERROR")
+    private String code;        // 暴露给外部的标准错误码（如 "INVALID_PARAM"）
+    private String defaultMsg;  // 默认文案模板（如 "操作失败：${action}，原因：${rawMessage}"）
+    private String logLevel;    // 动态日志级别管控（如 "WARN", "ERROR"）
 }
 ```
 
 ---
 
-### `TranslatedResponse` (最终统一输出)
-最终输出给调用方或前端的标准化契约对象。这是一个通过 Lombok `@Value` 修饰的 **不可变对象 (Immutable)** ：
+### `TranslatedResponse`（最终统一输出）
+最终输出给调用方或前端的标准化契约对象。这是一个通过 Lombok `@Value` 修饰的**不可变对象**：
 
 ```java
 @Value
@@ -52,7 +52,7 @@ public class TranslatedResponse {
 
 ---
 
-### `RenderContext` (渲染管线流转上下文)
+### `RenderContext`（渲染管线流转上下文）
 传递给各个 `RenderPolicy` 的执行上下文，保证非共享线程安全：
 
 | 属性 / 方法 | 类型 / 返回值 | 说明 |
@@ -77,7 +77,7 @@ sequenceDiagram
     participant Chain as OrderedPolicyChain<RenderPolicy>
 
     Client->>Engine: translate(source, routerId, args)
-    Engine->>Engine: 1. 校验 source 非空 (NPE 防御)<br/>2. 快照 args 为不可变 Map<br/>3. 提取并归一化 traceId
+    Engine->>Engine: 1. 校验 source 非空（NPE 防御）<br/>2. 快照 args 为不可变 Map<br/>3. 提取并归一化 traceId
     Engine->>Router: route(routerId, MatchContext["actual=source, attributes=args"], ErrorDef.class)
     
     alt 未命中任何路由规则 (result == null || !result.isMatch())
@@ -94,17 +94,17 @@ sequenceDiagram
 
 ### 核心步骤详解
 
-1. **入参防御与安全快照**：
-   - `Objects.requireNonNull(source, "source must not be null")` 快速失败。
-   - `snapshotArgs(args)` 创建不可变 Map 快照，防止渲染过程中外部多线程并发修改参数。
-   - 提取 `traceId`（空字符串自动归一化为 `null`）。
-2. **构建上下文并路由决策**：
-   - 将 `source` 作为 `MatchContext.actual`，将 `safeArgs` 作为 `MatchContext.attributes`。
-   - 调用 `routingManager.route(routerId, matchCtx, ErrorDef.class)` 执行规则判定。
-3. **未命中安全兜底**：
-   - 未命中规则时，直接返回包含 `source.getCode()` 与 `source.getMessage()` 的响应，且 **不丢失** `traceId`。
-4. **渲染管线推进**：
-   - 初始化 `RenderContext`（初始 `finalCode = routeDef.getCode()`，`finalMessage = routeDef.getDefaultMsg()`）。
-   - 按 `priority()` 顺序执行责任链中所有 `supports(context)` 返回 `true` 的 `RenderPolicy`。
-5. **构建不可变结果**：
-   - 调用 `renderCtx.build(traceId)` 生成全新的不可变 `TranslatedResponse` 并返回。
+- **入参防御与安全快照**：
+  - `Objects.requireNonNull(source, "source must not be null")` 快速失败。
+  - `snapshotArgs(args)` 创建不可变 Map 快照，防止渲染过程中外部多线程并发修改参数。
+  - 提取 `traceId`（空字符串自动归一化为 `null`）。
+- **构建上下文并路由决策**：
+  - 将 `source` 作为 `MatchContext.actual`，将 `safeArgs` 作为 `MatchContext.attributes`。
+  - 调用 `routingManager.route(routerId, matchCtx, ErrorDef.class)` 执行规则判定。
+- **未命中安全兜底**：
+  - 未命中规则时，直接返回包含 `source.getCode()` 与 `source.getMessage()` 的响应，且 **不丢失** `traceId`。
+- **渲染管线推进**：
+  - 初始化 `RenderContext`（初始 `finalCode = routeDef.getCode()`，`finalMessage = routeDef.getDefaultMsg()`）。
+  - 按 `priority()` 顺序执行责任链中所有 `supports(context)` 返回 `true` 的 `RenderPolicy`。
+- **构建不可变结果**：
+  - 调用 `renderCtx.build(traceId)` 生成全新的不可变 `TranslatedResponse` 并返回。

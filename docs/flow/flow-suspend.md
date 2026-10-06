@@ -1,6 +1,6 @@
 # 挂起续接与协作式取消合同
 
-在现代分布式业务架构中，流程往往不是一口气执行完毕的纯同步短事务。诸如“用户下单后等待二次短信验证”、“大额支付等待人工审批流审批”、“等待异步 Webhook 回调”等场景，都需要流程引擎具备**非阻塞挂起（Suspend）**、**精准恢复（Resume）**以及**安全取消（Cancellation）**的能力。
+在现代分布式业务架构中，流程往往不是一口气执行完毕的纯同步短事务。诸如“用户下单后等待二次短信验证”、“大额支付等待人工审批流审批”、“等待异步 Webhook 回调”等场景，都需要流程引擎具备非阻塞挂起、精准恢复与安全取消的能力。
 
 本文将深入剖析 Local 模式下的挂起续接机制、单次消费句柄 `Suspension` 的防重放设计、在 Spring 控制层中实现 Webhook 异步回调的完整实战代码、协作式取消令牌底层原理以及挂起与取消之间的极端竞态防御。
 
@@ -36,7 +36,7 @@ sequenceDiagram
 
 ### 声明强类型挂起点：`ResumePoint<R>`
 
-挂起点（`ResumePoint`）是一个强类型的静态标识，用于标记流程挂起的位置以及恢复时预期的信号（Signal）数据类型：
+挂起点（`ResumePoint`）是一个强类型的静态标识，用于标记流程挂起的位置以及恢复时预期的信号数据类型：
 
 ```java
 import com.team4u.framework.flow.api.ResumePoint;
@@ -87,7 +87,7 @@ if (result instanceof FlowResult.Suspended) {
 }
 ```
 
-### 单次消费（Single-Use）安全保证
+### 单次消费安全保证
 - **防重放与双花防御**：`Suspension` 是一个不透明的**单次消费句柄**；
 - 一旦通过 `executable.resume(suspension, ...)` 消费过一次，该句柄内部状态立即标记为失效（`consumed = true`）；
 - 若尝试对同一个 `Suspension` 实例调用两次 `resume`，框架会严格抛出 `IllegalStateException("Suspension has already been consumed")`，从底层杜绝外部重复回调引发的重放攻击与并发双花。
@@ -181,8 +181,8 @@ Local 执行器提供同步与异步两种恢复方式：
 
 | API 方法 | 签名 | 说明 |
 | :--- | :--- | :--- |
-| **`resume`** | `resume(suspension, resumePoint, signal[, cancellation])` | 在当前调用线程同步恢复并驱动后续步骤 |
-| **`resumeAsync`** | `resumeAsync(suspension, resumePoint, signal[, cancellation])` | 提交至 Dispatcher 线程池异步恢复，返回 `CompletionStage` |
+| `resume` | `resume(suspension, resumePoint, signal[, cancellation])` | 在当前调用线程同步恢复并驱动后续步骤 |
+| `resumeAsync` | `resumeAsync(suspension, resumePoint, signal[, cancellation])` | 提交至 Dispatcher 线程池异步恢复，返回 `CompletionStage` |
 
 ---
 
@@ -199,14 +199,14 @@ graph TD
 ```
 
 ### 核心机制与原理
-1. **CAS 原子置位**：令牌内部通过 CAS 状态机保证取消状态只被置位一次，并发安全；
-2. **物理线程中断与干净清理**：
+- **CAS 原子置位**：令牌内部通过 CAS 状态机保证取消状态只被置位一次，并发安全；
+- **物理线程中断与干净清理**：
    - 执行器在进入执行循环时通过 `cancellation.attach(Thread.currentThread())` 注册物理线程；
    - 一旦触发 `cancel()`，自动向执行线程发送中断信号；
    - **退出保护**：在退出 `SerialMachine` 时，仅当取消在本流内部触发了中断且进入时并非已中断时，才清除取消残留的中断标记，**绝对不破坏或吞噬调用方外部既有的中断状态**；
-3. **父子级联取消**：通过 `Cancellation.linked(parent)` 创建的子令牌会自动监听父令牌的状态，父令牌取消时所有子令牌同步生效；
-4. **清理屏障**：流程取消后，所有下游节点均不会被调度，并行块严格等待正在运行的子线程完全退出；
-5. **子令牌观测与防泄漏**：`cancellation.childCount()` 返回当前注册的活跃子令牌数量，
+- **父子级联取消**：通过 `Cancellation.linked(parent)` 创建的子令牌会自动监听父令牌的状态，父令牌取消时所有子令牌同步生效；
+- **清理屏障**：流程取消后，所有下游节点均不会被调度，并行块严格等待正在运行的子线程完全退出；
+- **子令牌观测与防泄漏**：`cancellation.childCount()` 返回当前注册的活跃子令牌数量，
    常用于测试断言“并行分支退出或超时后子令牌已全部 unlink、无强引用残留”；
    `unlink()` 可幂等地解除父链与线程绑定，避免长生命周期父令牌持有已结束子令牌的引用。
 
@@ -251,9 +251,9 @@ graph TD
     C2 -- 未取消 --> DRIVE["校验单次消费并继续驱动后续步骤"]
 ```
 
-1. **挂起前检测取消**：在将状态包装为 `Suspended` 之前，框架执行 CAS 校验；若检测到取消信号，直接丢弃挂起状态并流向 `Cancelled`；
-2. **恢复时检测取消**：在 `resume` 调用入口处校验传入的 `Cancellation` 令牌；若已被取消，直接返回 `Cancelled` 且不驱动后续节点；
-3. **挂起句柄安全作废**：被取消流程对应的 `Suspension` 句柄会被立即标记为作废，防止后续错误的外部信号再次唤醒已取消的流程。
+- **挂起前检测取消**：在将状态包装为 `Suspended` 之前，框架执行 CAS 校验；若检测到取消信号，直接丢弃挂起状态并流向 `Cancelled`；
+- **恢复时检测取消**：在 `resume` 调用入口处校验传入的 `Cancellation` 令牌；若已被取消，直接返回 `Cancelled` 且不驱动后续节点；
+- **挂起句柄安全作废**：被取消流程对应的 `Suspension` 句柄会被立即标记为作废，防止后续错误的外部信号再次唤醒已取消的流程。
 
 ---
 

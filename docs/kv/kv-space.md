@@ -74,7 +74,7 @@ Space<Session> after = Spaces.global().use("user.session", kvStore);
 - `Spaces.global()` 是全局单例，适合单体应用；多个独立模块互不干扰时各自 `new Spaces()` 隔离注册表；
 - `Spaces` 不管理存储生命周期，`AutoCloseable` 责任在存储本身。
 
-## 命名存储注册表（NamedKvStoreRegistry）
+## 命名存储注册表
 
 同一模块还提供命名 `KvStore` 注册表，供规则驱动的组件（id / ratelimiter / singleflight）按规则里的 `store` 名引用存储，实现「一套规则、多存储分工」（如默认走内存、热点走 Redis）：
 

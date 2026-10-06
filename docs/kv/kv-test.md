@@ -84,7 +84,7 @@ Spaces.global().register(new SpacePolicy()
 Space<Session> sessions = Spaces.global().use("user.session", kv.store());
 ```
 
-`TestKvContext.SettableClock` 同时是下游模块（lock/lifecycle/jdbc/redis）测试的共享时钟来源。
+`TestKvContext.SettableClock` 同时是下游模块（lock、lifecycle、jdbc、redis）测试的共享时钟来源。
 
 ## CI 中的既有覆盖
 

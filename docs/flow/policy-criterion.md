@@ -2,7 +2,7 @@
 
 在复杂多变的业务场景中（如营销圈选、动态风控、权限准入、A/B 实验分流等），业务规则往往面临高频变更。若每次规则调整都修改 Java 代码并重新发布服务，会导致开发效率低下且伴随发布风险。
 
-`team4u-flow-criterion` 模块将流程引擎的无状态治理契约 [`Policy<K>`](flow-governance.md#核心治理契约) 与规则表达式引擎 [`team4u-criterion`](../criterion/README.md) 结合，支持直接使用**低开销、高性能的类 SQL 文本表达式**进行前置门控拦截与流程分支判定。
+`team4u-flow-criterion` 模块将流程引擎的无状态治理契约 [`Policy<K>`](flow-governance.md#核心治理契约对比) 与规则表达式引擎 [`team4u-criterion`](../criterion/README.md) 结合，支持直接使用**低开销、高性能的类 SQL 文本表达式**进行前置门控拦截与流程分支判定。
 
 ---
 
@@ -27,13 +27,13 @@
 ```mermaid
 graph TD
     subgraph "team4u-flow-criterion 双模态架构"
-        subgraph "模式 A: 前置门控切面 (CriterionPolicy)"
+        subgraph "模式 A：前置门控切面"
             P_IN["输入 Key"] --> CP_EVAL{"表达式规则判定<br/>(age >= 18 && risk < 60)"}
             CP_EVAL -->|"匹配"| CP_OK["Gate.proceed() 放行"]
             CP_EVAL -->|"不匹配"| CP_REJ["Gate.reject(Reason) 业务短路"]
         end
         
-        subgraph "模式 B: 条件分支谓词 (CriterionPredicate)"
+        subgraph "模式 B：条件分支谓词"
             PR_IN["流程数据 Context"] --> PR_EVAL{"表达式匹配<br/>(vip == true && amount > 500)"}
             PR_EVAL -->|"true"| BR_A["执行优惠折扣子流程"]
             PR_EVAL -->|"false"| BR_B["执行普通结算子流程"]
@@ -43,7 +43,7 @@ graph TD
 
 ---
 
-## 模式 A：门控策略 (`CriterionPolicy<K>`)
+## 模式 A：门控策略 `CriterionPolicy<K>`
 
 用于在节点或子流程执行前进行**准入校验、风控拦截与黑白名单过滤**。
 
@@ -51,9 +51,9 @@ graph TD
 
 | 模式枚举 | 构建方式 | 行为语义 | 典型应用场景 |
 | :--- | :--- | :--- | :--- |
-| **`PERMIT_IF`** | `CriterionPolicy.builder().expression(expr).mode(PERMIT_IF)` | **满足表达式则放行**；不满足时以 `Rejected` 短路退出。 | **准入许可**：如“年龄满 18 岁且已完成实名认证”。 |
-| **`REJECT_IF`** | `CriterionPolicy.builder().expression(expr).mode(REJECT_IF)` | **满足表达式则以 `Rejected` 短路退出**；不满足时放行。 | **风险拦截**：如“处于黑名单中或风险评分超标”。 |
-| **`FAIL_IF`** | `CriterionPolicy.builder().expression(expr).mode(FAIL_IF)` | **满足表达式则以 `Failed` 系统故障退出**；不满足时放行。 | **严重故障熔断**：如“探测指标异常，需触发容灾或外层重试”。 |
+| `PERMIT_IF` | `CriterionPolicy.builder().expression(expr).mode(PERMIT_IF)` | **满足表达式则放行**；不满足时以 `Rejected` 短路退出。 | **准入许可** ：如“年龄满 18 岁且已完成实名认证”。 |
+| `REJECT_IF` | `CriterionPolicy.builder().expression(expr).mode(REJECT_IF)` | **满足表达式则以 `Rejected` 短路退出**；不满足时放行。 | **风险拦截** ：如“处于黑名单中或风险评分超标”。 |
+| `FAIL_IF` | `CriterionPolicy.builder().expression(expr).mode(FAIL_IF)` | **满足表达式则以 `Failed` 系统故障退出**；不满足时放行。 | **严重故障熔断** ：如“探测指标异常，需触发容灾或外层重试”。 |
 
 ```java
 import com.team4u.framework.flow.Flow;
@@ -130,17 +130,17 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
 
 | Builder 配置方法 | 参数类型 | 默认行为 | 核心作用与业务场景 |
 | :--- | :--- | :--- | :--- |
-| **`expression(String)`** | `String` | **必填**（无默认值） | **规则表达式文本**。<br/>遵循类 SQL 语法（如 `age >= 18 && tags contains 'VIP'`），支持嵌套字段、Map、集合操作。 |
-| **`mode(Mode)`** | `CriterionPolicy.Mode` | `Mode.PERMIT_IF` | **门控模式**：<br/>• `PERMIT_IF`：表达式为 true 则放行，false 则拦截；<br/>• `REJECT_IF`：表达式为 true 则以 `Reason` 拒绝，false 则放行；<br/>• `FAIL_IF`：表达式为 true 则以 `Failure` 报错，false 则放行。 |
-| **`targetExtractor(...)`** | `Function<K, Object>` | `k -> k`（直接使用入参） | **目标计算实体提取器**。<br/>若策略入参 `K` 是复合信封（如 `RequestEnvelope<UserOrder>`），可通过此函数提取内部用于表达式求值的领域 POJO 或 Map。 |
-| **`action(CriterionAction)`** | `CriterionAction` | `CriterionAction.REJECT` | **`PERMIT_IF` 不满足时的动作**：<br/>• `REJECT`：产出 `Outcome.Rejected`（正常业务短路）；<br/>• `FAIL`：产出 `Outcome.Failed`（技术故障，可触发重试）。 |
-| **`reasonFactory(...)`** | `BiFunction<PolicyContext, K, Reason>` | 默认生成码为 `CRITERION_REJECTED` 的 `Reason` | **自定义 Reason 工厂（在 REJECT 判定时调用）**。<br/>第一个参数 `PolicyContext` 包含当前节点路径与重试尝试轮次，第二个参数 `K` 为请求对象，便于组装丰富的诊断信息。默认拒绝码由 `CriterionPolicy.DEFAULT_REJECT_CODE` 常量暴露。 |
-| **`failureFactory(...)`** | `BiFunction<PolicyContext, K, Failure>` | 默认生成码为 `CRITERION_FAILED` 的 `Failure` | **自定义 Failure 工厂（在 FAIL 判定时调用）**。<br/>用于生成携带系统错误码与排障元数据的 `Failure` 对象。默认失败码由 `CriterionPolicy.DEFAULT_FAILURE_CODE` 常量暴露。 |
-| **`criteria(Criteria)`** | `Criteria` | `Criteria.global()` | **规则求值引擎实例**。<br/>可注入自定义注册了业务自定义函数（UDF）或独立缓存的 `Criteria` 实例。 |
+| `expression(String)` | `String` | **必填**（无默认值） | **规则表达式文本**。<br/>遵循类 SQL 语法（如 `age >= 18 && tags contains 'VIP'`），支持嵌套字段、Map、集合操作。 |
+| `mode(Mode)` | `CriterionPolicy.Mode` | `Mode.PERMIT_IF` | **门控模式**：<br/>• `PERMIT_IF`：表达式为 true 则放行，false 则拦截；<br/>• `REJECT_IF`：表达式为 true 则以 `Reason` 拒绝，false 则放行；<br/>• `FAIL_IF`：表达式为 true 则以 `Failure` 报错，false 则放行。 |
+| `targetExtractor(...)` | `Function<K, Object>` | `k -> k`（直接使用入参） | **目标计算实体提取器**。<br/>若策略入参 `K` 是复合信封（如 `RequestEnvelope<UserOrder>`），可通过此函数提取内部用于表达式求值的领域 POJO 或 Map。 |
+| `action(CriterionAction)` | `CriterionAction` | `CriterionAction.REJECT` | **PERMIT_IF 不满足时的动作**：<br/>• `REJECT`：产出 `Outcome.Rejected`（正常业务短路）；<br/>• `FAIL`：产出 `Outcome.Failed`（技术故障，可触发重试）。 |
+| `reasonFactory(...)` | `BiFunction<PolicyContext, K, Reason>` | 默认生成码为 `CRITERION_REJECTED` 的 `Reason` | **自定义 Reason 工厂（在 REJECT 判定时调用）** 。<br/>第一个参数 `PolicyContext` 包含当前节点路径与重试尝试轮次，第二个参数 `K` 为请求对象，便于组装丰富的诊断信息。默认拒绝码由 `CriterionPolicy.DEFAULT_REJECT_CODE` 常量暴露。 |
+| `failureFactory(...)` | `BiFunction<PolicyContext, K, Failure>` | 默认生成码为 `CRITERION_FAILED` 的 `Failure` | **自定义 Failure 工厂（在 FAIL 判定时调用）** 。<br/>用于生成携带系统错误码与排障元数据的 `Failure` 对象。默认失败码由 `CriterionPolicy.DEFAULT_FAILURE_CODE` 常量暴露。 |
+| `criteria(Criteria)` | `Criteria` | `Criteria.global()` | **规则求值引擎实例**。<br/>可注入自定义注册了业务自定义函数或独立缓存的 `Criteria` 实例。 |
 
 ---
 
-## 模式 B：条件分支谓词 (`CriterionPredicate<T>`)
+## 模式 B：条件分支谓词 `CriterionPredicate<T>`
 
 `CriterionPredicate<T>` 实现了标准 Java `Predicate<T>` 接口，可在 Flow 的条件判断、路由分发、步骤跳过中无缝复用：
 
@@ -213,7 +213,7 @@ userId hash 0.2 // 按用户 ID 稳定 Hash 圈选 20% 流量
 ## 关联章节与进一步阅读
 
 - [流程治理概览与洋葱模型](flow-governance.md)
-- [限流治理策略 (team4u-flow-ratelimiter)](policy-ratelimiter.md)
-- [重试与退避治理策略 (team4u-flow-retry)](policy-retry.md)
+- [限流治理策略](policy-ratelimiter.md)
+- [重试与退避治理策略](policy-retry.md)
 - [自定义 Policy 扩展开发](policy-custom.md)
-- [四态传播与消费机制 (Skipped / Rejected 消费)](flow-propagation.md)
+- [四态传播与消费机制](flow-propagation.md)

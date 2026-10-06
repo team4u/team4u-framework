@@ -12,17 +12,17 @@
 
 ```mermaid
 graph TD
-    subgraph "治理拦截洋葱模型 (Onion Interception Pipeline)"
+    subgraph "治理拦截洋葱模型"
         IN["输入数据 Input"] --> P_BEFORE["1. Policy.before (前置网关评估)"]
         P_BEFORE -->|"Gate.proceed()"| R_LOOP["2. Retry 循环 (重试控制器)"]
         P_BEFORE -->|"Gate.reject(Reason)"| OUT_REJ["直接输出 Rejected(Reason)"]
         P_BEFORE -->|"Gate.fail(Failure)"| OUT_FAIL["直接输出 Failed(Failure)"]
         
-        R_LOOP --> T_SCOPE["3. Timeout 作用域时限监控 (Deadline)"]
+        R_LOOP --> T_SCOPE["3. Timeout 作用域时限监控"]
         T_SCOPE --> OP["4. 核心业务 Operation.execute"]
         OP --> T_SCOPE
         
-        T_SCOPE -->|"返回 Failed 且可重试"| R_BACKOFF["退避等待 (Local 休眠 / Durable 落库唤醒)"]
+        T_SCOPE -->|"返回 Failed 且可重试"| R_BACKOFF["退避等待（Local 引擎线程休眠 / Durable 引擎落库唤醒）"]
         R_BACKOFF --> OP
         
         T_SCOPE -->|"最终完成 Completion"| P_AFTER["5. Policy.after (后置统计与审计)"]
@@ -66,15 +66,15 @@ Flow<OrderRequest, Receipt> flow = Flow.step(chargeOperation)
 
 | 治理维度 | 契约接口 | 状态与生命周期 | 执行与调度特性 | 适用场景 |
 | :--- | :--- | :--- | :--- | :--- |
-| **无状态切面治理** | [`Policy<K>`](policy-custom.md#无状态策略契约policyk) | **无状态**（零内存开销） | 在前置 `before` 做出放行/拒绝/失败裁决；在后置 `after` 接收完成摘要 `Completion`。 | 准入放行、限流、鉴权、黑白名单、动态开关、审计埋点 |
-| **有状态持久化治理** | [`PersistentPolicy<K, S>`](policy-custom.md#有状态持久化策略契约persistentpolicyk-s) | **不可变状态 `S`** （框架自动持久化至快照） | 支持 `Proceed`、`WaitUntil` 延时挂起与 `RetryAt` 定时退避唤醒；跨进程重启状态原位恢复。 | 故障自适应重试、多算法退避、状态机变迁、断点唤醒 |
-| **时效控制治理** | `Duration` (`flow.timeout(...)`) | **无状态**（基于绝对 Deadline 计算） | 限定子流程最大耗时；超时由执行器发送物理中断并截断栈帧产出 `TIMEOUT` 失败。 | 防止慢调用堆积、下游死锁熔断、跨服务调用防护 |
+| **无状态切面治理** | [`Policy<K>`](policy-custom.md#无状态策略契约) | 无状态（零内存开销） | 在前置 `before` 做出放行/拒绝/失败裁决；在后置 `after` 接收完成摘要 `Completion`。 | 准入放行、限流、鉴权、黑白名单、动态开关、审计埋点 |
+| **有状态持久化治理** | [`PersistentPolicy<K, S>`](policy-custom.md#有状态持久化策略契约) | 不可变状态 `S`（框架自动持久化至快照） | 支持 `Proceed`、`WaitUntil` 延时挂起与 `RetryAt` 定时退避唤醒；跨进程重启状态原位恢复。 | 故障自适应重试、多算法退避、状态机变迁、断点唤醒 |
+| **时效控制治理** | `Duration`（`flow.timeout(...)`） | 无状态（基于绝对 Deadline 计算） | 限定子流程最大耗时；超时由执行器发送物理中断并截断栈帧产出 `TIMEOUT` 失败。 | 防止慢调用堆积、下游死锁熔断、跨服务调用防护 |
 
 ---
 
-## 超时作用域与栈截断机制 (Timeout Scope)
+## 超时作用域与栈截断机制
 
-超时控制在 `SerialMachine` 与 `DurableMachine` 中被建模为**栈帧边界监视（Deadline-bounded Scope）**：
+超时控制在 `SerialMachine` 与 `DurableMachine` 中被建模为**栈帧边界监视** ：
 
 ```mermaid
 sequenceDiagram
@@ -94,9 +94,9 @@ sequenceDiagram
 ```
 
 ### 超时关键特性
-1. **精确作用域限定**：`flow.timeout(duration)` 仅对其包裹的子流程生效。若外层配置了 `recoverWith`，超时产生的 `Failed(TIMEOUT)` 可被外层无缝捕获并执行降级；
-2. **多层嵌套时限自适应**：当存在多层嵌套的 Timeout 时，执行器动态计算栈中所有活跃帧中**最紧迫的绝对 Deadline**，并优先触发最内层超时的作用域；
-3. **线程中断与清理**：超时触发后，执行器会自动清理内部未完成的临时资源，绝不遗留悬挂状态。
+- **精确作用域限定** ：`flow.timeout(duration)` 仅对其包裹的子流程生效。若外层配置了 `recoverWith`，超时产生的 `Failed(TIMEOUT)` 可被外层无缝捕获并执行降级；
+- **多层嵌套时限自适应** ：当存在多层嵌套的 Timeout 时，执行器动态计算栈中所有活跃帧中**最紧迫的绝对 Deadline** ，并优先触发最内层超时的作用域；
+- **线程中断与清理** ：超时触发后，执行器会自动清理内部未完成的临时资源，绝不遗留悬挂状态。
 
 ---
 
@@ -104,7 +104,7 @@ sequenceDiagram
 
 在 `team4u-flow` 中，自定义 `Policy` 或 `PersistentPolicy` 的内部逻辑如果抛出未捕获异常，框架会提供严格的异常隔离：
 
-- **`POLICY_EXCEPTION` 诊断收敛**：切面异常会被自动捕获并封装为 `Outcome.failed(Failure.of(FlowDiagnosticCodes.POLICY_EXCEPTION, e.getMessage(), e))`；
+- `POLICY_EXCEPTION` 诊断收敛：切面异常会被自动捕获并封装为 `Outcome.failed(Failure.of(FlowDiagnosticCodes.POLICY_EXCEPTION, e.getMessage(), e))`；
 - **保障调用者线程安全**：切面抛错绝不会导致执行器线程崩溃或内部帧栈状态损坏；
 - **可观察性**：通过 `FlowObserver.onEvent` 自动上报 `POLICY_WAITING`、`NODE_COMPLETED` 等事件。
 
@@ -123,29 +123,29 @@ modules/flow/
 
 ### 限流治理：`team4u-flow-ratelimiter`
 基于 [`team4u-ratelimiter`](../ratelimiter/README.md) 分布式限流组件：
-- **`RateLimitAction.FAIL`** ：超限产出 `Gate.fail`，联动外层重试策略进行削峰排队；
-- **`RateLimitAction.REJECT`** ：超限产出 `Gate.reject`，快速短路，不触发重试。
+- `RateLimitAction.FAIL`：超限产出 `Gate.fail`，联动外层重试策略进行削峰排队；
+- `RateLimitAction.REJECT`：超限产出 `Gate.reject`，快速短路，不触发重试。
 
-[查看专章详解：限流治理策略 (team4u-flow-ratelimiter)](policy-ratelimiter.md)
+[查看专章详解：限流治理策略](policy-ratelimiter.md)
 
 ---
 
 ### 重试与退避治理：`team4u-flow-retry`
 基于 [`team4u-retry`](../retry/README.md) 退避算法引擎：
-- **多算法退避**：固定延迟（Fixed）、指数退避（Exponential）、随机抖动（Jitter，防重试风暴）、等差递增（Increment）；
+- **多算法退避** ：固定延迟 `fixed`、指数退避 `exponential`、随机抖动 `exponentialJitter`（防重试风暴）、等差递增 `increment`；
 - **条件快速短路**：支持按白名单错误码（`retryOnCodes`）、黑名单（`abortOnCodes`）或自定义谓词快速失败；
 - **双引擎调度**：Local 线程休眠 vs Durable 快照落库定时唤醒。
 
-[查看专章详解：重试与退避治理策略 (team4u-flow-retry)](policy-retry.md)
+[查看专章详解：重试与退避治理策略](policy-retry.md)
 
 ---
 
 ### 表达式规则门控：`team4u-flow-criterion`
 基于 [`team4u-criterion`](../criterion/README.md) 规则引擎：
-- **`CriterionPolicy`** ：类 SQL 表达式准入拦截（`permitIf` / `rejectIf` / `failIf`）；
-- **`CriterionPredicate`** ：在条件路由与分支中复用动态表达式谓词。
+- `CriterionPolicy`：类 SQL 表达式准入拦截（`permitIf` / `rejectIf` / `failIf`）；
+- `CriterionPredicate`：在条件路由与分支中复用动态表达式谓词。
 
-[查看专章详解：表达式规则门控策略 (team4u-flow-criterion)](policy-criterion.md)
+[查看专章详解：表达式规则门控策略](policy-criterion.md)
 
 ---
 
@@ -158,9 +158,9 @@ modules/flow/
 
 ## 治理主题专章导航
 
-- [限流治理策略 (team4u-flow-ratelimiter)](policy-ratelimiter.md)：限流模式、`RateLimitAction` 决策、动态 Permits、配置驱动。
-- [重试与退避治理策略 (team4u-flow-retry)](policy-retry.md)：多算法退避、随机抖动防风暴、条件快速失败、Local/Durable 双引擎调度。
-- [表达式规则门控策略 (team4u-flow-criterion)](policy-criterion.md)：`CriterionPolicy` 门控、`CriterionPredicate` 条件分支、语法速查。
+- [限流治理策略](policy-ratelimiter.md)：限流模式、`RateLimitAction` 决策、动态 Permits、配置驱动。
+- [重试与退避治理策略](policy-retry.md)：多算法退避、随机抖动防风暴、条件快速失败、Local/Durable 双引擎调度。
+- [表达式规则门控策略](policy-criterion.md)：`CriterionPolicy` 门控、`CriterionPredicate` 条件分支、语法速查。
 - [自定义治理策略开发指南](policy-custom.md)：`Policy<K>` 无状态拦截、`PersistentPolicy<K, S>` 有状态调度、Spring Bean 集成。
 - [并行分支与汇合治理](flow-parallel.md)：并发分支调度与 `JoinStrategy`。
 - [挂起续接与协作式取消合同](flow-suspend.md)：异步挂起、`ResumePoint` 与 `Cancellation`。

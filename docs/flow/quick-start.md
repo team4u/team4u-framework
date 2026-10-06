@@ -95,7 +95,7 @@ public class QuickStart {
 
 ---
 
-## 四态业务结果 (Outcome)
+## 四态业务结果
 
 `Outcome<T>` 是业务结果的四态闭集，仅 `Accepted` 携带输出：
 
@@ -146,7 +146,7 @@ if (result.isAccepted()) {
 
 ## 条件路由与候选降级
 
-### 条件路由 (Route)
+### 条件路由
 
 ```java
 Flow<OrderRequest, Receipt> routedFlow = Flow
@@ -157,7 +157,7 @@ Flow<OrderRequest, Receipt> routedFlow = Flow
         .otherwise(manualFlow); // 或 .withoutOtherwise()：未匹配时整体 Skipped
 ```
 
-### 降级链 (firstApplicable)
+### 降级链
 
 依次尝试多个候选分支，以首个非 `Skipped` 结果结束；若全部分支均 `Skipped` 则整体 `Skipped`：
 
@@ -169,7 +169,7 @@ Flow<OrderRequest, Receipt> fallbackFlow = Flow.firstApplicable(
 );
 ```
 
-### 可选步骤 (thenOptional)
+### 可选步骤
 
 用于同类型（`O -> O`）可选步骤。节点弃权返回 `Skipped` 时不中断流水线，而是将**进入该步骤前的原值**透传给后续节点：
 
@@ -227,7 +227,7 @@ public class OrderFlowConfig {
 
 ## 进阶编排与治理控制
 
-### 异步执行 (runAsync)
+### 异步执行
 
 ```java
 LocalExecutable<String, String> executable = Local.compile(flow);
@@ -237,7 +237,7 @@ executable.runAsync("framework")
         .thenAccept(res -> System.out.println("Result: " + res.requireAccepted()));
 ```
 
-### 并行分支 (parallel 与 join)
+### 并行分支与汇合
 
 ```java
 Branch<OrderRequest, RiskReport> riskBranch = Branch.of("risk", riskFlow);
@@ -248,7 +248,7 @@ Flow<OrderRequest, ParallelResults.Values> parallelFlow = Flow.<OrderRequest>par
         .join(Joins.all());
 ```
 
-### 挂起与恢复 (await 与 resume)
+### 挂起与恢复
 
 ```java
 ResumePoint<Approval> approvalPoint = ResumePoint.named("manager-approval");
@@ -270,7 +270,7 @@ if (firstResult instanceof FlowResult.Suspended) {
 }
 ```
 
-### 容错治理 (persistentPolicy / timeout / recoverWith)
+### 容错治理
 
 ```java
 // 重试治理：通过 persistentPolicy 挂载有状态重试策略（maxAttempts 包含首次）
@@ -294,7 +294,7 @@ Flow<OrderRequest, Receipt> recoverFlow = Flow.step(chargeOperation)
 > 通过 `flow.persistentPolicy(policy, keyProjection)` 挂载，而非独立包裹方法。详见
 > [重试与退避治理策略](policy-retry.md)。
 
-### 上下文调用 (use)
+### 上下文调用
 
 调用外部服务而不丢失上游主上下文：
 
@@ -326,7 +326,7 @@ Flow<OrderContext, OrderContext> monitoredFlow = Flow.<OrderContext>identity()
 
 ---
 
-## 持久化执行器 (Durable)
+## 持久化执行器
 
 `team4u-flow-durable` 允许在**不修改任何 Flow 业务定义**的前提下，将内存执行器替换为持久化执行器，获得节点级检查点与跨进程崩溃恢复能力：
 
@@ -374,7 +374,7 @@ DurableResult<Receipt> recovered = durable.recover("order-0001");
 
 ---
 
-## 声明式文本 DSL 快速上手 (Flow DSL)
+## 声明式文本 DSL 快速上手
 
 除了使用 Java Fluent API 编排外，还可通过人类可读的声明式文本 DSL 动态描述业务流程：
 
@@ -457,7 +457,7 @@ public class FlowTest {
 
 ## 下一步与专栏导航
 
-- 外部流程定义与符号注册体系：[外部流程定义与符号注册 (team4u-flow-definition)](flow-definition.md)
+- 外部流程定义与符号注册：[外部流程定义与符号注册 (team4u-flow-definition)](flow-definition.md)
 - 文本 DSL 语法原语与统一门面：[文本 DSL 语法与统一门面 (team4u-flow-dsl)](flow-dsl.md)
 - 深入掌握四态代数模型与生命周期：[四态业务结果与生命周期模型](flow-outcome.md)
 - 深入理解四态传播与消费规则：[四态传播规则与消费机制](flow-propagation.md)

@@ -1,6 +1,6 @@
 # 流转契约：Guard 守卫、Action 动作与 Context 上下文
 
-在有限状态机的流转过程中，核心业务逻辑通常分为两部分：**判断能否流转（Guard 守卫条件）**与**流转发生时的副作用处理（Action 执行动作）**。`team4u-fsm` 通过强类型的 `TransitionContext` 将业务上下文、事件载荷与流转元数据统一桥接。
+在有限状态机的流转过程中，核心业务逻辑通常分为两部分：**判断能否流转的守卫条件** 与**流转发生时的副作用处理动作**。`team4u-fsm` 通过强类型的 `TransitionContext` 将业务上下文、事件载荷与流转元数据统一桥接。
 
 本文将详细解析 Guard 守卫契约、Action 动作契约以及 `TransitionContext` 的使用规范。
 
@@ -17,7 +17,7 @@ sequenceDiagram
     participant Action as TransitionAction
 
     App->>FSM: fire(currentState, event, payload, context)
-    FSM->>FSM: 匹配候选迁移规则 (Transition)
+    FSM->>FSM: 匹配候选迁移规则
     FSM->>Guard: evaluate(TransitionContext)
     
     alt Guard 判定通过 (返回 true)
@@ -107,18 +107,18 @@ builder.from(OrderState.CREATED).on(OrderEvent.PAY).to(OrderState.PAID)
 
 | 方法 | 返回类型 | 语义说明 |
 | :--- | :--- | :--- |
-| **`source()`** | `S` | 本次流转的来源状态 |
-| **`event()`** | `E` | 触发本次流转的事件 |
-| **`target()`** | `S` | 目标状态（若为自迁移 `toSelf()` 则等于 source） |
-| **`context()`** | `C` | 业务实体或上下文对象（如 `Order`、`LeaveRequest`） |
-| **`payload()`** | `Object` | 本次事件携带的临时载荷对象（如 `ApprovalComment`） |
-| **`payload(Class<T>)`** | `T` | 强类型获取临时载荷，类型不匹配抛 `ClassCastException` |
-| **`hasPayload()`** | `boolean` | 是否携带了非 null 的事件载荷 |
+| `source()` | `S` | 本次流转的来源状态 |
+| `event()` | `E` | 触发本次流转的事件 |
+| `target()` | `S` | 目标状态（若为自迁移 `toSelf()` 则等于 source） |
+| `context()` | `C` | 业务实体或上下文对象（如 `Order`、`LeaveRequest`） |
+| `payload()` | `Object` | 本次事件携带的临时载荷对象（如 `ApprovalComment`） |
+| `payload(Class<T>)` | `T` | 强类型获取临时载荷，类型不匹配抛 `ClassCastException` |
+| `hasPayload()` | `boolean` | 是否携带了非 null 的事件载荷 |
 
 ### 上下文与载荷的区别
 
-- **`context()`（业务实体）**：代表状态机作用的主体领域对象（通常带有生命周期和持久化 ID，如 `Order`）；
-- **`payload()`（事件载荷）**：代表本次事件临时传入的入参（如 `ApprovalForm`、`CancelReason`），通常无需持久化，仅在流转 Action 中消费一次。
+- **`context()`（业务实体）** ：代表状态机作用的主体领域对象（通常带有生命周期和持久化 ID，如 `Order`）；
+- **`payload()`（事件载荷）** ：代表本次事件临时传入的入参（如 `ApprovalForm`、`CancelReason`），通常无需持久化，仅在流转 Action 中消费一次。
 
 ---
 

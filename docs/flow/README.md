@@ -5,7 +5,7 @@
 在订单履约、支付结算、逆向退款、复杂审批流与数据清洗等业务场景中，流程通常由一系列线性转换、条件分支、外部交互与补偿清理逻辑组成。传统的实现方式通常面临以下困境：
 
 - **大单体 Service / 脚本方法**：业务逻辑、RPC 调用、异常捕获与状态回滚深度耦合在单一方法中；步骤难以独立测试与 Mock，局部修改极易产生意外副作用。
-- **重型工作流引擎（BPMN / 反射式 DSL）**：引入庞大依赖、表结构与运行时容器；强类型退化为 `Object` 与字符串反射，丢失编译期类型安全；启动慢、调用栈深，内存级同步编排成本过高。
+- **重型工作流引擎（BPMN / 反射式 DSL）** ：引入庞大依赖、表结构与运行时容器；强类型退化为 `Object` 与字符串反射，丢失编译期类型安全；启动慢、调用栈深，内存级同步编排成本过高。
 - **单机同步与持久化恢复割裂**：本地执行与跨进程崩溃恢复通常是不兼容的两套 API；单机验证后若需增加检查点，往往需要重写流程逻辑。
 - **布尔与异常承载分支语义过载**：“成功产出 / 业务拒绝 / 无适用分支 / 技术失败”被压缩成 `boolean`、`null` 或 `RuntimeException`，无法在类型层面区分“正常业务拒绝”与“技术故障”。
 - **容器与依赖注入割裂**：纯 Lambda 编排难以直接注入 Spring 托管的 DAO、RPC 客户端与事务切面；反射动态查找又带来性能损耗与类型退化。
@@ -22,11 +22,11 @@
 
 ```mermaid
 graph TD
-    subgraph "定义期 (Definition)"
+    subgraph "定义期"
         D["Flow&lt;I, O&gt;<br/>不可变逻辑定义（纯结构，无副作用）"]
     end
 
-    subgraph "双投影 (Dual Projection)"
+    subgraph "双投影"
         D -->|"describe(flowId)"| PD["FlowDescription<br/>冻结只读描述模型（无回调实例）"]
         D -->|"project(resolver, visitor)"| PE["ExecutableFlowVisitor&lt;R&gt;<br/>可执行投影 SPI（强类型执行合同）"]
     end
@@ -41,7 +41,7 @@ graph TD
         CK <--> SM["StateMapper<br/>确定性编码 StoredValue"]
         DR --> DRR["DurableResult：Completed / Suspended / Active / Cancelled"]
     end
-    subgraph "外围生态 (Ecosystem)"
+    subgraph "外围生态"
         PD --> FG["team4u-flow-diagram<br/>Mermaid / 文本树渲染"]
         PE --> FB["team4u-flow-bean<br/>BeanManager 绑定解析"]
         L --> FT["team4u-flow-test<br/>桩 / 断言 / 夹具 / 并行屏障"]
@@ -90,7 +90,7 @@ graph TD
 为了便于深入研读，组件文档按照语义层级、控制治理、持久化以及工程运维拆分为独立专章：
 
 ### 入门与概览
-- [快速开始 (Quick Start)](quick-start.md)：5 分钟体验流水线编排、条件路由、挂起恢复与持久化断点续跑。
+- [快速开始](quick-start.md)：5 分钟体验流水线编排、条件路由、挂起恢复与持久化断点续跑。
 
 ### 外部定义与文本 DSL
 - [外部流程定义与符号注册 (team4u-flow-definition)](flow-definition.md)：纯数据 AST 模型全景、符号注册表、静态类型检查、`FlowBinder` 绑定与 `SourceMap` 错误映射、`FlowPublisher` 不可变发布器。
